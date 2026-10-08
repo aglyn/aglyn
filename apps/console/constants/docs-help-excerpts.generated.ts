@@ -81,7 +81,7 @@ export const DOCS_HELP_EXCERPTS = {
   copyAssist: 'An AI copywriter for the words already on your site: rewrite a headline, a paragraph, a button label or a blog entry in your own voice, as an unsaved change one undo takes back.',
   copyPaste: 'Copy any element — with its children — and paste it elsewhere, including into a different page, layout or component.',
   createARedirect: 'Add a redirect rule and read its hit metrics.',
-  createImages: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG illustration, icon, pattern or logo mark, or a photo where photos are on, with alt text. Metered in AI credits.',
+  createImages: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits.',
   crm: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   crmByAi: 'An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields.',
   customDomains: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',

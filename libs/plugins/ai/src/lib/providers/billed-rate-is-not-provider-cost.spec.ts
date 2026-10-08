@@ -27,6 +27,7 @@ import {
   AI_IMAGE_DEFAULT_MODEL,
   AI_IMAGE_FALLBACK_RATES,
   AI_IMAGE_MODEL_CATALOG,
+  AI_IMAGE_SIZE_OUTPUT_TOKENS,
   AI_METER_SENTINELS,
   aiImageBilledUsdPerImage,
   aiImageProviderUsdPerImage,
@@ -438,6 +439,16 @@ describe('a picture is billed above what it costs (AGL-3602)', () => {
     expect(assistCreditsFromUsd(aiImageBilledUsdPerImage(AI_IMAGE_DEFAULT_MODEL))).toBe(101)
     expect(perMTok(aiProviderRatesForModel(AI_IMAGE_DEFAULT_MODEL))).toEqual({ input: 0.5, output: 3 })
     expect(perMTok(aiBilledRatesForModel(AI_IMAGE_DEFAULT_MODEL))).toEqual({ input: 0.75, output: 4.5 })
+  })
+
+  it('prices a 512 px picture at its share of the 1K picture’s image tokens, never at provider cost', () => {
+    expect(AI_IMAGE_SIZE_OUTPUT_TOKENS).toEqual({ '512': 747, '1K': 1_120 })
+    expect(aiImageProviderUsdPerImage(AI_IMAGE_DEFAULT_MODEL, '512')).toBe(0.04482)
+    expect(aiImageBilledUsdPerImage(AI_IMAGE_DEFAULT_MODEL, '512')).toBe(0.06723)
+    expect(aiImageBilledUsdPerImage(AI_IMAGE_DEFAULT_MODEL, '1K')).toBe(aiImageBilledUsdPerImage(AI_IMAGE_DEFAULT_MODEL))
+    for (const row of AI_IMAGE_MODEL_CATALOG) {
+      expect(aiImageBilledUsdPerImage(row.id, '512')).toBeGreaterThan(aiImageProviderUsdPerImage(row.id, '512'))
+    }
   })
 
   it('prices pictures and their tokens on the meter’s own estimators, and leaves a text exchange as it was', () => {

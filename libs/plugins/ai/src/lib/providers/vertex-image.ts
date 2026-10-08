@@ -17,7 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { getApp } from 'firebase-admin/app'
-import { AI_IMAGE_DEFAULT_MODEL, AI_IMAGE_VERTEX_PROVIDER_ID } from './catalog'
+import { AI_IMAGE_VERTEX_PROVIDER_ID } from './catalog'
 import { aiTokenCount, AiUpstreamError, type AiUsage } from './contract'
 import {
   AI_IMAGE_MAX_COUNT,
@@ -27,6 +27,13 @@ import {
   type AiImageRequest,
   type AiImageResult,
 } from './image-contract'
+import {
+  vertexImageProject,
+  vertexImageLocation,
+  vertexImageModel,
+  vertexImageHost,
+  vertexImageUrl,
+} from './vertex-image-endpoint'
 
 /**
  * Google's Gemini image models on Vertex AI (AGL-3602), behind the image
@@ -56,13 +63,14 @@ import {
  *
  * ⛔ THE ORDER FOR AGLYN'S OWN PRODUCTION, and no check can see it, so this
  * paragraph is the gate: a description reaching Vertex AI makes Google LLC a
- * recipient of customer content for a purpose `/legal/subprocessors` does not
- * name today (its Google rows say database, storage, authentication, backups
- * and logging). Publish that row first — the master, then the page, with a
- * change-log line; the wording is drafted in
- * `docs/legal-drafts/AGL-3602-subprocessors.md` — then declare the host in
- * the AI catalog with that date as `publishedOn`, and only then set the two
- * variables in production.
+ * recipient of customer content. The row naming it — Google LLC (Google Cloud
+ * Vertex AI), located "Global — Google selects where requests are processed",
+ * because the global endpoint promises no processing location — is declared
+ * in the AI catalog
+ * (`AI_IMAGE_CATALOG_PROVIDERS`) dated to its change-log entry, with the
+ * Privacy Policy §2 sentence beside it (legal v12). Both pages are live
+ * before either variable is set in production; the wording is in
+ * `docs/legal-drafts/AGL-3602-subprocessors.md`.
  *
  * ## What is sent, and nothing else
  *
@@ -72,8 +80,9 @@ import {
  *
  * - `responseModalities: ['IMAGE']` — a picture and no prose, which is also
  *   what lets the model render at the size asked for;
- * - `imageConfig: { aspectRatio, imageSize: '1K' }` — the shape, at the
- *   1K size the per-picture rate is priced at;
+ * - `imageConfig: { aspectRatio, imageSize }` — the shape, at the size the
+ *   door chose from the workspace's plan: `512` on Free, `1K` on a paid
+ *   plan (`aiImageSizeForPlan`), each priced at its own per-picture rate;
  * - `thinkingConfig: { thinkingLevel: 'HIGH' }` — Google's mapping for the
  *   Imagen 4 model this replaces;
  * - `safetySettings` at `BLOCK_MEDIUM_AND_ABOVE` on harassment, hate,
@@ -86,15 +95,18 @@ import {
  * whatever is asked. Neither is a setting here.
  */
 
-export const VERTEX_IMAGE_PROJECT_ENV = 'AI_IMAGE_VERTEX_PROJECT'
-export const VERTEX_IMAGE_LOCATION_ENV = 'AI_IMAGE_VERTEX_LOCATION'
-export const VERTEX_IMAGE_MODEL_ENV = 'AI_IMAGE_MODEL'
-
-/** The location requests go to when the operator names none: Google's global endpoint. */
-export const VERTEX_IMAGE_DEFAULT_LOCATION = 'global'
-
-/** The model a request runs on when the operator names none. */
-export const VERTEX_IMAGE_DEFAULT_MODEL = AI_IMAGE_DEFAULT_MODEL
+export {
+  VERTEX_IMAGE_PROJECT_ENV,
+  VERTEX_IMAGE_LOCATION_ENV,
+  VERTEX_IMAGE_MODEL_ENV,
+  VERTEX_IMAGE_DEFAULT_LOCATION,
+  VERTEX_IMAGE_DEFAULT_MODEL,
+  vertexImageProject,
+  vertexImageLocation,
+  vertexImageModel,
+  vertexImageHost,
+  vertexImageUrl,
+} from './vertex-image-endpoint'
 
 /** How long one picture may take, thinking included. */
 export const VERTEX_IMAGE_TIMEOUT_MS = 50_000
@@ -106,13 +118,6 @@ export const VERTEX_IMAGE_SAFETY_CATEGORIES = [
   'HARM_CATEGORY_SEXUALLY_EXPLICIT',
   'HARM_CATEGORY_DANGEROUS_CONTENT',
 ] as const
-
-/** A Google Cloud project id: 6–30 lowercase letters, digits and hyphens. */
-const PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/
-/** `global`, or a Vertex AI region such as `us-central1`. */
-const LOCATION = /^(global|[a-z]+-[a-z]+[0-9]+)$/
-/** A publisher model id, `gemini-3.1-flash-image`. */
-const MODEL_ID = /^[a-z0-9][a-z0-9.-]{1,62}$/
 
 /** The finish reasons that mean the picture was withheld rather than failed. */
 const WITHHELD_FINISH = new Set([
@@ -128,51 +133,16 @@ const WITHHELD_FINISH = new Set([
   'NO_IMAGE',
 ])
 
-function envValue(name: string): string {
-  return process.env[name]?.trim() ?? ''
-}
-
-/** The configured project, or `null` when the provider is off. */
-export function vertexImageProject(): string | null {
-  const project = envValue(VERTEX_IMAGE_PROJECT_ENV)
-  return PROJECT_ID.test(project) ? project : null
-}
-
-/** The configured location; the global endpoint when unset or malformed. */
-export function vertexImageLocation(): string {
-  const location = envValue(VERTEX_IMAGE_LOCATION_ENV)
-  return LOCATION.test(location) ? location : VERTEX_IMAGE_DEFAULT_LOCATION
-}
-
-/** The configured model; the default when unset or malformed. */
-export function vertexImageModel(): string {
-  const model = envValue(VERTEX_IMAGE_MODEL_ENV)
-  return MODEL_ID.test(model) ? model : VERTEX_IMAGE_DEFAULT_MODEL
-}
-
-/** The host a request goes to: the global endpoint's, or a region's. */
-export function vertexImageHost(location = vertexImageLocation()): string {
-  return location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`
-}
-
-/** The `:generateContent` address for a model. */
-export function vertexImageUrl(project: string, location: string, model: string): string {
-  return (
-    `https://${vertexImageHost(location)}/v1/projects/${project}/locations/${location}` +
-    `/publishers/google/models/${model}:generateContent`
-  )
-}
-
 /** The request body for one picture, exactly as it is sent. */
 export function vertexImageRequestBody(
-  request: Pick<AiImageRequest, 'prompt' | 'aspectRatio'>,
+  request: Pick<AiImageRequest, 'prompt' | 'aspectRatio' | 'size'>,
 ): Record<string, unknown> {
   return {
     contents: [{ role: 'USER', parts: [{ text: request.prompt }] }],
     generationConfig: {
       responseModalities: ['IMAGE'],
       candidateCount: 1,
-      imageConfig: { aspectRatio: request.aspectRatio, imageSize: '1K' },
+      imageConfig: { aspectRatio: request.aspectRatio, imageSize: request.size },
       thinkingConfig: { thinkingLevel: 'HIGH' },
     },
     safetySettings: VERTEX_IMAGE_SAFETY_CATEGORIES.map((category) => ({

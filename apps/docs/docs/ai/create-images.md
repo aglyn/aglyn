@@ -1,21 +1,27 @@
 ---
 sidebar_position: 14
 title: Create images with AI
-description: "An AI image generator in the Aglyn media library: describe a picture and get an SVG illustration, icon, pattern or logo mark, or a photo where photos are on, with alt text. Metered in AI credits."
+description: "An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits."
 ---
 
 # Create images with AI
 
 **Create with AI** in the media library makes pictures from a description and adds them
-to the library you have open. There are two kinds:
+to the library you have open. The **Kind** menu lists what it can make, in four sections:
 
-- **Illustration or icon**: a picture drawn as an SVG, sharp at any size. Choose an
-  **Illustration** (a spot illustration or small scene), an **Icon** (one color, or two
-  tones), a **Pattern** (a seamless background that tiles) or a **Logo mark** (a simple
-  symbol without lettering). Available wherever Aglyn AI is.
-- **Photo**: a picture made by Google's image models. Offered only where photo creation
-  is turned on for the deployment your workspace runs on; where it is not, the window
-  shows only Illustration or icon.
+| Section | Kinds | Made as |
+| --- | --- | --- |
+| **Vector** | **Illustration** (a spot illustration or small scene), **Icon** (one color, or two tones), **Pattern** (a seamless background that tiles), **Logo mark** (a simple symbol without lettering) | An SVG, sharp at any size. Available wherever Aglyn AI is. |
+| **Photo** | **Photo** (your description decides the style), **Natural photo**, **Studio product shot**, **Lifestyle with people**, **Architecture & interiors**, **Food**, **Aerial & landscape** | A picture made by Google's image models |
+| **Art** | **3D render**, **Watercolor**, **Oil painting**, **Flat vector art**, **Line drawing**, **Cartoon or anime** | A picture made by Google's image models |
+| **Design** | **Background or texture**, **Banner or hero image**, **Social post graphic**, **Mockup** (your design on a device screen or packaging) | A picture made by Google's image models |
+
+Every kind but **Photo** adds its own style to your description: a photographic kind
+asks for the lens, light and composition that genre is shot with, an art kind for its
+medium and strokes, and a design kind for its layout, such as a banner's calm space for a
+headline. The Photo, Art and Design sections are offered only where photo creation is
+turned on for the deployment your workspace runs on; where it is not, the menu lists the
+Vector kinds alone.
 
 Each picture is stored the way a file you upload is stored: in the open folder, counted
 toward your storage, served from the same addresses, and with alt text you can edit.
@@ -26,14 +32,18 @@ toward your storage, served from the same addresses, and with alt text you can e
    should land in.
 2. Choose **Create with AI**, beside **Upload media**. An empty library offers it beside
    its own **Upload media** button too.
-3. Where photos are on, choose **Photo** or **Illustration or icon**. For an
-   illustration, choose its **Kind**.
-4. Describe the picture: what is in it, the setting, and the style you want.
+3. Choose a **Kind**. Each one shows what a picture of it costs, and choosing it picks a
+   shape that suits it — **Wide 16:9** for a banner, **Square 1:1** for a social post —
+   which you can change.
+4. Describe the picture: what is in it and the setting. For a **Photo**, describe the
+   style too.
 5. Choose a shape: **Square 1:1**, **Landscape 4:3**, **Portrait 3:4**, **Wide 16:9** or
    **Tall 9:16**, and how many pictures to make, from one to four.
-6. For an illustration, choose its colors: **Use my site's theme colors**, which reads
+6. For a Vector kind, choose its colors: **Use my site's theme colors**, which reads
    your site's theme, or **Choose colors** to pick up to six. The organization's library
-   belongs to no single site, so there you choose the colors.
+   belongs to no single site, so there you choose the colors. For an Art or Design kind,
+   name the colors in your description if you want particular ones; a Photo kind takes the
+   colors of the scene.
 7. The window shows what the pictures will cost in credits before you start. Choose
    **Create**.
 
@@ -43,13 +53,13 @@ an **Image** element, a gallery or anywhere else a media field asks for one.
 
 ## What each picture gets
 
-- **Alt text.** A photo's is your description; an illustration's is a sentence the AI
-  writes about what it drew. Edit it in the picture's details like any other alt text.
+- **Alt text.** A picture from the Photo, Art or Design sections takes your description;
+  a Vector picture gets a sentence the AI writes about what it drew. Edit it in the picture's details like any other alt text.
 - **A file name** made from the first few words of your description, starting `ai-` and
-  numbered within the set: `.svg` for an illustration, the picture's own type for a photo.
-- **A record of how it was made**: the model, your description, the mode, the kind of
-  illustration and the shape, kept with the file.
-- **For a photo, an invisible watermark.** Google marks every picture its image models
+  numbered within the set: `.svg` for a Vector kind, the picture's own type for the others.
+- **A record of how it was made**: the model, your description, the kind and the shape,
+  kept with the file.
+- **For a picture from Google's image models, an invisible watermark.** Google marks every picture its image models
   make with its SynthID watermark, so the picture can later be identified as generated.
   You cannot see it, and it does not change how the picture looks.
 
@@ -58,10 +68,13 @@ an **Image** element, a gallery or anywhere else a media field asks for one.
 Pictures are metered in [AI credits](overview.md#credits-and-caps) from the workspace's
 pool. The window shows an estimate before you create anything:
 
-| Mode | About, per picture | What it is made of |
+| Kinds | About, per picture | What it is made of |
 | --- | --- | --- |
-| Illustration or icon | 18 credits | The words the AI reads and writes to draw the SVG, at the same rates as other AI text |
-| Photo | 108 credits | The picture, plus the description and the thinking the image model does before it draws |
+| Vector | 18 credits | The words the AI reads and writes to draw the SVG, at the same rates as other AI text |
+| Photo, Art and Design, on the Free plan | 75 credits | A 512 px picture, plus the description and the thinking the image model does before it draws |
+| Photo, Art and Design, on a paid plan | 108 credits | A 1K picture (about 1024 px on its longer side), plus the same |
+
+The size comes from your plan: pictures are 512 px on Free and 1K on every paid plan.
 
 What is charged is what was actually spent, so a picture can cost a little more or less
 than its estimate, and an illustration that needed a second attempt costs about twice its
@@ -93,18 +106,22 @@ recognizable brand symbol, a real, named person, and anything sexual, hateful, v
 otherwise unsafe; the window says why, and a declined request on a Free workspace costs
 nothing. A **Logo mark** is always a symbol without lettering.
 
-Photos are checked by Google's safety filters, set to block content they rate as a medium
-risk or higher, and Google's own policies refuse some content whatever is asked, such as
-photorealistic depictions of children or celebrities that its policies do not allow. A
-description that is declined is answered with a message and no picture is charged.
+Pictures from the Photo, Art and Design sections are checked by Google's safety filters,
+set to block content they rate as a medium risk or higher, and Google's own policies
+refuse some content whatever is asked, such as photorealistic depictions of children or
+celebrities that its policies do not allow. The window says so for those kinds: pictures
+of real, identifiable people, celebrities or brands may be declined. The people in a
+**Lifestyle with people** picture are asked for as made-up people, and a **Cartoon or
+anime** picture as original characters. A description that is declined is answered with a
+message and no picture is charged.
 
 ## What is sent {#what-is-sent}
 
-- **Illustration or icon:** your description, the kind and shape of picture, and your
-  site's theme colors or the colors you chose are sent to the AI service every other
-  Aglyn AI feature uses.
-- **Photo:** your description and the shape you chose are sent to Google's image models
-  on Vertex AI.
+- **Vector kinds:** your description, the kind and shape of picture, and your site's
+  theme colors or the colors you chose are sent to the AI service every other Aglyn AI
+  feature uses.
+- **Photo, Art and Design kinds:** your description, followed by the kind's fixed style
+  wording, and the shape you chose are sent to Google's image models on Vertex AI.
 
 Nothing else is sent: no other content of your site, no file from your library, and no
 name, email address or account identifier. The pictures come back to Aglyn and are stored
