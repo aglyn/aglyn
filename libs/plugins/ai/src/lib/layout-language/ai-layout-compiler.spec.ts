@@ -686,6 +686,78 @@ describe('repeats (rule 1)', () => {
     ])
   })
 
+  /*
+   * The business eval's towing Home (AGL-3660): one service a column, each a
+   * cards block with no `to`, its item naming the Card component. The plan's
+   * component went to the first column alone, so the row drew one boxed card
+   * beside three bare ones. Every item of a cards row is drawn alike.
+   */
+  const itemsOf = (nodes: Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>, rowRole: string[]) =>
+    Object.values(nodes)
+      .filter((node) => node.componentId === 'muiGrid' && node.props?.['container'])
+      .map((grid) => (grid.nodes ?? []).map((cell) => nodes[nodes[cell]?.nodes?.[0] ?? '']))
+      .filter((cells) => cells.length >= 2 && cells.every(Boolean))
+      .map((cells) => cells.map((node) => `${node?.componentId}:${String(node?.props?.['variant'] ?? '')}`))
+      .filter((row) => rowRole.some((role) => row[0]?.startsWith(role)) || row.some((cell) => rowRole.some((role) => cell.startsWith(role))))
+
+  it.each([
+    ['the plan places the component', [CARD], true],
+    ['only the items name the component', [], true],
+    ['a workspace that keeps no components', [], false],
+  ] as const)('draws every item of a cards row split over columns alike: %s', (_case, uses, reusable) => {
+    const service = (title: string, col: number): AiLayoutBlock => ({
+      kind: 'cards',
+      col,
+      items: [{ title, text: `${title}, any hour of the day.`, ...(reusable ? { to: CARD } : {}) }],
+    })
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Help on the road' }] },
+        {
+          cols: [1, 1, 1, 1],
+          blocks: [
+            { kind: 'heading', text: 'Services' },
+            service('Emergency towing', 0),
+            service('Roadside assistance', 1),
+            service('Fuel delivery', 2),
+            service('Accident recovery', 3),
+          ],
+        },
+      ],
+      { ...pagePlan, sections: [pagePlan.sections[0], { name: 'Services', uses: [...uses], items: 4 }] },
+      reusable,
+    )
+    expect(report.violations).toEqual([])
+    const rows = itemsOf(compiled.tree.nodes as never, ['reusableInstance', 'muiCard', 'muiListItemText'])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveLength(4)
+    expect(new Set(rows[0]).size).toBe(1)
+  })
+
+  /*
+   * The business eval's blog Home (AGL-3660): four "Card" items of the Card
+   * component, no words of their own. A published page never shows "Card":
+   * such items say nothing and are left out, so the section shows none and
+   * the page check asks for it again.
+   */
+  it('never draws an item whose only words are the name of the component that places it', () => {
+    const { compiled } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Weeknight cooking' }] },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Latest recipes' },
+            { kind: 'cards', items: ['Card', 'Card', 'cmp-service-card'].map((title) => ({ title, text: '', to: CARD })) },
+          ],
+        },
+      ],
+      pagePlan,
+      true,
+    )
+    expect(JSON.stringify(compiled.tree.nodes)).not.toMatch(/"Card"|cmp-service-card"/)
+    expect(compiled.itemIds[1]).toEqual([])
+  })
+
   it('draws the same cards in full on a workspace that keeps none', () => {
     const { compiled, report } = build(
       [

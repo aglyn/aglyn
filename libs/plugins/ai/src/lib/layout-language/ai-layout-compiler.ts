@@ -594,6 +594,15 @@ function placePlanned(
       else delete block.to
     }
     if (block.kind === 'component' && !block.to) block.to = plannedComponents[0]
+    // A group whose every item names the same component is that component's
+    // placements (AGL-3660): the design put the id on its items, not the block.
+    if (AI_LAYOUT_GROUP_KINDS.has(block.kind) && !block.to && block.items?.length) {
+      const named = block.items[0]?.to
+      if (named && componentOf(page.targets, named) && block.items.every((item) => item.to === named)) {
+        block.to = named
+        block.items = block.items.map(({ to: _to, ...item }) => item)
+      }
+    }
   }
   for (const form of plannedForms) {
     if (!blocks.some((block) => block.kind === 'form' && block.to === form)) {
@@ -623,7 +632,11 @@ function placePlanned(
         !block.to,
     )
     if (group) {
-      group.to = component
+      // Every group of that kind the design split over the row's columns, so
+      // each item of the row is drawn alike (AGL-3660), never the first alone.
+      for (const like of blocks) {
+        if (like.kind === group.kind && !like.to) like.to = component
+      }
       continue
     }
     blocks.push({
@@ -1250,15 +1263,28 @@ function speaks(scope: SectionScope, item: AiLayoutItem): boolean {
 }
 
 /** A group's items with every part that has no words left once cleaned emptied, and wordless items left out. */
+/** A title that only names the kind of thing it is: "Card", "Item 2", "Title". */
+const AI_LAYOUT_PLACEHOLDER_TITLE = /^(?:card|item|title|heading|placeholder|tile|box|feature|service|post|article|entry)\s*\d*$/i
+
 function cleanItems(
   scope: SectionScope,
   items: readonly AiLayoutItem[],
 ): AiLayoutItem[] {
   const facts = scope.page.targets.facts
+  // A title that is only the name or id of what places it — a "Card" item of
+  // the Card component (AGL-3660) — is no words a visitor reads.
+  const references = new Set(
+    scope.page.targets.components.flatMap((component) => [component.name, component.id]).map((name) => name.trim().toLowerCase()),
+  )
   return items
     .map((item) => ({
       ...item,
-      title: aiLayoutWords(item.title, 'itemTitle', facts) ? item.title : '',
+      title:
+        aiLayoutWords(item.title, 'itemTitle', facts) &&
+        !references.has(item.title.trim().toLowerCase()) &&
+        !AI_LAYOUT_PLACEHOLDER_TITLE.test(item.title.trim())
+          ? item.title
+          : '',
       text: aiLayoutWords(item.text, 'itemText', facts) ? item.text : '',
     }))
     .filter((item) => speaks(scope, item))
