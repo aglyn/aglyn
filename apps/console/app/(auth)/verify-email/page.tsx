@@ -135,7 +135,16 @@ function VerifyEmail() {
     // a refresh that is never answered leaves the page on the waiting screen
     // it was meant to leave.
     await resolveIdToken(user, { forceRefresh: true }).catch(() => undefined)
-    hardNavigate(verifiedContinueTarget(continueUrl) ?? '/')
+    const target = verifiedContinueTarget(continueUrl) ?? '/'
+    // A delegated sign-up returns to ANOTHER origin (AGL-3690), which can
+    // only pick the session up from the shared cookie — so mint it, and
+    // await it, before the navigation that would abort it (AGL-466).
+    if (/^https?:\/\//.test(target)) {
+      await authorizedFetch(user, '/api/auth/session', {
+        method: 'POST',
+      }).catch(() => undefined)
+    }
+    hardNavigate(target)
   }, [continueUrl, firebaseAuth])
 
   const continueToApp = useCallback(() => {
