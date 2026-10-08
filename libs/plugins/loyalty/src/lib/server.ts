@@ -26,11 +26,18 @@ import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { LOYALTY_API_ROUTES } from './constants/api-routes'
 
 type Routes = typeof import('./server/routes')
+type ConnectionRoutes = typeof import('./server/connection-routes')
 
 const lazy =
   (pick: (routes: Routes) => (request: Request) => Promise<Response>) =>
   async (request: Request) =>
     pick(await import('./server/routes'))(request)
+
+/** The connection route loads only its own module. */
+const connectionRoute = async (request: Request) =>
+  (
+    (await import('./server/connection-routes')) as ConnectionRoutes
+  ).connectionRoute(request)
 
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerLoyaltyConsoleApi(): void {
@@ -44,4 +51,7 @@ export function registerLoyaltyConsoleApi(): void {
     const handler = lazy(pick)
     registerPluginApiRoute(path, { web: (request) => handler(request) })
   }
+  registerPluginApiRoute(LOYALTY_API_ROUTES.connection, {
+    web: (request) => connectionRoute(request),
+  })
 }

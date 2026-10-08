@@ -21,6 +21,7 @@ import { lazy } from 'react'
 const PosConsolePage = lazy(() => import('./components/console/pos-page.component'))
 /** The customer display (AGL-3608): loads only on the public page that shows it. */
 const PosDisplayPage = lazy(() => import('./components/console/pos-display-page.component'))
+const PosKioskPage = lazy(() => import('./components/console/pos-kiosk-page.component'))
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
@@ -94,6 +95,9 @@ export function registerCommerceConsole(): void {
     // `server/pos-display.ts` refuses every read without one.
     publicPages: [
       { path: '/pos-display', title: 'Customer display', Component: PosDisplayPage },
+      // The self-service kiosk (AGL-3623), paired the same way with a kiosk
+      // code; `server/pos-kiosk.ts` refuses every call without its token.
+      { path: '/pos-kiosk', title: 'Self-service kiosk', Component: PosKioskPage },
     ],
     // Dashboard/analytics glance card (AGL-419): rendered through the
     // shell's 'commerceGlance' widget slot.

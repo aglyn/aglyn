@@ -13712,6 +13712,10 @@ describe('rewards records are the server’s alone (AGL-3640)', () => {
     ['loyaltyLedger', `${HOST}__earn__order-1`],
     ['loyaltyRedemptions', `${HOST}__order-1__member-1`],
     ['loyaltyReferralClaims', `${HOST}__member-2`],
+    // A merchant's sealed Smile.io or Yotpo key, and a buyer's points on
+    // their way there (AGL-3677).
+    ['loyaltyConnections', HOST],
+    ['loyaltySync', `${HOST}__earn__order-1`],
   ]
   const PRINCIPALS = [
     ['owner', () => authed(OWNER)],

@@ -21,17 +21,22 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { type FormEvent, useState } from 'react'
+import type * as CommerceModel from '../../../model'
 import { pairDisplay, type PosDisplayBranding } from './pos-display-api'
 
 /**
  * The unpaired display (AGL-3608): six digits from the register's Customer
- * display menu, exchanged once for this device's token.
+ * display menu, exchanged once for this device's token. A self-service kiosk
+ * (AGL-3623) pairs through the same screen with `mode="kiosk"`.
  */
 export function PosDisplayPairingScreen({
   onPaired,
+  mode = 'display',
 }: {
   onPaired: (token: string, branding: PosDisplayBranding) => void
+  mode?: CommerceModel.PosDeviceMode
 }) {
+  const noun = mode === 'kiosk' ? 'kiosk' : 'display'
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +47,7 @@ export function PosDisplayPairingScreen({
     if (!ready || busy) return
     setBusy(true)
     setError(null)
-    const result = await pairDisplay(code)
+    const result = await pairDisplay(code, mode)
     setBusy(false)
     const token = result.ok ? result.value?.token : undefined
     setCode('')
@@ -61,7 +66,7 @@ export function PosDisplayPairingScreen({
       sx={{ minHeight: '100dvh', alignItems: 'center', justifyContent: 'center', px: 2 }}
     >
       <Typography variant="h3" component="h1" sx={{ textAlign: 'center' }}>
-        Pair this display
+        {`Pair this ${noun}`}
       </Typography>
       <Typography variant="h6" color="text.secondary" sx={{ textAlign: 'center' }}>
         Enter the code shown on the register
@@ -104,7 +109,7 @@ export function PosDisplayPairingScreen({
           ...theme.typography.h6,
         })}
       >
-        {busy ? 'Pairing…' : 'Pair display'}
+        {busy ? 'Pairing…' : `Pair ${noun}`}
       </Button>
     </Stack>
   )

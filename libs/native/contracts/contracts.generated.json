@@ -256,6 +256,88 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "column": "$id",
+        "direction": "asc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "$id",
+        "direction": "desc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Used in",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Used in",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "asc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "desc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },
@@ -1667,6 +1749,74 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "column": "$id",
+        "direction": "asc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "$id",
+        "direction": "desc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "asc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "desc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },
@@ -3395,6 +3545,17 @@
   "OUTREACH_SEQUENCE_NAME_MAX": 120,
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "POS_KIOSK_CATALOG_LIMIT": 200,
+  "POS_KIOSK_DONE_SECONDS": 15,
+  "POS_KIOSK_IDLE_SECONDS_DEFAULT": 90,
+  "POS_KIOSK_IDLE_SECONDS_MAX": 600,
+  "POS_KIOSK_IDLE_SECONDS_MIN": 30,
+  "POS_KIOSK_IDLE_WARNING_SECONDS": 20,
+  "POS_KIOSK_MAX_LINES": 40,
+  "POS_KIOSK_MAX_QUANTITY": 20,
+  "POS_KIOSK_UNLOCK_LOCKOUT_MS": 900000,
+  "POS_KIOSK_UNLOCK_MAX_ATTEMPTS": 5,
+  "POS_KIOSK_UNLOCK_TTL_MS": 300000,
   "POS_OFFLINE_CLOCK_SKEW_MS": 600000,
   "POS_OFFLINE_DISABLED_TENDERS": {
     "card_keyed": "Typed cards need the connection.",
@@ -4014,6 +4175,75 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Kind",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Kind",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "source",
+        "direction": "asc",
+        "label": "Source",
+        "path": "source.type"
+      },
+      {
+        "alone": true,
+        "column": "source",
+        "direction": "desc",
+        "label": "Source",
+        "path": "source.type"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },

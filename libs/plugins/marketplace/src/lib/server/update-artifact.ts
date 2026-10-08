@@ -701,6 +701,9 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       ...artifactCreateListKeys(collectionRef.id, {
         kind: carried.kind,
         displayName: freshName,
+        // The description written above, so the stored-null default
+        // (AGL-3680) never overwrites it.
+        description: listing.description || null,
         source: { type: 'marketplace' },
       }),
       createdAt: now,

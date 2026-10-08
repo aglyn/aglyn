@@ -100,6 +100,7 @@ import { posPaymentHandler } from './server/pos-payment'
 import { posReadersHandler } from './server/pos-readers'
 import { posTerminalConnectionTokenHandler } from './server/pos-terminal-connection-token'
 import { posDisplayHandler } from './server/pos-display'
+import { posKioskHandler } from './server/pos-kiosk'
 import { registerPosOpsRoutes } from './server/pos-ops-routes'
 import {
   processAbandonedHandler,
@@ -491,6 +492,10 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/pos-payment', posPaymentHandler)
   registerPluginApiRoute('commerce/pos-readers', posReadersHandler)
   registerPluginApiRoute('commerce/pos-display', posDisplayHandler)
+  // The self-service kiosk (AGL-3623): a register's paired screen where the
+  // customer orders and pays. Its device token, never a staff session; the
+  // register's queue of "pay at counter" orders is gated like a sale.
+  registerPluginApiRoute('commerce/pos-kiosk', posKioskHandler)
   // Shifts, staff PINs, the customer lookup and returns (AGL-3609).
   registerPosOpsRoutes()
   // The offline register (AGL-3625): the kit a register caches to sell cash

@@ -52,6 +52,10 @@ export const LOYALTY_CREDIT_PROVIDER_ID = `${LOYALTY_PLUGIN_ID}.${LOYALTY_CREDIT
  *   from one member, and what refunds have given back.
  * - `loyaltyReferralClaims/{hostId}__{memberKey}`: a friend's one referral
  *   discount — held while they pay, closed once their order is written.
+ * - `loyaltyConnections/{hostId}`: the merchant's own Smile.io or Yotpo
+ *   account, its API key sealed (AGL-3677).
+ * - `loyaltySync/{hostId}__{entryKey}`: one points movement on its way to that
+ *   account, keyed by the ledger row it mirrors, so a retried cause sends once.
  */
 export const LOYALTY_COLLECTIONS = {
   programs: 'loyaltyPrograms',
@@ -60,6 +64,8 @@ export const LOYALTY_COLLECTIONS = {
   ledger: 'loyaltyLedger',
   redemptions: 'loyaltyRedemptions',
   referralClaims: 'loyaltyReferralClaims',
+  connections: 'loyaltyConnections',
+  sync: 'loyaltySync',
 } as const
 
 /** The emails this plugin sends a store's customers: catalog keys in `tenant-emails.ts`. */

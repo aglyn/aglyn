@@ -63,10 +63,6 @@ const switchesSortingOff = (source: string): boolean => /\bdisableColumnSorting\
  * line here — convert the list instead of adding one.
  */
 const NOT_YET_CONVERTED: readonly string[] = [
-  'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-  'apps/console/components/host-components-card.component.tsx',
-  'apps/console/components/staff-doc-table.component.tsx',
-  'apps/console/components/templates/host-templates-card.component.tsx',
 ]
 
 describe('every table sorts by its column headers (AGL-3680)', () => {

@@ -948,6 +948,16 @@ service cloud.firestore {
       match /loyaltyReferralClaims/{claimId} {
         allow read, write: if false;
       }
+      // The store's own Smile.io or Yotpo Loyalty account (AGL-3677), its
+      // API key sealed, and each points movement on its way there. Closed to
+      // every client like the rest: one holds a merchant's credential, the
+      // other a buyer's address.
+      match /loyaltyConnections/{hostId} {
+        allow read, write: if false;
+      }
+      match /loyaltySync/{rowId} {
+        allow read, write: if false;
+      }
 
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through

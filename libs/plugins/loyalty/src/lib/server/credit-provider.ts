@@ -46,7 +46,8 @@ import {
   parseLoyaltyReference,
   referralReference,
 } from './db'
-import { normalizeStoredMember, writeLedger, type LoyaltyScope } from './members'
+import { refreshConnectedMember, sendLoyaltySync } from './connector-sync'
+import { loyaltySyncTarget, normalizeStoredMember, writeLedger, type LoyaltyScope } from './members'
 import { loyaltyProgramIsOn, resolveLoyaltyStore } from './program-store'
 import { normalizeRedemption, restorationTo, withLiveTotals, type StoredRedemption } from './redemptions'
 import { resolveLoyaltyOrgId } from './site-context'
@@ -69,6 +70,13 @@ import { resolveLoyaltyOrgId } from './site-context'
  * Every write is a transaction, and every one that settles a sale runs in the
  * SELLER's transaction through {@link stageLoyaltyCredit}, so a redemption
  * commits with its sale or not at all.
+ *
+ * A CONNECTED PROGRAM (AGL-3677) spends the points the merchant's own Smile.io
+ * or Yotpo account holds. The member's balance is refreshed from the account
+ * whenever a code or a cashier names them, before anything is held; the
+ * redemption itself still commits inside the seller's transaction, and its
+ * points reach the account afterwards through `loyaltySync`. Referral codes
+ * are the connected program's to run, so they are refused here.
  */
 
 /** How long an online checkout's hold stands: past any session that can still be paid. */
@@ -117,6 +125,40 @@ async function readMember(scope: LoyaltyScope, memberKey: string): Promise<Store
   return snapshot.exists ? normalizeStoredMember(scope, memberKey, snapshot.data()) : null
 }
 
+const CONNECTED_UNREACHABLE: CheckoutCreditRefusal = {
+  ok: false,
+  status: 409,
+  error: 'Rewards can’t be checked right now. Try again in a moment.',
+}
+const CONNECTED_REFERRALS: CheckoutCreditRefusal = {
+  ok: false,
+  status: 409,
+  error: 'This store’s referral rewards are given through its rewards program, not as a code here.',
+}
+
+/**
+ * A member as they stand right now: for a connected program, the mirror
+ * refreshed from the merchant's account first. `null` when the member is gone;
+ * a refusal when the account cannot be asked.
+ */
+async function currentMember(
+  scope: LoyaltyScope,
+  memberKey: string,
+  program: LoyaltyProgram,
+): Promise<StoredLoyaltyMember | CheckoutCreditRefusal | null> {
+  if (!program.connected) return readMember(scope, memberKey)
+  try {
+    return await refreshConnectedMember(scope, memberKey)
+  } catch (error) {
+    console.error('[loyalty] a connected balance could not be read', scope.hostId, (error as Error)?.message)
+    return CONNECTED_UNREACHABLE
+  }
+}
+
+function isRefusal(value: unknown): value is CheckoutCreditRefusal {
+  return Boolean(value && typeof value === 'object' && (value as { ok?: unknown }).ok === false)
+}
+
 /** Whether a site offers rewards on a channel: the plugin and the program are on. */
 export async function loyaltyCreditOffered(input: { hostId: string; channel: CheckoutCreditChannel }): Promise<boolean> {
   return loyaltyProgramIsOn(input.hostId)
@@ -142,7 +184,8 @@ export async function resolveLoyaltyCredit(input: {
     // A bare reference is a staff member's pick from `lookup`, never a buyer's.
     const parsed = input.staff && input.reference ? parseLoyaltyReference(input.reference) : null
     if (!parsed || parsed.kind !== 'member') return UNKNOWN_CODE
-    const member = await readMember(scope, parsed.memberKey)
+    const member = await currentMember(scope, parsed.memberKey, program)
+    if (isRefusal(member)) return member
     return member ? memberAccount(member, program, nowMs) : UNKNOWN_CODE
   }
 
@@ -151,7 +194,9 @@ export async function resolveLoyaltyCredit(input: {
   const codeSnapshot = await loyaltyRefs.code(scope.orgId, input.hostId, canonical.code).get()
   if (!codeSnapshot.exists || codeSnapshot.get('kind') !== canonical.kind) return UNKNOWN_CODE
   const ownerKey = String(codeSnapshot.get('memberKey') ?? '')
-  const owner = ownerKey ? await readMember(scope, ownerKey) : null
+  if (canonical.kind === 'referral' && program.connected) return CONNECTED_REFERRALS
+  const owner = ownerKey ? await currentMember(scope, ownerKey, program) : null
+  if (isRefusal(owner)) return owner
   if (!owner) return UNKNOWN_CODE
 
   if (canonical.kind === 'rewards') return memberAccount(owner, program, nowMs)
@@ -201,6 +246,11 @@ export async function holdLoyaltyCredit(
   const maxCents = Math.max(0, Math.trunc(input.maxCents))
 
   if (parsed.kind === 'member') {
+    if (program.connected) {
+      const refreshed = await currentMember(scope, parsed.memberKey, program)
+      if (isRefusal(refreshed)) return refreshed
+      if (!refreshed) return UNKNOWN_CODE
+    }
     return loyaltyDb().runTransaction(async (transaction: any) => {
       const ref = loyaltyRefs.member(scope.orgId, scope.hostId, parsed.memberKey)
       const snapshot = await transaction.get(ref)
@@ -218,6 +268,7 @@ export async function holdLoyaltyCredit(
   }
 
   // A referral: one live hold per friend, and none once their first order is written.
+  if (program.connected) return CONNECTED_REFERRALS
   if (!program.referralsEnabled || program.refereeRewardCents <= 0) {
     return refusal(409, 'This store is not taking referral codes right now.')
   }
@@ -364,7 +415,7 @@ export async function stageLoyaltyCredit(input: {
             orderId,
             channel,
             atMs: nowMs,
-          })
+          }, loyaltySyncTarget(program, member.email))
         }
         return split.cents
       },
@@ -390,7 +441,7 @@ export async function stageLoyaltyCredit(input: {
           orderId,
           channel: prior.channel,
           atMs: nowMs,
-        })
+        }, loyaltySyncTarget(program, member.email))
         return prior.cents
       },
     }
@@ -463,8 +514,13 @@ export async function restoreRedemptionTo(input: {
   return loyaltyDb().runTransaction(async (transaction: any) => {
     const redemptionRef = loyaltyRefs.redemption(scope.orgId, scope.hostId, orderId, memberKey)
     const memberRef = loyaltyRefs.member(scope.orgId, scope.hostId, memberKey)
-    const [redemptionSnapshot, memberSnapshot] = await Promise.all([transaction.get(redemptionRef), transaction.get(memberRef)])
+    const [redemptionSnapshot, memberSnapshot, programSnapshot] = await Promise.all([
+      transaction.get(redemptionRef),
+      transaction.get(memberRef),
+      transaction.get(loyaltyRefs.program(scope.orgId, scope.hostId)),
+    ])
     if (!redemptionSnapshot.exists || !memberSnapshot.exists) return 0
+    const program = normalizeLoyaltyProgram(programSnapshot.exists ? programSnapshot.data() : null)
     const redemption: StoredRedemption = normalizeRedemption({ ...scope, orderId, memberKey }, redemptionSnapshot.data())
     const restoreId = keyId(input.key)
     if (restoreId in redemption.restores) return 0
@@ -491,7 +547,7 @@ export async function restoreRedemptionTo(input: {
       creditCents: give.creditCents,
       orderId,
       atMs: input.nowMs,
-    })
+    }, loyaltySyncTarget(program, member.email))
     return give.cents
   })
 }
@@ -513,7 +569,7 @@ export async function restoreLoyaltyCredit(input: {
   const snapshot = await loyaltyRefs.redemption(orgId, input.hostId, input.orderId, parsed.memberKey).get()
   if (!snapshot.exists) return 0
   const redemption = normalizeRedemption({ ...scope, orderId: input.orderId, memberKey: parsed.memberKey }, snapshot.data())
-  return restoreRedemptionTo({
+  const given = await restoreRedemptionTo({
     scope,
     orderId: input.orderId,
     memberKey: parsed.memberKey,
@@ -521,6 +577,9 @@ export async function restoreLoyaltyCredit(input: {
     key: input.key,
     nowMs: Date.now(),
   })
+  // A connected program hears of the give-back now (a no-op for the built-in one).
+  if (given > 0) await sendLoyaltySync({ ...scope, orderId: input.orderId })
+  return given
 }
 
 /** Staff search at the register: by code, by exact email, or by the start of an email. */
@@ -538,8 +597,8 @@ export async function lookupLoyaltyCredit(input: { hostId: string; query: string
   }
   const email = normalizeLoyaltyEmail(query)
   if (email) {
-    const member = await readMember(scope, memberKeyFor(input.hostId, email))
-    return member ? [memberAccount(member, store.program, nowMs)] : []
+    const member = await currentMember(scope, memberKeyFor(input.hostId, email), store.program)
+    return member && !isRefusal(member) ? [memberAccount(member, store.program, nowMs)] : []
   }
   const prefix = query.toLowerCase()
   const snapshot = await loyaltyRefs

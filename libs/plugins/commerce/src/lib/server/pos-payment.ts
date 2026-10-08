@@ -888,7 +888,7 @@ const RECEIPT_REPEAT_WINDOW_MS = 2 * 60 * 1000
  * display. Kept on the order; an email chosen after the sale is paid is sent
  * at once, and one chosen before is sent when it completes.
  */
-async function recordReceiptChoice(
+export async function recordReceiptChoice(
   staff: PosStaff,
   orderId: string,
   body: Record<string, any>,
@@ -966,7 +966,9 @@ async function recordReceiptChoice(
     // printer, under the sale's own key so it never prints twice (AGL-3609).
     await printPosSaleReceipt(staff.hostId, orderId)
   }
-  if (order.status === 'paid' && order.registerId) {
+  // A kiosk's own receipt screen (AGL-3623) is not the register's display:
+  // the display may be asking the cashier's customer right now.
+  if (order.status === 'paid' && order.registerId && order.posSource !== 'kiosk') {
     // The customer has answered (or the cashier for them): the display says
     // thank you and drops the address they typed (AGL-3608).
     await finishPosDisplayReceipt(staff.hostId, order.registerId).catch((error: unknown) =>

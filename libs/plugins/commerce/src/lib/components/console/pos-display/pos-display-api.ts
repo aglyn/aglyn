@@ -121,9 +121,22 @@ async function call<T>(
   }
 }
 
-export function pairDisplay(code: string) {
-  return call<{ token: string; branding: PosDisplayBranding }>(
-    { method: 'POST', body: { action: 'pair', code, label: 'Customer display' } },
+/**
+ * Exchanges a register's code for this device's token. `mode` is the kind of
+ * screen this page is — a customer display, or a self-service kiosk
+ * (AGL-3623) — and a code made for the other kind is refused.
+ */
+export function pairDisplay(code: string, mode: CommerceModel.PosDeviceMode = 'display') {
+  return call<{ token: string; mode?: CommerceModel.PosDeviceMode; branding: PosDisplayBranding }>(
+    {
+      method: 'POST',
+      body: {
+        action: 'pair',
+        code,
+        mode,
+        label: mode === 'kiosk' ? 'Self-service kiosk' : 'Customer display',
+      },
+    },
     null,
   )
 }

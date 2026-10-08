@@ -25,8 +25,35 @@ twice.
 
 ## Configuration
 
-None. No outside vendor and no environment variable: each store's program is
-off until its merchant turns it on under **Products → Promotions → Rewards**.
+The built-in program needs none: each store's program is off until its
+merchant turns it on under **Products → Promotions → Rewards**.
+
+## Smile.io and Yotpo Loyalty (AGL-3677)
+
+A merchant may connect their OWN Smile.io or Yotpo Loyalty account in place of
+the built-in points. Neither needs an app of Aglyn's: Smile.io takes a private
+API key the merchant creates (Plus and Enterprise plans), Yotpo its account
+GUID and API key. One deployment variable:
+
+- `LOYALTY_CONNECTORS_TOKEN_KEY` — 32 random bytes, base64 (a `secret-box`
+  keyring, `id:base64,…`, current first, to rotate). Every stored vendor key is
+  sealed under it. Without it the **Rewards account** card draws nothing and
+  its guide stays unlisted.
+
+One program at a time. While an account is connected, the built-in program
+awards no points, welcome points or referral rewards of its own: the same
+earn, reverse, redeem, void, give-back and hand-adjust movements are written
+to the ledger as before, and each also writes its twin in `loyaltySync`
+(same id, same commit). `connector-sync.ts` sends each row once — a
+transactional claim, then the call, then `synced`; a sender that died mid-call
+is found again by the reference it left in the vendor's own history. A member's
+balance is the vendor's, refreshed into the member document whenever a code or
+a cashier names them. Test-mode sales move no real points.
+
+Connecting never spends or erases built-in points: each member's are parked on
+their own document (`parked`, `parkedPoints`) while `points` mirrors the
+account, and disconnecting (a confirm step) restores exactly what was parked.
+Store credit is never touched by either.
 
 ## Storage
 
@@ -34,7 +61,6 @@ Server-only, under `orgs/{orgId}`: `loyaltyPrograms/{hostId}`,
 `loyaltyMembers/{hostId}__{memberKey}`, `loyaltyCodes/{hostId}__{code}`,
 `loyaltyLedger/{hostId}__{entryKey}`,
 `loyaltyRedemptions/{hostId}__{orderId}__{memberKey}` and
-`loyaltyReferralClaims/{hostId}__{memberKey}`. The Firestore rules refuse
-every client.
-
-Smile.io and Yotpo connectors are a later phase with their own issue.
+`loyaltyReferralClaims/{hostId}__{memberKey}`, and for a connected account
+`loyaltyConnections/{hostId}` and `loyaltySync/{hostId}__{entryKey}`. The
+Firestore rules refuse every client.

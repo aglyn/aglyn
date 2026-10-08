@@ -89,7 +89,8 @@
           "chrom",
           "chrome"
         ],
-        "nameReversed": "emorhc niam"
+        "nameReversed": "emorhc niam",
+        "description": null
       }
     },
     {
@@ -107,7 +108,8 @@
           "hero"
         ],
         "nameReversed": "oreh",
-        "kind": "site"
+        "kind": "site",
+        "description": null
       }
     },
     {
@@ -127,7 +129,8 @@
           "foote",
           "footer"
         ],
-        "nameReversed": "retoof"
+        "nameReversed": "retoof",
+        "description": null
       }
     },
     {
@@ -145,7 +148,8 @@
           "odd"
         ],
         "nameReversed": "ddo",
-        "kind": "site"
+        "kind": "site",
+        "description": null
       }
     },
     {
@@ -345,6 +349,24 @@
           "listingId": "listing-2"
         },
         "libraryRow": true
+      }
+    },
+    {
+      "name": "a layout that has a description keeps it: only a missing one is stored as null",
+      "collection": "layouts",
+      "doc": {
+        "displayName": "Side",
+        "description": "Left rail"
+      },
+      "expected": {
+        "nameLower": "side",
+        "nameTokens": [
+          "s",
+          "si",
+          "sid",
+          "side"
+        ],
+        "nameReversed": "edis"
       }
     }
   ],

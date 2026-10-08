@@ -109,6 +109,11 @@ export const loyaltyRefs = {
     ),
   referralClaim: (orgId: string, hostId: string, memberKey: string) =>
     collection(orgId, LOYALTY_COLLECTIONS.referralClaims).doc(loyaltyDocIds.referralClaim(hostId, memberKey)),
+  connection: (orgId: string, hostId: string) => collection(orgId, LOYALTY_COLLECTIONS.connections).doc(hostId),
+  syncCollection: (orgId: string) => collection(orgId, LOYALTY_COLLECTIONS.sync),
+  /** One movement on its way to a connected account: the same id as the ledger row it mirrors. */
+  sync: (orgId: string, hostId: string, entryKey: string) =>
+    collection(orgId, LOYALTY_COLLECTIONS.sync).doc(loyaltyDocIds.ledger(hostId, entryKey)),
 }
 
 /** The member a `m:` reference names, or the referral an `r:` one does. */

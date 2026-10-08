@@ -353,6 +353,9 @@ data class HostOrder(
     val fulfillmentMethod: OrderFulfillmentMethod? = null,
     val fulfillments: List<OrderFulfillment>? = null,
     val invoiceId: String? = null,
+    val kioskDeviceId: String? = null,
+    val kioskQueuedAtMs: Double? = null,
+    val kioskQueueRegisterId: String? = null,
     val lineItems: List<OrderLineItem>? = null,
     val localDelivery: OrderLocalDelivery? = null,
     val locationId: String? = null,
@@ -364,6 +367,7 @@ data class HostOrder(
     val paymentRisk: PaymentRisk? = null,
     val payments: List<OrderPayment>? = null,
     val pickup: OrderPickup? = null,
+    val posSource: String? = null,
     val productId: String? = null,
     val receiptRequest: HostOrderReceiptRequest? = null,
     val refundedCents: Double? = null,
@@ -1346,6 +1350,141 @@ data class PickupLocationSettings(
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosDeviceModeSerializer::class)
+enum class PosDeviceMode(val raw: String) {
+    DISPLAY("display"),
+    KIOSK("kiosk"),
+    UNKNOWN(""),
+}
+
+internal object PosDeviceModeSerializer :
+    RawEnumSerializer<PosDeviceMode>("com.aglyn.contracts.PosDeviceMode", PosDeviceMode.entries, PosDeviceMode.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosKioskCatalog(
+    val categories: List<PosKioskCategory>,
+    val currency: String,
+    val products: List<PosKioskProduct>,
+)
+
+@Serializable
+data class PosKioskCategory(
+    val id: String,
+    val name: String,
+)
+
+@Serializable
+data class PosKioskContext(
+    val branding: PosKioskContextBranding,
+    val currency: String,
+    val idleSeconds: Long,
+    val offerMarketing: Boolean,
+    val payments: PosKioskContextPayments,
+    val receipts: List<PosReceiptChannel>,
+    val testMode: Boolean,
+    val tipping: PosKioskContextTipping,
+)
+
+@Serializable
+data class PosKioskContextBranding(
+    val logoDarkUrl: String? = null,
+    val logoUrl: String? = null,
+    val message: String,
+    val name: String,
+)
+
+@Serializable
+data class PosKioskContextPayments(
+    val cardPresent: Boolean,
+    val payAtCounter: Boolean,
+    val reader: Boolean,
+)
+
+@Serializable
+data class PosKioskContextTipping(
+    val enabled: Boolean,
+    val percentages: List<Double>,
+)
+
+@Serializable
+data class PosKioskLine(
+    val modifiers: List<ModifierSelection>? = null,
+    val productId: String,
+    val quantity: Long,
+    val variantId: String? = null,
+)
+
+@Serializable
+data class PosKioskProduct(
+    val categoryIds: List<String>,
+    val description: String? = null,
+    val id: String,
+    val imageUrl: String? = null,
+    val modifierGroups: List<ProductModifierGroup>,
+    val name: String,
+    val options: List<PosKioskProductOptionsItem>,
+    val variants: List<PosKioskVariant>,
+)
+
+@Serializable
+data class PosKioskProductOptionsItem(
+    val name: String,
+    val values: List<String>,
+)
+
+@Serializable
+data class PosKioskSale(
+    val discountCents: Long,
+    val dueCents: Long,
+    val itemsCents: Long,
+    val lines: List<PosKioskSaleLine>,
+    val number: Long,
+    val orderId: String,
+    val paidCents: Long,
+    val payment: PosKioskSalePayment? = null,
+    val status: PosKioskSaleStatus,
+    val taxCents: Long,
+    val tipCents: Long,
+    val totalCents: Long,
+)
+
+@Serializable
+data class PosKioskSaleLine(
+    val amountCents: Long,
+    val name: String,
+    val quantity: Long,
+    val variantLabel: String? = null,
+)
+
+@Serializable
+data class PosKioskSalePayment(
+    val failureMessage: String? = null,
+    val id: String,
+    val status: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosKioskSaleStatusSerializer::class)
+enum class PosKioskSaleStatus(val raw: String) {
+    OPEN("open"),
+    PAID("paid"),
+    QUEUED("queued"),
+    VOIDED("voided"),
+    UNKNOWN(""),
+}
+
+internal object PosKioskSaleStatusSerializer :
+    RawEnumSerializer<PosKioskSaleStatus>("com.aglyn.contracts.PosKioskSaleStatus", PosKioskSaleStatus.entries, PosKioskSaleStatus.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosKioskVariant(
+    val id: String,
+    val options: Map<String, String>,
+    val priceCents: Long,
+    val soldOut: Boolean,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosOfflineFlagSerializer::class)
 enum class PosOfflineFlag(val raw: String) {
     CASH_SHORT("cash-short"),
@@ -1837,6 +1976,17 @@ data class ContractValues(
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
+    @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
+    @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
+    @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
+    @SerialName("POS_KIOSK_IDLE_SECONDS_MAX") val posKioskIdleSecondsMax: Long,
+    @SerialName("POS_KIOSK_IDLE_SECONDS_MIN") val posKioskIdleSecondsMin: Long,
+    @SerialName("POS_KIOSK_IDLE_WARNING_SECONDS") val posKioskIdleWarningSeconds: Long,
+    @SerialName("POS_KIOSK_MAX_LINES") val posKioskMaxLines: Long,
+    @SerialName("POS_KIOSK_MAX_QUANTITY") val posKioskMaxQuantity: Long,
+    @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
+    @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
+    @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
