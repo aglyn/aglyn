@@ -18,6 +18,15 @@ final class ShellTests: XCTestCase {
     XCTAssertNotNil(registry.screen("redirects.list"))
   }
 
+  func testThePlatformEntriesLoadBeforeThePlugins() {
+    let registry = NativePluginRegistry()
+    let result = NativePluginLoader.load(AppModel.platformEntries + NativePluginManifest.entries, into: registry)
+    XCTAssertEqual(result.failed, [])
+    XCTAssertEqual(result.loaded.first, "site")
+    XCTAssertNotNil(registry.screen("site.pages"))
+    XCTAssertEqual(registry.resolve("/acme/hosts/shop/screens"), .screen("site.pages", ["orgSlug": "acme", "hostSlug": "shop"]))
+  }
+
   func testANavigationPushLandsOnTheSelectedSection() {
     let navigation = ShellNavigation()
     navigation.section = .notifications

@@ -14,7 +14,7 @@ struct OrgAutomationsSection: View {
   let orgID: String
   let sites: OrgSites
   let entitlements: AutomationEntitlements?
-  @State private var live = LiveQuery()
+  @State private var live = LiveRows()
   @State private var confirm: PendingConfirm?
 
   private var api: AutomationAPI { context.automationAPI }
@@ -228,7 +228,7 @@ struct OrgSiteListSection: View {
   let sites: OrgSites
   let entitlements: AutomationEntitlements?
   @State private var showAll = false
-  @State private var loaders: [String: LiveQuery] = [:]
+  @State private var loaders: [String: LiveRows] = [:]
 
   private var canRead: Bool { kind != .webhooks || sites.canEdit }
 
@@ -288,7 +288,7 @@ struct OrgSiteListSection: View {
     .task(id: canRead ? shown.map(\.id) : []) {
       guard canRead else { return }
       for site in shown where loaders[site.id] == nil {
-        let live = LiveQuery()
+        let live = LiveRows()
         live.start(context.firestore, AutomationQueries.orgSiteRows(site.id, kind: kind))
         loaders[site.id] = live
       }
@@ -309,7 +309,7 @@ struct OrgSiteRowsSection: View {
   let context: NativePluginContext
   let site: WorkspaceSite
   let kind: OrgSiteKind
-  let live: LiveQuery?
+  let live: LiveRows?
 
   var body: some View {
     let name = site.name.isEmpty ? (site.subdomain.isEmpty ? site.id : site.subdomain) : site.name

@@ -27,7 +27,7 @@ struct WorkflowEditorScreen: View {
   let params: NativeParams
   @Environment(\.dismiss) private var dismiss
   @State private var stored = LiveDoc()
-  @State private var list = LiveQuery()
+  @State private var list = LiveRows()
   @State private var pickers = AutomationPickers()
   @State private var draft = WorkflowDraft()
   @State private var seeded = false

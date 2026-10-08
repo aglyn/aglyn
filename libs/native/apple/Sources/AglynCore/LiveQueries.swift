@@ -4,12 +4,13 @@
 import Foundation
 import Observation
 
-/// A live Firestore query as a screen holds one: the rows (nil until the
+/// A live Firestore query as an editor holds one (unlike [LiveQuery], it keeps
+/// the last rows on a failure and says when they are the cache's): the rows (nil until the
 /// first answer), whether the last answer failed, and whether the rows came
 /// from the device's cache rather than the server.
 @MainActor
 @Observable
-public final class LiveQuery {
+public final class LiveRows {
   public private(set) var docs: [FirestoreDocument]?
   public private(set) var failed = false
   /// The answer on screen is the cache's, unconfirmed by the server.

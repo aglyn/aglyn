@@ -12,7 +12,7 @@ import SwiftUI
 struct RunHistoryScreen: View {
   let context: NativePluginContext
   let params: NativeParams
-  @State private var live = LiveQuery()
+  @State private var live = LiveRows()
   @State private var filters = RunFilters()
   @State private var page = 0
   @State private var searchText = ""

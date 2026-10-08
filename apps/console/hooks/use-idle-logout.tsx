@@ -26,7 +26,7 @@ import {
 } from '../utils/session-reauth'
 
 const IDLE_TIMEOUT_MINUTES = Number(
-  process.env.NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES ?? '60',
+  process.env.NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES ?? '120',
 )
 const IDLE_TIMEOUT_MS = IDLE_TIMEOUT_MINUTES * 60_000
 const IDLE_CHECK_INTERVAL_MS = 60_000
@@ -34,7 +34,7 @@ const ACTIVITY_WRITE_THROTTLE_MS = 30_000
 /**
  * The server heartbeat is a network call, so it is throttled more coarsely
  * than the local write. Sub-minute granularity is irrelevant against an
- * hour-long idle window.
+ * two-hour idle window.
  */
 const SERVER_HEARTBEAT_THROTTLE_MS = 60_000
 const ACTIVITY_STORAGE_KEY = 'aglyn:last-activity-at'
@@ -103,7 +103,7 @@ async function readServerActivity(): Promise<number> {
 
 /**
  * Idle session expiry (AGL-464): after `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
- * (default 60, ≤0 disables) without user activity, expire the session IN
+ * (default 120, ≤0 disables) without user activity, expire the session IN
  * PLACE (AGL-664): sign out with the interactive marker set — which routes
  * the shared-cookie tombstone and the service-worker cache purge through
  * `useSessionCookie`'s convergence branch, exactly as the /signout page's

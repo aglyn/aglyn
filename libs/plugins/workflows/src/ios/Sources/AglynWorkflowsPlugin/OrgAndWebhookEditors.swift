@@ -182,7 +182,7 @@ struct WebhookEditorScreen: View {
   let context: NativePluginContext
   let params: NativeParams
   @Environment(\.dismiss) private var dismiss
-  @State private var workflows = LiveQuery()
+  @State private var workflows = LiveRows()
   @State private var name = ""
   @State private var inbound = false
   @State private var url = ""

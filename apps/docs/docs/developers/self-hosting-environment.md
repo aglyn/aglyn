@@ -388,7 +388,7 @@ enforcement on.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `AUTH_ACTION_ALLOWED_ORIGINS` | Optional | Runtime | Comma-separated extra origins a password-reset or verify-email link may be built on when the request supplies one. Empty — the default — means request-supplied origins are always ignored and the link is built on `NEXT_PUBLIC_CONSOLE_URL`, which is the safe state. **This is a security boundary:** a wrong entry lets a request-supplied host receive a live reset code. Intended for preview deployments. |
-| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `60`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
+| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `120`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
 
 ---
 

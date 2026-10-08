@@ -7,6 +7,8 @@ import AglynPluginHost
 import AglynBookingsPlugin
 import AglynCommercePlugin
 import AglynEventsCalendarPlugin
+import AglynFormsPlugin
+import AglynInboxPlugin
 import AglynRedirectsPlugin
 import AglynWorkflowsPlugin
 
@@ -26,6 +28,16 @@ public enum NativePluginManifest {
       id: "events-calendar",
       contributes: ["screens": ["events-calendar.events"], "quickActions": ["events-calendar.open"], "deepLinks": ["events-calendar.page"]],
       register: AglynEventsCalendarPlugin.registerEventsCalendarNative
+    ),
+    NativePluginManifestEntry(
+      id: "forms",
+      contributes: ["screens": ["forms.form", "forms.list"], "quickActions": ["forms.open"], "deepLinks": ["forms.page", "forms.record"]],
+      register: AglynFormsPlugin.registerFormsNative
+    ),
+    NativePluginManifestEntry(
+      id: "inbox",
+      contributes: ["screens": ["inbox.submission", "inbox.submissions"], "deepLinks": ["inbox.submissions-page"]],
+      register: AglynInboxPlugin.registerInboxNative
     ),
     NativePluginManifestEntry(
       id: "redirects",

@@ -291,7 +291,7 @@ struct WorkflowsSection: View {
   let context: NativePluginContext
   let hostID: String
   let entitlements: AutomationEntitlements?
-  @State private var live = LiveQuery()
+  @State private var live = LiveRows()
   @State private var serverCount: Int?
   @State private var scanning: String?
   @State private var confirm: PendingConfirm?
@@ -502,10 +502,10 @@ struct ActionsSection: View {
   let context: NativePluginContext
   let hostID: String
   let entitlements: AutomationEntitlements?
-  @State private var live = LiveQuery()
+  @State private var live = LiveRows()
   @State private var confirm: PendingConfirm?
   @State private var testing: String?
-  @State private var orgLive = LiveQuery()
+  @State private var orgLive = LiveRows()
 
   private var api: AutomationAPI { context.automationAPI }
 
@@ -726,7 +726,7 @@ struct WebhooksSection: View {
   let context: NativePluginContext
   let hostID: String
   let entitlements: AutomationEntitlements?
-  @State private var live = LiveQuery()
+  @State private var live = LiveRows()
   @State private var host = LiveDoc()
   @State private var confirm: PendingConfirm?
 
