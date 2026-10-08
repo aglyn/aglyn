@@ -100,6 +100,24 @@ export interface ListQuerySort {
   direction: 'asc' | 'desc'
   /** The grid column this order sorts, when the list lets the grid sort by it. */
   column?: string
+  /**
+   * Served ONLY while nothing narrows the list past its base scope — no
+   * served clause, no search word (AGL-3680).
+   *
+   * A header sort on every column would otherwise cost one composite per
+   * (equality field × order), a matrix the 1,000-composite cap cannot hold.
+   * An `alone` order is paired only with the base predicates
+   * (`listQueryIndexes`), so on a top-level or subcollection list it costs
+   * NO composite, and on a base-scoped collection-group list one per
+   * direction. Asked while a filter or the search is on, the plan falls
+   * back to the list's default header order and says so in `notices`.
+   *
+   * Leave it off the default order and on at most one other high-value
+   * order a list wants to hold under every filter.
+   */
+  alone?: boolean
+  /** How the order reads in a notice — "Created", "Plan". Defaults to the column. */
+  label?: string
 }
 
 /** The document id, as a path. */
@@ -180,6 +198,12 @@ export interface ListQueryPlan {
   refused: ListQueryRefusal[]
   /** Said to the reader about what WAS served — e.g. one search word of two. */
   notices: string[]
+  /**
+   * The order asked for that the plan did not serve, and why: `alone` — it
+   * is served only with no filter or search on; `range` — a range filter
+   * leads the order with its own field. Null when the asked order is served.
+   */
+  sortFallback?: { asked: ListQuerySort; reason: 'alone' | 'range' } | null
 }
 
 /** How one clause lands on a query, before it is composed with the others. */
@@ -515,11 +539,21 @@ export function planListQuery(
   }
 
   // The order.
-  const asked = request.sort
+  const declared = request.sort
     ? declaration.sorts.find(
         (sort) => sort.path === request.sort?.path && sort.direction === request.sort?.direction,
       )
     : undefined
+  let sortFallback: ListQueryPlan['sortFallback'] = null
+  let asked = declared
+  // An `alone` order holds only while nothing narrows the list past its base.
+  if (declared?.alone && (served.length > 0 || searched !== null)) {
+    asked = defaultHeaderSort(declaration)
+    sortFallback = { asked: declared, reason: 'alone' }
+    notices.push(
+      `Sorted by ${sortLabel(asked)}: ${sortLabel(declared)} sorts only with no filter or search on.`,
+    )
+  }
   // A range leads the order with the field it ranges over — in the asked
   // direction when the asked order IS that field, since a declared order has
   // its composites either way.
@@ -538,7 +572,38 @@ export function planListQuery(
       )
     : (asked ?? declaration.sorts[0] ?? { path: LIST_QUERY_ID_PATH, direction: 'asc' })
 
-  return { filters, orderBy, served, searched, refused, notices }
+  // A range took the order from a header the reader picked: say so. Not for
+  // the default order, which nobody picked.
+  if (
+    !sortFallback &&
+    declared &&
+    declared !== declaration.sorts[0] &&
+    declared !== defaultHeaderSort(declaration) &&
+    orderBy.path !== declared.path
+  ) {
+    sortFallback = { asked: declared, reason: 'range' }
+    const label = sortLabel(orderBy)
+    notices.push(`Sorted by ${label}: a ${label} filter orders the list by it.`)
+  }
+
+  return { filters, orderBy, served, searched, refused, notices, sortFallback }
+}
+
+/** How an order reads in a notice. */
+const sortLabel = (sort: ListQuerySort | undefined): string =>
+  sort?.label ?? sort?.column ?? sort?.path ?? 'the default order'
+
+/**
+ * The order an `alone` sort falls back to: the first header order that is
+ * not itself `alone`, else the list's default. A fallback that could itself
+ * fall back would leave the list in no order at all.
+ */
+export function defaultHeaderSort(declaration: ListQueryDeclaration): ListQuerySort {
+  return (
+    declaration.sorts.find((sort) => sort.column && !sort.alone) ??
+    declaration.sorts.find((sort) => !sort.alone) ??
+    { path: LIST_QUERY_ID_PATH, direction: 'asc' }
+  )
 }
 
 /** A composite the plan's shapes need, in the index file's own terms. */
@@ -563,12 +628,19 @@ export function listQueryIndexes(
   base: readonly { path: string; array?: boolean }[] = [],
 ): ListQueryIndex[] {
   const equalities = new Map<string, boolean>() // path → is array clause
-  const orders: ListQuerySort[] = [...declaration.sorts]
+  // `alone` orders pair with the base only (AGL-3680); every other order —
+  // and an `alone` one a range also imposes — with every equality.
+  const orders: Array<ListQuerySort & { alone?: boolean }> = declaration.sorts.map((sort) => ({
+    ...sort,
+  }))
   const addOrder = (sort: ListQuerySort) => {
-    if (!orders.some((entry) => entry.path === sort.path && entry.direction === sort.direction)) {
-      orders.push(sort)
-    }
+    const found = orders.find(
+      (entry) => entry.path === sort.path && entry.direction === sort.direction,
+    )
+    if (found) found.alone = false
+    else orders.push({ ...sort, alone: false })
   }
+  const basePaths = new Set(base.map((entry) => entry.path))
   for (const entry of base) equalities.set(entry.path, Boolean(entry.array))
   if (declaration.search) {
     equalities.set(declaration.search.tokensPath, true)
@@ -611,6 +683,7 @@ export function listQueryIndexes(
   for (const [path, array] of equalities) {
     for (const order of orders) {
       if (order.path === path || order.path === LIST_QUERY_ID_PATH) continue
+      if (order.alone && !basePaths.has(path)) continue
       const index: ListQueryIndex = {
         fields: [
           array ? { fieldPath: path, arrayConfig: 'CONTAINS' } : { fieldPath: path, order: 'ASCENDING' },
