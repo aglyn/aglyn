@@ -15,3 +15,17 @@ actual fun formatLocalDay(atMs: Long, pattern: String, timeZone: String?): Strin
 }
 
 actual fun normalizeNfkd(text: String): String = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKD)
+
+private fun zoneOf(timeZone: String?): ZoneId = timeZone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+
+actual fun localParts(atMs: Long, timeZone: String?): LocalParts {
+  val at = Instant.ofEpochMilli(atMs).atZone(zoneOf(timeZone))
+  return LocalParts(at.year, at.monthValue, at.dayOfMonth, at.dayOfWeek.value % 7, at.hour, at.minute)
+}
+
+actual fun localDayStart(year: Int, month: Int, day: Int, timeZone: String?): Long =
+  java.time.LocalDate.of(year, month, 1).plusDays((day - 1).toLong()).atStartOfDay(zoneOf(timeZone)).toInstant().toEpochMilli()
+
+actual fun deviceTimeZone(): String = ZoneId.systemDefault().id
+
+actual fun knownTimeZones(): List<String> = listOf("UTC") + ZoneId.getAvailableZoneIds().filter { '/' in it && !it.startsWith("Etc/") && !it.startsWith("SystemV/") }.sorted()

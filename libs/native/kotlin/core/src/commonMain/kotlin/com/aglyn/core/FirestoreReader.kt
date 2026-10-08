@@ -50,7 +50,12 @@ data class FirestorePage(
 
 sealed interface Live<out T> {
   data object Loading : Live<Nothing>
-  data class Ready<T>(val value: T) : Live<T>
+  /**
+   * [fromCache]: the snapshot came from the device's cache and the server has
+   * not confirmed it yet (the web SDK's `metadata.fromCache`). An editor that
+   * writes back a whole document refuses to save from such a seed.
+   */
+  data class Ready<T>(val value: T, val fromCache: Boolean = false) : Live<T>
   data class Failed(val error: Throwable) : Live<Nothing>
 }
 

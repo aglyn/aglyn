@@ -37,48 +37,21 @@ const val IN_PERSON_ROUTE = "/api/bookings/in-person-payment"
 /** A day holds at most this many bookings on the counter list. */
 const val COUNTER_BOOKINGS_LIMIT = 100
 
-/** The most one in-person booking charge may be: $10,000. */
-const val BOOKING_IN_PERSON_MAX_CENTS = 1_000_000L
-
-/** Stripe's card minimum in USD. */
-const val BOOKING_IN_PERSON_MIN_CENTS = 50L
-
-enum class BookingInPersonState { PAID, CANCELED, AWAITING_ONLINE, COLLECTING, PAYABLE }
-
-private fun Any?.number(): Double? = (this as? Number)?.toDouble()?.takeIf { it.isFinite() }
+/** The generated state (`booking-in-person.ts`), ported once in the shared contracts. */
+typealias BookingInPersonState = com.aglyn.contracts.BookingInPersonState
 
 /** Where a booking stands for payment at the counter (`bookingInPersonState`). */
-fun bookingInPersonState(booking: Map<String, Any?>, nowMs: Long): BookingInPersonState {
-  val inPerson = booking["inPersonPayment"] as? Map<*, *>
-  val paid = floor((booking["paidAmountCents"].number() ?: 0.0) + 0.5) > 0 ||
-    !(booking["paymentIntentId"] as? String).isNullOrEmpty() ||
-    inPerson?.get("status") == "paid"
-  if (paid) return BookingInPersonState.PAID
-  if (booking["status"] == "canceled") return BookingInPersonState.CANCELED
-  if (booking["status"] == "pendingPayment") {
-    // A lapsed online hold released its slot; it is not an appointment.
-    return if ((booking["expiresAtMs"].number() ?: 0.0) < nowMs) BookingInPersonState.CANCELED else BookingInPersonState.AWAITING_ONLINE
-  }
-  if (inPerson?.get("status") == "pending") return BookingInPersonState.COLLECTING
-  return BookingInPersonState.PAYABLE
-}
+fun bookingInPersonState(booking: Map<String, Any?>, nowMs: Long): BookingInPersonState =
+  com.aglyn.contracts.bookingInPersonState(booking, nowMs)
 
 /** Null when [serviceCents] is an amount staff may charge; otherwise why not (`bookingInPersonAmountProblem`). */
-fun bookingInPersonAmountProblem(serviceCents: Long?): String? = when {
-  serviceCents == null -> "Enter the amount to charge."
-  serviceCents < BOOKING_IN_PERSON_MIN_CENTS -> "Card payments start at $0.50."
-  serviceCents > BOOKING_IN_PERSON_MAX_CENTS -> "Charge at most $10,000 at a time."
-  else -> null
-}
+fun bookingInPersonAmountProblem(serviceCents: Long?): String? = com.aglyn.contracts.bookingInPersonAmountProblem(serviceCents)
 
 /** The amount to suggest: the service's fixed price, when it has one (`bookingSuggestedCents`). */
-fun bookingSuggestedCents(service: Map<String, Any?>?): Long? {
-  if (service == null) return null
-  val display = service["priceDisplay"] as? String
-  if (!display.isNullOrEmpty() && display != "fixed") return null
-  val cents = floor((service["priceUsd"].number() ?: 0.0) * 100 + 0.5).toLong()
-  return cents.takeIf { it >= BOOKING_IN_PERSON_MIN_CENTS }
-}
+fun bookingSuggestedCents(service: Map<String, Any?>?): Long? =
+  service?.let { com.aglyn.contracts.bookingSuggestedCents(it["priceUsd"], it["priceDisplay"]) }
+
+private fun Any?.number(): Double? = (this as? Number)?.toDouble()?.takeIf { it.isFinite() }
 
 /** The device's offset from UTC in minutes, as JavaScript's `getTimezoneOffset` reports it. */
 expect fun deviceUtcOffsetMinutes(atMs: Long): Int

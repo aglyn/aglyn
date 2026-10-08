@@ -148,6 +148,11 @@ class NativeWidget(
   val size: WidgetSize = WidgetSize.FULL,
   val requiresSite: Boolean = false,
   override val apps: Set<NativeApp> = setOf(NativeApp.AGLYN),
+  /**
+   * A core page's slot it renders in instead of Home, the native twin of the
+   * console's `PluginWidgetSlot` (`hostAnalytics` is the Analytics page's).
+   */
+  val slot: String? = null,
   val content: @Composable (context: NativePluginContext) -> Unit,
 ) : Contribution
 
