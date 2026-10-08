@@ -1231,7 +1231,71 @@
       {
         "column": "createdAtMs",
         "direction": "desc",
+        "label": "Date",
         "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "createdAtMs",
+        "direction": "asc",
+        "label": "Date",
+        "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "orderLabel",
+        "direction": "desc",
+        "label": "Order",
+        "path": "number"
+      },
+      {
+        "alone": true,
+        "column": "orderLabel",
+        "direction": "asc",
+        "label": "Order",
+        "path": "number"
+      },
+      {
+        "alone": true,
+        "column": "customerEmail",
+        "direction": "asc",
+        "label": "Customer",
+        "path": "customerEmailLower"
+      },
+      {
+        "alone": true,
+        "column": "customerEmail",
+        "direction": "desc",
+        "label": "Customer",
+        "path": "customerEmailLower"
+      },
+      {
+        "alone": true,
+        "column": "channelKey",
+        "direction": "asc",
+        "label": "Channel",
+        "path": "channel"
+      },
+      {
+        "alone": true,
+        "column": "channelKey",
+        "direction": "desc",
+        "label": "Channel",
+        "path": "channel"
+      },
+      {
+        "alone": true,
+        "column": "statusKey",
+        "direction": "asc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "statusKey",
+        "direction": "desc",
+        "label": "Status",
+        "path": "status"
       }
     ]
   },
@@ -1444,7 +1508,57 @@
       {
         "column": "name",
         "direction": "asc",
+        "label": "Product",
         "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Product",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "asc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "desc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "type",
+        "direction": "asc",
+        "label": "Type",
+        "path": "type"
+      },
+      {
+        "alone": true,
+        "column": "type",
+        "direction": "desc",
+        "label": "Type",
+        "path": "type"
+      },
+      {
+        "alone": true,
+        "column": "priceUsd",
+        "direction": "asc",
+        "label": "Price",
+        "path": "priceFromCents"
+      },
+      {
+        "alone": true,
+        "column": "priceUsd",
+        "direction": "desc",
+        "label": "Price",
+        "path": "priceFromCents"
       }
     ]
   },

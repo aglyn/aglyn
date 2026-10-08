@@ -136,7 +136,12 @@ describe('each thing the orders card shows has the read its job needs', () => {
   it('pages the list on its own query, and caps no window of orders', () => {
     render(<HostOrdersCard hostId="host-1" />)
     const list = mockListRequests[mockListRequests.length - 1]
-    expect(list.request).toEqual({ clauses: [], search: [] })
+    // Newest first: the default header order (AGL-3680).
+    expect(list.request).toEqual({
+      clauses: [],
+      search: [],
+      sort: expect.objectContaining({ path: 'createdAtMs', direction: 'desc' }),
+    })
     // The pager's page, not a window: the double pages by the default size.
     expect(list.pageSize).toBeUndefined()
     // An unentitled org's card makes no plain read of `orders` at all.

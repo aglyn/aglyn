@@ -39,8 +39,8 @@
  * Every writer of `hosts/{hostId}/orders` now spreads `orderListFields`
  * (`libs/plugins/commerce/src/lib/model/order-list-fields.ts`) over what it
  * writes: `status` and `channel` always present, `productIds`, `disputeKey`,
- * `customerEmailLower`, `customerEmailTokens`, `orderLabelTokens` and
- * `searchTokens`. An order written before that lacks some or all of them, and
+ * `number`, `customerEmailLower`, `customerEmailTokens`, `orderLabelTokens`
+ * and `searchTokens`. An order written before that lacks some or all of them, and
  * a query cannot find a document by a field it does not have — so without
  * this, older orders still LIST, newest first, and are missed by every filter
  * and by the search.
@@ -48,10 +48,18 @@
  * ## What it touches
  *
  * `hosts/{hostId}/orders/{orderId}` only (any other collection named `orders`
- * is counted and left alone), and on each only those eight fields, computed
- * from what the order already says. `status` and `channel` are written only
- * where the order has none, as `paid` and `online` — what `liftLegacyOrder`
- * has always read an absent one as. A Commerce Starter order that stored a
+ * is counted and left alone), and on each only those nine fields, computed
+ * from what the order already says.
+ *
+ * The Orders grid SORTS by `number` and `customerEmailLower` (AGL-3680), and
+ * an `orderBy` drops every document that LACKS its field — so on those two an
+ * ABSENT field is written as `null` (an unnumbered order, an order with no
+ * address), where for the rest absent and `null` read the same and nothing is
+ * written. An order's own `number` is never changed, only stated.
+ *
+ * `status` and `channel` are written only where the order has none, as
+ * `paid` and `online` — what `liftLegacyOrder` has always read an absent one
+ * as. A Commerce Starter order that stored a
  * product id and no line items is searchable by that product's CURRENT name,
  * read from `hosts/{hostId}/products/{productId}` once per product; the
  * writers since have always snapshotted a name onto the line item.
@@ -155,6 +163,7 @@ export function orderListFieldsOf(order, docId, options = {}) {
     channel: text(order?.channel) || 'online',
     productIds,
     disputeKey: disputeKey(order?.dispute),
+    number: typeof order?.number === 'number' && Number.isFinite(order.number) ? order.number : null,
     customerEmailLower: nameSearchKey(email) || null,
     customerEmailTokens: emailTokens,
     orderLabelTokens: labelTokens,
@@ -163,6 +172,12 @@ export function orderListFieldsOf(order, docId, options = {}) {
 }
 
 const same = (left, right) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+
+/**
+ * The fields the Orders grid's headers order by (AGL-3680): present on every
+ * order, `null` included, or the order drops out of that sort.
+ */
+const SORTED_FIELDS = new Set(['number', 'customerEmailLower'])
 
 /**
  * One order's verdict, so the dry run and the apply run cannot disagree:
@@ -183,7 +198,7 @@ export function planOrder(path, data, options = {}) {
   const computed = orderListFieldsOf(data, segments[3], options)
   const write = {}
   for (const [key, value] of Object.entries(computed)) {
-    if (!same(data[key], value)) write[key] = value
+    if (!same(data[key], value) || (SORTED_FIELDS.has(key) && !(key in data))) write[key] = value
   }
   return Object.keys(write).length ? { action: 'update', write } : { action: 'current' }
 }
@@ -325,6 +340,20 @@ function runSelfTest() {
       planOrder('hosts/h1/orders/legacy', { createdAtMs: 1, productId: 'p1' }).write,
     ),
     { status: 'paid', channel: 'online' },
+  )
+  const { number: _number, customerEmailLower: _email, ...lacking } = orderListFieldsOf(
+    { createdAtMs: 1 },
+    'pos1',
+  )
+  check(
+    'states an absent number and address as null, so the header sorts reach the order',
+    planOrder('hosts/h1/orders/pos1', { ...lacking, createdAtMs: 1 }).write,
+    { number: null, customerEmailLower: null },
+  )
+  check(
+    'leaves a stored null number and address alone',
+    planOrder('hosts/h1/orders/pos1', { ...orderListFieldsOf({ createdAtMs: 1 }, 'pos1'), createdAtMs: 1 }),
+    { action: 'current' },
   )
   check(
     'skips an order the list cannot read',

@@ -242,12 +242,19 @@ export interface PosShift {
   cashEvents: PosCashEvent[]
   closedBy?: string
   closedByName?: string
-  closedAtMs?: number
+  /*
+   * The history sorts by each of the five below (AGL-3680), and an `orderBy`
+   * drops a shift that lacks the field, so the shift is opened with each one
+   * `null` and the close fills them — see `POS_SHIFT_LIST_QUERY`.
+   */
+  closedAtMs?: number | null
   /** What the closing cashier counted in the drawer. */
-  countedCashCents?: number
-  expectedCashCents?: number
+  countedCashCents?: number | null
+  expectedCashCents?: number | null
   /** counted − expected: positive is over, negative is short. */
-  varianceCents?: number
+  varianceCents?: number | null
+  /** The Z report's `netSalesCents`, flattened so the history can order by it. */
+  netSalesCents?: number | null
   closingNote?: string
   /** The Z report, frozen when the shift closed. */
   report?: PosShiftReport
@@ -398,7 +405,7 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
 }
 
-const dollars = (cents: number | undefined): string =>
+const dollars = (cents: number | null | undefined): string =>
   cents == null ? '' : (Math.round(cents) / 100).toFixed(2)
 
 /** The shift history as a spreadsheet: one row per shift, money in dollars. */
@@ -433,7 +440,7 @@ export function posShiftsCsv(
     'Counted cash',
     'Variance',
   ]
-  const iso = (ms: number | undefined) => (ms ? new Date(ms).toISOString() : '')
+  const iso = (ms: number | null | undefined) => (ms ? new Date(ms).toISOString() : '')
   const rows = shifts.map((shift) => {
     const report = shift.report
     const card = report
