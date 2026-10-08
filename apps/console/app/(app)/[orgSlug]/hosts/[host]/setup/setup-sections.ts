@@ -17,7 +17,7 @@
 
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 
-export type SetupSectionId = 'details' | 'seo' | 'tracking' | 'theme' | 'emails'
+export type SetupSectionId = 'details' | 'business' | 'seo' | 'tracking' | 'theme' | 'emails'
 
 export interface SetupSection {
   id: SetupSectionId
@@ -40,6 +40,11 @@ const SECTIONS: ReadonlyArray<{
    * naming it here would point the rail at a schema this route does not draw.
    */
   { id: 'details', label: 'Basic details', route: Route.HOST_SETUP_DETAILS },
+  /*
+   * What the business is, for everything that writes about it (AGL-3661):
+   * beside Basic details, whose contact card it reads rather than copies.
+   */
+  { id: 'business', label: 'Business profile', route: Route.HOST_SETUP_BUSINESS },
   { id: 'seo', label: 'SEO', route: Route.HOST_SETUP_SEO, schemaId: 'hostSeo' },
   {
     id: 'tracking',

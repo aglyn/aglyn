@@ -79,6 +79,13 @@ export interface OrderChannelSource {
    */
   fees: Array<{ label: string; amountCents: number }> | null
   feesTotalCents: number | null
+  /**
+   * How the goods leave (AGL-3644): `courier`, handed to the channel's own
+   * courier (a delivery app); absent reads as `ship`.
+   */
+  handoff?: 'ship' | 'courier'
+  /** The channel's ids of the refunds and adjustments recorded on the order, so each is recorded once (AGL-3644). */
+  refundIds?: string[]
 }
 
 /** Snapshot of what was bought — self-contained for history. */

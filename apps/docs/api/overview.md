@@ -48,6 +48,7 @@ curl https://app.aglyn.com/api/v1/me \
 {
   "object": "api_key",
   "org": "org_abc123",
+  "name": "Warehouse sync",
   "scopes": ["datasets:read", "datasets:write"]
 }
 ```
@@ -160,12 +161,14 @@ a site's rows, but the path is `/v1/leads` with the site as a
 ### `GET /v1/me`
 
 Introspect the key you're calling with — useful for verifying a key after rotation, or
-for failing fast at startup with a clear message.
+for failing fast at startup with a clear message. `name` is the name the key was given
+when it was created, or `null` for a key from before names were required.
 
 ```json
 {
   "object": "api_key",
   "org": "org_abc123",
+  "name": "Warehouse sync",
   "scopes": ["datasets:read", "datasets:write"]
 }
 ```

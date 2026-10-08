@@ -158,6 +158,15 @@ export function validateAiSystemBlocks(system: readonly AiSystemBlock[]): void {
       )
     }
   })
+  // A site's block is cached per site (AGL-3661), so it closes the cached
+  // span: a platform-wide breakpoint after it would be keyed on the site too,
+  // and every workspace would warm its own copy of a shared prompt.
+  const firstSite = system.findIndex((block) => block.site && block.cacheBreakpoint)
+  if (firstSite >= 0 && firstSite !== lastBreakpoint) {
+    throw new AiRequestShapeError(
+      `system block ${firstSite} is a site's cached block but breakpoint ${lastBreakpoint} follows it`,
+    )
+  }
 }
 
 /**

@@ -127,6 +127,14 @@ export const API_SCOPES = [
   // takes, so the API can never write a status the console forbids.
   'orders:write',
   'products:read',
+  // AGL-3643. A site's bookings were the one record an integration could not
+  // read at all — not a booking app's sync, not a Zapier trigger's sample —
+  // though a booking is as much a customer's record as an order. Read-only
+  // on purpose, and its own scope for the reason `orders:read` is: a key
+  // handed to a scheduling or calendar tool needs the appointments and
+  // nothing else. Writes (moving or canceling one, which tells the guest and
+  // can refund them) want their own decision, in the change that ships them.
+  'bookings:read',
   'media:read',
   // AGL-2463. `media:read` was the only media scope, so an agency onboarding a
   // client site could automate everything about that site except putting its
@@ -409,4 +417,36 @@ export async function revokeApiKey(
     revokedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
   return true
+}
+
+/** What a key may still do, read by its public id (AGL-3643). */
+export interface ApiKeyGrant {
+  keyId: string
+  name: string
+  scopes: ApiScope[]
+}
+
+/**
+ * The key's grant as it stands now, by its public id: `null` when the key is
+ * unknown to the organization, revoked or expired. For something a key SET
+ * UP earlier that acts on its behalf later — a REST hook it subscribed —
+ * which must stop when the key does, and never outlive a revoke.
+ */
+export async function readApiKeyGrant(
+  orgId: string,
+  keyId: string,
+  now = Date.now(),
+): Promise<ApiKeyGrant | null> {
+  if (!orgId || !keyId) return null
+  const snap = await collection()
+    .where('orgId', '==', orgId)
+    .where('keyId', '==', keyId)
+    .limit(1)
+    .get()
+  const doc = snap.docs[0]
+  if (!doc) return null
+  const data = doc.data() as ApiKeyDocument
+  if (data.revokedAt) return null
+  if (data.expiresAt && data.expiresAt.toMillis() <= now) return null
+  return { keyId: data.keyId, name: String(data.name ?? ''), scopes: normalizeScopes(data.scopes ?? []) }
 }

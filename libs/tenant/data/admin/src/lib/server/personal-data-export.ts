@@ -291,6 +291,41 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each product linked between the store and the connected inventory system (AGL-3642): the system’s product id, the SKU, the version last synced, the store’s product and variant ids, and why it was not synced. Catalog data, no person’s.',
   },
   {
+    collection: 'podConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the tokens — each site’s connection to the merchant’s own Printful store or Printify shop (AGL-3641): service, store id and name, currency, whether orders are sent automatically or held for review, whether prices sync, how shipments are heard about, and the last error. The sealed API token and webhook token and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets).',
+  },
+  {
+    collection: 'podProductLinks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each product imported from a print-on-demand service (AGL-3641): the service’s product and variant ids, the store product and variants it became, names, SKUs, what the service charges for each variant and the store’s price. Catalog data, no person’s.',
+  },
+  {
+    collection: 'podOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The part of each paid order a print-on-demand service makes and ships (AGL-3641): the store order and its number, the service’s order id, the lines sent with quantity and cost, its status, costs, attempts and errors, and each parcel’s carrier and tracking number. No buyer name, address or email is kept here; they are on the store’s order. The merchant’s own record of a SHOPPER’s order, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'deliveryAppStores',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each site’s link to the merchant’s own DoorDash, Uber Eats or Grubhub store (AGL-3644): the service, the store id it shows the merchant, the settings (accept automatically, prep minutes), the items matched to products and those waiting, and the menu’s last send. No credential is stored: every call is signed with the deployment’s partner credentials.',
+  },
+  {
+    collection: 'deliveryAppOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each order a delivery service sent a site’s register (AGL-3644): the service and its order id and short code, the items with their options and instructions, the totals and refunds, where it stood at the counter, and the store order it became. The buyer appears by first name and last initial only. The merchant’s own record of a delivery BUYER’s order, so disclosed to the ORG only.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1096,6 +1131,11 @@ export async function exportOrgData(
     'inventorySyncConnections',
     'inventorySyncOrders',
     'inventorySyncProducts',
+    'podConnections',
+    'podProductLinks',
+    'podOrders',
+    'deliveryAppStores',
+    'deliveryAppOrders',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

@@ -350,6 +350,16 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'edits a record in place and removes one, neither creates a document, ' +
     'and the delete frees a slot under the cap.',
   overlays: 'Modal/drawer overlays, written by the interaction builder dialog.',
+  businessProfile:
+    'The site\'s business profile (AGL-3661): services, audience and tone, ' +
+    'saved from Setup → Business profile. One document, `profile`; the AI ' +
+    'jobs also prefill it on the Admin SDK, never over what the owner typed.',
+  aiMemory:
+    'What Aglyn AI remembers about the site (AGL-3661). CREATE and UPDATE ' +
+    'are server-only: the assist edit route distills them on the Admin SDK, ' +
+    'and a client write would put words of its choosing into every later AI ' +
+    'prompt for the site. DELETE stays client-side — the Business profile ' +
+    'page clears one preference, or all of them.',
   experiments:
     'A/B variants, created and retired by the interactions provider.',
   redirects:

@@ -645,6 +645,7 @@ export type AiStepKind =
   | 'generate.section'
   | 'job.component'
   | 'job.crm'
+  | 'job.edit'
   | 'job.experiment'
   | 'job.form'
   | 'job.insight'
@@ -676,6 +677,12 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // Short answers through a strict tool, held to the facts the CRM reports
   // about the record the member opened.
   'job.crm': 'fast',
+  // A change to a page or a layout the site has (AGL-3616): the Assist edit
+  // rung's protocol run as a job, held to the closed world of the document's
+  // own element ids and to the palette validators. Finding the element a
+  // request means, and changing only it, is the judgment; the chat door that
+  // proposes the same edits runs on this tier.
+  'job.edit': 'balanced',
   // A/B tests by AI (AGL-2914): variants of one piece of copy, and a
   // result put into words for a verdict code already reached. Short answers
   // through a strict tool, but the judgment a variant sells — which ONE idea

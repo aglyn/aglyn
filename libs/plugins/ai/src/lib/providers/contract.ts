@@ -76,11 +76,18 @@ import { UpstreamServiceError } from '@aglyn/shared-util-errors'
  * One system block. `cacheBreakpoint` marks the end of a cacheable prefix;
  * `volatile` declares that the text carries a per-request or per-org byte
  * and therefore may never sit inside one.
+ *
+ * `site` declares a block that describes ONE site (AGL-3661): its business
+ * profile, status and remembered preferences. As a breakpoint it is cached
+ * once per site, so it must close the cached span — every platform-wide
+ * block sits ahead of it, where every workspace still shares one entry —
+ * and the runtime refuses a request that puts another breakpoint after it.
  */
 export interface AiSystemBlock {
   text: string
   cacheBreakpoint?: true
   volatile?: true
+  site?: true
 }
 
 /** A structured-output tool. `strict` is required, not optional. */

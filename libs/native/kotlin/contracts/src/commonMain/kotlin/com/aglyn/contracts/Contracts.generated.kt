@@ -623,7 +623,9 @@ data class OrderChannelSource(
     val externalRef: String,
     val fees: List<OrderChannelSourceFeesItem>? = null,
     val feesTotalCents: Double? = null,
+    val handoff: OrderChannelSourceHandoff? = null,
     val lines: List<OrderChannelSourceLinesItem>,
+    val refundIds: List<String>? = null,
     val taxRemittedByChannel: Boolean,
 )
 
@@ -632,6 +634,17 @@ data class OrderChannelSourceFeesItem(
     val amountCents: Double,
     val label: String,
 )
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderChannelSourceHandoffSerializer::class)
+enum class OrderChannelSourceHandoff(val raw: String) {
+    COURIER("courier"),
+    SHIP("ship"),
+    UNKNOWN(""),
+}
+
+internal object OrderChannelSourceHandoffSerializer :
+    RawEnumSerializer<OrderChannelSourceHandoff>("com.aglyn.contracts.OrderChannelSourceHandoff", OrderChannelSourceHandoff.entries, OrderChannelSourceHandoff.UNKNOWN, { it.raw })
 
 @Serializable
 data class OrderChannelSourceLinesItem(

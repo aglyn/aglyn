@@ -395,6 +395,7 @@ export enum Route {
   HOST_SETUP_SEO = '/[orgSlug]/hosts/[host]/setup/seo',
   HOST_SETUP_TRACKING = '/[orgSlug]/hosts/[host]/setup/tracking',
   HOST_SETUP_THEME = '/[orgSlug]/hosts/[host]/setup/theme',
+  HOST_SETUP_BUSINESS = '/[orgSlug]/hosts/[host]/setup/business',
   HOST_SETUP_EMAILS = '/[orgSlug]/hosts/[host]/setup/emails',
   // Host Admin area (AGL-1014): owner/admin-only controls — per-site plugin
   // enablement and the Danger zone — out of the Setup page collaborators
@@ -655,6 +656,7 @@ export interface RoutePayload {
   [Route.HOST_SETUP_SEO]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_TRACKING]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_THEME]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_BUSINESS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_EMAILS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_GENERAL]: { orgSlug: string; host: string }

@@ -121,6 +121,13 @@ import {
   checkAiLogicVariable,
   type AiLogicSiteVariable,
 } from '../model/ai-logic-job'
+import { aiEditJobOutline, type AiEditTargetKind } from '../model/ai-edit-job'
+import {
+  ASSIST_EDIT_MAX_INSERT_NODES,
+  ASSIST_EDIT_MAX_OPS,
+  checkAssistEditAnswer,
+  parseAssistEditContext,
+} from '../server/assist-edit'
 
 /**
  * THE EVAL HARNESS (AGL-2937): the measure that gates every token lever.
@@ -185,6 +192,7 @@ export type AiEvalKind =
   | 'crm'
   | 'experiment'
   | 'logic'
+  | 'edit'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -208,6 +216,7 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'crm',
   'experiment',
   'logic',
+  'edit',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -459,6 +468,12 @@ export interface AiEvalCase {
    */
   logic?: AiEvalLogic
   /**
+   * For an edit brief (AGL-3616): the page or layout the change is asked of,
+   * as its version stores it, which the outline the job shows the model is
+   * read from and every op is held against.
+   */
+  edit?: AiEvalEdit
+  /**
    * What the workspace may create on the case's site (AGL-3030): a brief
    * for a workspace that keeps no reusable components is held to the inline
    * doctrine, and its plan to what the workspace may create. Absent, the
@@ -495,6 +510,12 @@ export interface AiEvalLogic {
   variables: AiLogicSiteVariable[]
   functions: string[]
   saved?: HostFunction | null
+}
+
+/** An edit brief, as the edit step is given one: the document's kind and its stored node map. */
+export interface AiEvalEdit {
+  kind: AiEditTargetKind
+  nodes: Record<string, unknown>
 }
 
 /** An A/B test brief, as the experiment step is given one. */
@@ -558,6 +579,7 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   crm: { passRate: 1, meanScore: 0.9 },
   experiment: { passRate: 1, meanScore: 0.9 },
   logic: { passRate: 1, meanScore: 0.9 },
+  edit: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -1007,6 +1029,54 @@ function checkLogic(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/** The edit rung's own size limits, as the reasons its check gives for an op past one. */
+const EDIT_OVER_LIMIT = /change limit|elements at once/
+
+/**
+ * An edit answer (AGL-3616), held by the check the edit step holds it by:
+ * the edit rung's closed world and palette validators, against the outline
+ * the job shows the model of the case's document. Readable when a change
+ * survives; a rule broken when any change was left out, or the answer says
+ * it published; over budget past the rung's own limits.
+ */
+function checkEdit(evalCase: AiEvalCase, answer: unknown): Checked {
+  const brief = evalCase.edit
+  if (!brief) return { readable: false, rules: false, budget: false, findings: ['edit-brief-missing'] }
+  if (!isRecord(answer) || !Array.isArray(answer['ops'])) {
+    return { readable: false, rules: false, budget: false, findings: ['edit-not-a-call'] }
+  }
+  const outline = aiEditJobOutline(brief.nodes)
+  const context = outline ? parseAssistEditContext(outline) : null
+  if (!context) return { readable: false, rules: false, budget: false, findings: ['edit-no-document'] }
+  const checked = checkAssistEditAnswer(answer, {
+    context,
+    target: { kind: brief.kind, documentId: evalCase.id, versionId: evalCase.id, hostId: AI_EVAL_SITE_ID },
+  })
+  const ops = answer['ops'] as unknown[]
+  const over =
+    ops.length > ASSIST_EDIT_MAX_OPS ||
+    ops.some((op) => isRecord(op) && Array.isArray(op['nodes']) && op['nodes'].length > ASSIST_EDIT_MAX_INSERT_NODES)
+  const samples = (checked.value?.ops ?? []).flatMap((op) =>
+    op.op === 'updateProps'
+      ? Object.entries(op.props)
+          .filter(([, value]) => typeof value === 'string' && value.trim())
+          .map(([name, value]) => ({ at: `${op.nodeId}.${name}`, text: String(value) }))
+      : [],
+  )
+  const left = checked.violations.filter((violation) => !EDIT_OVER_LIMIT.test(violation.message))
+  const broken = [
+    ...codes(detectPublishIntent(answer)),
+    ...codes(detectOffVoiceCopy(samples, evalCase.framing)),
+    ...left.map((violation) => `edit-left-out:${violation.message}`),
+  ]
+  return {
+    readable: checked.value !== null,
+    rules: broken.length === 0,
+    budget: !over,
+    findings: [...new Set([...broken, ...(over ? ['edit-over-limit'] : [])])],
+  }
+}
+
 /** What an experiment answer is refused for, by the check it fails. */
 const EXPERIMENT_RULE_FINDINGS = new Set([
   'variant-carries-markup',
@@ -1131,6 +1201,8 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown, plan?: unknown): Che
       return checkExperiment(evalCase, answer)
     case 'logic':
       return checkLogic(evalCase, answer)
+    case 'edit':
+      return checkEdit(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }
