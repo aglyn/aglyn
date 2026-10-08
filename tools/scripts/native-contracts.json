@@ -460,6 +460,33 @@
         "WORKFLOW_MAX_STEPS",
         "CROSS_MAX_DEPTH"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts": {
+      "types": [
+        "OrderFulfillmentMethod",
+        "OrderPickupStatus",
+        "OrderLocalDeliveryStatus",
+        "OrderPickup",
+        "OrderLocalDelivery",
+        "OrderFulfillmentKey",
+        "PickupLocationSettings"
+      ],
+      "values": [
+        "ORDER_PICKUP_STATUS_LABELS",
+        "ORDER_LOCAL_DELIVERY_STATUS_LABELS",
+        "ORDER_FULFILLMENT_METHOD_LABELS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts": {
+      "types": [
+        "LocalFulfillmentQueueTab"
+      ],
+      "values": [
+        "LOCAL_FULFILLMENT_QUEUE_TABS",
+        "LOCAL_FULFILLMENT_OPEN_STATUSES",
+        "LOCAL_FULFILLMENT_QUEUE_LIMIT",
+        "LOCAL_FULFILLMENT_QUEUE_FIELDS"
+      ]
     }
   },
   "ints": [
@@ -496,7 +523,10 @@
     "OrderTotals",
     "HostProduct",
     "ProductVariant",
-    "TenantEmailEntry"
+    "TenantEmailEntry",
+    "OrderPickup",
+    "OrderLocalDelivery",
+    "PickupLocationSettings"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -7519,6 +7549,89 @@
         [
           1797000000000,
           1800000000000
+        ]
+      ]
+    },
+    "canTransitionPickup": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ],
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ]
+      ]
+    },
+    "canTransitionLocalDelivery": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ],
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ]
+      ]
+    },
+    "orderLocalFulfillmentListFields": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "args": [
+        [
+          {
+            "fulfillmentMethod": "pickup",
+            "pickup": {
+              "locationId": "loc1",
+              "locationName": "Main",
+              "status": "ready"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "local_delivery",
+            "localDelivery": {
+              "zoneId": "z",
+              "zoneName": "Z",
+              "feeCents": 500,
+              "windowStartMs": 5000,
+              "windowEndMs": 9000,
+              "status": "out_for_delivery"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "shipping",
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "localFulfillmentQueueQuery": {
+      "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "args": [
+        [
+          "pickup_ready"
+        ],
+        [
+          "delivery_scheduled",
+          "loc1"
         ]
       ]
     }

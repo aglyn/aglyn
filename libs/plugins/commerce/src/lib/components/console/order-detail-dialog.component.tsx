@@ -44,6 +44,7 @@ import { doc, runTransaction, updateDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import OrderLocalFulfillmentPanel from './order-local-fulfillment-panel.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   type ConsoleWidgetSlotRenderer,
@@ -1065,6 +1066,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         ) : null}
         {/* A register sale rung offline, and what its sync found (AGL-3625). */}
         <OrderOfflineNotice order={order} />
+        {/* Pickup or the store's own delivery, and its next step (AGL-3624). */}
+        {orderId ? <OrderLocalFulfillmentPanel hostId={hostId} orderId={orderId} order={order} /> : null}
         <Divider />
         <Typography variant="subtitle2">{'Timeline'}</Typography>
         {(order.timeline ?? [])

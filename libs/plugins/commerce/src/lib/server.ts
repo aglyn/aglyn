@@ -302,6 +302,11 @@ export function registerCommerceApi(): void {
   registerSitePageEnricher(commerceSitePageEnricher)
   registerPluginApiRoute('commerce/cart-checkout', cartCheckoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/cart', cartHandler)
+  // What the cart offers besides shipping (AGL-3624): pickup locations, and
+  // local delivery's fee, minimum and windows for a postal code.
+  registerPluginApiRoute('commerce/local-fulfillment-options', async (req, res) =>
+    (await import('./server/local-fulfillment')).localFulfillmentOptionsHandler(req, res),
+  )
   // Optional lines another plugin offers at the cart (AGL-3635).
   registerPluginApiRoute('commerce/cart-extras', cartExtrasHandler)
   registerPluginApiRoute('commerce/catalog', catalogHandler)
@@ -409,6 +414,12 @@ export function registerCommerceConsoleApi(): void {
   // `PATCH /v1/sites/{id}/orders/{id}` records a shipment through the same
   // transaction (`server/api-v1/orders-and-products.ts`).
   registerPluginApiRoute('commerce/fulfill-order', fulfillOrderHandler)
+  // Pickup and local delivery steps (AGL-3624) — ready, picked up, out for
+  // delivery, delivered — from the console queue, the order dialog and the
+  // native Aglyn app. Loaded on first call.
+  registerPluginApiRoute('commerce/local-fulfillment', async (req, res) =>
+    (await import('./server/local-fulfillment-status')).localFulfillmentHandler(req, res),
+  )
   // "Resend receipt" from the order dialog (AGL-3610): by email, or by text
   // when the platform's SMS provider is configured. Rate-limited per member
   // and per order.

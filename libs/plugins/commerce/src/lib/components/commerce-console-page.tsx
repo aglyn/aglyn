@@ -29,6 +29,8 @@ import GiftCardsCard from './console/gift-cards-card.component'
 import HostCouponsCard from './console/host-coupons-card.component'
 import HostOrdersCard from './console/host-orders-card.component'
 import LocationsCard from './console/locations-card.component'
+import LocalDeliverySettingsCard from './console/local-delivery-settings-card.component'
+import PickupDeliveryQueueCard from './console/pickup-delivery-queue-card.component'
 import MemberPostsCard from './console/member-posts-card.component'
 import OrderWebhooksCard from './console/order-webhooks-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
@@ -119,6 +121,12 @@ function sectionBody(
           spacing={3}
           items={[
             { size: { xs: 12 }, children: <HostOrdersCard hostId={hostId} /> },
+            // What to prepare, hand over and drive out (AGL-3624). Renders
+            // nothing for a store with no pickup and no local delivery.
+            {
+              size: { xs: 12 },
+              children: <PickupDeliveryQueueCard hostId={hostId} />,
+            },
             // The two queues that feed orders rather than record them
             // (AGL-2227): checkouts that stalled and shoppers waiting on
             // stock. Beneath the orders list because both are pre-order.
@@ -200,6 +208,12 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <ShippingSettingsCard hostId={hostId} />,
+            },
+            // The store's own delivery (AGL-3624); pickup is per location,
+            // on the Inventory locations card above.
+            {
+              size: { xs: 12 },
+              children: <LocalDeliverySettingsCard hostId={hostId} />,
             },
             { size: { xs: 12 }, children: <SuppliersCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <ShipStationCard hostId={hostId} /> },

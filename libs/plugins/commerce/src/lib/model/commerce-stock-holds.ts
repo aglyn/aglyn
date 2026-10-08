@@ -77,6 +77,13 @@ export interface StockHold {
    * cart reserve the wrong shelf.
    */
   units?: Record<string, number>
+  /**
+   * The location the units are reserved AT (AGL-3624): a pickup or local
+   * delivery cart takes its stock off one location's bucket, so its hold
+   * spends that bucket. Absent for a shipped cart, whose hold spends only the
+   * variant's total.
+   */
+  locationId?: string
 }
 
 /**
@@ -165,7 +172,9 @@ export function pruneStockHolds(
       // able to reserve `NaN` units and make every comparison below false.
       if (Number.isFinite(count) && count > 0) units[variantId] = count
     }
-    live[key] = { expiresAtMs, units }
+    const locationId =
+      typeof hold?.locationId === 'string' && hold.locationId ? hold.locationId : undefined
+    live[key] = { expiresAtMs, units, ...(locationId ? { locationId } : {}) }
   }
   return live
 }
@@ -183,12 +192,15 @@ export function heldVariantUnits(
   variantId: string | undefined,
   nowMs: number,
   exceptHoldKey?: string,
+  /** Count only the holds taken at this location (AGL-3624). */
+  atLocationId?: string,
 ): number {
   if (!variantId) return 0
   const live = pruneStockHolds(product?.stockHolds, nowMs)
   if (exceptHoldKey) delete live[exceptHoldKey]
   let held = 0
   for (const hold of Object.values(live)) {
+    if (atLocationId && hold.locationId !== atLocationId) continue
     held += Number(hold.units?.[variantId] ?? 0)
   }
   return held
@@ -243,6 +255,16 @@ export function availableVariantUnits(
   variantId: string | undefined,
   nowMs: number,
   exceptHoldKey?: string,
+  /**
+   * The location the buyer is collecting from or being delivered from
+   * (AGL-3624). With one, and a variant whose stock is split by location,
+   * the answer is the SMALLER of what that location's bucket has free and
+   * what the whole variant has free: a shipped cart's hold names no bucket,
+   * so it can only be charged against the total, and a location with ten on
+   * its shelf cannot sell ten when shipped checkouts already hold the other
+   * locations' every unit plus some of these.
+   */
+  locationId?: string,
 ): number | null {
   const variant = resolveVariant(product, variantId)
   if (!variant) return null
@@ -250,10 +272,18 @@ export function availableVariantUnits(
   if (product?.oversellPolicy === 'backorder') return null
   const onShelf = Math.round(Number(variant.inventory))
   if (!Number.isFinite(onShelf)) return null
-  return Math.max(
+  const total = Math.max(
     0,
     onShelf - heldVariantUnits(product, variant.id, nowMs, exceptHoldKey),
   )
+  if (!locationId || !variant.inventoryByLocation) return total
+  const bucket = Math.round(Number(variant.inventoryByLocation[locationId] ?? 0))
+  const atLocation = Math.max(
+    0,
+    (Number.isFinite(bucket) ? bucket : 0) -
+      heldVariantUnits(product, variant.id, nowMs, exceptHoldKey, locationId),
+  )
+  return Math.min(total, atLocation)
 }
 
 /**
@@ -291,6 +321,8 @@ export function canReserveStock(
   quantity = 1,
   nowMs: number = Date.now(),
   exceptHoldKey?: string,
+  /** Reserve at this location's bucket (AGL-3624); see `availableVariantUnits`. */
+  locationId?: string,
 ): boolean {
   if (!product) return false
   if (!canPurchase(product as HostProduct, variantId, quantity)) return false
@@ -299,6 +331,7 @@ export function canReserveStock(
     variantId,
     nowMs,
     exceptHoldKey,
+    locationId,
   )
   // `== null`, never `!available` — see the note on `availableVariantUnits`.
   if (available == null) return true

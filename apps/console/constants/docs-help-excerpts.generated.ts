@@ -158,6 +158,7 @@ export const DOCS_HELP_EXCERPTS = {
   ordersAndReturns: 'Ship an order in parts with tracking links, run returns from request to refund, print invoices, and send order events to your own systems.',
   orgAutomations: 'Write an automation once for the whole organization and run it on the sites you choose, with a pause on each site.',
   passwordAScreen: 'Require a password to view a specific page.',
+  pickupAndLocalDelivery: 'Let buyers pick up orders at your locations or have your own driver deliver them, with pickup hours, delivery zones, fees, minimums and delivery times.',
   platformHealth: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',
   pluginConfig: 'Declare a settings schema and get a console form for free — plus the three layers a setting is answered at, workspace defaults with per-site overrides, and the one write that clears one.',
   pluginManagerApi: 'Every public registration and loading API a plugin can use, from `@aglyn/aglyn` and `@aglyn/aglyn/server`.',

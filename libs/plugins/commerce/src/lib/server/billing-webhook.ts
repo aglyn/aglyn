@@ -69,6 +69,7 @@ import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
 import { giftCardSearchTokens } from '../model/gift-card-search'
 import { releaseStockHold } from './stock-hold'
+import { orderLocalFulfillmentFromSession } from './local-fulfillment'
 import {
   releasePromotionHold,
   settlePromotionSlot,
@@ -3581,6 +3582,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         const heldCredit = decodeCheckoutCreditMetadata(object?.metadata)
         const creditEntry = heldCredit ? checkoutCreditProvider(heldCredit.providerId) : null
         let creditShortCents = 0
+        // Picked up or brought by the store's own driver (AGL-3624): where
+        // the buyer chose, read back off the session they paid. Never throws
+        // past here — a failed read records the order as shipped rather than
+        // losing it.
+        const cartLocalFulfillment = await orderLocalFulfillmentFromSession({
+          hostId: String(hostId),
+          hostRef,
+          metadata: object?.metadata,
+          shippingAddress: object?.shipping_details?.address
+            ? {
+                postalCode: object.shipping_details.address.postal_code ?? null,
+                country: object.shipping_details.address.country ?? null,
+              }
+            : null,
+          createdAtMs: Date.now(),
+        }).catch((error) => {
+          console.error('commerce cart local fulfillment unreadable', String(object.id), error)
+          return null
+        })
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -3711,7 +3731,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : {}),
             customerName: object?.customer_details?.name ?? null,
             customerEmail: object?.customer_details?.email ?? null,
-            ...(shipping?.address
+            // A pickup carries no address to deliver to (AGL-3624): the
+            // billing address Stripe falls back to is not where it goes.
+            ...(shipping?.address && cartLocalFulfillment?.fields.fulfillmentMethod !== 'pickup'
               ? {
                   shippingAddress: {
                     name: shipping?.name ?? undefined,
@@ -3724,6 +3746,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   },
                 }
               : {}),
+            // How it reaches the buyer, and the list fields the pickup and
+            // delivery queues query by (AGL-3624).
+            ...(cartLocalFulfillment?.fields ?? {}),
             ...(couponCode ? { couponCode } : {}),
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
@@ -3778,6 +3803,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `Order ${cartOrderLabel} on {site} was discounted ` +
               `$${(heldCredit.amountCents / 100).toFixed(2)} for ${heldCredit.label}, but the account ` +
               `had only $${((heldCredit.amountCents - creditShortCents) / 100).toFixed(2)} left when it was paid.`,
+            link: `/${hostId}/products`,
+          })
+        }
+        // The address typed at payment is outside every delivery zone the
+        // store has (AGL-3624): the fee was charged for the postal code the
+        // buyer declared, so the store decides — deliver, or refund.
+        if (cartLocalFulfillment?.outsideZone) {
+          void notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: `Check the delivery address on order ${cartOrderLabel}`,
+            body:
+              `Order ${cartOrderLabel} on {site} was booked for local delivery, but the ` +
+              'address entered at payment is outside your delivery zones. Contact the ' +
+              'buyer, or refund the delivery.',
             link: `/${hostId}/products`,
           })
         }
@@ -3891,13 +3930,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
             .join('\n')
           const orderTotal = `$${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`
-          const orderSummary = [linesText, licenseText, downloadLines]
+          // Where to collect it, or when it is coming (AGL-3624).
+          const fulfillmentText = cartLocalFulfillment?.summary ?? ''
+          const orderSummary = [linesText, licenseText, downloadLines, fulfillmentText]
             .filter(Boolean)
             .join('\n\n')
           const fallbackText =
             `Thanks for your purchase!\n\n${linesText}\n\n` +
             (licenseText ? `${licenseText}\n\n` : '') +
             (downloadLines ? `${downloadLines}\n\n` : '') +
+            (fulfillmentText ? `${fulfillmentText}\n\n` : '') +
             `Total: ${orderTotal}\n` +
             `Order reference: ${object.id}` +
             (receiptFooter ? `\n\n${receiptFooter}` : '')
@@ -3964,6 +4006,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             productId: line.productId,
             variantId,
             quantity: line.quantity,
+            // Off the pickup location's shelf, or the one deliveries leave
+            // from (AGL-3624); `order.locationId` says so for a cancellation.
+            ...(cartLocalFulfillment?.fields.locationId
+              ? { locationId: cartLocalFulfillment.fields.locationId }
+              : {}),
             ledger: { reason: 'sale', orderId: String(object.id) },
           })
           if (!moved.before || !moved.after) continue

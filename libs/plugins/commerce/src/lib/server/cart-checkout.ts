@@ -50,6 +50,14 @@ import {
 } from './promotion-hold'
 import { type StockHoldLine, holdStock, stockHoldKey } from './stock-hold'
 import {
+  appendLocalFulfillmentMetadata,
+  localFulfillmentLocationId,
+  localStockRefusalMessage,
+  planLocalFulfillment,
+  readLocalFulfillmentRequest,
+  readLocalFulfillmentStore,
+} from './local-fulfillment'
+import {
   applyNativeCheckoutParams,
   nativeCheckoutStripeHeaders,
   readCheckoutSessionPayload,
@@ -408,10 +416,45 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       .collection('settings')
       .doc('store')
       .get()
+    // PICKUP OR THE STORE'S OWN DELIVERY (AGL-3624), declared at the cart and
+    // decided here from the store's settings: the location, the zone's fee and
+    // minimum, the window. Above the claim, so a refusal keeps the key and the
+    // shopper's same button works once they choose again. See
+    // `local-fulfillment.ts`.
+    const localRequest = readLocalFulfillmentRequest(body.fulfillment)
+    const localStore = hasPhysicalLine
+      ? await readLocalFulfillmentStore({
+          hostRef,
+          storeSettings: (storeSettings.data?.() ?? null) as Record<string, unknown> | null,
+          org: ownerOrg.org as { timeZone?: string },
+        })
+      : null
+    const localPlan = localStore
+      ? await planLocalFulfillment({
+          hostId,
+          request: localRequest,
+          itemsCents,
+          hasPhysicalLine,
+          store: localStore,
+        })
+      : ({ kind: 'shipping' } as const)
+    if (localPlan.kind === 'refusal') {
+      return res.status(localPlan.status).json({
+        error: localPlan.error,
+        ...(localPlan.changed ? { fulfillmentChanged: localPlan.changed } : {}),
+      })
+    }
     // A live carrier rate (AGL-3612) is quoted here too, before the session,
     // for the destination the shopper declared; a store with none plans from
     // its table exactly as before. See `carrier-shipping.ts`.
-    const shippingPlan: CarrierShippingPlan = hasPhysicalLine
+    const shippingPlan: CarrierShippingPlan =
+      // Collected: nothing to price, no address to ask for.
+      localPlan.kind === 'pickup'
+        ? { countries: [], options: [] }
+        : // Driven by the store: its one fee, an address in its country only.
+          localPlan.kind === 'local_delivery'
+          ? { countries: [localPlan.country], options: [localPlan.option] }
+          : hasPhysicalLine
       ? await planCheckoutShippingWithCarriers({
           hostId,
           settings: storeSettings.get('shipping') as
@@ -424,6 +467,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           },
         })
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    // A store whose locations offer pickup has the shopper choose WHERE at
+    // the cart (AGL-3624); the old unnamed `Local pickup` rate would be a
+    // second, unrouted pickup inside a session the shopper chose shipping for.
+    if (localPlan.kind === 'shipping' && localStore?.pickupLocations.length) {
+      shippingPlan.options = shippingPlan.options.filter(
+        (option) => option.rateId !== CommerceModel.LOCAL_PICKUP_RATE_ID,
+      )
+    }
     if (shippingPlan.needsPostalCode) {
       return res.status(400).json({
         error: CARRIER_POSTAL_CODE_MESSAGE,
@@ -583,6 +634,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         holdKey: stockHoldKey(claimed.claim.stripeKey),
         lines: reserveLines,
         label: `cart ${hostId}/${cartId}`,
+        // At the pickup location, or the one deliveries leave from (AGL-3624).
+        locationId: localFulfillmentLocationId(localPlan),
       })
       if (!held.ok) {
         // Nothing has been minted yet, so the key goes back and the same
@@ -594,7 +647,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         await claim.release()
         return res.status(409).json({
           error:
-            held.reason === 'sold-out'
+            held.reason === 'sold-out-at-location'
+              ? localStockRefusalMessage(localPlan, held.productName)
+              : held.reason === 'sold-out'
               ? held.productName
                 ? `"${held.productName}" — ${CommerceModel.STOCK_HELD_MESSAGE}`
                 : CommerceModel.STOCK_HELD_MESSAGE
@@ -1296,6 +1351,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }),
     ).forEach(([key, value]) => params.set(key, value))
     params.set('metadata[type]', 'commerce-cart')
+    // How the order reaches the buyer (AGL-3624): the webhook routes it.
+    if (localPlan.kind === 'pickup' || localPlan.kind === 'local_delivery') {
+      appendLocalFulfillmentMetadata(params, localPlan.metadata)
+    }
     for (const [key, value] of Object.entries(taxEngineSessionMetadata(engineTax.stamp))) {
       params.set(key, value)
     }

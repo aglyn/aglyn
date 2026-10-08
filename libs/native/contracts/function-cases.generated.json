@@ -1885,6 +1885,123 @@
         }
       ]
     },
+    "canTransitionLocalDelivery": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            "scheduled",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "scheduled",
+            "out_for_delivery"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "scheduled",
+            "delivered"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "scheduled",
+            "failed"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "out_for_delivery"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "delivered"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "failed"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "delivered",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "delivered",
+            "out_for_delivery"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "delivered",
+            "delivered"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "delivered",
+            "failed"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "failed",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "failed",
+            "out_for_delivery"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "failed",
+            "delivered"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "failed",
+            "failed"
+          ],
+          "result": false
+        }
+      ]
+    },
     "canTransitionOrder": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -2228,6 +2345,74 @@
           "args": [
             "refunded",
             "refunded"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "canTransitionPickup": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            "preparing",
+            "preparing"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "preparing",
+            "ready"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "preparing",
+            "picked_up"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "ready",
+            "preparing"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "ready",
+            "ready"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "ready",
+            "picked_up"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "picked_up",
+            "preparing"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "picked_up",
+            "ready"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "picked_up",
+            "picked_up"
           ],
           "result": false
         }
@@ -5643,6 +5828,73 @@
         }
       ]
     },
+    "localFulfillmentQueueQuery": {
+      "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "cases": [
+        {
+          "args": [
+            "pickup_ready"
+          ],
+          "result": {
+            "limit": 50,
+            "orderBy": {
+              "direction": "asc",
+              "field": "fulfillmentDueMs"
+            },
+            "where": [
+              {
+                "field": "fulfillmentKey",
+                "op": "==",
+                "value": "pickup_ready"
+              },
+              {
+                "field": "status",
+                "op": "in",
+                "value": [
+                  "paid",
+                  "partially_fulfilled",
+                  "fulfilled"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            "delivery_scheduled",
+            "loc1"
+          ],
+          "result": {
+            "limit": 50,
+            "orderBy": {
+              "direction": "asc",
+              "field": "fulfillmentDueMs"
+            },
+            "where": [
+              {
+                "field": "fulfillmentLocationId",
+                "op": "==",
+                "value": "loc1"
+              },
+              {
+                "field": "fulfillmentKey",
+                "op": "==",
+                "value": "delivery_scheduled"
+              },
+              {
+                "field": "status",
+                "op": "in",
+                "value": [
+                  "paid",
+                  "partially_fulfilled",
+                  "fulfilled"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
     "mediaKindOf": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "cases": [
@@ -6643,6 +6895,65 @@
               "requiresShipping": true
             }
           ]
+        }
+      ]
+    },
+    "orderLocalFulfillmentListFields": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "fulfillmentMethod": "pickup",
+              "pickup": {
+                "locationId": "loc1",
+                "locationName": "Main",
+                "status": "ready"
+              },
+              "createdAtMs": 1000
+            }
+          ],
+          "result": {
+            "fulfillmentDueMs": 1000,
+            "fulfillmentKey": "pickup_ready",
+            "fulfillmentLocationId": "loc1"
+          }
+        },
+        {
+          "args": [
+            {
+              "fulfillmentMethod": "local_delivery",
+              "localDelivery": {
+                "zoneId": "z",
+                "zoneName": "Z",
+                "feeCents": 500,
+                "windowStartMs": 5000,
+                "windowEndMs": 9000,
+                "status": "out_for_delivery"
+              },
+              "createdAtMs": 1000
+            }
+          ],
+          "result": {
+            "fulfillmentDueMs": 5000,
+            "fulfillmentKey": "delivery_out_for_delivery",
+            "fulfillmentLocationId": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "fulfillmentMethod": "shipping",
+              "createdAtMs": 1000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
         }
       ]
     },

@@ -198,6 +198,14 @@
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "why": "Pickup and local delivery on an order (AGL-3624): the statuses, labels, transitions and queue fields the native Aglyn app shows and queries; no imports."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "why": "The pickup and delivery queue's tabs and its one Firestore query per tab (AGL-3624), which the native Aglyn app runs too; a type-only import."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
     },
