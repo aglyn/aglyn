@@ -985,7 +985,12 @@ async function runOnce(context, index) {
     )
     const plan = job?.plan ?? null
     const planScreens = plan?.screens ?? []
-    const live = host.screens.filter((screen) => screen.data.deletedAt == null)
+    // A paid start's welcome email is a `kind: 'email'` screen with no address
+    // (AGL-3676), which read as the page at / and failed four checks on a
+    // site whose home was built and published.
+    const live = host.screens.filter(
+      (screen) => screen.data.deletedAt == null && screen.data.kind !== 'email',
+    )
     const slugOf = (value) =>
       `/${String(value ?? '')
         .trim()
