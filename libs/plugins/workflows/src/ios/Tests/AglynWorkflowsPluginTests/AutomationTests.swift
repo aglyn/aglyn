@@ -302,6 +302,7 @@ final class AutomationTests: XCTestCase {
     draft.cooldownMinutes = "30"
     draft.conditionRows = [ConditionRow(op: "equals", field: " plan ", value: " pro "), ConditionRow(op: formIsOp, field: formIDField, value: "f1")]
     draft.combinator = "or"
+    draft.steps[0].fields["message"] = "Hi"
     let candidate = draft.candidate
     let trigger = candidate["trigger"] as! [String: Any]
     XCTAssertEqual(candidate["name"] as? String, "Nudge")
