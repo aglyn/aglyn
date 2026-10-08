@@ -266,6 +266,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders."
     }
   },
+  {
+    "id": "inventory-sync",
+    "label": "Inventory sync",
+    "alwaysOnForWorkspace": true,
+    "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+    "siteOff": {
+      "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+      "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -298,6 +308,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "fulfillment-networks": "console-only",
   "marketplaces": "console-only",
   "print-on-demand": "console-only",
+  "inventory-sync": "console-only",
 }
 
 /**
@@ -2296,6 +2307,21 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "print-on-demand",
     "name": "podOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "inventory-sync",
+    "name": "inventorySyncConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "inventory-sync",
+    "name": "inventorySyncOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "inventory-sync",
+    "name": "inventorySyncProducts",
     "orgField": "orgId"
   },
 ]

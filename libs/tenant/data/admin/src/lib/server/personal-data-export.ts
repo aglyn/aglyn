@@ -270,6 +270,27 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each marketplace order the store imported (AGL-3638): the marketplace and its order id, the store order it became, which order line each marketplace line became, the marketplace’s fees, and each shipment confirmed back with carrier and tracking number. The merchant’s own record of a marketplace BUYER’s order, so disclosed to the ORG only; the buyer’s name and address are on the store’s order, not here.',
   },
   {
+    collection: 'inventorySyncConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the keys — each site’s connection to the merchant’s own Cin7 Core, inFlow or Brightpearl account (AGL-3642): system, status, account name, the stock, product and order settings (location, the customer orders are recorded under, the tax rule), the last count by SKU, the last syncs’ counts, cursors and totals. The sealed API keys or grant and the id of the key that sealed them carry `credential` in their names and are redacted (see redactSecrets); Brightpearl’s account code and datacenter are disclosed as stored. The document id is the site id. Its `log` subcollection is not read by this export.',
+  },
+  {
+    collection: 'inventorySyncOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each paid order’s hand-off to the connected inventory system (AGL-3642): the order number and our reference, the lines sent with SKU, quantity and price, the buyer’s name, email address and shipping address as sent, the totals, the system’s id and number for it, attempts and why it was not sent. The merchant’s own record of a SHOPPER’s order, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'inventorySyncProducts',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each product linked between the store and the connected inventory system (AGL-3642): the system’s product id, the SKU, the version last synced, the store’s product and variant ids, and why it was not synced. Catalog data, no person’s.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1072,6 +1093,9 @@ export async function exportOrgData(
     'fulfillmentNetworkOrders',
     'marketplaceConnections',
     'marketplaceOrders',
+    'inventorySyncConnections',
+    'inventorySyncOrders',
+    'inventorySyncProducts',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

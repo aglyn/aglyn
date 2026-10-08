@@ -934,6 +934,28 @@ redirect URI in both apps. ShipBob's webhooks are subscribed for each
 connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
 with a token of their own; nothing needs registering for them.
 
+### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
+
+A store can keep its stock counts, products and paid orders in step with the
+merchant's **own** Cin7 Core, inFlow Inventory or Brightpearl account. Cin7
+Core and inFlow need nothing registered by the deployment: the merchant pastes
+API keys from their own account, and both are offered once the token key that
+seals those keys is set. Brightpearl needs a developer app the deployment
+registers with Brightpearl, and is offered only when its references **and** the
+token key are set. With no token key, no Inventory and ERP card appears and
+nothing is sent. Set these on the **console only**: the job runs there, and the
+tenant runtime never opens a stored key.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `INVENTORY_SYNC_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored API key and grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `BRIGHTPEARL_APP_REF` | Optional | Runtime, console | The Brightpearl app's reference, its OAuth client id. Brightpearl is offered only with it and the developer reference. |
+| `BRIGHTPEARL_DEV_REF` | Optional | Runtime, console | The developer reference every Brightpearl API call carries. |
+| `BRIGHTPEARL_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret, when the app has confidential OAuth turned on. |
+
+Register `https://<console>/api/inventory-sync/oauth/callback` as the redirect
+URI of the Brightpearl app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
 ### Marketplaces: Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire {#marketplaces}
 
 A store can keep its listings on the merchant's **own** marketplace seller

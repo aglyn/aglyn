@@ -14021,3 +14021,51 @@ describe('marketplace records are the server’s alone (AGL-3638)', () => {
     }
   })
 })
+
+describe('inventory sync records are the server’s alone (AGL-3642)', () => {
+  // A connection holds the merchant's sealed Cin7 Core or inFlow API keys,
+  // or Brightpearl grant; a hand-off decides whether an order is recorded in
+  // the merchant's system; a product link decides which system product's
+  // count overwrites a store product's. All written and read by the
+  // inventory-sync plugin's routes, event intake and job through the Admin SDK.
+  const DOCS = [
+    ['inventorySyncConnections', HOST],
+    ['inventorySyncConnections', HOST, 'log', 'entry-1'],
+    ['inventorySyncOrders', `${HOST}_order-1`],
+    ['inventorySyncProducts', `${HOST}_cin7-core_product-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedCredential: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})

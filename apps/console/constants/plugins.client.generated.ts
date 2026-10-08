@@ -209,6 +209,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-print-on-demand'),
   },
   {
+    id: 'inventory-sync',
+    apiPrefixes: ["inventory-sync"],
+    register: {"console":"registerInventorySyncConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    load: () => import('@aglyn/plugins-inventory-sync'),
+  },
+  {
     id: 'sales-channels',
     apiPrefixes: ["sales-channels"],
     register: {"console":"registerSalesChannelsConsole"},
