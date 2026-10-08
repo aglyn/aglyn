@@ -126,6 +126,8 @@ const AI_SITE_KIND_ICONS: Record<string, string> = {
   'coming-soon': mdiClockOutline.path,
 }
 import { AiJobFollow } from './ai-job-follow.component'
+import { AiModelSelector } from './ai-model-selector.component'
+import { useAiModelChoice } from './use-ai-model-choice'
 import { aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
 
@@ -391,6 +393,17 @@ export function AiSiteStartCard({
 
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
+  // On a paid plan the person picks the model that builds the site (AGL-3660),
+  // Auto by default, from the models their plan allows; every step of the job
+  // runs on it. A Free workspace builds on the default and is offered none.
+  const modelChoice = useAiModelChoice({ orgId, hostId, surface: 'jobs', kind: 'job.page' })
+  // A pick remembered from before needs its cost to estimate by; Auto does not,
+  // and the list is otherwise read when the picker opens.
+  const { load: loadModels, model: rememberedModel } = modelChoice
+  useEffect(() => {
+    if (!freeTaste && step === 'describe' && rememberedModel) loadModels()
+  }, [freeTaste, step, rememberedModel, loadModels])
+  const pickedModel = freeTaste ? null : modelChoice.model
 
   const plan = useCallback(async () => {
     if (!orgId || aiSiteStartRefusal(answers, { freeTaste })) return
@@ -408,6 +421,7 @@ export function AiSiteStartCard({
           // The guided start confirms its own plan (AGL-3594): the build
           // follows the plan with no approval to make.
           inputs: { ...aiSiteStartInputs(answers), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
+          ...(pickedModel ? { model: pickedModel } : {}),
         }),
       })
       const payload = await response.json().catch(() => null)
@@ -442,7 +456,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router])
+  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router, pickedModel])
 
   const chooseStarter = useCallback(() => {
     setStartingStarter(true)
@@ -461,11 +475,16 @@ export function AiSiteStartCard({
   // starter (AGL-3594); after, it only closes — the job builds the site.
   const exit = started ? (leave ?? startBlank) : startBlank
 
+  // The chosen model's cost against Auto's, as the model list states it.
+  const modelMultiplier =
+    (pickedModel && modelChoice.options?.options.find((option) => option.id === pickedModel)?.multiplier) || 1
   const estimate = freeTaste
     ? aiFreeSiteCreditEstimate(answers.pages)
-    : aiSiteCreditEstimate(answers.pages, {
-        welcomeEmail: answers.welcomeEmail,
-      })
+    : Math.round(
+        aiSiteCreditEstimate(answers.pages, {
+          welcomeEmail: answers.welcomeEmail,
+        }) * modelMultiplier,
+      )
   const estimateText = freeTaste
     ? `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits your Free workspace has each month`
     : `About ${estimate.toLocaleString('en-US')} credits, estimated`
@@ -741,6 +760,7 @@ export function AiSiteStartCard({
               {refusal}
             </Typography>
           )}
+          {!freeTaste && <AiModelSelector choice={modelChoice} disabled={busy} />}
           <Button onClick={() => setStep('choose')}>{'Back'}</Button>
           <Button
             variant="contained"

@@ -1347,6 +1347,15 @@ the `theme` kind's proposal, and no site plan may propose one.
   site whose owner already changed its theme keeps it.
 - **What it costs.** 4 credits in the live eval, 7 for the look that writes its
   cache, which is what the Free wall counts.
+- **Drawn apart from the workspace's sites.** The look reads the workspace's
+  other sites' `siteStyle` and draws again (up to 32 seeds) until none shares
+  its base, hue family, heading font and buttons and every one differs in at
+  least three tracked dimensions. Independent workspaces share such a tuple in
+  0.2–1.1% of pairs (`ai-site-look.spec.ts`).
+- **The model.** On a paid plan the guided start offers the shared model picker
+  (Auto by default, bounded by the plan's tiers); the job carries the pick and
+  every step — the look, the plan, the layout, each page — runs on it, and the
+  estimate is priced by the pick's multiplier. A Free start offers none.
 
 ## The doors
 

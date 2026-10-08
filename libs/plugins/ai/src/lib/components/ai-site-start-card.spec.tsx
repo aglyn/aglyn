@@ -74,6 +74,7 @@ import {
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
   aiFreeSiteCreditEstimate,
+  aiSiteCreditEstimate,
 } from '../model/ai-site-job'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 
@@ -149,7 +150,8 @@ beforeEach(() => {
 afterEach(() => {
   // The whole flow is the jobs route. Nothing here writes a draft, publishes
   // anything or touches the site the person is standing on.
-  for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
+  // The model list a paid start reads to price a pick is a read too (AGL-3660).
+  for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/(jobs|models)/)
 })
 
 /** Renders the dialog on its first step, once the jobs route has admitted this workspace. */
@@ -561,6 +563,43 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalled())
     const [, init] = mockFetch.mock.calls.find(([url, request]) => url === '/api/ai/jobs' && request?.method === 'POST')!
     expect(JSON.parse(init.body).inputs).toEqual(expect.objectContaining({ pages: 2, welcomeEmail: false }))
+  })
+
+  it('offers no model picker on the Free plan', async () => {
+    await openFreeCard()
+    expect(screen.queryByRole('button', { name: /^AI model:/ })).toBeNull()
+  })
+
+  /*
+   * A paid start picks the model that builds the site (AGL-3660): Auto by
+   * default, the estimate priced by the pick, and the pick on the job.
+   */
+  it('offers the model picker on a paid plan, prices the estimate by the pick, and starts the job on it', async () => {
+    await openCard()
+    const picker = screen.getByRole('button', { name: 'AI model: Auto' })
+    const auto = aiSiteCreditEstimate(5, { welcomeEmail: true })
+    expect(screen.getByText(`About ${auto.toLocaleString('en-US')} credits, estimated.`)).toBeTruthy()
+    mockFetch.mockResolvedValueOnce(
+      json({
+        kind: 'job.page',
+        auto: { id: 'auto', label: 'Auto', tier: 'balanced', creditsPerRequest: 10, multiplier: 1, model: 'claude-sonnet-5' },
+        options: [
+          { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 'fast', creditsPerRequest: 4, multiplier: 0.4 },
+          { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', tier: 'balanced', creditsPerRequest: 10, multiplier: 1 },
+        ],
+        measured: true,
+      }),
+    )
+    fireEvent.click(picker)
+    fireEvent.click(await screen.findByText('Claude Haiku 4.5'))
+    expect(screen.getByRole('button', { name: 'AI model: Claude Haiku 4.5' })).toBeTruthy()
+    expect(screen.getByText(`About ${Math.round(auto * 0.4).toLocaleString('en-US')} credits, estimated.`)).toBeTruthy()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(postCall()).toBeTruthy())
+    expect(JSON.parse(postCall()[1].body).model).toBe('claude-haiku-4-5')
+    localStorage.clear()
   })
 
   it('keeps a paid workspace’s four to eight pages', async () => {

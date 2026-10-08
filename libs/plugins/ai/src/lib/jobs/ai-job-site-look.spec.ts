@@ -82,6 +82,27 @@ describe('the look unit (AGL-3660)', () => {
     expect((saved as unknown as AiSiteStyle).kind).toBe('trades')
   })
 
+  it('runs on the model the person picked, else the fast tier of the job’s provider', async () => {
+    const models: string[] = []
+    const run = (overrides: Partial<AiJob>) =>
+      aiRunSiteLook(
+        { job: job(overrides), stepIndex: 0, now: new Date(), firestore: {} as never, modelFor: () => 'claude-opus-5' },
+        job(overrides),
+        {
+          generate: (async (_kind: string, input: { model: string }) => {
+            models.push(input.model)
+            return { status: 'ok', value: {}, ...spent }
+          }) as never,
+          others: async () => [],
+          save: async () => ({ write: 'applied', baseName: 'Minimal' }),
+        },
+      )
+    await run({ model: 'claude-opus-5' } as Partial<AiJob>)
+    await run({})
+    expect(models[0]).toBe('claude-opus-5')
+    expect(models[1]).not.toBe('claude-opus-5')
+  })
+
   it('replaces only the theme a site was born with', () => {
     expect(aiSiteThemeUntouched({ theme: DEFAULT_SITE_THEME })).toBe(true)
     expect(aiSiteThemeUntouched({})).toBe(true)
