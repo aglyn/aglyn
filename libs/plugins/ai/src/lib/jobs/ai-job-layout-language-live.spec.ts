@@ -92,6 +92,8 @@ import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inv
 import { aiSiteKindFor } from '../model/ai-site-kinds'
 import type { AiSiteStyle } from '../model/ai-site-look'
 import { aiRunSiteLook } from './ai-job-site-look'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
 import { aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration } from '../runtime/ai-doctrine'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
@@ -441,7 +443,14 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused.json`), JSON.stringify(result.answer, null, 1))
   }
   if (OUT && result.status === 'ok') {
-    writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.json`), JSON.stringify({ name: `${brief.key}-${page.title}`, nodes: result.value.nodes }, null, 1))
+    // The page step fills each picture slot with a photo the site serves itself, after the check.
+    const nodes = await aiResolveLayoutPictures(result.value.nodes, {
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      sectionIds,
+      sectionNames: screen.sections.map((section) => section.name),
+      seed: `${unit.$id}:${screen.id}`,
+    })
+    writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.json`), JSON.stringify({ name: `${brief.key}-${page.title}`, nodes }, null, 1))
   }
   return record(`${brief.key} / ${page.title}`, prompt, before, result as never)
 }
@@ -497,7 +506,10 @@ async function buildLook(brief: Brief): Promise<LookResult> {
       },
     },
   )
-  const calls = mockCalls.slice(before).filter((call) => call.prompt.startsWith('Kind of site:'))
+  // The looks run side by side: this brief's call is the one that names this business and this seed.
+  const calls = mockCalls
+    .slice(before)
+    .filter((call) => call.prompt.startsWith('Kind of site:') && call.prompt.includes(`Design seed: ${unit.$id.slice(-6)}.`))
   return {
     name: `${brief.key} / look`,
     status: outcome.outputs.length ? 'ok' : outcome.refused ? 'refused' : 'failed',

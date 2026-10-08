@@ -621,6 +621,49 @@ describe('repeats (rule 1)', () => {
     ])
   })
 
+  /*
+   * The live eval's portfolio Home on a paid workspace (AGL-3660): six work
+   * samples as a component placed in each of three columns, twice. Compiled
+   * column by column, that was the same Grid three times, and rule 1 refused
+   * the page on every ask.
+   */
+  it('draws a component placed in every column as one group of its instances', () => {
+    const work = (title: string, description: string, col: number): AiLayoutBlock => ({
+      kind: 'component',
+      to: CARD,
+      col,
+      items: [
+        { title: 'title', text: title },
+        { title: 'description', text: description },
+      ],
+    })
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our services' }] },
+        {
+          cols: [1, 1, 1],
+          blocks: [
+            { kind: 'heading', text: 'Selected work' },
+            work('Bath', 'Warm water and a gentle dry.', 0),
+            work('Trim', 'Neat lines for every coat.', 1),
+            work('Nails', 'Short and smooth.', 2),
+            work('Teeth', 'A fresh brush.', 0),
+            work('Ears', 'Cleaned with care.', 1),
+            work('Coat', 'A soft finish.', 2),
+          ],
+        },
+      ],
+      pagePlan,
+      true,
+    )
+    expect(report.violations).toEqual([])
+    expect(
+      Object.values(compiled.tree.nodes)
+        .filter((node) => node.componentId === 'reusableInstance')
+        .map((node) => (node.props?.['propValues'] as Record<string, string>)['title']),
+    ).toEqual(['Bath', 'Trim', 'Nails', 'Teeth', 'Ears', 'Coat'])
+  })
+
   it('draws the same cards in full on a workspace that keeps none', () => {
     const { compiled, report } = build(
       [

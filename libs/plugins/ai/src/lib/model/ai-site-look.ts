@@ -425,11 +425,14 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
   const secondary = neutral
     ? { main: aiOklchHex(0.24, 0.012, h), h }
     : (() => {
-        let L = 0.86
-        let main = aiOklchHex(L, accentChroma, style.accent)
+        // A light wash of the accent rather than the accent at full strength:
+        // it reads on the brand color without fighting it.
+        const washChroma = Math.min(accentChroma, 0.08)
+        let L = 0.9
+        let main = aiOklchHex(L, washChroma, style.accent)
         while (ratio(main, primaryMain) < 3 && L < 0.96) {
           L += 0.02
-          main = aiOklchHex(L, accentChroma, style.accent)
+          main = aiOklchHex(L, washChroma, style.accent)
         }
         return { main, h: style.accent }
       })()

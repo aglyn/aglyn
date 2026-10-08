@@ -311,6 +311,24 @@ function compileSection(
   let filled = columns
     .map((column, position) => ({ column, weight: cols?.[position] ?? 1 }))
     .filter((entry) => entry.column.length)
+  // A row whose columns each place the same component, one instance a
+  // column or more, is that component's group of cards: the compiler lays
+  // its instances out once, rather than one like Grid a column (rule 1).
+  // Row by row, as the columns showed them: the first of each column, then the second.
+  const deepest = Math.max(0, ...filled.map((entry) => entry.column.length))
+  const placedHere = Array.from({ length: deepest }, (_, row) =>
+    filled.flatMap((entry) => (entry.column[row] ? [entry.column[row]] : [])),
+  ).flat()
+  const repeated = placedHere[0]?.kind === 'component' ? componentOf(page.targets, placedHere[0].to) : null
+  if (
+    filled.length >= 2 &&
+    repeated &&
+    placedHere.every((block) => block.kind === 'component' && block.to === repeated.id)
+  ) {
+    head.push({ kind: 'cards', to: repeated.id, items: placedHere.map((block) => componentItem(block, repeated.props)) })
+    page.settled.push({ at, what: `${placedHere.length} ${repeated.name} instances in ${filled.length} columns drawn as one group` })
+    filled = []
+  }
   // A row whose columns each hold only one kind of group — a card a column —
   // is that group, laid out by the compiler rather than column by column.
   const groups = filled.flatMap((entry) => entry.column)
@@ -453,6 +471,19 @@ function compileSection(
     'section',
     page.options.sectionIds?.[index] ?? sectionIdOf(index),
   )
+}
+
+/**
+ * A component block's prop values as a card item: its title-like prop as the
+ * title and its text-like prop as the text, which `instanceValues` writes
+ * back into the same props.
+ */
+function componentItem(block: AiLayoutBlock, props: Record<string, string>): AiLayoutItem {
+  const value = (pattern: RegExp) =>
+    (block.items ?? []).find((item) => item.title in props && pattern.test(item.title) && item.text.trim())?.text ?? ''
+  const title = value(/title|name|heading|label|question|figure|value/i) || block.text || ''
+  const text = value(/text|description|body|summary|copy|answer|detail|caption/i)
+  return { title, text }
 }
 
 /** A band the page has room for: past two brand or two dark bands, a soft one instead. */

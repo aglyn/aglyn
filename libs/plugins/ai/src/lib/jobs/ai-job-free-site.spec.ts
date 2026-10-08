@@ -456,13 +456,19 @@ async function lookCredits(): Promise<number> {
   )
   const [request] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
   const { cached, uncached } = spans(request)
-  return assistCreditsFromUsd(
+  const derived = assistCreditsFromUsd(
     usd(
       { inputTokens: realTokens(uncached), outputTokens: request.maxTokens, cacheReadTokens: 0, cacheWriteTokens: realTokens(cached) },
       request.model,
     ),
   )
+  // Never under what a real look spent: the live eval's look that wrote the
+  // cache came to 7 credits on 2026-10-07; the rest read it, at 4.
+  return Math.max(derived, MEASURED_SITE_LOOK_CREDITS)
 }
+
+/** The dearest look the live eval measured (AGL-3660). */
+const MEASURED_SITE_LOOK_CREDITS = 7
 
 async function freeSiteRequests(): Promise<SentRequest[]> {
   mockRunAiRequest.mockReset()
