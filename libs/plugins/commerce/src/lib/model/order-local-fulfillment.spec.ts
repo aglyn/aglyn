@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   canTransitionLocalDelivery,
   canTransitionPickup,
@@ -101,8 +103,9 @@ describe('queue fields', () => {
   })
 
   it('is served by the two composites in the index file', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const indexes = require('../../../../../../cloud/firebase-firestore.indexes.json').indexes as Array<{
+    const indexes = JSON.parse(
+      readFileSync(join(__dirname, '../../../../../../cloud/firebase-firestore.indexes.json'), 'utf8'),
+    ).indexes as Array<{
       collectionGroup: string
       fields: Array<{ fieldPath: string; order?: string }>
     }>
