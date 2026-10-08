@@ -4006,12 +4006,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             productId: line.productId,
             variantId,
             quantity: line.quantity,
+            ledger: { reason: 'sale', orderId: String(object.id) },
             // Off the pickup location's shelf, or the one deliveries leave
             // from (AGL-3624); `order.locationId` says so for a cancellation.
-            ...(cartLocalFulfillment?.fields.locationId
-              ? { locationId: cartLocalFulfillment.fields.locationId }
-              : {}),
-            ledger: { reason: 'sale', orderId: String(object.id) },
+            locationId: cartLocalFulfillment?.fields.locationId || undefined,
           })
           if (!moved.before || !moved.after) continue
           productsById.set(line.productId, moved.after)
@@ -5189,11 +5187,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               productId: String(productId),
               variantId: soldVariantId,
               quantity: soldQuantity,
-              // Off the pickup or delivery location's shelf (AGL-3624).
-              ...(buyNowLocalFulfillment?.fields.locationId
-                ? { locationId: buyNowLocalFulfillment.fields.locationId }
-                : {}),
               ledger: { reason: 'sale', orderId: String(object.id) },
+              // Off the pickup or delivery location's shelf (AGL-3624).
+              locationId: buyNowLocalFulfillment?.fields.locationId || undefined,
             })
             if (moved.before && moved.after) {
               // Low-stock alert (AGL-281): fires on the crossing sale only,
