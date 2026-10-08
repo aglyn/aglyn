@@ -155,6 +155,8 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Percent
 import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.PowerSettingsNew
+import androidx.compose.material.icons.outlined.PowerOff
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
@@ -352,6 +354,8 @@ object AglynIcons {
     "psychology" to Icons.Outlined.Psychology,
     "memory" to Icons.Outlined.Memory,
     "toggle_on" to Icons.Outlined.ToggleOn,
+    "power_settings_new" to Icons.Outlined.PowerSettingsNew,
+    "power_off" to Icons.Outlined.PowerOff,
     "send" to Icons.AutoMirrored.Outlined.Send,
     "trending_up" to Icons.AutoMirrored.Outlined.TrendingUp,
     "login" to Icons.AutoMirrored.Outlined.Login,

@@ -2,7 +2,7 @@
 //
 // The AI plugin's Apple code: its jobs, credits and staff screens, drawn by
 // AglynScreens from the spec its Kotlin module reads too
-// (src/android/screens/ai.screens.json, linked into Resources). The app
+// (Resources/ai.screens.json, which src/android/screens links to). The app
 // reaches it only through the generated plugin manifest.
 
 import Foundation
