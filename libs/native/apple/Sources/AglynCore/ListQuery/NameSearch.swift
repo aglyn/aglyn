@@ -74,3 +74,14 @@ public struct NameSearchNormalizers: ListQueryNormalizers {
   public func reversed(_ value: String) -> String { nameSearchReversed(value) }
   public var maxPrefix: Int { ContractValues.shared.nameTokenMaxPrefix }
 }
+
+/// The name keys a rename writes beside `displayName` (`displayNameSearchFields`):
+/// `nameLower`, `nameTokens` and `nameReversed`, so list search and sort find
+/// the new name.
+public func displayNameSearchFields(_ displayName: String?) -> [String: Any] {
+  [
+    "nameLower": nameSearchKey(displayName),
+    "nameTokens": nameSearchTokens(displayName),
+    "nameReversed": nameSearchReversed(displayName),
+  ]
+}
