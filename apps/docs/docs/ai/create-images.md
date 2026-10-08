@@ -1,7 +1,7 @@
 ---
 sidebar_position: 14
 title: Create images with AI
-description: "An AI image generator in the Aglyn media library: describe a picture and get an SVG illustration, icon, pattern or logo mark, or, where photos are on, a realistic photo, a product shot, a watercolor, a 3D render, a banner or a social post graphic, with alt text. Metered in AI credits."
+description: "An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits."
 ---
 
 # Create images with AI
