@@ -10,6 +10,8 @@ name: Auto-merge green PRs
 #     none pending, AND the four checks `main`'s branch protection requires are
 #     present and passing. A PR that never gets `guards` (a path filter) waits,
 #     exactly as GitHub's own merge button would.
+#   - The merged branch is deleted on GitHub (main, production, release/* and
+#     any branch another open PR is based on are kept).
 #   - A PR into `production` is never merged here, and if anyone turns GitHub
 #     auto-merge on for one, this turns it off again. A promotion is merged by
 #     a person.
@@ -109,6 +111,16 @@ jobs:
               # --match-head-commit: a push after the checks were read is not merged.
               if gh pr merge "$n" --repo "$REPO" --merge --match-head-commit "$sha"; then
                 merged=1
+                # The merged branch is closed on GitHub too. The repository's
+                # "delete head branches" setting normally does it; this covers a
+                # merge it skips. Never main, production or a release branch,
+                # and never a branch another open PR still builds on.
+                branch=$(jq -r .headRefName <<<"$pr")
+                case "$branch" in main|production|release/*) continue ;; esac
+                if [ -z "$(gh pr list --repo "$REPO" --state open --base "$branch" --json number --jq '.[].number')" ] \
+                  && gh api "repos/$REPO/git/ref/heads/$branch" >/dev/null 2>&1; then
+                  gh api -X DELETE "repos/$REPO/git/refs/heads/$branch" && echo "#$n: deleted branch $branch"
+                fi
               else
                 echo "#$n: merge refused; left open"
               fi
