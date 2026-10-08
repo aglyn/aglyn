@@ -1,0 +1,119 @@
+name: Auto-merge green PRs
+
+# AGL-3685. Zach, 2026-10-08: "if it's green it should always merge … but don't
+# let it do it for production prs".
+#
+# WHAT IT DOES
+#   - Every open, non-draft PR into `main` whose checks are ALL green is merged
+#     (a merge commit, the way PRs here are merged by hand). "Green" means every
+#     check run and commit status on the head is SUCCESS, SKIPPED or NEUTRAL,
+#     none pending, AND the four checks `main`'s branch protection requires are
+#     present and passing. A PR that never gets `guards` (a path filter) waits,
+#     exactly as GitHub's own merge button would.
+#   - A PR into `production` is never merged here, and if anyone turns GitHub
+#     auto-merge on for one, this turns it off again. A promotion is merged by
+#     a person.
+#   - A PR labeled `hold` is skipped, for anything that needs a decision first
+#     (a legal publish, a release-day freeze).
+#
+# WHY A WORKFLOW AND NOT GITHUB'S AUTO-MERGE BUTTON
+#   GitHub's auto-merge waits only for REQUIRED checks and has to be switched on
+#   per PR. This sweep waits for every check, needs nobody to switch it on, and
+#   can refuse production outright.
+#
+# EMERGENCY HOTFIXES STILL GO STRAIGHT IN
+#   `main` and `production` share one branch protection with `enforce_admins`
+#   OFF, so a repository admin can push a fix to `main` directly, or merge a
+#   hotfix PR into `production` before its checks finish with
+#   `gh pr merge <n> --merge --admin` (the `hotfix` label and
+#   `release:prepare -- --hotfix` cover the promotion count). Nothing here
+#   blocks that; turning `enforce_admins` on would.
+#
+# WHY IT DISPATCHES MAIN GATE
+#   A merge made with GITHUB_TOKEN does not start `push` workflows, so Main
+#   Gate's push trigger never sees it. After any merge the sweep dispatches Main
+#   Gate on `main`, which grades main's head.
+
+on:
+  # Each PR check workflow finishing is the moment a PR can turn green.
+  workflow_run:
+    workflows:
+      - NX CI
+      - Emulator guards
+      - Tools guards
+    types:
+      - completed
+  # Backstop: GitHub drops scheduled runs often, and a PR can turn green
+  # through a status that is not one of the workflows above.
+  schedule:
+    - cron: '7,27,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: auto-merge-green
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      # Kept equal to `production`'s branch protection (and so `main`'s).
+      REQUIRED: '["ci","guards","*.emulator.spec.ts","Firestore + RTDB rules matrix"]'
+    steps:
+      - name: Production PRs never auto-merge
+        run: |
+          set -euo pipefail
+          for n in $(gh pr list --repo "$REPO" --base production --state open \
+              --json number,autoMergeRequest --jq '.[] | select(.autoMergeRequest != null) | .number'); do
+            gh pr merge "$n" --repo "$REPO" --disable-auto
+            gh pr comment "$n" --repo "$REPO" \
+              --body "Auto-merge was turned off: a PR into \`production\` is merged by a person (AGL-3685)."
+          done
+
+      - name: Merge every green PR into main
+        run: |
+          set -euo pipefail
+          merged=0
+          for n in $(gh pr list --repo "$REPO" --base main --state open --limit 100 --json number --jq '.[].number'); do
+            pr=$(gh pr view "$n" --repo "$REPO" \
+              --json isDraft,labels,mergeable,headRefName,headRefOid,statusCheckRollup)
+            verdict=$(jq -r --argjson required "$REQUIRED" '
+              def state: if .__typename == "CheckRun"
+                then (if .status == "COMPLETED" then .conclusion else "PENDING" end)
+                else .state end;
+              def name: .name // .context;
+              [.statusCheckRollup[] | {name: name, state: state}] as $checks
+              | if .isDraft then "skip: draft"
+                elif ([.labels[].name] | index("hold")) then "skip: labeled hold"
+                elif (.headRefName | startswith("release/")) then "skip: a release branch"
+                elif .mergeable != "MERGEABLE" then "skip: mergeable=\(.mergeable)"
+                elif ($checks | length) == 0 then "skip: no checks yet"
+                elif ([$checks[] | select(.state as $s | ["SUCCESS","SKIPPED","NEUTRAL"] | index($s) | not)] | length) > 0
+                  then "skip: not green (\([$checks[] | select(.state as $s | ["SUCCESS","SKIPPED","NEUTRAL"] | index($s) | not) | "\(.name)=\(.state)"] | join(", ")))"
+                elif ([$required[] as $r | select([$checks[] | select(.name == $r and .state == "SUCCESS")] | length == 0)] | length) > 0
+                  then "skip: missing \([$required[] as $r | select([$checks[] | select(.name == $r and .state == "SUCCESS")] | length == 0)] | join(", "))"
+                else "merge" end' <<<"$pr")
+            echo "#$n: $verdict"
+            if [ "$verdict" = "merge" ]; then
+              sha=$(jq -r .headRefOid <<<"$pr")
+              # --match-head-commit: a push after the checks were read is not merged.
+              if gh pr merge "$n" --repo "$REPO" --merge --match-head-commit "$sha"; then
+                merged=1
+              else
+                echo "#$n: merge refused; left open"
+              fi
+            fi
+          done
+          if [ "$merged" = 1 ]; then
+            gh workflow run main-gate.yml --repo "$REPO" --ref main
+          fi
