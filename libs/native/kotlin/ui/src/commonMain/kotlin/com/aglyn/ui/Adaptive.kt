@@ -7,6 +7,14 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,11 +55,13 @@ fun currentWidthClass(): WidthClass {
   }
 }
 
-data class NavDestination(val key: String, val label: String, val icon: ImageVector)
+/** [section] titles the group a destination opens in the permanent drawer (null continues the previous group). */
+data class NavDestination(val key: String, val label: String, val icon: ImageVector, val section: String? = null)
 
 /**
- * The app's top-level navigation: a bottom bar on phones, a rail on tablets
- * and small desktop windows, and a permanent drawer on large windows.
+ * The app's top-level navigation: a bottom bar on phones, a rail on medium
+ * windows, and a permanent labelled drawer (header, sections, footer) from
+ * expanded (840dp) upward.
  */
 @Composable
 fun AglynNavigationSuite(
@@ -59,14 +69,51 @@ fun AglynNavigationSuite(
   selected: String,
   onSelect: (String) -> Unit,
   modifier: Modifier = Modifier,
+  /** Shown at the top of the permanent drawer (EXPANDED and wider). */
+  drawerHeader: @Composable () -> Unit = {},
+  /** Shown at the foot of the permanent drawer: the workspace and site, opening the switcher. */
+  drawerFooter: @Composable () -> Unit = {},
   content: @Composable () -> Unit,
 ) {
-  val layout = when (currentWidthClass()) {
-    WidthClass.COMPACT -> NavigationSuiteType.NavigationBar
-    WidthClass.MEDIUM, WidthClass.EXPANDED -> NavigationSuiteType.NavigationRail
-    WidthClass.LARGE -> NavigationSuiteType.NavigationDrawer
-  }
+  val widthClass = currentWidthClass()
   val colors = MaterialTheme.colorScheme
+  if (widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE) {
+    Row(modifier.fillMaxSize().testTag("nav-drawer")) {
+      PermanentDrawerSheet(Modifier.width(264.dp), drawerContainerColor = colors.surfaceContainerLow) {
+        Column(Modifier.fillMaxHeight()) {
+          drawerHeader()
+          Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+            for (destination in destinations) {
+              destination.section?.let {
+                Text(
+                  it,
+                  Modifier.padding(start = 16.dp, top = 16.dp, bottom = 6.dp),
+                  style = MaterialTheme.typography.labelMedium,
+                  color = colors.onSurfaceVariant,
+                )
+              }
+              NavigationDrawerItem(
+                modifier = Modifier.testTag("nav-${destination.key}"),
+                selected = destination.key == selected,
+                onClick = { onSelect(destination.key) },
+                icon = { Icon(destination.icon, contentDescription = null) },
+                label = { Text(destination.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                colors = NavigationDrawerItemDefaults.colors(
+                  selectedContainerColor = colors.primaryContainer,
+                  selectedIconColor = colors.onPrimaryContainer,
+                  selectedTextColor = colors.onPrimaryContainer,
+                ),
+              )
+            }
+          }
+          drawerFooter()
+        }
+      }
+      Box(Modifier.weight(1f).fillMaxHeight()) { content() }
+    }
+    return
+  }
+  val layout = if (widthClass == WidthClass.COMPACT) NavigationSuiteType.NavigationBar else NavigationSuiteType.NavigationRail
   // Selection reads in the brand primary, as the console's own navigation does.
   val itemColors = NavigationSuiteDefaults.itemColors(
     navigationBarItemColors = NavigationBarItemDefaults.colors(
