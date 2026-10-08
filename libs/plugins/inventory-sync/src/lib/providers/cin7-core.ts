@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { InventoryLocation } from '../model/inventory-sync'
 import { decimalToMinor, minorToMajor } from '../model/money'
 import { ProviderError, providerRequest, type ProviderHttp } from './http'
@@ -143,7 +144,7 @@ export function createCin7CoreProvider(options: { http: ProviderHttp; base?: str
       {
         SaleID: saleId,
         Status: 'AUTHORISED',
-        Memo: `Aglyn order ${request.displayRef}`,
+        Memo: `${PLATFORM_BRAND_NAME} order ${request.displayRef}`,
         Lines: request.lines.map((line) => ({
           ProductID: line.productId,
           SKU: line.sku,
@@ -338,7 +339,7 @@ export function createCin7CoreProvider(options: { http: ProviderHttp; base?: str
             ...(request.buyerName ? { Contact: request.buyerName } : {}),
             ...(request.buyerEmail ? { Email: request.buyerEmail } : {}),
             ...(address?.phone ? { Phone: address.phone } : {}),
-            Note: `Aglyn order ${request.displayRef}`,
+            Note: `${PLATFORM_BRAND_NAME} order ${request.displayRef}`,
             ...(address
               ? {
                   ShippingAddress: {

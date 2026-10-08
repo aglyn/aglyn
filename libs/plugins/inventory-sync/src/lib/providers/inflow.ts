@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { InventoryLocation } from '../model/inventory-sync'
 import { decimalToMinor, minorToDecimal } from '../model/money'
 import { ProviderError, providerRequest, type ProviderHttp } from './http'
@@ -188,7 +189,7 @@ export function createInflowProvider(options: { http: ProviderHttp; base?: strin
           stockAdjustmentId: nameUuid(`adjustment:${input.reference}`),
           locationId: input.locationId,
           date: new Date().toISOString(),
-          remarks: `Aglyn stock sync ${input.reference}`,
+          remarks: `${PLATFORM_BRAND_NAME} stock sync ${input.reference}`,
           lines: input.changes.map((change) => ({
             stockAdjustmentLineId: nameUuid(`adjustment:${input.reference}:${change.sku}`),
             productId: change.productId,
@@ -291,7 +292,7 @@ export function createInflowProvider(options: { http: ProviderHttp; base?: strin
         {
           salesOrderId,
           customerId: customer,
-          source: 'Aglyn',
+          source: PLATFORM_BRAND_NAME,
           orderDate: new Date(request.orderedAtMs).toISOString(),
           ...(request.locationId ? { locationId: request.locationId } : {}),
           poNumber: request.reference,
@@ -315,7 +316,7 @@ export function createInflowProvider(options: { http: ProviderHttp; base?: strin
             : {}),
           orderFreight: minorToDecimal(request.shippingCents, currency),
           orderRemarks: [
-            `Aglyn order ${request.displayRef} (${request.reference}).`,
+            `${PLATFORM_BRAND_NAME} order ${request.displayRef} (${request.reference}).`,
             request.discountCents > 0 ? `Discount ${minorToDecimal(request.discountCents, currency)} ${currency}.` : null,
             request.taxCents > 0 ? `Tax collected by the store ${minorToDecimal(request.taxCents, currency)} ${currency}.` : null,
             `Total paid ${minorToDecimal(request.totalCents, currency)} ${currency}.`,

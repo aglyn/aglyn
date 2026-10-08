@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { InventoryLocation } from '../model/inventory-sync'
 import { decimalToMinor, minorToMajor } from '../model/money'
 import { ProviderError, providerRequest, type ProviderHttp } from './http'
@@ -220,7 +221,7 @@ export function createBrightpearlProvider(options: { http: ProviderHttp; app: Br
           corrections: input.changes.map((change) => ({
             quantity: change.delta,
             productId: Number(change.productId),
-            reason: `Aglyn stock sync ${input.reference}`,
+            reason: `${PLATFORM_BRAND_NAME} stock sync ${input.reference}`,
             locationId,
             ...(change.delta > 0 ? { cost: { currency: input.currency.toUpperCase(), value: 0 } } : {}),
           })),

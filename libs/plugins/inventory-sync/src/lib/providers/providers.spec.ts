@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { mockHttp, sentJson } from '../testing/mock-http'
 import { createBrightpearlProvider, safeApiDomain, searchRows } from './brightpearl'
 import { createCin7CoreProvider } from './cin7-core'
@@ -249,7 +250,7 @@ describe('inFlow (AGL-3642)', () => {
     expect(puts[0].salesOrderId).toBe(nameUuid(`order:${ORDER.reference}`))
     expect(puts[1].salesOrderId).toBe(puts[0].salesOrderId)
     expect(puts[0].lines[0].salesOrderLineId).toBe(puts[1].lines[0].salesOrderLineId)
-    expect(puts[0]).toMatchObject({ customerId: 'c-1', source: 'Aglyn', orderFreight: '5.00', poNumber: ORDER.reference, locationId: 'Main Warehouse' })
+    expect(puts[0]).toMatchObject({ customerId: 'c-1', source: PLATFORM_BRAND_NAME, orderFreight: '5.00', poNumber: ORDER.reference, locationId: 'Main Warehouse' })
     expect(puts[0].lines[0]).toMatchObject({ productId: 'p-1', unitPrice: '19.99', quantity: { standardQuantity: '2' } })
     expect(first).toEqual({ id: nameUuid(`order:${ORDER.reference}`), number: 'SO-000123' })
   })
