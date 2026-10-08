@@ -628,7 +628,7 @@ export function aiSiteUnitJob(
     // The look designed first (AGL-3660): its header arrangement and band rhythm.
     const look = (job.outputs ?? []).find((output) => output.resource === 'theme' && output.id === 'look')
     const style = look?.proposal?.['style'] as Record<string, unknown> | undefined
-    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'] }
+    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'], seed: style['seed'] }
     unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage

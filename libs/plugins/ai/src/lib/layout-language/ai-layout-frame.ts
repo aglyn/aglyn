@@ -155,6 +155,11 @@ export function aiCompileLayoutFrame(
     formSection: null,
     pageIcon: AI_ICON_LIBRARY.sparkle,
     formsPlaced: new Set(),
+    // A frame is drawn the platform's one way on every site.
+    design: null,
+    pictures: 0,
+    features: 0,
+    splitAt: -2,
   }
   const name = aiLayoutFitText(plan.siteName, 'heading') || 'Home'
   const header = frame.header ?? { blocks: [] }
