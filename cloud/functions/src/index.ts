@@ -900,6 +900,16 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '30 9 * * *',
     route: '/api/admin/web-risk-recheck',
   },
+  /*
+   * Hourly at twenty past (AGL-3692): the getting-started emails. The
+   * verification reminder is due an hour after sign-up, so this cannot be
+   * daily. Each crossing is recorded on the account after its send, so a
+   * manual dispatch beside this tick never mails one twice.
+   */
+  'retention-emails': {
+    schedule: '20 * * * *',
+    route: '/api/admin/retention-emails',
+  },
 } as const
 
 /**
@@ -971,6 +981,7 @@ export const consoleCrmTaskReminders = consoleDailyCron('crm-task-reminders')
 export const consoleRiskNoticeDigests = consoleDailyCron('risk-notice-digests')
 export const consoleUsageEmail = consoleDailyCron('usage-email')
 export const consoleWebRiskRecheck = consoleDailyCron('web-risk-recheck')
+export const consoleRetentionEmails = consoleDailyCron('retention-emails')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

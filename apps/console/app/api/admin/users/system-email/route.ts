@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   isEmailConfigured,
+  PRODUCT_TIP_RETENTION_EMAILS,
   sendEmail,
   SYSTEM_EMAIL_TEMPLATES,
   type SystemEmailTemplateDefinition,
@@ -32,6 +33,7 @@ import {
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { readPlatformMarketingConsent } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
 import { generateAuthActionLink } from '../../../_lib/auth-action-link'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { renderSystemEmail } from '../../../_lib/render-system-email'
@@ -119,6 +121,8 @@ interface LoadedTarget extends StaffSendTarget {
   emailVerified: boolean
   /** Set for an account in an enterprise tenant pool. */
   tenantId: string | null
+  /** The account answered No to product email (AGL-3692). */
+  declinedProductEmail: boolean
 }
 
 /** The account, its profile name and its first workspace. */
@@ -147,6 +151,10 @@ async function loadTarget(uid: string): Promise<LoadedTarget | null> {
     email,
     emailVerified: record.emailVerified === true,
     tenantId: pooled?.tenantId ?? null,
+    declinedProductEmail:
+      readPlatformMarketingConsent(
+        (profile?.data?.() as Record<string, unknown> | undefined) ?? null,
+      ).decision === 'declined',
     displayName: record.displayName ?? null,
     firstName: (profile?.get?.('firstName') as string | undefined) ?? null,
     org: org?.exists
@@ -262,6 +270,18 @@ async function handlePost(
     )
   }
 
+  // A getting-started tip is product email (AGL-3692): an account that said
+  // No to product email is not sent one by hand either.
+  if (PRODUCT_TIP_RETENTION_EMAILS.has(definition.key) && target.declinedProductEmail) {
+    return Response.json(
+      {
+        error: 'This account turned off product emails, so getting-started tips are not sent to it.',
+        declinedProductEmail: true,
+      },
+      { status: 409 },
+    )
+  }
+
   const values = mergeStaffValues(
     definition,
     autoMergeValues(definition, target),
@@ -350,6 +370,9 @@ async function handlePost(
     text: rendered.text,
     context: definition.key,
     ...(action ? { owedFor: 'account' as const } : {}),
+    ...(PRODUCT_TIP_RETENTION_EMAILS.has(definition.key) && values['preferencesUrl']
+      ? { headers: { 'List-Unsubscribe': `<${values['preferencesUrl']}>` } }
+      : {}),
     // A written follow-up is a person talking: an answer goes to them, not
     // to the platform's no-reply address.
     ...(definition.key === STAFF_FOLLOW_UP_EMAIL && caller.email
