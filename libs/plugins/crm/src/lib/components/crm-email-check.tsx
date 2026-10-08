@@ -17,7 +17,7 @@
 
 'use client'
 
-import { type EmailState } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME, type EmailState } from '@aglyn/aglyn'
 import { Alert, Chip, type ChipProps, Tooltip } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useCrmApi } from './use-crm-api'
@@ -164,12 +164,12 @@ const ACCOUNT_LOCK_CHIP: Record<'banned' | 'locked', { label: string; title: str
   banned: {
     label: 'Account banned',
     title:
-      'This address belongs to an Aglyn account banned for abuse. Nothing is sent to it — no campaign, sequence or one-to-one email — whatever its consent says. Lifting the ban restores it.',
+      `This address belongs to a ${PLATFORM_BRAND_NAME} account banned for abuse. Nothing is sent to it — no campaign, sequence or one-to-one email — whatever its consent says. Lifting the ban restores it.`,
   },
   locked: {
     label: 'Account locked',
     title:
-      'This address belongs to a locked Aglyn account. Our campaigns and sequences skip it until the lock is lifted; its consent is unchanged.',
+      `This address belongs to a locked ${PLATFORM_BRAND_NAME} account. Our campaigns and sequences skip it until the lock is lifted; its consent is unchanged.`,
   },
 }
 
