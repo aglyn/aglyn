@@ -64,7 +64,9 @@ struct OrderDetailView: View {
         if let done { AglynNotice(done, tone: .success) { self.done = nil } }
         let actions = OrderAction.available(for: row.status)
         if !actions.isEmpty {
-          HStack {
+          // One row when the labels fit whole, otherwise one button per line:
+          // a phone never breaks "Refund" into "Ref / und".
+          let buttons = Group {
             if orderCanRefund(order) {
               Button(role: .destructive) { confirmingRefund = true } label: {
                 if refunding { ProgressView() } else { Label("Refund", systemImage: "arrow.uturn.backward") }
@@ -83,6 +85,12 @@ struct OrderDetailView: View {
               .disabled(busy != nil)
               .accessibilityIdentifier("order-action-\(action.rawValue)")
             }
+          }
+          .lineLimit(1)
+          .fixedSize(horizontal: true, vertical: false)
+          ViewThatFits(in: .horizontal) {
+            HStack { buttons }
+            VStack(alignment: .leading) { buttons }
           }
         }
       }
