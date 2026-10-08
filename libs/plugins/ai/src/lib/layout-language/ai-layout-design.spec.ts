@@ -243,3 +243,16 @@ describe('the header over a photo cover, and a quiet footer under a dark close (
     expect(footerOf(frame(true))?.sx).toMatchObject({ bgcolor: 'background.paper' })
   })
 })
+
+describe('a restaurant’s dishes (AGL-3660)', () => {
+  it('read as one ruled list on a phone: each dish under its rule, the two columns a line’s gap apart', () => {
+    const { sections, plan } = page('Menu highlights', 4)
+    const { stored, report } = build(sections, plan, { kind: 'restaurant', seed: 9, home: true })
+    expect(report.violations).toEqual([])
+    const nodes = Object.values(stored.nodes) as Array<{ componentId: string; props?: Record<string, unknown>; sx?: Record<string, unknown> }>
+    const row = nodes.find((node) => node.componentId === 'muiGrid' && node.props?.['columnSpacing'] === '8')
+    expect(row?.props).toMatchObject({ container: true, rowSpacing: '2' })
+    // Every dish opens under its own rule, one style key an element.
+    expect(nodes.filter((node) => node.componentId === 'muiBox' && JSON.stringify(node.sx) === JSON.stringify({ borderTop: 1 }))).toHaveLength(4)
+  })
+})

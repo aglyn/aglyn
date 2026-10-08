@@ -2211,6 +2211,23 @@ function splitSection(
   return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
 }
 
+/**
+ * Items under rules, one a line, each opening under a thin rule in the
+ * text's own color. One style key an element, so a long list repeats no
+ * multi-key inline style (rule 16); and no Stack `divider`, which a
+ * published page's renderer hands a Stack as one child and so never draws.
+ */
+function ruledList(scope: SectionScope, ids: readonly string[], role: string): string {
+  const tree = scope.page.tree
+  return tree.add(
+    'muiStack',
+    { spacing: '2' },
+    null,
+    ids.map((id) => tree.add('muiBox', null, { borderTop: 1 }, [tree.add('muiBox', null, { pt: 2 }, [id], 'ruledWords')], 'ruledLine')),
+    role,
+  )
+}
+
 /** Numbered items as a ruled list: each number beside its title and words. */
 function timeline(scope: SectionScope, items: readonly AiLayoutItem[]): string {
   const tree = scope.page.tree
@@ -2247,7 +2264,7 @@ function timeline(scope: SectionScope, items: readonly AiLayoutItem[]): string {
       'step',
     ),
   )
-  return tree.add('muiStack', { spacing: '3', divider: 'line' }, null, noted(scope, rows), 'timeline')
+  return ruledList(scope, noted(scope, rows), 'timeline')
 }
 
 /** A group drawn the design's way; `null` to draw it as the theme's cards. */
@@ -2275,7 +2292,7 @@ function designedGroup(
     if (perRow <= 1) {
       // Stacked, the rules run between the items.
       const ids = items.map((item) => tree.add('muiStack', { spacing: '1' }, null, [title(item), words(item)], 'ruled'))
-      return tree.add('muiStack', { spacing: '3', divider: 'line' }, null, noted(scope, ids), 'ruledItems')
+      return ruledList(scope, noted(scope, ids), 'ruledItems')
     }
     // Side by side, each column opens under a rule in the text's own color.
     const ids = items.map((item) =>
@@ -2288,15 +2305,21 @@ function designedGroup(
     noted(scope, ids)
     // Two columns of lines under rules, the first half and the second.
     const half = room === 'full' && ids.length >= 4 ? Math.ceil(ids.length / 2) : ids.length
-    const lists = [ids.slice(0, half), ids.slice(half)].filter((list) => list.length).map((list) => tree.add('muiStack', { spacing: '2', divider: 'line' }, null, list, 'menu'))
-    return lists.length === 1
-      ? lists[0]
-      : designRow(
-          scope,
-          lists.map((id) => ({ id, size: 'xs:12 md:6' })),
-          '8',
-          'flex-start',
-        )
+    const lists = [ids.slice(0, half), ids.slice(half)].filter((list) => list.length).map((list) => ruledList(scope, list, 'menu'))
+    if (lists.length === 1) return lists[0]
+    // On a phone the two columns read as one list, the second opening under
+    // its own rule a line's gap below the first; side by side, a gutter.
+    const [first, second] = lists
+    return tree.add(
+      'muiGrid',
+      { container: true, rowSpacing: '2', columnSpacing: '8' },
+      { alignItems: 'flex-start' },
+      [
+        tree.add('muiGrid', { size: 'xs:12 md:6' }, null, [first], 'column'),
+        tree.add('muiGrid', { size: 'xs:12 md:6' }, null, [second], 'column'),
+      ],
+      'menuRow',
+    )
   }
   // Pictures over each item's title and words.
   const design = page.design as NonNullable<PageScope['design']>
