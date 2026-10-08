@@ -203,6 +203,28 @@ provider — its outcome carries no tokens and no cost, so nothing is metered.
 A step that stops for a person before the provider, such as one whose site has
 no room for its draft, hands its message back the same way.
 
+**A meter park is a pause, and the person is told (AGL-3660).** Entering
+`needs_input` for a new reason raises the `paused` transition once — a
+`content.aiJobNeedsYou` notice at `warning` — not once per hourly retry. The
+job's page reads "Your site is paused" with the refusal, what is built so far
+and that nothing is lost; the row it stopped at shows `paused`, never a
+spinner. It offers **Get more AI credits** (the workspace's Billing page at
+`#plans`, where plans and the AI add-on are sold) and **Resume**, which posts
+to the resume door: `resumeAiJob` queues the same job on its paused step and
+the door runs it on its own reservation, so a Resume while still out of
+credits is refused in the meter's words and the job stays paused. A month
+that rolls over or a staff credit return re-opens the meter, and Resume (or
+the beat) carries on.
+
+**A Free guided start is refused before it spends when what is left cannot
+pay for it (AGL-3660).** What a Free workspace has left is the less of its own
+band and its owner's allowance across every Free workspace they hold
+(`readFreeAiCreditsLeft`), net of give-backs. The jobs list returns it as
+`freeCredits`, the dialog quotes it beside the start's estimate
+(`aiFreeSiteCreditEstimate`) and disables the start below it, and the site
+kind's admission refuses the create with a 429 on the same figure, so a stale
+dialog cannot start a job that would pause between its form and its first page.
+
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
 

@@ -567,7 +567,8 @@ async function walk(page, db, auth, identity, created) {
   const user = await auth.getUserByEmail(email)
   created.uid = user.uid
   if (user.emailVerified) throw new Error('a new account arrived pre-verified')
-  done(`uid ${user.uid.slice(0, 6)}…`)
+  // The host proves which path the leg took: a phone is on the auth host.
+  done(`uid ${user.uid.slice(0, 6)}… on ${new URL(page.url()).host}`)
 
   begin('hold-name')
   /**
@@ -697,36 +698,56 @@ async function walk(page, db, auth, identity, created) {
 
   begin('assert')
   /**
-   * Which way the workspace went. Not graded — recorded.
+   * THE WORKSPACE IS GRADED, NOT RECORDED (AGL-3690).
    *
-   * `signed-out` is the one worth watching: the account is verified and the
-   * browser is back at the sign-in page, so the person has to sign in again to
-   * reach the workspace their held name still describes. Recoverable, and a
-   * rough edge. It happened once in eight runs and nobody has diagnosed it, so
-   * it is reported rather than paged on — a canary that reds on an
-   * undiagnosed one-in-eight trains people to ignore it.
+   * A sign-up is only finished when the workspace exists, so this step fails
+   * when none does. The console home page creates the workspace on the first
+   * verified session (AGL-2590), which is a beat after verification. That is
+   * why this step waits for it instead of reading once. Reading once reported
+   * `first-site` on every run, desktop and phone alike, while real verified
+   * sign-ups did get workspaces a minute later. So the canary could not tell
+   * a working sign-up from one that never gets a workspace.
+   *
+   * It waits on Firestore, never on the address bar (see
+   * `signup-canary-marker-wiring.spec.ts`). It reloads every 20s, because a
+   * page that redeemed while its token still said unverified only provisions
+   * on a re-read.
    */
-  const orgs = await db
-    .collection('orgs')
-    .where('ownerUid', '==', created.uid)
-    .get()
+  let orgs = null
+  const workspaceBy = Date.now() + 90_000
+  let nextReload = Date.now() + 20_000
+  while (Date.now() < workspaceBy) {
+    orgs = await db
+      .collection('orgs')
+      .where('ownerUid', '==', created.uid)
+      .get()
+    if (orgs.size > 0) break
+    if (Date.now() > nextReload) {
+      await page
+        .reload({ waitUntil: 'domcontentloaded' })
+        .catch(() => undefined)
+      nextReload = Date.now() + 20_000
+    }
+    await new Promise((r) => setTimeout(r, 3_000))
+  }
   const url = page.url()
-  const outcome =
-    orgs.size > 0
-      ? 'workspace'
-      : /\/signin/.test(url)
-        ? 'signed-out'
-        : 'first-site'
+  if (!orgs || orgs.size === 0) {
+    const seen = (await page.innerText('body').catch(() => ''))
+      .replace(/\s+/g, ' ')
+      .slice(0, 160)
+    throw new Error(
+      `verified, and no workspace 90s later — at ${url}${/\/signin/.test(url) ? ' (signed out)' : ''}, screen: ${seen}`,
+    )
+  }
+  const outcome = 'workspace'
   if (orgs.size > 1) {
     throw new Error(`one signup produced ${orgs.size} workspaces`)
   }
-  if (orgs.size === 1) {
-    const foundOrgId = orgs.docs[0].id
-    const foundSlug = orgs.docs[0].get('slug')
-    Object.assign(created, { orgId: foundOrgId, slug: foundSlug })
-    if (!foundSlug || !foundSlug.startsWith(CANARY_SLUG_PREFIX)) {
-      throw new Error(`org slug ${foundSlug} is outside the canary namespace`)
-    }
+  const foundOrgId = orgs.docs[0].id
+  const foundSlug = orgs.docs[0].get('slug')
+  Object.assign(created, { orgId: foundOrgId, slug: foundSlug })
+  if (!foundSlug || !foundSlug.startsWith(CANARY_SLUG_PREFIX)) {
+    throw new Error(`org slug ${foundSlug} is outside the canary namespace`)
   }
   done(`account verified, workspace: ${outcome}`)
   return outcome

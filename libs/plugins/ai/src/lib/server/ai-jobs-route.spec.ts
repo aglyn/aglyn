@@ -294,6 +294,8 @@ import {
   registerAiJobStep,
 } from '../jobs/ai-jobs'
 import { registerAiJobAdmission } from '../jobs/ai-job-admission'
+import { createAiSiteJobAdmission } from '../jobs/ai-job-site-step'
+import { aiFreeCreditsResetOn, aiFreeSiteCreditEstimate, aiFreeSiteShortfallText } from '../model/ai-site-job'
 
 const ORG = 'org-1'
 /** A Pro workspace with the AI add-on: `aiGenerative` is on. */
@@ -1140,5 +1142,108 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
       registerAiJobAdmission('site', null)
       registerAiJobStep('site', (context) => siteRunner(context))
     }
+  })
+})
+
+describe('a Free workspace’s AI credits before and after a start (AGL-3660)', () => {
+  /** A Free workspace whose owner holds other Free workspaces: the account month is shared. */
+  const FREE_ORG = { plan: 'free', ownerUid: 'uid-1' }
+  const OUT = 'Your free AI credits for this month are used across your workspaces — upgrade any workspace to keep going.'
+  const month = () => assistUsageMonth()
+  const accountMonth = () => `users/uid-1/aiUsage/${month()}`
+  const planRunner = jest.fn()
+  const siteRunner = jest.fn()
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+
+  beforeAll(() => registerAiJobStep('site', (context) => siteRunner(context)))
+  beforeEach(() => {
+    mockGetOrgForUser.mockImplementation(async (_uid: string, orgId: string) =>
+      orgId === ORG ? { orgId: ORG, org: FREE_ORG } : null,
+    )
+    mockDocs.set(`orgs/${ORG}`, FREE_ORG)
+    mockDocs.set('hosts/host-1', { orgId: ORG })
+    planRunner.mockReset().mockImplementation(async ({ now }: { now: Date }) => ({
+      outputs: [],
+      ...spend,
+      plan: { reuse: [], create: [], screens: [], status: 'proposed', labels: {}, proposedAt: now, confirmedAt: null, confirmedBy: null },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    siteRunner.mockReset().mockResolvedValue({
+      outputs: [{ resource: 'screen', id: 'scr-1', versionId: 'v-1', hostId: 'host-1', label: 'Home' }],
+      ...spend,
+    })
+    registerAiJobPlanStep((context) => planRunner(context))
+  })
+  afterEach(() => registerAiJobPlanStep(null))
+
+  it('lists what is left across the owner’s Free workspaces, not the 300 a fresh workspace starts with', async () => {
+    // Another Free workspace of the same owner spent 230 this month; this one spent nothing.
+    mockDocs.set(`orgs/org-2/assistUsage/${month()}`, { estCostUsd: 0.23 })
+    mockDocs.set(accountMonth(), { estCostUsd: 0.23 })
+    const payload = await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}`))).json()
+    expect(payload).toMatchObject({ freeTaste: true, freeCredits: { left: 70, total: 300 } })
+    expect(payload.freeCredits.resetsOn).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('refuses a guided start what is left cannot pay for, creating no job and spending nothing', async () => {
+    mockDocs.set(accountMonth(), { estCostUsd: 0.23 })
+    registerAiJobAdmission('site', createAiSiteJobAdmission())
+    try {
+      const response = await createJob(
+        post({ ...VALID, kind: 'site', brief: 'A site for a dog groomer.', inputs: { businessType: 'dog groomer', pages: 2 } }),
+      )
+      expect(response.status).toBe(429)
+      expect((await response.json()).error).toBe(
+        aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, aiFreeCreditsResetOn(new Date())),
+      )
+      expect(jobDocs()).toEqual([])
+      expect(planRunner).not.toHaveBeenCalled()
+      expect(mockDocs.get(`orgs/${ORG}/assistUsage/${month()}`)?.['messages']).toBe(0)
+    } finally {
+      registerAiJobAdmission('site', null)
+    }
+  })
+
+  it('resumes a job the meter paused from its paused step — refused while still out, carried on after a credit return', async () => {
+    const { job } = await (await createJob(post({ ...VALID, kind: 'site' }))).json()
+    const path = `orgs/${ORG}/aiJobs/${job.id}`
+    const stored = mockDocs.get(path) as Record<string, unknown> & {
+      plan: Record<string, unknown>
+      steps: Array<Record<string, unknown>>
+    }
+    // What the machine leaves when the meter refuses the build's step: paused
+    // on it, the plan confirmed and kept, the step pending.
+    mockDocs.set(path, {
+      ...stored,
+      status: 'needs_input',
+      error: OUT,
+      review: null,
+      plan: { ...stored.plan, status: 'confirmed', confirmedAt: new Date(), confirmedBy: 'uid-1' },
+      steps: stored.steps.map((step) => (step['name'] === 'plan' ? step : { ...step, status: 'pending' })),
+    })
+    const resume = () =>
+      resumeJob(post({ orgId: ORG, hostId: 'host-1' }, { path: `/api/ai/jobs/${job.id}/resume` }), params(job.id))
+
+    // Still out of credits: the door refuses in the meter's words, and the job stays paused.
+    mockDocs.set(accountMonth(), { estCostUsd: 0.31 })
+    const refused = await resume()
+    expect(refused.status).toBe(429)
+    expect((await refused.json()).error).toBe(OUT)
+    expect(mockDocs.get(path)?.['status']).toBe('needs_input')
+    expect(siteRunner).not.toHaveBeenCalled()
+
+    // Staff give the month back (or the month rolls): Resume carries on the same job.
+    mockDocs.set(accountMonth(), { estCostUsd: 0.31, returnedUsd: 0.31 })
+    const resumed = await resume()
+    expect(resumed.status).toBe(200)
+    expect((await resumed.json()).job).toMatchObject({
+      id: job.id,
+      status: 'done',
+      error: null,
+      plan: { status: 'confirmed' },
+      outputs: [{ resource: 'screen', id: 'scr-1' }],
+    })
+    expect(siteRunner).toHaveBeenCalledTimes(1)
+    expect(planRunner).toHaveBeenCalledTimes(1)
   })
 })

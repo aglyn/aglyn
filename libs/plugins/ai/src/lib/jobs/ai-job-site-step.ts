@@ -44,6 +44,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiFreeSiteShortfall,
+  aiFreeSiteShortfallText,
   aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
@@ -53,6 +55,7 @@ import {
   type AiSiteJobInputs,
   aiSiteBlogNavPage,
 } from '../model/ai-site-job'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -682,32 +685,51 @@ export function aiSiteWritesPosts(job: Pick<AiJob, 'items'>): boolean {
  * org, and only where this deployment has loaded the step that builds a page:
  * a scaffold whose pages nothing can build is not a scaffold.
  */
-export const aiSiteJobAdmission: AiJobAdmission = async (context) => {
-  const inputs = parseAiSiteJobInputs(context.inputs)
-  if (typeof inputs === 'string') return { status: 400, error: inputs }
-  // The workspace's own page band (AGL-3594): one or two pages on the Free
-  // taste, four to eight on a paid plan.
-  const freeTaste = aiSiteFreeTaste(context.org)
-  const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
-  if (pages) return { status: 400, error: pages }
-  if (context.plan) {
-    const shape = aiSitePlanRefusal(context.plan, { freeTaste })
-    if (shape) return { status: 400, error: shape }
-  }
-  if (!context.hostId) {
-    return {
-      status: 400,
-      error: 'Open the site the scaffold is for before starting the job',
+export function createAiSiteJobAdmission(
+  deps: { freeCreditsLeft?: typeof readFreeAiCreditsLeft; now?: () => Date } = {},
+): AiJobAdmission {
+  const freeCreditsLeft = deps.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const now = deps.now ?? (() => new Date())
+  return async (context) => {
+    const inputs = parseAiSiteJobInputs(context.inputs)
+    if (typeof inputs === 'string') return { status: 400, error: inputs }
+    // The workspace's own page band (AGL-3594): one or two pages on the Free
+    // taste, four to eight on a paid plan.
+    const freeTaste = aiSiteFreeTaste(context.org)
+    const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
+    if (pages) return { status: 400, error: pages }
+    // A Free start that what is left of the month's Free credits cannot pay for
+    // is refused before it spends (AGL-3660), on the figure the dialog quotes —
+    // the dialog asks the same, and this is what a stale dialog meets. Only at
+    // creation: a resume is the same job carrying on from where it paused.
+    if (freeTaste && !context.plan) {
+      const credits = await freeCreditsLeft(context.firestore, { orgId: context.orgId, org: context.org, now: now() })
+      const shortfall = aiFreeSiteShortfall(credits, inputs.pages)
+      if (credits && shortfall) {
+        return { status: 429, error: aiFreeSiteShortfallText(shortfall, credits.resetsOn) }
+      }
     }
+    if (context.plan) {
+      const shape = aiSitePlanRefusal(context.plan, { freeTaste })
+      if (shape) return { status: 400, error: shape }
+    }
+    if (!context.hostId) {
+      return {
+        status: 400,
+        error: 'Open the site the scaffold is for before starting the job',
+      }
+    }
+    const owner = await resolveOrgIdForHost(context.hostId)
+    if (!owner || owner !== context.orgId)
+      return { status: 404, error: 'Unknown site' }
+    if (!aiJobStepRunnerFor('page')) {
+      return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
+    }
+    return null
   }
-  const owner = await resolveOrgIdForHost(context.hostId)
-  if (!owner || owner !== context.orgId)
-    return { status: 404, error: 'Unknown site' }
-  if (!aiJobStepRunnerFor('page')) {
-    return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
-  }
-  return null
 }
+
+export const aiSiteJobAdmission: AiJobAdmission = createAiSiteJobAdmission()
 
 /** Whether a scaffold's workspace spends the Free taste (AGL-3594); a missing org reads as paid, as the band has always been. */
 export function aiSiteFreeTaste(org: object | null | undefined): boolean {
