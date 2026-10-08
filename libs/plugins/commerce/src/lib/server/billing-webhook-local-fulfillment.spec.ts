@@ -284,3 +284,45 @@ describe('a paid local delivery cart (AGL-3624)', () => {
     expect(notifications.filter((note) => /Check the delivery address/.test(note.title))).toHaveLength(1)
   })
 })
+
+describe('a paid buy-now order records where it ships (AGL-3688)', () => {
+  const buyNow = (extra: Record<string, any> = {}) => ({
+    id: 'cs_buynow',
+    payment_status: 'paid',
+    payment_intent: 'pi_buynow',
+    amount_total: 1500,
+    customer_details: {
+      email: 'buyer@example.com',
+      name: 'Ada',
+      address: { line1: '9 Billing Rd', postal_code: '11111', country: 'US' },
+    },
+    total_details: { amount_tax: 0, amount_shipping: 0, amount_discount: 0 },
+    metadata: { type: 'commerce-order', hostId: 'host-1', productId: 'bread', variantId: 'loaf', quantity: '1', feeCents: '45' },
+    ...extra,
+  })
+
+  it('keeps the shipping address the session collected', async () => {
+    await deliver(
+      buyNow({
+        shipping_details: {
+          name: 'Ada Lovelace',
+          address: { line1: '2 Ship St', city: 'Springfield', state: 'IL', postal_code: '62704', country: 'US' },
+        },
+      }),
+    )
+    expect((docs.get('hosts/host-1/orders/cs_buynow') as any).shippingAddress).toEqual({
+      name: 'Ada Lovelace',
+      line1: '2 Ship St',
+      line2: undefined,
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62704',
+      country: 'US',
+    })
+  })
+
+  it('never takes the billing address for one', async () => {
+    await deliver(buyNow())
+    expect((docs.get('hosts/host-1/orders/cs_buynow') as any).shippingAddress).toBeUndefined()
+  })
+})

@@ -4880,6 +4880,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? { livemode: event.livemode }
               : {}),
             customerName: object?.customer_details?.name ?? null,
+            // Where it ships (AGL-3688): the address the session collected for
+            // the shipping it charged. `shipping_details` only — buy-now
+            // collects no shipping address when nothing is priced, and the
+            // billing address is not where a parcel goes.
+            ...(object?.shipping_details?.address
+              ? {
+                  shippingAddress: {
+                    name: object.shipping_details.name ?? undefined,
+                    line1: object.shipping_details.address.line1 ?? undefined,
+                    line2: object.shipping_details.address.line2 ?? undefined,
+                    city: object.shipping_details.address.city ?? undefined,
+                    state: object.shipping_details.address.state ?? undefined,
+                    postalCode: object.shipping_details.address.postal_code ?? undefined,
+                    country: object.shipping_details.address.country ?? undefined,
+                  },
+                }
+              : {}),
             createdAtMs: Date.now(),
             // Legacy Commerce Starter fields (AGL-90).
             productId,
