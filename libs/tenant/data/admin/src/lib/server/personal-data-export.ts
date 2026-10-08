@@ -340,6 +340,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Markers that one event reached one Zapier hook, so a retry does not post it twice (AGL-3643): the hook, the status and the time. The document id is a SHA-256 of the event and hook, an identifier rather than a verifier of any credential; no customer data, and a TTL policy removes each row.',
   },
   {
+    collection: 'paypalSellers',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The workspace’s PayPal seller account (AGL-3630): the merchant id PayPal returned, the referral tracking id, whether it may take payments and whether its email is confirmed, test or live, and who started the connection. No credential is stored: the platform acts with its own partner credentials on the merchant’s behalf.',
+  },
+  {
+    collection: 'paypalCheckouts',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each buyer’s PayPal or Venmo checkout (AGL-3630): the lines, discount, tax, shipping and platform fee priced, the PayPal order and capture ids, refunds, and what the buyer gave PayPal — their email, name and shipping address. The merchant’s own record of a SHOPPER’s payment, so disclosed to the ORG only.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
