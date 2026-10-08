@@ -641,7 +641,9 @@ async function walk(page, db, auth, identity, created) {
    * bypassed by the product, which keeps only the code.
    */
   await page.goto(
-    `${CONSOLE}/verify-email?mode=verifyEmail&oobCode=${encodeURIComponent(oobCode)}`,
+    // On the origin the walk signed up on: the console on a desktop, the
+    // auth host on a phone, where the session lives (AGL-3690).
+    `${new URL(page.url()).origin}/verify-email?mode=verifyEmail&oobCode=${encodeURIComponent(oobCode)}`,
     { waitUntil: 'domcontentloaded', timeout: 45_000 },
   )
   /**
@@ -825,21 +827,43 @@ async function main() {
    * past the cap gets silently truncated, and the walk then fails asserting
    * its own name back. Base36 plus two bytes keeps `signup-canary-…` at 26.
    */
-  const stamp = `${Date.now().toString(36)}${randomBytes(2).toString('hex')}`
   const [local, domain] = EMAIL_BASE.split('@')
-  const identity = {
-    email: `${local}-${stamp}@${domain}`,
-    password: `Cy-${randomBytes(18).toString('base64url')}-Aa1!`,
-    org: `Signup canary ${stamp}`,
-    // The typed organization name becomes the slug, so the two must agree or
-    // the orphan sweep cannot find what a crashed run left.
-    slug: `${CANARY_SLUG_PREFIX}${stamp}`,
+  const makeIdentity = () => {
+    const stamp = `${Date.now().toString(36)}${randomBytes(2).toString('hex')}`
+    return {
+      email: `${local}-${stamp}@${domain}`,
+      password: `Cy-${randomBytes(18).toString('base64url')}-Aa1!`,
+      org: `Signup canary ${stamp}`,
+      // The typed organization name becomes the slug, so the two must agree or
+      // the orphan sweep cannot find what a crashed run left.
+      slug: `${CANARY_SLUG_PREFIX}${stamp}`,
+    }
   }
-  const created = { uid: null, orgId: null, slug: null }
 
+  const { chromium, devices } = require('playwright-core')
+  /**
+   * EVERY RUN WALKS A DESKTOP AND A PHONE (AGL-3690).
+   *
+   * They are different sign-ups. A desktop browser on the console signs up in
+   * place. A phone browser is handed to the auth host (AGL-468) and comes
+   * back with an absolute `continue`, a path the desktop never takes. On
+   * 2026-10-08 that path looped every phone password sign-up between the two
+   * hosts, so two of four real sign-ups that day were lost. This canary, a
+   * desktop-only walk, passed every hour throughout. The phone leg would have
+   * failed at `account`, because the loop never reaches `/verify-email`.
+   *
+   * The device descriptor gives the UA, touch and `userAgentData.mobile`
+   * that `isMobileBrowser` reads. `defaultBrowserType` is dropped because the
+   * walk always runs Chromium.
+   */
+  const { defaultBrowserType: _webkit, ...phone } = devices['iPhone 13']
+  const LEGS = [
+    { leg: 'desktop', device: {} },
+    { leg: 'phone', device: phone },
+  ]
+  const results = []
   let failedStep = null
-  let outcome = null
-  const { chromium } = require('playwright-core')
+  let debugToken = ''
   const browser = await chromium.launch({
     executablePath:
       process.env['CHROME_PATH'] ||
@@ -873,96 +897,133 @@ async function main() {
      * day cannot hold that green.
      */
     begin('attest-setup')
-    const debugToken = process.env['FIREBASE_APPCHECK_DEBUG_TOKEN'] ?? ''
+    debugToken = process.env['FIREBASE_APPCHECK_DEBUG_TOKEN'] ?? ''
     if (!debugToken) {
       throw new Error('FIREBASE_APPCHECK_DEBUG_TOKEN is not set')
     }
-    // One CONTEXT, so the verification tab shares the signup tab's session and
-    // storage the way two tabs of one browser do.
-    const context = await browser.newContext()
-    if (PROBE_TOKEN) {
-      /**
-       * Scoped to the console, via routing rather than `extraHTTPHeaders`.
-       *
-       * A context-wide header goes to EVERY origin the page touches —
-       * Identity Platform, Firestore, reCAPTCHA — where an unknown header
-       * turns simple requests into preflighted ones and the cross-origin
-       * calls start failing. Measured: the tab crashed outright, and the walk
-       * failed at `account` with "Target page, context or browser has been
-       * closed", which names nothing useful.
-       *
-       * Only requests to the console carry it. That is also the honest scope:
-       * the bypass is for OUR firewall, and nobody else's edge should see it.
-       */
-      await context.route(
-        (url) => url.href.startsWith(CONSOLE),
-        (route) =>
-          route.continue({
-            headers: {
-              ...route.request().headers(),
-              'x-aglyn-probe': PROBE_TOKEN,
-            },
-          }),
-      )
-    }
-    /**
-     * ⛔ THE CANARY MUST NOT BE A VISITOR (AGL-2720).
-     *
-     * This walks the real signup page in a real browser, so without this it
-     * fires `page_view` into GA4 on every step, every hour, forever — landing
-     * in exactly the signup funnel the ad spend is measured against, and
-     * looking most like real demand on the days there is none. An internal
-     * traffic filter cannot catch it either: those match on IP and this runs
-     * from whatever address a hosted runner happens to have.
-     *
-     * Blocked at the network rather than by a flag in the app, so the page
-     * under test is the page a visitor gets — a build that skipped analytics
-     * for the canary would be a different build from the one being proved.
-     *
-     * ⚠️ Analytics ONLY. reCAPTCHA is served from `google.com` and
-     * `gstatic.com` and App Check dies without it, so the list is exact
-     * hostnames rather than anything matching "google".
-     */
-    const ANALYTICS_HOSTS = new Set([
-      'www.googletagmanager.com',
-      'www.google-analytics.com',
-      'analytics.google.com',
-      'ssl.google-analytics.com',
-      'stats.g.doubleclick.net',
-    ])
-    await context.route(
-      (url) =>
-        ANALYTICS_HOSTS.has(url.hostname) ||
-        url.hostname.endsWith('.analytics.google.com') ||
-        /^region\d+\.google-analytics\.com$/.test(url.hostname) ||
-        url.pathname.startsWith('/_vercel/insights'),
-      (route) => route.abort(),
-    )
-
-    // Before any page script: the SDK reads this the moment App Check
-    // initializes, and after that it is too late.
-    await context.addInitScript((token) => {
-      self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
-    }, debugToken)
-    const page = await context.newPage()
     done()
-
-    outcome = await walk(page, db, auth, identity, created)
   } catch (error) {
     failedStep = step
     console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
-  } finally {
-    await browser.close().catch(() => undefined)
   }
 
-  // Always, on every path. A failed walk that leaves residue is two problems.
-  begin('reap')
-  const missed = await reap(db, auth, created)
-  const reapedCleanly = missed.length === 0
-  done(reapedCleanly ? 'clean' : `MISSED ${missed.join(', ')}`)
+  const consoleSite = new URL(CONSOLE).hostname.split('.').slice(-2).join('.')
+  for (const { leg, device } of failedStep ? [] : LEGS) {
+    console.log(`\n${leg}`)
+    const legStartedAt = Date.now()
+    const identity = makeIdentity()
+    const created = { uid: null, orgId: null, slug: null }
+    let legFailedStep = null
+    let outcome = null
+    let context = null
+    try {
+      begin('attest-setup')
+      // One CONTEXT, so the verification tab shares the signup tab's session and
+      // storage the way two tabs of one browser do.
+      context = await browser.newContext(device)
+      if (PROBE_TOKEN) {
+        /**
+         * Scoped to the console, via routing rather than `extraHTTPHeaders`.
+         *
+         * A context-wide header goes to EVERY origin the page touches —
+         * Identity Platform, Firestore, reCAPTCHA — where an unknown header
+         * turns simple requests into preflighted ones and the cross-origin
+         * calls start failing. Measured: the tab crashed outright, and the walk
+         * failed at `account` with "Target page, context or browser has been
+         * closed", which names nothing useful.
+         *
+         * Only requests to the console carry it. That is also the honest scope:
+         * the bypass is for OUR firewall, and nobody else's edge should see it.
+         * "The console" means its whole site: the phone leg is handed to the
+         * auth host, which sits behind the same firewall.
+         */
+        await context.route(
+          (url) =>
+            url.protocol === 'https:' &&
+            (url.hostname === consoleSite ||
+              url.hostname.endsWith(`.${consoleSite}`)),
+          (route) =>
+            route.continue({
+              headers: {
+                ...route.request().headers(),
+                'x-aglyn-probe': PROBE_TOKEN,
+              },
+            }),
+        )
+      }
+      /**
+       * ⛔ THE CANARY MUST NOT BE A VISITOR (AGL-2720).
+       *
+       * This walks the real signup page in a real browser, so without this it
+       * fires `page_view` into GA4 on every step, every hour, forever — landing
+       * in exactly the signup funnel the ad spend is measured against, and
+       * looking most like real demand on the days there is none. An internal
+       * traffic filter cannot catch it either: those match on IP and this runs
+       * from whatever address a hosted runner happens to have.
+       *
+       * Blocked at the network rather than by a flag in the app, so the page
+       * under test is the page a visitor gets — a build that skipped analytics
+       * for the canary would be a different build from the one being proved.
+       *
+       * ⚠️ Analytics ONLY. reCAPTCHA is served from `google.com` and
+       * `gstatic.com` and App Check dies without it, so the list is exact
+       * hostnames rather than anything matching "google".
+       */
+      const ANALYTICS_HOSTS = new Set([
+        'www.googletagmanager.com',
+        'www.google-analytics.com',
+        'analytics.google.com',
+        'ssl.google-analytics.com',
+        'stats.g.doubleclick.net',
+      ])
+      await context.route(
+        (url) =>
+          ANALYTICS_HOSTS.has(url.hostname) ||
+          url.hostname.endsWith('.analytics.google.com') ||
+          /^region\d+\.google-analytics\.com$/.test(url.hostname) ||
+          url.pathname.startsWith('/_vercel/insights'),
+        (route) => route.abort(),
+      )
 
+      // Before any page script: the SDK reads this the moment App Check
+      // initializes, and after that it is too late.
+      await context.addInitScript((token) => {
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
+      }, debugToken)
+      const page = await context.newPage()
+      done()
+
+      outcome = await walk(page, db, auth, identity, created)
+    } catch (error) {
+      legFailedStep = step
+      console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
+    } finally {
+      await context?.close().catch(() => undefined)
+    }
+
+    // Always, on every path. A failed walk that leaves residue is two problems.
+    begin('reap')
+    const missed = await reap(db, auth, created)
+    const legReapedCleanly = missed.length === 0
+    done(legReapedCleanly ? 'clean' : `MISSED ${missed.join(', ')}`)
+    results.push({
+      leg,
+      ok: legFailedStep === null,
+      failedStep: legFailedStep,
+      reapedCleanly: legReapedCleanly,
+      workspaceOutcome: outcome,
+      elapsedMs: Date.now() - legStartedAt,
+    })
+  }
+  await browser.close().catch(() => undefined)
+
+  const failedLeg = results.find((r) => !r.ok) ?? null
+  failedStep = failedStep ?? failedLeg?.failedStep ?? null
+  const reapedCleanly = results.every((r) => r.reapedCleanly)
+  const outcome =
+    results.find((r) => r.leg === 'desktop')?.workspaceOutcome ?? null
   const elapsedMs = Date.now() - t0
-  const ok = failedStep === null
+  const ok = failedStep === null && results.length === LEGS.length
 
   // The marker the health door reads. Written with the admin SDK rather than
   // through the workspace lib because this runs outside the app; the field
@@ -979,12 +1040,15 @@ async function main() {
       reapedCleanly,
       // Context, not a verdict. See the note in `assert`.
       workspaceOutcome: outcome,
+      // Which walk failed, and each leg's own result (AGL-3690).
+      failedLeg: failedLeg?.leg ?? null,
+      legs: results,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     })
 
   console.log(
     `\n${ok && reapedCleanly ? 'PASS' : 'FAIL'} — walk ${elapsedMs}ms` +
-      `${failedStep ? `, failed at ${failedStep}` : `, workspace: ${outcome}`}` +
+      `${failedStep ? `, failed at ${failedLeg ? `${failedLeg.leg} ` : ''}${failedStep}` : `, workspace: ${outcome}`}` +
       `${reapedCleanly ? '' : ', LEFT RESIDUE'}`,
   )
   process.exit(ok && reapedCleanly ? 0 : 1)
