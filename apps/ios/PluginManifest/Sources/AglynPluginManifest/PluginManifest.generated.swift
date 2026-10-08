@@ -15,6 +15,7 @@ import AglynInboxPlugin
 import AglynMarketingPlugin
 import AglynOutreachPlugin
 import AglynRedirectsPlugin
+import AglynSmsPlugin
 import AglynWorkflowsPlugin
 
 public enum NativePluginManifest {
@@ -73,6 +74,11 @@ public enum NativePluginManifest {
       id: "redirects",
       contributes: ["screens": ["redirects.list"], "widgets": ["redirects.summary"], "quickActions": ["redirects.open"], "deepLinks": ["redirects.page"]],
       register: AglynRedirectsPlugin.registerRedirectsNative
+    ),
+    NativePluginManifestEntry(
+      id: "sms",
+      contributes: ["screens": ["sms.texts"], "quickActions": ["sms.open"]],
+      register: AglynSmsPlugin.registerSmsNative
     ),
     NativePluginManifestEntry(
       id: "workflows",

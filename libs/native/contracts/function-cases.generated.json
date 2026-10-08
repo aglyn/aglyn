@@ -1455,6 +1455,103 @@
         }
       ]
     },
+    "buyerNotificationEnabled": {
+      "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {},
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": false
+            },
+            "texts"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "texts": true
+            },
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": "no"
+            },
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": false
+            },
+            "receipt"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "receipt": false
+            },
+            "receipt"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "receipt": false,
+              "texts": true
+            },
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "off",
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [],
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": null
+            },
+            "texts"
+          ],
+          "result": true
+        }
+      ]
+    },
     "campaignReport": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
       "cases": [

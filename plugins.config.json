@@ -2835,6 +2835,15 @@
         "usageAxes": "smsUsageAxes"
       },
       "apiPrefixes": ["sms"],
+      "mobile": {
+        "$comment": "AGL-3669: the texts switch natively. The plugin is infrastructure with no console page of its own; what a person controls is the Customer notifications card's \"Also send as texts\" switch (offered only when the platform can text), so the app gives that switch a screen and a quick action.",
+        "ios": { "module": "AglynSmsPlugin", "register": "registerSmsNative" },
+        "android": { "package": "com.aglyn.plugins.sms", "register": "registerSmsNative" },
+        "contributes": {
+          "screens": ["sms.texts"],
+          "quickActions": ["sms.open"]
+        }
+      },
       "contributes": {}
     },
     {

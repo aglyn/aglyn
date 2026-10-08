@@ -23,6 +23,7 @@ let package = Package(
     .package(path: "Plugins/AglynMarketingPlugin"),
     .package(path: "Plugins/AglynOutreachPlugin"),
     .package(path: "Plugins/AglynRedirectsPlugin"),
+    .package(path: "Plugins/AglynSmsPlugin"),
     .package(path: "Plugins/AglynWorkflowsPlugin"),
   ],
   targets: [
@@ -41,6 +42,7 @@ let package = Package(
         .product(name: "AglynMarketingPlugin", package: "AglynMarketingPlugin"),
         .product(name: "AglynOutreachPlugin", package: "AglynOutreachPlugin"),
         .product(name: "AglynRedirectsPlugin", package: "AglynRedirectsPlugin"),
+        .product(name: "AglynSmsPlugin", package: "AglynSmsPlugin"),
         .product(name: "AglynWorkflowsPlugin", package: "AglynWorkflowsPlugin"),
       ]
     ),
