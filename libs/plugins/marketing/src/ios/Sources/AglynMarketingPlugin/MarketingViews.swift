@@ -15,8 +15,8 @@ func problemText(_ error: Error) -> String {
 @MainActor
 @Observable
 final class MarketingAccess {
-  @ObservationIgnored let host = LiveDocument()
-  @ObservationIgnored let org = LiveDocument()
+  @ObservationIgnored let host = ObservedDocument()
+  @ObservationIgnored let org = ObservedDocument()
   private var uid = ""
 
   func start(_ context: NativePluginContext) {
@@ -256,7 +256,7 @@ struct CampaignDetail: View {
   let access: MarketingAccess
   let campaignID: String
   @Environment(\.dismiss) private var dismiss
-  @State private var doc = LiveDocument()
+  @State private var doc = ObservedDocument()
   @State private var emails = LiveQueryList(pageSize: 25) { $0 }
   @State private var lists = LiveQueryList(pageSize: 50) { (id: $0.id, name: $0.string("name") ?? $0.id) }
   @State private var editing = false
@@ -772,7 +772,7 @@ struct ExperimentDetail: View {
   let access: MarketingAccess
   let experimentID: String
   @Environment(\.dismiss) private var dismiss
-  @State private var doc = LiveDocument()
+  @State private var doc = ObservedDocument()
   @State private var stats = LiveQueryList(pageSize: 10) { $0 }
   @State private var confirmDelete = false
   @State private var notice: String?

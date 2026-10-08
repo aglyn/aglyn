@@ -6,66 +6,19 @@ import AglynCore
 import Foundation
 
 /*
- * A SITE'S INBOX, AS THE CONSOLE'S INBOX READS AND WRITES IT (the Kotlin
- * plugin's `Inbox.kt`, rule for rule).
- *
- * Submissions are `hosts/{hostId}/formSubmissions`, listed by the console's
- * SUBMISSION_LIST_QUERY through the shared planner. Read / unread is the one
- * field the rules let a site writer change; delete is the console's delete
- * and its form-stats refresh; a reply and a marketing-list add go to the
- * console's own routes.
+ * THE REST OF A SITE'S INBOX, AS THE CONSOLE READS AND WRITES IT (the Kotlin
+ * plugin's `Inbox.kt`, rule for rule). The submissions themselves (their
+ * list, one message, read or unread, reply, delete, export) are
+ * `Submissions.swift`; this file holds what surrounds them: the form pick,
+ * who wrote in and what the site did with it, the marketing-list add, and the
+ * site's members and leads.
  */
 
-let submissionsPageSize = 25
-let inboxReplyRoute = "/api/inbox/reply"
 let inboxListOptionsRoute = "/api/inbox/list-options"
 let inboxAssignListRoute = "/api/inbox/assign-list"
-let formStatsRoute = "/api/forms/stats"
 let memberRemoveRoute = "/api/membership/admin-remove"
 
-func submissionsPath(_ hostID: String) -> [String] { ["hosts", hostID, "formSubmissions"] }
 func repliesPath(_ hostID: String, _ submissionID: String) -> [String] { submissionsPath(hostID) + [submissionID, "replies"] }
-
-enum ReadFilter: String, CaseIterable, Identifiable {
-  case all, unread, read
-  var id: String { rawValue }
-
-  var value: String? {
-    switch self {
-    case .all: nil
-    case .unread: "false"
-    case .read: "true"
-    }
-  }
-
-  var label: String {
-    guard let value else { return "All" }
-    return ContractValues.shared.submissionReadOptions.first { $0.value == value }?.label ?? rawValue.capitalized
-  }
-}
-
-func submissionsRequest(_ read: ReadFilter, formID: String?, search: String) -> ListQueryRequest {
-  var clauses: [ListFilterRequest] = []
-  if let value = read.value { clauses.append(ListFilterRequest(field: "read", op: "equals", value: value)) }
-  if let formID, !formID.isEmpty { clauses.append(ListFilterRequest(field: "formId", op: "equals", value: formID)) }
-  let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
-  return ListQueryRequest(clauses: clauses, search: words.isEmpty ? nil : [words])
-}
-
-/// A site's submissions. `scopedForm` is a form's own card (FORM_SCOPED_SUBMISSION_LIST_QUERY): that form is the
-/// list's base, which no clause can widen; otherwise `formID` is the Form pick.
-func submissionsQuery(
-  _ hostID: String, read: ReadFilter, formID: String?, search: String, limit: Int, scopedForm: String? = nil
-) -> FirestoreQuery {
-  if let scopedForm, !scopedForm.isEmpty {
-    var request = submissionsRequest(read, formID: nil, search: search)
-    request.base = [ListQueryFilter(op: .equal, path: "formId", value: .string(scopedForm))]
-    return planListQuery(ContractValues.shared.formScopedSubmissionListQuery, request)
-      .firestoreQuery(submissionsPath(hostID), limit: limit)
-  }
-  return planListQuery(ContractValues.shared.submissionListQuery, submissionsRequest(read, formID: formID, search: search))
-    .firestoreQuery(submissionsPath(hostID), limit: limit)
-}
 
 /// The site's forms for the Form pick, by document id as the console reads them (an `orderBy` on a name
 /// would drop a form saved without one), named by `displayName`, then `name`.
@@ -91,44 +44,7 @@ func siteLeadsQuery(orgID: String, hostID: String, search: String, limit: Int) -
     .firestoreQuery(["orgs", orgID, "leads"], limit: limit)
 }
 
-// MARK: Who wrote in: `messageSender` and `submissionSender`, replayed from the console's cases
-
-private let senderNameKeys = ["name", "fullname", "yourname", "firstname", "contactname"]
-private let senderEmailKeys = ["email", "emailaddress"]
-
-func messageText(_ value: Any?) -> String {
-  switch value {
-  case let string as String: return string
-  case let number as NSNumber:
-    if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "true" : "false" }
-    let double = number.doubleValue
-    guard double.isFinite else { return "" }
-    if double.rounded() == double && abs(double) < 1e15 { return String(Int64(double)) }
-    return String(double)
-  case let bool as Bool: return bool ? "true" : "false"
-  case let array as [Any]: return array.map(messageText).filter { !$0.isEmpty }.joined(separator: " ")
-  default: return ""
-  }
-}
-
-struct MessageSender: Equatable {
-  var name: String?
-  var email: String?
-}
-
-/// Who wrote in, by the field-name convention: the first non-empty name-like and address-like values, in order.
-func messageSender(_ fields: [(String, Any?)]) -> MessageSender {
-  var reduced: [String: String] = [:]
-  for (key, value) in fields {
-    let text = messageText(value).trimmingCharacters(in: .whitespacesAndNewlines)
-    if text.isEmpty { continue }
-    let at = key.lowercased().filter { ($0 >= "a" && $0 <= "z") || ($0 >= "0" && $0 <= "9") }
-    if reduced[at] == nil { reduced[at] = text }
-  }
-  return MessageSender(
-    name: senderNameKeys.lazy.compactMap { reduced[$0] }.first,
-    email: senderEmailKeys.lazy.compactMap { reduced[$0] }.first)
-}
+// MARK: Who wrote in: `submissionSender`, replayed from the console's cases
 
 struct SubmissionSender: Equatable {
   let label: String
@@ -146,7 +62,7 @@ func initialsOf(_ label: String) -> String {
 }
 
 func submissionSender(_ fields: [(String, Any?)], fallback: String = "Someone") -> SubmissionSender {
-  let sender = messageSender(fields)
+  let sender = messageSender(fields.map { (key: $0.0, value: $0.1) })
   let label = sender.name ?? sender.email ?? fallback
   return SubmissionSender(label: label, email: sender.email, initials: initialsOf(label))
 }
@@ -188,47 +104,8 @@ func routingChips(_ routing: [String: Any]?) -> [RoutingChip] {
 
 // MARK: Rows
 
-struct Submission: Identifiable, Equatable {
-  let id: String
-  let formID: String?
-  let formName: String
-  let sender: SubmissionSender
-  let fields: [(key: String, value: String)]
-  let read: Bool
-  let receivedAt: Date?
-  let repliedAt: Date?
-  let path: String?
-  let chips: [RoutingChip]
-  let capturedKind: String?
-  let capturedID: String?
-
-  var preview: String { fields.map { "\($0.key): \($0.value)" }.joined(separator: " · ") }
-
-  static func == (a: Submission, b: Submission) -> Bool {
-    a.id == b.id && a.read == b.read && a.repliedAt == b.repliedAt && a.preview == b.preview
-  }
-}
-
-/// A stored map's entries in the order the server wrote them where the SDK keeps it, else by key.
-func orderedEntries(_ map: [String: Any]) -> [(String, Any?)] {
-  map.keys.sorted().map { ($0, map[$0]) }
-}
-
 func date(_ value: Any?) -> Date? {
   epochMillis(value).map { Date(timeIntervalSince1970: Double($0) / 1000) }
-}
-
-func submission(_ doc: FirestoreDocument) -> Submission {
-  let fields = orderedEntries(doc.data["fields"] as? [String: Any] ?? [:])
-  let formName = (doc.string("formName")?.isEmpty == false ? doc.string("formName") : nil) ?? "Form"
-  let captured = doc.data["capturedRecord"] as? [String: Any]
-  return Submission(
-    id: doc.id, formID: doc.string("formId"), formName: formName,
-    sender: submissionSender(fields, fallback: formName),
-    fields: fields.map { (key: $0.0, value: messageText($0.1)) }.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty },
-    read: doc.bool("read") == true, receivedAt: date(doc.data["createdAt"]), repliedAt: date(doc.data["repliedAtMs"]),
-    path: doc.string("path"), chips: routingChips(doc.data["routing"] as? [String: Any]),
-    capturedKind: captured?["kind"] as? String, capturedID: captured?["id"] as? String)
 }
 
 struct SentReply: Identifiable {
@@ -245,6 +122,8 @@ func sentReply(_ doc: FirestoreDocument) -> SentReply {
     sentAt: date(doc.data["sentAtMs"]))
 }
 
+/// What the site role may do in the Inbox: write (read state, delete) is the console's content roles,
+/// reply and the list add are owner, admin and editor.
 struct InboxPermissions: Equatable {
   let canWrite: Bool
   let canReply: Bool
@@ -314,23 +193,6 @@ struct InboxActions {
     var all = fields
     all["hostId"] = hostID
     return jsonBody(all)
-  }
-
-  func setRead(_ submissionID: String, _ read: Bool) async throws {
-    try await reader.setDocument(submissionsPath(hostID) + [submissionID], ["read": read], merge: true)
-  }
-
-  func delete(_ row: Submission) async throws {
-    try await reader.deleteDocument(submissionsPath(hostID) + [row.id])
-    if let formID = row.formID {
-      _ = try? await api.request(formStatsRoute, method: .post, body: body(["formIds": [formID]]))
-    }
-  }
-
-  func reply(_ submissionID: String, subject: String, message: String) async throws -> String? {
-    let answer = try await api.request(
-      inboxReplyRoute, method: .post, body: body(["submissionId": submissionID, "subject": subject, "message": message]))
-    return answer?["to"]?.stringValue
   }
 
   func listOptions(_ submissionID: String) async throws -> ListOptions {

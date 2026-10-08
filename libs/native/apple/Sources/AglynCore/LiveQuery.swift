@@ -83,7 +83,7 @@ public final class LiveQueryList<Row> {
 /// One document, live: `nil` once it is known to be missing.
 @MainActor
 @Observable
-public final class LiveDocument {
+public final class ObservedDocument {
   public private(set) var document: FirestoreDocument?
   public private(set) var ready = false
   public private(set) var failed = false

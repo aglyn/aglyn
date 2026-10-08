@@ -37,9 +37,9 @@ func outreachPermitted(member: [String: Any]?, role customRole: [String: Any]?) 
 @MainActor
 @Observable
 final class OutreachGate {
-  @ObservationIgnored let org = LiveDocument()
-  @ObservationIgnored let member = LiveDocument()
-  @ObservationIgnored let role = LiveDocument()
+  @ObservationIgnored let org = ObservedDocument()
+  @ObservationIgnored let member = ObservedDocument()
+  @ObservationIgnored let role = ObservedDocument()
   private(set) var staff = false
   private(set) var claimsRead = false
   private var roleID: String?

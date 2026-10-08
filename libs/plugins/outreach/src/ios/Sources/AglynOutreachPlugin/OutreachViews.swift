@@ -202,7 +202,7 @@ struct SequenceDetail: View {
   let sequenceID: String
   let mailboxes: [MailboxRow]
   @Environment(\.dismiss) private var dismiss
-  @State private var doc = LiveDocument()
+  @State private var doc = ObservedDocument()
   @State private var enrollments = LiveQueryList(pageSize: 25, map: enrollmentRow)
   @State private var editing = false
   @State private var enrolling = false

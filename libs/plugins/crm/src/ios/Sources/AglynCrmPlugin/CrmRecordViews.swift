@@ -168,7 +168,7 @@ struct RecordDetail: View {
   let scope: CrmScope
   let api: CrmAPI
   let reference: CrmReference
-  @State private var doc = LiveDocument()
+  @State private var doc = ObservedDocument()
   @State private var tasks = LiveQueryList(pageSize: 25, map: crmTask)
   @State private var activity = LiveQueryList(pageSize: 25) { $0 }
   @State private var related: [(CrmKind, LiveQueryList<FirestoreDocument>)] = []

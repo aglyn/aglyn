@@ -19,13 +19,14 @@ private func functionCases(_ name: String) throws -> [(args: [Any], result: Any)
 }
 
 private func entries(_ value: Any?) -> [(String, Any?)] {
-  orderedEntries(value as? [String: Any] ?? [:])
+  let map = value as? [String: Any] ?? [:]
+  return map.keys.sorted().map { ($0, map[$0]) }
 }
 
 final class InboxTests: XCTestCase {
   func testMessageSenderAnswersAsTheConsoleDoes() throws {
     for (index, item) in try functionCases("messageSender").enumerated() {
-      let sender = messageSender(entries(item.args.first))
+      let sender = messageSender(entries(item.args.first).map { (key: $0.0, value: $0.1) })
       let expected = item.result as? [String: Any] ?? [:]
       XCTAssertEqual(sender.name, expected["name"] as? String, "case \(index)")
       XCTAssertEqual(sender.email, expected["email"] as? String, "case \(index)")
@@ -59,11 +60,15 @@ final class InboxTests: XCTestCase {
     }
   }
 
-  func testTheReadChipsAreTheStoredBoolean() {
-    XCTAssertTrue(submissionsRequest(.all, formID: nil, search: "").clauses.isEmpty)
-    let unread = submissionsRequest(.unread, formID: "form-1", search: " ada ")
-    XCTAssertEqual(unread.clauses.map { "\($0.field)=\($0.value)" }, ["read=false", "formId=form-1"])
-    XCTAssertEqual(unread.search, ["ada"])
+  func testTheFormPickIsAClauseAndAFormsOwnListIsItsBase() {
+    XCTAssertTrue(submissionsRequest(formID: nil, read: nil, search: "").clauses.isEmpty)
+    let picked = submissionsRequest(formID: nil, read: "false", search: " ada ", pickedForm: "form-1")
+    XCTAssertEqual(picked.clauses.map { "\($0.field)=\($0.value)" }, ["read=false", "formId=form-1"])
+    XCTAssertEqual(picked.search, ["ada"])
+    XCTAssertNil(picked.base)
+    let scoped = submissionsRequest(formID: "form-2", read: nil, search: "", pickedForm: "form-1")
+    XCTAssertTrue(scoped.clauses.isEmpty)
+    XCTAssertEqual(scoped.base?.map(\.path), ["formId"])
   }
 
   func testPermissionsFollowTheSiteRole() {

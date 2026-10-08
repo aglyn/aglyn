@@ -103,6 +103,7 @@
       ],
       "mobile": {
         "$comment": "AGL-3668: a site's forms in the Aglyn app: search, in use or retired, create, duplicate, rename, retire, CRM routing, questions, versions (open in the Besigner, publish) and the form's submissions (the Inbox plugin's screens) with export; list and detail side by side on tablets and desktop.",
+        "ios": { "module": "AglynFormsPlugin", "register": "registerFormsNative" },
         "android": { "package": "com.aglyn.plugins.forms", "register": "registerFormsNative" },
         "contributes": {
           "screens": ["forms.form", "forms.list"],
@@ -1953,7 +1954,7 @@
         "inbox"
       ],
       "mobile": {
-        "$comment": "AGL-3669: the site's form submissions natively (search, read and form picks, a form's own submissions by `formId`, one message as `inbox.submission`, read, unread, delete, reply, add to a marketing list) and its members and leads; a Home card of unread messages.",
+        "$comment": "AGL-3669, AGL-3668: the site's form submissions natively, the site's or one form's (the Forms screens open it with `formId`): read filter, form pick and search, export, one message as `inbox.submission`, each submission's fields with read or unread, reply, delete and add to a marketing list; list and detail side by side on tablets and desktop. Also the site's members and leads, and a Home card of unread messages.",
         "ios": { "module": "AglynInboxPlugin", "register": "registerInboxNative" },
         "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
         "contributes": {

@@ -7,6 +7,7 @@ import AglynPluginHost
 import AglynCommercePlugin
 import AglynCrmPlugin
 import AglynEmailPlugin
+import AglynFormsPlugin
 import AglynInboxPlugin
 import AglynMarketingPlugin
 import AglynOutreachPlugin
@@ -28,6 +29,11 @@ public enum NativePluginManifest {
       id: "email",
       contributes: ["screens": ["email.audiences", "email.messages", "email.sending", "email.suppressions", "email.templates", "email.topics"], "quickActions": ["email.open"], "deepLinks": ["email.audiences-page", "email.list-page", "email.message-page", "email.messages-page", "email.page", "email.sending-page", "email.suppressions-page", "email.templates-page", "email.topics-page"]],
       register: AglynEmailPlugin.registerEmailNative
+    ),
+    NativePluginManifestEntry(
+      id: "forms",
+      contributes: ["screens": ["forms.form", "forms.list"], "quickActions": ["forms.open"], "deepLinks": ["forms.page", "forms.record"]],
+      register: AglynFormsPlugin.registerFormsNative
     ),
     NativePluginManifestEntry(
       id: "inbox",

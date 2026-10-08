@@ -66,8 +66,8 @@ public final class ConsoleAPIClient: Sendable {
   public typealias Sleep = @Sendable (_ milliseconds: UInt64) async throws -> Void
 
   public let origin: String
-  private let getIDToken: TokenSource
-  private let transport: HTTPTransport
+  let getIDToken: TokenSource
+  let transport: HTTPTransport
   private let sleep: Sleep
   private let maxAttempts: Int
 

@@ -222,7 +222,7 @@ func addressesIn(_ text: String) -> [String] {
 @MainActor
 @Observable
 final class EmailRoleModel {
-  @ObservationIgnored let doc = LiveDocument()
+  @ObservationIgnored let doc = ObservedDocument()
   private var uid = ""
 
   func start(_ context: NativePluginContext) {
@@ -520,7 +520,7 @@ struct ListDetail: View {
   let actions: EmailActions
   let listID: String
   @Environment(\.dismiss) private var dismiss
-  @State private var doc = LiveDocument()
+  @State private var doc = ObservedDocument()
   @State private var members = LiveQueryList(pageSize: 25, map: listMemberRow)
   @State private var searchText = ""
   @State private var search = ""

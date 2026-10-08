@@ -25,7 +25,7 @@ func sendTone(_ state: String) -> AglynTone {
 @MainActor
 @Observable
 final class SiteRoleModel {
-  @ObservationIgnored let doc = LiveDocument()
+  @ObservationIgnored let doc = ObservedDocument()
   private var uid = ""
 
   func start(_ context: NativePluginContext) {
@@ -175,8 +175,8 @@ struct EmailDetail: View {
   let hostID: String
   let sendID: String
   let canSend: Bool
-  @State private var doc = LiveDocument()
-  @State private var links = LiveDocument()
+  @State private var doc = ObservedDocument()
+  @State private var links = ObservedDocument()
   @State private var sheet: SendSheet?
   @State private var notice: String?
 

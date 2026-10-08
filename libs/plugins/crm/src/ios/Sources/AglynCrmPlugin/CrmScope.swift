@@ -151,8 +151,8 @@ struct CrmScope: Equatable {
 final class CrmScopeModel {
   private(set) var scope: CrmScope?
   private(set) var failed = false
-  @ObservationIgnored private let org = LiveDocument()
-  @ObservationIgnored private let member = LiveDocument()
+  @ObservationIgnored private let org = ObservedDocument()
+  @ObservationIgnored private let member = ObservedDocument()
   @ObservationIgnored private var ids: (String, String, String)?
 
   func start(_ reader: FirestoreReader, orgID: String, hostID: String, uid: String) {
