@@ -82,7 +82,7 @@ export function parseAiEditJobInputs(
 // ── What a person reads ───────────────────────────────────────────────────
 
 export const AI_EDIT_NO_SITE_COPY = 'Open the site the change is for before starting the job'
-export const AI_EDIT_GONE_COPY = 'The page or layout to change is no longer on the site.'
+export const AI_EDIT_GONE_COPY = 'The page or layout to change is not on the site.'
 export const AI_EDIT_VERSION_GONE_COPY = 'The version to start from is no longer on the page or layout.'
 export const AI_EDIT_EMAIL_COPY = 'That is an email design, not a page — change it from Emails → Templates.'
 export const AI_EDIT_NO_NODES_COPY = 'That version has nothing on it to change.'

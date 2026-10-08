@@ -29,6 +29,7 @@ import { AI_TEMPLATE_SUBJECTS } from '../model/ai-template-subjects'
 import { AI_SITE_PASS_CREDITS } from '../model/ai-site-job'
 import type { AiBuildOps } from '../model/ai-build-job'
 import { AI_LOGIC_FUNCTION_RESOURCE } from '../model/ai-logic-job'
+import { AI_EDIT_TARGET_KINDS } from '../model/ai-edit-job'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
 
@@ -43,7 +44,8 @@ import { aiJobStepRunnerFor } from './ai-jobs'
  * arguments. A campaign and an automation are still WRITTEN by the marketing
  * and workflows plugins, through the writers their runners already call, and
  * a site function by the logic plugin's `function` writer, which the `logic`
- * runner calls when its job is a build's unit.
+ * runner calls when its job is a build's unit. A change to a page or layout
+ * the site already has is the `edit` runner's.
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -187,6 +189,42 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     freeAllowed: true,
     quota: 'functionsPerHost',
     runnerKind: 'logic',
+    estimateCredits: passes(1),
+    degrade: 'omit',
+  },
+  {
+    // A change to something the site already has (AGL-3616), made by the
+    // `edit` runner: the Assist edit rung's protocol against the stored
+    // document, saved as a version visitors do not see. Not on the Free
+    // taste: without version history only an unpublished page can take a
+    // change, which is rarely the page a request means, and its admission
+    // would refuse the item after the plan was confirmed.
+    op: 'edit',
+    noun: 'page change',
+    where: 'the page’s or layout’s versions',
+    intents: [
+      'a change to a page or layout the site already has — shorter copy, a new section, different wording — saved as a version visitors do not see until it is published',
+    ],
+    argsSchema: {
+      type: 'object',
+      properties: {
+        target: {
+          type: 'string',
+          description: 'The id of an existing page or layout from the site inventory.',
+          maxLength: 64,
+        },
+        targetKind: {
+          type: 'string',
+          description: 'screen when target is a page, layout when it is a layout.',
+          enum: AI_EDIT_TARGET_KINDS,
+        },
+      },
+      required: ['target'],
+      additionalProperties: false,
+    },
+    maxPerPlan: 3,
+    freeAllowed: false,
+    runnerKind: 'edit',
     estimateCredits: passes(1),
     degrade: 'omit',
   },
