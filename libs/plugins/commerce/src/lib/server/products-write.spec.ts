@@ -54,7 +54,7 @@ function setup(options: { org?: Record<string, unknown>; locked?: boolean } = {}
     firestore: () => memory.firestore,
     verifyIdToken: async (token: string) => {
       const decoded = TOKENS[token]
-      if (!decoded) throw new Error('bad token')
+      if (!decoded) throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' })
       return decoded
     },
     orgForHost: async () => ({ org: options.org ?? { plan: 'business' } }),
