@@ -432,6 +432,14 @@ const shots = [
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
   },
   {
+    out: 'ai/business-profile.png',
+    // Setup → Business profile (AGL-3661): the profile, the facts read from
+    // the site's settings, and what Aglyn AI learned, all above the footer.
+    path: `/${HOST_BASE}/setup/business`,
+    waitFor: 'What Aglyn AI learned',
+    settleMs: 2500,
+  },
+  {
     out: 'commerce/products-page.png',
     path: `/${HOST_BASE}/products`,
     waitFor: 'Products',

@@ -126,7 +126,11 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // timeline cut to its newest twelve entries, and the typical answer is a
   // summary and a next step of a few sentences, with no thinking.
   'job.crm': { inputTokens: 1_800, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
+  // A layout: a tree layout's 1,000 output tokens until AGL-3660, now a
+  // site's header and footer in the layout language — 442 to 583 output
+  // tokens live on 2026-10-07 — with up to 1,500 more for the adaptive
+  // thinking it is asked with, an estimate until a workspace measures it.
+  'job.layout': { inputTokens: 700, outputTokens: 2_000, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_400, cacheWriteTokens: 0 },
   // One page section's exchange (AGL-2907), from the modules' own text: the
   // doctrine (6,281 characters), the page instructions (1,524), the screen
@@ -134,7 +138,12 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // the site inventory (711 on the median golden site), the brief, the plan
   // and the section line ride uncached; and a golden section answer is 901
   // characters at the median, asked for with no thinking.
-  'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_400, cacheWriteTokens: 0 },
+  // Since AGL-3660 a site's and a build's pages are one answer a page in
+  // the layout language: 683 to 1,745 output tokens live on 2026-10-07, about
+  // 1,150 at the median, with up to 1,500 more for the adaptive thinking it
+  // is asked with — an estimate until a workspace measures it, read high so
+  // the quote beside a model never undersells the exchange.
+  'job.page': { inputTokens: 600, outputTokens: 2_650, cacheReadTokens: 4_400, cacheWriteTokens: 0 },
   // One product's copy (AGL-2916), the exchange a bulk job makes once a
   // product: the doctrine, the copy rules and the tool (about 9,500 characters)
   // are the cached prefix; the product's facts, the site's categories and a
@@ -192,6 +201,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // the request ride uncached, and a function of a few operations is about
   // 1,200 characters of JSON with as much again to think in.
   'job.logic': { inputTokens: 700, outputTokens: 900, cacheReadTokens: 1_500, cacheWriteTokens: 0 },
+  // The edit step (AGL-3616): the document doctrine, the job's rules and the
+  // edit rung's protocol and catalog for the document's kind are the cached
+  // prefix (5,970 tokens for a page, as `runtime/ai-prompt-cache.spec.ts`
+  // measures it); the outline of up to sixty elements with their settings
+  // and the request ride uncached, and a change of a few operations is about
+  // 1,500 characters of tool call with as much again to think in.
+  'job.edit': { inputTokens: 2_500, outputTokens: 1_000, cacheReadTokens: 6_000, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

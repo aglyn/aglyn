@@ -86,14 +86,11 @@ function headerLook(band: AiLayoutBand): {
       },
     }
   }
+  // A rule, a shadow or nothing under a plain header is the site theme's
+  // MuiAppBar style (AGL-3660); the band's color stays here.
   return {
     props: { color: 'inherit' },
-    sx: {
-      bgcolor: 'background.paper',
-      boxShadow: 'none',
-      borderBottom: 1,
-      borderColor: 'divider',
-    },
+    sx: { bgcolor: 'background.paper' },
   }
 }
 
@@ -150,6 +147,8 @@ export function aiCompileLayoutFrame(
     options: { reusableComponents: true },
     settled: [],
     scrollTo: {},
+    // A frame's lines are its own, never a page section's items.
+    itemIds: [],
     // A frame shows no picture slot: a header and a footer are the same on every page.
     images: AI_LAYOUT_MAX_IMAGES,
     strong: { brand: 0, dark: 0 },

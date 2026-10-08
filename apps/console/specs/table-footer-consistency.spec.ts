@@ -1016,6 +1016,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'hide part of what the Buy button is about to charge for.',
   ],
   [
+    'libs/plugins/print-on-demand/src/lib/components/product-pod-source.component.tsx',
+    'ONE imported product in the product editor (AGL-3641): a row per ' +
+      'variant the product has, which the store caps at ' +
+      '`COMMERCE_MAX_VARIANTS` (100), each beside the price set above it. ' +
+      'A detail view of one record, read against the editor it sits in.',
+  ],
+  [
     'libs/plugins/funnels/src/lib/components/funnel-results.component.tsx',
     "One funnel's results by source (AGL-3605): at most `FUNNEL_SOURCE_ROWS` sources and " +
       'an Other row, ranked by the compute, beside the step figures they ' +
@@ -1578,6 +1585,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'it are the last `RECENT_PROPOSALS_SHOWN` (3).',
   ],
   [
+    'libs/plugins/ai/src/lib/components/ai-site-memory-card.component.tsx',
+    'What Aglyn AI learned on one site (AGL-3661): the preferences the ' +
+      'applied edits taught it, read at `limit(AI_SITE_MEMORY_MAX * 2)` ' +
+      'and kept to `AI_SITE_MEMORY_MAX` (12) by the writer. Bounded by the ' +
+      'memory\u2019s own cap, not by anything the site accumulates.',
+  ],
+  [
     'libs/plugins/outreach/src/lib/components/sequence-report-card.tsx',
     'The LINK ROLLUP for one sequence (AGL-3239): a row per destination '
       + 'followed, capped server-side at `CAMPAIGN_LINK_ROLLUP_MAX` before it '
@@ -2025,7 +2039,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // spend and one batch of ticked orders — each bounded by something other
     // than how long the store has traded. The two that were real lists, a
     // register's shifts and a webhook's deliveries, page instead.
-    expect(NOT_A_LIST).toHaveLength(78)
+    //
+    // 79 with print on demand's costs per variant (AGL-3641): one imported
+    // product's variants, which the store caps per product.
+    // 80 with what Aglyn AI learned on one site (AGL-3661): its preferences,
+    // capped by the memory's own `AI_SITE_MEMORY_MAX`.
+    expect(NOT_A_LIST).toHaveLength(80)
   })
 })
 

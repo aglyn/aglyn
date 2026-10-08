@@ -2,6 +2,9 @@ package com.aglyn.shell
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.performScrollTo
@@ -98,7 +101,7 @@ class ShellUiTest {
       api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { respondOk() }), auth::idToken),
       workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
       prefs = prefs,
-      registry = NativePluginRegistry(),
+      registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
       besigner = { _, _, _ -> },
       writer = writer,
     )
@@ -121,11 +124,11 @@ class ShellUiTest {
     onNodeWithTag("sign-in-submit").performClick()
 
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
-    onNodeWithText("Acme Shop").assertIsDisplayed()
+    onAllNodesWithText("Acme Shop").onFirst().assertIsDisplayed()
     onNodeWithTag("site-status").assertIsDisplayed()
     onNodeWithText("Live").assertIsDisplayed()
     onNodeWithText("shop.aglyn.app").assertIsDisplayed()
-    onNodeWithTag("quick-action-pages").assertIsDisplayed()
+    onNodeWithTag("quick-action-site.pages-open").assertIsDisplayed()
     onNodeWithText("New order #1042").assertIsDisplayed()
     onNodeWithText("5 min ago").assertIsDisplayed()
   }
@@ -142,6 +145,30 @@ class ShellUiTest {
     onNodeWithTag("switcher-site-h1").assertIsDisplayed()
     assertEquals(1, onAllNodesWithTagCount("switcher-org-o1"))
   }
+  @Test
+  fun aWideWindowKeepsADrawerWithTheWorkspaceAndSiteAtItsFoot() = runComposeUiTest {
+    val services = services()
+    setContent { AglynShell(services) }
+    onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
+    onNodeWithTag("sign-in-password").performTextInput("right")
+    onNodeWithTag("sign-in-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-drawer") > 0 }
+    // Labelled destinations, not a rail of icons.
+    onNodeWithTag("nav-home").assertIsDisplayed()
+    onNodeWithTag("nav-notifications").assertIsDisplayed()
+    onNodeWithTag("nav-settings").assertIsDisplayed()
+    // The footer names the workspace and the site, and opens the switcher for both.
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("sidebar-switcher") > 0 }
+    onNodeWithTag("sidebar-switcher").assertIsDisplayed()
+    onNodeWithTag("sidebar-switcher").assertTextContains("Acme", substring = true)
+    onNodeWithTag("sidebar-switcher").assertTextContains("Acme Shop", substring = true)
+    onNodeWithTag("sidebar-switcher").performClick()
+    onNodeWithTag("switcher-org-o1").assertIsDisplayed()
+    onNodeWithTag("switcher-site-h1").assertIsDisplayed()
+    // The top-right chip is for narrower windows only.
+    assertEquals(0, onAllNodesWithTagCount("workspace-chip"))
+  }
+
   private class RecordingWriter(private val fail: Boolean = false) : com.aglyn.core.FirestoreWriter {
     val writes = mutableListOf<Pair<String, Map<String, Any?>>>()
     override suspend fun merge(path: String, data: Map<String, Any?>) {

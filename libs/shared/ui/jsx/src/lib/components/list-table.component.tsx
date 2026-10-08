@@ -25,6 +25,8 @@ import {
 import { IconButton, Stack, Tooltip } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { ReactNode } from 'react'
+import { LIST_PAGE_SORT_DESCRIPTION } from '@aglyn/shared-util-tools/list-query/list-column-sort'
+import type { ListColumnSort } from '../hooks/use-list-column-sort'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from './row-actions-menu.component'
@@ -320,6 +322,44 @@ export interface ListTableProps extends DataTableProps {
    * and to export.
    */
   toolbarOnly?: boolean
+  /**
+   * The list's header sorts (AGL-3680), from `useListColumnSort`.
+   *
+   * Present, the table draws `columnSort.rows`, sorts nothing itself
+   * (`sortingMode="server"`), and decides every column's `sortable` from it:
+   * a column the hook names sorts — a page-sorted one says so on its header
+   * — and every other column does not. Pass this rather than
+   * `disableColumnSorting`, which `specs/list-tables-sort-by-their-headers`
+   * refuses on any new caller.
+   */
+  columnSort?: ListColumnSort
+}
+
+/**
+ * The columns as `columnSort` sorts them: the hook's columns sortable in its
+ * directions, a page-sorted header described as such, every other column not
+ * sortable. The actions column never sorts.
+ */
+function columnsSortedBy(
+  columns: readonly GridColDef[] | undefined,
+  columnSort: ListColumnSort,
+): GridColDef[] | undefined {
+  return columns?.map((column) => {
+    const sorted = column.field === LIST_ACTIONS_FIELD ? undefined : columnSort.columns[column.field]
+    if (!sorted) return { ...column, sortable: false }
+    return {
+      ...column,
+      sortable: true,
+      sortingOrder: sorted.sortingOrder,
+      ...(sorted.mode === 'page'
+        ? {
+            description: column.description
+              ? `${column.description} ${LIST_PAGE_SORT_DESCRIPTION}.`
+              : `${LIST_PAGE_SORT_DESCRIPTION}.`,
+          }
+        : {}),
+    }
+  })
 }
 
 const NO_ROWS = [] as const
@@ -378,8 +418,17 @@ export function ListTable(props: ListTableProps) {
     slotProps,
     toolbarOnly = false,
     slots,
+    columnSort,
     ...rest
   } = props
+  const sortProps = columnSort
+    ? {
+        columns: columnsSortedBy(rest.columns, columnSort),
+        sortingMode: columnSort.sortingMode,
+        sortModel: columnSort.sortModel,
+        onSortModelChange: columnSort.onSortModelChange,
+      }
+    : {}
   const showQuickFilter = quickFilter ?? rest.filterMode !== 'server'
   /*==========================================
    * SELECTION IS OPT-IN, AND NAVIGATION-ONLY IS THE DEFAULT.
@@ -594,11 +643,12 @@ export function ListTable(props: ListTableProps) {
       // A toolbar-only grid holds no rows: the reader sees them some other
       // way, and rows laid out under a collapsed body would be drawn for no
       // one.
-      rows={toolbarOnly ? NO_ROWS : rows}
+      rows={toolbarOnly ? NO_ROWS : columnSort ? (columnSort.rows as any[]) : rows}
       hideFooter={footerHidden}
       slots={toolbarOnly ? { ...slots, ...TOOLBAR_ONLY_SLOTS } : slots}
       {...(toolbarOnly ? TOOLBAR_ONLY_PROPS : {})}
       {...rest}
+      {...sortProps}
       /*
        * AFTER `rest`, deliberately. "The footer is hidden, so every row I was
        * handed is on screen" is an invariant of this component, not a default

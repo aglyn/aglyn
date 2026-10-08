@@ -49,6 +49,9 @@ const OP_NOUNS: Readonly<Record<string, string>> = {
   template: 'Page template',
   campaign: 'Email campaign',
   workflow: 'Automation',
+  // A guided start's first posts and products (AGL-3676).
+  posts: 'Blog',
+  products: 'Store',
 }
 
 /** What an operation is called at the start of a row: its own noun, or the op spelled as words. */

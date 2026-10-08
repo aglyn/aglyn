@@ -64,6 +64,27 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
     })
   })
 
+  it('keeps the Google Cloud Vertex AI row in the derived list, reaching its global and multi-region endpoints (AGL-3602)', () => {
+    const row = derivePublishedRows().find(
+      (entry) => entry.entity === 'Google LLC (Google Cloud Vertex AI)',
+    )
+    expect(row).toEqual({
+      entity: 'Google LLC (Google Cloud Vertex AI)',
+      purpose:
+        "AI image generation: creating images for a customer's media library from a description a user writes",
+      region: 'Global — Google selects where requests are processed',
+      publishedOn: '2026-10-08',
+      reaches: [
+        'aiplatform.eu.rep.googleapis.com',
+        'aiplatform.googleapis.com',
+        'aiplatform.us.rep.googleapis.com',
+      ],
+    })
+    expect(EGRESS_HOSTS['aiplatform.googleapis.com']?.dataReceived).toBe(
+      "The description the user writes and the shape requested, and the generated image returned. No account identifiers, email addresses, or other content of the customer's site.",
+    )
+  })
+
   it('declares every host in the manifest as a subprocessor', () => {
     // The manifest is read, not assumed: the AI plugin's row is in it.
     expect(PLUGIN_SUBPROCESSORS.map((entry) => entry.pluginId)).toContain('ai')
@@ -98,8 +119,20 @@ describe('plugin-declared hosts and uses reach the registry (AGL-2978)', () => {
   })
 
   it('folds each declared host in as written, with no published row', () => {
+    // Another plugin's use of a declared host (AGL-3638: the marketplaces
+    // plugin reaches the Amazon hosts fulfillment networks declares) follows
+    // the declaration's own words, which still lead the entry.
+    const used = new Set(uses.map((use) => use.host))
     for (const declaration of hosts) {
-      expect([declaration.host, EGRESS_HOSTS[declaration.host]]).toStrictEqual([
+      const entry = EGRESS_HOSTS[declaration.host]
+      if (used.has(declaration.host)) {
+        expect([declaration.host, entry.disposition]).toEqual([declaration.host, declaration.disposition])
+        expect(entry.reason.startsWith(declaration.reason)).toBe(true)
+        expect(entry.dataReceived.startsWith(declaration.dataReceived)).toBe(true)
+        expect('publishedOn' in entry).toBe(false)
+        continue
+      }
+      expect([declaration.host, entry]).toStrictEqual([
         declaration.host,
         {
           disposition: declaration.disposition,
@@ -116,8 +149,12 @@ describe('plugin-declared hosts and uses reach the registry (AGL-2978)', () => {
       expect([use.host, Boolean(entry)]).toEqual([use.host, true])
       expect(entry.reason).toContain(` ${use.reason}`)
       expect(entry.dataReceived).toContain(` ${use.dataReceived}`)
-      // A use neither takes the host over nor changes what it is.
-      expect(hosts.some((declaration) => declaration.host === use.host)).toBe(false)
+      // A use neither takes the host over nor changes what it is: no plugin
+      // both declares and uses one host, and a used host keeps its disposition.
+      const owner = PLUGIN_SUBPROCESSORS.find((plugin) => (plugin.uses ?? []).includes(use))
+      expect((owner?.hosts ?? []).some((declaration) => declaration.host === use.host)).toBe(false)
+      const declared = hosts.find((declaration) => declaration.host === use.host)
+      if (declared) expect(entry.disposition).toBe(declared.disposition)
       expect(recipients.has(use.host)).toBe(false)
       expect(entry.reason.startsWith(use.reason)).toBe(false)
     }

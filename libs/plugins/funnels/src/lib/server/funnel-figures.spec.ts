@@ -83,3 +83,21 @@ describe('the funnels figure set (AGL-3605)', () => {
     expect(await overview.read({ ...request(), hostId: null })).toMatchObject({ ok: false, status: 400 })
   })
 })
+
+describe('a draft funnel in the figure set (AGL-3616)', () => {
+  const store = db().seed('hosts/h1/funnels/d1', {
+    name: 'Drafted by a build',
+    status: 'draft',
+    steps: [
+      { type: 'page', key: '/pricing', match: 'exact' },
+      { type: 'order', key: '' },
+    ],
+  })
+  const [overview, steps] = funnelFigureReaders(() => store)
+
+  it('is not read until it is activated', async () => {
+    const read = await overview.read(request())
+    expect(read.ok && read.table.rows.map((row) => row['funnel'])).toEqual(['Pricing to contact'])
+    expect(await steps.read(request({ funnel: 'drafted by a build' }))).toMatchObject({ ok: false, status: 404 })
+  })
+})

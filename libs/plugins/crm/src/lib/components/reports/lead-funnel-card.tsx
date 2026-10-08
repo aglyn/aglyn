@@ -379,7 +379,7 @@ function LeadFunnelBody(props: {
       }}
     >
       <Stack spacing={2}>
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
           <ReportStatTile
             label={'Leads captured'}
             value={figures ? figures.current.toLocaleString() : null}

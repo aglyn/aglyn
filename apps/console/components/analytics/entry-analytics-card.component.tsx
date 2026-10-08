@@ -225,7 +225,7 @@ export function EntryAnalyticsCard(props: {
         <LinearProgress />
       ) : (
         <Stack spacing={2}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             <Stack>
               <Typography variant="h5">{total.toLocaleString()}</Typography>
               <Typography variant="caption" color="text.secondary">

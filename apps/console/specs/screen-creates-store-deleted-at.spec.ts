@@ -78,11 +78,15 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'apps/console/app/api/hosts/versions/route.ts': 'creates versions under a screen, never the screen',
   'apps/console/utils/api-v1-resources.ts': 'creates media; reads the routing map',
   'apps/console/constants/screen-publishing.ts': 'merge-sets the publish fields of a screen that exists',
+  'apps/console/app/api/hosts/pages/route.ts':
+    'merge-sets the publish fields of screens that exist, and moves, trashes or unpublishes them (AGL-3668)',
   'apps/console/utils/server/page-security-hold.ts':
     'reads a held page’s screen and version; merge-sets the abuse report row (AGL-3450)',
   'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
     'unpublishes the placeholder home page, a screen that exists (AGL-3408)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
+  'libs/plugins/ai/src/lib/jobs/ai-job-edit-step.ts':
+    'creates a version under a page or layout that exists and updates its fields (AGL-3616)',
   'libs/plugins/ai/src/lib/jobs/ai-site-publish.ts':
     'merge-sets the publish fields of screens the job wrote, and trashes the starter home; creates a layout version (AGL-3596)',
   'libs/plugins/forms/src/lib/server/form-submit.ts':

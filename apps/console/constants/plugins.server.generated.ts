@@ -131,10 +131,40 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms/server'),
   },
   {
+    id: 'zapier',
+    apiPrefixes: ["zapier"],
+    register: {"consoleApi":"registerZapierConsoleApi"},
+    load: () => import('@aglyn/plugins-zapier/server'),
+  },
+  {
     id: 'fulfillment-networks',
     apiPrefixes: ["fulfillment-networks"],
     register: {"consoleApi":"registerFulfillmentNetworksConsoleApi"},
     load: () => import('@aglyn/plugins-fulfillment-networks/server'),
+  },
+  {
+    id: 'marketplaces',
+    apiPrefixes: ["marketplaces"],
+    register: {"consoleApi":"registerMarketplacesConsoleApi"},
+    load: () => import('@aglyn/plugins-marketplaces/server'),
+  },
+  {
+    id: 'print-on-demand',
+    apiPrefixes: ["print-on-demand"],
+    register: {"consoleApi":"registerPrintOnDemandConsoleApi"},
+    load: () => import('@aglyn/plugins-print-on-demand/server'),
+  },
+  {
+    id: 'inventory-sync',
+    apiPrefixes: ["inventory-sync"],
+    register: {"consoleApi":"registerInventorySyncConsoleApi"},
+    load: () => import('@aglyn/plugins-inventory-sync/server'),
+  },
+  {
+    id: 'delivery-apps',
+    apiPrefixes: ["delivery-apps"],
+    register: {"consoleApi":"registerDeliveryAppsConsoleApi"},
+    load: () => import('@aglyn/plugins-delivery-apps/server'),
   },
   {
     id: 'sales-channels',

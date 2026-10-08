@@ -417,6 +417,14 @@ describe('AGL-2320 — every stock writer is transactional', () => {
     // A register return's restock (AGL-3609): read and written in one
     // transaction per product, the same shape as the cancel.
     'pos-return.ts',
+    // A marketplace order (AGL-3638): the order, every product's count and
+    // every ledger row in ONE transaction that reads each product first, and
+    // its cancellation's restore in one transaction, as the cancel's.
+    'channel-orders.ts',
+    // A channel's adjustment or refund (AGL-3644): the units it names go
+    // back inside the transaction that reads the order, its ledger and each
+    // product first, bounded by what the sale took.
+    'channel-order-updates.ts',
   ])
 
   const sources = fs

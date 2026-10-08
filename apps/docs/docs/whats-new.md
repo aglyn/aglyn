@@ -10,7 +10,34 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — a font picker, your own fonts, and faster fonts on every site (newest)
+## October 2026 — your own email platform, kept in step (newest)
+
+- **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
+  connect your own account to a site with its API key and your contacts stay in
+  step both ways: everyone the site may market to is added with their name, tags and
+  order history, an unsubscribe on either side reaches the other, and Klaviyo and
+  Omnisend receive your started checkouts and orders for their abandoned-cart and
+  post-purchase flows. A sync log under each connection shows what ran and anything
+  that needs you.
+
+## October 2026 — your own tax service
+
+- **[Avalara AvaTax and TaxJar](commerce-and-bookings/commerce/tax-services.md)** —
+  connect your own AvaTax or TaxJar account and checkout and the register charge the
+  sales tax it calculates, with product tax codes and exempt customers. Paid orders,
+  refunds and register returns are recorded in your account. If the service does not
+  answer in time, the sale is taxed at your own rates and the order says so. You remain
+  responsible for registering, filing and paying your sales tax.
+
+## October 2026 — bookings in the API
+
+- **[Bookings over the API](/api/resources/bookings)** — read a site's bookings with
+  a key that has the new `bookings:read` scope: the service, the time and time zone,
+  the guest, what they paid and refunded, and whether they checked in. List them by
+  status or service, or read one by id, to copy appointments into a calendar, a CRM
+  or a spreadsheet.
+
+## October 2026 — a font picker, your own fonts, and faster fonts on every site
 
 - **[Font picker](building-sites/theme-builder/edit-your-theme.md#fonts)** — browse every
   Google font in the theme editor, with search, style filters, previews in your own
@@ -70,42 +97,71 @@ for the how-to.
 -->
 
 <!--
-  AGL-3631 — Tax services are built and hidden until a deployment sets
-  TAX_ENGINES_TOKEN_KEY (the key merchants' credentials are sealed under; no
-  vendor account of Aglyn's is needed). This entry is held unpublished, like the
-  guide it links (`unlisted: true`): once the key is set on aglyn.com, remove this
-  comment's markers, move "(newest)" here from the top heading, and delete
-  `unlisted: true` and the "Rolling out" note from
-  commerce-and-bookings/commerce/tax-services.md.
+  AGL-3641 — Print on demand is built and hidden until a deployment sets
+  PRINT_ON_DEMAND_TOKEN_KEY (the key merchants' Printful and Printify tokens are
+  sealed under; no developer app or partnership of Aglyn's is needed). This
+  entry is held unpublished, like the guide it links (`unlisted: true`): once
+  the key is set on aglyn.com, remove this comment's markers, move "(newest)"
+  here from the top heading, and delete `unlisted: true` and the "Rolling out"
+  note from commerce-and-bookings/commerce/print-on-demand.md.
 
-## October 2026 — your own tax service
+## October 2026 — print on demand with Printful and Printify
 
-- **[Avalara AvaTax and TaxJar](commerce-and-bookings/commerce/tax-services.md)** —
-  connect your own AvaTax or TaxJar account and checkout and the register charge the
-  sales tax it calculates, with product tax codes and exempt customers. Paid orders,
-  refunds and register returns are recorded in your account. If the service does not
-  answer in time, the sale is taxed at your own rates and the order says so. You remain
-  responsible for registering, filing and paying your sales tax.
+- **[Printful and Printify](commerce-and-bookings/commerce/print-on-demand.md)** —
+  connect your own Printful store or Printify shop, import its products with their
+  variants, prices and photos, and every paid order for them is sent to be made and
+  shipped. Tracking lands on the order as the service ships, each order shows what
+  the service charged against what your buyer paid, test orders stay drafts, and a
+  canceled or fully refunded order is canceled at the service too.
 -->
 
 <!--
-  AGL-3639 — Email platform connections are built and hidden until a deployment
-  sets MARKETING_PLATFORMS_TOKEN_KEY on the console (the key merchants' API keys
-  are sealed under; no vendor account of Aglyn's is needed). This entry is held
-  unpublished, like the guide it links (`unlisted: true`): once the key is set on
+  AGL-3642 — Inventory sync is built and hidden until a deployment sets
+  INVENTORY_SYNC_TOKEN_KEY on the console (Brightpearl also needs
+  BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF). This entry is held unpublished,
+  like the guide it links (`unlisted: true`): once it is configured on
   aglyn.com, remove this comment's markers, move "(newest)" here from the top
   heading, and delete `unlisted: true` and the "Rolling out" note from
-  marketing-and-automation/email-campaigns/email-platforms.md.
+  commerce-and-bookings/commerce/inventory-and-erp-sync.md.
 
-## October 2026 — your own email platform, kept in step
+## October 2026 — your stock system and your store, in step
 
-- **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
-  connect your own account to a site with its API key and your contacts stay in
-  step both ways: everyone the site may market to is added with their name, tags and
-  order history, an unsubscribe on either side reaches the other, and Klaviyo and
-  Omnisend receive your started checkouts and orders for their abandoned-cart and
-  post-purchase flows. A sync log under each connection shows what ran and anything
-  that needs you.
+- **[Inventory and ERP sync](commerce-and-bookings/commerce/inventory-and-erp-sync.md)** —
+  connect your own Cin7 Core, inFlow Inventory or Brightpearl account. Stock counts
+  follow whichever side you say is right, products come into your store from it (or go
+  the other way), and paid orders arrive there as sales orders, each once, with
+  anything it could not take listed for you to send again.
+  AGL-3644 — Delivery apps are built and hidden until a deployment holds a partner
+  account with DoorDash, Uber Eats or Grubhub and sets its DELIVERY_APPS_* variables
+  on the console. This entry is held unpublished, like the guide it links
+  (`unlisted: true`): once a service is configured on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/delivery-apps.md.
+
+## October 2026 — DoorDash, Uber Eats and Grubhub orders at your register
+
+- **[Delivery apps](commerce-and-bookings/commerce/delivery-apps.md)** — link your own
+  DoorDash, Uber Eats or Grubhub store and take its orders at your POS register: accept
+  or reject, mark ready and picked up, and each accepted order takes its items off the
+  same shelf as every other sale. Send your menu from your products in one step.
+-->
+
+<!--
+  AGL-3638 — Marketplaces are built and hidden until a deployment holds an app
+  for at least one of Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire and sets
+  MARKETPLACES_TOKEN_KEY on the console. This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once a marketplace is configured on
+  aglyn.com, remove this comment's markers, move "(newest)" here from the top
+  heading, and delete `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/marketplaces.md.
+
+## October 2026 — sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire
+
+- **[Marketplaces](commerce-and-bookings/commerce/marketplaces.md)** — connect your own
+  seller account and sell everywhere from one stock count. Listings follow your stock
+  (and your prices, if you choose), marketplace orders come in as your orders and take
+  their units off the same shelf, and the tracking goes back when you ship.
 -->
 
 <!--

@@ -255,7 +255,7 @@ export default function StaffTaxFindingsCard({
           minWidth: 220,
           sortable: false,
           renderCell: ({ row }: { row: FindingListRow }) => (
-            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5, py: 1 }}>
+            <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5, py: 1 }}>
               {row.groups.map((finding) => (
                 <Chip
                   key={finding}
@@ -298,7 +298,7 @@ export default function StaffTaxFindingsCard({
       <Stack spacing={2}>
         {/* The counts, one per finding. Pressing one sets the grid's Finding
             filter to it — the same clause the Filters panel writes. */}
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
           {groups.map((group) => (
             <Chip
               key={group.id}

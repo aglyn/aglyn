@@ -186,6 +186,7 @@ export function OrgMarketingOverviewCard(props: OrgMarketingOverviewCardProps) {
     >
       <Stack spacing={2}>
         <Stack
+          useFlexGap
           direction="row"
           spacing={3}
           sx={{ flexWrap: 'wrap', rowGap: 1.5 }}
@@ -218,7 +219,13 @@ export function OrgMarketingOverviewCard(props: OrgMarketingOverviewCardProps) {
                       "site's own Marketing page has its figures."}
                   </Alert>
                 ) : null}
-                <ScrollTable size="small" aria-label="Figures by site">
+                <ScrollTable
+                  size="small"
+                  aria-label="Figures by site"
+                  // Below md the figure columns scroll sideways rather than
+                  // folding each two-word header onto three lines.
+                  sx={{ '& th': { whiteSpace: { xs: 'nowrap', md: 'normal' } } }}
+                >
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Site'}</TableCell>

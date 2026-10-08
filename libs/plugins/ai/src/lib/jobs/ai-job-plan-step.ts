@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
@@ -65,6 +66,8 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
+import { readAiSiteContext } from '../runtime/site-context'
+import { aiInstructionsWithSiteContext, type AiSiteContextInput } from '../model/ai-site-context'
 import {
   AI_BUILD_CREATE_KINDS,
   AI_BUILD_STRUCTURAL_OPS,
@@ -255,6 +258,9 @@ export function aiPlanSiteLines(
       `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — with at most ${sections} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
     )
   }
+  // The kind of site the person picked (AGL-3660): the pages it usually has.
+  const kind = aiSiteKindOfInputs(job.inputs)
+  if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
   lines.push(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
@@ -556,7 +562,23 @@ export interface AiJobPlanStepDeps {
   admissionRefusal?: typeof aiJobAdmissionRefusal
   /** A build's operations on its site (AGL-3616); the registry and its gates otherwise. */
   readOps?: AiBuildOpsReader
+  /**
+   * The site's business profile, status and remembered preferences
+   * (AGL-3661); specs and the eval recorder hand in their own, and `null`
+   * turns it off.
+   */
+  readSiteContext?: AiSiteContextReader | null
 }
+
+/** What a job's site context is read with (AGL-3661). */
+export type AiSiteContextReader = (input: {
+  job: AiJob
+  firestore: FirebaseFirestore.Firestore
+}) => Promise<AiSiteContextInput | null>
+
+/** The reader the step uses in production: fail-soft, org-scoped, `null` for a job with no site. */
+export const readAiJobSiteContext: AiSiteContextReader = ({ job, firestore }) =>
+  readAiSiteContext(firestore, { orgId: job.orgId, hostId: job.hostId })
 
 /** What a build may plan on its site (AGL-3616). */
 export type AiBuildOpsReader = (input: {
@@ -597,12 +619,18 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const readCapabilities = deps.readCapabilities ?? readAiJobPlanCapabilities
   const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
   const readOps = deps.readOps ?? readAiBuildOps
+  const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
-    const [inventory, workspace] = await Promise.all([
+    const [inventory, workspace, siteContext] = await Promise.all([
       job.hostId ? readInventory(job.orgId, job.hostId, { firestore }) : Promise.resolve(null),
       readCapabilities({ job, org, firestore }),
+      job.hostId && readContext ? readContext({ job, firestore }) : Promise.resolve(null),
     ])
+    // The site's profile, status and memory (AGL-3661), as a per-site cached
+    // block after the plan rules. The inventory block already lists what the
+    // site holds, so the context carries no index of its own here.
+    const instructions = aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, siteContext)
     const scope = AI_JOB_PLAN_SCOPES[job.kind] ?? null
     const capabilities = aiSitePlanCapabilities(
       job,
@@ -665,7 +693,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       job,
       prompt,
       model: resolved,
-      system: aiDoctrineSystemBlocks(inventory, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
+      system: aiDoctrineSystemBlocks(inventory, { instructions }),
       tool,
     })
     const reused = findPlansByKey
@@ -699,7 +727,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const result = await runValidatedGeneration('plan', {
       step: 'job.plan',
       ...(model ? { model } : {}),
-      instructions: AI_JOB_PLAN_INSTRUCTIONS,
+      instructions,
       inventory,
       messages: [{ role: 'user', content: prompt }],
       tool,
@@ -771,34 +799,43 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
 }
 
 /**
- * A site job's capabilities on the Free taste (AGL-3594): its plan holds at
- * most the pages the member asked for within the Free band, which the Free
- * wall then holds it to, and it changes no theme — the site was born with
- * one (AGL-3497), and a palette pass is credits the two pages need. Every
- * other job's capabilities pass through.
+ * A site job's capabilities (AGL-3594, AGL-3660): it changes no theme in its
+ * plan — every scaffold designs its look first, in a unit of its own — and on
+ * the Free taste its plan holds at most the pages the member asked for within
+ * the Free band, which the Free wall then holds it to. Every other job's
+ * capabilities pass through.
  */
 export function aiSitePlanCapabilities(
   job: Pick<AiJob, 'kind' | 'inputs'>,
   capabilities: AiPlanCapabilities | null,
 ): AiPlanCapabilities | null {
-  if (job.kind !== 'site' || !capabilities?.freeTaste) return capabilities
+  if (job.kind !== 'site' || !capabilities) return capabilities
+  const create = {
+    ...capabilities.create,
+    'theme-change': {
+      allowed: false,
+      left: null,
+      reason: 'a site start designs its own look before its pages',
+    },
+    // A site start builds its look, one layout and one form, never a
+    // component (`AI_SITE_CREATE_KINDS`), so a paid workspace's plan draws
+    // repeated items in their sections, as a Free one's does. Held to rule 1
+    // instead, every paid plan was refused: for the component it left out,
+    // or, re-asked, for the one it could not build (AGL-3660).
+    component: {
+      allowed: false,
+      left: null,
+      reason: 'a site start draws its repeated items in their sections',
+    },
+  }
+  const site = { ...capabilities, reusableComponents: false, create }
+  if (!capabilities.freeTaste) return site
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =
     Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
       ? Math.min(asked, AI_SITE_FREE_PAGES.max)
       : AI_SITE_FREE_PAGES.max
-  return {
-    ...capabilities,
-    freeSitePages: pages,
-    create: {
-      ...capabilities.create,
-      'theme-change': {
-        allowed: false,
-        left: null,
-        reason: "a Free workspace's site start keeps the theme the site was created with",
-      },
-    },
-  }
+  return { ...site, freeSitePages: pages }
 }
 
 /**

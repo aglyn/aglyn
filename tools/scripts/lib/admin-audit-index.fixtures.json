@@ -23,7 +23,8 @@
       ],
       "accessActions": [
         "org.ai-viewed",
-        "user.ai-usage-viewed"
+        "user.ai-usage-viewed",
+        "org.ai-conversations-viewed"
       ]
     }
   ],

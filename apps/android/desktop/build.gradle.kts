@@ -4,6 +4,7 @@
 //
 // One module, two apps: -Paglyn.desktopApp=pos builds and runs Aglyn POS.
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.time.Duration
 
 plugins {
   alias(libs.plugins.kotlin.multiplatform)
@@ -64,9 +65,19 @@ kotlin {
   }
 }
 
+val DESKTOP_RUNTIME_MODULES = arrayOf(
+  // :desktop:suggestRuntimeModules (10/7) ...
+  "java.compiler", "java.instrument", "java.management", "java.naming", "java.net.http",
+  "java.prefs", "java.sql", "jdk.unsupported",
+  // ... plus TLS on elliptic curves and the platform screen-reader bridge.
+  "jdk.crypto.ec", "jdk.accessibility",
+)
+
 compose.desktop {
   application {
     mainClass = if (pos) "com.aglyn.desktop.AglynPosDesktopKt" else "com.aglyn.desktop.AglynDesktopKt"
+    // Skia loads its native library; JDK 24+ warns (and later refuses) without this.
+    jvmArgs += "--enable-native-access=ALL-UNNAMED"
     // Run settings: the local emulator stack unless -Daglyn.* says otherwise.
     jvmArgs += (findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList()
 
@@ -75,6 +86,12 @@ compose.desktop {
     if (isWindows) nativeDistributions.appResourcesRootDir.set(layout.buildDirectory.dir("appResources"))
     nativeDistributions {
       targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg)
+      // The bundled jlink runtime carries only these JDK modules. Compose's
+      // default set lacks java.net.http, which the Ktor Java engine behind
+      // every API call needs (the 10/7 preview died at launch without it).
+      // Keep it a superset of `./gradlew :desktop:suggestRuntimeModules`;
+      // :desktop:launchCheck proves the packaged app starts.
+      modules(*DESKTOP_RUNTIME_MODULES)
       packageName = if (pos) "Aglyn POS" else "Aglyn"
       packageVersion = "1.0.0"
       vendor = "Aglyn LLC"
@@ -117,6 +134,43 @@ tasks.register<JavaExec>("posSnapshots") {
   jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
   (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
 }
+
+// The content areas (sites, pages, media, forms, submissions, data) at phone,
+// tablet and desktop widths (a development tool; see ContentSnapshots.kt).
+tasks.register<JavaExec>("contentSnapshots") {
+  val test = kotlin.jvm("desktop").compilations.getByName("test")
+  dependsOn(test.compileTaskProvider)
+  classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+  mainClass.set("com.aglyn.desktop.ContentSnapshotsKt")
+  jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
+  (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
+  (findProperty("aglyn.snapshotOnly") as String?)?.let { systemProperty("aglyn.snapshotOnly", it) }
+}
+
+// Launches the PACKAGED app (its own jlink runtime, not Gradle's JDK) with
+// --launch-check, which renders the shell offscreen and exits 0, and fails if
+// it does not start. Every package task runs it first, so a runtime missing a
+// module never reaches a package or a preview.
+val launchCheck = tasks.register<Exec>("launchCheck") {
+  group = "verification"
+  description = "Starts the packaged app and fails if it does not start."
+  dependsOn("createDistributable")
+  val appName = if (pos) "Aglyn POS" else "Aglyn"
+  val os = System.getProperty("os.name").orEmpty()
+  val appDir = layout.buildDirectory.dir("compose/binaries/main/app")
+  val launcher = appDir.map {
+    when {
+      os.startsWith("Mac") -> it.file("$appName.app/Contents/MacOS/$appName")
+      os.startsWith("Windows") -> it.file("$appName/$appName.exe")
+      else -> it.file("$appName/bin/$appName")
+    }
+  }
+  inputs.dir(appDir)
+  doFirst { commandLine(launcher.get().asFile.absolutePath, "--launch-check") }
+  timeout.set(Duration.ofMinutes(2))
+}
+tasks.matching { it.name.startsWith("package") && it.name != "packageResources" && !it.name.contains("Uber") }
+  .configureEach { dependsOn(launchCheck) }
 
 // This module's test source set holds the snapshot tool, not tests; the
 // shells' UI tests live in libs/native/kotlin/shell.

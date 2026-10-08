@@ -210,7 +210,7 @@ export function ThemePreview(props: ThemePreviewProps) {
               with no edit. Each row names the variant and shows what it
               resolves to, so the preview doubles as the legend. */}
           <TypeRamp />
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {/* Every colour is named EXPLICITLY: this kit DEMOS the palette,
                 so each control must show the slot it is labelled with. It is
                 also the one place the rotation sweep had to be undone by
@@ -231,7 +231,12 @@ export function ThemePreview(props: ThemePreviewProps) {
             <Button variant="outlined">{'Outlined'}</Button>
             <Button variant="text">{'Text'}</Button>
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+          >
             <Chip label="Primary" color="primary" />
             <Chip label="Secondary" color="secondary" />
             <Chip label="Tertiary" color="tertiary" />
@@ -242,7 +247,7 @@ export function ThemePreview(props: ThemePreviewProps) {
           </Stack>
           {/* The status colours — error/warning/info/success each have a
               palette swatch, and until now only two of them appeared. */}
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             <Chip label="Error" color="error" />
             <Chip label="Warning" color="warning" />
             <Chip label="Info" color="info" />
@@ -303,7 +308,7 @@ export function ThemePreview(props: ThemePreviewProps) {
             {'one named after the accent whose icon sits on it. They are not '}
             {'the light shades of those accents.'}
           </Typography>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
             {(
               [
                 ['tint.primary', 'primary.dark', 'Primary'],

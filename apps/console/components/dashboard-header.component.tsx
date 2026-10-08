@@ -95,7 +95,9 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
       url="/_static/images/backgrounds/patterns/abstract-wave-lines.svg"
       bgPosition="50% 90%"
       sx={{
-        pt: 10,
+        // The room above the heading is for the background pattern; on a
+        // phone it is most of the first screen, so it shrinks with the width.
+        pt: { xs: 3, sm: 6, md: 10 },
         pb: 2,
         bgcolor: 'surface.main',
         color: 'text.primary',
@@ -109,12 +111,14 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
         <Grid
           container
           direction="row"
-          spacing={2}
+          spacing={{ xs: 1, sm: 2 }}
           sx={{
             justifyContent: "space-between",
             alignItems: "center"
           }}>
-          <Grid>
+          {/* Full width below `md`, so the controls take their own row under
+              the heading instead of squeezing it to a word per line. */}
+          <Grid size={{ xs: 12, md: 'grow' }} sx={{ minWidth: 0 }}>
             <Stack>
               <Typography
                 component="h1"
@@ -124,6 +128,8 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                     display: 'flex',
                     flexDirection: 'row',
                     alignItems: 'center',
+                    typography: { xs: 'h5', sm: 'h4' },
+                    overflowWrap: 'anywhere',
                   },
                   headerSx,
                 )}
@@ -137,8 +143,9 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                     {...headerIcon}
                     sx={mergeSxProps(
                       {
-                        padding: 1,
-                        mr: 1.75,
+                        flexShrink: 0,
+                        padding: { xs: 0.75, sm: 1 },
+                        mr: { xs: 1.25, sm: 1.75 },
                         fontSize: `1.5em`,
                         borderWidth: `1px`,
                         borderStyle: 'solid',
@@ -192,7 +199,21 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
             </Stack>
           </Grid>
 
-          {headerRight && <Grid>{headerRight}</Grid>}
+          {headerRight && (
+            <Grid
+              size={{ xs: 12, md: 'auto' }}
+              sx={{
+                // A control row that does not fit wraps onto a second line
+                // rather than pushing the page wider than the phone.
+                '& > .MuiStack-root, & > .MuiBox-root': {
+                  flexWrap: 'wrap',
+                  rowGap: 1,
+                },
+              }}
+            >
+              {headerRight}
+            </Grid>
+          )}
         </Grid>
         {children}
       </Container>

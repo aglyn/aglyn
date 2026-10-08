@@ -26,6 +26,7 @@ import {
   aiMessageImages,
   type AiMessage,
   type AiProvider,
+  type AiProviderRequest,
   type AiRequestBase,
   type AiResult,
   type AiStreamEvent,
@@ -33,6 +34,14 @@ import {
   type AiTool,
 } from '../providers/contract'
 import { resolveAiProvider, type AiPluginSettings } from '../providers/routing'
+import {
+  aiDevCacheTtl,
+  aiDevReplayMode,
+  aiIsDeployedRuntime,
+  aiLiveBatchWanted,
+  aiWarnIfReplayAskedInDeployment,
+} from './ai-dev-env'
+import { aiCompleteInBatch } from './ai-live-batch'
 
 export {
   AI_UPSTREAM_FAILURE_COPY,
@@ -149,6 +158,15 @@ export function validateAiSystemBlocks(system: readonly AiSystemBlock[]): void {
       )
     }
   })
+  // A site's block is cached per site (AGL-3661), so it closes the cached
+  // span: a platform-wide breakpoint after it would be keyed on the site too,
+  // and every workspace would warm its own copy of a shared prompt.
+  const firstSite = system.findIndex((block) => block.site && block.cacheBreakpoint)
+  if (firstSite >= 0 && firstSite !== lastBreakpoint) {
+    throw new AiRequestShapeError(
+      `system block ${firstSite} is a site's cached block but breakpoint ${lastBreakpoint} follows it`,
+    )
+  }
 }
 
 /**
@@ -340,14 +358,56 @@ export async function runAiRequest(
   const { provider, apiKey } = providerFor(input)
   validateAiMessages(input.messages, () => aiModelReadsImages(provider, input.model))
   const { stream, settings: _settings, provider: _provider, ...request } = input
-  const providerRequest = { ...request, apiKey }
+  aiWarnIfReplayAskedInDeployment()
+  const cacheTtl = request.cacheTtl ?? aiDevCacheTtl()
+  const providerRequest: AiProviderRequest = { ...request, ...(cacheTtl ? { cacheTtl } : {}), apiKey }
   try {
-    return await (stream ? provider.stream(providerRequest) : provider.complete(providerRequest))
+    if (aiIsDeployedRuntime()) {
+      return await (stream ? provider.stream(providerRequest) : provider.complete(providerRequest))
+    }
+    return await runInDevelopment(provider, providerRequest, stream)
   } catch (error) {
     await reportAccountProblem(provider, error)
     throw error
   }
 }
+
+/**
+ * A request in a development process (AGL-3660): through the replay cache,
+ * batch mode and the first-request-warms-the-prefix rule when this process
+ * asked for them (`ai-dev-env.ts`), straight to the provider when it asked
+ * for none. The file-backed half is loaded only when a layer is on, so a dev
+ * server that never asked loads nothing it did not before.
+ */
+async function runInDevelopment(
+  provider: AiProvider,
+  request: AiProviderRequest,
+  stream: boolean,
+): Promise<AsyncIterable<AiStreamEvent> | AiResult> {
+  const mode = aiDevReplayMode()
+  const batch = !stream && aiLiveBatchWanted() && Boolean(provider.completeBatch)
+  if (mode === 'off' && !batch) {
+    return stream ? provider.stream(request) : provider.complete(request)
+  }
+  const dev = await import('./ai-dev-replay')
+  const ttlMs = request.cacheTtl === '1h' ? 60 * 60_000 : 5 * 60_000
+  const prefix = dev.aiCachedPrefixKey(request)
+  if (stream) {
+    const live = () => dev.aiDevWarmPrefixFirst(prefix, ttlMs, () => provider.stream(request))
+    return mode === 'off' ? live() : dev.aiDevReplayStream(provider, request, mode, live)
+  }
+  const live = async (): Promise<AiResult> => {
+    const result = batch
+      ? await aiCompleteInBatch(provider, request)
+      : await dev.aiDevWarmPrefixFirst(prefix, ttlMs, () => provider.complete(request))
+    dev.aiDevCountLive(result.usage, request.model, batch ? AI_BATCH_PRICE_FACTOR : 1)
+    return result
+  }
+  return mode === 'off' ? live() : dev.aiDevReplayComplete(provider, request, mode, live)
+}
+
+/** What a batch's discount leaves of a request's price, for the development count. */
+const AI_BATCH_PRICE_FACTOR = 0.5
 
 /**
  * Tells the operator when the failure is the platform's provider account —

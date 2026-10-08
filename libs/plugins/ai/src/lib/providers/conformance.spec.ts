@@ -594,7 +594,7 @@ describe('the routing table (AGL-2937)', () => {
   it('seeds the first-party adapters when nothing registered, the first of them by default', () => {
     expect(resolveAiRoute('assist.chat')).toEqual({
       provider: anthropicProvider,
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
     })
     // The element copy step runs on the fast tier.
     expect(aiModelForStep('copy.element')).toBe('claude-haiku-4-5')

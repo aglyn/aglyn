@@ -622,7 +622,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
           </Typography>
         ) : (
           <>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+            <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
               {totals === null ? (
                 <Typography variant="caption" color="text.secondary">
                   {'Could not read the breakdown. This is not the same as ' +

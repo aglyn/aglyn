@@ -151,6 +151,7 @@ export function ConsentGroupSitePicker(props: ConsentGroupSitePickerProps) {
           const other = memberOf.get(row.id)
           return (
             <Stack
+              useFlexGap
               key={row.id}
               direction="row"
               spacing={1}

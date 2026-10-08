@@ -110,6 +110,11 @@ export interface CatalogOffer {
   hasVariants: boolean
   productId: string
   variantId: string
+  /**
+   * The merchant's own SKU for this configuration, as entered; absent when
+   * they entered none. What a marketplace matches its listing by (AGL-3638).
+   */
+  sku?: string
   /** The product's name. */
   productName: string
   /** The product's name with this configuration's choices, e.g. `Tee — Red / M`. */

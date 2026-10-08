@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteStyleTokens } from '../model/ai-site-kinds'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
@@ -85,7 +86,7 @@ import {
   aiLayoutSiteName,
   type AiLayoutFrameBuilt,
 } from './ai-job-layout-language'
-import { aiJobUsesLayoutLanguage } from './ai-job-page-language'
+import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -408,8 +409,9 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         messages: [{ role: 'user', content: aiLayoutFramePrompt({ job, siteName, pages, targets }) }],
         tool: AI_LAYOUT_FRAME_TOOL,
         maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
-        thinking: 'off',
+        ...AI_LAYOUT_LANGUAGE_THINKING,
         check: aiLayoutFrameCheck({
+          ...aiSiteStyleTokens(job.inputs),
           siteName,
           homeId: aiLayoutHomeId(pages, inventory),
           pages,

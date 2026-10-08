@@ -191,6 +191,9 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
           <Tabs
             value={tab}
             onChange={(_event, value) => setTab(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
             sx={{ mb: 2 }}
           >
             <Tab value="site" label="This site" />

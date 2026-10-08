@@ -249,6 +249,7 @@ export function MarketplaceReportsPage() {
                   {reports.map((report) => (
                     <Stack key={report.id} spacing={1}>
                       <Stack
+                        useFlexGap
                         direction="row"
                         sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}
                       >
@@ -293,6 +294,7 @@ export function MarketplaceReportsPage() {
                         <Alert severity="success">{report.resolution}</Alert>
                       ) : null}
                       <Stack
+                        useFlexGap
                         direction="row"
                         sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}
                       >

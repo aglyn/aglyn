@@ -1,7 +1,7 @@
 ---
 sidebar_position: 14
 title: AI monitoring
-description: How staff watch one organization's AI usage — the add-on, credit pool, overage, refusals, jobs, tokens and cache hit rate, top spenders and margin — and where those figures appear across the staff console.
+description: How staff watch one organization's AI usage — add-on, credits, overage, refusals, jobs, tokens, cache hits and margin — read its AI conversations, and find those figures across the staff console.
 ---
 
 # AI monitoring
@@ -149,6 +149,32 @@ optionally, the AI job id it compensates.
 It does not touch the daily request or message caps, which reset at midnight
 UTC on their own, and it does not change what the month cost us: the margin
 and spend figures keep the real provider spend.
+
+## AI conversations {#ai-conversations}
+
+Below the AI card, **AI conversations** shows what people in the organization
+typed to Aglyn AI and what it answered. It's where to look when you want to
+know what a new customer was trying to do, or why an answer confused them.
+
+Nothing loads until you choose **Show conversations**. Then switch between:
+
+- **Assist chat**: each question asked in the Assist panel, with its answer,
+  who asked, when, the console page it was asked from, the model, what it cost
+  and any thumbs rating. Questions and answers are deleted 180 days after they
+  were asked, so older chat isn't listed.
+- **AI jobs**: each job's brief, kind, status and credits, who started it,
+  what it made, and any error. For an insight question or a CRM summary, email
+  draft or column match, the answer itself is shown too. A CRM answer is
+  deleted 14 days after it's written.
+
+Each list shows 25 entries at a time, newest first. Use **Load more** for older
+ones.
+
+Every page you open is recorded in the staff audit log as
+`org.ai-conversations-viewed` (an access), with the list you opened and how
+many entries it returned. The log never records the text itself. Customers'
+AI requests and answers are accessible to Aglyn under the Privacy Policy, but
+read them only to support the customer or improve the product.
 
 ## Where else the figures appear {#where-else}
 

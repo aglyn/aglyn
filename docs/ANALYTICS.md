@@ -2366,7 +2366,11 @@ the first-touch capture (`@aglyn/shared-util-first-touch`) runs on every host
 the first-party registry names, keeps the first EXTERNAL referrer or landing in
 a cookie on the registrable domain (analytics storage, behind the same consent
 gate as the tag), and the platform writes it once at account creation,
-server-side, with its own channel rule table rather than GA4's grouping. The
+server-side, with its own channel rule table rather than GA4's grouping. Every
+sign-up door writes it — `signup-password`, `signup-google` (popup) and
+`signup-google-redirect` — through `POST /api/auth/acquisition`, and
+`POST /api/orgs/create` writes it as a backstop when the sign-up page was torn
+down before its call went out (AGL-3674); the first write wins. The
 rules refuse the field to every client. The staff console's Acquisition card
 reads it; see `apps/docs/docs/staff-console/acquisition.md`. `signupCampaign`
 is unchanged and still feeds `sign_up`.

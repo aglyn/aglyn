@@ -57,6 +57,44 @@ enum class ApnsEnvironment(val raw: String) {
 internal object ApnsEnvironmentSerializer :
     RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ContentSchemaTypeSerializer::class)
+enum class ContentSchemaType(val raw: String) {
+    ARTICLE("Article"),
+    BLOG_POSTING("BlogPosting"),
+    NEWS_ARTICLE("NewsArticle"),
+    TECH_ARTICLE("TechArticle"),
+    UNKNOWN(""),
+}
+
+internal object ContentSchemaTypeSerializer :
+    RawEnumSerializer<ContentSchemaType>("com.aglyn.contracts.ContentSchemaType", ContentSchemaType.entries, ContentSchemaType.UNKNOWN, { it.raw })
+
+@Serializable
+data class ContentSchemaTypeOptionsItem(
+    val description: String,
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class EntryStatusOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class FormLeadRoutingOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class FormStatusOptionsItem(
+    val label: String,
+    val value: String,
+)
+
 @Serializable
 data class HostOrder(
     val amountCents: Double? = null,
@@ -64,6 +102,7 @@ data class HostOrder(
     val buyerNotifications: Map<String, HostOrderBuyerNotificationsValue>? = null,
     val cashierId: String? = null,
     val channel: OrderChannel? = null,
+    val channelSource: OrderChannelSource? = null,
     val checkoutSessionId: String? = null,
     val couponCode: String? = null,
     val createdAtMs: Double? = null,
@@ -406,7 +445,25 @@ data class ListQueryPlan(
     val refused: List<ListQueryRefusal>,
     val searched: String? = null,
     val served: List<ListFilterRequest>,
+    val sortFallback: ListQueryPlanSortFallback? = null,
 )
+
+@Serializable
+data class ListQueryPlanSortFallback(
+    val asked: ListQuerySort,
+    val reason: ListQueryPlanSortFallbackReason,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ListQueryPlanSortFallbackReasonSerializer::class)
+enum class ListQueryPlanSortFallbackReason(val raw: String) {
+    ALONE("alone"),
+    RANGE("range"),
+    UNKNOWN(""),
+}
+
+internal object ListQueryPlanSortFallbackReasonSerializer :
+    RawEnumSerializer<ListQueryPlanSortFallbackReason>("com.aglyn.contracts.ListQueryPlanSortFallbackReason", ListQueryPlanSortFallbackReason.entries, ListQueryPlanSortFallbackReason.UNKNOWN, { it.raw })
 
 @Serializable
 data class ListQueryRefusal(
@@ -424,8 +481,10 @@ data class ListQueryRequest(
 
 @Serializable
 data class ListQuerySort(
+    val alone: Boolean? = null,
     val column: String? = null,
     val direction: ListQuerySortDirection,
+    val label: String? = null,
     val path: String,
 )
 
@@ -439,6 +498,38 @@ enum class ListQuerySortDirection(val raw: String) {
 
 internal object ListQuerySortDirectionSerializer :
     RawEnumSerializer<ListQuerySortDirection>("com.aglyn.contracts.ListQuerySortDirection", ListQuerySortDirection.entries, ListQuerySortDirection.UNKNOWN, { it.raw })
+
+@Serializable
+data class LocalBusinessTypeOptionsItem(
+    val label: String,
+    val value: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MediaKindSerializer::class)
+enum class MediaKind(val raw: String) {
+    DOCUMENT("document"),
+    IMAGE("image"),
+    PDF("pdf"),
+    VIDEO("video"),
+    UNKNOWN(""),
+}
+
+internal object MediaKindSerializer :
+    RawEnumSerializer<MediaKind>("com.aglyn.contracts.MediaKind", MediaKind.entries, MediaKind.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = MediaSortSerializer::class)
+enum class MediaSort(val raw: String) {
+    NAME("name"),
+    NEWEST("newest"),
+    OLDEST("oldest"),
+    SIZE("size"),
+    UNKNOWN(""),
+}
+
+internal object MediaSortSerializer :
+    RawEnumSerializer<MediaSort>("com.aglyn.contracts.MediaSort", MediaSort.entries, MediaSort.UNKNOWN, { it.raw })
 
 @Serializable
 data class MobileDevice(
@@ -515,6 +606,7 @@ data class OrderAddress(
 @Serializable(with = OrderChannelSerializer::class)
 enum class OrderChannel(val raw: String) {
     DRAFT("draft"),
+    MARKETPLACE("marketplace"),
     ONLINE("online"),
     POS("pos"),
     SUBSCRIPTION("subscription"),
@@ -523,6 +615,44 @@ enum class OrderChannel(val raw: String) {
 
 internal object OrderChannelSerializer :
     RawEnumSerializer<OrderChannel>("com.aglyn.contracts.OrderChannel", OrderChannel.entries, OrderChannel.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderChannelSource(
+    val channelId: String,
+    val channelLabel: String,
+    val currency: String,
+    val externalOrderId: String,
+    val externalRef: String,
+    val fees: List<OrderChannelSourceFeesItem>? = null,
+    val feesTotalCents: Double? = null,
+    val handoff: OrderChannelSourceHandoff? = null,
+    val lines: List<OrderChannelSourceLinesItem>,
+    val refundIds: List<String>? = null,
+    val taxRemittedByChannel: Boolean,
+)
+
+@Serializable
+data class OrderChannelSourceFeesItem(
+    val amountCents: Double,
+    val label: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderChannelSourceHandoffSerializer::class)
+enum class OrderChannelSourceHandoff(val raw: String) {
+    COURIER("courier"),
+    SHIP("ship"),
+    UNKNOWN(""),
+}
+
+internal object OrderChannelSourceHandoffSerializer :
+    RawEnumSerializer<OrderChannelSourceHandoff>("com.aglyn.contracts.OrderChannelSourceHandoff", OrderChannelSourceHandoff.entries, OrderChannelSourceHandoff.UNKNOWN, { it.raw })
+
+@Serializable
+data class OrderChannelSourceLinesItem(
+    val externalLineId: String,
+    val lineIndex: Double,
+)
 
 @Serializable
 data class OrderDispute(
@@ -937,11 +1067,80 @@ data class ReceiptTender(
     val label: String,
 )
 
+@Serializable
+data class SiteFilterOptions(
+    val hasCustomDomain: List<SiteFilterOptionsHasCustomDomainItem>,
+)
+
+@Serializable
+data class SiteFilterOptionsHasCustomDomainItem(
+    val label: String,
+    val value: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = TenantEmailControlSerializer::class)
+enum class TenantEmailControl(val raw: String) {
+    BESIGNER("besigner"),
+    EXTERNAL("external"),
+    FIXED("fixed"),
+    UNKNOWN(""),
+}
+
+internal object TenantEmailControlSerializer :
+    RawEnumSerializer<TenantEmailControl>("com.aglyn.contracts.TenantEmailControl", TenantEmailControl.entries, TenantEmailControl.UNKNOWN, { it.raw })
+
+@Serializable
+data class TenantEmailEntry(
+    val authoredIn: String? = null,
+    val control: TenantEmailControl? = null,
+    val defaultSubject: String? = null,
+    val description: String? = null,
+    val footerReason: String? = null,
+    val key: String? = null,
+    val name: String? = null,
+    val plugin: String? = null,
+    val pluginId: String? = null,
+    val requiresFeature: String? = null,
+)
+
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
+    @SerialName("AREA_SERVED_MAX") val areaServedMax: Long,
+    @SerialName("COMPONENT_LIST_QUERY") val componentListQuery: ListQueryDeclaration,
+    @SerialName("CONTENT_SCHEMA_TYPE_DEFAULT") val contentSchemaTypeDefault: ContentSchemaType,
+    @SerialName("CONTENT_SCHEMA_TYPE_OPTIONS") val contentSchemaTypeOptions: List<ContentSchemaTypeOptionsItem>,
+    @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
+    @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
+    @SerialName("ENTRY_LIST_QUERY") val entryListQuery: ListQueryDeclaration,
+    @SerialName("ENTRY_STATUS_OPTIONS") val entryStatusOptions: List<EntryStatusOptionsItem>,
+    @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
+    @SerialName("FORM_LEAD_ROUTING_OPTIONS") val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem>,
+    @SerialName("FORM_LIST_FILTER_HEADERS") val formListFilterHeaders: Map<String, String>,
+    @SerialName("FORM_LIST_QUERY") val formListQuery: ListQueryDeclaration,
+    @SerialName("FORM_SCOPED_SUBMISSION_LIST_QUERY") val formScopedSubmissionListQuery: ListQueryDeclaration,
+    @SerialName("FORM_STATUS_OPTIONS") val formStatusOptions: List<FormStatusOptionsItem>,
+    @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
+    @SerialName("LOCAL_BUSINESS_TYPE_OPTIONS") val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem>,
+    @SerialName("MEDIA_ALT_MAX_LENGTH") val mediaAltMaxLength: Long,
+    @SerialName("MEDIA_ALT_OPTIONS") val mediaAltOptions: List<ListFilterOption>,
+    @SerialName("MEDIA_DISJUNCTION_LIMIT") val mediaDisjunctionLimit: Long,
+    @SerialName("MEDIA_FILTER_HEADERS") val mediaFilterHeaders: Map<String, String>,
+    @SerialName("MEDIA_FOLDER_MAX_DEPTH") val mediaFolderMaxDepth: Long,
+    @SerialName("MEDIA_FOLDER_NAME_MAX_LENGTH") val mediaFolderNameMaxLength: Long,
+    @SerialName("MEDIA_KINDS") val mediaKinds: List<MediaKind>,
+    @SerialName("MEDIA_LIST_QUERY") val mediaListQuery: ListQueryDeclaration,
+    @SerialName("MEDIA_ORIENTATION_OPTIONS") val mediaOrientationOptions: List<ListFilterOption>,
+    @SerialName("MEDIA_SCOPED_SEARCH_NOTICE") val mediaScopedSearchNotice: String,
+    @SerialName("MEDIA_SORT_LABELS") val mediaSortLabels: Map<String, String>,
+    @SerialName("MEDIA_SORT_ORDER") val mediaSortOrder: Map<String, ListQuerySort>,
+    @SerialName("MEDIA_SORTS") val mediaSorts: List<MediaSort>,
+    @SerialName("MEDIA_TAG_MAX_COUNT") val mediaTagMaxCount: Long,
+    @SerialName("MEDIA_TAG_MAX_LENGTH") val mediaTagMaxLength: Long,
+    @SerialName("MEDIA_TYPE_OPTIONS") val mediaTypeOptions: List<ListFilterOption>,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
@@ -954,10 +1153,27 @@ data class ContractValues(
     @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
     @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
+    @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
+    @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
+    @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
+    @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
+    @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
+    @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
+    @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
+    @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
+    @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
+    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
+    @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
+    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
+    @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
+    @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
+    @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
 )

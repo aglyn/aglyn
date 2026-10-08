@@ -228,7 +228,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
             multiline
             fullWidth
           />
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <TextField
               label="Link (optional)"
               size="small"

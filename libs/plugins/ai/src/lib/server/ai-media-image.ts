@@ -20,6 +20,7 @@
 // every stored picture also passes the upload route's.
 
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
 import { aiMediaCreditsPerPicture } from '../model/ai-media-credits'
 import { aiSvgThemePalette, isAiSvgColor } from '../model/ai-svg'
@@ -32,10 +33,13 @@ import {
   AI_SVG_MAX_COLORS,
   AI_SVG_STYLES,
   AiImageSafetyRefusal,
+  aiImageSizeForPlan,
   isAiImageAspectRatio,
+  isAiRasterStyle,
   type AiImageAspectRatio,
   type AiImageMode,
   type AiImageProvider,
+  type AiRasterStyle,
   type AiSvgStyle,
 } from '../providers/image-contract'
 import { vertexImageProvider } from '../providers/vertex-image'
@@ -47,6 +51,7 @@ import {
   recordAssistCost,
   releaseAssistMessage,
 } from '../usage/assist-usage'
+import { aiMediaRasterPrompt } from './ai-media-raster-prompt'
 import { aiMediaSvgModel, generateAiMediaSvg, type AiMediaSvgOutcome } from './ai-media-svg'
 
 /**
@@ -59,9 +64,11 @@ import { aiMediaSvgModel, generateAiMediaSvg, type AiMediaSvgOutcome } from './a
  *
  * Two modes:
  *
- * - `photo` — Google's image models on Vertex AI (`vertex-image.ts`). Off
- *   unless the deployment configured them; the door answers 404 with a
- *   sentence the dialog shows.
+ * - `photo` — Google's image models on Vertex AI (`vertex-image.ts`), for
+ *   every kind that is not SVG: a photo, a photographic genre, an art style
+ *   or a design asset, each the description followed by its kind's fixed
+ *   style wording (`ai-media-raster-prompt.ts`). Off unless the deployment
+ *   configured them; the door answers 404 with a sentence the dialog shows.
  * - `illustration` — an SVG drawn by the text provider every other AI door
  *   uses (`ai-media-svg.ts`): an illustration, an icon, a tileable pattern or
  *   a simple logo mark, in the site's theme colors or the person's own. No
@@ -115,7 +122,7 @@ export const AI_MEDIA_OURS_COPY =
 
 /** What the door answers on a deployment that makes no photos. */
 export const AI_MEDIA_NO_PHOTOS_COPY =
-  "Photos aren't available here yet. Choose Illustration to draw one instead."
+  "Photos and painted styles aren't available here yet. Choose a vector kind, such as Illustration, to draw one instead."
 
 /** The provider photos come from; a spec stands one in through jest. */
 function imageProvider(): AiImageProvider {
@@ -180,7 +187,7 @@ export interface AiMediaImageInput {
   prompt: string
   aspectRatio: string
   count: number
-  /** An illustration's kind; unread for a photo. */
+  /** The kind: an SVG style for an illustration, an image-provider style for a photo. */
   style: string
   /** An illustration's colors: the site theme's, or these. */
   palette: { source: 'theme' } | { source: 'custom'; colors: string[] }
@@ -203,7 +210,7 @@ export function parseAiMediaImageInput(body: Record<string, unknown> | null): Ai
     prompt: cleanAiImagePrompt(body?.['prompt']),
     aspectRatio: text('aspectRatio', 8),
     count: Number.isFinite(count) ? count : 0,
-    style: text('style', 24) || 'illustration',
+    style: text('style', 24) || (body?.['mode'] === 'illustration' ? 'illustration' : 'photo'),
     palette:
       palette?.['source'] === 'custom'
         ? {
@@ -270,8 +277,8 @@ export interface AiMediaProvenance {
   model: string
   prompt: string
   mode: AiImageMode
-  /** An illustration's kind; absent on a photo. */
-  style?: AiSvgStyle
+  /** The kind the picture was made as. */
+  style?: AiSvgStyle | AiRasterStyle
   aspectRatio: string
   /** The meter's signal id for the request that made it. */
   signalId: string | null
@@ -388,6 +395,9 @@ export async function POST(request: Request): Promise<Response> {
   if (input.count < 1 || input.count > AI_IMAGE_MAX_COUNT) {
     return refuse(`Make between 1 and ${AI_IMAGE_MAX_COUNT} pictures at a time.`, 400)
   }
+  if (input.mode === 'photo' && !isAiRasterStyle(input.style)) {
+    return refuse('Choose a kind of picture from the list.', 400)
+  }
   if (input.mode === 'illustration') {
     if (!(AI_SVG_STYLES as readonly string[]).includes(input.style)) {
       return refuse('Choose an illustration, an icon, a pattern or a logo mark.', 400)
@@ -403,7 +413,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const model = input.mode === 'photo' ? provider.defaultModel() : (svgModel as string)
-  const perPicture = aiMediaCreditsPerPicture(input.mode, model)
+  // The size is the plan's, never the request's: 512 px on Free, 1K on a
+  // paid plan, each estimated and charged at its own per-picture rate.
+  const imageSize = aiImageSizeForPlan(resolveEffectivePlan(gate.org) === 'free')
+  const perPicture = aiMediaCreditsPerPicture(input.mode, model, imageSize)
   const estimate = perPicture * input.count
   const credits = publicAssistQuota(gate.reservation).credits
   if (credits && assistBandRefuses(gate.org) && credits.remaining < estimate) {
@@ -439,14 +452,16 @@ export async function POST(request: Request): Promise<Response> {
   /** Tokens a photo request spent beside its pictures, charged once any is stored. */
   let photoUsage: AiUsage = ZERO_USAGE
   let declineReason: string | null = null
-  let style: AiSvgStyle | undefined
+  let style: AiSvgStyle | AiRasterStyle | undefined
 
   if (input.mode === 'photo') {
+    style = input.style as AiRasterStyle
     try {
       const result = await provider.generate({
         model,
-        prompt: input.prompt,
+        prompt: aiMediaRasterPrompt(input.prompt, style),
         aspectRatio,
+        size: imageSize,
         count: input.count,
       })
       photoUsage = result.usage
@@ -470,14 +485,15 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: AI_UPSTREAM_FAILURE_COPY }, { status })
     }
   } else {
-    style = input.style as AiSvgStyle
+    const svgStyle = input.style as AiSvgStyle
+    style = svgStyle
     const palette = await illustrationPalette(gate, input)
     const settled = await Promise.allSettled(
       Array.from({ length: input.count }, (_unused, variant) =>
         generateAiMediaSvg({
           model,
           prompt: input.prompt,
-          style: style as AiSvgStyle,
+          style: svgStyle,
           aspectRatio,
           palette,
           variant,
@@ -548,7 +564,7 @@ export async function POST(request: Request): Promise<Response> {
   // rate with the request's prompt and thinking, an illustration's tokens.
   const usage =
     input.mode === 'photo'
-      ? { ...photoUsage, images: stored.length }
+      ? { ...photoUsage, images: stored.length, imageSize }
       : sumUsage(stored.map((entry) => entry.picture.usage))
   let signalId: string | null = null
   try {

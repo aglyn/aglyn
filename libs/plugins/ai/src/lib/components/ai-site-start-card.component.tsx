@@ -22,12 +22,33 @@ import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { ConsoleHostFirstRunZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import {
-  mdiCheckCircle,
+  mdiAccount,
+  mdiBookOpenPageVariant,
+  mdiBriefcaseOutline,
+  mdiCalendarHeart,
+  mdiCamera,
+  mdiClockOutline,
+  mdiContentCut,
   mdiCreation,
+  mdiDumbbell,
+  mdiHandHeart,
+  mdiHeartPulse,
+  mdiHomeCity,
+  mdiMusic,
+  mdiPaletteOutline,
+  mdiRocketLaunch,
+  mdiScaleBalance,
+  mdiSchool,
+  mdiShopping,
+  mdiSilverwareForkKnife,
+  mdiViewGridOutline,
+  mdiWrench,
+  mdiYoga,
   mdiInformationOutline,
   mdiPageLayoutHeaderFooter,
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -70,15 +91,43 @@ import {
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   AI_SITE_START_ANSWERS,
-  AI_SITE_START_EXAMPLES,
   AI_SITE_START_TYPES,
   aiSiteStartBrief,
+  aiSiteStartKind,
   aiSiteStartInputs,
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
 import type { AiJobSummary } from '../model/ai-jobs.types'
+import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+
+/** The icon each kind of site's card shows. */
+const AI_SITE_KIND_ICONS: Record<string, string> = {
+  business: mdiBriefcaseOutline.path,
+  trades: mdiWrench.path,
+  professional: mdiScaleBalance.path,
+  wellness: mdiHeartPulse.path,
+  restaurant: mdiSilverwareForkKnife.path,
+  store: mdiShopping.path,
+  portfolio: mdiViewGridOutline.path,
+  studio: mdiPaletteOutline.path,
+  photography: mdiCamera.path,
+  blog: mdiBookOpenPageVariant.path,
+  events: mdiCalendarHeart.path,
+  fitness: mdiDumbbell.path,
+  yoga: mdiYoga.path,
+  beauty: mdiContentCut.path,
+  realestate: mdiHomeCity.path,
+  education: mdiSchool.path,
+  nonprofit: mdiHandHeart.path,
+  music: mdiMusic.path,
+  personal: mdiAccount.path,
+  landing: mdiRocketLaunch.path,
+  'coming-soon': mdiClockOutline.path,
+}
 import { AiJobFollow } from './ai-job-follow.component'
+import { AiModelSelector } from './ai-model-selector.component'
+import { useAiModelChoice } from './use-ai-model-choice'
 import { aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
 
@@ -344,6 +393,17 @@ export function AiSiteStartCard({
 
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
+  // On a paid plan the person picks the model that builds the site (AGL-3660),
+  // Auto by default, from the models their plan allows; every step of the job
+  // runs on it. A Free workspace builds on the default and is offered none.
+  const modelChoice = useAiModelChoice({ orgId, hostId, surface: 'jobs', kind: 'job.page' })
+  // A pick remembered from before needs its cost to estimate by; Auto does not,
+  // and the list is otherwise read when the picker opens.
+  const { load: loadModels, model: rememberedModel } = modelChoice
+  useEffect(() => {
+    if (!freeTaste && step === 'describe' && rememberedModel) loadModels()
+  }, [freeTaste, step, rememberedModel, loadModels])
+  const pickedModel = freeTaste ? null : modelChoice.model
 
   const plan = useCallback(async () => {
     if (!orgId || aiSiteStartRefusal(answers, { freeTaste })) return
@@ -361,6 +421,7 @@ export function AiSiteStartCard({
           // The guided start confirms its own plan (AGL-3594): the build
           // follows the plan with no approval to make.
           inputs: { ...aiSiteStartInputs(answers), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
+          ...(pickedModel ? { model: pickedModel } : {}),
         }),
       })
       const payload = await response.json().catch(() => null)
@@ -395,7 +456,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router])
+  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router, pickedModel])
 
   const chooseStarter = useCallback(() => {
     setStartingStarter(true)
@@ -414,11 +475,16 @@ export function AiSiteStartCard({
   // starter (AGL-3594); after, it only closes — the job builds the site.
   const exit = started ? (leave ?? startBlank) : startBlank
 
+  // The chosen model's cost against Auto's, as the model list states it.
+  const modelMultiplier =
+    (pickedModel && modelChoice.options?.options.find((option) => option.id === pickedModel)?.multiplier) || 1
   const estimate = freeTaste
     ? aiFreeSiteCreditEstimate(answers.pages)
-    : aiSiteCreditEstimate(answers.pages, {
-        welcomeEmail: answers.welcomeEmail,
-      })
+    : Math.round(
+        aiSiteCreditEstimate(answers.pages, {
+          welcomeEmail: answers.welcomeEmail,
+        }) * modelMultiplier,
+      )
   const estimateText = freeTaste
     ? `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits your Free workspace has each month`
     : `About ${estimate.toLocaleString('en-US')} credits, estimated`
@@ -580,54 +646,24 @@ export function AiSiteStartCard({
                     helperText="Optional. It narrows who the pages are written for."
                   />
                 </Stack>
-                <Stack spacing={2} component="section" aria-label="Look & layout">
-                  <SectionLabel>{'Look & layout'}</SectionLabel>
+                <Stack spacing={2} component="section" aria-label="Style">
+                  <SectionLabel>{'Style'}</SectionLabel>
                   <Typography variant="body2" color="text.secondary">
-                    {'Optional. Picking one steers the shape of the site, not its words.'}
+                    {answers.kind
+                      ? 'This decides how your site looks and which pages it usually has.'
+                      : 'Picked from your answer above. Choose another to change how your site looks and which pages it usually has.'}
                   </Typography>
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                      gap: 2,
-                    }}
-                  >
-                    {AI_SITE_START_EXAMPLES.map((example) => {
-                      const selected = answers.example === example.id
-                      return (
-                        <Card
-                          key={example.id}
-                          variant="outlined"
-                          sx={(theme: Theme) => ({
-                            borderRadius: 2,
-                            borderColor: selected ? 'primary.main' : 'divider',
-                            bgcolor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-                          })}
-                        >
-                          <CardActionArea
-                            aria-pressed={selected}
-                            aria-label={`${example.label} — ${example.blurb}`}
-                            onClick={() => answer({ example: selected ? null : example.id })}
-                            sx={{ p: 2, height: '100%' }}
-                          >
-                            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="subtitle2">{example.label}</Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {example.blurb}
-                                </Typography>
-                              </Box>
-                              {selected && (
-                                <Box sx={{ color: 'primary.main', display: 'flex' }} aria-hidden>
-                                  <MdiIcon path={mdiCheckCircle.path} />
-                                </Box>
-                              )}
-                            </Stack>
-                          </CardActionArea>
-                        </Card>
-                      )
-                    })}
-                  </Box>
+                  <OptionCardGrid
+                    label="Style of site"
+                    options={AI_SITE_KINDS.map((kind) => ({
+                      id: kind.id,
+                      title: kind.label,
+                      description: kind.blurb,
+                      icon: AI_SITE_KIND_ICONS[kind.id],
+                    }))}
+                    value={aiSiteStartKind(answers).id}
+                    onChange={(kind) => answer({ kind })}
+                  />
                 </Stack>
                 <Stack spacing={2} component="section" aria-label="Details">
                   <SectionLabel>{'Details'}</SectionLabel>
@@ -724,6 +760,7 @@ export function AiSiteStartCard({
               {refusal}
             </Typography>
           )}
+          {!freeTaste && <AiModelSelector choice={modelChoice} disabled={busy} />}
           <Button onClick={() => setStep('choose')}>{'Back'}</Button>
           <Button
             variant="contained"

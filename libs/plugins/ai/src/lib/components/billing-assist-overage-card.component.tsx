@@ -394,7 +394,7 @@ export function BillingAssistOverageControls({
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Chip
           label={
             hardCap
@@ -494,6 +494,7 @@ export function BillingAssistOverageControls({
                     `is no overage for it to bound. You can safely remove it.`}
               </Typography>
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={2}
                 sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 2 }}

@@ -363,6 +363,37 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/ada-lovelace')
   })
 
+  /*
+   * Each Google door records where the account came from under its own name,
+   * BEFORE the workspace exists — the workspace copies its creator's record
+   * at birth (AGL-3674).
+   */
+  const acquisitionThenWorkspace = () =>
+    (global.fetch as jest.Mock).mock.calls
+      .map(([url, init]) => [String(url), JSON.parse(String(init?.body ?? '{}'))])
+      .filter(([url]) => /\/api\/(auth\/acquisition|orgs\/create)/.test(url))
+      .map(([url, body]) => (url.includes('acquisition') ? `acquisition:${body.door}` : 'workspace'))
+
+  it('records the popup door as signup-google before creating the workspace', async () => {
+    render(<SignUp />)
+    await clickGoogle()
+
+    expect(acquisitionThenWorkspace()).toEqual(['acquisition:signup-google', 'workspace'])
+  })
+
+  it('records the redirect door as signup-google-redirect before creating the workspace', async () => {
+    render(<SignUp />)
+    await act(async () => {
+      await redirectOnCredential?.(googleUser())
+      await settle()
+    })
+
+    expect(acquisitionThenWorkspace()).toEqual([
+      'acquisition:signup-google-redirect',
+      'workspace',
+    ])
+  })
+
   it('carries the plan the visitor picked into the new workspace', async () => {
     mockPlanIntent = { plan: 'pro', interval: 'year' }
     render(<SignUp />)

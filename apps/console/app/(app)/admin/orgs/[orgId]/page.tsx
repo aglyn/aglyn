@@ -63,7 +63,6 @@ import {
   Stack,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Tooltip,
@@ -118,6 +117,7 @@ import {
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
+import StaffTableHead from '../../../../../components/staff-table-head.component'
 
 /**
  * Organization detail for staff (AGL-207/238): the org's sites, member
@@ -1184,6 +1184,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
               sx={{ mb: 3 }}
             >
               <Stack
+                useFlexGap
                 direction="row"
                 spacing={1}
                 sx={{ alignItems: 'center', flexWrap: 'wrap' }}
@@ -1558,7 +1559,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     >
                       {resolved ? (
                         <ScrollTable size="small">
-                          <TableHead>
+                          <StaffTableHead>
                             <TableRow>
                               <TableCell>{'Key'}</TableCell>
                               <TableCell align="right">{'Used'}</TableCell>
@@ -1569,7 +1570,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 {'Plan default'}
                               </TableCell>
                             </TableRow>
-                          </TableHead>
+                          </StaffTableHead>
                           <TableBody>
                             {Object.entries(resolved)
                               .filter(
@@ -1753,14 +1754,14 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             )
                           ) : (
                             <ScrollTable size="small">
-                              <TableHead>
+                              <StaffTableHead>
                                 <TableRow>
                                   <TableCell>{'Invoice'}</TableCell>
                                   <TableCell>{'Status'}</TableCell>
                                   <TableCell>{'Amount'}</TableCell>
                                   <TableCell>{'Period end'}</TableCell>
                                 </TableRow>
-                              </TableHead>
+                              </StaffTableHead>
                               <TableBody>
                                 {billing.invoices.map((invoice) => (
                                   <TableRow key={invoice.id}>

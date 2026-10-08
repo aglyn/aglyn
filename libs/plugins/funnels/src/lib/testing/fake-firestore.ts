@@ -18,7 +18,8 @@
 /**
  * A small in-memory Firestore for the funnels specs: documents by path, and
  * the query shapes the plugin's server code uses — ranges and equality, one
- * ordering, a projection, a cursor, a limit, a collection group, a batch —
+ * ordering, a projection, a cursor, a limit, a collection group, a batch, a
+ * transaction (applied as it goes: the specs run one writer at a time) —
  * and the update sentinels it writes ({@link FAKE_FIELD_VALUE}). Nothing else.
  */
 
@@ -56,6 +57,13 @@ function applyUpdate(held: Data, patch: Data): Data {
 
 type Data = Record<string, any>
 
+interface FakeTransaction {
+  get(target: { get(): Promise<any> }): Promise<any>
+  create(ref: FakeDoc, data: Data): void
+  update(ref: FakeDoc, data: Data): void
+  set(ref: FakeDoc, data: Data): void
+}
+
 const comparable = (value: any): any =>
   value && typeof value.toMillis === 'function' ? value.toMillis() : value
 
@@ -92,6 +100,16 @@ export class FakeFirestore {
         for (const op of ops) await op()
       },
     }
+  }
+
+  /** Reads through `get`, writes through `create`/`update`/`set`, each applied at once. */
+  async runTransaction<T>(run: (tx: FakeTransaction) => Promise<T>): Promise<T> {
+    return run({
+      get: (target: { get(): Promise<any> }) => target.get(),
+      create: (ref: FakeDoc, data: Data) => void ref.create(data),
+      update: (ref: FakeDoc, data: Data) => void ref.update(data),
+      set: (ref: FakeDoc, data: Data) => void ref.set(data),
+    })
   }
 
   seed(path: string, data: Data): this {
@@ -217,6 +235,12 @@ class FakeDoc {
     this.db.writes.push({ op: 'set', path: this.path, data, options })
     const held = options?.merge ? this.db.docs.get(this.path) ?? {} : {}
     this.db.docs.set(this.path, { ...held, ...data })
+  }
+  /** Refuses a document that exists, as Firestore's `create` does. */
+  create(data: Data) {
+    if (this.db.docs.has(this.path)) throw new Error(`document already exists at ${this.path}`)
+    this.db.writes.push({ op: 'create', path: this.path, data })
+    this.db.docs.set(this.path, { ...data })
   }
   async update(data: Data) {
     this.db.writes.push({ op: 'update', path: this.path, data })

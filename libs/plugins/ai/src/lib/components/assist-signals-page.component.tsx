@@ -302,7 +302,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           // Neither `gap` nor `flexWrap` is a Stack prop under MUI 9
           // — both go through `sx` or it is a typecheck error.
           // AGL-1891 is the same drift, in the Assist panel itself.
-          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack useFlexGap direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             <Chip label={`${totals.messages.toLocaleString()} turns`} />
             <Chip label={`${money(totals.providerCostUsd)} estimated`} />
             {/*
@@ -765,6 +765,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                 {prose.map((row: any) => (
                   <Stack key={`${row.orgId}:${row.exchangeId}`} spacing={0.5}>
                     <Stack
+                      useFlexGap
                       direction="row"
                       sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}
                     >

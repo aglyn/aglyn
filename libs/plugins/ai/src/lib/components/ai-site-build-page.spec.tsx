@@ -424,6 +424,8 @@ describe('the detail a site job shows while it works', () => {
     const rows = aiSiteBuildRows(planning())
     expect(rows.map((row) => [row.label, row.state])).toEqual([
       ['Planning your pages', 'active'],
+      // The look is designed first (AGL-3660).
+      ['Designing your look', 'waiting'],
       ['Building the header and footer', 'waiting'],
       ['Writing your 2 pages', 'waiting'],
       ['Publishing your site', 'waiting'],
@@ -433,7 +435,7 @@ describe('the detail a site job shows while it works', () => {
   })
 
   it('fills the bar by finished stages, the active one counting half', () => {
-    expect(aiSiteBuildFraction(aiSiteBuildRows(planning()))).toBeCloseTo(0.5 / 4)
+    expect(aiSiteBuildFraction(aiSiteBuildRows(planning()))).toBeCloseTo(0.5 / 5)
     expect(aiSiteBuildFraction([{ id: 'plan', label: 'Planning your pages', state: 'active' }])).toBeNull()
   })
 
@@ -446,8 +448,8 @@ describe('the detail a site job shows while it works', () => {
 
   it('draws a filling bar, the hint and the sections on the page', async () => {
     await open(planning())
-    const bar = await screen.findByRole('progressbar', { name: /Building: 0 of 4 steps done/ })
-    expect(bar.getAttribute('aria-valuenow')).toBe(String(Math.round((0.5 / 4) * 100)))
+    const bar = await screen.findByRole('progressbar', { name: /Building: 0 of 5 steps done/ })
+    expect(bar.getAttribute('aria-valuenow')).toBe(String(Math.round((0.5 / 5) * 100)))
     expect(screen.getByText(AI_SITE_PLAN_HINT)).toBeTruthy()
   })
 })
@@ -535,6 +537,8 @@ describe('a guided start, snapshot by snapshot (AGL-3596)', () => {
       ['Publishing your site', 'waiting'],
     ])
     expect(rows[3]).toMatchObject({ hint: AI_SITE_PAGE_HINT, startedAt: '2026-10-07T17:12:45.000Z', sections: ['hero', 'services'] })
+    // The plan keeps its credits once the items take over (prod 2026-10-07, job yazWNJr9k-).
+    expect(rows[0].credits).toBe(12)
     // The next item counts from the failed one's settle.
     const next = aiSiteBuildRows(SNAPSHOTS[7][1])
     expect(next.map((row) => row.state)).toEqual(['done', 'done', 'done', 'failed', 'active', 'waiting'])
@@ -611,6 +615,7 @@ describe('the contact form’s stage (AGL-3596)', () => {
     )
     expect(rows.map((row) => row.label)).toEqual([
       'Planning your pages',
+      'Designing your look',
       'Building the header and footer',
       'Building your contact form',
       'Writing your 2 pages',

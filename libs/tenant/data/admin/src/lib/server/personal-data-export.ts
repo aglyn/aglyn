@@ -256,6 +256,90 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each paid order’s hand-off to a fulfillment network (AGL-3634): the order number, the lines sent with SKU and quantity, the network’s reference, the parcels read back with carrier, tracking number and status, and why anything was not sent. The merchant’s own fulfillment record of a SHOPPER’s order, so disclosed to the ORG only.',
   },
   {
+    collection: 'marketplaceConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account (AGL-3638): marketplace, status, account name, the marketplace sites the account sells on, the listing and order settings, the order cursor and the last sync’s counts. The sealed access and refresh tokens and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the account’s marketplace ids are disclosed as stored. The document id is the site id and the marketplace. Its `log` and `listingState` subcollections (what each listing was last sent) are not read by this export.',
+  },
+  {
+    collection: 'marketplaceOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each marketplace order the store imported (AGL-3638): the marketplace and its order id, the store order it became, which order line each marketplace line became, the marketplace’s fees, and each shipment confirmed back with carrier and tracking number. The merchant’s own record of a marketplace BUYER’s order, so disclosed to the ORG only; the buyer’s name and address are on the store’s order, not here.',
+  },
+  {
+    collection: 'inventorySyncConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the keys — each site’s connection to the merchant’s own Cin7 Core, inFlow or Brightpearl account (AGL-3642): system, status, account name, the stock, product and order settings (location, the customer orders are recorded under, the tax rule), the last count by SKU, the last syncs’ counts, cursors and totals. The sealed API keys or grant and the id of the key that sealed them carry `credential` in their names and are redacted (see redactSecrets); Brightpearl’s account code and datacenter are disclosed as stored. The document id is the site id. Its `log` subcollection is not read by this export.',
+  },
+  {
+    collection: 'inventorySyncOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each paid order’s hand-off to the connected inventory system (AGL-3642): the order number and our reference, the lines sent with SKU, quantity and price, the buyer’s name, email address and shipping address as sent, the totals, the system’s id and number for it, attempts and why it was not sent. The merchant’s own record of a SHOPPER’s order, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'inventorySyncProducts',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each product linked between the store and the connected inventory system (AGL-3642): the system’s product id, the SKU, the version last synced, the store’s product and variant ids, and why it was not synced. Catalog data, no person’s.',
+  },
+  {
+    collection: 'podConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the tokens — each site’s connection to the merchant’s own Printful store or Printify shop (AGL-3641): service, store id and name, currency, whether orders are sent automatically or held for review, whether prices sync, how shipments are heard about, and the last error. The sealed API token and webhook token and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets).',
+  },
+  {
+    collection: 'podProductLinks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each product imported from a print-on-demand service (AGL-3641): the service’s product and variant ids, the store product and variants it became, names, SKUs, what the service charges for each variant and the store’s price. Catalog data, no person’s.',
+  },
+  {
+    collection: 'podOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The part of each paid order a print-on-demand service makes and ships (AGL-3641): the store order and its number, the service’s order id, the lines sent with quantity and cost, its status, costs, attempts and errors, and each parcel’s carrier and tracking number. No buyer name, address or email is kept here; they are on the store’s order. The merchant’s own record of a SHOPPER’s order, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'deliveryAppStores',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each site’s link to the merchant’s own DoorDash, Uber Eats or Grubhub store (AGL-3644): the service, the store id it shows the merchant, the settings (accept automatically, prep minutes), the items matched to products and those waiting, and the menu’s last send. No credential is stored: every call is signed with the deployment’s partner credentials.',
+  },
+  {
+    collection: 'deliveryAppOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each order a delivery service sent a site’s register (AGL-3644): the service and its order id and short code, the items with their options and instructions, the totals and refunds, where it stood at the counter, and the store order it became. The buyer appears by first name and last initial only. The merchant’s own record of a delivery BUYER’s order, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'zapierHooks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each Zapier REST hook a site’s API key subscribed (AGL-3643): the site, the events, the API key’s public id and name, delivery counts and dates. EXISTENCE ONLY for the URL — `targetUrl` is the capability Zapier minted for the Zap, a bearer URL whose secret is in its path, so it is redacted by name (see redactSecrets).',
+  },
+  {
+    collection: 'zapierHookDeliveries',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Markers that one event reached one Zapier hook, so a retry does not post it twice (AGL-3643): the hook, the status and the time. The document id is a SHA-256 of the event and hook, an identifier rather than a verifier of any credential; no customer data, and a TTL policy removes each row.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -489,6 +573,10 @@ const SECRET_WORD_PAIRS = new Set([
   // A Stripe payment link is a live bearer URL: whoever holds it can pay.
   // Named in the AGL-1443 inventory of what the old dump actually carried.
   'payment link',
+  // A Zapier REST hook's `targetUrl` (AGL-3643) is the same kind of bearer
+  // URL: whoever holds it can post into the Zap, and its secret is in the
+  // path, which the URL scrub does not read.
+  'target url',
   'auth code',
   'recovery code',
   'backup code',
@@ -1056,6 +1144,16 @@ export async function exportOrgData(
     'marketingPlatformEvents',
     'fulfillmentNetworkConnections',
     'fulfillmentNetworkOrders',
+    'marketplaceConnections',
+    'marketplaceOrders',
+    'inventorySyncConnections',
+    'inventorySyncOrders',
+    'inventorySyncProducts',
+    'podConnections',
+    'podProductLinks',
+    'podOrders',
+    'deliveryAppStores',
+    'deliveryAppOrders',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

@@ -543,6 +543,7 @@ export default function BillingAddonsCardComponent({
         const aiOffer = row.kind === 'aiAddon' ? aiAddonOffer(plan) : 'sold'
         return (
           <Stack
+            useFlexGap
             key={row.kind}
             direction="row"
             spacing={2}

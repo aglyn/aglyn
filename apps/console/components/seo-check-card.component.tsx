@@ -92,7 +92,7 @@ export function SeoFindingChips({ findings }: { findings: readonly SeoFinding[] 
     )
   }
   return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+    <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
       {findings.map((entry) => (
         <Chip
           key={`${entry.code}:${entry.keyword ?? ''}`}

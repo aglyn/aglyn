@@ -139,7 +139,7 @@ export function ServerConfigCard() {
           </Alert>
         ) : null}
 
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
           {/*
             Without the deployment id the reading is unattributable, which is
             the project-vs-deployment confusion that started this issue.

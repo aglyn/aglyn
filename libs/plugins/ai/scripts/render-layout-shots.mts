@@ -26,11 +26,18 @@
  * node map… }, "theme"?: HostTheme }` — the node map as a layout version
  * stores it (the root `_@_`, a `layoutSlot` somewhere under it), the site's
  * name (what `{{host.businessName}}` resolves to), and the site's theme
- * (the starter site's `DEFAULT_SITE_THEME` when absent). A layout job's
+ * (the starter site's `DEFAULT_SITE_THEME` when absent). In place of a
+ * `theme`, a `"style"` is a site's look tokens (AGL-3660, `ai-site-look.ts`):
+ * the theme is then built the way the look unit builds it, the tokens over
+ * the base theme they name, read from the themes plugin. A layout job's
  * draft, read back with `readAiDraftNodes`, is exactly that node map. An
  * optional `"page"` is a page's node map (an AI-built Home, say) to render
  * inside the layout in place of the starter home page; with one, the whole
- * page is shot too.
+ * page is shot too. An optional `"forms"` maps a form id to its saved design
+ * (`{ rootId, nodes }`, as the form job writes it), grafted into every place
+ * the page or layout places that form, as a published page grafts it; a form
+ * the input names no design for is drawn with the fields a contact form asks
+ * for (name, email, phone, message), so a shot never shows an empty form.
  *
  * HOW IT RENDERS. No emulator and no tenant server: the layout is composed
  * around a page with the platform's own `composeLayoutAndScreenNodes`, its
@@ -57,7 +64,9 @@
  *   <key>-page-desktop-light.png     with a `page`: header, that page and footer, whole, 1440 wide
  *   <key>-page-phone-light.png       the same, 375 wide
  *   <key>-page.txt                   with a `page`: the words that page shows, as a visitor reads them
- *   <key>-short-desktop-light.png    a one-heading page, whole: the footer must sit at the window's bottom
+ *   <key>-short-desktop-light.png    a one-heading page, whole: the footer must sit at the window's bottom,
+ *                                    and under its heading a Card, two Buttons and a field with no style
+ *                                    of their own, as dragged in from the drawer: they take the site's look
  *   <key>-short-phone-light.png
  *
  * and logs any width at which the document is wider than its window.
@@ -149,6 +158,32 @@ function chromeExecutable(): Dict {
   return { channel: 'chrome' }
 }
 
+/**
+ * A page's reusable-component instances drawn as the card such a component
+ * draws (AGL-3660): a shot has no component documents to resolve an instance
+ * against, and an instance with no definition renders nothing, which read as
+ * a section with no items. Each instance becomes a Card — no style of its own,
+ * so the site's theme draws it — holding its title-like prop over its others.
+ */
+function expandInstances(nodes: Dict): Dict {
+  const out: Dict = { ...nodes }
+  for (const [id, node] of Object.entries(nodes) as Array<[string, Dict]>) {
+    if (node?.componentId !== 'reusableInstance') continue
+    const values = Object.entries((node.props?.propValues ?? {}) as Record<string, unknown>).filter(([, value]) => typeof value === 'string' && value)
+    const title = values.find(([name]) => /title|name|heading|label/i.test(name)) ?? values[0]
+    const rest = values.filter((entry) => entry !== title)
+    const content = `${id}__content`
+    const lines = [
+      ...(title ? [{ $id: `${id}__title`, componentId: 'muiTypography', pluginId: 'mui', parentId: content, props: { variant: 'h5', component: 'h3', children: title[1] }, nodes: [] }] : []),
+      ...rest.map(([name, value]) => ({ $id: `${id}__${name}`, componentId: 'muiTypography', pluginId: 'mui', parentId: content, props: { variant: 'body1', children: value }, sx: { color: 'text.secondary', mt: 1 }, nodes: [] })),
+    ]
+    out[id] = { ...node, componentId: 'muiCard', pluginId: 'mui', props: {}, sx: { height: '100%' }, nodes: [content] }
+    out[content] = { $id: content, componentId: 'muiCardContent', pluginId: 'mui', parentId: id, props: {}, sx: { p: 3 }, nodes: lines.map((line) => line.$id) }
+    for (const line of lines) out[line.$id] = line
+  }
+  return out
+}
+
 const CLOSE_ICON =
   'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'
 
@@ -184,6 +219,54 @@ async function main(): Promise<void> {
   const starter = await load('libs/aglyn/src/lib/app-utils/starter-template-nodes.ts')
   const defaults = await load('libs/aglyn/src/lib/app-utils/default-site.ts')
   const drawer = await load('libs/plugins/mui/src/lib/components/drawer.tsx')
+  const look = await load('libs/plugins/ai/src/lib/model/ai-site-look.ts')
+  const forms = await load('libs/aglyn/src/lib/app-utils/forms.ts')
+  const reusable = await load('libs/aglyn/src/lib/app-utils/compose-reusable-components.ts')
+  /** A contact form's design, as a form job writes one: a form root over its fields. */
+  const contactDesign = (formId: string) => {
+    const field = (name: string, label: string, extra: Dict = {}) => ({
+      $id: `${formId}__${name}`,
+      componentId: 'formField',
+      pluginId: 'forms',
+      parentId: `${formId}__root`,
+      props: { fieldName: name, label, required: name !== 'phone', ...extra },
+      nodes: [],
+    })
+    const fields = [
+      field('name', 'Name'),
+      field('email', 'Email', { fieldType: 'email' }),
+      field('phone', 'Phone', { fieldType: 'tel' }),
+      field('message', 'Message', { fieldType: 'textarea' }),
+    ]
+    return {
+      rootId: `${formId}__root`,
+      nodes: {
+        [`${formId}__root`]: {
+          $id: `${formId}__root`,
+          componentId: 'form',
+          pluginId: 'forms',
+          props: { formId, formName: 'Contact', submitLabel: 'Send message' },
+          nodes: fields.map((entry) => entry.$id),
+        },
+        ...Object.fromEntries(fields.map((entry) => [entry.$id, entry])),
+      },
+    }
+  }
+  /** Each placed form grafted with its design, as a published page grafts it. */
+  const withForms = (nodes: Dict, given: Record<string, { rootId: string; nodes: Dict }> | undefined): Dict => {
+    const ids = new Set(
+      (Object.values(nodes) as Dict[]).filter((node) => node?.componentId === 'form' && node.props?.formId).map((node) => String(node.props.formId)),
+    )
+    if (!ids.size) return nodes
+    const designs = Object.fromEntries([...ids].map((id) => [id, given?.[id] ?? contactDesign(id)]))
+    return reusable.composeReusableComponentNodes(nodes, undefined, [forms.placedFormPlacement(designs)])
+  }
+  const presets = (await load('libs/plugins/themes/src/lib/presets/index.ts')).THEME_PRESETS as Dict[]
+  /** A look's theme, as the look unit saves it: the tokens over the base they name. */
+  const themeOfStyle = (style: Dict): Dict => {
+    const preset = presets.find((entry) => entry.id === `theme-presets.${style.base}`)
+    return look.aiSiteTheme(style, preset?.theme ?? defaults.DEFAULT_SITE_THEME)
+  }
 
   const React = require('react')
   const { renderToStaticMarkup } = require('react-dom/server')
@@ -216,6 +299,25 @@ async function main(): Promise<void> {
     starter.starterSection('shot_section', 'md', 10, [
       starter.starterText('shot_title', 'h1', 'A short page', { component: 'h1' }),
       { ...starter.starterText('shot_body', 'lede', 'One heading and a line: the footer still sits at the bottom of the window.'), sx: { color: 'text.secondary', marginTop: 2 } },
+      // Components as the drawer drops them, with no style of their own: the site's theme styles them.
+      { id: 'shot_eyebrow', componentId: 'muiTypography', props: { variant: 'overline', children: 'Dropped from the drawer' }, sx: { display: 'block', marginTop: 4 } },
+      {
+        id: 'shot_card',
+        componentId: 'muiCard',
+        sx: { maxWidth: 360, marginTop: 1 },
+        children: [
+          {
+            id: 'shot_card_content',
+            componentId: 'muiCardContent',
+            children: [
+              starter.starterText('shot_card_title', 'h6', 'A card'),
+              starter.starterText('shot_card_text', 'body2', 'No variant of its own.'),
+            ],
+          },
+        ],
+      },
+      { id: 'shot_button', componentId: 'muiButton', props: { variant: 'contained', children: 'A button' }, sx: { marginTop: 2, marginRight: 1 } },
+      { id: 'shot_button_quiet', componentId: 'muiButton', props: { variant: 'text', children: 'A quiet one' }, sx: { marginTop: 2 } },
     ]),
   ])
 
@@ -240,15 +342,22 @@ async function main(): Promise<void> {
 
     for (const input of inputs) {
       const key = basename(input).replace(/\.json$/, '')
-      const data = JSON.parse(readFileSync(input, 'utf8')) as { name: string; nodes: Dict; page?: Dict; theme?: Dict }
-      const theme = data.theme ?? defaults.DEFAULT_SITE_THEME
+      const data = JSON.parse(readFileSync(input, 'utf8')) as {
+        name: string
+        nodes: Dict
+        page?: Dict
+        theme?: Dict
+        style?: Dict
+        forms?: Record<string, { rootId: string; nodes: Dict }>
+      }
+      const theme = data.theme ?? (data.style ? themeOfStyle(data.style) : defaults.DEFAULT_SITE_THEME)
       const fonts = ((theme.fonts ?? []) as Dict[])
         .filter((font) => font.source === 'google')
         .map((font) => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font.family)}:wght@${(font.weights ?? [400, 700]).join(';')}&display=swap">`)
         .join('')
       const render = (screen: Dict, scheme: 'light' | 'dark', menuOpen: boolean): string => {
         core.components.registerComponent(menuOpen ? OpenDrawer : drawer.default, drawerSchema)
-        const composed = tokens.resolveNodesHostTokens(compose.composeLayoutAndScreenNodes(data.nodes, screen), { displayName: data.name })
+        const composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
         core.canvas.setNodes(composed)
         const root = core.canvas.getNode('_@_')
         const markup = renderToStaticMarkup(
@@ -277,7 +386,7 @@ async function main(): Promise<void> {
           }
         }
       }
-      const home = data.page ?? defaults.buildDefaultHomeScreen(data.name).nodes
+      const home = data.page ? expandInstances(data.page) : defaults.buildDefaultHomeScreen(data.name).nodes
       const light = render(home, 'light', false)
       if (data.page) {
         await shoot(light, 1440, 900, 'page-desktop-light', ['full'])

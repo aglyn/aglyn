@@ -55,11 +55,17 @@ import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-ema
 import { AI_JOB_FORM_INSTRUCTIONS, AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_JOB_EXPERIMENT_SYSTEM } from '../jobs/ai-job-experiment-step'
 import { AI_JOB_LOGIC_INSTRUCTIONS } from '../jobs/ai-job-logic-step'
+import { aiJobEditInstructions } from '../jobs/ai-job-edit-step'
+import { assistEditTool } from '../server/assist-edit'
 import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
+import { AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_FRAME_KIND } from '../jobs/ai-job-layout-language'
+import { AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, AI_LAYOUT_PAGE_KIND } from '../jobs/ai-job-page-language'
+import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
+import { buildAnthropicRequestBody } from '../providers/anthropic'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
 import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
 import { AI_OVERLAY_SYSTEM } from '../jobs/ai-job-overlay-copy'
@@ -73,6 +79,12 @@ import {
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { resolveBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
+import {
+  AI_SITE_CONTEXT_MAX_CHARS,
+  aiInstructionsWithSiteContext,
+  type AiSiteContextInput,
+} from '../model/ai-site-context'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
@@ -84,6 +96,8 @@ import {
   AI_CATEGORIES_INSTRUCTIONS,
   AI_PRODUCT_COPY_INSTRUCTIONS,
 } from './ai-products-generation'
+import { AI_BLOG_POST_INSTRUCTIONS } from './ai-blog-post-generation'
+import { AI_BLOG_POST_TOOL } from '../tools/ai-blog-post-tool'
 import {
   AI_CATALOG_TOOL,
   AI_CATEGORIES_TOOL,
@@ -259,20 +273,30 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: "one rules block — the grammar, a variable's stored forms and how to explain — so every tool's prefix clears the balanced tier's minimum; the site's variables and the request ride uncached",
   },
+  'jobs/ai-job-edit-step.ts': {
+    step: 'job.edit',
+    caches: true,
+    why: "the document doctrine, the job's own rules and the edit rung's protocol and catalog for the document's kind, one prefix a kind; the outline of the page and the request ride uncached (AGL-3616)",
+  },
   'jobs/ai-job-experiment-step.ts': {
     step: 'job.experiment',
-    caches: false,
-    why: "the A/B test rules and the acceptable-use block are under the balanced tier's minimum; the copy under test, or a test's arms with its verdict, is the request",
+    caches: true,
+    why: "the A/B test rules and the acceptable-use block, under 1,000 tokens: over Claude Sonnet 5.5's 512-token minimum since it became the balanced default (AGL-3660), under Sonnet 5's 1,024 before; the copy under test, or a test's arms with its verdict, is the request",
   },
   'jobs/ai-job-insight-step.ts': {
     step: 'job.insight',
-    caches: false,
-    why: "an insight's rules and the acceptable-use block are under the balanced tier's minimum; the read call's catalog and the answer call's tables are the request",
+    caches: true,
+    why: "an insight's rules and the acceptable-use block, under 1,000 tokens: over Claude Sonnet 5.5's 512-token minimum since AGL-3660; the read call's catalog and the answer call's tables are the request",
   },
   'runtime/ai-products-generation.ts': {
     step: 'job.products',
     caches: true,
     why: "the doctrine, the rules and the tool of a product's copy, a catalog, or categories and discounts; the product, its photo and the brief ride uncached",
+  },
+  'runtime/ai-blog-post-generation.ts': {
+    step: 'copy.blog',
+    caches: true,
+    why: "the doctrine's fields block, a post's rules and its tool (AGL-3676); the site's brief, the posts already written and which post this is ride uncached",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -281,8 +305,8 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-overlay-copy.ts': {
     step: 'job.text',
-    caches: false,
-    why: "a text job asked for overlay copy (AGL-3603): the overlay rules and the acceptable-use block are under the balanced tier's minimum; the brief, the triggers and the current copy are the request",
+    caches: true,
+    why: "a text job asked for overlay copy (AGL-3603): the overlay rules and the acceptable-use block, over Claude Sonnet 5.5's 512-token minimum since AGL-3660; the brief, the triggers and the current copy are the request",
   },
   'server/plugin-text-generation.ts': {
     step: 'job.text',
@@ -292,7 +316,7 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   'server/ai-assist.ts': {
     step: 'copy.element',
     caches: false,
-    why: "the copy assistant's three mode prompts, each measured below",
+    why: "the copy assistant's three mode prompts, each measured below; the section mode alone clears its model's minimum, since Claude Sonnet 5.5's is 512 (AGL-3660)",
   },
   'server/assist-chat.ts': {
     step: 'assist.chat',
@@ -327,6 +351,8 @@ interface Composed {
   step: AiStepKind
   blocks: (site: AiSiteInventory | null | undefined) => AiSystemBlock[]
   tools: (site: AiSiteInventory) => AiTool[]
+  /** This request's verdict where it differs from its door's other requests. */
+  caches?: boolean
 }
 
 const SEO_LISTING_FIELDS = ['title', 'description', 'breadcrumb'] as const
@@ -394,6 +420,29 @@ const REQUESTS: Record<string, Composed> = {
     step: 'job.page',
     blocks: (site) => aiDoctrineSystemBlocks(site, { instructions: AI_JOB_PAGE_INSTRUCTIONS }),
     tools: () => [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()],
+  },
+  // The layout language (AGL-3660): a guided start's pages, one answer a
+  // page, and its header and footer. Both carry the fields-scope doctrine and
+  // the language; the site's inventory rides after the last breakpoint.
+  'layout-page': {
+    door: 'jobs/ai-job-page-language.ts',
+    step: 'job.page',
+    blocks: (site) =>
+      aiDoctrineSystemBlocks(site, {
+        instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_LAYOUT_PAGE_KIND),
+      }),
+    tools: () => [AI_LAYOUT_PAGE_TOOL, aiInventoryLookupTool()],
+  },
+  'layout-frame': {
+    door: 'jobs/ai-job-layout-step.ts',
+    step: 'job.layout',
+    blocks: (site) =>
+      aiDoctrineSystemBlocks(site, {
+        instructions: AI_JOB_LAYOUT_LANGUAGE_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_LAYOUT_FRAME_KIND),
+      }),
+    tools: () => [AI_LAYOUT_FRAME_TOOL, aiInventoryLookupTool()],
   },
   theme: {
     door: 'jobs/ai-job-theme-step.ts',
@@ -477,6 +526,13 @@ const REQUESTS: Record<string, Composed> = {
     step: 'job.products',
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATALOG_INSTRUCTIONS }),
     tools: () => [AI_CATALOG_TOOL],
+  },
+  // A site's first post (AGL-3676): the brief and the posts written are the user turn.
+  'blog-post': {
+    door: 'runtime/ai-blog-post-generation.ts',
+    step: 'copy.blog',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_BLOG_POST_INSTRUCTIONS, scope: 'fields' }),
+    tools: () => [AI_BLOG_POST_TOOL],
   },
   categories: {
     door: 'runtime/ai-products-generation.ts',
@@ -579,6 +635,28 @@ const REQUESTS: Record<string, Composed> = {
       }),
     tools: () => [aiWorkflowExplanationTool()],
   },
+  // An edit to a page or a layout (AGL-3616): the rung's tool and catalog per
+  // kind, a page's tool also offering its search fields.
+  'edit-screen': {
+    door: 'jobs/ai-job-edit-step.ts',
+    step: 'job.edit',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiJobEditInstructions('screen'),
+        scope: aiDoctrineScopeFor('edit'),
+      }),
+    tools: () => [assistEditTool('screen')],
+  },
+  'edit-layout': {
+    door: 'jobs/ai-job-edit-step.ts',
+    step: 'job.edit',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiJobEditInstructions('layout'),
+        scope: aiDoctrineScopeFor('edit'),
+      }),
+    tools: () => [assistEditTool('layout')],
+  },
   'experiment-explain': {
     door: 'jobs/ai-job-experiment-step.ts',
     step: 'job.experiment',
@@ -623,6 +701,7 @@ const REQUESTS: Record<string, Composed> = {
   'copy.section': {
     door: 'server/ai-assist.ts',
     step: 'copy.section',
+    caches: true,
     blocks: () => assistModeSystemBlocks('section'),
     tools: () => [assistSectionTool()],
   },
@@ -672,6 +751,43 @@ describe('a cached span is keyed on the request, never on the tenant', () => {
   })
 })
 
+/**
+ * The bytes a provider caches, as the Anthropic adapter puts them on the wire:
+ * the tools, then every system block through the last `cache_control`. What a
+ * cache entry is keyed on, so two requests that differ here never share one.
+ */
+function wirePrefix(name: string, site: AiSiteInventory, brief: string): string {
+  const request = REQUESTS[name]
+  const body = buildAnthropicRequestBody({
+    model: aiModelForStep(request.step),
+    maxTokens: 1_000,
+    system: request.blocks(site),
+    tools: request.tools(site),
+    messages: [{ role: 'user', content: brief }],
+    stream: false,
+  })
+  const system = (body['system'] ?? []) as Array<{ cache_control?: unknown }>
+  const last = system.map((block) => Boolean(block.cache_control)).lastIndexOf(true)
+  return JSON.stringify({ tools: body['tools'] ?? [], system: system.slice(0, last + 1) })
+}
+
+describe('a cached prefix is byte-stable across briefs, as it goes on the wire (AGL-3660)', () => {
+  // The guided start's own requests, and every other door's: the brief is the
+  // user turn and the site is the volatile block, so neither may move a byte
+  // of what the provider caches. A timestamp, an id, a key order that follows
+  // insertion or a tool list built per request would each fail here.
+  it.each(Object.keys(REQUESTS).filter((name) => name !== 'seo-fixes'))(
+    '%s sends the same cached bytes for two briefs on two sites',
+    (name) => {
+      const a = wirePrefix(name, SITE_A, 'A 2-page website for a dog groomer in Austin called Hillside.')
+      const b = wirePrefix(name, SITE_B, 'A 5-page website for a bakery in Tulsa that sells cakes to order.')
+      expect(a).toBe(b)
+      expect(a).not.toContain('Hillside')
+      expect(a).not.toContain('Acme Roofing')
+    },
+  )
+})
+
 describe('the ledger: what each request caches, against its model’s minimum', () => {
   const measured = () =>
     Object.fromEntries(
@@ -697,7 +813,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
 
   it('reports the same verdict its door table row claims', () => {
     for (const [name, row] of Object.entries(measured())) {
-      expect([name, row.caches]).toEqual([name, AI_DOORS[REQUESTS[name].door].caches])
+      expect([name, row.caches]).toEqual([name, REQUESTS[name].caches ?? AI_DOORS[REQUESTS[name].door].caches])
     }
   })
 
@@ -717,7 +833,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // at AGL-3433, whose shorter rule 16 every document request below also
       // carries. A brief that asks for a video is offered the plan's list of
       // players on a tool of its own; this plain one is the same bytes.
-      plan: { prefixTokens: 2_984, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_984, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
@@ -730,17 +846,23 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // AGL-3143 §16, which tells it copy never prints an address, a slug or
       // a timestamp: a live build printed all three on every article. All
       // four grew 6 at AGL-3588, the App Bar's shrink and hide switches.
-      layout: { prefixTokens: 4_427, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_039, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_038, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_427, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_039, minimum: 512, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_038, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate.
-      email: { prefixTokens: 2_896, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_728, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_596, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_896, minimum: 512, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_596, minimum: 512, caches: true, toolsStable: true },
+      // The layout language (AGL-3660). Read four characters a token these
+      // err low: the token counting endpoint puts the page's cached span at
+      // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
+      // and their system prompt included.
+      'layout-page': { prefixTokens: 1_831, minimum: 512, caches: true, toolsStable: true },
+      'layout-frame': { prefixTokens: 2_202, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
-      theme: { prefixTokens: 3_517, minimum: 1_024, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_517, minimum: 512, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096). Up 84 at AGL-3538: a
@@ -753,8 +875,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Up 249 at AGL-3611, the order and return triggers the draft may start
       // on, and 7 for the two steps that ride a larger variant naming its
       // empty field.
-      'workflow-draft': { prefixTokens: 5_000, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_215, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 5_000, minimum: 512, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_215, minimum: 512, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -763,30 +885,37 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_006, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_006, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
       // balanced tier's minimum, so nothing is cached and the copy under test
       // — or the arms and the verdict — is billed as the request.
-      'experiment-variants': { prefixTokens: 987, minimum: 1_024, caches: false, toolsStable: true },
-      'experiment-explain': { prefixTokens: 911, minimum: 1_024, caches: false, toolsStable: true },
+      'experiment-variants': { prefixTokens: 987, minimum: 512, caches: true, toolsStable: true },
+      'experiment-explain': { prefixTokens: 911, minimum: 512, caches: true, toolsStable: true },
       // Logic by AI (AGL-3603): one rules block on the fields scope, so a
       // function's, a variable's and an explanation's prefix each cache.
-      'logic-function': { prefixTokens: 1_556, minimum: 1_024, caches: true, toolsStable: true },
-      'logic-variable': { prefixTokens: 1_087, minimum: 1_024, caches: true, toolsStable: true },
-      'logic-explain': { prefixTokens: 1_077, minimum: 1_024, caches: true, toolsStable: true },
+      'logic-function': { prefixTokens: 1_556, minimum: 512, caches: true, toolsStable: true },
+      'logic-variable': { prefixTokens: 1_087, minimum: 512, caches: true, toolsStable: true },
+      'logic-explain': { prefixTokens: 1_077, minimum: 512, caches: true, toolsStable: true },
+      // An edit to a page or a layout (AGL-3616): the document doctrine, the
+      // job's rules, and the edit rung's protocol and element catalog for the
+      // kind, so a page's and a layout's prefix each cache.
+      'edit-screen': { prefixTokens: 5_970, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 5_958, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
-      'insight-read': { prefixTokens: 944, minimum: 1_024, caches: false, toolsStable: true },
-      'insight-answer': { prefixTokens: 983, minimum: 1_024, caches: false, toolsStable: true },
+      'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },
+      'insight-answer': { prefixTokens: 983, minimum: 512, caches: true, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
-      'product-copy': { prefixTokens: 2_424, minimum: 1_024, caches: true, toolsStable: true },
-      catalog: { prefixTokens: 2_449, minimum: 1_024, caches: true, toolsStable: true },
-      categories: { prefixTokens: 2_348, minimum: 1_024, caches: true, toolsStable: true },
+      'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_449, minimum: 512, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
+      // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
+      'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
@@ -795,11 +924,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'crm-mapping': { prefixTokens: 680, minimum: 4_096, caches: false, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
-      text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },
-      'overlay-popup': { prefixTokens: 866, minimum: 1_024, caches: false, toolsStable: true },
+      text: { prefixTokens: 128, minimum: 512, caches: false, toolsStable: true },
+      'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
       'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
-      'copy.blog': { prefixTokens: 340, minimum: 1_024, caches: false, toolsStable: true },
-      'copy.section': { prefixTokens: 694, minimum: 1_024, caches: false, toolsStable: true },
+      'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
+      'copy.section': { prefixTokens: 694, minimum: 512, caches: true, toolsStable: true },
     })
   })
 
@@ -894,9 +1023,13 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // workspace has measured anything, and a cache read is priced at a tenth
     // of an input token. A step whose prefix cannot cache and still claims
     // cache reads quotes roughly a tenth of what it will actually cost.
+    // One-sided, as the title says: a step whose prompt caches and whose
+    // nominal claims no read quotes high, which is safe; claiming a read the
+    // prompt cannot get quotes low. The steps the balanced default's lower
+    // minimum let cache (AGL-3660) still quote as they did.
     for (const [name, row] of Object.entries(measured())) {
       const nominal = AI_STEP_NOMINAL_USAGE[REQUESTS[name].step]
-      expect([name, nominal.cacheReadTokens > 0]).toEqual([name, row.caches])
+      if (nominal.cacheReadTokens > 0) expect([name, row.caches]).toEqual([name, true])
     }
   })
 
@@ -907,3 +1040,66 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     }
   })
 })
+
+/**
+ * THE PER-SITE BLOCK (AGL-3661). A site's business profile, status and
+ * remembered preferences ride as one cached block AFTER every platform-wide
+ * block, so the doors that read it hold two cache entries: the platform's,
+ * shared by every workspace and measured in the ledger above, and the
+ * site's, read by every request of a job on that site. Each row below is a
+ * ledger row's request with the context added the way its door adds it.
+ */
+describe('a site’s context block extends the shared prefix, never enters it (AGL-3661)', () => {
+  const context = (name: string, email: string): AiSiteContextInput => ({
+    profile: resolveBusinessProfile({
+      host: { displayName: name, business: { supportEmail: email } },
+      site: { services: ['Repairs', 'Inspections'], tone: 'friendly', sources: { services: 'owner', tone: 'owner' } },
+    }),
+    preferences: ['Prefers short, concise copy'],
+  })
+  const CONTEXT_A = context('Acme Roofing', 'hello@acme.test')
+  const CONTEXT_B = context('Bakery', 'orders@bakery.test')
+  const SITE_REQUESTS: Record<string, { base: string; blocks: (site: AiSiteInventory, ctx: AiSiteContextInput | null) => AiSystemBlock[] }> = {
+    plan: {
+      base: 'plan',
+      blocks: (site, ctx) =>
+        aiDoctrineSystemBlocks(site, { instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, ctx) }),
+    },
+    'insight-answer': {
+      base: 'insight-answer',
+      blocks: (_site, ctx) => [...aiInstructionsWithSiteContext(AI_JOB_INSIGHT_SYSTEM, ctx)],
+    },
+  }
+  /** Every block through the last breakpoint that is NOT a site's: what every workspace shares. */
+  const platformPrefix = (blocks: readonly AiSystemBlock[]) =>
+    cachedPrefix(blocks.filter((block) => !block.site))
+
+  it.each(Object.keys(SITE_REQUESTS))('%s shares its platform prefix byte for byte across two sites', (name) => {
+    const row = SITE_REQUESTS[name]
+    const a = row.blocks(SITE_A, CONTEXT_A)
+    const b = row.blocks(SITE_B, CONTEXT_B)
+    expect(platformPrefix(a)).toBe(platformPrefix(b))
+    expect(platformPrefix(a)).not.toContain('Acme Roofing')
+    expect(platformPrefix(a)).toBe(cachedPrefix(REQUESTS[row.base].blocks(SITE_A)))
+    expect(() => validateAiSystemBlocks(a)).not.toThrow()
+    expect(() => validateAiSystemBlocks(b)).not.toThrow()
+  })
+
+  it.each(Object.keys(SITE_REQUESTS))('%s caches the site block last, at most 400 tokens, and only the site’s', (name) => {
+    const blocks = SITE_REQUESTS[name].blocks(SITE_A, CONTEXT_A)
+    const last = blocks.map((block) => Boolean(block.cacheBreakpoint)).lastIndexOf(true)
+    const site = blocks.filter((block) => block.site)
+    expect(site).toHaveLength(1)
+    expect(blocks[last]).toBe(site[0])
+    expect(site[0].text).toContain('Acme Roofing')
+    expect(site[0].text).toContain('hello@acme.test')
+    expect(site[0].text.length).toBeLessThanOrEqual(AI_SITE_CONTEXT_MAX_CHARS)
+    expect(blocks.slice(last + 1).filter((block) => !block.volatile)).toEqual([])
+  })
+
+  it.each(Object.keys(SITE_REQUESTS))('%s is byte-identical to its ledger row for a site with no context', (name) => {
+    const row = SITE_REQUESTS[name]
+    expect(row.blocks(SITE_A, null)).toEqual(REQUESTS[row.base].blocks(SITE_A))
+  })
+})
+

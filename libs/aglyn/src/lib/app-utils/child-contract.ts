@@ -115,7 +115,10 @@ function restrictsChildrenToNothing(restrict: unknown): boolean {
  *
  * - `flags.selfClosing` — an image, an icon, a divider.
  * - `flags.textEditable` — the component renders `children` as editable text,
- *   so an element dropped in would be destroyed by the next text edit.
+ *   so an element dropped in would be destroyed by the next text edit —
+ *   unless the schema also says `flags.dropping: ENABLED`. That is a promise
+ *   the component keeps its text in its own `<aglyn-text>` beside the child
+ *   elements, which is the only part the in-place editor rewrites (AGL-3672).
  * - `flags.dropping: DISABLED` — neither of the above, but still no slot
  *   (AGL-1388): Markdown renders its parsed `content` prop and nothing else;
  *   a Reusable Component instance has its child list REPLACED by the grafted
@@ -136,7 +139,11 @@ export function schemaAcceptsChildren(
   const flags = schema.flags
   if (isFlagDisabled(flags?.dropping)) return false
   if (isLeafFlagEnabled(flags?.selfClosing)) return false
-  if (isLeafFlagEnabled(flags?.textEditable)) return false
+  if (
+    isLeafFlagEnabled(flags?.textEditable) &&
+    !isLeafFlagEnabled(flags?.dropping)
+  )
+    return false
   return !restrictsChildrenToNothing(schema.restrictChildren)
 }
 

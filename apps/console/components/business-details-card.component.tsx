@@ -293,6 +293,7 @@ export function BusinessDetailsCard(props: { hostId: string }) {
           <Stack spacing={0.5}>
             {preview.map((token) => (
               <Stack
+                useFlexGap
                 key={token.key}
                 direction="row"
                 spacing={1}

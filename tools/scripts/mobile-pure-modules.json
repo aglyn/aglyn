@@ -2,8 +2,52 @@
   "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-list-queries.ts",
+      "why": "The components, layouts and templates lists' query declarations; the native site screens plan the same Firestore queries (AGL-3668); type-only imports beside LIST_QUERY_ID_PATH."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/collection-entry-date.ts",
+      "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/content-schema-type.ts",
+      "why": "The content collection schema types the native collection settings offer (AGL-3668), no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
+      "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
       "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/local-business.ts",
+      "why": "The local business types, limits and opening-hours check the native SEO setup offers and replays (AGL-3668), no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-alt.ts",
+      "why": "Reached by media-metadata: the alt text length cap, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-embedded-fields.ts",
+      "why": "Reached by media-metadata: the embedded-metadata field names and search text, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-filter.ts",
+      "why": "The media library's list query declaration, sorts and options; the native media screens plan the same Firestore query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-folders.ts",
+      "why": "Media folder name, depth and sibling rules the native folder dialogs show (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
+      "why": "Reached by media-filter: media kinds, orientation and the name-token normalizer the library search asks with."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
+      "why": "Who sent a form submission (`messageSender`), which the native submissions list and detail name the same way (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
@@ -28,6 +72,18 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "why": "Search engine verification labels and the token extraction the native SEO setup replays (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-title-variables.ts",
+      "why": "The default SEO title pattern the native SEO setup shows (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
+      "why": "The Sites list query declaration (search and filters on the member's hostMemberships rows); the native Sites screens plan the same query (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
@@ -74,20 +130,20 @@
       "why": "The product, collection and store shapes, read by the Commerce app product screens (AGL-3621)."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
-      "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
-      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
-    },
-    {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
+      "why": "A product's shopping-channel facts (brand, GTIN, MPN, condition, category) and their normalizing, imports nothing; commerce.ts stages them in the product editor (AGL-3637)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/product-modifiers.ts",
+      "why": "A product's register modifiers and their validation, imports nothing; commerce.ts checks them when a product is stored (AGL-3607)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/smart-collection-reads.ts",
@@ -106,6 +162,14 @@
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
+      "path": "libs/plugins/forms/src/lib/components/form-list-query.ts",
+      "why": "The forms list query declaration and its options; the native Forms screens plan the same query (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
+      "why": "The submissions list query declarations; the native submissions screens plan the same query (AGL-3668)."
+    },
+    {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
     },
@@ -120,6 +184,14 @@
     {
       "path": "libs/shared/util/email/src/lib/outbound-phishing-screen.ts",
       "why": "Reached by the redirects model: pattern tables and pure functions over text."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
+      "why": "The site's transactional email catalog the native Emails setup lists (AGL-3668); type-only imports beside its generated rows."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/tenant-emails.generated.ts",
+      "why": "Reached by tenant-email-catalog: the generated email rows, type-only imports."
     },
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",

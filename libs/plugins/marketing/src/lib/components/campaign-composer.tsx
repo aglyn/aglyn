@@ -1979,6 +1979,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
        */}
       {designed ? null : (
         <Stack
+          useFlexGap
           direction="row"
           spacing={1}
           sx={{ alignItems: 'center', flexWrap: 'wrap' }}

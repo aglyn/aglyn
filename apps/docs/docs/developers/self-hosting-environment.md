@@ -388,7 +388,7 @@ enforcement on.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `AUTH_ACTION_ALLOWED_ORIGINS` | Optional | Runtime | Comma-separated extra origins a password-reset or verify-email link may be built on when the request supplies one. Empty — the default — means request-supplied origins are always ignored and the link is built on `NEXT_PUBLIC_CONSOLE_URL`, which is the safe state. **This is a security boundary:** a wrong entry lets a request-supplied host receive a live reset code. Intended for preview deployments. |
-| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `60`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
+| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `120`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
 
 ---
 
@@ -904,6 +904,20 @@ merchant's credential.
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
+### Zapier {#zapier}
+
+The REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`) are
+served by every deployment and post only to Zapier's hook host, with each
+merchant's own API key. What this variable gates is the console's **Zapier** card on
+a site's setup page, which lists and disconnects a site's Zaps: until it is set the
+card draws nothing. The app itself (`apps/zapier`) is published from Zapier's
+developer platform under your own Zapier developer account; point it at your console
+with its `AGLYN_API_URL` environment variable there.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `ZAPIER_APP_URL` | Optional | Runtime, console | The `https://` link to your published Zapier app (its public page or invite link). Set it once the app is published; the card's **Open in Zapier** button goes there. |
+
 ### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
 
 A store can send its paid orders to the merchant's **own** ShipBob or Amazon
@@ -933,6 +947,123 @@ Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
 redirect URI in both apps. ShipBob's webhooks are subscribed for each
 connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
 with a token of their own; nothing needs registering for them.
+
+### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
+
+A store can keep its stock counts, products and paid orders in step with the
+merchant's **own** Cin7 Core, inFlow Inventory or Brightpearl account. Cin7
+Core and inFlow need nothing registered by the deployment: the merchant pastes
+API keys from their own account, and both are offered once the token key that
+seals those keys is set. Brightpearl needs a developer app the deployment
+registers with Brightpearl, and is offered only when its references **and** the
+token key are set. With no token key, no Inventory and ERP card appears and
+nothing is sent. Set these on the **console only**: the job runs there, and the
+tenant runtime never opens a stored key.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `INVENTORY_SYNC_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored API key and grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `BRIGHTPEARL_APP_REF` | Optional | Runtime, console | The Brightpearl app's reference, its OAuth client id. Brightpearl is offered only with it and the developer reference. |
+| `BRIGHTPEARL_DEV_REF` | Optional | Runtime, console | The developer reference every Brightpearl API call carries. |
+| `BRIGHTPEARL_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret, when the app has confidential OAuth turned on. |
+
+Register `https://<console>/api/inventory-sync/oauth/callback` as the redirect
+URI of the Brightpearl app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
+
+### Marketplaces: Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire {#marketplaces}
+
+A store can keep its listings on the merchant's **own** marketplace seller
+accounts in step with its stock, bring their orders in as its own orders, and
+send tracking back. No marketplace takes a key a merchant could paste: each
+needs an app the deployment registers with the marketplace, and the merchant
+signs in to grant it. A marketplace is offered only when its app's variables
+**and** the token key are set; with none set, no Marketplaces card appears and
+nothing is sent. Set these on the **console only**: the job runs there, and the
+tenant runtime never opens a grant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `MARKETPLACES_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `MARKETPLACES_AMAZON_APPLICATION_ID` | Optional | Runtime, console | The selling-partner app's id (`amzn1.sp.solution.…`). Amazon is offered only with it and the two Login with Amazon values below. |
+| `MARKETPLACES_AMAZON_LWA_CLIENT_ID` | Optional | Runtime, console | The app's Login with Amazon client id. |
+| `MARKETPLACES_AMAZON_LWA_CLIENT_SECRET` | Optional | Runtime, console | The app's Login with Amazon client secret. |
+| `MARKETPLACES_AMAZON_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`. |
+| `MARKETPLACES_AMAZON_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
+| `MARKETPLACES_AMAZON_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+| `MARKETPLACES_EBAY_CLIENT_ID` | Optional | Runtime, console | The eBay keyset's App ID. eBay is offered only with it, its Cert ID and the RuName. |
+| `MARKETPLACES_EBAY_CLIENT_SECRET` | Optional | Runtime, console | The keyset's Cert ID. |
+| `MARKETPLACES_EBAY_RU_NAME` | Optional | Runtime, console | The RuName whose accept URL is the redirect address below. |
+| `MARKETPLACES_EBAY_ENVIRONMENT` | Optional | Runtime, console | `sandbox` for eBay's sandbox. Unset is production. |
+| `MARKETPLACES_EBAY_MARKETPLACE_ID` | Optional | Runtime, console | The eBay site listings go to, `EBAY_US` by default. |
+| `MARKETPLACES_ETSY_KEYSTRING` | Optional | Runtime, console | The Etsy app's keystring. Etsy is offered only with it and the shared secret. Etsy has no sandbox. |
+| `MARKETPLACES_ETSY_SHARED_SECRET` | Optional | Runtime, console | The Etsy app's shared secret. |
+| `MARKETPLACES_TIKTOK_APP_KEY` | Optional | Runtime, console | The TikTok Shop app's key. TikTok Shop is offered only with it, its secret and its service id. It has no sandbox. |
+| `MARKETPLACES_TIKTOK_APP_SECRET` | Optional | Runtime, console | The app's secret. |
+| `MARKETPLACES_TIKTOK_SERVICE_ID` | Optional | Runtime, console | The app's service id, from its authorization link in Partner Center. |
+| `MARKETPLACES_TIKTOK_REGION` | Optional | Runtime, console | `us` (default) or `global`: which consent page sellers are sent to. |
+| `MARKETPLACES_WALMART_CLIENT_ID` | Optional | Runtime, console | The Walmart solution-provider app's client id. Walmart is offered only with it and its secret. |
+| `MARKETPLACES_WALMART_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret. |
+| `MARKETPLACES_WALMART_ENVIRONMENT` | Optional | Runtime, console | `sandbox` for Walmart's sandbox. Unset is production. |
+| `MARKETPLACES_WALMART_CHANNEL_TYPE` | Optional | Runtime, console | The `WM_CONSUMER.CHANNEL.TYPE` value Walmart issued the solution provider, when it issued one. |
+| `MARKETPLACES_FAIRE_APPLICATION_ID` | Optional | Runtime, console | The Faire app's application id. Faire is offered only with it and its secret. It has no sandbox. |
+| `MARKETPLACES_FAIRE_APPLICATION_SECRET` | Optional | Runtime, console | The Faire app's application secret. |
+
+Register `https://<console>/api/marketplaces/oauth/callback` as the redirect
+address in every app (for eBay, as the accept URL of the RuName).
+
+### Print on demand: Printful and Printify {#print-on-demand}
+
+A merchant can connect their **own** Printful store or Printify shop, import its
+products, and have paid orders sent to it to make and ship. Each merchant
+connects with a token made in their own account — neither service needs a
+developer app or partnership of the deployment's — so the deployment holds only
+the key those tokens are sealed under. Leave it unset and no Print on demand
+card appears and no order is sent anywhere. Set it on the console **and** the
+tenant runtime: paid orders are sent from wherever commerce's order events are
+delivered, and the console connects, imports and runs the retry job.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `PRINT_ON_DEMAND_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored Printful and Printify token, and each connection's webhook secret, with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again, and until they do their paid orders are not sent. |
+
+The services are told about shipments at
+`https://<console>/api/print-on-demand/webhooks/printful` and
+`…/webhooks/printify`, which the console registers itself when a merchant
+connects and builds from `NEXT_PUBLIC_CONSOLE_URL`. A console the services
+cannot reach (a laptop) still works: each open order is asked after by the
+console job every 15 minutes.
+### Delivery apps: DoorDash, Uber Eats and Grubhub {#delivery-apps}
+
+A store's POS register can take the merchant's **own** DoorDash, Uber Eats
+and Grubhub orders. No service takes a key a merchant could paste: each admits
+a point-of-sale integration only through a **partner (integration provider)
+account** the deployment's operator holds with it, and the merchant links their
+store by the store id the service shows them. A service is offered only when
+**every** variable it names is set; with none set, no Delivery apps card
+appears, the register shows no delivery orders and every webhook answers 404.
+Set these on the **console only**: the webhooks, the register's routes and the
+job run there.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `DELIVERY_APPS_DOORDASH_DEVELOPER_ID` | Optional | Runtime, console | The DoorDash developer id of the integration. DoorDash is offered only with it and the three below. |
+| `DELIVERY_APPS_DOORDASH_KEY_ID` | Optional | Runtime, console | The integration's access key id. |
+| `DELIVERY_APPS_DOORDASH_SIGNING_SECRET` | Optional | Runtime, console | The access key's signing secret, as DoorDash issues it (base64url). Signs each request's JWT. |
+| `DELIVERY_APPS_DOORDASH_WEBHOOK_SECRET` | Optional | Runtime, console | The token set on the integration's order webhook; a webhook without it is refused. |
+| `DELIVERY_APPS_DOORDASH_PROVIDER_TYPE` | Optional | Runtime, console | The provider type DoorDash assigned the integration, sent with each menu. |
+| `DELIVERY_APPS_DOORDASH_ENVIRONMENT` | Optional | Runtime, console | `sandbox` marks DoorDash orders as test orders. Unset is live. |
+| `DELIVERY_APPS_UBER_EATS_CLIENT_ID` | Optional | Runtime, console | The Uber Eats app's client id. Uber Eats is offered only with it and its secret. |
+| `DELIVERY_APPS_UBER_EATS_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret. Also the key Uber signs each webhook with. |
+| `DELIVERY_APPS_UBER_EATS_ENVIRONMENT` | Optional | Runtime, console | `sandbox` marks Uber Eats orders as test orders (Uber's test stores). Unset is live. |
+| `DELIVERY_APPS_GRUBHUB_CLIENT_ID` | Optional | Runtime, console | The Grubhub partner client id. Grubhub is offered only with it and the two below. |
+| `DELIVERY_APPS_GRUBHUB_SECRET_KEY` | Optional | Runtime, console | The partner's MAC secret key, as Grubhub issues it (base64). Signs each request and verifies each webhook. |
+| `DELIVERY_APPS_GRUBHUB_PARTNER_KEY` | Optional | Runtime, console | The partner key sent as `X-GH-PARTNER-KEY`. |
+| `DELIVERY_APPS_GRUBHUB_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends Grubhub calls to its pre-production host and marks its orders as test orders. Unset is live. |
+
+Register each service's order webhook as
+`https://<console>/api/delivery-apps/webhooks/doordash`, `…/uber-eats` or
+`…/grubhub`. Uber's webhook notifications must include orders, cancels,
+failures and resolved fulfillment issues.
 
 ---
 
@@ -1083,9 +1214,9 @@ Config.
 | `AI_PROVIDER` | Optional | Runtime | Which registered adapter is the platform default: `anthropic` or `openai-compatible`, or the id of a provider another plugin registers. Unset, the first ready adapter is the default. A workspace's `pluginSettings/ai` may pick its own. |
 | `AI_DEFAULT_MODEL` | Optional | Runtime | A model id, served by the default provider, for every step kind. Unset, each step kind takes its catalog tier on that provider. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
 | `AI_IMAGE_VERTEX_PROJECT` | Feature | Runtime | The Google Cloud project Media's photo mode bills to, through Google's image models on Vertex AI. Unset, no photos are made and the door says so; illustrations are unaffected. The platform's Firebase service account needs the Vertex AI User role there, and the project needs the Vertex AI API enabled. Google becomes a recipient of the descriptions users type, so list it as a subprocessor before you set this. |
-| `AI_IMAGE_VERTEX_LOCATION` | Optional | Runtime | The Vertex AI location photos are made in: `global` (the default) or a region that serves the model. |
+| `AI_IMAGE_VERTEX_LOCATION` | Optional | Runtime | The Vertex AI location images are made in: `global` (the default), the `us` or `eu` multi-region, or a single region that serves the model. Google's global endpoint makes no promise about where a request is processed; `us` or `eu` keeps processing inside that jurisdiction, for the models that offer it, and lists about 10% higher. |
 | `AI_IMAGE_MODEL` | Optional | Runtime | The image model photos are made with. Default `gemini-3.1-flash-image`. An id absent from the built-in image rate table is priced at the dearest known image rate. |
-| `NEXT_PUBLIC_AI_IMAGE_PHOTOS` | Optional | Build | `on` offers the **Photo** mode in Media's Create with AI window. Set it with `AI_IMAGE_VERTEX_PROJECT`; without it the window offers illustrations only. |
+| `NEXT_PUBLIC_AI_IMAGE_PHOTOS` | Optional | Build | `on` offers the Photo, Art and Design kinds in Media's Create with AI window. Set it with `AI_IMAGE_VERTEX_PROJECT`; without it the window offers the Vector kinds only. |
 | `ASSIST_MODEL` | Optional | Runtime | The assistant's own override, above `AI_DEFAULT_MODEL` for the chat door alone — the incident-response lever the assistant has always honored. |
 | `ASSIST_FREE_DAILY_LIMIT` | Optional | Runtime | Messages per free workspace per UTC day. Default **10**. |
 | `ASSIST_ENTITLED_MONTHLY_LIMIT` | Optional | Runtime | Messages per entitled workspace per month. Default **1000**. |

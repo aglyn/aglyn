@@ -59,15 +59,43 @@ export const ACCOUNT_ACQUISITION_FIELD = 'acquisition'
 
 /**
  * How an account was created: the signup form with a password, the signup
- * form through Google, accepting an invitation, or single sign-on.
+ * form through Google — in a popup, or by the full-page redirect phones use —
+ * accepting an invitation, or single sign-on.
  */
 export const ACQUISITION_DOORS = [
   'signup-password',
   'signup-google',
+  'signup-google-redirect',
   'invite',
   'sso',
 ] as const
 export type AcquisitionDoor = (typeof ACQUISITION_DOORS)[number] | 'unknown'
+
+/** The sign-up form's doors: the ones a person reaches by signing up themselves. */
+export type SignUpAcquisitionDoor = Extract<
+  AcquisitionDoor,
+  'signup-password' | 'signup-google' | 'signup-google-redirect'
+>
+
+/**
+ * The sign-up door an account took, from the provider its VERIFIED token
+ * names, or null when that provider is not one the sign-up form offers.
+ *
+ * The provider decides; the page's `hint` only says which of a provider's
+ * doors it was, so a Google account can say "redirect" and nothing else — it
+ * can never claim the password door, and a password account can never claim
+ * a Google one.
+ */
+export function signUpDoorFor(
+  provider: string | null | undefined,
+  hint?: unknown,
+): SignUpAcquisitionDoor | null {
+  if (provider === 'password') return 'signup-password'
+  if (provider === 'google.com') {
+    return hint === 'signup-google-redirect' ? 'signup-google-redirect' : 'signup-google'
+  }
+  return null
+}
 
 /** What wrote a record: a door at creation, an organization copying its creator's, or the backfill. */
 export type AcquisitionRecordedBy = 'signup' | 'sso' | 'org-creation' | 'backfill'
@@ -402,6 +430,8 @@ function doorPhrase(record: AccountAcquisition): string {
       return 'signed up with password'
     case 'signup-google':
       return 'signed up with Google'
+    case 'signup-google-redirect':
+      return 'signed up with Google, by redirect'
     case 'invite':
       return provider
         ? `signed up from an invitation, with ${provider}`

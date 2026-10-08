@@ -20,7 +20,6 @@ import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.compon
 import {
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   Typography,
 } from '@mui/material'
@@ -35,6 +34,7 @@ import {
   PluginListColumnHeaders,
   type PluginListColumn,
 } from './plugin-list-columns.component'
+import StaffTableHead from './staff-table-head.component'
 
 /**
  * One monthly org usage rollup as `/api/admin/org-usage` serves it. The row
@@ -254,7 +254,7 @@ const StaffOrgUsageTable = ({
   }
   return (
     <ScrollTable size="small">
-      <TableHead>
+      <StaffTableHead>
         <TableRow>
           {LEADING_COLUMNS.map((column, index) => (
             <TableCell key={column} align={index === 0 ? 'left' : 'right'}>
@@ -264,7 +264,7 @@ const StaffOrgUsageTable = ({
           <PluginListColumnHeaders columns={columns} orgId={orgId} />
           <TableCell align="right">{TRAILING_COLUMN}</TableCell>
         </TableRow>
-      </TableHead>
+      </StaffTableHead>
       <TableBody>
         {months.map((row) => (
           <Fragment key={row.month}>

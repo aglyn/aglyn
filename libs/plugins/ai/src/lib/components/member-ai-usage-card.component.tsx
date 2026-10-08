@@ -157,7 +157,12 @@ export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1.5}>
-          <ScrollTable size="small">
+          <ScrollTable
+            size="small"
+            // Below md the columns scroll sideways rather than folding each
+            // header onto several lines.
+            sx={{ '& th': { whiteSpace: { xs: 'nowrap', md: 'normal' } } }}
+          >
             <TableHead>
               <TableRow>
                 <TableCell>{'Month'}</TableCell>

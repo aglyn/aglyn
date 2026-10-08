@@ -19,6 +19,7 @@ import {
   ACCOUNT_ACQUISITION_FIELD,
   buildAccountAcquisition,
   readAccountAcquisition,
+  signUpDoorFor,
   type AccountAcquisition,
   type AcquisitionDoor,
 } from '@aglyn/aglyn/app-utils/account-acquisition'
@@ -28,6 +29,7 @@ import {
   readRequestRegionLabel,
   type HeaderReader,
 } from '@aglyn/aglyn/app-utils/request-geo'
+import { findUserByUidAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
 
 /**
@@ -134,7 +136,9 @@ export async function recordAccountAcquisition(
   }
   const invitedToOrgId =
     input.invitedToOrgId ??
-    (input.door === 'signup-password' || input.door === 'signup-google'
+    (input.door === 'signup-password' ||
+    input.door === 'signup-google' ||
+    input.door === 'signup-google-redirect'
       ? await pendingInvitationOrgId(input.email, firestore)
       : null)
   const record = buildAccountAcquisition({
@@ -156,5 +160,58 @@ export async function recordAccountAcquisition(
     }
     tx.set(userRef, { [ACCOUNT_ACQUISITION_FIELD]: record }, { merge: true })
     return { status: 'recorded', record } as const
+  })
+}
+
+/** What a sign-up door knows about the account it is recording. */
+export interface RecordSignUpAcquisitionInput {
+  uid: string
+  /** The verified token's `sign_in_provider`. */
+  provider: string | null
+  /** The verified token's address. */
+  email: string | null
+  /** The first touch the page sent, else the request's cookie — untrusted. */
+  touch: unknown
+  /** Which of the provider's doors the page says it was; see `signUpDoorFor`. */
+  doorHint?: unknown
+  headers: HeaderReader
+  nowMs?: number
+  firestore?: FirebaseFirestore.Firestore
+}
+
+/**
+ * Record a self-serve sign-up's acquisition, deciding from the verified
+ * provider and the auth record whether there is one to record.
+ *
+ * Shared by the two moments a sign-up passes through: the sign-up page's own
+ * call, right after the account exists, and workspace creation, which is the
+ * backstop for a page torn down before its call went out — the workspace
+ * copies its creator's record at birth, so that is the last moment one can
+ * still reach it. Both write through {@link recordAccountAcquisition}, so the
+ * first one wins and neither can restate the other; an account older than
+ * the window, or one a sign-up door did not create, writes nothing.
+ *
+ * `null` when the provider is not a sign-up door (SSO records its own).
+ */
+export async function recordSignUpAcquisition(
+  input: RecordSignUpAcquisitionInput,
+): Promise<RecordAccountAcquisitionResult | null> {
+  const door = signUpDoorFor(input.provider, input.doorHint)
+  if (!door) return null
+  // Across every pool, not the project's alone (AGL-1122): a lookup that
+  // cannot see an account answers "not new", which writes nothing.
+  const pooled = await findUserByUidAcrossPools(input.uid)
+  const createdAtMs = Date.parse(pooled?.record.metadata.creationTime ?? '')
+  return recordAccountAcquisition({
+    uid: input.uid,
+    accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
+    touch: input.touch,
+    door,
+    provider: input.provider,
+    email: input.email,
+    headers: input.headers,
+    recordedBy: 'signup',
+    nowMs: input.nowMs,
+    firestore: input.firestore,
   })
 }

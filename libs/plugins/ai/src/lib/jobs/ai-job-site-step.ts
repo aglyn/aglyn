@@ -64,6 +64,23 @@ import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-la
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
+import {
+  AI_SITE_CONTENT_INPUT,
+  AI_SITE_POST_BUDGET,
+  AI_SITE_POSTS,
+  AI_SITE_POSTS_LABEL,
+  AI_SITE_PRODUCTS_LABEL,
+  aiPublishSitePosts,
+  aiSiteContentBriefLines,
+  aiSiteContentPart,
+  aiSiteContentRefusal,
+  aiSiteProductsBriefLine,
+  createAiSiteProductsRunner,
+  runAiSitePostsUnit,
+  type AiSitePostsInput,
+} from './ai-job-site-content'
+import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -134,8 +151,13 @@ import {
  * `aiSiteUnitJob`). There is one loop, and it is the machine's.
  */
 
-/** What a scaffold's units are, in the order it builds them; a component is a page job's. */
-export type AiSiteUnitKind = 'theme' | 'layout' | 'form' | 'component' | 'page' | 'email'
+/**
+ * What a scaffold's units are, in the order it builds them; a component is a
+ * page job's. A blog's first posts and a store's first products (AGL-3676)
+ * are built after the layout and the form and before the pages, which are
+ * told what they are.
+ */
+export type AiSiteUnitKind = 'theme' | 'layout' | 'form' | 'component' | 'posts' | 'products' | 'page' | 'email'
 
 export interface AiSiteUnit {
   kind: AiSiteUnitKind
@@ -164,6 +186,11 @@ const UNIT_KINDS: Record<
   component: { jobKind: 'component', resource: 'reusableComponent' },
   page: { jobKind: 'page', resource: 'screen' },
   email: { jobKind: 'email', resource: 'emailScreen' },
+  // The scaffold's own runner writes them (`ai-job-site-content.ts`); the
+  // posts' job kind is the one whose derived job a post's brief is, and the
+  // products' the step that proposes the catalog they are written from.
+  posts: { jobKind: 'text', resource: 'entry' },
+  products: { jobKind: 'products', resource: 'product' },
 }
 
 /** The unit kind a creation is built as, where a unit builds it. */
@@ -194,6 +221,9 @@ const CREATION_UNITS: Array<{
   { unit: 'form', create: 'form' },
 ]
 
+/** What the look's unit is called on the ledger. */
+export const AI_SITE_LOOK_LABEL = 'Your look'
+
 export const AI_SITE_NO_PLAN_COPY =
   'This site job has no confirmed plan to build.'
 
@@ -207,12 +237,13 @@ export const AI_SITE_UNIT_EMPTY_COPY =
 
 /**
  * The most passes a scaffold's step may take: the largest plan it admits —
- * eight pages of eight sections, its three creations and a welcome email —
- * with nothing to spare, so a runner that never finishes is still bounded
- * while a real site is not.
+ * eight pages of eight sections, its three creations, a blog's first posts
+ * (one a pass, the largest part) and a welcome email — with nothing to
+ * spare, so a runner that never finishes is still bounded while a real site
+ * is not.
  */
 export const AI_SITE_MAX_PASSES =
-  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + 1
+  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_POSTS + 1
 
 /**
  * The units a plan implies, in build order: the palette first, because a
@@ -223,10 +254,16 @@ export const AI_SITE_MAX_PASSES =
  */
 export function aiSiteJobUnits(
   plan: Pick<AiJobPlan, 'create' | 'screens'>,
-  options: { welcomeEmail?: boolean } = {},
+  options: { welcomeEmail?: boolean; content?: 'posts' | 'products' | null } = {},
 ): AiSiteUnit[] {
-  const units: AiSiteUnit[] = []
+  // The site's look is designed first, on every scaffold (AGL-3660): the
+  // header, the footer and every page render in it from their first draft.
+  // A theme change the plan names is that same unit, never a second one.
+  const units: AiSiteUnit[] = [
+    { kind: 'theme', ...UNIT_KINDS.theme, slot: 't', label: AI_SITE_LOOK_LABEL },
+  ]
   for (const { unit, create } of CREATION_UNITS) {
+    if (unit === 'theme') continue
     const creation = plan.create.find((entry) => entry.kind === create)
     if (!creation) continue
     units.push({
@@ -236,6 +273,12 @@ export function aiSiteJobUnits(
       creation,
       label: creation.name,
     })
+  }
+  // A paid blog's first posts and a paid store's first products (AGL-3676).
+  if (options.content === 'posts') {
+    units.push({ kind: 'posts', ...UNIT_KINDS.posts, slot: 'posts', label: AI_SITE_POSTS_LABEL })
+  } else if (options.content === 'products') {
+    units.push({ kind: 'products', ...UNIT_KINDS.products, slot: 'products', label: AI_SITE_PRODUCTS_LABEL })
   }
   plan.screens.forEach((screen, index) => {
     units.push({
@@ -546,7 +589,10 @@ export function aiSiteUnitJob(
     brief.push(
       `Build the page “${screen.title}” of this site, at ${screen.slug}.`,
     )
+    // What the blog's posts or the store's products are, once built (AGL-3676).
+    if (job.kind === 'site') brief.push(...aiSiteContentBriefLines(job.outputs ?? []))
   }
+  if (unit.kind === 'products') brief.push(aiSiteProductsBriefLine())
   if (unit.kind === 'email') {
     brief.push(...aiSiteEmailBriefLines(job.inputs))
   }
@@ -564,10 +610,28 @@ export function aiSiteUnitJob(
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
   if (unit.kind === 'layout' || unit.kind === 'page') {
+    // The look designed first (AGL-3660): its header arrangement and band rhythm.
+    const look = (job.outputs ?? []).find((output) => output.resource === 'theme' && output.id === 'look')
+    const style = look?.proposal?.['style'] as Record<string, unknown> | undefined
+    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'] }
     unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
   }
+  if (unit.kind === 'posts') {
+    // The posts already written (one a pass), the addresses the site's own
+    // pages answer at, and the byline the person gave (AGL-3676).
+    const posts: AiSitePostsInput = {
+      written: (job.outputs ?? [])
+        .filter((output) => output.resource === 'entry')
+        .map((output) => ({ id: output.id, title: output.label })),
+      total: AI_SITE_POSTS,
+      avoidSlugs: plan.screens.map((screen) => screen.slug.replace(/^\/+/, '').split('/')[0]).filter(Boolean),
+      byline: typeof inputs === 'string' ? '' : (inputs.businessName ?? ''),
+    }
+    unitInputs[AI_SITE_CONTENT_INPUT] = posts
+  }
+  if (unit.kind === 'products') unitInputs['target'] = 'catalog'
   return {
     ...job,
     $id: aiSiteUnitJobId(job, unit),
@@ -690,6 +754,16 @@ export interface AiJobSiteStepDeps {
   readNodes?: typeof readAiDraftNodes
   /** The guided start's publish; specs hand in a fake. */
   publish?: typeof aiPublishGuidedSite
+  /** The look's pass (AGL-3660); specs hand in a fake. */
+  look?: (context: AiJobStepContext, job: AiJob) => Promise<AiJobStepOutcome>
+  /** The first posts' and first products' passes (AGL-3676); specs hand in fakes. */
+  posts?: AiJobStepRunner
+  products?: AiJobStepRunner
+  /** Whether a part may be built for this member, before its first pass. */
+  contentRefusal?: typeof aiSiteContentRefusal
+  /** The posts' publish once the pages are live, and the cache drop after it. */
+  publishPosts?: typeof aiPublishSitePosts
+  dropCache?: typeof dropPluginSiteCache
 }
 
 /** A page the scaffold reported built that holds none of its plan's sections. */
@@ -724,7 +798,7 @@ export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
   const creations = units.filter((unit) => unit.kind === 'layout' || unit.kind === 'form').map((unit) => unit.slot)
   return units.map((unit) => ({
     slot: unit.slot,
-    op: unit.kind === 'theme' ? 'theme' : unit.jobKind,
+    op: unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' ? unit.kind : unit.jobKind,
     label: unit.label,
     ...(unit.creation ? { creation: unit.creation } : {}),
     ...(unit.screen ? { screen: unit.screen } : {}),
@@ -760,9 +834,10 @@ function aiSiteOwedUnits(
   freeTaste: boolean,
   runnerFor: typeof aiJobStepRunnerFor,
 ): AiSiteUnit[] {
-  return aiSiteJobUnits(plan, { welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste) }).filter((unit) =>
-    runnerFor(unit.jobKind),
-  )
+  return aiSiteJobUnits(plan, {
+    welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
+    content: aiSiteContentPart(job.inputs, freeTaste),
+  }).filter((unit) => unit.kind === 'theme' || unit.kind === 'posts' || runnerFor(unit.jobKind))
 }
 
 export function createAiJobSiteStep(
@@ -771,6 +846,10 @@ export function createAiJobSiteStep(
   const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
+  const look = deps.look ?? aiRunSiteLook
+  const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
+  const publishPosts = deps.publishPosts ?? aiPublishSitePosts
+  const dropCache = deps.dropCache ?? dropPluginSiteCache
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -813,7 +892,22 @@ export function createAiJobSiteStep(
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
+      if (sitePublish?.published.length) await finishPosts()
       return sitePublish ? { ...outcome, sitePublish } : outcome
+    }
+    /** The blog's posts go live with its pages (AGL-3676), as a person's Publish would put them. */
+    const finishPosts = async () => {
+      const row = rows.get('posts')
+      if (!row || !aiBuildItemDelivered(row) || !job.hostId) return
+      const ids = new Set(row.outputs)
+      const posts = (job.outputs ?? []).filter((output) => output.resource === 'entry' && ids.has(output.id))
+      const published = await publishPosts(context.firestore, { job, outputs: posts, now: context.now })
+      if (!published?.paths.length) return
+      await dropCache({
+        hostIds: [job.hostId],
+        reason: 'guided AI site start published its posts',
+        paths: { [job.hostId]: published.paths },
+      }).catch((error: unknown) => console.warn('ai site posts: cache not dropped', { jobId: job.$id, error }))
     }
     /** The pages built so far, as the job reported them. */
     const builtPages = (extra: readonly AiJobOutput[] = []) => {
@@ -827,7 +921,16 @@ export function createAiJobSiteStep(
 
     if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
     const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
-    const runner = runnerFor(unit.jobKind)
+    // The look is the scaffold's own pass (AGL-3660), not the theme job's proposal.
+    const catalog = unit.kind === 'products' ? runnerFor('products') : undefined
+    const runner: AiJobStepRunner | undefined =
+      unit.kind === 'theme'
+        ? (lookContext) => look(lookContext, lookContext.job)
+        : unit.kind === 'posts'
+          ? (deps.posts ?? runAiSitePostsUnit)
+          : unit.kind === 'products'
+            ? (deps.products ?? (catalog ? createAiSiteProductsRunner({ catalog }) : undefined))
+            : runnerFor(unit.jobKind)
     if (!runner) return { ...aiUnspentOutcome(model), ...init }
     const othersOpen = ledgerUnits.some(
       (one) => one.slot !== unit.slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }),
@@ -843,6 +946,25 @@ export function createAiJobSiteStep(
       item,
       ...(item.status === 'running' || othersOpen ? { continue: true } : {}),
     })
+    /**
+     * A unit that failed or was skipped with nothing else open ends the job
+     * on this pass (AGL-3676): a guided start whose last unit — its welcome
+     * email — failed was never published, because the pass that publishes is
+     * the one after. So the end is the publish, whatever the last unit came to.
+     */
+    const closing = async (outcome: AiJobStepOutcome): Promise<AiJobStepOutcome> =>
+      outcome.continue ? outcome : finish(outcome, builtPages())
+
+    // A blog's posts and a store's products ask, before their first pass,
+    // whether this member may have them here (AGL-3676): a refusal spends
+    // nothing, and the row says why, as a build's item does.
+    if ((unit.kind === 'posts' || unit.kind === 'products') && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await contentRefusal(unit.kind, { ...context, job }).catch((error: unknown) => {
+        console.error('ai site part admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
 
     // A page whose layout or form failed is built without it, and says so.
     const degradation = aiBuildDegradation(next, { units: ledgerUnits, ledger })
@@ -860,16 +982,18 @@ export function createAiJobSiteStep(
     } catch (error) {
       if (aiUnitErrorRetryable(error)) throw error
       console.error('ai site unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
-      return settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } })
+      return closing(settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } }))
     }
     const spent = aiUnitSpend(outcome)
     const stopped = aiUnitFailure(unit.slot, outcome)
     if (stopped) {
-      return settle(
-        stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
-          ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
-          : stopped,
-        spent,
+      return closing(
+        settle(
+          stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
+            ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
+            : stopped,
+          spent,
+        ),
       )
     }
     // A page counts as built only when its plan's sections are in it
@@ -884,9 +1008,11 @@ export function createAiJobSiteStep(
           readNodes,
         ))
       if (!written) {
-        return settle(
-          { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
-          { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+        return closing(
+          settle(
+            { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
+            { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+          ),
         )
       }
     }
@@ -920,14 +1046,24 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   const plan = aiConfirmedPlan(job)
   const inputs = parseAiSiteJobInputs(job.inputs)
   if (!plan || typeof inputs === 'string') return AI_JOB_PAGE_STEP_MINIMUM_MS
-  const units = aiSiteJobUnits(plan, { welcomeEmail: inputs.welcomeEmail }).filter((unit) =>
-    aiJobStepRunnerFor(unit.jobKind),
+  // The org is not read here, so a blog's or a store's part is counted as a
+  // paid plan's; a ledger, once the job has one, says which units it owes.
+  const owed = new Set((job.items ?? []).map((row) => row.slot))
+  const units = aiSiteJobUnits(plan, {
+    welcomeEmail: inputs.welcomeEmail,
+    content: aiSiteContentPart(job.inputs, false),
+  }).filter(
+    (unit) =>
+      (unit.kind === 'theme' || unit.kind === 'posts' || aiJobStepRunnerFor(unit.jobKind)) &&
+      (!owed.size || owed.has(unit.slot)),
   )
   const outputs = job.outputs ?? []
   const ledger = job.items?.length ? job.items : aiSiteInitialLedger(units, outputs)
   const next = aiBuildNextUnit(aiSiteLedgerUnits(units), ledger)
   const unit = next ? units.find((one) => one.slot === next.slot) : undefined
   if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
+  if (unit.kind === 'posts') return AI_SITE_POST_BUDGET.minimumMs
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))
 }
 

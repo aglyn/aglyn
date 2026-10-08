@@ -60,6 +60,7 @@ import {
 import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { assistMonthlyCeilingUsd } from './assist-ceiling'
 import { estimateAiBilledUsd, estimateAiProviderCostUsd } from '../providers/catalog'
+import type { AiImageSize } from '../providers/image-contract'
 import { recordAssistRefusal } from './assist-refusals'
 import {
   announcePlatformFreeSpend,
@@ -246,6 +247,8 @@ export interface AssistTokenUsage {
    * catalog. Absent on every text exchange.
    */
   images?: number
+  /** The size those pictures were made at (AGL-3602); 1K when absent. */
+  imageSize?: AiImageSize
 }
 
 /**
@@ -1208,7 +1211,10 @@ function writeSignalAndRollup(
     // Pictures delivered (AGL-3602), on a turn that made any: what the
     // per-picture rate was multiplied by.
     ...(record.usage.images && record.usage.images > 0
-      ? { images: Math.floor(record.usage.images) }
+      ? {
+          images: Math.floor(record.usage.images),
+          ...(record.usage.imageSize ? { imageSize: record.usage.imageSize } : {}),
+        }
       : {}),
     createdAt: serverTimestamp(),
   })

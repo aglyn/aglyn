@@ -55,10 +55,12 @@ import { registerBookingFigureReader } from './server/booking-figures'
 import { registerBookingServiceAiCapability } from './server/booking-service-ai-capability'
 import { registerBookingServiceDraftWriter } from './server/booking-service-drafts'
 import { bookingRefundHandler } from './server/refund'
+import { stageBookingEvent } from './server/booking-events'
 import { bookingInPersonPaymentHandler } from './server/in-person-payment'
 import {
   bookingManageDeps,
   createBookingCheckInHandler,
+  createBookingCancelHandler,
   createBookingRescheduleHandler,
 } from './server/booking-manage'
 // The booking's way back to the record it was booked from (AGL-2660): the
@@ -600,7 +602,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         throw Object.assign(new Error('Slot unavailable'), { code: 409 })
       }
       const bookingRef = bookingsRef.doc()
-      transaction.set(bookingRef, {
+      const record = {
         serviceId,
         serviceName: service.name ?? '',
         name,
@@ -613,8 +615,20 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         status: paid ? 'pendingPayment' : 'confirmed',
         ...(paid && { expiresAtMs: Date.now() + 15 * 60_000 }),
         ...(crmRef ? { crmRef: formatBookingRecordRef(crmRef) } : {}),
-        createdAt: FieldValue.serverTimestamp(),
-      })
+      }
+      transaction.set(bookingRef, { ...record, createdAt: FieldValue.serverTimestamp() })
+      // A free booking is confirmed as it is made (AGL-3643); a paid one
+      // raises `booking.created` from the payment webhook instead.
+      if (!paid) {
+        const nowMs = Date.now()
+        stageBookingEvent(transaction, firestore, {
+          event: 'booking.created',
+          hostId,
+          bookingId: bookingRef.id,
+          booking: { ...record, createdAt: nowMs },
+          nowMs,
+        })
+      }
       return bookingRef.id
     })
 
@@ -1190,6 +1204,9 @@ export function registerBookingsConsoleApi(): void {
   // team in the native Aglyn app: member routes, one transaction each.
   registerPluginApiRoute('bookings/check-in', createBookingCheckInHandler(bookingManageDeps()))
   registerPluginApiRoute('bookings/reschedule', createBookingRescheduleHandler(bookingManageDeps()))
+  // Canceling a booking with no money on it (AGL-3643): the console's cancel
+  // for a free booking, so the cancel reaches the plugins listening for it.
+  registerPluginApiRoute('bookings/cancel', createBookingCancelHandler(bookingManageDeps()))
   // The merchant-side `purchase` lookup (AGL-2481). A public, unauthenticated
   // read like `bookings/slots`, authorised by the unguessable Stripe session
   // id and answering with a projection that carries no guest identity.

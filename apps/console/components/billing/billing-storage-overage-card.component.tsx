@@ -308,7 +308,7 @@ export default function BillingStorageOverageCardComponent({
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Chip
           label={
             capSet
@@ -362,6 +362,7 @@ export default function BillingStorageOverageCardComponent({
             cap. This is optional — most people leave it off.
           </Typography>
           <Stack
+            useFlexGap
             direction="row"
             spacing={2}
             sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 2 }}
@@ -402,6 +403,7 @@ export default function BillingStorageOverageCardComponent({
                 `doing anything. You can safely remove it.`}
           </Typography>
           <Stack
+            useFlexGap
             direction="row"
             spacing={2}
             sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 2 }}

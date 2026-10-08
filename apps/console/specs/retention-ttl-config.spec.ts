@@ -254,6 +254,12 @@ const POLICIES: Array<{
     ],
     stamp: 'expiresAt: new Date(',
   },
+  // AGL-3643: a Zapier REST hook's delivered markers — ids only.
+  {
+    collectionGroup: 'zapierHookDeliveries',
+    writers: ['libs/plugins/zapier/src/lib/server/store.ts'],
+    stamp: 'expiresAt: deliveryMarkerExpiry(input.nowMs)',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {

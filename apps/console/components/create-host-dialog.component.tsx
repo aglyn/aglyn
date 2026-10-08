@@ -214,6 +214,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         />
         {suggestions.length ? (
           <Stack
+            useFlexGap
             direction="row"
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}

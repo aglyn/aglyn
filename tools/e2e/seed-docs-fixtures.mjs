@@ -205,7 +205,11 @@ await put(
     orgId,
     role: 'editor',
     displayName: 'Demo Bakery',
+    nameLower: 'demo bakery',
     createdAt: daysAgo(21),
+    // The site switcher's idle list is `orderBy('updatedAt')`, which leaves
+    // out any row without the field — `membershipRow` always stamps it.
+    updatedAt: daysAgo(21),
   },
 )
 // The site's own roster, which the site Users card lists. Shaped as
@@ -422,6 +426,9 @@ await put(
     nameLower: 'downgraded bakery',
     role: 'admin',
     createdAt: daysAgo(60),
+    // As above: without it the switcher reads "No sites yet." over a
+    // workspace whose Sites page lists this one.
+    updatedAt: daysAgo(60),
   },
 )
 // One product, because the draft dialog cannot be filled in without one — the
@@ -743,6 +750,60 @@ await put(
   firestore.collection('hosts').doc(hostId).collection('siteMembers').doc('seed-site-member'),
   { displayName: 'Rae Donovan' },
 )
+
+// ── Business profile (AGL-3661) ───────────────────────────────────────────
+// Setup → Business profile shows the site's profile with a source under each
+// field, the facts read from its SEO settings (one of them left unentered, so
+// the frame shows "Not entered"), and what Aglyn AI learned. The AI plugin
+// and its add-on are what draw that last card: `aiGenerative` on a paid plan
+// is the add-on's. Each profile document is SET whole, so a re-run converges
+// a field an earlier run's save made the owner's.
+console.log('Business profile:')
+await put(firestore.collection('orgs').doc(orgId), {
+  enabledPlugins: FieldValue.arrayUnion('ai'),
+  seatAddons: { aiAddon: 1 },
+})
+await put(firestore.collection('hosts').doc(hostId), {
+  seo: {
+    entity: {
+      type: 'Organization',
+      name: 'Demo Bakery',
+      businessType: 'Bakery',
+      email: 'hello@demobakery.test',
+      openingHours: 'Tu-Sa 07:00-15:00',
+      address: {
+        streetAddress: '100 Congress Ave',
+        addressLocality: 'Austin',
+        addressRegion: 'TX',
+        postalCode: '78701',
+        addressCountry: 'US',
+      },
+    },
+  },
+})
+await firestore.doc(`hosts/${hostId}/businessProfile/profile`).set({
+  whatYouDo: 'A neighborhood bakery baking sourdough, pastries and cakes to order every morning',
+  services: ['Sourdough loaves', 'Morning pastries', 'Custom celebration cakes', 'Wholesale for cafés'],
+  audience: 'Neighbors who want fresh bread and families planning a celebration',
+  tone: 'friendly',
+  sources: { whatYouDo: 'start', services: 'start', audience: 'ai', tone: 'ai' },
+  updatedAt: now,
+  updatedBy: null,
+})
+await firestore.doc(`orgs/${orgId}/businessProfile/defaults`).set({
+  serviceArea: 'Austin, Texas',
+  toneNotes: 'Warm and plain. No exclamation marks.',
+  sources: { serviceArea: 'owner', toneNotes: 'owner' },
+  updatedAt: now,
+})
+const aiMemory = firestore.collection('hosts').doc(hostId).collection('aiMemory')
+for (const [id, group, text, count, ageDays] of [
+  ['copy-short', 'length', 'Prefers short, concise copy', 3, 0],
+  ['removes-testimonials', 'removes-testimonials', 'Removes testimonial and review sections', 2, 1],
+  ['no-emoji', 'emoji', 'Does not want emoji in copy', 1, 2],
+]) {
+  await aiMemory.doc(id).set({ group, text, count, lastSeenAtMs: daysAgo(ageDays).toMillis(), source: 'assist-edit' })
+}
 
 // ── Names a reader sees (AGL-3319) ────────────────────────────────────────
 // `seed-e2e.mjs` names its fixtures for the suite that asserts on them —

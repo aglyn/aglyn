@@ -13645,6 +13645,53 @@ describe('post-purchase records are the server’s alone (AGL-3635)', () => {
   })
 })
 
+describe('print-on-demand records are the server’s alone (AGL-3641)', () => {
+  // A site's connection holds the merchant's sealed Printful or Printify
+  // token; a product link decides which service makes a product's orders; an
+  // order's part says what was sent and shipped. All three are written and
+  // read by the print-on-demand plugin's routes, event handlers and job
+  // through the Admin SDK.
+  const DOCS = [
+    ['podConnections', `${HOST}__printful`],
+    ['podProductLinks', `${HOST}__printful__501`],
+    ['podOrders', `${HOST}__order-1__printful`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedApiToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, `${HOST}__new`), { orgId: ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('tax service records are the server’s alone (AGL-3631)', () => {
   // A site's connection holds the merchant's sealed AvaTax or TaxJar
   // credential; the exemptions decide who pays no tax; the records say which
@@ -13686,6 +13733,53 @@ describe('tax service records are the server’s alone (AGL-3631)', () => {
         await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
         await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
         await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, `${HOST}__new`), { orgId: ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('zapier hooks are the server’s alone (AGL-3643)', () => {
+  // A hook holds the URL Zapier minted for a merchant's Zap — a capability —
+  // and decides where a site's orders, bookings and contacts are posted; a
+  // delivery marker decides whether an event is posted again. All written
+  // and read by the zapier plugin's routes and outbox subscribers through
+  // the Admin SDK.
+  const DOCS = [
+    ['zapierHooks', 'hook-1'],
+    ['zapierHookDeliveries', 'abc123'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), {
+          orgId: ORG,
+          hostId: HOST,
+          targetUrl: 'https://hooks.zapier.com/hooks/standard/1/abc/',
+          events: ['order.paid'],
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG, targetUrl: 'https://evil.example.com/' }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, 'new'), { orgId: ORG, hostId: HOST }))
         await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
       }
     }
@@ -13922,6 +14016,143 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
         await mustDeny(`${who} reading ${name}`, getDoc(ref))
         await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
         await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('marketplace records are the server’s alone (AGL-3638)', () => {
+  // A connection holds the merchant's sealed marketplace grant and what each
+  // listing was last sent; an imported order's record says which shipments
+  // to confirm to the marketplace. All written and read by the marketplaces
+  // plugin's routes, event intake and job through the Admin SDK.
+  const DOCS = [
+    ['marketplaceConnections', `${HOST}_ebay`],
+    ['marketplaceConnections', `${HOST}_ebay`, 'log', 'entry-1'],
+    ['marketplaceConnections', `${HOST}_ebay`, 'listingState', 'c00'],
+    ['marketplaceOrders', `${HOST}_ebay_0123456789abcdef01234567`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedAccessToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('inventory sync records are the server’s alone (AGL-3642)', () => {
+  // A connection holds the merchant's sealed Cin7 Core or inFlow API keys,
+  // or Brightpearl grant; a hand-off decides whether an order is recorded in
+  // the merchant's system; a product link decides which system product's
+  // count overwrites a store product's. All written and read by the
+  // inventory-sync plugin's routes, event intake and job through the Admin SDK.
+  const DOCS = [
+    ['inventorySyncConnections', HOST],
+    ['inventorySyncConnections', HOST, 'log', 'entry-1'],
+    ['inventorySyncOrders', `${HOST}_order-1`],
+    ['inventorySyncProducts', `${HOST}_cin7-core_product-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedCredential: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('delivery-app records are the server’s alone (AGL-3644)', () => {
+  // A store link routes a service's orders to a site's register; an order
+  // record says what the service is told. All written and read by the
+  // delivery-apps plugin's webhooks, register routes and job through the
+  // Admin SDK.
+  const DOCS = [
+    ['deliveryAppStores', 'doordash_0123456789abcdef01234567'],
+    ['deliveryAppOrders', 'doordash_76543210fedcba9876543210'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), { orgId: ORG, hostId: HOST, status: 'new', active: true })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} listing ${name} by site`, getDocs(query(collection(db, path[0]), where('hostId', '==', HOST), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG, hostId: HOST }))
         await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
       }
     }

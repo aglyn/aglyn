@@ -41,6 +41,7 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine } from './ai-job-generation'
@@ -49,7 +50,10 @@ import {
   aiLayoutIsHomeSlug,
   aiLayoutSitePages,
 } from './ai-job-layout-site-pages'
-import { aiLayoutPageTargets } from './ai-job-page-language'
+import {
+  AI_LAYOUT_FRAME_THINKING_TOKENS,
+  aiLayoutPageTargets,
+} from './ai-job-page-language'
 import { AI_SITE_NAME_TOKEN } from './ai-layout-site-facts'
 
 /**
@@ -63,8 +67,11 @@ import { AI_SITE_NAME_TOKEN } from './ai-layout-site-facts'
  * (`ai-layout-frame.ts`).
  */
 
-/** The most a frame's answer asks for: two sections of a few blocks each. */
-export const AI_JOB_LAYOUT_LANGUAGE_TOKENS = 1_200
+/**
+ * The most a frame's answer asks for: two sections of a few blocks each (the
+ * live runs of 2026-10-07 wrote 442 to 583), and the thinking before them.
+ */
+export const AI_JOB_LAYOUT_LANGUAGE_TOKENS = 1_200 + AI_LAYOUT_FRAME_THINKING_TOKENS
 
 /** A language layout pass's time, on the tier the layout step is served from. */
 export const AI_JOB_LAYOUT_LANGUAGE_BUDGET = aiJobStepBudget({
@@ -131,7 +138,7 @@ export function aiLayoutHomeId(
 
 /** The frame's user turn: the site, its brief, its pages and its form. */
 export function aiLayoutFramePrompt(input: {
-  job: Pick<AiJob, 'brief' | '$id'>
+  job: Pick<AiJob, 'brief' | '$id'> & Partial<Pick<AiJob, 'inputs'>>
   siteName: string
   pages: readonly AiLayoutPage[]
   targets: AiLayoutTargets
@@ -140,6 +147,7 @@ export function aiLayoutFramePrompt(input: {
   return [
     `Site: ${input.siteName === AI_SITE_NAME_TOKEN ? 'the business the brief describes' : `"${input.siteName}"`}`,
     aiJobBriefLine(job),
+    ...aiSiteKindDesignLines(job.inputs),
     pages.length
       ? `Its pages, which the navigation links: ${pages.map((page) => `${page.label} (page:${page.id})`).join(', ')}.`
       : 'It has no pages yet.',
@@ -161,6 +169,8 @@ export interface AiLayoutFrameBuilt {
 
 /** The check a frame answer is held to: read, compiled, stored and checked as a layout, with the layout door's own checks. */
 export function aiLayoutFrameCheck(input: {
+  /** The header arrangement the site's look chose (AGL-3660); the answer's otherwise. */
+  headerAlign?: 'start' | 'center'
   siteName: string
   homeId: string | null
   pages: readonly AiLayoutPage[]
@@ -173,6 +183,7 @@ export function aiLayoutFrameCheck(input: {
     answers += 1
     const last = answers >= AI_GENERATION_MAX_ATTEMPTS
     const frame = aiReadLayoutFrame(answer)
+    if (input.headerAlign && frame.header) frame.header.align = input.headerAlign
     const compiled = aiCompileLayoutFrame(
       frame,
       { siteName: input.siteName, homeId: input.homeId, navPages: input.pages },

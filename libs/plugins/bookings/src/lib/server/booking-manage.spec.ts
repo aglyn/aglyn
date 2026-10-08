@@ -36,8 +36,10 @@ jest.mock('@aglyn/aglyn/server', () => ({ resolveBrandingProfile: () => ({ fromN
 jest.mock('@aglyn/shared-util-email', () => ({ isEmailConfigured: () => true, sendEmail: async () => undefined }))
 
 import type { HostBookingService } from '../model/bookings'
+import type { BookingEventInput } from './booking-events'
 import {
   type BookingManageDeps,
+  createBookingCancelHandler,
   createBookingCheckInHandler,
   createBookingRescheduleHandler,
   type ManageFirestore,
@@ -336,6 +338,127 @@ describe('bookings/reschedule', () => {
     expect(out.statusCode).toBe(400)
     const get = res()
     await createBookingRescheduleHandler(deps(firestore).value)({ method: 'GET', headers: {}, body: {} } as never, get as never)
+    expect(get.statusCode).toBe(405)
+  })
+})
+
+describe('booking events from the team’s routes (AGL-3643)', () => {
+  const raised = () => {
+    const events: BookingEventInput[] = []
+    return { events, raiseEvent: async (input: BookingEventInput) => void events.push(input) }
+  }
+
+  it('a move raises booking.rescheduled with the new time and where it moved from, once', async () => {
+    const { firestore } = base({ b1: booking(MONDAY + 10 * HOUR) })
+    const { events, raiseEvent } = raised()
+    const handler = createBookingRescheduleHandler(deps(firestore, { raiseEvent }).value)
+    await handler(req({ bookingId: 'b1', startsAtMs: MONDAY + 12 * HOUR }), res() as never)
+    await handler(req({ bookingId: 'b1', startsAtMs: MONDAY + 12 * HOUR }), res() as never)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      event: 'booking.rescheduled',
+      hostId: 'h1',
+      bookingId: 'b1',
+      booking: { startsAtMs: MONDAY + 12 * HOUR, endsAtMs: MONDAY + 13 * HOUR, rescheduledFromMs: MONDAY + 10 * HOUR },
+    })
+  })
+
+  it('a refused move raises nothing', async () => {
+    const { firestore } = base({ b1: booking(MONDAY + 10 * HOUR, { status: 'canceled' }) })
+    const { events, raiseEvent } = raised()
+    const out = res()
+    await createBookingRescheduleHandler(deps(firestore, { raiseEvent }).value)(
+      req({ bookingId: 'b1', startsAtMs: MONDAY + 12 * HOUR }),
+      out as never,
+    )
+    expect(out.statusCode).toBe(409)
+    expect(events).toEqual([])
+  })
+})
+
+describe('bookings/cancel (AGL-3643)', () => {
+  const raised = () => {
+    const events: BookingEventInput[] = []
+    return { events, raiseEvent: async (input: BookingEventInput) => void events.push(input) }
+  }
+
+  it('cancels a free booking, stamps who and when, raises booking.canceled, and a retry changes nothing', async () => {
+    const { docs, firestore } = base({ b1: booking(MONDAY + 10 * HOUR) })
+    const { events, raiseEvent } = raised()
+    const handler = createBookingCancelHandler(deps(firestore, { raiseEvent }).value)
+    const first = res()
+    await handler(req({ bookingId: 'b1' }), first as never)
+    expect(first.statusCode).toBe(200)
+    expect(docs.get('hosts/h1/bookings/b1')).toMatchObject({ status: 'canceled', canceledAtMs: NOW, canceledBy: 'editor-1' })
+    expect(events).toEqual([
+      expect.objectContaining({ event: 'booking.canceled', hostId: 'h1', bookingId: 'b1', booking: expect.objectContaining({ status: 'canceled' }) }),
+    ])
+
+    const again = res()
+    await handler(req({ bookingId: 'b1' }), again as never)
+    expect(again.statusCode).toBe(200)
+    expect(events).toHaveLength(1)
+  })
+
+  it('cancels a paid booking already refunded in full, and refuses one with money still on it', async () => {
+    const { docs, firestore } = base({
+      refunded: booking(MONDAY + 10 * HOUR, { paidAmountCents: 5000, refundedCents: 5000 }),
+      owed: booking(MONDAY + 12 * HOUR, { paidAmountCents: 5000, refundedCents: 1000 }),
+    })
+    const { events, raiseEvent } = raised()
+    const handler = createBookingCancelHandler(deps(firestore, { raiseEvent }).value)
+    const ok = res()
+    await handler(req({ bookingId: 'refunded' }), ok as never)
+    expect(ok.statusCode).toBe(200)
+    const refused = res()
+    await handler(req({ bookingId: 'owed' }), refused as never)
+    expect(refused.statusCode).toBe(409)
+    expect(refused.body.error).toMatch(/refund/)
+    expect(docs.get('hosts/h1/bookings/owed')?.['status']).toBe('confirmed')
+    expect(events.map((one) => one.bookingId)).toEqual(['refunded'])
+  })
+
+  it('refuses a checked-in guest, a viewer, a bad token, a locked site and an unknown booking', async () => {
+    const { firestore } = base(
+      { b1: booking(MONDAY + 10 * HOUR, { checkedInAtMs: NOW - 1000 }), b2: booking(MONDAY + 12 * HOUR) },
+      { 'editor-1': 'editor', 'viewer-1': 'viewer' },
+    )
+    const { events, raiseEvent } = raised()
+    const handler = createBookingCancelHandler(deps(firestore, { raiseEvent }).value)
+    const checkedIn = res()
+    await handler(req({ bookingId: 'b1' }), checkedIn as never)
+    expect(checkedIn.statusCode).toBe(409)
+
+    const viewer = createBookingCancelHandler(
+      deps(firestore, { raiseEvent, verifyIdToken: async () => ({ uid: 'viewer-1' }) }).value,
+    )
+    const asViewer = res()
+    await viewer(req({ bookingId: 'b2' }), asViewer as never)
+    expect(asViewer.statusCode).toBe(403)
+
+    const badToken = res()
+    await handler(req({ bookingId: 'b2' }, 'bad'), badToken as never)
+    expect(badToken.statusCode).toBe(401)
+
+    const locked = createBookingCancelHandler(deps(firestore, { raiseEvent, siteLocked: async () => true }).value)
+    const asLocked = res()
+    await locked(req({ bookingId: 'b2' }), asLocked as never)
+    expect(asLocked.statusCode).toBe(423)
+
+    const unknown = res()
+    await handler(req({ bookingId: 'nope' }), unknown as never)
+    expect(unknown.statusCode).toBe(404)
+    expect(events).toEqual([])
+  })
+
+  it('refuses a missing booking id and a non-POST', async () => {
+    const { firestore } = base({})
+    const handler = createBookingCancelHandler(deps(firestore).value)
+    const missing = res()
+    await handler(req({}), missing as never)
+    expect(missing.statusCode).toBe(400)
+    const get = res()
+    await handler({ method: 'GET', headers: {}, body: {} } as never, get as never)
     expect(get.statusCode).toBe(405)
   })
 })

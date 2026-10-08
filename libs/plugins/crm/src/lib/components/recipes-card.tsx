@@ -275,7 +275,7 @@ function RecipeInstallForm(props: RecipeInstallFormProps) {
   }
 
   return (
-    <Stack spacing={2} sx={{ width: 380, p: 3 }}>
+    <Stack spacing={2} sx={{ width: 380, maxWidth: '100vw', p: 3 }}>
       <Typography variant="h6">{`Install “${recipe.title}”`}</Typography>
       <Typography variant="body2" color="text.secondary">
         {recipe.description}

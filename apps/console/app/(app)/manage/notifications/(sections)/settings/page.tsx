@@ -589,6 +589,7 @@ const ManageNotificationSettings: NextPageWithLayout<
         <Stack spacing={1.5}>
           {NOTIFICATION_DIGESTS.map((digest) => (
             <Stack
+              useFlexGap
               key={digest.key}
               direction="row"
               spacing={1}
@@ -612,6 +613,7 @@ const ManageNotificationSettings: NextPageWithLayout<
           ))}
           {Object.keys(insightDigests).length ? (
             <Stack
+              useFlexGap
               direction="row"
               spacing={1}
               sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
@@ -660,6 +662,7 @@ const ManageNotificationSettings: NextPageWithLayout<
         contentBordered="all"
       >
         <Stack
+          useFlexGap
           direction="row"
           spacing={1}
           sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}

@@ -189,6 +189,15 @@ describe('redactSecrets', () => {
     }
   })
 
+  it('withholds a Zapier hook’s URL, whose secret is in its path (AGL-3643)', () => {
+    const out = redactSecrets({
+      targetUrl: 'https://hooks.zapier.com/hooks/standard/123456/7a1b2c3d4e5f60718293a4b5c6d7e8f9/',
+      events: ['orderPaid'],
+    }) as any
+    expect(out.targetUrl).toEqual({ redacted: true, present: true, reason: 'secret' })
+    expect(out.events).toEqual(['orderPaid'])
+  })
+
   it('renders a Firestore timestamp as a date a human can read', () => {
     const stamp = { toDate: () => new Date('2026-08-18T00:00:00.000Z') }
     expect(redactSecrets({ at: stamp } as any)).toEqual({

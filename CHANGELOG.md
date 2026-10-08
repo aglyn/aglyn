@@ -9,6 +9,128 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.232 — 2026-10-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.231...v1.0.0-beta.232)
+
+### Added
+
+- **business-profile:** a site's business profile in Setup, and workspace defaults in Settings ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **ai:** every AI job reads the site's business profile, and remembers the edits you keep ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **ai:** the assist edit and build turns read the site's business context ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **ai:** a build can change a page or layout the site already has ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** an edit job changes an existing page or layout into a version no visitor sees ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **zapier:** REST hooks plugin and the Aglyn Zapier app ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **bookings:** bookings on the REST API, booking events, a cancel route ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **delivery-apps:** DoorDash, Uber Eats and Grubhub orders at the POS register ([AGL-3644](https://linear.app/aglyn/issue/AGL-3644))
+- **ai:** a build's site function is written through the logic plugin's writer ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **commerce:** products save and stock through the console's own code, for the apps ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **ai:** a follow-up on a built draft opens its Besigner and asks again there ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** a paid guided start writes a blog's first posts and a store's first products ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** one blog post a generation, held to what the site's blog publishes ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **logic:** variable and function draft writers, and the variable build operation ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **funnels:** an AI build can plan a funnel, written as a draft ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **funnels:** a funnel an AI build drafts changes nothing live until activated ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **content:** a server job writes a site's posts the way the console's routes do ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **native:** sites, pages, media, forms and submissions on Android and desktop ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** content contracts and seeded content for the native apps ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **console:** the pages and media routes the native apps write through ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **inventory-sync:** stock, products and orders synced with Cin7, inFlow, Brightpearl ([AGL-3642](https://linear.app/aglyn/issue/AGL-3642), [AGL-3641](https://linear.app/aglyn/issue/AGL-3641), [AGL-3611](https://linear.app/aglyn/issue/AGL-3611))
+- **print-on-demand:** each service holds what it has not shipped, through core's fulfillment providers ([AGL-3641](https://linear.app/aglyn/issue/AGL-3641), [AGL-3634](https://linear.app/aglyn/issue/AGL-3634))
+- **print-on-demand:** Printful and Printify, from the merchant's own account ([AGL-3641](https://linear.app/aglyn/issue/AGL-3641))
+- **commerce:** products from another plugin's source, through core's product writer ([AGL-3641](https://linear.app/aglyn/issue/AGL-3641))
+- **marketplaces:** Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire listing and order sync ([AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **commerce:** outside channels record real orders, stock off the shelf in one write ([AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **ai:** the layout language thinks, at medium effort, with room to ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** serve the balanced tier from Claude Sonnet 5.5 ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a paid guided start picks the model that builds the site ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** list Claude Sonnet 5.5 and Claude Opus 5.5 in the catalog for a side-by-side ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** every site of a kind its own look; a section with no items is asked again ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** the guided start asks for the style of site in a grid of kinds ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** the site kind steers plan, pages and frame; the look fits the Free wall ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a guided start designs its look first, as its own row ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** site kinds and a per-site look layered on a base theme ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a language page's picture slots show the starter photos ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** staff read what an org asked Aglyn AI and what it answered ([AGL-3675](https://linear.app/aglyn/issue/AGL-3675))
+- **besigner:** a Typography holds other elements after its text ([AGL-3672](https://linear.app/aglyn/issue/AGL-3672))
+- **console:** every toast can be closed by hand ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+- **besigner:** edit a site from a phone or a tablet ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+
+### Fixed
+
+- **commerce:** the products write gate answers 401 only for a refused token ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **zapier:** the console hooks route answers 401 only for a refused token ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **console,ai:** the business profile names the configured brand's AI ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **export:** a Zapier hook's URL is withheld from a data export, its hooks and deliveries disclosed ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **ai:** the edit step's least time is documented, and a function pass timed as logic ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** a build offers a campaign or an automation only where its writer's plugin runs ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **zapier:** the hook origin is a URL the egress sweep reads ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **api:** /v1/me's description names `org` as it answers, and the key's name ([AGL-3678](https://linear.app/aglyn/issue/AGL-3678))
+- **print-on-demand:** the data export discloses its three collections ([AGL-3641](https://linear.app/aglyn/issue/AGL-3641))
+- **commerce:** the console's smart-collection reader stays untouched ([AGL-3652](https://linear.app/aglyn/issue/AGL-3652), [AGL-3621](https://linear.app/aglyn/issue/AGL-3621))
+- **console:** the pages and media routes mint ids with createResourceUid ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **console:** a member creates a template through the resources route ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **commerce:** the POS register fills the window below the console chrome ([AGL-3679](https://linear.app/aglyn/issue/AGL-3679))
+- **inventory-sync:** records written to the merchant's system name the configured brand ([AGL-3642](https://linear.app/aglyn/issue/AGL-3642))
+- **ai:** a paid guided start plans no component it cannot build ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **marketplaces:** marketplace copy reads the store, never the brand name ([AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **marketplaces:** the model names no seller-center address the code never opens ([AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **ai:** staff AI conversations page instead of growing; the door is classified ([AGL-3675](https://linear.app/aglyn/issue/AGL-3675))
+- **ai:** a lone button is sized to its words; shots draw a placed form's fields ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** every item of a cards row is drawn alike, and no item reads "Card" ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a component block whose item is the card itself fills the card ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a page answer with extra sections is matched to the plan by heading and items ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** the look's words name no brand, and the kinds say inquiry ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a component placed in every column is one group of its instances ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **signup:** a Google sign-up records where it came from, like a password one ([AGL-3674](https://linear.app/aglyn/issue/AGL-3674), [AGL-3665](https://linear.app/aglyn/issue/AGL-3665))
+- **ai:** the plan row keeps its credits once the items take over the build page ([AGL-3596](https://linear.app/aglyn/issue/AGL-3596))
+- **besigner:** press and hold a selected element to drag it on a touch screen ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **ai:** the AI conversations card names the configured brand ([AGL-3675](https://linear.app/aglyn/issue/AGL-3675))
+- **console:** the Versions dialog has a close button in its title ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **besigner:** a hierarchy drag keeps the hierarchy open ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **besigner:** the element's more menu opens and closes on its button ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **besigner:** the selection toolbar works with a finger ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **theme:** the console's phone chrome lives in its own module, off the published page ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+- **console:** the empty Templates and Forms lists stack their start buttons on a phone ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+- **console:** notification switch headers stay on one line at every width ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+- **besigner:** an overlay panel steps aside while an element is dragged out of it ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **ai:** a job row's chips wrap with even gaps on a phone ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+- **besigner:** on a phone the save state is its icon, so every tool fits ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **besigner:** the phone top bar keeps every control apart, and Confirm stays on screen ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+- **console:** every console page fits and reflows on phones and tablets ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+- **e2e:** seeded site memberships carry updatedAt, so the switcher lists them ([AGL-3598](https://linear.app/aglyn/issue/AGL-3598))
+
+### Performance
+
+- **ai:** replay identical dev requests, batch live evals, warm a prefix first ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+### Documentation
+
+- **ai:** the build kind, its capabilities, the follow-up and the edit kind ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+<details>
+<summary>Also in this release: 11 test, 5 chore, 1 build</summary>
+
+- **zapier:** the plugin's bundle budget ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **zapier:** record the Zapier app's own name in the brand-literal baseline ([AGL-3643](https://linear.app/aglyn/issue/AGL-3643))
+- **ai:** the canonical build request as a recorded eval case, planned and built offline ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **tools:** the Linear ceiling read off the workspace, AGL-3681 ([AGL-3681](https://linear.app/aglyn/issue/AGL-3681), [AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** the blog post door in the prompt-cache ledger and the tool-set limits ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **console:** the media-shape sweep tells a folder id from a media id ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **inventory-sync:** its plugin budget, and Cin7's AUTHORISED in the spelling baseline ([AGL-3642](https://linear.app/aglyn/issue/AGL-3642))
+- **console:** the nonprofit & community website kind may say "community" ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **ai:** the live look reports its token usage, as every result now does ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **console:** a plugin may use a host another plugin declares, whose words still lead ([AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **console:** the Plugins page specs list marketplaces among the locked-on plugins ([AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **ai:** the live site-plan spec plans on a paid workspace when asked ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** type the look spec's model answer ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** every live eval reports live vs replayed calls; the ladder is written down ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** live eval and shots cover ten kinds of site and a twin; harness checks the look ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **tools:** the Linear ceiling is read off the workspace again, AGL-3675 ([AGL-3675](https://linear.app/aglyn/issue/AGL-3675), [AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **besigner:** the designer declares react-dom, which its drag preview portals through ([AGL-3599](https://linear.app/aglyn/issue/AGL-3599))
+
+</details>
+
 ## v1.0.0-beta.231 — 2026-10-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.230...v1.0.0-beta.231)

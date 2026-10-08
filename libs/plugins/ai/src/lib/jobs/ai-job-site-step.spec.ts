@@ -77,12 +77,21 @@ import {
   aiCreationUnit,
   aiRunJobUnit,
   aiSiteBuiltRefs,
+  aiSiteInitialLedger,
+  aiSiteJobRunMinimumMs,
   aiSiteJobUnits,
+  aiSiteLedgerUnits,
   aiSitePendingUnits,
   aiSiteUnitJob,
   createAiJobSiteStep,
   registerAiSiteJob,
 } from './ai-job-site-step'
+import {
+  AI_SITE_POST_BUDGET,
+  AI_SITE_POSTS,
+  AI_SITE_POSTS_LABEL,
+  AI_SITE_PRODUCTS_LABEL,
+} from './ai-job-site-content'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -116,6 +125,9 @@ function output(
 ): AiJobOutput {
   return { resource, id, hostId: 'host-1', label }
 }
+
+/** The look the scaffold designs first (AGL-3660), as its unit reports it. */
+const LOOK: AiJobOutput = { resource: 'theme', id: 'look', hostId: 'host-1', label: 'Your look' }
 
 /** The site's own listing as the scaffold reports it, from `siteJob`'s inputs. */
 const SITE_LISTING: AiJobOutput = {
@@ -180,7 +192,8 @@ function siteJob(overrides: Partial<AiJob> = {}): AiJob {
     },
     // The welcome email's id, recorded on the step when the job was created (AGL-3079).
     steps: [{ name: 'generate', status: 'running', creditsSpent: 0, draftIds: { email: 'drftWelcom' } }],
-    outputs: [],
+    // The look is designed first (AGL-3660); these specs start past it unless they say otherwise.
+    outputs: [LOOK],
     creditsReserved: 0,
     creditsSpent: 0,
     createdBy: 'uid-1',
@@ -215,6 +228,7 @@ function stepWith(
   return createAiJobSiteStep({
     runnerFor: (kind) => runners[kind] ?? null,
     readNodes: EVERY_SECTION,
+    look: async () => ({ outputs: [LOOK], usage: AI_JOB_ZERO_USAGE, estCostUsd: 0, model: 'test-model', stopReason: null }),
     ...deps,
   })
 }
@@ -276,6 +290,8 @@ describe('the units a plan owes', () => {
   it('owes only what the plan names, and no email unless one is asked for', () => {
     const units = aiSiteJobUnits(confirmedPlan(), {})
     expect(units.map((unit) => unit.kind)).toEqual([
+      // The look comes first on every scaffold (AGL-3660).
+      'theme',
       'page',
       'page',
       'page',
@@ -286,6 +302,7 @@ describe('the units a plan owes', () => {
   it('reads how far it got from the outputs already recorded', () => {
     const units = aiSiteJobUnits(confirmedPlan({ create: [LAYOUT, FORM] }), {})
     expect(aiSitePendingUnits(units, []).map((unit) => unit.slot)).toEqual([
+      't',
       'l',
       'f',
       'p0',
@@ -294,6 +311,7 @@ describe('the units a plan owes', () => {
       'p3',
     ])
     const built = [
+      LOOK,
       output('layout', 'layout-1'),
       output('form', 'form-1'),
       output('screen', 's-0'),
@@ -343,7 +361,8 @@ describe('the job each unit is built under', () => {
       planScreen({ title: 'Contact', slug: 'contact', id: 'drftContPg' }),
     ],
   })
-  const units = aiSiteJobUnits(plan, { welcomeEmail: true })
+  // The look's unit leads every scaffold (AGL-3660); these address the units after it.
+  const units = aiSiteJobUnits(plan, { welcomeEmail: true }).slice(1)
   const built = aiSiteBuiltRefs(units, [
     output('layout', 'layout-1', 'Site frame'),
     output('form', 'form-1', 'Contact'),
@@ -370,7 +389,7 @@ describe('the job each unit is built under', () => {
       screens: plan.screens.map((screen) => ({ ...screen, id: undefined })),
     })
     const job = siteJob({ plan: unrecorded, steps: [] })
-    const legacy = aiSiteJobUnits(unrecorded, { welcomeEmail: true })
+    const legacy = aiSiteJobUnits(unrecorded, { welcomeEmail: true }).slice(1)
     expect(legacy.map((unit) => aiSiteUnitJob(job, unit, built).$id)).toEqual([
       'job-1-l',
       'job-1-f',
@@ -475,7 +494,7 @@ describe('the job each unit is built under', () => {
     const job = siteJob({
       plan,
       steps: [{ name: 'generate', status: 'running', creditsSpent: 0 }],
-      outputs: [output('layout', 'layout-1')],
+      outputs: [LOOK, output('layout', 'layout-1')],
     })
     const derived = aiSiteUnitJob(job, units[2], built)
     expect(derived.steps).toEqual([])
@@ -516,7 +535,7 @@ describe('one unit a pass', () => {
     await step(
       context(
         siteJob({
-          outputs: [output('screen', 'screen-0'), output('screen', 'screen-1')],
+          outputs: [LOOK, output('screen', 'screen-0'), output('screen', 'screen-1')],
         }),
       ),
     )
@@ -528,9 +547,7 @@ describe('one unit a pass', () => {
       page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })),
     })
     const job = siteJob({
-      outputs: ['screen-0', 'screen-1', 'screen-2'].map((id) =>
-        output('screen', id),
-      ),
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))],
     })
     expect((await step(context(job))).continue).toBeUndefined()
   })
@@ -639,7 +656,7 @@ describe('one unit a pass', () => {
         pages: AI_SITE_PAGES.min,
         welcomeEmail: true,
       },
-      outputs: ['a', 'b', 'c', 'd'].map((id) => output('screen', id)),
+      outputs: [LOOK, ...['a', 'b', 'c', 'd'].map((id) => output('screen', id))],
     })
     // No email runner: the last page's report finishes the scaffold.
     expect(
@@ -753,7 +770,7 @@ describe('the site’s own listing, from the answers', () => {
     // A later pass has the listing among the job's outputs already, and adds
     // no second one — a person staging it twice would stage it twice.
     const later = await step(
-      context(siteJob({ outputs: [SITE_LISTING, output('screen', 'drftPage00')] })),
+      context(siteJob({ outputs: [LOOK, SITE_LISTING, output('screen', 'drftPage00')] })),
     )
     expect(later.outputs.filter((entry) => entry.resource === 'seo')).toEqual([])
     expect(later.outputs).toEqual([output('screen', 'drftPage01')])
@@ -1036,7 +1053,7 @@ describe('a site job generates every page from its plan (AGL-3596)', () => {
       screens: [planScreen({ title: 'Home', slug: '/', duplicateOf: STARTER_HOME, id: 'drftPage00' })],
     })
     const job = siteJob({ plan, inputs: { businessType: 'dog groomer', pages: 1, autoConfirm: true } })
-    const [unit] = aiSiteJobUnits(plan)
+    const [, unit] = aiSiteJobUnits(plan)
     const derived = aiSiteUnitJob(job, unit, new Map())
     expect(derived.plan?.screens[0].duplicateOf).toBeNull()
     expect(derived.inputs['originJobId']).toBe('job-1')
@@ -1044,7 +1061,7 @@ describe('a site job generates every page from its plan (AGL-3596)', () => {
 
   it('a page job keeps the page it was asked to start from', () => {
     const plan = confirmedPlan({ screens: [planScreen({ duplicateOf: 'scrAbout' })] })
-    const [unit] = aiSiteJobUnits(plan)
+    const [, unit] = aiSiteJobUnits(plan)
     expect(aiSiteUnitJob(siteJob({ kind: 'page', plan }), unit, new Map()).plan?.screens[0].duplicateOf).toBe('scrAbout')
   })
 
@@ -1112,7 +1129,7 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
   const lastPass = (inputs: Record<string, unknown>) =>
     siteJob({
       inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: false, ...inputs },
-      outputs: ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id)),
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))],
     })
 
   it('publishes every page on the last pass of a guided start, once, and keeps what it put live', async () => {
@@ -1134,6 +1151,33 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     // A job that already published does not publish again.
     publish.mockClear()
     await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: SITE_PUBLISH }))
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('publishes what was built when the last unit fails, since no pass comes after it (AGL-3676)', async () => {
+    // The local store run: the welcome email, the last unit, broke a building
+    // rule twice, and the site it ended was never published.
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({})), email: fakeRunner([], () => ({ refused: true })) },
+      { publish },
+    )
+    const job = siteJob({
+      inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: true, autoConfirm: true },
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))],
+    })
+    const outcome = await step(context(job))
+    expect(outcome.item).toMatchObject({ slot: 'e', status: 'failed' })
+    expect(outcome.continue).toBeUndefined()
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[] }]
+    expect(input.outputs.map((entry) => entry.id)).toEqual(['screen-0', 'screen-1', 'screen-2', 'screen-3'])
+    expect(outcome.sitePublish).toEqual(SITE_PUBLISH)
+    // A unit that fails with others still open publishes nothing yet.
+    publish.mockClear()
+    await stepWith({ page: fakeRunner([], () => ({ refused: true })) }, { publish })(
+      context(siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, autoConfirm: true } })),
+    )
     expect(publish).not.toHaveBeenCalled()
   })
 
@@ -1164,5 +1208,121 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     expect(last.failure).toBeUndefined()
     expect(last.sitePublish).toBeUndefined()
     error.mockRestore()
+  })
+})
+
+describe('a blog’s first posts and a store’s first products (AGL-3676)', () => {
+  const blogInputs = { businessType: 'a pottery blog', siteKind: 'blog', businessName: 'Clay Notes', pages: AI_SITE_PAGES.min, welcomeEmail: false }
+  const storeInputs = { businessType: 'a candle shop', siteKind: 'store', pages: AI_SITE_PAGES.min, welcomeEmail: false }
+  const entry = (id: string, label: string): AiJobOutput => ({
+    resource: 'entry',
+    id,
+    hostId: 'host-1',
+    label,
+    proposal: { collectionId: 'job-1-posts', collectionSlug: 'blog', slug: id },
+  })
+  const pageRunner = () => fakeRunner([], () => ({ outputs: [output('screen', 'screen-x')] }))
+
+  it('builds the part after the layout and the form and before the pages, as its own row', () => {
+    const plan = confirmedPlan({ create: [LAYOUT, FORM] })
+    expect(aiSiteJobUnits(plan, { content: 'posts' }).map((unit) => unit.slot)).toEqual(['t', 'l', 'f', 'posts', 'p0', 'p1', 'p2', 'p3'])
+    const units = aiSiteJobUnits(plan, { content: 'products' })
+    expect(units[3]).toMatchObject({ kind: 'products', jobKind: 'products', resource: 'product', label: AI_SITE_PRODUCTS_LABEL })
+    expect(aiSiteLedgerUnits(units)[3]).toMatchObject({ slot: 'products', op: 'products', deps: [] })
+    expect(aiSiteLedgerUnits(aiSiteJobUnits(plan, { content: 'posts' }))[3]).toMatchObject({ op: 'posts', label: AI_SITE_POSTS_LABEL })
+    expect(aiSiteJobUnits(plan).some((unit) => unit.kind === 'posts' || unit.kind === 'products')).toBe(false)
+  })
+
+  it('writes a paid blog’s posts after its look, told the posts written, the pages’ addresses and the byline', async () => {
+    const seen: AiJob[] = []
+    const contentRefusal = jest.fn(async () => null)
+    const step = stepWith({ page: pageRunner() }, { posts: fakeRunner(seen, () => ({ outputs: [entry('job-1-posts-0', 'One')], continue: true })), contentRefusal })
+    const outcome = await step(context(siteJob({ inputs: blogInputs })))
+    expect(contentRefusal).toHaveBeenCalledWith('posts', expect.objectContaining({ job: expect.objectContaining({ $id: 'job-1' }) }))
+    expect(seen.map((job) => job.$id)).toEqual(['job-1-posts'])
+    expect(seen[0].inputs['siteContent']).toEqual({
+      written: [],
+      total: AI_SITE_POSTS,
+      avoidSlugs: ['page-0', 'page-1', 'page-2', 'page-3'],
+      byline: 'Clay Notes',
+    })
+    expect(outcome.item).toMatchObject({ slot: 'posts', status: 'running', outputs: ['job-1-posts-0'] })
+    expect(outcome.continue).toBe(true)
+  })
+
+  it('asks no admission again on a later pass of the same part, and tells it what was written', async () => {
+    const seen: AiJob[] = []
+    const contentRefusal = jest.fn(async () => 'never asked')
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const outputs = [LOOK, entry('job-1-posts-0', 'One')]
+    const items = aiSiteInitialLedger(units, [LOOK]).map((row) =>
+      row.slot === 'posts' ? { ...row, status: 'running' as const, outputs: ['job-1-posts-0'] } : row,
+    )
+    const step = stepWith({ page: pageRunner() }, { posts: fakeRunner(seen, () => ({ outputs: [entry('job-1-posts-1', 'Two')], continue: true })), contentRefusal })
+    await step(context(siteJob({ inputs: blogInputs, outputs, items })))
+    expect(contentRefusal).not.toHaveBeenCalled()
+    expect((seen[0].inputs['siteContent'] as { written: unknown[] }).written).toEqual([{ id: 'job-1-posts-0', title: 'One' }])
+  })
+
+  it('skips the part, unspent, where the member or the plan may not have it, and says why', async () => {
+    const posts = jest.fn()
+    const step = stepWith({ page: pageRunner() }, { posts, contentRefusal: async () => 'Editing requires the editor role' })
+    const outcome = await step(context(siteJob({ inputs: blogInputs })))
+    expect(posts).not.toHaveBeenCalled()
+    expect(outcome.item).toEqual({ slot: 'posts', status: 'skipped', note: 'Not built: Editing requires the editor role' })
+    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+    expect(outcome.continue).toBe(true)
+  })
+
+  it('asks a store’s catalog for 3 to 6 products under the products step, as a catalog', async () => {
+    const seen: AiJob[] = []
+    const products = fakeRunner(seen, () => ({ outputs: [output('product', 'job-1-products-0', 'Candle')] }))
+    // Owed only where the step that proposes a catalog is loaded.
+    expect((await stepWith({ page: pageRunner() }, { products })(context(siteJob({ inputs: storeInputs })))).item?.slot).toBe('p0')
+    const step = stepWith({ page: pageRunner(), products: fakeRunner([], () => ({})) }, { products, contentRefusal: async () => null })
+    const outcome = await step(context(siteJob({ inputs: storeInputs })))
+    expect(seen[0]).toMatchObject({ $id: 'job-1-products', kind: 'products', inputs: { target: 'catalog' } })
+    expect(seen[0].brief.split('\n').pop()).toBe("Propose between 3 and 6 products: the store's first ones.")
+    expect(outcome.item).toMatchObject({ slot: 'products', status: 'succeeded', outputs: ['job-1-products-0'] })
+  })
+
+  it('tells each page the posts and the products built before it, by name', () => {
+    const plan = confirmedPlan()
+    const page = aiSiteJobUnits(plan).find((unit) => unit.kind === 'page')
+    if (!page) throw new Error('a page is a unit')
+    const blog = aiSiteUnitJob(siteJob({ inputs: blogInputs, outputs: [LOOK, entry('a', 'Centering clay'), entry('b', 'Trimming feet')] }), page, new Map())
+    expect(blog.brief).toContain('This site\'s blog at /blog has these posts: “Centering clay”, “Trimming feet”.')
+    const store = aiSiteUnitJob(siteJob({ inputs: storeInputs, outputs: [LOOK, output('product', 'p0', 'Fig candle')] }), page, new Map())
+    expect(store.brief).toContain('This store\'s products are: “Fig candle”.')
+    expect(aiSiteUnitJob(siteJob(), page, new Map()).brief).not.toContain('This site\'s blog')
+  })
+
+  it('publishes a guided blog’s posts once its pages are live, and drops the blog’s cached addresses', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const posts = [entry('job-1-posts-0', 'One'), entry('job-1-posts-1', 'Two'), entry('job-1-posts-2', 'Three')]
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const items = aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) =>
+      row.slot === 'posts' ? { ...row, status: 'succeeded' as const, outputs: posts.map((post) => post.id) } : row,
+    )
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [{ id: 'screen-3', label: 'Home', path: '/' }], drafts: [] }))
+    const publishPosts = jest.fn(async () => ({ published: 3, kept: 0, paths: ['/blog', '/blog/one'] }))
+    const dropCache = jest.fn(async () => ({ complete: true }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts, dropCache: dropCache as never },
+    )
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items })))
+    expect(publishPosts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ outputs: posts }))
+    expect(dropCache).toHaveBeenCalledWith(expect.objectContaining({ hostIds: ['host-1'], paths: { 'host-1': ['/blog', '/blog/one'] } }))
+    // Nothing published, nothing for the posts either.
+    publishPosts.mockClear()
+    publish.mockResolvedValueOnce({ liveUrl: null, published: [], drafts: [] })
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items })))
+    expect(publishPosts).not.toHaveBeenCalled()
+  })
+
+  it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
+    expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
+    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_POSTS + 1)
   })
 })

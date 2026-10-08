@@ -36,6 +36,7 @@ import { registerAiBuildJob } from './jobs/ai-job-build-step'
 import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { registerAiLogicJob } from './jobs/ai-job-logic-step'
+import { registerAiEditJob } from './jobs/ai-job-edit-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -58,6 +59,7 @@ import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
 import { PATCH as aiHostPermissions } from './server/ai-host-permissions'
 import { GET as aiAdminOrg } from './server/ai-admin-org'
+import { GET as aiAdminConversations } from './server/ai-admin-conversations'
 import { GET as aiAdminOrgsSpend } from './server/ai-admin-orgs-spend'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
@@ -126,6 +128,9 @@ function registerAiJobKinds(): void {
   // Site functions and variables proposed from a description, and functions
   // explained, as proposals the logic editor opens unsaved (AGL-3603).
   registerAiLogicJob()
+  // A change to a page or a layout the site has, from a description, saved
+  // where no visitor sees it — the Assist edit rung run as a job (AGL-3616).
+  registerAiEditJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()
@@ -244,6 +249,9 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/admin/orgs-spend', { web: aiAdminOrgsSpend })
   registerPluginApiRoute('ai/admin/user', { web: aiAdminUser })
   registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })
+  // What an org asked Aglyn AI and what it answered (AGL-3675): one page at a
+  // time, read on request, each page an audited access.
+  registerPluginApiRoute('ai/admin/conversations', { web: aiAdminConversations })
   // One workspace's overage standing and the four acts staff have over it
   // (AGL-3011): the ceiling override, lifting a pause — the only way a
   // dispute pause comes off — and resetting the step. Every act audited.

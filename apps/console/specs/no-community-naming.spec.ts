@@ -68,6 +68,14 @@ const ALLOWED = new Map<string, string>([
     'libs/plugins/marketplace/src/lib/model/legal/publisher-agreement/2026-08-14.1/marketplace-publisher-agreement.txt',
     'Verbatim capture of the published page; the live page carries the stale name — AGL-1840.',
   ],
+  // A website kind the AI guided start offers (AGL-3660): "Nonprofit &
+  // community" names community ORGANIZATIONS a visitor's site is for, and
+  // "community" is a word a person types to describe one. Neither the
+  // marketplace nor the forum.
+  [
+    'libs/plugins/ai/src/lib/model/ai-site-kinds.ts',
+    'The nonprofit/community-organization website kind and its search keyword — AGL-3660.',
+  ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
   [
     'apps/console/app/api/support/forum/route.ts',

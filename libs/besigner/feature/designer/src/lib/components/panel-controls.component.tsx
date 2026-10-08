@@ -18,6 +18,8 @@
 import {
   ICON_VARIANT_DOCK_LEFT_TOGGLE,
   ICON_VARIANT_DOCK_RIGHT_TOGGLE,
+  ICON_VARIANT_ELEMENT_PROPERTIES,
+  ICON_VARIANT_ELEMENT_TREE_VIEW,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -30,10 +32,18 @@ import {
 import { forwardRef } from 'react'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 
-export interface PanelControlsProps extends StackProps {}
+export interface PanelControlsProps extends StackProps {
+  /**
+   * Name the panels by what they hold — layers and properties — instead of
+   * by the side they dock to. Where the panels overlay the canvas there is no
+   * dock to point at, and these two buttons are the only way in.
+   */
+  compact?: boolean
+}
 
 const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
   (props, ref) => {
+    const { compact, ...rest } = props
     const [panelLeft, setPanelLeft] = useAglynBesignerPanel('panelLeft')
     const [panelRight, setPanelRight] = useAglynBesignerPanel('panelRight')
     const openPanels = [panelLeft, panelRight]
@@ -41,9 +51,9 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
       .map((i) => i?.id)
 
     return (
-      <MuiStack ref={ref} direction="row" spacing={1} {...props}>
+      <MuiStack ref={ref} direction="row" spacing={1} {...rest}>
         <MuiToggleButtonGroup size="small" value={openPanels}>
-          <MuiTooltip title={'Left panel'}>
+          <MuiTooltip title={compact ? 'Layers & elements' : 'Left panel'}>
             <MuiToggleButton
               selected={Boolean(panelLeft?.toggled)}
               value={Boolean(panelLeft?.id) || false}
@@ -56,7 +66,11 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
             >
               <MdiIcon
                 fontSize="inherit"
-                path={ICON_VARIANT_DOCK_LEFT_TOGGLE.path}
+                path={
+                  compact
+                    ? ICON_VARIANT_ELEMENT_TREE_VIEW.path
+                    : ICON_VARIANT_DOCK_LEFT_TOGGLE.path
+                }
               />
             </MuiToggleButton>
           </MuiTooltip>
@@ -68,7 +82,7 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
           {/*    <MdiIcon fontSize="inherit" path={ICON_VARIANT_DOCK_BOTTOM_TOGGLE.path} />*/}
           {/*  </MuiToggleButton>*/}
           {/*</MuiTooltip>*/}
-          <MuiTooltip title={'Right panel'}>
+          <MuiTooltip title={compact ? 'Properties & styles' : 'Right panel'}>
             <MuiToggleButton
               selected={Boolean(panelRight?.toggled)}
               value={Boolean(panelRight?.id) || false}
@@ -81,7 +95,11 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
             >
               <MdiIcon
                 fontSize="inherit"
-                path={ICON_VARIANT_DOCK_RIGHT_TOGGLE.path}
+                path={
+                  compact
+                    ? ICON_VARIANT_ELEMENT_PROPERTIES.path
+                    : ICON_VARIANT_DOCK_RIGHT_TOGGLE.path
+                }
               />
             </MuiToggleButton>
           </MuiTooltip>

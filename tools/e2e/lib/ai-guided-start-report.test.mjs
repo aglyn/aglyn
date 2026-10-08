@@ -92,6 +92,31 @@ describe('analyzeProgress', () => {
   })
 })
 
+describe('the look row (AGL-3660)', () => {
+  const look = (state, text = 'Designing your look') => ({ ...row('Designing your look', state), text })
+  it('is the first row after planning, is active while it runs, and keeps its credits once done', () => {
+    const result = analyzeProgress([
+      snap(0, 'running', [row('Planning your pages', 'active'), look('waiting'), row('Writing page 1', 'waiting')]),
+      snap(1, 'running', [row('Planning your pages', 'done'), look('active'), row('Writing page 1', 'waiting')]),
+      snap(2, 'done', [row('Planning your pages', 'done'), look('done', 'Designing your look 2 credits'), row('Writing page 1', 'done')]),
+    ])
+    assert.equal(result.lookRowSeen, true)
+    assert.equal(result.lookRowFirst, true)
+    assert.equal(result.lookRowActive, true)
+    assert.equal(result.lookCreditsKept, true)
+  })
+
+  it('fails a look row that loses its credits or comes after another', () => {
+    const result = analyzeProgress([
+      snap(0, 'running', [row('Planning your pages', 'done'), row('Header', 'active'), look('waiting')]),
+      snap(1, 'done', [row('Planning your pages', 'done'), row('Header', 'done'), look('done')]),
+    ])
+    assert.equal(result.lookRowFirst, false)
+    assert.equal(result.lookRowActive, false)
+    assert.equal(result.lookCreditsKept, false)
+  })
+})
+
 describe('seoTextVerdict', () => {
   it('passes a finished title within its length', () => {
     assert.deepEqual(seoTextVerdict('Hillside Dog Grooming in Austin', 60), {

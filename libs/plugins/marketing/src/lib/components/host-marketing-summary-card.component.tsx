@@ -150,6 +150,7 @@ export function HostMarketingSummaryCard(props: HostMarketingSummaryCardProps) {
       contentGutterY
     >
       <Stack
+        useFlexGap
         direction="row"
         spacing={3}
         sx={{ flexWrap: 'wrap', rowGap: 1.5 }}

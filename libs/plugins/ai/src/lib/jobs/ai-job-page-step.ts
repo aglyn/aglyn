@@ -87,6 +87,7 @@ import {
   type AiPageSection,
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
+import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   AI_JOB_PAGE_LANGUAGE_BUDGET,
@@ -730,6 +731,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const spent = aiGenerationSpent(result)
       if (result.status === 'refused') return { ...spent, refused: true }
       if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+      // The compiler leaves each picture slot empty; a photo the site serves
+      // itself fills it here, after the page is checked (AGL-3660).
+      const pictured = await aiResolveLayoutPictures(result.value.nodes, {
+        rootId: CANVAS_ROOT_ELEMENT_ID,
+        sectionIds,
+        sectionNames: screen.sections.map((section) => section.name),
+        seed: `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`,
+      })
       if (!written) {
         const draft = await writeAiDraft(firestore, {
           kind: 'screen',
@@ -738,7 +747,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           uid: job.createdBy,
           org,
           name,
-          nodes: result.value.nodes,
+          nodes: pictured,
           slug,
           layoutId: aiPageDraftLayoutId(screen, inventory),
           aiJobId: aiOriginJobId(job),
@@ -755,7 +764,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           hostId,
           id: draftId,
           now,
-          update: () => result.value.nodes,
+          update: () => pictured,
         })
         if (update.ok === false) return { ...spent, failure: AI_JOB_PAGE_DELETED_COPY }
       }

@@ -122,8 +122,9 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
       ).toBeTruthy()
       // ...and a fact nobody wrote, read off restrictChildren.
       expect(screen.getByText('Only accepts Surfaces Only Child')).toBeTruthy()
-      // All of it BEFORE the commit.
-      expect(screen.getByText('Confirm')).toBeTruthy()
+      // All of it BEFORE the commit — Confirm is drawn in the pane from
+      // `md` and in the action bar below it, never in neither.
+      expect(screen.getAllByText('Confirm').length).toBeGreaterThan(0)
     })
 
     it('shows derived facts for an element with no prose at all', () => {
@@ -394,16 +395,35 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
     it('never hides the pane that holds Confirm', () => {
       openPicker()
       fireEvent.click(cardFor('Surfaces Plain'))
-      const confirm = screen.getByText('Confirm')
-      const pane = confirm.closest('.MuiDialogContent-root > *')
+      const confirm = screen
+        .getAllByText('Confirm')
+        .find((el) => el.closest('.MuiDialogContent-root'))
+      const pane = confirm?.closest('.MuiDialogContent-root > *')
       expect(pane).toBeTruthy()
 
       // The pane used to be `display: { xs: 'none', sm: 'flex' }`, and
       // Confirm lives inside it — so below `sm` the dialog could be browsed
       // and never used. It stacks under the grid now instead of vanishing.
-      const css = cssFor(pane)
+      const css = cssFor(pane as Element)
       expect(css).not.toMatch(/display:\s*none/)
       expect(css).toMatch(/width:\s*100%/)
+    })
+
+    it('keeps Confirm on screen below md, outside the scrolling catalog', () => {
+      openPicker()
+      fireEvent.click(cardFor('Surfaces Plain'))
+      // Stacked, the pane sits under every tile, so a phone would scroll the
+      // whole catalog to reach it. The action bar is outside that scroll.
+      const confirm = screen
+        .getAllByText('Confirm')
+        .find((el) => el.closest('.MuiDialogActions-root'))
+      expect(confirm?.closest('.MuiDialogContent-root')).toBeNull()
+      const bar = confirm?.closest('.MuiDialogActions-root') as Element
+      // Shown below md, gone from md where the pane beside the grid has it.
+      expect(cssFor(bar)).toMatch(/display:\s*flex/)
+      expect(cssFor(bar)).toMatch(/display:\s*none/)
+      // And it names the choice, whose preview is out of sight.
+      expect(bar.textContent).toContain('Surfaces Plain')
     })
 
     it('stacks the panes rather than squeezing both, below the pane width', () => {

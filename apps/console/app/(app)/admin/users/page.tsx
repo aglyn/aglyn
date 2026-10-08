@@ -69,13 +69,18 @@ import {
   ListQueryNotices,
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
-import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type {
+  ListQueryRefusal,
+  ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { displayWindow } from '../../../../utils/display-window'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   STAFF_ROLES,
+  USER_LIST_COLUMN_SORTS,
   USER_LIST_FILTER_FIELDS,
   USER_LIST_FILTER_HEADERS,
   USER_LIST_FILTER_OPTIONS,
@@ -190,18 +195,27 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * shows as a filter that highlights its column and narrows nothing.
    */
   type ListQuery = ReadonlyArray<{ field: string; op: string; value: string }>
-  const queryRef = useRef<{ search: string; clauses: ListQuery }>({
+  const queryRef = useRef<{
+    search: string
+    clauses: ListQuery
+    sort: ListQuerySort | null
+  }>({
     search: '',
     clauses: [],
+    sort: null,
   })
   /** What the route could not answer, and why; none of it is applied. */
   const [refused, setRefused] = useState<ListQueryRefusal[]>([])
+  /** What the route says about what it did answer — a sort it could only
+   * apply page by page (AGL-3680). */
+  const [routeNotices, setRouteNotices] = useState<string[]>([])
 
   const fetchUsersPage = useCallback(
     async (cursor: string | null, index: number) => {
       const params = new URLSearchParams()
-      const { search: term, clauses: asked } = queryRef.current
+      const { search: term, clauses: asked, sort } = queryRef.current
       if (term) params.set('search', term)
+      if (sort) params.set('sort', `${sort.path}:${sort.direction}`)
       if (asked.length) {
         params.set(
           'filters',
@@ -225,6 +239,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       // silently (AGL-1122) — invisible users are the bug this fixed.
       setTruncatedTenants(payload.tenantTruncated ?? [])
       setRefused(Array.isArray(payload.refused) ? payload.refused : [])
+      setRouteNotices(Array.isArray(payload.notices) ? payload.notices : [])
       return {
         rows,
         nextCursor: payload.nextPageToken ?? null,
@@ -275,8 +290,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * directory instead.
    */
   const applyQuery = useCallback(
-    (search: string, clauses: ListQuery) => {
-      queryRef.current = { search, clauses }
+    (search: string, clauses: ListQuery, sort: ListQuerySort | null = queryRef.current.sort) => {
+      queryRef.current = { search, clauses, sort }
       // The rows of the OLD walk go with it. They are kept to merge twins
       // across pages, and a row that matched the previous search is not a
       // row that matched this one — carrying them over would show accounts
@@ -323,6 +338,19 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     onChange: onClausesChange,
     search: searchBinding,
   })
+  /*
+   * EVERY HEADER SORTS (AGL-3680), over the whole directory: the route sorts
+   * the complete read it already makes for a filter, and pages that. A new
+   * order is a new query, restarted at page one like a new filter.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const onSortChange = useCallback(
+    (next: ListQuerySort | null) => {
+      setAskedSort(next)
+      applyQuery(queryRef.current.search, queryRef.current.clauses, next)
+    },
+    [applyQuery],
+  )
   const searching = searchWords.join('').trim() !== ''
   const filtering = clauses.length > 0 || searching
 
@@ -374,6 +402,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     () => displayWindow(visible, displayPage, displaySize),
     [visible, displayPage, displaySize],
   )
+  const columnSort = useListColumnSort<AdminUser>({
+    sorts: USER_LIST_COLUMN_SORTS,
+    sort: askedSort,
+    onSortChange,
+    rows: window.shown,
+  })
   const changeDisplayPage = useCallback(
     async (next: number) => {
       if (next === displayPage) return
@@ -741,9 +775,11 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   headers: USER_LIST_FILTER_HEADERS,
                   options: USER_LIST_FILTER_OPTIONS,
                 })}
+                notices={routeNotices}
               />
               <ListTable
-                rows={window.shown}
+                rows={columnSort.rows}
+                columnSort={columnSort}
                 columns={userColumns}
                 getRowId={(row: any) => row.uid}
                 loading={loading}
@@ -767,11 +803,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid: id }))
                 }
                 // Server-paged through Firebase Auth: the footer below owns
-                // the page, so the grid must not also slice these rows —
-                // nor sort them, which would order one page and read as the
-                // whole list's.
+                // the page, so the grid must not also slice these rows. The
+                // ROUTE sorts them (`columnSort`), over the whole directory.
                 hideFooter
-                disableColumnSorting
                 // The console's row height, like every other grid list.
                 rowHeight={TABLE_ROW_HEIGHT}
                 initialState={{

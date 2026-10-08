@@ -20,6 +20,8 @@ import { createChainedFunction } from '@aglyn/shared-util-tools'
 import {
   Collapse,
   emphasize,
+  IconButton,
+  SvgIcon,
   type SnackbarClassKey,
   styled,
 } from '@mui/material'
@@ -132,6 +134,10 @@ export interface SnackbarItemProps
   classes: Partial<ClassNameMap<SnackbarClassKey>>
 }
 
+/** mdi `close`, inline: this package draws its own icons (`defaultIconVariants`). */
+const CLOSE_ICON_PATH =
+  'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'
+
 const SnackbarItem = forwardRef<any, SnackbarItemProps>((props, ref) => {
   const { classes: propClasses, ...rest } = props
   const timeout = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -173,6 +179,7 @@ const SnackbarItem = forwardRef<any, SnackbarItemProps>((props, ref) => {
     iconVariant,
     snack,
     action: otherAction,
+    dismissible: otherDismissible,
     content: otherContent,
     TransitionComponent: otherTranComponent,
     TransitionProps: otherTranProps,
@@ -196,6 +203,7 @@ const SnackbarItem = forwardRef<any, SnackbarItemProps>((props, ref) => {
     variant,
     content: singleContent,
     action: singleAction,
+    dismissible: singleDismissible,
     ariaAttributes: singleAriaAttributes,
     anchorOrigin,
     message: snackMessage,
@@ -237,6 +245,8 @@ const SnackbarItem = forwardRef<any, SnackbarItemProps>((props, ref) => {
   if (typeof action === 'function') {
     action = action(snackbarId)
   }
+
+  const dismissible = singleDismissible ?? otherDismissible ?? false
 
   let content = singleContent || otherContent
   if (typeof content === 'function') {
@@ -324,7 +334,25 @@ const SnackbarItem = forwardRef<any, SnackbarItemProps>((props, ref) => {
                 {!hideIconVariant ? icon : null}
                 {snackMessage}
               </div>
-              {action && <div className={classes.action}>{action}</div>}
+              {action || dismissible ? (
+                <div className={classes.action}>
+                  {action}
+                  {dismissible ? (
+                    <IconButton
+                      size="small"
+                      color="inherit"
+                      aria-label="Dismiss"
+                      // Closes it the way `closeSnackbar` does, so the
+                      // provider's own `onClose` hears the same reason.
+                      onClick={() => handleClose(null, REASONS.INSTRUCTED)}
+                    >
+                      <SvgIcon fontSize="small">
+                        <path d={CLOSE_ICON_PATH} />
+                      </SvgIcon>
+                    </IconButton>
+                  ) : null}
+                </div>
+              ) : null}
             </SnackbarContent>
           )}
         </TransitionComponent>

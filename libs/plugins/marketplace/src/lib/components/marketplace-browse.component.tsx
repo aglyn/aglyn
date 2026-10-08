@@ -539,6 +539,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
       contentGutterY
     >
       <Stack
+        useFlexGap
         direction="row"
         spacing={1}
         sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -674,6 +675,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     {listing.displayName}
                   </AppLink>
                   <Stack
+                    useFlexGap
                     direction="row"
                     spacing={1}
                     sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
@@ -863,6 +865,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                       (AGL-656). */}
                   {isInstalled ? (
                     <Stack
+                      useFlexGap
                       direction="row"
                       spacing={0.75}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}

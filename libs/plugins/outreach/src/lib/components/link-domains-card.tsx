@@ -189,7 +189,7 @@ function LinkDomainRow(props: {
   const setUp = row.status !== 'not-set-up'
   return (
     <Stack spacing={1}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-all' }}>
           {row.host}
         </Typography>
@@ -235,7 +235,7 @@ function LinkDomainRow(props: {
           {`Point ${row.host} at this app — a CNAME to its address, or your proxy’s — then check it.`}
         </Typography>
       ) : null}
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
         {!setUp && canManage ? (
           <Button
             variant="outlined"
