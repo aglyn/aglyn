@@ -174,7 +174,7 @@ describe('the Leads query plan', () => {
       { field: 'ownerUid', op: 'equals', value: 'u1' },
     ])
     expect(served.refused).toEqual([])
-    expect(served.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+    expect(served.orderBy).toMatchObject({ path: 'lastSeenAtMs', direction: 'desc' })
     expect(served.filters.map((filter) => filter.path)).toEqual([
       'status',
       'emailStatus',
@@ -189,7 +189,7 @@ describe('the Leads query plan', () => {
       { field: 'status', op: 'equals', value: 'open' },
     ])
     expect(served.refused).toEqual([])
-    expect(served.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+    expect(served.orderBy).toMatchObject({ path: 'lastSeenAtMs', direction: 'desc' })
     expect(served.filters.map((filter) => filter.path).sort()).toEqual(['leadSourceDirection', 'status'])
     expect(served.filters.find((filter) => filter.path === 'leadSourceDirection')?.value).toBe('inbound')
   })
@@ -199,7 +199,7 @@ describe('the Leads query plan', () => {
       const served = plan([{ field, op: 'equals', value: 'hot' }])
       expect(served.refused).toEqual([])
       expect(served.filters.map((filter) => filter.path)).toEqual([`${field}Key`])
-      expect(served.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+      expect(served.orderBy).toMatchObject({ path: 'lastSeenAtMs', direction: 'desc' })
     }
   })
 

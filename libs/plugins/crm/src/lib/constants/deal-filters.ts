@@ -57,6 +57,37 @@ import { LEAD_SOURCE_CODEC, LEAD_SOURCE_FILTER_NONE } from '../model/lead-filter
 /** The table's one order: newest change first. */
 export const DEAL_LIST_SORTS: readonly ListQuerySort[] = [
   { path: 'updatedAt', direction: 'desc' },
+  /*
+   * The header orders (AGL-3680), each `alone` — served with no filter or
+   * search on, beside the pipeline by one `(pipelineId, field)` and one
+   * `(visibleTo, field)` composite per direction: the title's key, the
+   * amount and expected close as stored beside them (`null` for none), the
+   * status and the next activity. Stage (the pipeline's order), Owner, Type
+   * and Lead source (the org's picklist order) and custom values sort the
+   * page.
+   */
+  { path: 'titleLower', direction: 'asc', column: 'title', label: 'Deal', alone: true },
+  { path: 'titleLower', direction: 'desc', column: 'title', label: 'Deal', alone: true },
+  { path: 'amountSortCents', direction: 'asc', column: 'amountCents', label: 'Amount', alone: true },
+  { path: 'amountSortCents', direction: 'desc', column: 'amountCents', label: 'Amount', alone: true },
+  {
+    path: 'expectedCloseSortAtMs',
+    direction: 'asc',
+    column: 'expectedCloseAtMs',
+    label: 'Expected close',
+    alone: true,
+  },
+  {
+    path: 'expectedCloseSortAtMs',
+    direction: 'desc',
+    column: 'expectedCloseAtMs',
+    label: 'Expected close',
+    alone: true,
+  },
+  { path: 'status', direction: 'asc', column: 'status', label: 'Status', alone: true },
+  { path: 'status', direction: 'desc', column: 'status', label: 'Status', alone: true },
+  { path: 'nextTaskAtMs', direction: 'asc', column: 'nextTaskAtMs', label: 'Next activity', alone: true },
+  { path: 'nextTaskAtMs', direction: 'desc', column: 'nextTaskAtMs', label: 'Next activity', alone: true },
 ]
 
 /**
