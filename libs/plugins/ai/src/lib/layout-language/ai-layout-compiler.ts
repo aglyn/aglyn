@@ -779,9 +779,7 @@ export function compileFlow(
               spacing: '2',
               useFlexGap: true,
               flexWrap: 'wrap',
-              ...(scope.centered && room === 'full'
-                ? { justifyContent: 'center' }
-                : {}),
+              ...(scope.centered ? { justifyContent: 'center' } : {}),
             },
             null,
             buttons,
@@ -993,7 +991,9 @@ function compileButton(
       size: scope.index === 0 || block.style === 'large' ? 'large' : 'medium',
       ...destinationProps(destination),
     },
-    null,
+    // Sized to its words, never stretched across the column a Stack would
+    // stretch it over (AGL-3660), and aligned with its section.
+    { alignSelf: scope.centered ? 'center' : 'flex-start' },
     null,
     'button',
   )
@@ -1111,8 +1111,10 @@ function form(scope: SectionScope, block: AiLayoutBlock): string | null {
     [placed],
     'formContent',
   )
-  // The card style is the site theme's (AGL-3660), as a card dropped from the drawer takes it.
-  return tree.add('muiCard', null, null, [content], 'formCard')
+  // The card style is the site theme's (AGL-3660), as a card dropped from the
+  // drawer takes it; it takes the flow's width, so a centered section never
+  // shrinks a form to its button.
+  return tree.add('muiCard', null, { alignSelf: 'stretch' }, [content], 'formCard')
 }
 
 /** A reusable component placed by its id, its props filled from the block's items. */

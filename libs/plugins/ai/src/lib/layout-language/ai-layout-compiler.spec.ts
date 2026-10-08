@@ -779,6 +779,36 @@ describe('repeats (rule 1)', () => {
   })
 })
 
+/*
+ * Live on hillside-dog-grooming.aglyn.app (beta.231, AGL-3660): a lone
+ * button in a column Stack stretched across the whole column, because a
+ * column Stack stretches its children. A compiled button is sized to its
+ * words: it aligns itself with its section, or sits in a row of buttons.
+ */
+describe('buttons size to their words', () => {
+  const button = (text: string, to = `page:${SERVICES}`, col?: number): AiLayoutBlock => ({ kind: 'button', text, to, ...(col !== undefined ? { col } : {}) })
+  const pages: Array<[string, AiLayoutSection[]]> = [
+    ['a lone button under a group', [{ blocks: [{ kind: 'heading', text: 'Grooming' }] }, { blocks: [{ kind: 'heading', text: 'Why us' }, { kind: 'cards', items: [{ title: 'Calm', text: 'Gentle hands.' }, { title: 'Local', text: 'Near you.' }] }, button('Contact us')] }]],
+    ['a hero column with one button', [{ cols: [7, 5], blocks: [{ kind: 'heading', text: 'Grooming', col: 0 }, { kind: 'lede', text: 'Gentle hands.', col: 0 }, button('Book a groom', `page:${CONTACT}`, 0), { kind: 'image', text: 'A dog', col: 1 }] }]],
+    ['a centered pair', [{ align: 'center', blocks: [{ kind: 'heading', text: 'Grooming' }, button('Book'), button('Services')] }]],
+  ]
+  it.each(pages)('%s', (_name, sections) => {
+    const plan: AiLayoutPagePlan = { title: 'Home', sections: sections.map((_, index) => ({ name: `s${index}`, uses: [], items: 0 })) }
+    const { compiled } = build(sections, plan, false)
+    const nodes = compiled.tree.nodes as Record<string, { componentId?: string; props?: Record<string, unknown>; sx?: Record<string, unknown> | null; nodes?: string[] }>
+    const parentOf = (id: string) => Object.values(nodes).find((node) => node.nodes?.includes(id))
+    const buttons = Object.entries(nodes).filter(([, node]) => node.componentId === 'muiButton')
+    expect(buttons.length).toBeGreaterThan(0)
+    for (const [id, node] of buttons) {
+      expect(node.props?.['fullWidth']).toBeUndefined()
+      expect(node.sx?.['width']).toBeUndefined()
+      const parent = parentOf(id)
+      const inRow = parent?.componentId === 'muiStack' && parent.props?.['direction'] === 'row'
+      expect([id, inRow || ['flex-start', 'center'].includes(String(node.sx?.['alignSelf']))]).toEqual([id, true])
+    }
+  })
+})
+
 describe('columns', () => {
   it('spans relative widths across twelve, three at the least', () => {
     expect(aiLayoutSpans([1, 1])).toEqual([6, 6])
@@ -893,6 +923,25 @@ describe('the frame', () => {
       .filter((text): text is string => typeof text === 'string')
     expect(texts.filter((text) => /©|copyright|all rights reserved/i.test(text))).toEqual(['© Hillside Dog Grooming'])
     expect(texts).toContain('Gentle grooming for Austin dogs.')
+  })
+
+  // The towing footer's "Request a Tow" spanned its whole column (AGL-3660).
+  it('sizes a lone footer button to its words', () => {
+    const { stored } = frame({
+      header: { band: 'plain', blocks: [] },
+      footer: {
+        cols: [2, 1],
+        blocks: [
+          { kind: 'heading', col: 0, text: 'Hillside Dog Grooming' },
+          { kind: 'button', col: 0, text: 'Request a groom', to: `page:${CONTACT}` },
+          { kind: 'list', col: 1, items: [{ title: 'Services', text: '', to: `page:${SERVICES}` }] },
+        ],
+      },
+    })
+    if (stored.ok === false) throw new Error(stored.error)
+    const button = Object.values(stored.nodes).find((node) => node.props?.['children'] === 'Request a groom')
+    expect(button?.props?.['fullWidth']).toBeUndefined()
+    expect(button?.sx).toMatchObject({ alignSelf: 'flex-start' })
   })
 
   it.each([

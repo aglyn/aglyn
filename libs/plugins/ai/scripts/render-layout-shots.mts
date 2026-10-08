@@ -33,7 +33,11 @@
  * draft, read back with `readAiDraftNodes`, is exactly that node map. An
  * optional `"page"` is a page's node map (an AI-built Home, say) to render
  * inside the layout in place of the starter home page; with one, the whole
- * page is shot too.
+ * page is shot too. An optional `"forms"` maps a form id to its saved design
+ * (`{ rootId, nodes }`, as the form job writes it), grafted into every place
+ * the page or layout places that form, as a published page grafts it; a form
+ * the input names no design for is drawn with the fields a contact form asks
+ * for (name, email, phone, message), so a shot never shows an empty form.
  *
  * HOW IT RENDERS. No emulator and no tenant server: the layout is composed
  * around a page with the platform's own `composeLayoutAndScreenNodes`, its
@@ -216,6 +220,47 @@ async function main(): Promise<void> {
   const defaults = await load('libs/aglyn/src/lib/app-utils/default-site.ts')
   const drawer = await load('libs/plugins/mui/src/lib/components/drawer.tsx')
   const look = await load('libs/plugins/ai/src/lib/model/ai-site-look.ts')
+  const forms = await load('libs/aglyn/src/lib/app-utils/forms.ts')
+  const reusable = await load('libs/aglyn/src/lib/app-utils/compose-reusable-components.ts')
+  /** A contact form's design, as a form job writes one: a form root over its fields. */
+  const contactDesign = (formId: string) => {
+    const field = (name: string, label: string, extra: Dict = {}) => ({
+      $id: `${formId}__${name}`,
+      componentId: 'formField',
+      pluginId: 'forms',
+      parentId: `${formId}__root`,
+      props: { fieldName: name, label, required: name !== 'phone', ...extra },
+      nodes: [],
+    })
+    const fields = [
+      field('name', 'Name'),
+      field('email', 'Email', { fieldType: 'email' }),
+      field('phone', 'Phone', { fieldType: 'tel' }),
+      field('message', 'Message', { fieldType: 'textarea' }),
+    ]
+    return {
+      rootId: `${formId}__root`,
+      nodes: {
+        [`${formId}__root`]: {
+          $id: `${formId}__root`,
+          componentId: 'form',
+          pluginId: 'forms',
+          props: { formId, formName: 'Contact', submitLabel: 'Send message' },
+          nodes: fields.map((entry) => entry.$id),
+        },
+        ...Object.fromEntries(fields.map((entry) => [entry.$id, entry])),
+      },
+    }
+  }
+  /** Each placed form grafted with its design, as a published page grafts it. */
+  const withForms = (nodes: Dict, given: Record<string, { rootId: string; nodes: Dict }> | undefined): Dict => {
+    const ids = new Set(
+      (Object.values(nodes) as Dict[]).filter((node) => node?.componentId === 'form' && node.props?.formId).map((node) => String(node.props.formId)),
+    )
+    if (!ids.size) return nodes
+    const designs = Object.fromEntries([...ids].map((id) => [id, given?.[id] ?? contactDesign(id)]))
+    return reusable.composeReusableComponentNodes(nodes, undefined, [forms.placedFormPlacement(designs)])
+  }
   const presets = (await load('libs/plugins/themes/src/lib/presets/index.ts')).THEME_PRESETS as Dict[]
   /** A look's theme, as the look unit saves it: the tokens over the base they name. */
   const themeOfStyle = (style: Dict): Dict => {
@@ -297,7 +342,14 @@ async function main(): Promise<void> {
 
     for (const input of inputs) {
       const key = basename(input).replace(/\.json$/, '')
-      const data = JSON.parse(readFileSync(input, 'utf8')) as { name: string; nodes: Dict; page?: Dict; theme?: Dict; style?: Dict }
+      const data = JSON.parse(readFileSync(input, 'utf8')) as {
+        name: string
+        nodes: Dict
+        page?: Dict
+        theme?: Dict
+        style?: Dict
+        forms?: Record<string, { rootId: string; nodes: Dict }>
+      }
       const theme = data.theme ?? (data.style ? themeOfStyle(data.style) : defaults.DEFAULT_SITE_THEME)
       const fonts = ((theme.fonts ?? []) as Dict[])
         .filter((font) => font.source === 'google')
@@ -305,7 +357,7 @@ async function main(): Promise<void> {
         .join('')
       const render = (screen: Dict, scheme: 'light' | 'dark', menuOpen: boolean): string => {
         core.components.registerComponent(menuOpen ? OpenDrawer : drawer.default, drawerSchema)
-        const composed = tokens.resolveNodesHostTokens(compose.composeLayoutAndScreenNodes(data.nodes, screen), { displayName: data.name })
+        const composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
         core.canvas.setNodes(composed)
         const root = core.canvas.getNode('_@_')
         const markup = renderToStaticMarkup(
