@@ -239,6 +239,35 @@ function lookLabel(style: AiSiteStyle, baseName: string): string {
 export interface AiSiteLookDeps {
   save?: typeof aiSaveSiteTheme
   generate?: typeof runValidatedGeneration
+  others?: typeof aiWorkspaceSiteStyles
+}
+
+/** The most of a workspace's sites a look is drawn apart from. */
+export const AI_SITE_LOOK_SIBLINGS = 50
+
+/**
+ * The looks of a workspace's other sites (AGL-3660), so a new one is drawn
+ * apart from each: none shares their base, hue family, heading font and
+ * buttons. A read that fails draws apart from nothing.
+ */
+export async function aiWorkspaceSiteStyles(
+  firestore: FirebaseFirestore.Firestore,
+  input: { orgId: string; hostId: string },
+): Promise<AiSiteStyle[]> {
+  try {
+    const snapshot = await firestore
+      .collection('hosts')
+      .where('orgId', '==', input.orgId)
+      .limit(AI_SITE_LOOK_SIBLINGS)
+      .get()
+    return snapshot.docs.flatMap((doc) => {
+      const style = doc.get('siteStyle') as AiSiteStyle | undefined
+      return doc.id !== input.hostId && style && typeof style.base === 'string' ? [style] : []
+    })
+  } catch (error) {
+    console.warn('ai site look: the workspace sites could not be read; drawing apart from none', { orgId: input.orgId, error })
+    return []
+  }
 }
 
 /**
@@ -273,7 +302,9 @@ export async function aiRunSiteLook(
   // An answer that could not be used leaves the kind and the seed to choose.
   const answer = result.status === 'ok' ? result.value : {}
   const brand = typeof job.inputs?.['brand'] === 'string' ? (job.inputs['brand'] as string) : null
-  const style = aiSiteStyleFor({ kind, answer, seed: aiSiteSeed(origin), brand })
+  const others = deps.others ?? aiWorkspaceSiteStyles
+  const avoid = await others(context.firestore, { orgId: job.orgId, hostId: job.hostId })
+  const style = aiSiteStyleFor({ kind, answer, seed: aiSiteSeed(origin), brand, avoid })
   const saved = await save(context.firestore, { hostId: job.hostId, jobId: origin, style })
   if (saved.write === 'missing') throw new Error(`site ${job.hostId} vanished while its look was chosen`)
   const output: AiJobOutput = {

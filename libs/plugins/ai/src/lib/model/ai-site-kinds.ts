@@ -115,6 +115,14 @@ export type AiSiteCorners = 'sharp' | 'soft' | 'round' | 'pill'
 export const AI_SITE_CORNERS: readonly AiSiteCorners[] = ['sharp', 'soft', 'round', 'pill']
 /** How buttons are drawn: on the corner radius, as pills, square, in capitals, or with quiet buttons as underlined links. */
 export type AiSiteButtons = 'rounded' | 'pill' | 'square' | 'caps' | 'link'
+/**
+ * How a site's pages alternate their bands: calm (mostly plain, one soft),
+ * alternating (plain and soft by turns), or bold (brand and dark bands for
+ * its key moments).
+ */
+export type AiSiteRhythm = 'calm' | 'alternating' | 'bold'
+export const AI_SITE_RHYTHMS: readonly AiSiteRhythm[] = ['calm', 'alternating', 'bold']
+
 /** Spacing: tighter, regular or airier than the platform's unit. */
 export type AiSiteDensity = 'compact' | 'regular' | 'airy'
 
@@ -123,6 +131,10 @@ export interface AiSiteLookFamily {
   /** The platform's base themes that suit the kind, best first (`AI_SITE_BASES`). */
   bases: readonly AiSiteBase[]
   chroma: AiSiteChroma
+  /** How the header is arranged: the brand at the start with the links after it, or both centered. */
+  headerAligns?: readonly ('start' | 'center')[]
+  /** The band rhythm its pages lean to (`AI_SITE_RHYTHMS`). */
+  rhythms?: readonly AiSiteRhythm[]
   /** Hue ranges in degrees that suit the kind, `[from, to]`, wrapping past 360. */
   hues: ReadonlyArray<readonly [number, number]>
   grounds: readonly AiSiteGround[]
@@ -181,7 +193,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'wrench',
     keywords: ['roofer', 'roofing', 'plumber', 'plumbing', 'electrician', 'hvac', 'towing', 'tow', 'landscaping', 'landscaper', 'contractor', 'construction', 'handyman', 'painter', 'painting', 'mover', 'moving', 'pest', 'remodeling', 'repair', 'mechanic', 'auto', 'trades', 'trade', 'garage', 'locksmith', 'flooring', 'fencing', 'pool'],
     starter: 'business',
-    look: { bases: ['bootstrap', 'carbon', 'material-ui'], chroma: 'vivid', hues: [[0, 50], [200, 230], [40, 60], [100, 150]], grounds: ['white', 'cool'], fonts: ['oswald', 'archivo', 'barlow', 'manrope'], corners: ['sharp', 'soft'], buttons: 'square', headingScale: 1.05, density: 'compact' },
+    look: { bases: ['bootstrap', 'carbon', 'material-ui', 'fluent', 'starter'], chroma: 'vivid', hues: [[4, 18], [20, 38], [42, 56], [128, 158], [195, 212], [214, 240]], grounds: ['white', 'cool'], fonts: ['oswald', 'archivo', 'barlow', 'manrope'], corners: ['sharp', 'soft'], buttons: 'square', headingScale: 1.05, density: 'compact' },
     design: 'Direct and high-contrast: a big promise and a call-to-action button in the first section, the services as a tight grid of cards, why customers can trust the business (licensed, insured, years, guarantees, but only what the brief gives), the area served, and a call or quote request repeated near the end. Use a dark band and a brand band.',
     pages: 'Home, Services, About or Why us, and a Quote or Contact page with the form.',
   },
@@ -192,7 +204,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'scale',
     keywords: ['law', 'lawyer', 'attorney', 'legal', 'firm', 'accountant', 'accounting', 'cpa', 'tax', 'bookkeeping', 'financial', 'advisor', 'adviser', 'consulting', 'insurance', 'notary', 'mediator'],
     starter: 'business',
-    look: { bases: ['carbon', 'fluent', 'minimal'], chroma: 'muted', hues: [[210, 250], [340, 360], [0, 15], [150, 175]], grounds: ['white', 'warm', 'cool'], fonts: ['baskerville', 'merriweather', 'editorial', 'plex', 'lora'], corners: ['sharp', 'soft'], buttons: 'rounded', headingScale: 0.95, density: 'airy' },
+    look: { bases: ['carbon', 'fluent', 'minimal', 'starter'], chroma: 'muted', hues: [[210, 250], [340, 360], [0, 15], [150, 175]], grounds: ['white', 'warm', 'cool'], fonts: ['baskerville', 'merriweather', 'editorial', 'plex', 'lora'], corners: ['sharp', 'soft'], buttons: 'rounded', headingScale: 0.95, density: 'airy' },
     design: 'Measured and credible: generous space, a calm opening statement, practice areas as cards with short plain explanations, the approach as steps, and an unhurried invitation to a consultation. Prefer plain and soft bands, at most one dark band.',
     pages: 'Home, Practice areas or Services, About or Our team, and Contact with a consultation form.',
   },
@@ -203,7 +215,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'heart',
     keywords: ['therapist', 'therapy', 'counselor', 'counseling', 'counselling', 'psychologist', 'dentist', 'dental', 'clinic', 'doctor', 'chiropractor', 'massage', 'wellness', 'health', 'nutrition', 'nutritionist', 'acupuncture', 'physio', 'physiotherapy', 'coach', 'coaching', 'healing', 'mental', 'medical', 'vet', 'veterinary'],
     starter: 'business',
-    look: { bases: ['material3', 'cupertino', 'starter'], chroma: 'muted', hues: [[150, 200], [250, 290], [20, 40], [90, 130]], grounds: ['warm', 'tinted', 'white'], fonts: ['lora', 'fraunces', 'quicksand', 'dmserif', 'nunito'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1, density: 'airy' },
+    look: { bases: ['material3', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: [[150, 200], [250, 290], [20, 40], [90, 130]], grounds: ['warm', 'tinted', 'white'], fonts: ['lora', 'fraunces', 'quicksand', 'dmserif', 'nunito'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1, density: 'airy' },
     design: 'Reassuring and gentle: a warm opening that names who it helps, what a first visit or session is like as steps, services as soft cards, answers to common worries as an FAQ, and a low-pressure way to book or ask. Prefer soft bands, avoid dark ones.',
     pages: 'Home, Services or Approach, About, and Book or Contact with the form.',
   },
@@ -247,7 +259,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'sparkle',
     keywords: ['design', 'designer', 'agency', 'creative', 'branding', 'marketing', 'advertising', 'web', 'digital', 'production', 'video', 'animation'],
     starter: 'portfolio',
-    look: { bases: ['minimal', 'carbon'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'cool'], fonts: ['syne', 'grotesk', 'bricolage', 'inter'], corners: ['sharp', 'soft'], buttons: 'pill', headingScale: 1.3, density: 'airy' },
+    look: { bases: ['minimal', 'carbon', 'cupertino'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'cool'], fonts: ['syne', 'grotesk', 'bricolage', 'inter'], corners: ['sharp', 'soft'], buttons: 'pill', headingScale: 1.3, density: 'airy' },
     design: 'Confident and editorial: an oversized statement, selected case studies as large image cards with the outcome in a line, services as a short list, how the studio works as steps, and a bold dark band to start a project.',
     pages: 'Home, Work or Case studies, Services, About, and Contact or Start a project.',
   },
@@ -258,7 +270,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'camera',
     keywords: ['photographer', 'photography', 'photo', 'photos', 'videographer', 'wedding photographer', 'portraits'],
     starter: 'portfolio',
-    look: { bases: ['minimal', 'cupertino'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['instrument', 'garamond', 'inter', 'grotesk'], corners: ['sharp'], buttons: 'square', headingScale: 1.2, density: 'airy' },
+    look: { bases: ['minimal', 'cupertino', 'carbon'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['instrument', 'garamond', 'inter', 'grotesk'], corners: ['sharp'], buttons: 'square', headingScale: 1.2, density: 'airy' },
     design: 'Gallery-first: one full image to open, then galleries as image cards by subject, a short personal about, packages only as the brief gives them, and a booking inquiry. Few words, many images, mostly plain bands and one dark band.',
     pages: 'Home, Galleries or Portfolio, About, and Book or Contact with the form.',
   },
@@ -291,7 +303,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'bolt',
     keywords: ['gym', 'fitness', 'trainer', 'training', 'personal trainer', 'crossfit', 'boxing', 'martial', 'karate', 'pilates', 'sports', 'running', 'climbing', 'dance', 'swim', 'team', 'club'],
     starter: 'business',
-    look: { bases: ['bootstrap', 'material-ui', 'carbon'], chroma: 'vivid', hues: [[0, 30], [90, 140], [180, 210], [270, 300]], grounds: ['white', 'cool'], fonts: ['barlow', 'anton', 'archivo', 'outfit'], corners: ['sharp', 'soft'], buttons: 'caps', headingScale: 1.15, density: 'compact' },
+    look: { bases: ['bootstrap', 'material-ui', 'carbon', 'material3'], chroma: 'vivid', hues: [[0, 30], [90, 140], [180, 210], [270, 300]], grounds: ['white', 'cool'], fonts: ['barlow', 'anton', 'archivo', 'outfit'], corners: ['sharp', 'soft'], buttons: 'caps', headingScale: 1.15, density: 'compact' },
     design: 'High-energy: a punchy opening with a strong call to action, classes or programs as cards, how to start as steps, and a repeated join or book section. Use a dark band and a brand band.',
     pages: 'Home, Classes or Programs, About or Coaches, and Join or Contact with the form.',
   },
@@ -302,7 +314,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'leaf',
     keywords: ['yoga', 'meditation', 'mindfulness', 'breathwork', 'reiki', 'spa', 'retreat', 'sound'],
     starter: 'business',
-    look: { bases: ['material3', 'cupertino'], chroma: 'muted', hues: [[20, 50], [80, 150], [260, 300], [170, 200]], grounds: ['warm', 'tinted'], fonts: ['garamond', 'lora', 'quicksand', 'instrument', 'fraunces'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1.05, density: 'airy' },
+    look: { bases: ['material3', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: [[20, 50], [80, 150], [260, 300], [170, 200]], grounds: ['warm', 'tinted'], fonts: ['garamond', 'lora', 'quicksand', 'instrument', 'fraunces'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1.05, density: 'airy' },
     design: 'Calm and spacious: a quiet opening, classes as soft cards, what a first class is like as steps, a gentle about, and an easy way to book. Soft bands, no dark band, lots of space.',
     pages: 'Home, Classes or Schedule, About, and Book or Contact with the form.',
   },
@@ -357,7 +369,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'music',
     keywords: ['band', 'musician', 'music', 'dj', 'singer', 'rapper', 'producer', 'orchestra', 'choir', 'composer', 'artist music'],
     starter: 'landing',
-    look: { bases: ['carbon', 'minimal'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'cool', 'tinted'], fonts: ['anton', 'syne', 'grotesk', 'archivo'], corners: ['sharp'], buttons: 'caps', headingScale: 1.3, density: 'regular' },
+    look: { bases: ['carbon', 'minimal', 'material-ui'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'cool', 'tinted'], fonts: ['anton', 'syne', 'grotesk', 'archivo'], corners: ['sharp'], buttons: 'caps', headingScale: 1.3, density: 'regular' },
     design: 'Loud and visual: the name huge in the opening, an image band, releases or shows as image cards only as the brief gives them, a short bio, and a booking or contact section. Dark bands are welcome.',
     pages: 'Home, Music or Shows, About, and Booking or Contact with the form.',
   },
@@ -368,7 +380,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'person',
     keywords: ['personal', 'resume', 'cv', 'me', 'myself', 'profile', 'job', 'candidate', 'speaker'],
     starter: 'portfolio',
-    look: { bases: ['minimal', 'cupertino'], chroma: 'muted', hues: ALL_HUES, grounds: ['white', 'warm', 'cool'], fonts: ['inter', 'instrument', 'manrope', 'lora', 'grotesk'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.1, density: 'airy' },
+    look: { bases: ['minimal', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: ALL_HUES, grounds: ['white', 'warm', 'cool'], fonts: ['inter', 'instrument', 'manrope', 'lora', 'grotesk'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.1, density: 'airy' },
     design: 'Simple and personal: who the person is in one line, what they do, experience or highlights as a list or steps, selected work as cards where the brief names some, and a way to get in touch. Mostly plain bands.',
     pages: 'Home, About or Experience, Work where the brief names some, and Contact.',
   },
@@ -390,7 +402,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     icon: 'clock',
     keywords: ['coming soon', 'soon', 'prelaunch', 'pre-launch', 'under construction', 'placeholder'],
     starter: 'landing',
-    look: { bases: ['minimal', 'material3'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'tinted', 'cool'], fonts: ['syne', 'anton', 'outfit', 'instrument'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1.3, density: 'airy' },
+    look: { bases: ['minimal', 'material3', 'cupertino'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'tinted', 'cool'], fonts: ['syne', 'anton', 'outfit', 'instrument'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1.3, density: 'airy' },
     design: 'Short and striking: what is coming in one big line, two or three reasons to care, and a way to hear first through the form. Few sections, big type.',
     pages: 'A home page that says what is coming and invites people to sign up; nothing else unless the brief asks.',
   },
@@ -440,8 +452,32 @@ export function aiSiteKindOfInputs(inputs: Readonly<Record<string, unknown>> | n
   return typeof type === 'string' && type.trim() ? aiSiteKindFor(type) : null
 }
 
-/** The style line a page, the header and the footer are told for the job's kind; empty for none. */
+/** What each band rhythm asks of a page's sections. */
+const RHYTHM_WORDS: Record<AiSiteRhythm, string> = {
+  calm: 'mostly plain bands with one soft band, and a brand or dark band only for the closing call to action',
+  alternating: 'plain and soft bands by turns, with one brand band',
+  bold: 'a dark or brand band to open or close, and strong contrast between neighboring sections',
+}
+
+/** The site's own look tokens a unit is handed (AGL-3660), read defensively. */
+export function aiSiteStyleTokens(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): { headerAlign?: 'start' | 'center'; rhythm?: AiSiteRhythm } {
+  const raw = inputs?.['siteStyle']
+  if (!raw || typeof raw !== 'object') return {}
+  const style = raw as Record<string, unknown>
+  return {
+    ...(style['headerAlign'] === 'start' || style['headerAlign'] === 'center' ? { headerAlign: style['headerAlign'] } : {}),
+    ...(AI_SITE_RHYTHMS.includes(style['rhythm'] as AiSiteRhythm) ? { rhythm: style['rhythm'] as AiSiteRhythm } : {}),
+  }
+}
+
+/** The style lines a page, the header and the footer are told for the job's kind and look; empty for none. */
 export function aiSiteKindDesignLines(inputs: Readonly<Record<string, unknown>> | null | undefined): string[] {
   const kind = aiSiteKindOfInputs(inputs)
-  return kind ? [`Style: a ${kind.label.toLowerCase()} site. ${kind.design}`] : []
+  const { rhythm } = aiSiteStyleTokens(inputs)
+  return [
+    ...(kind ? [`Style: a ${kind.label.toLowerCase()} site. ${kind.design}`] : []),
+    ...(rhythm ? [`Band rhythm for this site: ${RHYTHM_WORDS[rhythm]}.`] : []),
+  ]
 }

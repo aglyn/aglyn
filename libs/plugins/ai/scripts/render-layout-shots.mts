@@ -154,6 +154,32 @@ function chromeExecutable(): Dict {
   return { channel: 'chrome' }
 }
 
+/**
+ * A page's reusable-component instances drawn as the card such a component
+ * draws (AGL-3660): a shot has no component documents to resolve an instance
+ * against, and an instance with no definition renders nothing, which read as
+ * a section with no items. Each instance becomes a Card — no style of its own,
+ * so the site's theme draws it — holding its title-like prop over its others.
+ */
+function expandInstances(nodes: Dict): Dict {
+  const out: Dict = { ...nodes }
+  for (const [id, node] of Object.entries(nodes) as Array<[string, Dict]>) {
+    if (node?.componentId !== 'reusableInstance') continue
+    const values = Object.entries((node.props?.propValues ?? {}) as Record<string, unknown>).filter(([, value]) => typeof value === 'string' && value)
+    const title = values.find(([name]) => /title|name|heading|label/i.test(name)) ?? values[0]
+    const rest = values.filter((entry) => entry !== title)
+    const content = `${id}__content`
+    const lines = [
+      ...(title ? [{ $id: `${id}__title`, componentId: 'muiTypography', pluginId: 'mui', parentId: content, props: { variant: 'h5', component: 'h3', children: title[1] }, nodes: [] }] : []),
+      ...rest.map(([name, value]) => ({ $id: `${id}__${name}`, componentId: 'muiTypography', pluginId: 'mui', parentId: content, props: { variant: 'body1', children: value }, sx: { color: 'text.secondary', mt: 1 }, nodes: [] })),
+    ]
+    out[id] = { ...node, componentId: 'muiCard', pluginId: 'mui', props: {}, sx: { height: '100%' }, nodes: [content] }
+    out[content] = { $id: content, componentId: 'muiCardContent', pluginId: 'mui', parentId: id, props: {}, sx: { p: 3 }, nodes: lines.map((line) => line.$id) }
+    for (const line of lines) out[line.$id] = line
+  }
+  return out
+}
+
 const CLOSE_ICON =
   'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'
 
@@ -308,7 +334,7 @@ async function main(): Promise<void> {
           }
         }
       }
-      const home = data.page ?? defaults.buildDefaultHomeScreen(data.name).nodes
+      const home = data.page ? expandInstances(data.page) : defaults.buildDefaultHomeScreen(data.name).nodes
       const light = render(home, 'light', false)
       if (data.page) {
         await shoot(light, 1440, 900, 'page-desktop-light', ['full'])

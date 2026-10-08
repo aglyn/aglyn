@@ -574,6 +574,10 @@ export function aiSiteUnitJob(
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
   if (unit.kind === 'layout' || unit.kind === 'page') {
+    // The look designed first (AGL-3660): its header arrangement and band rhythm.
+    const look = (job.outputs ?? []).find((output) => output.resource === 'theme' && output.id === 'look')
+    const style = look?.proposal?.['style'] as Record<string, unknown> | undefined
+    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'] }
     unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage

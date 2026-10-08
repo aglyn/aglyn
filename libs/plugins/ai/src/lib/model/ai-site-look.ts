@@ -34,6 +34,7 @@ import {
   AI_SITE_CORNERS,
   AI_SITE_FONT_PAIRINGS,
   AI_SITE_GROUNDS,
+  AI_SITE_RHYTHMS,
   aiSiteFontPairing,
   type AiSiteBase,
   type AiSiteButtons,
@@ -42,6 +43,7 @@ import {
   type AiSiteDensity,
   type AiSiteGround,
   type AiSiteKind,
+  type AiSiteRhythm,
 } from './ai-site-kinds'
 
 /**
@@ -109,6 +111,10 @@ export interface AiSiteStyle {
   fields: AiSiteFields
   eyebrow: AiSiteEyebrow
   header: AiSiteHeader
+  /** The header's arrangement: brand at the start and links after it, or both centered. */
+  headerAlign: 'start' | 'center'
+  /** How the pages alternate their bands. */
+  rhythm: AiSiteRhythm
   headingScale: number
   density: AiSiteDensity
   /** A brand color the brief gave, used as the primary color. */
@@ -233,81 +239,157 @@ export function aiReadSiteLook(answer: unknown): AiSiteLookAnswer {
 const BLOCK_BIAS: Partial<
   Record<string, { cards: readonly AiSiteCards[]; eyebrow: readonly AiSiteEyebrow[]; header: readonly AiSiteHeader[]; fields: readonly AiSiteFields[] }>
 > = {
-  portfolio: { cards: ['rule', 'flat', 'outlined'], eyebrow: ['small', 'rule'], header: ['flat', 'line'], fields: ['standard', 'outlined'] },
-  studio: { cards: ['flat', 'rule', 'outlined'], eyebrow: ['rule', 'small'], header: ['flat', 'line'], fields: ['standard', 'outlined'] },
-  photography: { cards: ['flat', 'rule'], eyebrow: ['small', 'rule'], header: ['flat', 'line'], fields: ['standard', 'outlined'] },
-  blog: { cards: ['rule', 'outlined', 'flat'], eyebrow: ['small', 'caps'], header: ['line', 'flat'], fields: ['outlined', 'standard'] },
-  trades: { cards: ['elevated', 'outlined', 'rule'], eyebrow: ['caps'], header: ['shadow', 'line'], fields: ['outlined', 'filled'] },
-  fitness: { cards: ['elevated', 'flat', 'rule'], eyebrow: ['caps', 'rule'], header: ['shadow', 'flat'], fields: ['filled', 'outlined'] },
-  professional: { cards: ['outlined', 'rule', 'flat'], eyebrow: ['caps', 'rule'], header: ['line', 'flat'], fields: ['outlined', 'standard'] },
-  wellness: { cards: ['tinted', 'flat', 'elevated'], eyebrow: ['small', 'caps'], header: ['flat', 'line'], fields: ['filled', 'outlined'] },
-  yoga: { cards: ['tinted', 'flat'], eyebrow: ['small', 'rule'], header: ['flat'], fields: ['filled', 'standard'] },
-  restaurant: { cards: ['flat', 'elevated', 'tinted'], eyebrow: ['caps', 'rule'], header: ['flat', 'shadow'], fields: ['outlined', 'filled'] },
-  beauty: { cards: ['tinted', 'flat', 'outlined'], eyebrow: ['rule', 'small'], header: ['flat', 'line'], fields: ['standard', 'filled'] },
-  music: { cards: ['flat', 'rule'], eyebrow: ['caps'], header: ['flat'], fields: ['filled', 'standard'] },
+  portfolio: { cards: ['rule', 'flat', 'outlined'], eyebrow: ['small', 'rule', 'caps'], header: ['flat', 'line', 'shadow'], fields: ['standard', 'outlined', 'filled'] },
+  studio: { cards: ['flat', 'rule', 'outlined'], eyebrow: ['rule', 'small', 'caps'], header: ['flat', 'line', 'shadow'], fields: ['standard', 'outlined', 'filled'] },
+  photography: { cards: ['flat', 'rule', 'outlined'], eyebrow: ['small', 'rule', 'caps'], header: ['flat', 'line', 'shadow'], fields: ['standard', 'outlined', 'filled'] },
+  blog: { cards: ['rule', 'outlined', 'flat', 'tinted'], eyebrow: ['small', 'caps', 'rule'], header: ['line', 'flat', 'shadow'], fields: ['outlined', 'standard', 'filled'] },
+  trades: { cards: ['elevated', 'outlined', 'rule', 'flat', 'tinted'], eyebrow: ['caps', 'rule', 'small'], header: ['shadow', 'line', 'flat'], fields: ['outlined', 'filled', 'standard'] },
+  fitness: { cards: ['elevated', 'flat', 'rule', 'outlined'], eyebrow: ['caps', 'rule', 'small'], header: ['shadow', 'flat', 'line'], fields: ['filled', 'outlined', 'standard'] },
+  professional: { cards: ['outlined', 'rule', 'flat', 'elevated'], eyebrow: ['caps', 'rule', 'small'], header: ['line', 'flat', 'shadow'], fields: ['outlined', 'standard', 'filled'] },
+  wellness: { cards: ['tinted', 'flat', 'elevated', 'outlined'], eyebrow: ['small', 'caps', 'rule'], header: ['flat', 'line', 'shadow'], fields: ['filled', 'outlined', 'standard'] },
+  yoga: { cards: ['tinted', 'flat', 'outlined'], eyebrow: ['small', 'rule', 'caps'], header: ['flat', 'line', 'shadow'], fields: ['filled', 'standard', 'outlined'] },
+  restaurant: { cards: ['flat', 'elevated', 'tinted', 'rule'], eyebrow: ['caps', 'rule', 'small'], header: ['flat', 'shadow', 'line'], fields: ['outlined', 'filled', 'standard'] },
+  beauty: { cards: ['tinted', 'flat', 'outlined', 'rule'], eyebrow: ['rule', 'small', 'caps'], header: ['flat', 'line', 'shadow'], fields: ['standard', 'filled', 'outlined'] },
+  music: { cards: ['flat', 'rule', 'elevated'], eyebrow: ['caps', 'rule', 'small'], header: ['flat', 'shadow', 'line'], fields: ['filled', 'standard', 'outlined'] },
 }
 const ANY_BLOCKS = { cards: AI_SITE_CARDS, eyebrow: AI_SITE_EYEBROWS, header: AI_SITE_HEADERS, fields: AI_SITE_FIELDS }
 
-/** The nearest hue a kind's ranges admit, where a choice falls well outside them all. */
-function nearKind(hue: number, kind: AiSiteKind): number {
-  const ranges = kind.look.hues
-  const inside = (value: number, [from, to]: readonly [number, number]) =>
-    from <= to ? value >= from && value <= to : value >= from || value <= to
-  const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b))
-  if (ranges.some((range) => inside(hue, range))) return hue
-  let best = hue
-  let gap = Infinity
-  for (const [from, to] of ranges) {
-    for (const edge of [from, to]) {
-      if (distance(hue, edge) < gap) {
-        gap = distance(hue, edge)
-        best = edge
-      }
-    }
+/** The hue family a hue is in: twelve families of thirty degrees, 0 the reds. */
+export function aiSiteHueFamily(hue: number): number {
+  return Math.floor((((hue + 15) % 360) + 360) % 360 / 30)
+}
+
+/** Which of a kind's hue ranges a hue falls in, or -1. */
+function rangeOf(hue: number, kind: AiSiteKind): number {
+  return kind.look.hues.findIndex(([from, to]) => (from <= to ? hue >= from && hue <= to : hue >= from || hue <= to))
+}
+
+/** The look dimensions two sites are compared by (`ai-site-look.spec.ts`). */
+export const AI_SITE_LOOK_DIMENSIONS = [
+  'base',
+  'hueFamily',
+  'fonts',
+  'buttons',
+  'cards',
+  'corners',
+  'ground',
+  'eyebrow',
+  'header',
+  'fields',
+  'headerAlign',
+  'rhythm',
+] as const
+
+/** A style's value on each tracked dimension. */
+export function aiSiteLookSignature(style: AiSiteStyle): Record<(typeof AI_SITE_LOOK_DIMENSIONS)[number], string> {
+  return {
+    base: style.base,
+    hueFamily: String(aiSiteHueFamily(style.hue)),
+    fonts: style.fonts,
+    buttons: style.buttons,
+    cards: style.cards,
+    corners: style.corners,
+    ground: style.ground,
+    eyebrow: style.eyebrow,
+    header: style.header,
+    fields: style.fields,
+    headerAlign: style.headerAlign,
+    rhythm: style.rhythm,
   }
-  // A choice near the kind's colors is the model knowing the business better.
-  return gap <= 25 ? hue : best % 360
 }
 
 /**
- * The style tokens for a site of this kind: the model's choices where it made
- * them, the seed's picks from the kind's options where it did not, and the
- * seed's nudge on every continuous value.
+ * The style tokens for a site of this kind (AGL-3660). Every dimension is
+ * the SEED's choice among what suits the kind, with the model's choice for
+ * this business as a favored candidate — kept at a given chance, not always
+ * — so the brief steers the look and two jobs with the same brief and the
+ * same answer still come out as two sites: another base, another hue family,
+ * another pairing, other buttons. A brand color the brief gives is always
+ * kept.
  */
-export function aiSiteStyleFor(input: { kind: AiSiteKind; answer: AiSiteLookAnswer; seed: number; brand?: string | null }): AiSiteStyle {
-  const { kind, answer, seed } = input
+export function aiSiteStyleFor(input: {
+  kind: AiSiteKind
+  answer: AiSiteLookAnswer
+  seed: number
+  brand?: string | null
+  /**
+   * The looks of the workspace's other sites (AGL-3660): a look that shares
+   * one's base, hue family, heading font and buttons, or differs from one in
+   * fewer than three tracked dimensions, is drawn again from the next seed.
+   */
+  avoid?: readonly AiSiteStyle[]
+}): AiSiteStyle {
+  const avoid = input.avoid ?? []
+  if (!avoid.length) return styleOnce(input, input.seed)
+  const signatures = avoid.map(aiSiteLookSignature)
+  let best: { style: AiSiteStyle; least: number } | null = null
+  for (let attempt = 0; attempt < AI_SITE_LOOK_DRAWS; attempt += 1) {
+    const style = styleOnce(input, attempt === 0 ? input.seed : (Math.imul(input.seed ^ 0x5bd1e995, attempt + 1) >>> 0))
+    const own = aiSiteLookSignature(style)
+    const least = Math.min(
+      ...signatures.map((other) =>
+        TUPLE.every((dimension) => own[dimension] === other[dimension])
+          ? -1
+          : AI_SITE_LOOK_DIMENSIONS.filter((dimension) => own[dimension] !== other[dimension]).length,
+      ),
+    )
+    if (least >= AI_SITE_LOOK_LEAST_DIFFERENCES) return style
+    if (!best || least > best.least) best = { style, least }
+  }
+  return (best as { style: AiSiteStyle }).style
+}
+
+/** How many seeds a look draws before it settles for the most different. */
+export const AI_SITE_LOOK_DRAWS = 32
+/** The fewest tracked dimensions in which two of a workspace's sites differ. */
+export const AI_SITE_LOOK_LEAST_DIFFERENCES = 3
+/** The dimensions no two of a workspace's sites share all of. */
+const TUPLE = ['base', 'hueFamily', 'fonts', 'buttons'] as const
+
+function styleOnce(
+  input: { kind: AiSiteKind; answer: AiSiteLookAnswer; brand?: string | null },
+  seed: number,
+): AiSiteStyle {
+  const { kind, answer } = input
   const next = random(seed)
   const family = kind.look
   const blocks = BLOCK_BIAS[kind.id] ?? ANY_BLOCKS
-  const randomHue = () => {
-    const [from, to] = pick(next, family.hues)
-    const span = from <= to ? to - from : 360 - from + to
-    return Math.round(from + next() * span) % 360
-  }
-  // A nudge of at least `least` degrees either way, so two jobs whose model
-  // answered alike never land on one color.
-  const jitter = (least: number, most: number) => (next() < 0.5 ? -1 : 1) * Math.round(least + next() * (most - least))
-  const baseHue = answer.hue === undefined ? randomHue() : nearKind(answer.hue, kind)
-  const hue = (baseHue + jitter(5, 16) + 360) % 360
-  const accentFrom = answer.accent ?? (baseHue + pick(next, [30, 150, 180, 210, 330])) % 360
-  const accent = (accentFrom + jitter(8, 24) + 360) % 360
-  const base = answer.base ?? pick(next, family.bases)
+  /** The model's choice at a chance of `keep`, else the seed's among `options`. */
+  const choose = <T,>(model: T | undefined, options: readonly T[], keep: number): T =>
+    model !== undefined && next() < keep ? model : pick(next, options)
+
+  // The hue: a family among the kind's (the brief's industry), the model's
+  // own family favored, and a hue within it.
+  const modelRange = answer.hue === undefined ? -1 : rangeOf(answer.hue, kind)
+  const keepHue = modelRange !== -1 && next() < 0.3
+  const range = keepHue ? modelRange : Math.floor(next() * family.hues.length) % family.hues.length
+  const [from, to] = family.hues[range] as readonly [number, number]
+  const span = from <= to ? to - from : 360 - from + to
+  const hue = keepHue
+    ? ((answer.hue as number) + (next() < 0.5 ? -1 : 1) * Math.round(4 + next() * 8) + 360) % 360
+    : Math.round(from + next() * span) % 360
+  const accentFrom = answer.accent !== undefined && next() < 0.4 ? answer.accent : (hue + pick(next, [30, 150, 180, 210, 330])) % 360
+  const accent = (accentFrom + (next() < 0.5 ? -1 : 1) * Math.round(8 + next() * 16) + 360) % 360
+
+  const bases = [...new Set([...(answer.base ? [answer.base] : []), ...family.bases])]
   return {
     v: 1,
     kind: kind.id,
-    base,
+    base: choose(answer.base, bases, 0.3),
     seed,
     hue,
     accent,
     chroma: family.chroma,
-    ground: answer.ground ?? pick(next, family.grounds),
-    fonts: answer.fonts ?? pick(next, family.fonts),
-    corners: answer.corners ?? pick(next, family.corners),
-    buttons: answer.buttons ?? (next() < 0.7 ? family.buttons : pick(next, AI_SITE_BUTTONS)),
-    cards: answer.cards ?? pick(next, blocks.cards),
-    fields: answer.fields ?? pick(next, blocks.fields),
-    eyebrow: answer.eyebrow ?? pick(next, blocks.eyebrow),
-    header: answer.header ?? pick(next, blocks.header),
+    ground: choose(answer.ground, family.grounds, 0.35),
+    fonts: choose(answer.fonts, family.fonts, 0.3),
+    corners: choose(answer.corners, family.corners, 0.35),
+    buttons: choose(answer.buttons, [family.buttons, ...AI_SITE_BUTTONS], 0.3),
+    cards: choose(answer.cards, blocks.cards, 0.35),
+    fields: choose(answer.fields, blocks.fields, 0.35),
+    eyebrow: choose(answer.eyebrow, blocks.eyebrow, 0.35),
+    header: choose(answer.header, blocks.header, 0.35),
+    headerAlign: pick(next, family.headerAligns ?? ['start', 'start', 'center']),
+    rhythm: pick(next, family.rhythms ?? AI_SITE_RHYTHMS),
     headingScale: Math.round(family.headingScale * (0.94 + next() * 0.12) * 100) / 100,
     density: family.density === 'regular' && next() < 0.25 ? pick(next, DENSITIES) : family.density,
     brand: aiSiteBrandHex(input.brand) ?? answer.brand ?? null,

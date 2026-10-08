@@ -21,7 +21,9 @@ import { contrastRatio, validateThemeForPublish } from '@aglyn/aglyn/app-utils/s
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { AI_SITE_FONT_PAIRINGS, AI_SITE_KINDS, aiSiteKind, aiSiteKindFor } from './ai-site-kinds'
 import {
+  AI_SITE_LOOK_DIMENSIONS,
   aiReadSiteLook,
+  aiSiteLookSignature,
   aiSiteBrandHex,
   aiSiteSeed,
   aiSiteStyleFor,
@@ -83,8 +85,6 @@ describe('site looks (AGL-3660)', () => {
     const one = aiSiteStyleFor({ kind: kind('portfolio'), answer, seed: aiSiteSeed('job-a') })
     const two = aiSiteStyleFor({ kind: kind('portfolio'), answer, seed: aiSiteSeed('job-b') })
     expect(one).not.toEqual(two)
-    // Same base theme, still two looks.
-    expect(one.base).toBe(two.base)
     expect(aiSiteTheme(one, DEFAULT_SITE_THEME).colorSchemes).not.toEqual(aiSiteTheme(two, DEFAULT_SITE_THEME).colorSchemes)
   })
 
@@ -97,14 +97,63 @@ describe('site looks (AGL-3660)', () => {
     expect(seen.size).toBe(20)
   })
 
-  it('keeps what the model chose, and fills the rest from the kind', () => {
-    const style = aiSiteStyleFor({
-      kind: kind('professional'),
-      answer: { base: 'carbon', fonts: 'baskerville', cards: 'rule', fields: 'standard', eyebrow: 'rule', header: 'line' },
-      seed: 7,
-    })
-    expect(style).toMatchObject({ base: 'carbon', fonts: 'baskerville', cards: 'rule', fields: 'standard', eyebrow: 'rule', header: 'line' })
-    expect(kind('professional').look.corners).toContain(style.corners)
+  it('favors what the model chose for the business, within what suits the kind', () => {
+    const answer: AiSiteLookAnswer = { base: 'carbon', fonts: 'baskerville', cards: 'rule' }
+    const styles = Array.from({ length: 60 }, (_, n) =>
+      aiSiteStyleFor({ kind: kind('professional'), answer, seed: aiSiteSeed(`law-${n}`) }),
+    )
+    const share = (pickOne: (style: (typeof styles)[number]) => string, value: string) =>
+      styles.filter((style) => pickOne(style) === value).length / styles.length
+    // Kept often, never always: the seed still moves a third of them or more.
+    expect(share((style) => style.base, 'carbon')).toBeGreaterThan(0.25)
+    expect(share((style) => style.base, 'carbon')).toBeLessThan(0.7)
+    expect(share((style) => style.fonts, 'baskerville')).toBeGreaterThan(0.25)
+    for (const style of styles) {
+      expect([...kind('professional').look.corners]).toContain(style.corners)
+      expect(['carbon', ...kind('professional').look.bases]).toContain(style.base)
+    }
+  })
+
+  /*
+   * Zach's bar (AGL-3660): no two sites alike, even one kind and one brief.
+   * Ten sites of one workspace whose model answered exactly alike: no two
+   * share their base, hue family, heading font and button style, and every
+   * two differ in at least three of the look's tracked dimensions — each
+   * look drawn knowing the workspace's others.
+   */
+  const SAME: AiSiteLookAnswer = { base: 'carbon', hue: 210, accent: 30, fonts: 'oswald', buttons: 'caps', cards: 'outlined', corners: 'sharp', ground: 'white', eyebrow: 'caps', header: 'line', fields: 'outlined' }
+  it('makes ten sites of one kind and one brief ten looks', () => {
+    const styles: ReturnType<typeof aiSiteStyleFor>[] = []
+    for (let n = 0; n < 10; n += 1) {
+      styles.push(aiSiteStyleFor({ kind: kind('trades'), answer: SAME, seed: aiSiteSeed(`roofer-job-${n}`), avoid: styles }))
+    }
+    const signatures = styles.map(aiSiteLookSignature)
+    const tuples = signatures.map((signature) => [signature.base, signature.hueFamily, signature.fonts, signature.buttons].join('|'))
+    expect(new Set(tuples).size).toBe(10)
+    for (let a = 0; a < signatures.length; a += 1) {
+      for (let b = a + 1; b < signatures.length; b += 1) {
+        const differ = AI_SITE_LOOK_DIMENSIONS.filter((dimension) => signatures[a][dimension] !== signatures[b][dimension])
+        expect([a, b, differ.length >= 3]).toEqual([a, b, true])
+      }
+    }
+  })
+
+  it('rarely gives two independent jobs of one brief the same base, hue family, font and buttons', () => {
+    for (const entry of AI_SITE_KINDS) {
+      const signatures = Array.from({ length: 80 }, (_, n) =>
+        aiSiteLookSignature(aiSiteStyleFor({ kind: entry, answer: SAME, seed: aiSiteSeed(`${entry.id}-${n}`) })),
+      )
+      let same = 0
+      let pairs = 0
+      for (let a = 0; a < signatures.length; a += 1) {
+        for (let b = a + 1; b < signatures.length; b += 1) {
+          pairs += 1
+          if (['base', 'hueFamily', 'fonts', 'buttons'].every((key) => signatures[a][key as 'base'] === signatures[b][key as 'base'])) same += 1
+        }
+      }
+      // Measured 0.2–1.1% of pairs on 2026-10-07; a workspace's own sites never.
+      expect([entry.id, same / pairs < 0.02]).toEqual([entry.id, true])
+    }
   })
 
   it('uses a brand color the brief gives', () => {
@@ -115,11 +164,13 @@ describe('site looks (AGL-3660)', () => {
   })
 
   it('puts every building block in the theme, so a component dropped in later matches', () => {
-    const style = aiSiteStyleFor({
-      kind: kind('wellness'),
-      answer: { cards: 'tinted', buttons: 'pill', fields: 'filled', header: 'flat' },
-      seed: 3,
-    })
+    const style = {
+      ...aiSiteStyleFor({ kind: kind('wellness'), answer: {}, seed: 3 }),
+      cards: 'tinted' as const,
+      buttons: 'pill' as const,
+      fields: 'filled' as const,
+      header: 'flat' as const,
+    }
     const theme = aiSiteTheme(style, DEFAULT_SITE_THEME)
     expect(theme.components?.['MuiCard']).toMatchObject({
       defaultProps: { variant: 'elevation', elevation: 0 },

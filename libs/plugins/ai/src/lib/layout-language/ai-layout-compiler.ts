@@ -126,6 +126,13 @@ export interface AiLayoutCompiledPage {
   /** A button's compiled id → the plan section a click scrolls to. */
   scrollTo: Record<string, number>
   settled: AiLayoutSettlement[]
+  /**
+   * Each plan section's repeated items — cards, steps, figures, component
+   * instances, list lines and questions — by the id of the element that
+   * draws each (AGL-3660), so a check can count what a visitor sees after
+   * anything later takes words out.
+   */
+  itemIds: string[][]
 }
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
@@ -153,6 +160,8 @@ export interface PageScope {
   pageIcon: AiIconLibraryEntry
   /** The forms this page already places, each once. */
   formsPlaced: Set<string>
+  /** Each section's repeated items, by the id of the element that draws each (AGL-3660). */
+  itemIds: string[][]
 }
 
 /** Everything one section's compile shares. */
@@ -226,6 +235,7 @@ export function aiCompileLayoutPage(
     formSection: formSectionOf(sections, plan, targets),
     pageIcon: pageIconOf(sections),
     formsPlaced: new Set(),
+    itemIds: plan.sections.map(() => []),
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
@@ -244,6 +254,7 @@ export function aiCompileLayoutPage(
     sectionRoots: roots,
     scrollTo: page.scrollTo,
     settled: page.settled,
+    itemIds: page.itemIds,
   }
 }
 
@@ -1161,6 +1172,12 @@ function instanceValues(
 
 // ── Groups ────────────────────────────────────────────────────────────────
 
+/** Records the elements that draw a section's repeated items, and hands them back. */
+function noted<T extends readonly string[]>(scope: SectionScope, ids: T): T {
+  if (!scope.frame) scope.page.itemIds[scope.index]?.push(...ids)
+  return ids
+}
+
 /** How many items sit side by side in a room. */
 function across(
   count: number,
@@ -1277,7 +1294,7 @@ function group(
     case 'steps':
       return layOut(
         scope,
-        items.map((item, position) => step(scope, item, position)),
+        noted(scope, items.map((item, position) => step(scope, item, position))),
         perRow,
         '4',
         'steps',
@@ -1285,7 +1302,7 @@ function group(
     case 'stats':
       return layOut(
         scope,
-        items.map((item) => stat(scope, item)),
+        noted(scope, items.map((item) => stat(scope, item))),
         perRow,
         '4',
         'stats',
@@ -1293,7 +1310,7 @@ function group(
     case 'quotes':
       return layOut(
         scope,
-        items.map((item) => quote(scope, item)),
+        noted(scope, items.map((item) => quote(scope, item))),
         perRow,
         '3',
         'quotes',
@@ -1301,7 +1318,7 @@ function group(
     default:
       return layOut(
         scope,
-        items.map((item) => card(scope, block, item)),
+        noted(scope, items.map((item) => card(scope, block, item))),
         perRow,
         '3',
         'cards',
@@ -1329,7 +1346,7 @@ function instances(
       'instance',
     )
   })
-  return layOut(scope, ids, perRow, '3', 'instances')
+  return layOut(scope, noted(scope, ids), perRow, '3', 'instances')
 }
 
 /**
@@ -1367,7 +1384,7 @@ function compactGroup(
       'pair',
     )
   })
-  return layOut(scope, pairs, perRow, '3', 'compact')
+  return layOut(scope, noted(scope, pairs), perRow, '3', 'compact')
 }
 
 /** A card: an optional icon, its title one level under the section's heading, and its words. */
@@ -1610,7 +1627,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
       return [id]
     })
     return links.length
-      ? tree.add('muiStack', { spacing: '1' }, null, links, 'links')
+      ? tree.add('muiStack', { spacing: '1' }, null, noted(scope, links), 'links')
       : null
   }
   const lines = cleanItems(scope, block.items ?? [])
@@ -1634,7 +1651,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
         'row',
       ),
     )
-    return tree.add('muiList', { disablePadding: true }, null, rows, 'list')
+    return tree.add('muiList', { disablePadding: true }, null, noted(scope, rows), 'list')
   }
   const check = aiIconOfWord(block.icon) ?? AI_ICON_LIBRARY.check
   const rows = lines.map((line) =>
@@ -1661,7 +1678,7 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
       'row',
     ),
   )
-  return tree.add('muiStack', { spacing: '1.5' }, null, rows, 'list')
+  return tree.add('muiStack', { spacing: '1.5' }, null, noted(scope, rows), 'list')
 }
 
 /** Questions and answers: an accordion each, or question-over-answer pairs where rule 1 holds. */
@@ -1698,7 +1715,7 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
         'row',
       ),
     )
-    return tree.add('muiList', { disablePadding: true }, null, rows, 'faq')
+    return tree.add('muiList', { disablePadding: true }, null, noted(scope, rows), 'faq')
   }
   const panels = items.map((item, position) =>
     tree.add(
@@ -1740,7 +1757,7 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
       'panel',
     ),
   )
-  return tree.add('muiStack', { spacing: '1.5' }, null, panels, 'faq')
+  return tree.add('muiStack', { spacing: '1.5' }, null, noted(scope, panels), 'faq')
 }
 
 /** The id the compiled page's root is stored under. */

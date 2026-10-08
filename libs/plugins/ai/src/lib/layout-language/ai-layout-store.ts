@@ -34,7 +34,14 @@ import type { AiLayoutRawTree } from './ai-layout-tree'
  */
 
 export type AiLayoutStored =
-  | { ok: true; nodes: NodesMap; rootId: string; repairs: string[] }
+  | {
+      ok: true
+      nodes: NodesMap
+      rootId: string
+      repairs: string[]
+      /** Each compiled id → the id its node is stored under, for a node the validator kept. */
+      storedIds: Record<string, string>
+    }
   | { ok: false; error: string }
 
 type StoredNode = Record<string, unknown> & {
@@ -85,10 +92,16 @@ export function aiLayoutStoredTree(
         : {}),
     }
   }
+  const storedIds: Record<string, string> = {}
+  for (const minted of Object.keys(validated.nodes)) {
+    const source = validated.sourceIds[minted]
+    if (source) storedIds[source] = storedId(minted)
+  }
   return {
     ok: true,
     nodes: nodes as unknown as NodesMap,
     rootId: storedId(validated.rootId),
     repairs: validated.repairs,
+    storedIds,
   }
 }

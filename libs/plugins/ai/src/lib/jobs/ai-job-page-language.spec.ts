@@ -78,3 +78,53 @@ describe('a page in the layout language gives no contact detail the job was not 
     expect(JSON.stringify(last.value?.nodes)).not.toContain('[phone number]')
   })
 })
+
+/*
+ * A section planned with repeated items that shows none (AGL-3660): the
+ * business contact sheets showed "What the inspection covers" as a heading
+ * and an intro over nothing. Such a page is asked for again.
+ */
+describe('a section planned with items shows them (AGL-3660)', () => {
+  const screen = {
+    title: 'Home',
+    slug: '/',
+    template: null,
+    sections: [
+      { name: 'Hero', uses: [], items: 0 },
+      { name: 'What the inspection covers', uses: [], items: 3 },
+    ],
+  }
+  const page = () =>
+    aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds: ['sec-0', 'sec-1'],
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'A roofer.' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, scrollTargetIds: ['sec-0', 'sec-1'], reusableComponents: false },
+      reusableComponents: false,
+    })
+  const hero = { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Storm damage, checked'), block('lede', 'A free inspection.')] }
+
+  it('refuses a heading and an intro over nothing', () => {
+    const result = page()({
+      sections: [hero, { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'What the inspection covers'), block('lede', 'Every part of the roof.')] }],
+    })
+    expect(result.value).toBeNull()
+    expect(result.violations.map((violation) => violation.code)).toEqual(['layout-section-no-items'])
+    expect(result.violations[0].message).toBe('Section 2 ("What the inspection covers") is planned with 3 items and shows none.')
+  })
+
+  it('admits the section with its cards', () => {
+    const cards = {
+      ...block('cards', ''),
+      items: [
+        { title: 'Shingles', text: 'Wind lift and hail bruising.', to: '', icon: '' },
+        { title: 'Flashing', text: 'Where leaks start.', to: '', icon: '' },
+        { title: 'Gutters', text: 'Dents and blockage.', to: '', icon: '' },
+      ],
+    }
+    const result = page()({
+      sections: [hero, { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'What the inspection covers'), cards] }],
+    })
+    expect(result.violations).toEqual([])
+  })
+})

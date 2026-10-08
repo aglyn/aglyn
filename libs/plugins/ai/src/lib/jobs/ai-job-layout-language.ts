@@ -163,6 +163,8 @@ export interface AiLayoutFrameBuilt {
 
 /** The check a frame answer is held to: read, compiled, stored and checked as a layout, with the layout door's own checks. */
 export function aiLayoutFrameCheck(input: {
+  /** The header arrangement the site's look chose (AGL-3660); the answer's otherwise. */
+  headerAlign?: 'start' | 'center'
   siteName: string
   homeId: string | null
   pages: readonly AiLayoutPage[]
@@ -175,6 +177,7 @@ export function aiLayoutFrameCheck(input: {
     answers += 1
     const last = answers >= AI_GENERATION_MAX_ATTEMPTS
     const frame = aiReadLayoutFrame(answer)
+    if (input.headerAlign && frame.header) frame.header.align = input.headerAlign
     const compiled = aiCompileLayoutFrame(
       frame,
       { siteName: input.siteName, homeId: input.homeId, navPages: input.pages },

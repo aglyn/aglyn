@@ -89,7 +89,7 @@ import { AI_LAYOUT_FRAME_TOOL } from '../layout-language/ai-layout-language'
 import type { AiBuildPlanScreen } from '../model/ai-build-plan'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
-import { aiSiteKindFor } from '../model/ai-site-kinds'
+import { aiSiteKindFor, aiSiteStyleTokens } from '../model/ai-site-kinds'
 import type { AiSiteStyle } from '../model/ai-site-look'
 import { aiRunSiteLook } from './ai-job-site-look'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
@@ -282,7 +282,9 @@ const BRIEFS: readonly Brief[] = [
  * brief side by side.
  */
 const TWINS: readonly Brief[] = [{ ...(BRIEFS.find((brief) => brief.key === 'roofer') as Brief), key: 'roofer-twin' }]
-const ALL_BRIEFS: readonly Brief[] = [...BRIEFS, ...TWINS]
+/** `AGLYN_LIVE_AI_BRIEFS=roofer,towing` runs only those briefs. */
+const ONLY = (process.env['AGLYN_LIVE_AI_BRIEFS'] ?? '').split(',').map((key) => key.trim()).filter(Boolean)
+const ALL_BRIEFS: readonly Brief[] = [...BRIEFS, ...TWINS].filter((brief) => !ONLY.length || ONLY.includes(brief.key))
 
 /** Each brief's kind, as the guided start suggests it from what the site is for. */
 const kindOf = (brief: Brief) => aiSiteKindFor(brief.businessType).id
@@ -301,7 +303,11 @@ function inventory(): AiSiteInventory {
   }
 }
 
+/** Each brief's look, once designed, which its pages and frame are built in (AGL-3660). */
+const LOOKS = new Map<string, AiSiteStyle | null>()
+
 function job(brief: Brief, kind: 'page' | 'layout', id: string, screen: AiBuildPlanScreen | null): AiJob {
+  const look = LOOKS.get(brief.key)
   const plan = {
     reuse: [{ kind: 'form', id: FORM_ID, purpose: 'the form this site’s pages are built on' }],
     create: kind === 'layout' ? [{ kind: 'layout', name: 'Main Layout', why: 'header and footer', duplicateOf: null, fields: ['header', 'nav', 'main', 'footer'] }] : [],
@@ -324,6 +330,7 @@ function job(brief: Brief, kind: 'page' | 'layout', id: string, screen: AiBuildP
       businessName: brief.name,
       businessType: brief.businessType,
       siteKind: kindOf(brief),
+      ...(look ? { siteStyle: { headerAlign: look.headerAlign, rhythm: look.rhythm } } : {}),
       audience: brief.audience,
       city: brief.city,
       sitePages: planned(brief),
@@ -352,6 +359,8 @@ interface Result {
   findings: string[]
   settled: number
   dropped: string[]
+  /** Each section's planned items and the items it shows, as `shown/planned` (AGL-3660). */
+  items?: string[]
 }
 
 function record(name: string, prompt: string, before: number, result: { status: string; estCostUsd: number; attempts: number } & Record<string, unknown>): Result {
@@ -430,6 +439,7 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     observe: (check) => (answer) => {
       attempt += 1
       const checked = check(answer)
+      if (OUT) writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.answer-${attempt}.json`), JSON.stringify(answer, null, 1))
       if (OUT && checked.violations.length) {
         writeFileSync(
           join(OUT, `${brief.key}-${page.title.toLowerCase()}.refused-${attempt}.json`),
@@ -452,7 +462,11 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     })
     writeFileSync(join(OUT, `${brief.key}-${page.title.toLowerCase()}.json`), JSON.stringify({ name: `${brief.key}-${page.title}`, nodes }, null, 1))
   }
-  return record(`${brief.key} / ${page.title}`, prompt, before, result as never)
+  const recorded = record(`${brief.key} / ${page.title}`, prompt, before, result as never)
+  if (result.status === 'ok') {
+    recorded.items = screen.sections.map((section, index) => `${result.value.items[index] ?? 0}/${section.items}`)
+  }
+  return recorded
 }
 
 async function buildFrame(brief: Brief): Promise<Result> {
@@ -474,6 +488,7 @@ async function buildFrame(brief: Brief): Promise<Result> {
     maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
     thinking: 'off',
     check: aiLayoutFrameCheck({
+      ...aiSiteStyleTokens(unit.inputs),
       siteName,
       homeId: aiLayoutHomeId(pages, site),
       pages,
@@ -500,6 +515,8 @@ async function buildLook(brief: Brief): Promise<LookResult> {
     { job: unit, stepIndex: 0, now: NOW, firestore: {} as never, ...(MODEL ? { modelFor: () => MODEL } : {}) },
     unit,
     {
+      // Each brief a customer of its own: drawn apart from no other site.
+      others: async () => [],
       save: async (_firestore, input) => {
         style = input.style
         return { write: 'applied', baseName: input.style.base }
@@ -534,6 +551,7 @@ describeLive('six guided starts designed by the real model in the layout languag
   it('builds every page and every header and footer with no refusal', async () => {
     if (OUT) mkdirSync(OUT, { recursive: true })
     const looks = await Promise.all(ALL_BRIEFS.map((brief) => buildLook(brief)))
+    ALL_BRIEFS.forEach((brief, index) => LOOKS.set(brief.key, looks[index].style))
     const built = await Promise.all(
       ALL_BRIEFS.flatMap((brief) => [buildPage(brief, 0), buildPage(brief, 1), buildPage(brief, -1), buildFrame(brief)]),
     )
@@ -571,6 +589,7 @@ describeLive('six guided starts designed by the real model in the layout languag
       creditsPerPage: pages.map((result) => result.credits),
       creditsPerFrame: frames.map((result) => result.credits),
       creditsPerLook: looks.map((result) => result.credits),
+      itemsPerSection: Object.fromEntries(pages.map((result) => [result.name, (result.items ?? []).join(' ')])),
       looks: looks.map((result, index) => {
         const style = result.style as AiSiteStyle | null
         return {
@@ -586,6 +605,8 @@ describeLive('six guided starts designed by the real model in the layout languag
           fields: style?.fields,
           eyebrow: style?.eyebrow,
           header: style?.header,
+          headerAlign: style?.headerAlign,
+          rhythm: style?.rhythm,
           ground: style?.ground,
         }
       }),

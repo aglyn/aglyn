@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiSiteStyleTokens } from '../model/ai-site-kinds'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
@@ -410,6 +411,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
         thinking: 'off',
         check: aiLayoutFrameCheck({
+          ...aiSiteStyleTokens(job.inputs),
           siteName,
           homeId: aiLayoutHomeId(pages, inventory),
           pages,
