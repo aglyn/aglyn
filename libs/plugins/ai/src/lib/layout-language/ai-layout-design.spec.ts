@@ -24,6 +24,7 @@ import type { AiLayoutSection } from './ai-layout-language'
 import type { AiLayoutTargets } from './ai-layout-links'
 import { aiLayoutPictureSlots } from './ai-layout-pictures'
 import { aiLayoutStoredTree } from './ai-layout-store'
+import { aiCompileLayoutFrame } from './ai-layout-frame'
 
 /**
  * The designer layer (AGL-3660): the same model answer drawn as a designer
@@ -93,7 +94,7 @@ function page(groupHeading: string, groupItems: number): { sections: AiLayoutSec
   }
 }
 
-function build(sections: AiLayoutSection[], plan: AiLayoutPagePlan, design?: AiLayoutDesign) {
+function build(sections: AiLayoutSection[], plan: AiLayoutPagePlan, design?: AiLayoutDesign, paid = false) {
   const sectionIds = plan.sections.map((_, index) => `sec-${index + 1}`)
   const context = {
     screenIds: TARGETS.pages.map((entry) => entry.id),
@@ -101,10 +102,12 @@ function build(sections: AiLayoutSection[], plan: AiLayoutPagePlan, design?: AiL
     homeScreenIds: ['pg-home'],
     pageSections: plan.sections.map((section) => section.name),
     scrollTargetIds: sectionIds,
-    reusableComponents: false,
+    ...(paid ? {} : { reusableComponents: false }),
+    // As the language page check reads it (AGL-3660).
+    repeatsCompiled: true,
     codeBuilt: true,
   }
-  const compiled = aiCompileLayoutPage(sections, plan, TARGETS, { reusableComponents: false, sectionIds, ...(design ? { design } : {}) })
+  const compiled = aiCompileLayoutPage(sections, plan, TARGETS, { reusableComponents: paid, sectionIds, ...(design ? { design } : {}) })
   const stored = aiLayoutStoredTree(compiled.tree, 'screen', context, sectionIds)
   if (stored.ok === false) throw new Error(stored.error)
   const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, 'page', context)
@@ -186,5 +189,57 @@ describe('a site design (AGL-3660)', () => {
     const hero = slots.find((slot) => slot.sectionIndex === 0)
     expect(hero?.alt).toBe('A sunlit studio with mats on a wooden floor')
     expect((stored.nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[hero?.imageId as string].props?.['decorative']).toBeUndefined()
+  })
+})
+
+describe('a site design on a workspace that keeps components (AGL-3660)', () => {
+  it('still draws work as pictures, which rule 1 reads as compiled, and every other repeat compact', () => {
+    const { sections, plan } = page('Selected work', 4)
+    const { slots, report } = build(sections, plan, { kind: 'portfolio', seed: 3, home: true }, true)
+    expect(report.violations).toEqual([])
+    expect(slots.filter((slot) => slot.sectionIndex === 1)).toHaveLength(4)
+    const ruled = build(page('Why people come', 3).sections, page('Why people come', 3).plan, { kind: 'yoga', seed: 3, home: true }, true)
+    expect(ruled.report.violations).toEqual([])
+    expect(Object.values(ruled.stored.nodes).filter((node) => (node as { componentId: string }).componentId === 'muiListItemText')).toHaveLength(3)
+  })
+
+  it('holds the same picture cards to rule 1 where nothing says the layout language drew them', () => {
+    const { sections, plan } = page('Selected work', 4)
+    const { stored } = build(sections, plan, { kind: 'portfolio', seed: 3, home: true }, true)
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: stored.nodes }, 'page', {
+      screenIds: TARGETS.pages.map((entry) => entry.id),
+      homeScreenIds: ['pg-home'],
+      scrollTargetIds: plan.sections.map((_, index) => `sec-${index + 1}`),
+      codeBuilt: true,
+    })
+    expect(report.violations.map((violation) => violation.code)).toContain('repeated-subtree')
+  })
+})
+
+describe('the header over a photo cover, and a quiet footer under a dark close (AGL-3660)', () => {
+  const cover = (): number => {
+    for (let seed = 1; seed < 200; seed += 1) if (aiLayoutDesignChoices({ kind: 'restaurant', seed, home: true }).hero === 'cover') return seed
+    throw new Error('no cover seed')
+  }
+
+  it('marks a page that opens on a photo cover to run under the header, and no other band', () => {
+    const { sections, plan } = page('Menu highlights', 4)
+    const { stored } = build(sections, plan, { kind: 'restaurant', seed: cover(), home: true })
+    const under = Object.entries(stored.nodes).filter(([, node]) => (node as { props?: Record<string, unknown> }).props?.['underHeader'] === true)
+    expect(under.map(([id]) => id)).toEqual(['sec-1'])
+  })
+
+  it('gives every header the offer to sit over such a page, and quiets a brand footer when pages close dark', () => {
+    const frame = (closesDark: boolean) =>
+      aiCompileLayoutFrame(
+        { header: { blocks: [] }, footer: { band: 'brand', blocks: [{ kind: 'text', text: 'A small studio in town.' }] } },
+        { siteName: 'Studio', homeId: 'pg-home', navPages: TARGETS.pages, closesDark },
+        TARGETS,
+      ).tree.nodes
+    const bar = Object.values(frame(false)).find((node) => node.componentId === 'muiAppBar')
+    expect(bar?.props?.['overHero']).toBe(true)
+    const footerOf = (nodes: ReturnType<typeof frame>) => Object.values(nodes).find((node) => node.props?.['element'] === 'footer')
+    expect(footerOf(frame(false))?.sx).toMatchObject({ bgcolor: 'primary.main' })
+    expect(footerOf(frame(true))?.sx).toMatchObject({ bgcolor: 'background.paper' })
   })
 })

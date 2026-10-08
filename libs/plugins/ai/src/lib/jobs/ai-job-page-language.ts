@@ -492,6 +492,8 @@ export function aiLayoutPageCheck(
       {
         ...input.context,
         scrollTargetIds: input.sectionIds,
+        // The layout language draws its own picture cards (AGL-3660).
+        repeatsCompiled: true,
       },
     )
     // Each section's items as they are stored, after anything the gaps took out.

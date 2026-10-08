@@ -62,6 +62,12 @@ export interface AiLayoutFramePlan {
   homeId: string | null
   /** The pages the navigation links, in order. */
   navPages: readonly AiLayoutPage[]
+  /**
+   * Whether the site's pages close on a dark photo band (AGL-3660,
+   * `AiLayoutDesignChoices.coverClose`): a brand or dark footer under it
+   * would read as a second loud band, so the footer takes the quiet one.
+   */
+  closesDark?: boolean
 }
 
 export interface AiLayoutCompiledFrame {
@@ -359,6 +365,8 @@ export function aiCompileLayoutFrame(
     {
       ...look.props,
       position: 'sticky',
+      // Over a page that opens with a photo cover, the bar sits on the photo (AGL-3660).
+      overHero: true,
       component: 'header',
       ariaLabel: 'Site header',
     },
@@ -409,7 +417,9 @@ function compileFooter(
   name: string,
 ): string {
   const tree = page.tree
-  const band = footer?.band ?? 'soft'
+  const asked = footer?.band ?? 'soft'
+  const band = plan.closesDark && (asked === 'brand' || asked === 'dark') ? 'soft' : asked
+  if (band !== asked) page.settled.push({ at: 'footer', what: `a ${asked} footer under a dark closing band drawn soft` })
   const scope = frameScope(page, 'footer', band, footer?.align === 'center')
   // The footer's page links are the site's pages, every one, as the header's
   // are (AGL-3660): a list the model wrote of page links is drawn with them

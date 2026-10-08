@@ -94,6 +94,7 @@ function checkContext(
     pageSections: plan.sections.map((section) => section.name),
     scrollTargetIds: sectionIds,
     ...(reusableComponents ? {} : { reusableComponents: false }),
+    repeatsCompiled: true,
     codeBuilt: true,
   }
 }

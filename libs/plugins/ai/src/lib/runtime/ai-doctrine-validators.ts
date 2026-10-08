@@ -221,6 +221,14 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    */
   reusableComponents?: boolean
   /**
+   * A page the layout language compiled (AGL-3660), whose picture cards — a
+   * picture over its title and words, one to a cell of a grid — the compiler
+   * draws from the site's design, as the 'build' job's plan reads its repeats
+   * as compiled (`repeatsCompiled`, AGL-3616). Rule 1 asks no component of
+   * those cards; every other repeat on the page is still held to it.
+   */
+  repeatsCompiled?: boolean
+  /**
    * The site's home screens, by id (AGL-3056): the screen a link falls back
    * to when the site has none for what it promises. Absent: none is known.
    */
@@ -482,10 +490,25 @@ function aiRepeatFrameOrSection(tree: AiDoctrineTree): (visit: Visit) => boolean
 export function detectRepeatedSubtrees(
   tree: AiDoctrineTree,
   otherPages: readonly AiDoctrineTree[] = [],
-  context: Pick<AiDoctrineTreeContext, 'reusableComponents'> = {},
+  context: Pick<AiDoctrineTreeContext, 'reusableComponents' | 'repeatsCompiled'> = {},
 ): AiDoctrineViolation[] {
   if (context.reusableComponents === false) return []
   const index = indexShapes(tree)
+  /**
+   * A compiled picture card (AGL-3660): a Stack that opens with its picture,
+   * in a cell of a grid — or that cell, holding only the card.
+   */
+  const card = (id: string | undefined): boolean => {
+    const node = id === undefined ? undefined : tree.nodes[id]
+    const first = node?.nodes?.[0]
+    return node?.componentId === 'muiStack' && first !== undefined && tree.nodes[first]?.componentId === 'image'
+  }
+  const pictureCard = (id: string): boolean => {
+    const node = tree.nodes[id]
+    if (node?.componentId === 'muiGrid' && node.props?.['container'] !== true) return node.nodes?.length === 1 && card(node.nodes[0])
+    const parentId = index.visits.find((visit) => visit.id === id)?.ancestors.at(-1)
+    return card(id) && parentId !== undefined && tree.nodes[parentId]?.componentId === 'muiGrid'
+  }
   const violations: AiDoctrineViolation[] = repeatedShapes(
     tree,
     index,
@@ -496,7 +519,9 @@ export function detectRepeatedSubtrees(
     // the Services band are two parts of two stories, not one block placed twice.
     (visit) => [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'section') ?? tree.rootId,
     aiRepeatFrameOrSection(tree),
-  ).map(({ ids }) => {
+  )
+    .filter(({ ids }) => !(context.repeatsCompiled && ids.every(pictureCard)))
+    .map(({ ids }) => {
     const name = displayName(tree.nodes[ids[0]].componentId)
     return {
       rule: 1,

@@ -149,6 +149,7 @@ async function main(): Promise<void> {
         pages: sitePages,
         targets,
         extend: () => [],
+        ...(language.aiLayoutDesignOf ? { design: language.aiLayoutDesignOf(unit, '/') } : {}),
       })
       const checked = check(site.frame)
       if (checked.violations.length) console.log(`REFUSED   ${site.key} frame: ${checked.violations.map((v: Dict) => v.code).join(', ')}`)
@@ -299,7 +300,15 @@ async function main(): Promise<void> {
       style: site['style'],
       facts: String(site['name']),
       pages,
-      layoutNodes: site['nodes'],
+      // A brief's frame is stored compiled, with no answer to compile again: the
+      // header gets the one prop today's frame compiler gives it, so it sits
+      // over a page's photo cover as a recompiled frame would.
+      layoutNodes: Object.fromEntries(
+        Object.entries(site['nodes'] as Dict).map(([id, node]) => [
+          id,
+          (node as Dict)['componentId'] === 'muiAppBar' ? { ...(node as Dict), props: { ...(node as Dict)['props'], overHero: true } } : node,
+        ]),
+      ),
       form: null,
     })
   }

@@ -60,8 +60,17 @@ export interface SectionProps {
   element?: SectionElement
   /** Accessible name announced for landmark elements. */
   ariaLabel?: string
+  /**
+   * The band runs up under the site's header (AGL-3660): a page's first
+   * band, a full-bleed photo, marks itself so a header that offers to sit
+   * over a photo (`muiAppBar`'s `overHero`) does, on this page only.
+   */
+  underHeader?: boolean
   children?: JSX.Children
 }
+
+/** The mark a band that runs under the header carries, which `muiAppBar` reads. */
+export const UNDER_HEADER_ATTRIBUTE = 'data-aglyn-under-header'
 
 /**
  * Semantic grouping container (AGL-336): renders children inside the
@@ -71,7 +80,7 @@ export interface SectionProps {
  * classes, and interactions.
  */
 const Section = forwardRef<HTMLElement, SectionProps>((props, ref) => {
-  const { element, ariaLabel, children, ...rest } = props
+  const { element, ariaLabel, underHeader, children, ...rest } = props
   const component = SECTION_ELEMENTS.includes(element as SectionElement)
     ? (element as SectionElement)
     : 'section'
@@ -80,6 +89,7 @@ const Section = forwardRef<HTMLElement, SectionProps>((props, ref) => {
       ref={ref}
       component={component}
       aria-label={ariaLabel || undefined}
+      {...(underHeader ? { [UNDER_HEADER_ATTRIBUTE]: '' } : {})}
       {...rest}
     >
       {children}
@@ -122,6 +132,15 @@ export const schema: Aglyn.ComponentSchema<SectionProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     colorSchemeAttribute(),
+    {
+      name: 'underHeader',
+      label: 'Run under the header?',
+      description:
+        "Starts this band at the very top of the page, under the site's " +
+        'header, when the header is set to sit over a photo. Use it on the ' +
+        "page's first band, a full-width photo.",
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
   ],
 }
 

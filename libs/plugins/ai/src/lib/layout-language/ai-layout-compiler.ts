@@ -1366,8 +1366,14 @@ function group(
   const perRow = across(items.length, room, block.kind)
   const placed = componentOf(scope.page.targets, block.to)
   if (placed) return instances(scope, placed, items, perRow)
-  if (rule1(scope)) return compactGroup(scope, block, items, perRow)
   const design = scope.page.design
+  if (rule1(scope)) {
+    // Picture cards the design draws are the compiler's, not a block typed out
+    // by hand (`repeatsCompiled`, AGL-3660); every other repeat stays compact.
+    const variant = design && block.kind === 'cards' && block.style !== 'quiet' ? aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '') : null
+    const pictured = (variant === 'pictures' || variant === 'articles') && room === 'full' && picturesLeft(scope.page) >= items.length
+    return (pictured && designedGroup(scope, variant, items, room)) || compactGroup(scope, block, items, perRow)
+  }
   if (design && block.kind === 'steps' && (design.choices.steps === 'timeline' || room !== 'full')) {
     return timeline(scope, items)
   }
@@ -1885,6 +1891,8 @@ function designedRoot(
       element: 'section',
       ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
       ...(dark ? { colorScheme: 'dark' } : {}),
+      // A photo cover that opens the page runs up under the header, which sits over it.
+      ...(index === 0 && scope.overPhoto ? { underHeader: true } : {}),
     },
     sx,
     children,
@@ -1978,9 +1986,11 @@ function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readon
       flow.unshift({ kind: 'heading', text: page.plan.title })
       page.settled.push({ at: scope.at, what: "no heading; the page's title written as its h1" })
     }
-    // A designed hero's title is display-sized.
+    // A designed hero's title is display-sized; beside a photo, in half the
+    // page, it is the page's title size, so a long one still reads in a few lines.
     const lead = flow.findIndex((block) => speaksHeading(scope, block))
-    flow[lead] = { ...flow[lead], style: 'large' }
+    const { style: _style, ...title } = flow[lead]
+    flow[lead] = design.choices.hero === 'split' ? title : { ...title, style: 'large' }
     const given = images[0] ? aiLayoutFitText(images[0].text, 'alt') : ''
     return hero(
       scope,
