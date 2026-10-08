@@ -938,7 +938,6 @@ describe('the frame', () => {
         ],
       },
     })
-    if (stored.ok === false) throw new Error(stored.error)
     const button = Object.values(stored.nodes).find((node) => node.props?.['children'] === 'Request a groom')
     expect(button?.props?.['fullWidth']).toBeUndefined()
     expect(button?.sx).toMatchObject({ alignSelf: 'flex-start' })

@@ -559,6 +559,12 @@ async function buildLook(brief: Brief): Promise<LookResult> {
     calls: calls.length,
     attempts: calls.length,
     outputTokens: calls.map((call) => Number(call.usage['outputTokens'] ?? 0)),
+    usage: {
+      inputTokens: calls.reduce((total, call) => total + Number(call.usage['inputTokens'] ?? 0), 0),
+      cacheReadTokens: calls.reduce((total, call) => total + Number(call.usage['cacheReadTokens'] ?? 0), 0),
+      cacheWriteTokens: calls.reduce((total, call) => total + Number(call.usage['cacheWriteTokens'] ?? 0), 0),
+      outputTokens: calls.reduce((total, call) => total + Number(call.usage['outputTokens'] ?? 0), 0),
+    },
     cutOffs: calls.filter((call) => call.stopReason === 'max_tokens').length,
     estCostUsd: outcome.estCostUsd,
     credits: assistCreditsFromUsd(outcome.estCostUsd),
