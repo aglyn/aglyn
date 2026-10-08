@@ -44,12 +44,43 @@ import type {
  * `specs/email-history-list-query.spec.ts`.
  */
 
-/** The one order the table keeps, and pages by. */
+/** The default order the table keeps, and pages by. */
 export const EMAIL_HISTORY_SORT: ListQuerySort = {
   path: 'firstSeenAtMs',
   direction: 'desc',
   column: 'sentAtMs',
+  label: 'Sent',
 }
+
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Every header orders each address's query by the field it shows, and the
+ * route merges the addresses' pages in that same order
+ * (`readUserEmailHistoryPage`) — the per-address cursor is a document, so it
+ * resumes in whichever order is on. Sent newest first is the default and
+ * full; the rest are `alone` — served with no filter or search on — so on
+ * this subcollection none costs a composite. Every message writer stamps
+ * `subject` (null until known), `openCount` and `clickCount` (0) when it
+ * creates the message, and `tools/scripts/backfill-staff-list-sort-fields.mjs`
+ * stamps the ones before; `status` and `firstSeenAtMs` are on every message.
+ * Sender (`context`) is set only by the event feed, so the same backfill
+ * stamps it null where an imported message has none.
+ */
+const historyAlone = (path: string, column: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label, alone: true },
+  { path, direction: 'desc', column, label, alone: true },
+]
+
+export const EMAIL_HISTORY_COLUMN_SORTS: readonly ListQuerySort[] = [
+  EMAIL_HISTORY_SORT,
+  { path: 'firstSeenAtMs', direction: 'asc', column: 'sentAtMs', label: 'Sent', alone: true },
+  ...historyAlone('subject', 'subject', 'Message'),
+  ...historyAlone('context', 'context', 'Sender'),
+  ...historyAlone('status', 'status', 'Status'),
+  ...historyAlone('openCount', 'openCount', 'Opens'),
+  ...historyAlone('clickCount', 'clickCount', 'Clicks'),
+]
 
 /** The field every delivery writer stamps (`EMAIL_DELIVERY_SEARCH_FIELD`). */
 const TOKENS = 'searchTokens'
@@ -82,7 +113,7 @@ export const EMAIL_HISTORY_SELECT_FIELDS: readonly string[] = ['status']
 
 export const EMAIL_HISTORY_QUERY: ListQueryDeclaration = {
   fields: EMAIL_HISTORY_FIELDS,
-  sorts: [EMAIL_HISTORY_SORT],
+  sorts: EMAIL_HISTORY_COLUMN_SORTS,
   search: { tokensPath: TOKENS },
 }
 
