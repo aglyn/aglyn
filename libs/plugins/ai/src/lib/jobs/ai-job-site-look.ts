@@ -59,14 +59,17 @@ import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepContext, type AiJobStepOutcome } 
  * keeps it.
  */
 
-/** The answer is a dozen short values; the ceiling leaves room for a re-ask's worth of care. */
-export const AI_SITE_LOOK_MAX_TOKENS = 400
+/** The answer is a dozen short values, about 150 tokens; the ceiling leaves room to spare. */
+export const AI_SITE_LOOK_MAX_TOKENS = 600
 
 /** A look pass's time, on the fast tier the look is asked on. */
 export const AI_SITE_LOOK_BUDGET = aiJobStepBudget({ tier: 'fast', maxTokens: AI_SITE_LOOK_MAX_TOKENS })
 
-/** The generation kind a look is asked under. */
-export const AI_SITE_LOOK_KIND = 'theme'
+/**
+ * The generation kind a look is asked under: values code builds a theme
+ * from, composing nothing, so the doctrine's short fields block leads it.
+ */
+export const AI_SITE_LOOK_KIND = 'site-look'
 
 /** The base themes as the model reads them; `starter` is the one a new site is born with. */
 const STARTER_WORDS = 'Aglyn starter: a soft neutral ground, rounder corners and calm buttons'
@@ -76,9 +79,9 @@ export const AI_SITE_LOOK_INSTRUCTIONS: readonly AiSystemBlock[] = [
   {
     text: [
       "You choose the look of a new small-business website: the platform's base theme it starts from, and the choices that make it this business's own.",
-      `Answer by calling ${AI_SITE_LOOK_TOOL_NAME} exactly once.`,
+      `Answer by calling ${AI_SITE_LOOK_TOOL_NAME} exactly once, at once, and write nothing else: no reasoning, no prose.`,
       '- Choose for this business, its audience and its kind of site, never a default: a roofer and a florist should not share a color, a law firm and a yoga studio should not share a typeface.',
-      '- Prefer a base theme, font pairing and corners from the lists the request gives for this kind of site.',
+      '- Prefer a base theme, font pairing and corners from the lists the request gives for this kind of site; the lists are in no order, so weigh each for this business.',
       '- hue is the brand color and accent sits beside it; pick colors people would expect of this business, and let the design seed tip a close call.',
       '- A hex color written in the brief is the brand color: put it in brand. Otherwise brand is null.',
       '- Choose the building blocks to suit the kind: quiet, flat cards and small eyebrows for minimal sites; raised cards and capitals for bold ones; soft tinted cards for calm ones.',
@@ -86,6 +89,18 @@ export const AI_SITE_LOOK_INSTRUCTIONS: readonly AiSystemBlock[] = [
     cacheBreakpoint: true,
   },
 ]
+
+/** A list in a seed's order (Fisher–Yates over a small LCG). */
+function shuffled<T>(list: readonly T[], seed: number): T[] {
+  const out = [...list]
+  let state = seed >>> 0 || 1
+  for (let index = out.length - 1; index > 0; index -= 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    const other = state % (index + 1)
+    ;[out[index], out[other]] = [out[other] as T, out[index] as T]
+  }
+  return out
+}
 
 /** The look's user turn: the site, its kind and what suits it, and the seed. */
 export function aiSiteLookPrompt(input: {
@@ -96,6 +111,9 @@ export function aiSiteLookPrompt(input: {
   const { job, kind } = input
   const text = (key: string) => (typeof job.inputs?.[key] === 'string' ? (job.inputs[key] as string).trim() : '')
   const pairings = AI_SITE_FONT_PAIRINGS.filter((pairing) => kind.look.fonts.includes(pairing.id))
+  // The lists in the job's own order: a model reads the first of a list as
+  // the answer, and every site of a kind would get the same base and type.
+  const seed = aiSiteSeed(job.$id)
   return [
     `Kind of site: ${kind.label}. ${kind.design}`,
     text('businessName') ? `Business name: ${text('businessName')}` : '',
@@ -103,8 +121,8 @@ export function aiSiteLookPrompt(input: {
     text('audience') ? `For: ${text('audience')}` : '',
     text('brand') ? `Brand: ${text('brand')}` : '',
     `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`,
-    `Base themes that suit it, best first: ${input.bases.map((entry) => `${entry.base} (${entry.words})`).join('; ')}.`,
-    `Font pairings that suit it: ${pairings.map((pairing) => `${pairing.id} (${pairing.feel})`).join('; ')}.`,
+    `Base themes that suit it: ${shuffled(input.bases, seed).map((entry) => `${entry.base} (${entry.words})`).join('; ')}.`,
+    `Font pairings that suit it: ${shuffled(pairings, seed + 1).map((pairing) => `${pairing.id} (${pairing.feel})`).join('; ')}.`,
     `Corners that suit it: ${kind.look.corners.join(', ')}. Its palette runs ${kind.look.chroma === 'neutral' ? 'neutral, ink and paper with one accent color' : kind.look.chroma}.`,
     `Design seed: ${job.$id.slice(-6)}.`,
   ]

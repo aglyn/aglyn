@@ -26,7 +26,10 @@
  * node map… }, "theme"?: HostTheme }` — the node map as a layout version
  * stores it (the root `_@_`, a `layoutSlot` somewhere under it), the site's
  * name (what `{{host.businessName}}` resolves to), and the site's theme
- * (the starter site's `DEFAULT_SITE_THEME` when absent). A layout job's
+ * (the starter site's `DEFAULT_SITE_THEME` when absent). In place of a
+ * `theme`, a `"style"` is a site's look tokens (AGL-3660, `ai-site-look.ts`):
+ * the theme is then built the way the look unit builds it, the tokens over
+ * the base theme they name, read from the themes plugin. A layout job's
  * draft, read back with `readAiDraftNodes`, is exactly that node map. An
  * optional `"page"` is a page's node map (an AI-built Home, say) to render
  * inside the layout in place of the starter home page; with one, the whole
@@ -57,7 +60,9 @@
  *   <key>-page-desktop-light.png     with a `page`: header, that page and footer, whole, 1440 wide
  *   <key>-page-phone-light.png       the same, 375 wide
  *   <key>-page.txt                   with a `page`: the words that page shows, as a visitor reads them
- *   <key>-short-desktop-light.png    a one-heading page, whole: the footer must sit at the window's bottom
+ *   <key>-short-desktop-light.png    a one-heading page, whole: the footer must sit at the window's bottom,
+ *                                    and under its heading a Card, two Buttons and a field with no style
+ *                                    of their own, as dragged in from the drawer: they take the site's look
  *   <key>-short-phone-light.png
  *
  * and logs any width at which the document is wider than its window.
@@ -184,6 +189,13 @@ async function main(): Promise<void> {
   const starter = await load('libs/aglyn/src/lib/app-utils/starter-template-nodes.ts')
   const defaults = await load('libs/aglyn/src/lib/app-utils/default-site.ts')
   const drawer = await load('libs/plugins/mui/src/lib/components/drawer.tsx')
+  const look = await load('libs/plugins/ai/src/lib/model/ai-site-look.ts')
+  const presets = (await load('libs/plugins/themes/src/lib/presets/index.ts')).THEME_PRESETS as Dict[]
+  /** A look's theme, as the look unit saves it: the tokens over the base they name. */
+  const themeOfStyle = (style: Dict): Dict => {
+    const preset = presets.find((entry) => entry.id === `theme-presets.${style.base}`)
+    return look.aiSiteTheme(style, preset?.theme ?? defaults.DEFAULT_SITE_THEME)
+  }
 
   const React = require('react')
   const { renderToStaticMarkup } = require('react-dom/server')
@@ -216,6 +228,25 @@ async function main(): Promise<void> {
     starter.starterSection('shot_section', 'md', 10, [
       starter.starterText('shot_title', 'h1', 'A short page', { component: 'h1' }),
       { ...starter.starterText('shot_body', 'lede', 'One heading and a line: the footer still sits at the bottom of the window.'), sx: { color: 'text.secondary', marginTop: 2 } },
+      // Components as the drawer drops them, with no style of their own: the site's theme styles them.
+      { id: 'shot_eyebrow', componentId: 'muiTypography', props: { variant: 'overline', children: 'Dropped from the drawer' }, sx: { display: 'block', marginTop: 4 } },
+      {
+        id: 'shot_card',
+        componentId: 'muiCard',
+        sx: { maxWidth: 360, marginTop: 1 },
+        children: [
+          {
+            id: 'shot_card_content',
+            componentId: 'muiCardContent',
+            children: [
+              starter.starterText('shot_card_title', 'h6', 'A card'),
+              starter.starterText('shot_card_text', 'body2', 'No variant of its own.'),
+            ],
+          },
+        ],
+      },
+      { id: 'shot_button', componentId: 'muiButton', props: { variant: 'contained', children: 'A button' }, sx: { marginTop: 2, marginRight: 1 } },
+      { id: 'shot_button_quiet', componentId: 'muiButton', props: { variant: 'text', children: 'A quiet one' }, sx: { marginTop: 2 } },
     ]),
   ])
 
@@ -240,8 +271,8 @@ async function main(): Promise<void> {
 
     for (const input of inputs) {
       const key = basename(input).replace(/\.json$/, '')
-      const data = JSON.parse(readFileSync(input, 'utf8')) as { name: string; nodes: Dict; page?: Dict; theme?: Dict }
-      const theme = data.theme ?? defaults.DEFAULT_SITE_THEME
+      const data = JSON.parse(readFileSync(input, 'utf8')) as { name: string; nodes: Dict; page?: Dict; theme?: Dict; style?: Dict }
+      const theme = data.theme ?? (data.style ? themeOfStyle(data.style) : defaults.DEFAULT_SITE_THEME)
       const fonts = ((theme.fonts ?? []) as Dict[])
         .filter((font) => font.source === 'google')
         .map((font) => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font.family)}:wght@${(font.weights ?? [400, 700]).join(';')}&display=swap">`)

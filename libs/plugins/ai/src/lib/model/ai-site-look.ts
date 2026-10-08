@@ -284,11 +284,13 @@ export function aiSiteStyleFor(input: { kind: AiSiteKind; answer: AiSiteLookAnsw
     const span = from <= to ? to - from : 360 - from + to
     return Math.round(from + next() * span) % 360
   }
-  const jitter = (spread: number) => Math.round((next() * 2 - 1) * spread)
+  // A nudge of at least `least` degrees either way, so two jobs whose model
+  // answered alike never land on one color.
+  const jitter = (least: number, most: number) => (next() < 0.5 ? -1 : 1) * Math.round(least + next() * (most - least))
   const baseHue = answer.hue === undefined ? randomHue() : nearKind(answer.hue, kind)
-  const hue = (baseHue + jitter(9) + 360) % 360
+  const hue = (baseHue + jitter(5, 16) + 360) % 360
   const accentFrom = answer.accent ?? (baseHue + pick(next, [30, 150, 180, 210, 330])) % 360
-  const accent = (accentFrom + jitter(14) + 360) % 360
+  const accent = (accentFrom + jitter(8, 24) + 360) % 360
   const base = answer.base ?? pick(next, family.bases)
   return {
     v: 1,

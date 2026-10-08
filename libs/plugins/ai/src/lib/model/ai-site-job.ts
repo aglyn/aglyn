@@ -115,7 +115,7 @@ export interface AiFreeSiteWorstCase {
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
   plan: 35,
-  look: 8,
+  look: 6,
   layout: 64,
   firstSection: 44,
   laterSection: 20,

@@ -155,5 +155,12 @@ describe('site looks (AGL-3660)', () => {
     expect(aiSiteKindFor('a counselor for teens').id).toBe('wellness')
     expect(aiSiteKindFor('my food blog').id).toBe('blog')
     expect(aiSiteKindFor('something else entirely').id).toBe('business')
+    // The briefs the live eval runs (AGL-3660).
+    expect(aiSiteKindFor('a yoga studio with drop-in classes').id).toBe('yoga')
+    expect(aiSiteKindFor('a family dental practice').id).toBe('wellness')
+    expect(aiSiteKindFor('a neighborhood café with breakfast and pastries').id).toBe('restaurant')
+    expect(aiSiteKindFor('a 24-hour towing and roadside assistance company').id).toBe('trades')
+    expect(aiSiteKindFor('an online store for hand-poured soy candles').id).toBe('store')
+    expect(aiSiteKindFor('an illustrator portfolio for picture books and editorial work').id).toBe('portfolio')
   })
 })
