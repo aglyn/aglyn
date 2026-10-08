@@ -129,7 +129,8 @@ if (flag('help')) {
   --audience <text>       Who it is for (default "Local dog owners")
   --style <label|id>      Style of site, or "auto" for the one the brief suggests (default auto)
   --submissions <id>      inbox | lead (default inbox)
-  --pages <n>             Pages to plan (default 2, the Free maximum)
+  --pages <n>             Pages to plan (default 2, the Free maximum; a paid start plans 4 to 8)
+  --plan <id>             The workspace's plan: free (default) or a paid one such as pro
   --site-name <text>      The site's name (default "Hillside Dog Grooming"); " || " as --brief
   --runs <n>              Fresh workspace + site per run (default 1)
   --app-root <checkout>   Serve this checkout's console and tenant (default this one)
@@ -158,6 +159,9 @@ const answers = {
 }
 let siteName = siteNames[0]
 const runs = Math.max(1, Number(option('runs', '1')))
+// A paid workspace (AGL-3676): a paid start writes a blog's first posts and a
+// store's products, which a Free one never does, so only a paid run shows them.
+const orgPlan = option('plan', 'free')
 const appRoot = resolve(option('app-root', repoRoot))
 const startedAt = new Date().toISOString()
 const outDir = resolve(
@@ -686,9 +690,17 @@ async function runOnce(context, index) {
   await firestore
     .collection('orgs')
     .doc(run.orgId)
-    .set({ releaseFlags: { release_ai_generative: true } }, { merge: true })
+    .set(
+      {
+        releaseFlags: { release_ai_generative: true },
+        // The emulator stack has no Stripe; a paid run's plan is written as
+        // the billing webhook would write it.
+        ...(orgPlan === 'free' ? {} : { plan: orgPlan }),
+      },
+      { merge: true },
+    )
   log(
-    `run ${index + 1}: workspace ${run.orgSlug} (org ${run.orgId}), owner ${email}`,
+    `run ${index + 1}: workspace ${run.orgSlug} (org ${run.orgId}, ${orgPlan}), owner ${email}`,
   )
 
   const { browser, page } = await session.openConsole({
