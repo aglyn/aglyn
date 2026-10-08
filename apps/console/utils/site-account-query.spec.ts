@@ -29,18 +29,20 @@ import {
   missingListQueryIndexes,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { SITE_ACCOUNT_LIST_QUERY } from './site-account-query'
+import { SITE_ACCOUNT_LIST_COLUMN_SORTS, SITE_ACCOUNT_LIST_QUERY } from './site-account-query'
 
 const plan = (
   clauses: Array<{ field: string; op: string; value: string }>,
   search: string[] = [],
-) => planListQuery(SITE_ACCOUNT_LIST_QUERY, { clauses, search }, nameSearchNormalizers)
+  sort: (typeof SITE_ACCOUNT_LIST_COLUMN_SORTS)[number] | null = null,
+) => planListQuery(SITE_ACCOUNT_LIST_QUERY, { clauses, search, sort }, nameSearchNormalizers)
 
 const NEWEST = { path: 'createdAt', direction: 'desc' }
 
 describe('the Site users query (AGL-3321)', () => {
   it('reads newest first, unfiltered', () => {
     expect(plan([])).toMatchObject({ filters: [], orderBy: NEWEST, refused: [] })
+    expect(plan([], [], SITE_ACCOUNT_LIST_COLUMN_SORTS[0])).toMatchObject({ orderBy: NEWEST })
   })
 
   it('serves Status, an address and a name together, with the search', () => {
@@ -58,7 +60,7 @@ describe('the Site users query (AGL-3321)', () => {
       { path: 'email', op: '==', value: 'ann@example.test' },
       { path: 'displayNameLower', op: '==', value: 'ann lee' },
     ])
-    expect(all.orderBy).toEqual(NEWEST)
+    expect(all.orderBy).toMatchObject(NEWEST)
     expect(all.refused).toEqual([])
   })
 
@@ -71,7 +73,7 @@ describe('the Site users query (AGL-3321)', () => {
       ['createdAt', '>='],
       ['suspended', '=='],
     ])
-    expect(range.orderBy).toEqual(NEWEST)
+    expect(range.orderBy).toMatchObject(NEWEST)
   })
 
   it('searches the name and the address with one word', () => {
@@ -107,6 +109,53 @@ describe('the Site users query (AGL-3321)', () => {
     const status = plan([{ field: 'suspended', op: 'equals', value: 'maybe' }])
     expect(status.filters).toEqual([])
     expect(status.refused[0].reason).toMatch(/true or false/)
+  })
+})
+
+describe('every Site users header sorts the whole list (AGL-3680)', () => {
+  const sortBy = (column: string, direction: 'asc' | 'desc') => {
+    const found = SITE_ACCOUNT_LIST_COLUMN_SORTS.find(
+      (sort) => sort.column === column && sort.direction === direction,
+    )
+    if (!found) throw new Error(`no ${column} ${direction}`)
+    return found
+  }
+
+  it('offers both directions on every column', () => {
+    for (const column of ['createdAt', 'email', 'displayName', 'suspended']) {
+      expect(sortBy(column, 'asc')).toBeTruthy()
+      expect(sortBy(column, 'desc')).toBeTruthy()
+    }
+  })
+
+  it('orders the query by the stored field each header reads', () => {
+    expect(plan([], [], sortBy('email', 'asc')).orderBy).toMatchObject({ path: 'email', direction: 'asc' })
+    expect(plan([], [], sortBy('displayName', 'desc')).orderBy).toMatchObject({
+      path: 'displayNameLower',
+      direction: 'desc',
+    })
+    expect(plan([], [], sortBy('suspended', 'asc')).orderBy).toMatchObject({ path: 'suspended' })
+    expect(plan([], [], sortBy('createdAt', 'asc')).orderBy).toMatchObject({
+      path: 'createdAt',
+      direction: 'asc',
+    })
+  })
+
+  it('falls back to newest first, and says so, while a filter or the search is on', () => {
+    for (const asked of [
+      plan([{ field: 'suspended', op: 'equals', value: 'true' }], [], sortBy('email', 'asc')),
+      plan([], ['rae'], sortBy('displayName', 'asc')),
+    ]) {
+      expect(asked.orderBy).toEqual(expect.objectContaining(NEWEST))
+      expect(asked.sortFallback?.reason).toBe('alone')
+      expect(asked.notices.join(' ')).toMatch(/Joined/)
+    }
+  })
+
+  it('keeps newest first under every filter', () => {
+    const newest = plan([{ field: 'suspended', op: 'equals', value: 'true' }], ['rae'], sortBy('createdAt', 'desc'))
+    expect(newest.orderBy).toEqual(expect.objectContaining(NEWEST))
+    expect(newest.sortFallback).toBeUndefined()
   })
 })
 
