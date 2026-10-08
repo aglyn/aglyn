@@ -33,6 +33,7 @@ import {
 import { AI_JOB_CREATE_KINDS, AI_JOB_CREATE_NOUNS } from '../model/ai-job-creations'
 import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
 import {
+  AI_PLAN_COMPILED_REPEATS_SENTENCE,
   AI_PLAN_NO_FORM_SENTENCE,
   aiPlanCanPlaceForm,
   aiPlanCapabilitiesForJob,
@@ -207,6 +208,9 @@ export function aiPlanBuildLines(
   return [
     `This is a build from one request: plan each page it asks for in screens (at most ${pages}), each new layout, form, component or email design in create, and anything else in items. Plan only what the request asks for; reuse what the site has.`,
     'A page section that shows a form or an item places it: put its new:<name> in that section\'s uses. An item built after another lists it in dependsOn.',
+    // The layout language draws a section's repeated items (AGL-3660), so the
+    // doctrine's "repeated items place a component" is not asked of a build.
+    ...(capabilities?.repeatsCompiled ? [AI_PLAN_COMPILED_REPEATS_SENTENCE] : []),
     ...(ops ? aiBuildOpLines(ops, AI_BUILD_STRUCTURAL_OPS) : []),
   ]
 }
@@ -802,13 +806,19 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
  * A site job's capabilities (AGL-3594, AGL-3660): it changes no theme in its
  * plan — every scaffold designs its look first, in a unit of its own — and on
  * the Free taste its plan holds at most the pages the member asked for within
- * the Free band, which the Free wall then holds it to. Every other job's
+ * the Free band, which the Free wall then holds it to.
+ *
+ * A build's pages are written in the layout language (`aiBuildUnitJob`), whose
+ * compiler draws a section's repeated items itself, so its plan is not asked
+ * for a component for them (`repeatsCompiled`, AGL-3616). It still may plan
+ * one, and a section two pages share is still one. Every other job's
  * capabilities pass through.
  */
 export function aiSitePlanCapabilities(
   job: Pick<AiJob, 'kind' | 'inputs'>,
   capabilities: AiPlanCapabilities | null,
 ): AiPlanCapabilities | null {
+  if (job.kind === 'build' && capabilities) return { ...capabilities, repeatsCompiled: true }
   if (job.kind !== 'site' || !capabilities) return capabilities
   const create = {
     ...capabilities.create,

@@ -363,11 +363,35 @@ export interface OrderUnresolvedLine {
 }
 
 /** `hosts/{hostId}/orders/{id}` doc. */
+/**
+ * Store credit another plugin kept that came off an online sale (AGL-3640),
+ * as core's checkout-credits seam records it (`PluginCheckoutCreditSold`),
+ * restated here so the order model stays pure for the native apps.
+ */
+export interface OrderCredit {
+  /** `{pluginId}.{key}`. */
+  providerId: string
+  pluginId: string
+  key: string
+  /** The provider's own handle on the account; never a code. */
+  reference: string
+  label: string
+  last4: string
+  amountCents: number
+  appliedAs: 'discount' | 'tender'
+}
+
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
   /** Optional lines the buyer added at checkout (AGL-3635); see {@link OrderExtra}. */
   extras?: OrderExtra[]
+  /**
+   * Store credit another plugin kept that came off an ONLINE sale (AGL-3640),
+   * as its provider recorded it. A register sale's credit is one of its
+   * `payments` instead.
+   */
+  credits?: OrderCredit[]
   status: OrderStatus
   channel?: OrderChannel
   /** The outside channel an order with channel `marketplace` was sold on (AGL-3638). */

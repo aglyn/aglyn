@@ -39,11 +39,16 @@ jest.mock('./ai-jobs', () => ({
   aiJobStepRunnerFor: () => null,
 }))
 
-import { pluginAiCapabilityArgsProblems, pluginAiCapabilityProblem } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import {
+  pluginAiCapabilityArgsProblems,
+  pluginAiCapabilityProblem,
+  type PluginAiCapability,
+} from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import {
   AI_OWNED_CAPABILITIES,
   AI_OWNED_OP_WRITERS,
   aiBuildIntents,
+  aiBuildOpLines,
   aiBuildOps,
   type AiBuildOpsContext,
 } from './ai-build-capabilities'
@@ -157,5 +162,47 @@ describe('the page change operation', () => {
       hasRunner: (kind) => kind !== 'edit',
     })
     expect(unloaded.has('edit')).toBe(false)
+  })
+})
+
+describe('the operations the plan step lists', () => {
+  it('lists each item operation with its arguments, and holds the planner to the operation over a form that imitates it', () => {
+    const ops = new Map(AI_OWNED_CAPABILITIES.map((one) => [one.op, one] as const))
+    const lines = aiBuildOpLines(ops, ['page', 'layout', 'form', 'component', 'email'])
+    expect(lines[0]).toBe('Operations for items (anything else goes in create or screens):')
+    expect(lines.some((line) => line.startsWith('- template: a page template'))).toBe(true)
+    expect(lines.at(-1)).toMatch(/^When the request asks for what one of these operations makes, plan that operation as an item/)
+    expect(lines.at(-1)).toContain('Never stand in for it with a form, page or component that only imitates it')
+  })
+
+  // Told only "days: array", the live canonical plan wrote "monday" for the
+  // enum's "mon" (AGL-3616): an array's allowed values are listed too.
+  it("names an array argument's allowed values, as it names a string's", () => {
+    const days: PluginAiCapability = {
+      ...AI_OWNED_CAPABILITIES[0],
+      op: 'booking-service',
+      noun: 'booking service',
+      argsSchema: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'array',
+            description: 'The weekdays it can be booked on.',
+            items: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
+            maxItems: 7,
+          },
+          note: { type: 'array', description: 'Free lines.', items: { type: 'string' } },
+        },
+        required: ['days'],
+        additionalProperties: false,
+      },
+    }
+    const [, line] = aiBuildOpLines(new Map([[days.op, days]]), [])
+    expect(line).toContain('days: array of mon|tue|wed|thu|fri|sat|sun — The weekdays it can be booked on.')
+    expect(line).toContain('note: array (optional) — Free lines.')
+  })
+
+  it('says to leave items empty where nothing is offered, and adds no rule there', () => {
+    expect(aiBuildOpLines(new Map(), [])).toEqual(['Operations for items: none on this site. Leave items empty.'])
   })
 })

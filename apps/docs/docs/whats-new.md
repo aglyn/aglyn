@@ -10,7 +10,21 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — your own email platform, kept in step (newest)
+## October 2026 — rewards, referrals and store credit (newest)
+
+- **[Rewards](commerce-and-bookings/commerce/rewards-and-referrals.md)** — your store's
+  own loyalty program, under **Products → Promotions**. Customers earn points on every
+  order, online and at the register, and spend them with their rewards code in the cart
+  or with the new **Rewards** tender at the register. Refunds take earned points back
+  and give spent rewards back.
+- **[Referrals](commerce-and-bookings/commerce/rewards-and-referrals.md#referrals)** —
+  members share a referral code that takes money off a friend's first order and earns
+  the member store credit when that order is paid.
+- **[Store credit](commerce-and-bookings/commerce/rewards-and-referrals.md#members-and-store-credit)** —
+  give any customer store credit by hand, beside your gift cards, and see every member's
+  balance and history.
+
+## October 2026 — your own email platform, kept in step
 
 - **[Mailchimp, Klaviyo and Omnisend](marketing-and-automation/email-campaigns/email-platforms.md)** —
   connect your own account to a site with its API key and your contacts stay in

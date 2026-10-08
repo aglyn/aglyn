@@ -132,6 +132,8 @@ const areas = [
   ['inbox', 'seedInbox'],
   ['marketing', 'seedMarketing'],
   ['store', 'seedCommerce'],
+  ['insights', 'seedInsights'],
+  ['site-rules', 'seedAutomation'],
   ['pos', 'seedPos'],
   ['notifications', 'seedNotifications'],
   ['content', 'seedContent'],

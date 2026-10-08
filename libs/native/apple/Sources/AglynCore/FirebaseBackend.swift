@@ -74,7 +74,21 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   private static func document(_ snapshot: DocumentSnapshot) -> FirestoreDocument {
     FirestoreDocument(
       id: snapshot.documentID,
-      data: (snapshot.data(with: .estimate) ?? [:]).mapValues(plain))
+      data: (snapshot.data(with: .estimate) ?? [:]).mapValues(plain),
+      fromCache: snapshot.metadata.isFromCache)
+  }
+
+  private func built(_ query: FirestoreQuery) -> Query {
+    var built: Query = collection(query.collection)
+    for constraint in query.allFilters { built = constraint.apply(to: built) }
+    for order in query.order { built = built.order(by: fieldPath(order.field), descending: order.descending) }
+    if let limit = query.limit { built = built.limit(to: limit) }
+    return built
+  }
+
+  public func count(_ query: FirestoreQuery) async throws -> Int? {
+    let snapshot = try await built(query).count.getAggregation(source: .server)
+    return snapshot.count.intValue
   }
 
   @MainActor
@@ -82,11 +96,7 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     _ query: FirestoreQuery,
     _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void
   ) -> FirestoreListening {
-    var built: Query = collection(query.collection)
-    for constraint in query.allFilters { built = constraint.apply(to: built) }
-    for order in query.order { built = built.order(by: fieldPath(order.field), descending: order.descending) }
-    if let limit = query.limit { built = built.limit(to: limit) }
-    let handle = built.addSnapshotListener { snapshot, error in
+    let handle = built(query).addSnapshotListener(includeMetadataChanges: query.includeMetadataChanges) { snapshot, error in
       let result: Result<[FirestoreDocument], Error> =
         if let snapshot { .success(snapshot.documents.map(Self.document)) }
         else { .failure(error ?? URLError(.unknown)) }
@@ -100,7 +110,10 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     _ path: [String],
     _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void
   ) -> FirestoreListening {
-    let handle = db.document(path.joined(separator: "/")).addSnapshotListener { snapshot, error in
+    // Metadata changes too, so a cached answer the server then confirms reaches
+    // the screen with `fromCache` false (an editor's stale-seed guard reads it).
+    let handle = db.document(path.joined(separator: "/")).addSnapshotListener(includeMetadataChanges: true) {
+      snapshot, error in
       let result: Result<FirestoreDocument?, Error> =
         if let snapshot { .success(snapshot.exists ? Self.document(snapshot) : nil) }
         else { .failure(error ?? URLError(.unknown)) }

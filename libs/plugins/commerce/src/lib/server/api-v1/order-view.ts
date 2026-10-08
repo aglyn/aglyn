@@ -74,6 +74,11 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
         amountCents: Number(entry.amountCents ?? 0) || 0,
         quoteRef: typeof entry.quoteRef === 'string' ? entry.quoteRef : null,
       })),
+    // Store credit another plugin kept that paid part of the sale (AGL-3640):
+    // a rewards redemption online comes off the goods (`discount`), one at
+    // the register is one of its payments (`tender`). The provider reads its
+    // own `reference` back off `order.paid` and `order.refunded`.
+    credits: orderCreditsView(data),
     // Money already handed back, for any reason. A chargeback lands here too,
     // so `refundedCents > 0` does not by itself mean the merchant chose it.
     refundedCents: Number(data.refundedCents ?? 0),
@@ -131,3 +136,43 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
   }
 }
 
+/** The plugin credits an order carries, online and at the register (AGL-3640). */
+export function orderCreditsView(data: Record<string, any>): Array<{
+  providerId: string
+  pluginId: string
+  reference: string
+  label: string
+  last4: string
+  amountCents: number
+  appliedAs: 'discount' | 'tender'
+}> {
+  const online = (Array.isArray(data.credits) ? data.credits : [])
+    .filter((entry: Record<string, unknown>) => entry && typeof entry.providerId === 'string')
+    .map((entry: Record<string, unknown>) => ({
+      providerId: String(entry.providerId),
+      pluginId: String(entry.pluginId ?? String(entry.providerId).split('.')[0]),
+      reference: String(entry.reference ?? ''),
+      label: String(entry.label ?? ''),
+      last4: String(entry.last4 ?? ''),
+      amountCents: Math.max(0, Math.trunc(Number(entry.amountCents) || 0)),
+      appliedAs: entry.appliedAs === 'tender' ? ('tender' as const) : ('discount' as const),
+    }))
+  const register = (Array.isArray(data.payments) ? data.payments : [])
+    .filter(
+      (payment: Record<string, unknown>) =>
+        payment &&
+        payment.method === 'credit' &&
+        payment.status === 'succeeded' &&
+        typeof payment.creditProviderId === 'string',
+    )
+    .map((payment: Record<string, unknown>) => ({
+      providerId: String(payment.creditProviderId),
+      pluginId: String(payment.creditProviderId).split('.')[0],
+      reference: String(payment.creditReference ?? ''),
+      label: String(payment.creditLabel ?? ''),
+      last4: String(payment.last4 ?? ''),
+      amountCents: Math.max(0, Math.trunc(Number(payment.amountCents) || 0)),
+      appliedAs: 'tender' as const,
+    }))
+  return [...online, ...register].filter((credit) => credit.reference && credit.amountCents > 0)
+}

@@ -286,6 +286,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The linked stores, their item matches and every order already taken are kept, and switching it back on takes new orders again."
     }
   },
+  {
+    "id": "loyalty",
+    "label": "Rewards",
+    "alwaysOnForWorkspace": true,
+    "description": "Points, referrals and store credit for your store.",
+    "siteOff": {
+      "stops": "Stops new points, rewards at checkout and at the register, and referral credit.",
+      "keeps": "Members keep their points and store credit."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -320,6 +330,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "print-on-demand": "console-only",
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
+  "loyalty": "console-only",
 }
 
 /**
@@ -2367,7 +2378,7 @@ export const PLUGIN_REQUIRED_ORG_ERASERS: readonly string[] = ["marketplace"]
  * The plugins whose person eraser a person erasure may not run without
  * (AGL-3080): each keeps a share of the person the erasure promises to remove.
  */
-export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ["bookings","commerce","crm","email"]
+export const PLUGIN_REQUIRED_PERSON_ERASERS: readonly string[] = ["bookings","commerce","crm","email","loyalty"]
 
 /**
  * The plugins whose sales the operator's sales tax return may not be filed

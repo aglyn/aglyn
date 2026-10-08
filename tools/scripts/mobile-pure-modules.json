@@ -2,6 +2,10 @@
   "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/artifact-list-queries.ts",
       "why": "The components, layouts and templates lists' query declarations; the native site screens plan the same Firestore queries (AGL-3668); type-only imports beside LIST_QUERY_ID_PATH."
     },
@@ -14,8 +18,20 @@
       "why": "The content collection schema types the native collection settings offer (AGL-3668), no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
+      "why": "Reached by the automation step vocabulary: the CRM lifecycle stages, task and activity kinds, plain lists."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
       "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "why": "The site functions' expression language: the evaluator, its syntax check and the function runner, which the native Automation screens replay for a trigger filter and a workflow's test run (AGL-3670)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "why": "The host events an automation triggers on: their labels, payload keys and whether the recipient acted (AGL-3670)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
@@ -70,8 +86,16 @@
       "why": "Reached by payment-risk: the platform brand name constants, no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/plugin-host-events.generated.ts",
+      "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "why": "Reached by organizations: the scope token grammar (org, host, consent group)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "why": "The per-page traffic table's fold over screen day documents (AGL-3670)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
@@ -98,12 +122,44 @@
       "why": "Reached by host-naming: the tenant apex domain constants."
     },
     {
+      "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
+      "why": "Reached by booking-contact-fields: contact shapes and the phone normalizer; no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "why": "The plugin switchboard resolvers (which plugins a workspace and a site run, what switching one off strands), ported for the native Plugins screens and replayed from function-cases (AGL-3671)."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts",
+      "why": "What a service asks the booker for and how a booking's phone and address read (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "why": "Where a booking stands for payment at the counter, and the in-person amount rules (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "why": "What may be done to a booking: check in, reschedule, cancel, refund; the routes' own refusals (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "why": "How a service states its price (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-record.ts",
+      "why": "Reached by bookings: how a booking's CRM record and booker lines read (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "why": "The service dialog's defaults and what one save stores, shared by the console page and the native editors (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/model/bookings.ts",
+      "why": "The service shape, slot walk and the 24-hour reminder band the console's Bookings card counts (AGL-3670)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
@@ -170,6 +226,10 @@
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
+      "path": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "why": "The one rule for what an event stores, shared by the Events page, the events import and the native editors (AGL-3670)."
+    },
+    {
       "path": "libs/plugins/forms/src/lib/components/form-list-query.ts",
       "why": "The forms list query declaration and its options; the native Forms screens plan the same query (AGL-3668); type-only imports."
     },
@@ -180,6 +240,14 @@
     {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",
+      "why": "A webhook's shape and the delivery URL hint the native webhook form shows (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/model/workflows.ts",
+      "why": "A workflow's shape and its pure runner over site functions and variables, the native test run's (AGL-3670)."
     },
     {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
@@ -200,6 +268,10 @@
     {
       "path": "libs/shared/util/email/src/lib/tenant-emails.generated.ts",
       "why": "Reached by tenant-email-catalog: the generated email rows, type-only imports."
+    },
+    {
+      "path": "libs/shared/util/timestamp/src/lib/zoned-time.ts",
+      "why": "Reached by bookings: a moment on a zone's wall clock, through Intl; no imports."
     },
     {
       "path": "libs/shared/util/tools/src/lib/linear-regex.ts",

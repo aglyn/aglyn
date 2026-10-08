@@ -193,6 +193,11 @@ data class FeedNotification(
   val level: String?,
   val type: String? = null,
   val createdAt: com.aglyn.core.FirestoreTimestamp? = null,
+  /** The workspace and site it is about, which opening it switches to. */
+  val orgId: String? = null,
+  val hostId: String? = null,
+  /** The invitee's own invitation: opening it answers the invite instead of following [link]. */
+  val inviteId: String? = null,
 )
 
 /** The AGL-3437 levels as intents; unknown or absent reads as info. */
@@ -202,24 +207,6 @@ fun levelIntent(level: String?): String = when (level) {
   "success" -> "success"
   "neutral" -> "neutral"
   else -> "info"
-}
-
-@Composable
-internal fun NotificationsScreen(services: ShellServices, uid: String, context: ShellPluginContext) {
-  when (val feed = notificationFeed(services, uid, 50)) {
-    Live.Loading -> SkeletonList(rows = 5)
-    is Live.Failed -> EmptyState("Could not load notifications", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
-    is Live.Ready -> if (feed.value.isEmpty()) {
-      EmptyState("You're all caught up", body = "New orders, form entries and alerts show up here.", icon = AglynIcons.named("notifications"))
-    } else {
-      val now = remember(feed) { com.aglyn.core.nowMillis() }
-      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(
-          Modifier.widthIn(max = 840.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(1f)),
-        ) { NotificationRows(feed.value, now, context) }
-      }
-    }
-  }
 }
 
 @Composable
@@ -269,7 +256,7 @@ internal fun SettingsScreen(
     SectionHeader("Preferences")
     AglynListItem(
       title = "Notifications",
-      supporting = "Choose what is sent as push",
+      supporting = "What reaches you in the app, by email and as push",
       icon = AglynIcons.named("notifications"),
       trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
       onClick = onNotificationSettings,

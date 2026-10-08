@@ -46,6 +46,8 @@ export interface PosSaleSummary {
     changeCents?: number
     checkoutUrl?: string
     readerId?: string
+    /** What a store-credit payment's provider calls it (AGL-3640). */
+    creditLabel?: string
     failureMessage?: string
     livemode?: boolean
   }>
@@ -71,6 +73,17 @@ export interface PosRegisterContext {
   }>
   publishableKey: string
   smsReceipts: boolean
+  /** Store credit other plugins keep, taken as a tender (AGL-3640). */
+  credits?: Array<{ providerId: string; label: string; lookup: boolean }>
+}
+
+/** A store-credit account a staff lookup found (AGL-3640). */
+export interface PosCreditAccount {
+  reference: string
+  label: string
+  last4: string
+  availableCents: number
+  detail?: string
 }
 
 type User = Parameters<typeof authorizedFetch>[0]
@@ -152,6 +165,7 @@ export function openPosSale(
 export type PosTenderAction =
   | 'cash'
   | 'gift-card'
+  | 'credit'
   | 'folio'
   | 'card-present'
   | 'card-present-sdk'
@@ -186,6 +200,16 @@ export function posGiftCardBalance(user: User, hostId: string, code: string) {
     '/api/commerce/pos-payment',
     { action: 'gift-card-balance', hostId, code },
   )
+}
+
+/** Finds store-credit accounts by a customer's email or code (AGL-3640). */
+export function posCreditLookup(user: User, hostId: string, providerId: string, query: string) {
+  return call<{ providerId: string; accounts: PosCreditAccount[] }>(user, '/api/commerce/pos-payment', {
+    action: 'credit-lookup',
+    hostId,
+    providerId,
+    query,
+  })
 }
 
 export function posDisplayCall<T = any>(

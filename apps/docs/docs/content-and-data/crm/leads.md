@@ -167,8 +167,8 @@ consent, so none is recorded.
 
 The list shows the most recently seen leads first — a person who booked
 yesterday sits above one who signed up last month, whichever came first.
-It keeps that order: the column headers do not re-sort it. Each row
-carries:
+A column header sorts it another way — see
+[Columns and sort](./views.md#columns-and-sort). Each row carries:
 
 | Column | What it shows |
 | --- | --- |

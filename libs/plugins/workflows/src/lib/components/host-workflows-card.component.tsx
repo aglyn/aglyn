@@ -688,8 +688,9 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         {workflows.length === 0 ? (
           <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
             <Typography variant="body2" color="text.secondary">
-              {'Chain your functions into multi-step pipelines — each step ' +
-                'feeds the next. Site-event triggers are coming next.'}
+              {'Run steps in order when something happens on your site — a ' +
+                'form submission, a booking, a new member — or chain your ' +
+                'functions, each step feeding the next.'}
             </Typography>
             {automationsZone}
           </Stack>

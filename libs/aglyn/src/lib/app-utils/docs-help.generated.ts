@@ -282,6 +282,11 @@ export const PLUGIN_DOCS = {
     title: 'Invite teammates',
     excerpt: 'Add people to your site and understand how team members act within your organization.',
   },
+  loyalty: {
+    path: '/commerce-and-bookings/commerce/rewards-and-referrals',
+    title: 'Rewards, referrals and store credit',
+    excerpt: 'Give customers points on every order, online and at the register, let them spend points and store credit at checkout or the till, and reward members whose friends buy.',
+  },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
     title: 'Manifests, trust lifecycle & environment',
@@ -462,6 +467,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
   inventorySync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
+  loyalty: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
   marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
@@ -485,7 +491,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   taxServices: ['#before-you-start', '#connect', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
-  webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
+  webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   zapier: ['#connect-aglyn-to-zapier', '#triggers', '#actions-and-searches', '#what-each-needs', '#see-and-disconnect-your-zaps'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
 

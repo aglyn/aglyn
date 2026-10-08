@@ -605,6 +605,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/revenue',
     title: 'Revenue',
   },
+  rewardsAndReferrals: {
+    path: '/commerce-and-bookings/commerce/rewards-and-referrals',
+    title: 'Rewards, referrals and store credit',
+  },
   runAnAgencyWorkspace: {
     path: '/guides/run-an-agency-workspace',
     title: 'Run an agency workspace',
@@ -954,6 +958,7 @@ export const DOCS_HELP_ANCHORS = {
   reports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#lead-sources', '#pipeline', '#forecast-by-close-month', '#by-forecast-category', '#won-and-lost', '#won-and-lost-by-owner', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#mute-a-style', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#borders-without-css', '#picking-a-font', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#pin-a-color-scheme', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   revenue: ['#the-two-bases', '#how-each-org-is-treated', '#the-gap', '#where-the-money-came-from', '#gross-versus-net', '#three-costs-the-page-flags-but-does-not-net-out', '#rows-that-need-attention', '#related'],
+  rewardsAndReferrals: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
   salesChannels: ['#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
   salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#which-rows', '#rows-that-are-excluded-rather-than-flagged', '#where-this-deployment-files', '#tax-filing-precedence', '#tax-filing-secrecy', '#the-figures', '#taxable-purchases', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
@@ -1000,7 +1005,7 @@ export const DOCS_HELP_ANCHORS = {
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
-  webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
+  webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#email-footer', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#org-automations', '#run-history', '#related'],
   yourFirstApiCall: ['#step-1-create-a-key', '#step-2-check-the-key', '#step-3-your-first-request', '#in-javascript', '#step-4-write-something', '#idempotency', '#step-5-page-through-everything', '#the-four-errors-you-will-hit', '#mcp', '#where-to-go-next', '#related'],

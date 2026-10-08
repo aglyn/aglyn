@@ -88,6 +88,23 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Webhook
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Today
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.material.icons.outlined.PlayCircleOutline
+import androidx.compose.material.icons.outlined.ViewWeek
+import androidx.compose.material.icons.outlined.ViewDay
+import androidx.compose.material.icons.outlined.ViewAgenda
+import androidx.compose.material.icons.outlined.DesignServices
+import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.HowToReg
+import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.LocalPolice
 import androidx.compose.material.icons.outlined.MonitorHeart
@@ -176,6 +193,10 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FileCopy
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -261,6 +282,36 @@ object AglynIcons {
     "done_all" to Icons.Outlined.DoneAll,
     "location_on" to Icons.Outlined.LocationOn,
     "undo" to Icons.AutoMirrored.Outlined.Undo,
+    "filter_list" to Icons.Outlined.FilterList,
+    "done" to Icons.Outlined.Done,
+    "calendar_month" to Icons.Outlined.CalendarMonth,
+    "today" to Icons.Outlined.Today,
+    "chevron_left" to Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+    "event_available" to Icons.Outlined.EventAvailable,
+    "event_busy" to Icons.Outlined.EventBusy,
+    "phone" to Icons.Outlined.Phone,
+    "edit" to Icons.Outlined.Edit,
+    "account_tree" to Icons.Outlined.AccountTree,
+    "bar_chart" to Icons.Outlined.BarChart,
+    "play_circle" to Icons.Outlined.PlayCircleOutline,
+    "view_week" to Icons.Outlined.ViewWeek,
+    "view_day" to Icons.Outlined.ViewDay,
+    "view_agenda" to Icons.Outlined.ViewAgenda,
+    "design_services" to Icons.Outlined.DesignServices,
+    "webhook" to Icons.Outlined.Webhook,
+    "link" to Icons.Outlined.Link,
+    "devices" to Icons.Outlined.Devices,
+    "trending_up" to Icons.AutoMirrored.Outlined.TrendingUp,
+    "filter_alt" to Icons.Outlined.FilterAlt,
+    "person_check" to Icons.Outlined.HowToReg,
+    "content_copy" to Icons.Outlined.ContentCopy,
+    "visibility" to Icons.Outlined.Visibility,
+    "mouse" to Icons.Outlined.Mouse,
+    "expand_more" to Icons.Outlined.ExpandMore,
+    "expand_less" to Icons.Outlined.ExpandLess,
+    "file_copy" to Icons.Outlined.FileCopy,
+    "key" to Icons.Outlined.Key,
+    "play_arrow" to Icons.Outlined.PlayArrow,
     "privacy_tip" to Icons.Outlined.PrivacyTip,
     "receipt_long" to Icons.Outlined.ReceiptLong,
     "text_fields" to Icons.Outlined.TextFields,
@@ -282,7 +333,6 @@ object AglynIcons {
     "domain" to Icons.Outlined.Domain,
     "account_circle" to Icons.Outlined.AccountCircle,
     "lock" to Icons.Outlined.Lock,
-    "key" to Icons.Outlined.Key,
     "vpn_key" to Icons.Outlined.VpnKey,
     "business" to Icons.Outlined.Business,
     "palette" to Icons.Outlined.Palette,
@@ -292,7 +342,6 @@ object AglynIcons {
     "block" to Icons.Outlined.Block,
     "verified" to Icons.Outlined.Verified,
     "dns" to Icons.Outlined.Dns,
-    "link" to Icons.Outlined.Link,
     "sync" to Icons.Outlined.Sync,
     "policy" to Icons.Outlined.Policy,
     "badge" to Icons.Outlined.Badge,
@@ -300,12 +349,10 @@ object AglynIcons {
     "bug_report" to Icons.Outlined.BugReport,
     "mark_email_read" to Icons.Outlined.MarkEmailRead,
     "alternate_email" to Icons.Outlined.AlternateEmail,
-    "devices" to Icons.Outlined.Devices,
     "security" to Icons.Outlined.Security,
     "password" to Icons.Outlined.Password,
     "storage" to Icons.Outlined.Storage,
     "data_usage" to Icons.Outlined.DataUsage,
-    "bar_chart" to Icons.Outlined.BarChart,
     "smart_toy" to Icons.Outlined.SmartToy,
     "savings" to Icons.Outlined.Savings,
     "local_offer" to Icons.Outlined.LocalOffer,
@@ -314,9 +361,6 @@ object AglynIcons {
     "health_and_safety" to Icons.Outlined.HealthAndSafety,
     "construction" to Icons.Outlined.Construction,
     "money_off" to Icons.Outlined.MoneyOff,
-    "visibility" to Icons.Outlined.Visibility,
-    "edit" to Icons.Outlined.Edit,
-    "content_copy" to Icons.Outlined.ContentCopy,
     "backup" to Icons.Outlined.Backup,
     "restore" to Icons.Outlined.Restore,
     "delete_forever" to Icons.Outlined.DeleteForever,
@@ -325,7 +369,6 @@ object AglynIcons {
     "apartment" to Icons.Outlined.Apartment,
     "request_quote" to Icons.Outlined.RequestQuote,
     "account_balance" to Icons.Outlined.AccountBalance,
-    "webhook" to Icons.Outlined.Webhook,
     "api" to Icons.Outlined.Api,
     "code" to Icons.Outlined.Code,
     "category" to Icons.Outlined.Category,
@@ -357,7 +400,6 @@ object AglynIcons {
     "power_settings_new" to Icons.Outlined.PowerSettingsNew,
     "power_off" to Icons.Outlined.PowerOff,
     "send" to Icons.AutoMirrored.Outlined.Send,
-    "trending_up" to Icons.AutoMirrored.Outlined.TrendingUp,
     "login" to Icons.AutoMirrored.Outlined.Login,
     "article" to Icons.AutoMirrored.Outlined.Article,
     "assignment" to Icons.AutoMirrored.Outlined.Assignment,

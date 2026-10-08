@@ -24,6 +24,7 @@ import ListQueryNotices, {
 import ListTable from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -83,6 +84,29 @@ const INVOICE_GRID_COLUMNS = (): GridColDef[] =>
     INVOICE_FILTER_OPTIONS,
     INVOICE_FILTER_HEADERS,
   )
+
+/*
+ * EVERY HEADER SORTS THE INVOICES LOADED (AGL-3680).
+ *
+ * Stripe lists invoices newest first and offers no other order, so no
+ * header can be the query's: each sorts the invoices loaded so far, and the
+ * header and the notice say so. "Load older invoices" adds to what a header
+ * sorts. Documents is a set of links, not a value, and does not sort.
+ */
+const INVOICE_PAGE_SORTS = {
+  number: (invoice: InvoiceRow) => invoice.number ?? invoice.id,
+  created: (invoice: InvoiceRow) => (invoice.created ? new Date(invoice.created) : null),
+  status: (invoice: InvoiceRow) => invoice.status,
+  totalCents: (invoice: InvoiceRow) => invoice.totalCents,
+}
+const INVOICE_SORT_HEADERS = {
+  number: 'Invoice',
+  created: 'Date',
+  status: 'Status',
+  totalCents: 'Amount',
+}
+const NO_QUERY_SORTS = [] as const
+const NO_INVOICES: InvoiceRow[] = []
 
 const INVOICE_COLUMNS: GridColDef<InvoiceRow>[] = [
   {
@@ -286,6 +310,12 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, user, permissionsLoaded, invoiceParams])
   const invoiceColumns = useMemo(INVOICE_GRID_COLUMNS, [])
+  const columnSort = useListColumnSort<InvoiceRow>({
+    sorts: NO_QUERY_SORTS,
+    rows: invoices ?? NO_INVOICES,
+    pageSorts: INVOICE_PAGE_SORTS,
+    headers: INVOICE_SORT_HEADERS,
+  })
   const invoiceRefusals = useMemo(
     () =>
       listQueryRefusals(invoicePlan.refused, {
@@ -374,21 +404,21 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                               />
                               <ListQueryNotices
                                 refused={invoiceRefusals}
-                                notices={invoicePlan.notices}
+                                notices={[...invoicePlan.notices, ...columnSort.notices]}
                               />
                               <ListTable
                                 aria-label="Invoices"
-                                rows={invoices}
+                                rows={columnSort.rows as InvoiceRow[]}
                                 columns={invoiceColumns}
                                 getRowId={(invoice: InvoiceRow) => invoice.id}
                                 // Every loaded invoice is on screen, and the
                                 // button below loads older ones: the history
                                 // grows rather than pages.
                                 hideFooter
-                                // In the order Stripe returns them; a header
-                                // sort would order only the invoices loaded so
-                                // far and read as the whole history's.
-                                disableColumnSorting
+                                // Newest first, as Stripe returns them, until
+                                // a header sorts the invoices loaded and says
+                                // so (`columnSort`).
+                                columnSort={columnSort}
                                 // The panel and the search are Stripe's: the
                                 // grid narrows nothing itself (AGL-3321).
                                 filterMode="server"

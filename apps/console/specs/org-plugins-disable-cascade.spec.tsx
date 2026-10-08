@@ -197,6 +197,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'print-on-demand',
       'inventory-sync',
       'delivery-apps',
+      'loyalty',
       'commerce',
     ])
   })
@@ -262,6 +263,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'print-on-demand',
         'inventory-sync',
         'delivery-apps',
+        'loyalty',
       ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',
