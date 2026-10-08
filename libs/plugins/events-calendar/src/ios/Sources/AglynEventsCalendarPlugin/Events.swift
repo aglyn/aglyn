@@ -197,8 +197,7 @@ struct EventsScreen: View {
       Button("Delete", role: .destructive) {
         run("Event deleted.") {
           guard let hostID = context.hostID else { return }
-          try await context.firestore.setDocument(
-            eventsPath(hostID) + [row.id], ["deletedAt": FirestoreSentinel.serverTimestamp, "status": "deleted"], merge: true)
+          try await context.writer.merge(eventsPath(hostID) + [row.id], ["deletedAt": FirestoreSentinel.serverTimestamp, "status": "deleted"])
         }
         if selection == row.id { selection = nil }
       }
@@ -272,7 +271,7 @@ struct EventsScreen: View {
         adding = false
         selection = id
       }
-      run("Event saved.") { try await context.firestore.setDocument(eventsPath(hostID) + [id], merge, merge: true) }
+      run("Event saved.") { try await context.writer.merge(eventsPath(hostID) + [id], merge) }
     }
   }
 }

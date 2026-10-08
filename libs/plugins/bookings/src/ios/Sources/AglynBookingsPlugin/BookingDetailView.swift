@@ -40,7 +40,7 @@ struct BookingDetailView: View {
   @State private var rescheduling = false
   @State private var paying = false
 
-  private var api: BookingsAPI? { context.hostID.map { BookingsAPI(api: context.api, reader: context.firestore, hostID: $0) } }
+  private var api: BookingsAPI? { context.hostID.map { BookingsAPI(api: context.api, writer: context.writer, hostID: $0) } }
 
   var body: some View {
     Group {

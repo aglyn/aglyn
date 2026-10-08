@@ -256,7 +256,7 @@ struct OpenSlots {
 /// The writes and route calls the console makes for one site's bookings.
 struct BookingsAPI {
   let api: ConsoleAPIClient
-  let reader: FirestoreReader
+  let writer: FirestoreWriter
   let hostID: String
 
   func checkIn(_ bookingID: String, _ checkedIn: Bool) async throws {
@@ -280,7 +280,7 @@ struct BookingsAPI {
         BookingRoutes.refund, method: .post, body: ["hostId": .string(hostID), "bookingId": .string(row.id)],
         idempotencyKey: key)
     } else {
-      try await reader.setDocument(bookingsPath(hostID) + [row.id], ["status": "canceled"], merge: true)
+      try await writer.merge(bookingsPath(hostID) + [row.id], ["status": "canceled"])
     }
   }
 
@@ -309,19 +309,17 @@ struct BookingsAPI {
   func saveService(_ id: String, _ draft: BookingServiceDraft) async throws {
     var fields = bookingServiceFirestoreFields(bookingServiceFields(draft))
     fields["updatedAt"] = FirestoreSentinel.serverTimestamp
-    try await reader.setDocument(servicesPath(hostID) + [id], fields, merge: true)
+    try await writer.merge(servicesPath(hostID) + [id], fields)
   }
 
   /// Offers a draft or withdraws a live service.
   func setServiceActive(_ id: String, _ active: Bool) async throws {
-    try await reader.setDocument(
-      servicesPath(hostID) + [id], ["status": active ? "active" : "draft", "updatedAt": FirestoreSentinel.serverTimestamp],
-      merge: true)
+    try await writer.merge(servicesPath(hostID) + [id], ["status": active ? "active" : "draft", "updatedAt": FirestoreSentinel.serverTimestamp])
   }
 
   /// The console's soft delete.
   func deleteService(_ id: String) async throws {
-    try await reader.setDocument(servicesPath(hostID) + [id], ["deletedAt": FirestoreSentinel.serverTimestamp], merge: true)
+    try await writer.merge(servicesPath(hostID) + [id], ["deletedAt": FirestoreSentinel.serverTimestamp])
   }
 
   static func json(_ value: Any) -> JSONValue {

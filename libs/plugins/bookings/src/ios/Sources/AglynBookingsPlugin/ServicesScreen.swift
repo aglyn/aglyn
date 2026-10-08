@@ -19,7 +19,7 @@ struct BookingServicesScreen: View {
   @State private var deleting: ServiceRow?
 
   private static let newID = "new"
-  private var api: BookingsAPI? { context.hostID.map { BookingsAPI(api: context.api, reader: context.firestore, hostID: $0) } }
+  private var api: BookingsAPI? { context.hostID.map { BookingsAPI(api: context.api, writer: context.writer, hostID: $0) } }
 
   var body: some View {
     WideLayoutReader { wide in
