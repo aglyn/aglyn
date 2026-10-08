@@ -119,7 +119,7 @@ final class AnalyticsModel {
         // A failed lookup is not a plan without the feature: it says so, and a refresh retries.
         do {
           let body = try await api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
-          if case .bool(let value)? = body["features"]?["screenAnalytics"] { entitled = value } else { entitled = false }
+          if case .bool(let value)? = body?["features"]?["screenAnalytics"] { entitled = value } else { entitled = false }
         } catch {
           entitlementFailed = true
         }
