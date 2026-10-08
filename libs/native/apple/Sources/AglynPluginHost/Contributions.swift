@@ -135,6 +135,9 @@ public struct NativeWidget: Identifiable {
   public let size: WidgetSize
   public let requiresSite: Bool
   public let apps: Set<AglynAppKind>
+  /// A core page's slot it renders in instead of Home, the native twin of
+  /// the console's `PluginWidgetSlot` (`hostAnalytics` is the Analytics page's).
+  public var slot: String? = nil
   public let make: WidgetBuilder
 }
 

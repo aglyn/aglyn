@@ -61,6 +61,8 @@ sealed interface Route {
   data class Besigner(val path: String) : Route
   /** The site's pages, each opening in the Besigner. */
   data object Pages : Route
+  /** The site's Analytics page. */
+  data object Analytics : Route
   data object Switcher : Route
   data object NotificationSettings : Route
 }
@@ -165,6 +167,7 @@ internal class ShellPluginContext(
     val rest = DeepLinks.splitConsoleScope(path.substringBefore('?')).rest
     when {
       rest == "/screens" || rest.startsWith("/screens/") -> navigator.push(Route.Pages)
+      rest == "/analytics" || rest.startsWith("/analytics/") -> navigator.push(Route.Analytics)
       rest.startsWith("/manage/notifications/settings") -> {
         navigator.select(ShellNavigator.SETTINGS)
         navigator.push(Route.NotificationSettings)

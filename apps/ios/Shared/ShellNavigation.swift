@@ -15,6 +15,8 @@ enum Route: Hashable {
   case unavailable(String)
   /// The person's notification settings (`/manage/notifications/settings`).
   case notificationSettings
+  /// The site's Analytics page.
+  case analytics
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.
@@ -23,6 +25,8 @@ enum ShellSection: Hashable, Identifiable {
   case notifications
   case settings
   case more
+  /// The site's Analytics page (a core page, not a plugin's).
+  case analytics
   /// A plugin tab, or a site screen the sidebar lists, by screen id.
   case plugin(String)
 
@@ -32,6 +36,7 @@ enum ShellSection: Hashable, Identifiable {
     case .notifications: "notifications"
     case .settings: "settings"
     case .more: "more"
+    case .analytics: "analytics"
     case .plugin(let screen): "plugin:\(screen)"
     }
   }

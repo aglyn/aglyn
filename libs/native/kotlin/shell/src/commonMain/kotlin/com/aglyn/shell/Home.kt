@@ -60,6 +60,7 @@ private data class ShellAction(val key: String, val title: String, val icon: Str
 
 private val SHELL_ACTIONS = listOf(
   ShellAction("pages", "Pages", "description", 100, Route.Pages),
+  ShellAction("analytics", "Analytics", "bar_chart", 110, Route.Analytics),
 )
 
 /** How many recent notifications the dashboard reads. */

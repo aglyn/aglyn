@@ -122,6 +122,8 @@ final class AppModel {
         navigation.push(.notificationSettings)
       } else if path.hasPrefix("/manage/notifications") {
         navigation.select(.notifications)
+      } else if DeepLinks.splitConsoleScope(path).rest.hasPrefix("/analytics") {
+        navigation.push(.analytics)
       } else {
         navigation.push(.unavailable(path))
       }

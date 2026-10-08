@@ -25,6 +25,8 @@ fun main() {
           Item("Notifications", shortcut = shortcut(Key.Two), onClick = { navigator.select(ShellNavigator.NOTIFICATIONS) })
           Item("Pages", shortcut = shortcut(Key.Three), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Pages) })
           Item("Orders", shortcut = shortcut(Key.Four), onClick = { navigator.select(ShellNavigator.screenKey("commerce.orders")) })
+          Item("Bookings", shortcut = shortcut(Key.Five), onClick = { navigator.select(ShellNavigator.screenKey("bookings.calendar")) })
+          Item("Analytics", shortcut = shortcut(Key.Six), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Analytics) })
           Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.select(ShellNavigator.SETTINGS) })
           Separator()
           Item("Back", shortcut = shortcut(Key.LeftBracket), onClick = { navigator.back() })
