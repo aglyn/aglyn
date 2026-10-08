@@ -20,6 +20,7 @@ import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filt
 import type {
   ListQueryDeclaration,
   ListQueryRequest,
+  ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
@@ -85,10 +86,31 @@ const HOST_MEMBER_EMAIL_FIELD: ListFilterField = {
   operators: ['startsWith'],
 }
 
-/** The roster's one query: its fields, and its one order, by address. */
+/*
+ * EVERY HEADER SORTS THE WHOLE ROSTER (AGL-3680).
+ *
+ * By address, A to Z, is the default and holds under every filter — the
+ * search is a range on `email`, which leads the order with that field
+ * anyway. Z to A and Site access are `alone` orders: on a subcollection list
+ * they pair with nothing, so they cost no composite, and while a filter or
+ * the search is on they fall back to A to Z and the notices say so. Both
+ * read fields the roster's one writer stores on every document (`email`,
+ * `role` — see above), so an `orderBy` drops no one.
+ *
+ * The owner's row is not a roster document and stays pinned on top under
+ * every order; a plugin column orders the page through its own header.
+ */
+export const HOST_MEMBER_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'email', direction: 'asc', column: 'email', label: 'Member' },
+  { path: 'email', direction: 'desc', column: 'email', label: 'Member', alone: true },
+  { path: 'role', direction: 'asc', column: 'role', label: 'Site access', alone: true },
+  { path: 'role', direction: 'desc', column: 'role', label: 'Site access', alone: true },
+]
+
+/** The roster's one query: its fields, and the orders its headers ask for. */
 export const HOST_MEMBER_LIST_QUERY: ListQueryDeclaration = {
   fields: [...HOST_MEMBER_FILTER_FIELDS, HOST_MEMBER_EMAIL_FIELD],
-  sorts: [{ path: 'email', direction: 'asc' }],
+  sorts: HOST_MEMBER_LIST_COLUMN_SORTS,
 }
 
 export const HOST_MEMBER_FILTER_HEADERS: Readonly<Record<string, string>> = {
@@ -105,9 +127,11 @@ export const HOST_MEMBER_FILTER_HEADERS: Readonly<Record<string, string>> = {
 export function hostMemberListRequest(
   clauses: readonly ListFilterClause[],
   words: readonly string[],
+  sort: ListQuerySort | null = null,
 ): ListQueryRequest {
   const prefix = words.join(' ').trim()
   return {
+    sort,
     clauses: [
       ...clauses.filter((clause) => clause.field !== HOST_MEMBER_EMAIL_FIELD.column),
       ...(prefix
