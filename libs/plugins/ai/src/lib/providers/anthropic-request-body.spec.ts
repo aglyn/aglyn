@@ -65,8 +65,8 @@ describe('the Messages API body for the models that refuse disabled thinking (AG
     }
   })
 
-  it('moves no tier default: the comparison models are listed, not routed to', () => {
-    expect(aiDefaultModelFor('anthropic', 'balanced')).toBe('claude-sonnet-5')
+  it('serves the balanced tier from Claude Sonnet 5.5 and leaves the deep default where it was', () => {
+    expect(aiDefaultModelFor('anthropic', 'balanced')).toBe('claude-sonnet-5-5')
     expect(aiDefaultModelFor('anthropic', 'deep')).toBe('claude-opus-5')
     expect(aiCatalogEntry('claude-sonnet-5-5')?.tier).toBe('balanced')
     expect(aiCatalogEntry('claude-opus-5-5')?.tier).toBe('deep')

@@ -111,8 +111,8 @@ describe('the catalog carries two rates, and they have not collapsed', () => {
     const marked = AI_MODEL_CATALOG.filter(
       (entry) => entry.billedRates.inputPerToken > entry.providerRates.inputPerToken,
     )
-    // Claude Sonnet 5.5 carries its sibling's markup at the same list price (AGL-3660).
-    expect(marked.map((entry) => entry.id)).toEqual(['claude-sonnet-5', 'claude-sonnet-5-5'])
+    // Claude Sonnet 5.5, the balanced default since AGL-3660, carries Sonnet 5's markup at the same list price.
+    expect(marked.map((entry) => entry.id)).toEqual(['claude-sonnet-5-5', 'claude-sonnet-5'])
     for (const sonnet of marked) {
       // Pinned as list prices, so a change to either half has to be written
       // here in the units the vendor publishes and the plan bands were sized in.

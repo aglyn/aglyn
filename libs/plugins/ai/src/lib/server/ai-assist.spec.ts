@@ -673,7 +673,7 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     // same 100 in / 40 out — so no pair of them can pass for another.
     const cases: Array<[string, string, number]> = [
       ['element', 'claude-haiku-4-5', 0.0003],
-      ['blog', 'claude-sonnet-5', 0.0009],
+      ['blog', 'claude-sonnet-5-5', 0.0009],
     ]
     for (const [mode, expected, cost] of cases) {
       mockDocs.clear()

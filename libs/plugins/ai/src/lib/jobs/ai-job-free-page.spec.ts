@@ -109,7 +109,7 @@ import { AI_JOB_LAYOUT_INSTRUCTIONS } from './ai-job-layout-step'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { AI_MODEL_CATALOG, AI_STEP_TIERS, estimateAiBilledUsd } from '../providers/catalog'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS, aiCatalogEntry, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiUsage } from '../providers/contract'
 import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import {
@@ -538,7 +538,9 @@ describe('one Free page fits the Free taste, end to end', () => {
   it('runs the plan and every pass on the models the routing table gives them, the plan on the one measured live', async () => {
     const result = await replay()
     expect(result.planRequest.model).toBe(PLAN_MODEL)
-    expect(PLAN_MODEL).toBe(MEASURED.model)
+    // Measured on Claude Sonnet 5; the balanced default since AGL-3660, Claude
+    // Sonnet 5.5, bills at the same rates, so the measured arithmetic carries.
+    expect(aiCatalogEntry(PLAN_MODEL)?.billedRates).toEqual(aiCatalogEntry(MEASURED.model)?.billedRates)
     expect(result.passRequests.map((request) => request.model)).toEqual(FIXTURE.answers.map(() => PAGE_MODEL))
   })
 
@@ -678,7 +680,7 @@ describe('one Free page fits the Free taste, end to end', () => {
 
   it('fits the same page on a site with no layout yet, whose job builds the one layout the Free plan includes first (AGL-3031)', async () => {
     const figures = arithmetic(await replay())
-    expect(LAYOUT_MODEL).toBe(MEASURED.model)
+    expect(aiCatalogEntry(LAYOUT_MODEL)?.billedRates).toEqual(aiCatalogEntry(MEASURED.model)?.billedRates)
     expect(figures.totalWithLayout).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
     expect(FREE_AI_TASTE_CREDITS_PER_MONTH - figures.totalWithLayout).toBeGreaterThan(Math.max(...figures.passes))
     expect(figures.sectionsWithinWithLayout).toBeGreaterThanOrEqual(FIXTURE.answers.length)

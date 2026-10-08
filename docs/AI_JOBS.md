@@ -484,6 +484,20 @@ Every door reads its row rather than a constant of its own.
 - **A model that takes no setting gets none.** The Anthropic adapter sends
   neither `thinking` nor `effort` to a catalog model whose
   `capabilities.thinking` is false, whatever the door asked for.
+- **The balanced tier is Claude Sonnet 5.5 (AGL-3660).** The first balanced
+  row of `AI_MODEL_CATALOG` is the tier's default, so Free, "Auto" and every
+  step on the balanced tier run on `claude-sonnet-5-5`; `claude-sonnet-5`
+  stays listed so a workspace's earlier choice and every recording still
+  resolve. Both bill at the same rates. Sonnet 5.5 refuses
+  `thinking: {type: "disabled"}`, so the adapter says a step's `thinking:
+  'off'` to it as `{type: "between_tools"}` (accepted at effort high or below,
+  every effort the contract names); Claude Opus 5.5 cannot turn thinking off,
+  so it is sent no `thinking` and `effort: high` where a step names none. No
+  door forces a tool: every request sends `tool_choice: auto`. Its cache
+  minimum is 512 tokens, so the insight, A/B test, overlay and copy-section
+  prompts now cache where they did not on Sonnet 5's 1,024.
+- **A Free site's plan still runs on the fast tier** (`aiSitePlanModel`,
+  AGL-3594), not on the balanced default.
 
 ## Planning, and a job that waits for a person
 

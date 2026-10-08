@@ -261,13 +261,13 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-experiment-step.ts': {
     step: 'job.experiment',
-    caches: false,
-    why: "the A/B test rules and the acceptable-use block are under the balanced tier's minimum; the copy under test, or a test's arms with its verdict, is the request",
+    caches: true,
+    why: "the A/B test rules and the acceptable-use block, under 1,000 tokens: over Claude Sonnet 5.5's 512-token minimum since it became the balanced default (AGL-3660), under Sonnet 5's 1,024 before; the copy under test, or a test's arms with its verdict, is the request",
   },
   'jobs/ai-job-insight-step.ts': {
     step: 'job.insight',
-    caches: false,
-    why: "an insight's rules and the acceptable-use block are under the balanced tier's minimum; the read call's catalog and the answer call's tables are the request",
+    caches: true,
+    why: "an insight's rules and the acceptable-use block, under 1,000 tokens: over Claude Sonnet 5.5's 512-token minimum since AGL-3660; the read call's catalog and the answer call's tables are the request",
   },
   'runtime/ai-products-generation.ts': {
     step: 'job.products',
@@ -281,8 +281,8 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-overlay-copy.ts': {
     step: 'job.text',
-    caches: false,
-    why: "a text job asked for overlay copy (AGL-3603): the overlay rules and the acceptable-use block are under the balanced tier's minimum; the brief, the triggers and the current copy are the request",
+    caches: true,
+    why: "a text job asked for overlay copy (AGL-3603): the overlay rules and the acceptable-use block, over Claude Sonnet 5.5's 512-token minimum since AGL-3660; the brief, the triggers and the current copy are the request",
   },
   'server/plugin-text-generation.ts': {
     step: 'job.text',
@@ -292,7 +292,7 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   'server/ai-assist.ts': {
     step: 'copy.element',
     caches: false,
-    why: "the copy assistant's three mode prompts, each measured below",
+    why: "the copy assistant's three mode prompts, each measured below; the section mode alone clears its model's minimum, since Claude Sonnet 5.5's is 512 (AGL-3660)",
   },
   'server/assist-chat.ts': {
     step: 'assist.chat',
@@ -327,6 +327,8 @@ interface Composed {
   step: AiStepKind
   blocks: (site: AiSiteInventory | null | undefined) => AiSystemBlock[]
   tools: (site: AiSiteInventory) => AiTool[]
+  /** This request's verdict where it differs from its door's other requests. */
+  caches?: boolean
 }
 
 const SEO_LISTING_FIELDS = ['title', 'description', 'breadcrumb'] as const
@@ -623,6 +625,7 @@ const REQUESTS: Record<string, Composed> = {
   'copy.section': {
     door: 'server/ai-assist.ts',
     step: 'copy.section',
+    caches: true,
     blocks: () => assistModeSystemBlocks('section'),
     tools: () => [assistSectionTool()],
   },
@@ -697,7 +700,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
 
   it('reports the same verdict its door table row claims', () => {
     for (const [name, row] of Object.entries(measured())) {
-      expect([name, row.caches]).toEqual([name, AI_DOORS[REQUESTS[name].door].caches])
+      expect([name, row.caches]).toEqual([name, REQUESTS[name].caches ?? AI_DOORS[REQUESTS[name].door].caches])
     }
   })
 
@@ -717,7 +720,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // at AGL-3433, whose shorter rule 16 every document request below also
       // carries. A brief that asks for a video is offered the plan's list of
       // players on a tool of its own; this plain one is the same bytes.
-      plan: { prefixTokens: 2_984, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_984, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
@@ -730,17 +733,17 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // AGL-3143 §16, which tells it copy never prints an address, a slug or
       // a timestamp: a live build printed all three on every article. All
       // four grew 6 at AGL-3588, the App Bar's shrink and hide switches.
-      layout: { prefixTokens: 4_427, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_039, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_038, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_427, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_039, minimum: 512, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_038, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate.
-      email: { prefixTokens: 2_896, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_728, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_596, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_896, minimum: 512, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_596, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
-      theme: { prefixTokens: 3_517, minimum: 1_024, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_517, minimum: 512, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096). Up 84 at AGL-3538: a
@@ -753,8 +756,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Up 249 at AGL-3611, the order and return triggers the draft may start
       // on, and 7 for the two steps that ride a larger variant naming its
       // empty field.
-      'workflow-draft': { prefixTokens: 5_000, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_215, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 5_000, minimum: 512, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_215, minimum: 512, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -763,30 +766,30 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_006, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_006, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
       // balanced tier's minimum, so nothing is cached and the copy under test
       // — or the arms and the verdict — is billed as the request.
-      'experiment-variants': { prefixTokens: 987, minimum: 1_024, caches: false, toolsStable: true },
-      'experiment-explain': { prefixTokens: 911, minimum: 1_024, caches: false, toolsStable: true },
+      'experiment-variants': { prefixTokens: 987, minimum: 512, caches: true, toolsStable: true },
+      'experiment-explain': { prefixTokens: 911, minimum: 512, caches: true, toolsStable: true },
       // Logic by AI (AGL-3603): one rules block on the fields scope, so a
       // function's, a variable's and an explanation's prefix each cache.
-      'logic-function': { prefixTokens: 1_556, minimum: 1_024, caches: true, toolsStable: true },
-      'logic-variable': { prefixTokens: 1_087, minimum: 1_024, caches: true, toolsStable: true },
-      'logic-explain': { prefixTokens: 1_077, minimum: 1_024, caches: true, toolsStable: true },
+      'logic-function': { prefixTokens: 1_556, minimum: 512, caches: true, toolsStable: true },
+      'logic-variable': { prefixTokens: 1_087, minimum: 512, caches: true, toolsStable: true },
+      'logic-explain': { prefixTokens: 1_077, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
-      'insight-read': { prefixTokens: 944, minimum: 1_024, caches: false, toolsStable: true },
-      'insight-answer': { prefixTokens: 983, minimum: 1_024, caches: false, toolsStable: true },
+      'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },
+      'insight-answer': { prefixTokens: 983, minimum: 512, caches: true, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
-      'product-copy': { prefixTokens: 2_424, minimum: 1_024, caches: true, toolsStable: true },
-      catalog: { prefixTokens: 2_449, minimum: 1_024, caches: true, toolsStable: true },
-      categories: { prefixTokens: 2_348, minimum: 1_024, caches: true, toolsStable: true },
+      'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_449, minimum: 512, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
@@ -795,11 +798,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'crm-mapping': { prefixTokens: 680, minimum: 4_096, caches: false, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
-      text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },
-      'overlay-popup': { prefixTokens: 866, minimum: 1_024, caches: false, toolsStable: true },
+      text: { prefixTokens: 128, minimum: 512, caches: false, toolsStable: true },
+      'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
       'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
-      'copy.blog': { prefixTokens: 340, minimum: 1_024, caches: false, toolsStable: true },
-      'copy.section': { prefixTokens: 694, minimum: 1_024, caches: false, toolsStable: true },
+      'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
+      'copy.section': { prefixTokens: 694, minimum: 512, caches: true, toolsStable: true },
     })
   })
 
@@ -894,9 +897,13 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // workspace has measured anything, and a cache read is priced at a tenth
     // of an input token. A step whose prefix cannot cache and still claims
     // cache reads quotes roughly a tenth of what it will actually cost.
+    // One-sided, as the title says: a step whose prompt caches and whose
+    // nominal claims no read quotes high, which is safe; claiming a read the
+    // prompt cannot get quotes low. The steps the balanced default's lower
+    // minimum let cache (AGL-3660) still quote as they did.
     for (const [name, row] of Object.entries(measured())) {
       const nominal = AI_STEP_NOMINAL_USAGE[REQUESTS[name].step]
-      expect([name, nominal.cacheReadTokens > 0]).toEqual([name, row.caches])
+      if (nominal.cacheReadTokens > 0) expect([name, row.caches]).toEqual([name, true])
     }
   })
 
