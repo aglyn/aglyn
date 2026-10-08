@@ -27,6 +27,7 @@ import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-pr
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useViewportFill } from '@aglyn/shared-ui-jsx/hooks/use-viewport-fill'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import {
   Badge,
@@ -366,6 +367,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
    * ringing the same coffee twice is two sales.
    */
   const attemptKey = useRef('')
+  const fill = useViewportFill({ min: 480 })
   useEffect(() => {
     attemptKey.current = ''
   }, [lines, discountPct])
@@ -828,9 +830,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     <>
       <NextPageTitle screen={'POS'} />
       <Box
+        ref={fill.ref}
         sx={{
           display: 'flex',
-          height: '100dvh',
+          // From under the console's header, nav and page title to the
+          // bottom of the window, not a whole window tall below them.
+          height: fill.height,
           overflow: 'hidden',
         }}
       >
