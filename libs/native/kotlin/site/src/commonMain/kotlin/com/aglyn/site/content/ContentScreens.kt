@@ -448,14 +448,12 @@ private fun ContentDialogs(
         busy = runner.busy,
         error = runner.error,
         onDismiss = close,
+        onConfirm = { runner.run("Saved.") { api.renameCollection(c.id, name, slug) } },
         dismissLabel = "Close",
       ) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
           OutlinedTextField(slug, { slug = contentSlug(it).ifEmpty { it.lowercase() } }, label = { Text("Address") }, prefix = { Text("/") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-          if (name != c.name || slug != c.slug) {
-            TextButton(onClick = { runner.run("Saved.") { api.renameCollection(c.id, name, slug) } }, enabled = !runner.busy) { Text("Save name and address") }
-          }
           SelectField("List page", screenOptions, c.listScreenId, { id -> runner.run("List page saved.") { api.setListScreen(c.id, id) } }, noneLabel = "None", enabled = !runner.busy)
           SelectField("Entry page", screenOptions, c.entryScreenId, { id -> runner.run("Entry page saved.") { api.setEntryScreen(c.id, id) } }, noneLabel = "None", enabled = !runner.busy, supporting = "Each entry renders through this page")
           SelectField(

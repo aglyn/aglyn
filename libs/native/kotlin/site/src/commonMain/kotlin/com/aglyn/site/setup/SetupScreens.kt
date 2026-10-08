@@ -306,7 +306,7 @@ private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit
     onSave = {
       runner.run("Saved.") {
         val default = chosen?.takeIf { it in parsed } ?: parsed.firstOrNull()
-        api.replace(mapOf("locales" to parsed.ifEmpty { null } ?: FirestoreDelete, "defaultLocale" to (default ?: FirestoreDelete)))
+        api.replace(mapOf("locales" to (parsed.ifEmpty { null } ?: FirestoreDelete), "defaultLocale" to (default ?: FirestoreDelete)))
       }
     },
   ) {
