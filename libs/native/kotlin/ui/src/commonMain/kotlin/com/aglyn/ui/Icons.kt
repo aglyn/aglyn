@@ -76,6 +76,33 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.ViewKanban
+import androidx.compose.material.icons.outlined.Upload
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.automirrored.outlined.Reply
+import androidx.compose.material.icons.outlined.MarkEmailUnread
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Segment
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.CallMerge
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -161,6 +188,35 @@ object AglynIcons {
     "done_all" to Icons.Outlined.DoneAll,
     "location_on" to Icons.Outlined.LocationOn,
     "undo" to Icons.AutoMirrored.Outlined.Undo,
+    // CRM, Inbox and Email (AGL-3669).
+    "expand_more" to Icons.Outlined.ExpandMore,
+    "edit" to Icons.Outlined.Edit,
+    "business" to Icons.Outlined.Business,
+    "handshake" to Icons.Outlined.Handshake,
+    "person_add" to Icons.Outlined.PersonAdd,
+    "sticky_note" to Icons.AutoMirrored.Outlined.StickyNote2,
+    "call" to Icons.Outlined.Call,
+    "groups" to Icons.Outlined.Groups,
+    "view_kanban" to Icons.Outlined.ViewKanban,
+    "upload" to Icons.Outlined.Upload,
+    "download" to Icons.Outlined.Download,
+    "reply" to Icons.AutoMirrored.Outlined.Reply,
+    "mark_unread" to Icons.Outlined.MarkEmailUnread,
+    "mark_read" to Icons.Outlined.Drafts,
+    "send" to Icons.AutoMirrored.Outlined.Send,
+    "filter_list" to Icons.Outlined.FilterList,
+    "bar_chart" to Icons.Outlined.BarChart,
+    "filter_alt" to Icons.Outlined.FilterAlt,
+    "list" to Icons.AutoMirrored.Outlined.List,
+    "label" to Icons.AutoMirrored.Outlined.Label,
+    "timeline" to Icons.Outlined.Timeline,
+    "arrow_forward" to Icons.AutoMirrored.Outlined.ArrowForward,
+    "copy" to Icons.Outlined.ContentCopy,
+    "segment" to Icons.Outlined.Segment,
+    "tag" to Icons.Outlined.Tag,
+    "merge" to Icons.Outlined.CallMerge,
+    "drafts" to Icons.Outlined.Drafts,
+    "play" to Icons.Outlined.PlayCircle,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension

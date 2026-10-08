@@ -89,6 +89,10 @@ class FirebaseFirestoreWriter(private val db: FirebaseFirestore) : FirestoreWrit
   override suspend fun merge(path: String, data: Map<String, Any?>) {
     db.document(path).set(toSdkWrite(data), SetOptions.merge()).await()
   }
+
+  override suspend fun delete(path: String) {
+    db.document(path).delete().await()
+  }
 }
 
 internal fun DocumentSnapshot.toDoc(): FirestoreDoc? {

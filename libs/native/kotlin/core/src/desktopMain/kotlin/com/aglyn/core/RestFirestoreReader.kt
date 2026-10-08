@@ -1,6 +1,7 @@
 package com.aglyn.core
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
@@ -95,6 +96,14 @@ class RestFirestoreReader(
     if (response.status.value !in 200..299) {
       val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
       throw IllegalStateException(body?.let(::errorOf) ?: "Could not save.")
+    }
+  }
+
+  override suspend fun delete(path: String) {
+    val response = http.delete("$root/$path") { header("Authorization", "Bearer ${bearer()}") }
+    if (response.status.value !in 200..299 && response.status.value != 404) {
+      val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
+      throw IllegalStateException(body?.let(::errorOf) ?: "Could not delete.")
     }
   }
 

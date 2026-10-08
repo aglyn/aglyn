@@ -8,6 +8,12 @@ package com.aglyn.core
  */
 interface FirestoreWriter {
   suspend fun merge(path: String, data: Map<String, Any?>)
+
+  /**
+   * Deletes the document at [path], as the web SDK's `deleteDoc`: under the
+   * same rules, and a missing document is not an error.
+   */
+  suspend fun delete(path: String): Unit = throw IllegalStateException("Deleting is not available here.")
 }
 
 /**
@@ -23,6 +29,8 @@ fun firestoreNow(): FirestoreTimestamp = nowMillis().let { FirestoreTimestamp(it
 object NoFirestoreWrites : FirestoreWriter {
   override suspend fun merge(path: String, data: Map<String, Any?>) =
     throw IllegalStateException("Saving is not available here.")
+
+  override suspend fun delete(path: String) = throw IllegalStateException("Deleting is not available here.")
 }
 
 /**
