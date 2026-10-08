@@ -177,7 +177,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     "id": "accounting",
     "label": "Accounting",
-    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
     "releaseFlag": "release_accounting"
   },
   {
