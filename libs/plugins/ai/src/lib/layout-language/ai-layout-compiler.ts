@@ -490,6 +490,9 @@ function compileSection(
  * back into the same props.
  */
 function componentItem(block: AiLayoutBlock, props: Record<string, string>): AiLayoutItem {
+  // An item that names no prop is the card itself, written as a cards item.
+  const own = (block.items ?? []).find((item) => !(item.title in props) && (item.title.trim() || item.text.trim()))
+  if (own && !(block.items ?? []).some((item) => item.title in props)) return { title: own.title, text: own.text }
   const value = (pattern: RegExp) =>
     (block.items ?? []).find((item) => item.title in props && pattern.test(item.title) && item.text.trim())?.text ?? ''
   const title = value(/title|name|heading|label|question|figure|value/i) || block.text || ''

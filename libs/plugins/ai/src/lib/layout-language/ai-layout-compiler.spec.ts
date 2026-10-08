@@ -664,6 +664,28 @@ describe('repeats (rule 1)', () => {
     ).toEqual(['Bath', 'Trim', 'Nails', 'Teeth', 'Ears', 'Coat'])
   })
 
+  it('reads a component placed in every column whose item is the card itself', () => {
+    const work = (title: string, text: string, col: number): AiLayoutBlock => ({ kind: 'component', to: CARD, col, items: [{ title, text }] })
+    const { compiled, report } = build(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our services' }] },
+        { cols: [1, 1, 1], blocks: [{ kind: 'heading', text: 'Classes' }, work('Gentle Flow', 'A slow start.', 0), work('Restorative', 'Soft and quiet.', 1), work('Slow Stretch', 'Easy and unhurried.', 2)] },
+      ],
+      pagePlan,
+      true,
+    )
+    expect(report.violations).toEqual([])
+    expect(
+      Object.values(compiled.tree.nodes)
+        .filter((node) => node.componentId === 'reusableInstance')
+        .map((node) => node.props?.['propValues']),
+    ).toEqual([
+      { title: 'Gentle Flow', description: 'A slow start.' },
+      { title: 'Restorative', description: 'Soft and quiet.' },
+      { title: 'Slow Stretch', description: 'Easy and unhurried.' },
+    ])
+  })
+
   it('draws the same cards in full on a workspace that keeps none', () => {
     const { compiled, report } = build(
       [
