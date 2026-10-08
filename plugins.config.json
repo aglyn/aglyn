@@ -3489,6 +3489,51 @@
           ]
         }
       }
+    },
+    {
+      "id": "weglot",
+      "$comment": "AGL-3700: Weglot translation for a merchant's published site, with the MERCHANT'S OWN Weglot account and public project key (merchant-provided: Aglyn holds no Weglot account and no server of ours calls it). Off per site until a site admin switches it on (`defaultOffPerSite`); settings are the platform's generic plugin settings (`pluginSettings/weglot`), drawn by the console's settings card from the schema `declarations` registers. The tenant enricher (`tenantApi`) writes the page slice only for a site that switched it on, on a plan with `multilingual`, with valid settings; the site runtime loads Weglot's script without blocking render. `siteIntegration` widens the site's connect-src/img-src to Weglot's exact hosts under the same three conditions (core `site-integrations.ts`). Client-side translation only: no hreflang and no Weglot subdomain/subdirectory mode are built.",
+      "package": "@aglyn/plugins-weglot",
+      "register": {
+        "site": "registerWeglotSite",
+        "tenantApi": "registerWeglotApi",
+        "declarations": "registerWeglotDeclarations",
+        "subprocessors": "weglotSubprocessors"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "catalog": {
+        "order": 32,
+        "label": "Weglot translation",
+        "description": "Translate your published site with your own Weglot account.",
+        "releaseFlag": "release_weglot",
+        "releaseFlagDefinition": {
+          "label": "Weglot translation",
+          "description": "Weglot's JavaScript translation on published sites, with the merchant's own Weglot key (AGL-3700). Platform-wide kill switch; each site still switches it on itself.",
+          "defaultEnabled": true
+        },
+        "defaultOffPerSite": true,
+        "siteOff": {
+          "stops": "Stops loading Weglot and its language switcher on this site's pages.",
+          "keeps": "Your Weglot settings and your Weglot account's translations are kept."
+        },
+        "publishedSiteImpact": "elements"
+      },
+      "siteIntegration": {
+        "$comment": "The hosts Weglot's script reaches from the visitor's browser, read out of weglot.min.js 5.90.2 (libs/plugins/weglot/src/lib/constants.ts holds the same list and its spec holds the two together). Admitted only on a site that switched the plugin on, whose plan has the entitlement, and whose settings have `enabled` on.",
+        "configSwitch": "enabled",
+        "entitlement": "multilingual",
+        "connectHosts": ["cdn.weglot.com", "cdn-api-weglot.com", "api.weglot.com"],
+        "imageHosts": ["cdn.weglot.com"]
+      },
+      "contributes": {
+        "site": {
+          "features": [
+            "weglot-site-runtime"
+          ]
+        }
+      }
     }
   ]
 }

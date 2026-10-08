@@ -895,4 +895,28 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       },
     ],
   },
+  {
+    pluginId: 'weglot',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "cdn.weglot.com",
+        disposition: "not-a-subprocessor",
+        reason: "Weglot’s CDN: the `weglot.min.js` script, its stylesheet, the project settings (`/projects-settings/{key}.json`) and the switcher’s flag images. Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not Aglyn, and no Aglyn server calls it.",
+        dataReceived: "From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from Aglyn’s servers, and no workspace data beyond what the published page already shows.",
+      },
+      {
+        host: "cdn-api-weglot.com",
+        disposition: "not-a-subprocessor",
+        reason: "Weglot’s translation API (`/translate`, `/translations/slugs`), which answers the translations for the page the visitor is reading. Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not Aglyn, and no Aglyn server calls it.",
+        dataReceived: "From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from Aglyn’s servers, and no workspace data beyond what the published page already shows.",
+      },
+      {
+        host: "api.weglot.com",
+        disposition: "not-a-subprocessor",
+        reason: "Weglot’s API (`/project-settings`, and `/pageviews` when the merchant’s Weglot project counts page views). Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not Aglyn, and no Aglyn server calls it.",
+        dataReceived: "From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from Aglyn’s servers, and no workspace data beyond what the published page already shows.",
+      },
+    ],
+  },
 ]

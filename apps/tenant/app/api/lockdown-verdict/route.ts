@@ -87,7 +87,9 @@ import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import {
   getDomainLockdown,
   getPlatformLockdown,
+  getPluginConfig,
 } from '@aglyn/tenant-data-admin'
+import { siteIntegrationHosts } from '@aglyn/aglyn/plugin-manager/site-integrations'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
@@ -119,6 +121,8 @@ function lockedVerdict(
     approvedFrameHosts?: string[]
     runsMeasurement?: boolean
     siteOrigins?: string[]
+    integrationConnectHosts?: string[]
+    integrationImageHosts?: string[]
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -137,6 +141,8 @@ function lockedVerdict(
       approvedFrameHosts: facts.approvedFrameHosts ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
       siteOrigins: facts.siteOrigins ?? [],
+      integrationConnectHosts: facts.integrationConnectHosts ?? [],
+      integrationImageHosts: facts.integrationImageHosts ?? [],
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -355,6 +361,30 @@ export async function GET(request: Request): Promise<Response> {
       // exists to permit would have been the one thing refused.
       Object.keys(analytics?.adTags ?? {}).length > 0,
     )
+    /**
+     * The hosts of the third-party scripts this site's owner switched on
+     * through a plugin (AGL-3700) — Weglot's translation API, say. Only the
+     * hosts the plugin DECLARED, and only while the plugin is on for the
+     * site, its plan has the entitlement and its settings have it enabled:
+     * the same three things the plugin's page enricher checks before the
+     * script is on the page. Settings are read only for a site that passed
+     * the first two, so a site with no integration costs no read.
+     *
+     * Same disclosure posture as the lists above: the script, and so these
+     * hosts, are in the site's own public pages.
+     */
+    const integrations = await siteIntegrationHosts({
+      org: orgRes.org as never,
+      host: hostRes.host as never,
+      readConfig: (pluginId) =>
+        getPluginConfig(
+          (hostRes.host as { orgId?: string }).orgId ?? null,
+          pluginId,
+          { hostId: hostRes.host.$id },
+        ),
+    })
+    const integrationConnectHosts = integrations.connectHosts
+    const integrationImageHosts = integrations.imageHosts
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -379,6 +409,8 @@ export async function GET(request: Request): Promise<Response> {
           approvedFrameHosts,
           runsMeasurement,
           siteOrigins,
+          integrationConnectHosts,
+          integrationImageHosts,
         },
         { status: 200 },
       )
@@ -395,6 +427,8 @@ export async function GET(request: Request): Promise<Response> {
       approvedFrameHosts,
       runsMeasurement,
       siteOrigins,
+      integrationConnectHosts,
+      integrationImageHosts,
     })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)

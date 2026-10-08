@@ -1356,11 +1356,20 @@ const TENANT_CONNECT_ORIGINS = [
   'https://fonts.googleapis.com',
 ]
 
+/**
+ * `integrationHosts` (AGL-3700) are the exact hosts of a third-party script
+ * the site owner switched on through a plugin — Weglot's translation API, say
+ * — compiled from that plugin's `siteIntegration` declaration and sent by the
+ * verdict route only for a site where the plugin is on, entitled and enabled
+ * (core `site-integrations.ts`). Parsed by the same hostname rule as the
+ * owner's list, so a malformed declaration admits nothing.
+ */
 function tenantConnectSrcDirective(
   isProduction,
   approvedConnectHosts,
   runsMeasurement,
   siteOrigins,
+  integrationHosts = [],
 ) {
   // `ws:` alongside `http:` because a source expression matches by scheme
   // group — `http://localhost:*` does not admit `ws://localhost:3000` — and
@@ -1386,6 +1395,7 @@ function tenantConnectSrcDirective(
     // analytics has no reason to permit an ad network's endpoint, and one that
     // permits it anyway is describing our convenience instead of the site.
     .concat(runsMeasurement ? MEASUREMENT_CONNECT_ORIGINS : [])
+    .concat(approvedImageHostSources(integrationHosts))
     .concat(approvedImageHostSources(approvedConnectHosts))
     .concat(development)
   return `connect-src ${sources.join(' ')}`
@@ -1596,6 +1606,8 @@ function tenantImgSrcDirective(
   approvedImageHosts,
   runsMeasurement,
   siteOrigins,
+  // A plugin integration's image hosts (AGL-3700), as `connect-src` takes them.
+  integrationHosts = [],
 ) {
   const development = isProduction
     ? []
@@ -1617,6 +1629,7 @@ function tenantImgSrcDirective(
     // analytics has no reason to permit an ad network's beacon, and a policy
     // that permits one anyway is documenting our convenience, not its needs.
     .concat(runsMeasurement ? MEASUREMENT_IMAGE_ORIGINS : [])
+    .concat(approvedImageHostSources(integrationHosts))
     .concat(approvedImageHostSources(approvedImageHosts))
     .concat(development)
   return `img-src ${sources.join(' ')}`

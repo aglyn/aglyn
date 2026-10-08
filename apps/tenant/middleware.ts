@@ -311,6 +311,8 @@ const lockdownVerdicts = new Map<
     approvedFrameHosts: string[]
     runsMeasurement: boolean
     siteOrigins: string[]
+    integrationConnectHosts: string[]
+    integrationImageHosts: string[]
   }
 >()
 
@@ -344,6 +346,8 @@ async function hostVerdict(
   approvedFrameHosts: string[]
   runsMeasurement: boolean
   siteOrigins: string[]
+  integrationConnectHosts: string[]
+  integrationImageHosts: string[]
 }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
@@ -360,6 +364,8 @@ async function hostVerdict(
       approvedFrameHosts: cached.approvedFrameHosts,
       runsMeasurement: cached.runsMeasurement,
       siteOrigins: cached.siteOrigins,
+      integrationConnectHosts: cached.integrationConnectHosts,
+      integrationImageHosts: cached.integrationImageHosts,
     }
   }
   let blocked = false
@@ -433,6 +439,11 @@ async function hostVerdict(
   // Stale-retentive with the rest: a site's own addresses going missing during
   // an outage would refuse its own images.
   let siteOrigins: string[] = cached?.siteOrigins ?? []
+  // A switched-on plugin integration's hosts (AGL-3700) — Weglot's API, say.
+  // Stale-retentive with the rest: a verdict outage must not break the
+  // owner's translation or chat widget on their live site.
+  let integrationConnectHosts: string[] = cached?.integrationConnectHosts ?? []
+  let integrationImageHosts: string[] = cached?.integrationImageHosts ?? []
   try {
     // The body is read inside the deadline too: a verdict that never answers,
     // or answers with a body that never ends, is the outage case below — not
@@ -464,6 +475,8 @@ async function hostVerdict(
         approvedFrameHosts?: unknown
         runsMeasurement?: boolean
         siteOrigins?: unknown
+        integrationConnectHosts?: unknown
+        integrationImageHosts?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
@@ -505,6 +518,12 @@ async function hostVerdict(
           (entry): entry is string => typeof entry === 'string',
         )
       }
+      if (Array.isArray(data?.integrationConnectHosts)) {
+        integrationConnectHosts = strings(data.integrationConnectHosts)
+      }
+      if (Array.isArray(data?.integrationImageHosts)) {
+        integrationImageHosts = strings(data.integrationImageHosts)
+      }
     }
   } catch {
     // Fail open on the lock and the cap, closed on the attribution.
@@ -523,6 +542,8 @@ async function hostVerdict(
     approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
+    integrationConnectHosts,
+    integrationImageHosts,
   })
   return {
     blocked,
@@ -537,6 +558,8 @@ async function hostVerdict(
     approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
+    integrationConnectHosts,
+    integrationImageHosts,
   }
 }
 
@@ -1269,6 +1292,7 @@ export const middleware: NextMiddleware = async (req, event) => {
       verdict.approvedImageHosts,
       verdict.runsMeasurement,
       verdict.siteOrigins,
+      verdict.integrationImageHosts,
     )}; ${tenantMediaSrcDirective(
       process.env.NODE_ENV === 'production',
       verdict.approvedMediaHosts,
@@ -1286,6 +1310,7 @@ export const middleware: NextMiddleware = async (req, event) => {
       verdict.approvedConnectHosts,
       verdict.runsMeasurement,
       verdict.siteOrigins,
+      verdict.integrationConnectHosts,
     )}; ${tenantFrameSrcDirective(
       process.env.NODE_ENV === 'production',
       verdict.approvedFrameHosts,

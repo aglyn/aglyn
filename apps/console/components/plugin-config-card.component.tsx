@@ -30,6 +30,7 @@ import {
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   Chip,
   MenuItem,
@@ -47,6 +48,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import { revalidateLivePages } from '../utils/revalidate-live-pages'
 
 /**
  * Generic per-plugin settings form (AGL-428), at either scope.
@@ -282,6 +284,17 @@ function SchemaForm({
         // can retry rather than discover later that nothing was stored.
         return void enqueueSnackbar(verdict.message, { variant: 'warning' })
       }
+      /**
+       * Settings a published page reads (AGL-3700) reach it through the page
+       * cache, so a site save drops that site's cached pages — best effort
+       * and not awaited, exactly as a publish does: the save has succeeded,
+       * and the cache window is still the backstop if this does not land.
+       */
+      if (siteScoped && hostId && schema.affectsPublishedPages) {
+        void revalidateLivePages({ user, hostId, entireHost: true }).catch(
+          () => undefined,
+        )
+      }
       setDirty(false)
       enqueueSnackbar('Settings saved', { variant: 'success' })
     } catch {
@@ -430,6 +443,7 @@ function SchemaForm({
       contentGutterY
     >
       <Stack spacing={2} sx={{ maxWidth: 480 }}>
+        {schema.notice ? <Alert severity="info">{schema.notice}</Alert> : null}
         {siteScoped ? (
           <Typography variant="body2" color="text.secondary">
             {'This site follows the workspace until you answer a field here. ' +

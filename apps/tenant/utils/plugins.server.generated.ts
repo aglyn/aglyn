@@ -70,4 +70,9 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     register: {"tenantApi":"registerSalesChannelsApi"},
     load: () => import('@aglyn/plugins-sales-channels/server'),
   },
+  {
+    id: 'weglot',
+    register: {"tenantApi":"registerWeglotApi"},
+    load: () => import('@aglyn/plugins-weglot/server'),
+  },
 ]

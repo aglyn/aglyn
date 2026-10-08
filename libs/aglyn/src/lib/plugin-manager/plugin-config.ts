@@ -50,6 +50,18 @@ export interface PluginConfigSchema {
   pluginId: string
   fields: PluginConfigField[]
   defaults: Record<string, unknown>
+  /**
+   * What an operator must read before filling the form in (AGL-3700) — a
+   * limit the settings cannot express, such as what a translation does NOT
+   * do for search. Shown above the fields at both scopes.
+   */
+  notice?: string
+  /**
+   * The settings change what a published page serves (AGL-3700). A site-scope
+   * save then drops that site's cached pages, so the change is live at once
+   * rather than within the page cache's window.
+   */
+  affectsPublishedPages?: boolean
   /** Cross-field validation; returns an error message or null. */
   validate?: (values: Record<string, unknown>) => string | null
 }

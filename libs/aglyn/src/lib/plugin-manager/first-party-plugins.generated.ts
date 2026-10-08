@@ -29,6 +29,7 @@ import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+import type { SiteIntegrationDeclaration } from './site-integrations'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { ServerStepDeclaration } from './plugin-server-steps'
 import type { InteractionRecipeDeclaration } from './interaction-recipes'
@@ -296,6 +297,17 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "Members keep their points and store credit."
     }
   },
+  {
+    "id": "weglot",
+    "label": "Weglot translation",
+    "description": "Translate your published site with your own Weglot account.",
+    "releaseFlag": "release_weglot",
+    "defaultOffPerSite": true,
+    "siteOff": {
+      "stops": "Stops loading Weglot and its language switcher on this site's pages.",
+      "keeps": "Your Weglot settings and your Weglot account's translations are kept."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -331,6 +343,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
   "loyalty": "console-only",
+  "weglot": "elements",
 }
 
 /**
@@ -2484,6 +2497,27 @@ export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration
     "settings": [
       "gaMeasurementId",
       "gtmContainerId"
+    ]
+  },
+]
+
+/**
+ * The third-party scripts a plugin may put on a merchant's published pages
+ * with the merchant's own account, and the exact hosts each reaches
+ * (AGL-3700). Read by the tenant's verdict route for the page's policy.
+ */
+export const SITE_INTEGRATIONS_DECLARED: readonly SiteIntegrationDeclaration[] = [
+  {
+    "pluginId": "weglot",
+    "configSwitch": "enabled",
+    "entitlement": "multilingual",
+    "connectHosts": [
+      "cdn.weglot.com",
+      "cdn-api-weglot.com",
+      "api.weglot.com"
+    ],
+    "imageHosts": [
+      "cdn.weglot.com"
     ]
   },
 ]

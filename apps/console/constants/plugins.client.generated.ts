@@ -250,4 +250,10 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     contributes: {"console":{"slots":["hostAnalytics"]}},
     load: () => import('@aglyn/plugins-funnels'),
   },
+  {
+    id: 'weglot',
+    register: {"site":"registerWeglotSite"},
+    contributes: {},
+    load: () => import('@aglyn/plugins-weglot/site'),
+  },
 ]

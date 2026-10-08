@@ -543,4 +543,28 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     surface: `${CONSOLE_HOST}, set on google.com by Firebase App Check`,
     purpose: 'Bot protection',
   },
+  /**
+   * Weglot (AGL-3700), on a customer site whose owner switched the Weglot
+   * plugin on with their own Weglot account. Read out of `weglot.min.js`
+   * rather than Weglot's cookie page alone: the chosen language is kept in
+   * `localStorage` under `wglang` (a cookie of that name only where storage
+   * is unavailable), beside `wg-translations` and `wg-slugs`, the cache of
+   * translations the page fetched. `WG_CHOOSE_ORIGINAL` is a cookie, set for
+   * a month when a visitor picks the original language on a project whose
+   * Weglot settings redirect by browser language. Weglot also lists
+   * `wg-search-form`, which only its search translation sets — off here.
+   *
+   * Not consent-gated, and why: each serves the translation the visitor asked
+   * for (their language, and the text already fetched for it). That is
+   * preference and function storage, which sits with the cart and the consent
+   * record in the strictly necessary group; none of it measures or
+   * advertises.
+   */
+  Weglot: {
+    names: ['wglang', 'wg-translations', 'wg-slugs', 'WG_CHOOSE_ORIGINAL'],
+    loaderToken: 'WEGLOT_SCRIPT_SRC',
+    surface: `customer sites whose owner switched on Weglot translation with their own Weglot account (*.${TENANT_DOMAIN} and custom domains)`,
+    purpose:
+      'Remembers the language you chose and keeps the translations already loaded for it',
+  },
 }

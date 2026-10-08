@@ -28,7 +28,16 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — a self-service kiosk (newest)
+## October 2026 — translate your site with Weglot (newest)
+
+- **[Weglot translation](building-sites/multilingual/weglot.md)** — already use
+  Weglot? Switch it on for a site, paste your Weglot API key and choose your
+  languages. Visitors get a language switcher that matches your theme (or Weglot's
+  own), and the script never holds up the page's first view. Translations are for
+  visitors: they are not indexed as separate pages, so use locale variants for
+  languages that need to rank. Business and above.
+
+## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
   pair a tablet to a register and let customers order themselves: products by
