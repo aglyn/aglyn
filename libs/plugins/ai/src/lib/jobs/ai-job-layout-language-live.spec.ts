@@ -108,6 +108,7 @@ import { aiLayoutChecks } from './ai-job-layout-step'
 import {
   AI_LAYOUT_FORM_PAGE_INPUT,
   AI_LAYOUT_LANGUAGE_INPUT,
+  AI_LAYOUT_LANGUAGE_THINKING,
   aiLayoutPagePrompt,
   aiLayoutPageTargets,
   aiRunLayoutPage,
@@ -389,7 +390,7 @@ async function buildFrame(brief: Brief): Promise<Result> {
     messages: [{ role: 'user', content: prompt }],
     tool: AI_LAYOUT_FRAME_TOOL,
     maxTokens: AI_JOB_LAYOUT_LANGUAGE_BUDGET.maxTokens(model),
-    thinking: 'off',
+    ...AI_LAYOUT_LANGUAGE_THINKING,
     check: aiLayoutFrameCheck({
       siteName,
       homeId: aiLayoutHomeId(pages, site),

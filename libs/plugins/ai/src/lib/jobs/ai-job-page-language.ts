@@ -87,19 +87,47 @@ export function aiJobUsesLayoutLanguage(job: Pick<AiJob, 'inputs'>): boolean {
 }
 
 /**
- * The most one page's answer asks for. A section in the language is about
- * 120 to 250 tokens with its copy, so the largest page a plan admits — eight
- * sections — fits with room; the compiler, not the ceiling, keeps a page small.
+ * How the language doors think (AGL-3660): adaptively, at an effort named
+ * rather than left to the model's default. Zach, 2026-10-07: quality first —
+ * a page and a site's frame are designed, not transcribed, and the caching
+ * work pays for the thinking. Medium is where Claude Sonnet 5.5, the balanced
+ * default, is tuned to start for multistep design work.
  */
-export const AI_JOB_PAGE_LANGUAGE_TOKENS = 3_000
+export const AI_LAYOUT_LANGUAGE_THINKING = { thinking: 'adaptive', effort: 'medium' } as const
+
+/**
+ * Room for the thinking a page's answer does before it writes, inside the
+ * same `max_tokens` as the answer: thinking is drawn from the ceiling first,
+ * so a ceiling sized for the answer alone would cut a thoughtful answer off.
+ *
+ * Bounded by TIME, not by money: the page step's answer, its re-ask and the
+ * follow-up must fit the least time a beat gives a step
+ * (`AI_JOB_STEP_MAX_MINIMUM_MS`), and `aiJobStepBudget` quietly lowers every
+ * ceiling to what fits. 2,000 here, with the follow-up's 500, is the most
+ * that fits whole on the balanced tier; at 5,000 the budget cut a page's
+ * ceiling to 879 tokens, under the answer itself.
+ */
+export const AI_LAYOUT_PAGE_THINKING_TOKENS = 2_000
+
+/** The same room for a site's header and footer, whose step has the time for more. */
+export const AI_LAYOUT_FRAME_THINKING_TOKENS = 4_000
+
+/**
+ * The most one page's answer asks for: the answer and the thinking before it.
+ * A section in the language is about 120 to 250 tokens with its copy, so the
+ * largest page a plan admits — eight sections — fits in 3,000 with room (the
+ * live runs of 2026-10-07 wrote 683 to 1,745); the compiler, not the ceiling,
+ * keeps a page small.
+ */
+export const AI_JOB_PAGE_LANGUAGE_TOKENS = 3_000 + AI_LAYOUT_PAGE_THINKING_TOKENS
 
 /**
  * The time a language page pass needs: its lookup rounds, its answer and its
  * re-ask at `AI_JOB_PAGE_LANGUAGE_TOKENS` on the tier the page step is served
  * from, with the step's reads and writes.
  */
-/** The most the follow-up asking only for the sections an answer left out may run to. */
-export const AI_JOB_PAGE_LANGUAGE_FOLLOW_UP_TOKENS = 1_500
+/** The most the follow-up asking only for the sections an answer left out may run to, its thinking included. */
+export const AI_JOB_PAGE_LANGUAGE_FOLLOW_UP_TOKENS = 1_500 + 500
 
 export const AI_JOB_PAGE_LANGUAGE_BUDGET = aiJobStepBudget({
   tier: AI_STEP_TIERS['job.page'],
@@ -469,7 +497,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
       tool: AI_LAYOUT_PAGE_TOOL,
       maxTokens,
       cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer items in each group.' },
-      thinking: 'off',
+      ...AI_LAYOUT_LANGUAGE_THINKING,
       check: observe(
         aiLayoutPageCheck({
           screen: input.screen,

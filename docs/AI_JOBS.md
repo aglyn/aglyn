@@ -556,7 +556,21 @@ Every door reads its row rather than a constant of its own.
   minimum is 512 tokens, so the insight, A/B test, overlay and copy-section
   prompts now cache where they did not on Sonnet 5's 1,024.
 - **A Free site's plan still runs on the fast tier** (`aiSitePlanModel`,
-  AGL-3594), not on the balanced default.
+  AGL-3594). Moving it to the balanced default puts the plan's derived
+  worst case at 105 credits rather than 35, and the Free site wall
+  (`AI_FREE_SITE_WORST_CASE_CREDITS`, still priced on section passes rather
+  than the layout language's one answer a page) then fits no section at all,
+  so every Free plan would be refused. The wall has to be re-derived for the
+  layout language first.
+- **The layout language thinks.** A page's answer and a site's header and
+  footer are asked with adaptive thinking at `effort: medium`
+  (`AI_LAYOUT_LANGUAGE_THINKING`), and each ceiling carries room for it above
+  the answer's own: 2,000 tokens on a page (5,000 in all; the live answers
+  ran 683–1,745) and 4,000 on a frame (5,200). The page's room is bounded by
+  time, not money: the answer, its re-ask and the follow-up must fit the
+  least time a beat gives a step, and `aiJobStepBudget` lowers a ceiling that
+  does not — at 5,000 of room it cut the page ceiling to 879. The theme step already thought
+  adaptively, at the model's default effort, and is unchanged.
 
 ## Planning, and a job that waits for a person
 
