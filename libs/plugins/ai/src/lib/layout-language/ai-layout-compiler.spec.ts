@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  AI_JUNIPER_PORTFOLIO_PAGE_ANSWER,
+  AI_JUNIPER_PORTFOLIO_PLANNED_SECTIONS,
+} from '../jobs/fixtures/ai-juniper-portfolio-page-recording'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   validateAiDoctrineTree,
@@ -980,6 +984,23 @@ describe('the frame', () => {
     })
     expect(report.violations).toEqual([])
     expect(stored.ok && stored.repairs).toEqual([])
+  })
+})
+
+describe('reading the recorded Juniper Clay portfolio answer (AGL-3660)', () => {
+  it('fills "Works Gallery" with "Selected works", not the inquiry form, though the plan gave it no items', () => {
+    const reading = aiReadLayoutPage(AI_JUNIPER_PORTFOLIO_PAGE_ANSWER, 2, AI_JUNIPER_PORTFOLIO_PLANNED_SECTIONS)
+    const headings = reading.sections.map((section) => section?.blocks.find((block) => block.kind === 'heading')?.text)
+    expect(headings).toEqual(['Handmade stoneware, shaped slowly.', 'Selected works'])
+    expect(reading.sections[1]?.blocks.some((block) => block.kind === 'cards')).toBe(true)
+    expect(reading.sections.flatMap((section) => section?.blocks ?? []).some((block) => block.kind === 'form')).toBe(false)
+  })
+
+  it('lets the form fill a planned section that asks for one, by name or by the form bound there', () => {
+    const contact = [AI_JUNIPER_PORTFOLIO_PLANNED_SECTIONS[0], { name: 'Get in touch', uses: [], items: 0 }]
+    expect(aiReadLayoutPage(AI_JUNIPER_PORTFOLIO_PAGE_ANSWER, 2, contact).sections[1]?.blocks.some((block) => block.kind === 'form')).toBe(true)
+    const bound = [AI_JUNIPER_PORTFOLIO_PLANNED_SECTIONS[0], { name: 'Studio visits', uses: ['new:Gallery Inquiry Form'], items: 0 }]
+    expect(aiReadLayoutPage(AI_JUNIPER_PORTFOLIO_PAGE_ANSWER, 2, bound).sections[1]?.blocks.some((block) => block.kind === 'form')).toBe(true)
   })
 })
 
