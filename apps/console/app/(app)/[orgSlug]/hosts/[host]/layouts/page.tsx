@@ -106,6 +106,7 @@ import {
   TABLE_ROW_HEIGHT,
 } from '../../../../../../constants/shared'
 import {
+  LAYOUT_LIST_BASE,
   LAYOUT_LIST_HEADERS,
   LAYOUT_LIST_QUERY,
   LAYOUT_LIST_SORTS,
@@ -217,7 +218,12 @@ function Layouts(props) {
   const layoutList = useListQuery<any>({
     collection: hostId ? collection(firestore, 'hosts', hostId, 'layouts') : null,
     declaration: LAYOUT_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort },
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort: askedSort,
+      base: LAYOUT_LIST_BASE,
+    },
     deps: [firestore, hostId],
     idField: '$id',
     /*
@@ -244,18 +250,11 @@ function Layouts(props) {
    *
    * Delete here stamps `deletedAt` and leaves the document in place so
    * published tenant pages keep rendering their chrome until the next
-   * revalidate. Firestore cannot ask for the ABSENCE of a field, and the two
-   * live shapes are not one value — a layout created through the resources
-   * route carries no `deletedAt`, one installed from the marketplace carries
-   * an explicit `null` — so the tombstone is dropped from the page it falls
-   * in. It is the list's scope, not a filter: no clause or search word is
-   * matched here, and a page can only render FEWER rows than its size;
-   * `hasMore` and the walk are unaffected.
+   * revalidate. Every create stores `deletedAt: null`, so the query's scope
+   * (`LAYOUT_LIST_BASE`) leaves tombstones out and a page is always a full
+   * page (AGL-3680) — it used to drop them after the read.
    */
-  const layouts = useMemo(
-    () => layoutList.rows.filter((layout: any) => !layout.deletedAt),
-    [layoutList.rows],
-  )
+  const layouts = layoutList.rows
   const columnSort = useListColumnSort<any>({
     sorts: LAYOUT_LIST_SORTS,
     defaultSort: LAYOUT_LIST_SORTS[0],

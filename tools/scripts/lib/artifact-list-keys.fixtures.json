@@ -90,6 +90,7 @@
           "chrome"
         ],
         "nameReversed": "emorhc niam",
+        "deletedAt": null,
         "description": null
       }
     },
@@ -366,7 +367,26 @@
           "sid",
           "side"
         ],
-        "nameReversed": "edis"
+        "nameReversed": "edis",
+        "deletedAt": null
+      }
+    },
+    {
+      "name": "a deleted layout is never revived: no stored null over its deletedAt",
+      "collection": "layouts",
+      "doc": {
+        "displayName": "Old",
+        "description": "x",
+        "deletedAt": 1
+      },
+      "expected": {
+        "nameLower": "old",
+        "nameTokens": [
+          "o",
+          "ol",
+          "old"
+        ],
+        "nameReversed": "dlo"
       }
     }
   ],

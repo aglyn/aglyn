@@ -167,6 +167,15 @@ export const LAYOUT_LIST_SORTS: readonly ListQuerySort[] = [
   ...TIME_SORTS,
 ]
 
+/**
+ * The layouts list's scope: live layouts. Every create stores `deletedAt: null`
+ * (`artifactCreateListKeys`) and a delete stamps the time, so the query leaves
+ * tombstones out instead of the page dropping them after the read (AGL-3680).
+ */
+export const LAYOUT_LIST_BASE: readonly ListQueryFilter[] = [
+  { path: 'deletedAt', op: '==', value: null },
+]
+
 /** `hosts/{hostId}/layouts`. */
 export const LAYOUT_LIST_QUERY: ListQueryDeclaration = {
   fields: [NAME_FIELD, ID_FIELD, UPDATED_FIELD],

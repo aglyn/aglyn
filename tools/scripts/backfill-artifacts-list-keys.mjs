@@ -184,6 +184,7 @@ export function createKeys(collection, doc) {
   if (collection === 'screens' && doc.deletedAt != null) return {}
   const keys = { ...displayNameSearchFields(searchName(collection, doc)) }
   if (collection === 'screens') keys.deletedAt = null
+  if (collection === 'layouts' && doc.deletedAt == null) keys.deletedAt = null
   if (collection === 'components' && doc.kind !== 'email') keys.kind = 'site'
   if ((collection === 'layouts' || collection === 'components') && doc.description == null) {
     keys.description = null
@@ -339,11 +340,13 @@ function selfTest() {
     ['a keyed screen missing its stored null', 'screens', { displayName: 'Home', ...HOME }, undefined, { update: { deletedAt: null } }],
     ['a deleted email template with no keys', 'screens', { displayName: 'Old', kind: 'email', deletedAt: 1 }, undefined, { skip: 'deleted' }],
     ['a deleted screen still keyed, its keys cleared', 'screens', { displayName: 'Old', kind: 'email', deletedAt: 1, nameLower: 'old', nameTokens: ['o'] }, undefined, { update: { nameLower: CLEAR, nameTokens: CLEAR } }],
-    ['a renamed layout with stale keys', 'layouts', { displayName: 'Home', ...HOME, nameLower: 'old', description: null }, undefined, { update: { nameLower: 'home' } }],
-    ['a layout with no stored description', 'layouts', { displayName: 'Home', ...HOME }, undefined, { update: { description: null } }],
-    ['a layout whose description is written is never touched', 'layouts', { displayName: 'Home', ...HOME, description: 'Rail' }, undefined, { skip: 'current' }],
+    ['a renamed layout with stale keys', 'layouts', { displayName: 'Home', ...HOME, nameLower: 'old', description: null, deletedAt: null }, undefined, { update: { nameLower: 'home' } }],
+    ['a layout with no stored description', 'layouts', { displayName: 'Home', ...HOME, deletedAt: null }, undefined, { update: { description: null } }],
+    ['a layout whose description is written is never touched', 'layouts', { displayName: 'Home', ...HOME, description: 'Rail', deletedAt: null }, undefined, { skip: 'current' }],
+    ['a live layout missing its stored null (AGL-3680)', 'layouts', { displayName: 'Home', ...HOME, description: 'Rail' }, undefined, { update: { deletedAt: null } }],
+    ['a deleted layout is never revived', 'layouts', { displayName: 'Home', ...HOME, description: 'Rail', deletedAt: 1 }, undefined, { skip: 'current' }],
     ['a legacy component', 'components', { displayName: 'Home' }, undefined, { update: { ...HOME, description: null, kind: 'site' } }],
-    ['a layout with no createdAt takes its updatedAt', 'layouts', { displayName: 'Home', ...HOME, description: null, updatedAt: 7 }, undefined, { update: { createdAt: 7 } }, { createTime: 1, updateTime: 9 }],
+    ['a layout with no createdAt takes its updatedAt', 'layouts', { displayName: 'Home', ...HOME, description: null, deletedAt: null, updatedAt: 7 }, undefined, { update: { createdAt: 7 } }, { createTime: 1, updateTime: 9 }],
     ['a template with neither time takes its document times', 'templates', { displayName: 'Home', ...HOME, kind: 'page', source: { type: 'authored' }, libraryRow: true }, true, { update: { createdAt: 1, updatedAt: 9 } }, { createTime: 1, updateTime: 9 }],
     ['a deleted screen missing its updatedAt takes its createdAt', 'screens', { displayName: 'Old', deletedAt: 1, createdAt: 3 }, undefined, { update: { updatedAt: 3 } }, { createTime: 1, updateTime: 9 }],
     ['a legacy template', 'templates', { displayName: 'Home' }, true, { update: { ...HOME, kind: 'page', 'source.type': 'authored', libraryRow: true } }],

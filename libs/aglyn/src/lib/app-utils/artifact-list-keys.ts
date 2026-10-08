@@ -134,6 +134,9 @@ export function artifactCreateListKeys(
   // Stored, not omitted: `deletedAt == null` matches only a document that
   // holds the field (AGL-3321, a campaign's screens).
   if (collection === 'screens') keys['deletedAt'] = null
+  // A live layout too: its list asks for `deletedAt == null` rather than
+  // dropping tombstones from the page they fall in (AGL-3680).
+  if (collection === 'layouts' && doc['deletedAt'] == null) keys['deletedAt'] = null
   if (collection === 'components' && doc['kind'] !== 'email') keys['kind'] = 'site'
   // Stored, not omitted: the Description header orders by it (AGL-3680).
   if ((collection === 'layouts' || collection === 'components') && doc['description'] == null) {
