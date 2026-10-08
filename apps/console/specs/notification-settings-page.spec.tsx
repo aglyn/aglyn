@@ -162,7 +162,10 @@ describe('the notification settings page (AGL-3226)', () => {
       notificationSettings: { account: { billing: { email: true }, team: { console: false } } },
     }
     render(<Page />)
-    fireEvent.click(await screen.findByRole('switch', { name: 'Billing — Email' }))
+    const billingEmail = await screen.findByRole('switch', { name: 'Billing — Email' })
+    // The stored answer has loaded before the switch is flipped.
+    await waitFor(() => expect(isOn(billingEmail)).toBe(true))
+    fireEvent.click(billingEmail)
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
     // The whole field is written and REPLACES the stored one, so a key the
     // page deleted (Inherit, Follow category) is gone from the store too.

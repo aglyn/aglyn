@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -273,16 +274,28 @@ private fun TopList(title: String, rows: List<Pair<String, Double>>) {
 private fun PagesTable(services: ShellServices, context: ShellPluginContext, hostId: String) {
   var range by remember { mutableStateOf(14) }
   var entitled by remember(hostId) { mutableStateOf<Boolean?>(null) }
-  LaunchedEffect(hostId) {
-    entitled = runCatching {
+  // A failed lookup is not a plan without the feature: it says so and offers a retry.
+  var lookupFailed by remember(hostId) { mutableStateOf(false) }
+  var attempt by remember(hostId) { mutableStateOf(0) }
+  LaunchedEffect(hostId, attempt) {
+    lookupFailed = false
+    runCatching {
       val body = services.api.request("/api/orgs/entitlements", query = mapOf("hostId" to hostId)) as? JsonObject
       ((body?.get("features") as? JsonObject)?.get("screenAnalytics") as? JsonPrimitive)?.booleanOrNull == true
-    }.getOrElse { false }
+    }.onSuccess { entitled = it }.onFailure { lookupFailed = true }
   }
   val now = remember(range) { nowMillis() }
   SectionCard("Pages", Modifier.fillMaxWidth().testTag("analytics-pages")) {
     when (entitled) {
-      null -> SkeletonList(rows = 2)
+      null -> if (lookupFailed) {
+        NoticeBanner(
+          "Your plan could not be checked. Check the connection and try again.",
+          StatusTone.ERROR,
+          Modifier.testTag("analytics-pages-failed"),
+        ) { TextButton(onClick = { attempt += 1 }) { Text("Try again") } }
+      } else {
+        SkeletonList(rows = 2)
+      }
       false -> NoticeBanner("Per-page traffic is part of the Pro plan. Upgrade in Billing to see each page's views, devices and referrers.", StatusTone.INFO, Modifier.testTag("analytics-pages-upgrade"))
       true -> {
         ChoiceChipRow(

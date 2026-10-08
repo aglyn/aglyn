@@ -60,7 +60,7 @@ export interface BookingServiceDraft {
 }
 
 /** What one save stores: every editable key of the service, written explicitly. */
-export interface BookingServiceFields {
+export type BookingServiceFields = {
   name: string
   durationMinutes: number
   priceUsd: number

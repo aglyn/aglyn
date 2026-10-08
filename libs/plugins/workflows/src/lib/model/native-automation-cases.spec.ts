@@ -207,8 +207,8 @@ const ORG: unknown[] = [
   },
 ]
 
-function cases<A extends unknown[]>(fn: (...args: A) => unknown, inputs: A[]) {
-  return inputs.map((args) => ({ args, result: fn(...(JSON.parse(JSON.stringify(args)) as A)) ?? null }))
+function cases(fn: (...args: any[]) => unknown, inputs: unknown[][]) {
+  return inputs.map((args) => ({ args, result: fn(...(JSON.parse(JSON.stringify(args)) as unknown[])) ?? null }))
 }
 
 function build() {
