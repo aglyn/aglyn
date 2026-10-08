@@ -354,6 +354,25 @@ describe('paid booking (AGL-1755)', () => {
   })
 
   /**
+   * `booking.created` (AGL-3643): the payment is what confirms a paid
+   * booking, so the event is staged in the transaction that confirms it —
+   * once, whatever Stripe redelivers, and never for a booking not there.
+   */
+  it('stages booking.created once, in the confirming transaction', async () => {
+    await deliver(BOOKING_SESSION)
+    await deliver(BOOKING_SESSION)
+    const outbox = [...docs.entries()].filter(([path]) => path.startsWith('pluginEventOutbox/'))
+    expect(outbox).toHaveLength(1)
+    expect(outbox[0][1]).toMatchObject({
+      status: 'pending',
+      event: 'booking.created',
+      pluginId: 'bookings',
+      hostId: 'host-1',
+      payload: { booking: { id: 'booking-1', object: 'booking', status: 'confirmed', paidCents: 9500 } },
+    })
+  })
+
+  /**
    * A metadata `bookingId` pointing at nothing used to CREATE a stub booking,
    * because the write was a merge-set on a ref that need not exist. The
    * existence check is new and deliberate.
@@ -362,6 +381,7 @@ describe('paid booking (AGL-1755)', () => {
     docs.delete('hosts/host-1/bookings/booking-1')
     await deliver(BOOKING_SESSION)
     expect(storedBooking()).toBeUndefined()
+    expect([...docs.keys()].filter((path) => path.startsWith('pluginEventOutbox/'))).toEqual([])
     expect(contactUpserts).toHaveLength(0)
     expect(sentEmails).toHaveLength(0)
   })

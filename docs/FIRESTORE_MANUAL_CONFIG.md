@@ -110,6 +110,7 @@ running the deploy, which is the one action that can destroy them.
 | `orderWebhookDeliveries` | `expiresAt` | One signed order-webhook delivery (AGL-3611) at `hosts/{hostId}/orderWebhookDeliveries/{deliveryId}`: the event, its attempts and the request body **verbatim** (up to `ORDER_WEBHOOK_BODY_MAX`), which is the order as the API publishes it — buyer email and shipping address included. **30 days** (`ORDER_WEBHOOK_LOG_RETENTION_MS` in `libs/plugins/commerce/src/lib/server/order-webhooks.ts`); every attempt re-stamps `expiresAt(now)`. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 | `printJobs` | `expiresAt` | A cloud receipt printer's job (AGL-3619) at `hosts/{hostId}/printJobs/{jobId}`: the receipt or shift report it prints, the register and cashier names on it, and the printer's result. **7 days** (`PRINT_JOB_RETENTION_MS` in `libs/plugins/commerce/src/lib/model/commerce-printers.ts`); `enqueuePrintJob` stamps it when the job is queued. A job is never delivered past its `deliverByMs`, minutes after it is written, so the week is only the jobs list's history. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 | `shippingQuoteCache` | `expiresAt` | Live carrier rates (AGL-3612), top-level: a checkout quote keyed by a SHA-256 of the site, the destination address and the parcels — the address itself is not stored — for **10 minutes** (`QUOTE_CACHE_TTL_MS` in `libs/plugins/shipping/src/lib/server/quote-cache.ts`), and a label quote held for purchase as `q_{shipmentId}` for **30 minutes** (`QUOTE_HOLD_MS` in `libs/plugins/shipping/src/lib/server/labels.ts`). Both are refused by age on read, so a missing policy costs storage, not a stale price. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
+| `zapierHookDeliveries` | `expiresAt` | That one event reached one Zapier REST hook (AGL-3643), top-level: the outbox event's id, the hook's id, the org and when — **no customer data**. **3 days** (`ZAPIER_DELIVERY_MARKER_RETENTION_MS` in `libs/plugins/zapier/src/lib/constants.ts`), longer than the outbox's whole retry ladder; `markDelivered` stamps `deliveryMarkerExpiry(...)` when the hook takes the event. **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -190,6 +191,10 @@ gcloud firestore fields ttls update expiresAt \
   --project=aglyn-main --database='(default)'
 gcloud firestore fields ttls update expiresAt \
   --collection-group=shippingQuoteCache --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-3643 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=zapierHookDeliveries --enable-ttl \
   --project=aglyn-main --database='(default)'
 # verify:
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'

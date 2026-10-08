@@ -596,6 +596,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'unlisted in 94b6a011c, which left this ratchet red on main.',
   },
   {
+    file: 'apps/zapier/lib/api.js',
+    count: 1,
+    reason:
+      "AGL-3643. `DEFAULT_API_URL`, `'https://app.aglyn.com/api'`, is the `||` DEFAULT of the Zapier app's `AGLYN_API_URL` and nothing else reads the literal — the `@aglyn/cli` row's shape. The app runs on Zapier's platform under the operator's own Zapier developer account, never in an Aglyn deployment; a self-hoster who publishes it sets `AGLYN_API_URL` (`zapier env:set`) to their own console and the literal is never evaluated. No tenant site's runtime reaches it.",
+  },
+  {
     file: 'libs/cli/src/lib/cli.ts',
     count: 2,
     reason:

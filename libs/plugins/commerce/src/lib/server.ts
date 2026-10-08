@@ -413,6 +413,15 @@ export function registerCommerceConsoleApi(): void {
   // when the platform's SMS provider is configured. Rate-limited per member
   // and per order.
   registerPluginApiRoute('commerce/order-receipt-send', orderReceiptSendHandler)
+  // The product editor's save and Adjust stock for the native apps (AGL-3652):
+  // the console's own product-write computation under the rules' gate. Loaded
+  // on first call.
+  registerPluginApiRoute('commerce/products/save', async (req, res) =>
+    (await import('./server/products-write')).productSaveHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/products/stock', async (req, res) =>
+    (await import('./server/products-write')).productStockHandler(req, res),
+  )
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.

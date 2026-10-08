@@ -44,7 +44,13 @@ class MainActivity : ComponentActivity() {
     }
     setContent {
       // Scan stock reads barcodes with CameraX + ML Kit.
-      CompositionLocalProvider(LocalCameraScanner provides CameraXBarcodeScanner) {
+      CompositionLocalProvider(
+        LocalCameraScanner provides CameraXBarcodeScanner,
+        // Media uploads: the photo picker, the camera app and the document picker.
+        com.aglyn.ui.LocalMediaPicker provides com.aglyn.shell.rememberAndroidMediaPicker(),
+        // Exports (form submissions, records) go out through the share sheet.
+        com.aglyn.ui.LocalFileExporter provides com.aglyn.shell.rememberAndroidFileExporter(),
+      ) {
         AglynShell(services, autoSignIn = autoSignIn, pendingLink = pendingLink, onLinkOpened = { pendingLink = null })
       }
     }

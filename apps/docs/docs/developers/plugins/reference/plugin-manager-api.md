@@ -2397,6 +2397,19 @@ The merchant's own webhooks are one more subscriber to the same events, so a
 store's endpoints receive exactly what a plugin does, signed (see
 [Order webhooks](/commerce-and-bookings/commerce/orders-and-returns#order-webhooks)).
 
+### The bookings plugin's events
+
+The bookings plugin declares three more, on the same terms. Each payload is
+`{ booking }` in the public API's booking shape
+(`GET /v1/sites/{siteId}/bookings/{bookingId}`) as it stood once the fact was
+written, with money in integer cents, in US dollars.
+
+| Event | Raised |
+| --- | --- |
+| `booking.created` | A booking was confirmed: a free one as it was made, a paid one when its payment landed. A checkout the guest never finished raises nothing. |
+| `booking.rescheduled` | The site's team moved a booking, once per move; `booking.rescheduledFrom` is where it started before. |
+| `booking.canceled` | A booking was canceled: a free one by the site's team, a paid one by the refund that gave all of the money back. |
+
 ## Site beacons — `plugin-site-beacons` (`/server`)
 
 A published page reports what visitors did through one collector, and the
