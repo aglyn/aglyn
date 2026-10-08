@@ -61,6 +61,7 @@ import {
   newAttemptKey,
   openPosSale,
   posRegisterContext,
+  posTender,
   PosRequestError,
   usd,
   type PosRegisterContext,
@@ -87,6 +88,7 @@ import {
   useConsoleWidgetSlot,
 } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { POS_ORDERS_ZONE } from './pos-zones'
+import { PosOfflineBanner, PosOfflineCheckout, usePosOffline } from './pos-offline/register-offline'
 
 /** The till sells active products only; every read of the catalog asks it. */
 const SELLABLE: ListFilterRequest = { field: 'status', op: 'equals', value: 'active' }
@@ -400,9 +402,52 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       })),
     [productDocs],
   )
+  /*
+   * THE OFFLINE REGISTER (AGL-3625): the catalog and the site's offline rules
+   * kept on this device, the queue of cash sales rung without a connection,
+   * and the sync that records them once it returns.
+   */
+  const loadCatalog = useCallback(
+    async () =>
+      (
+        await getDocs(
+          query(
+            collection(firestore, 'hosts', hostId, 'products'),
+            ...listQueryConstraints(posProductPlan({})),
+            limit(POS_GRID_CEILING),
+          ),
+        )
+      ).docs.map((snapshot) => ({ ...(snapshot.data() as Record<string, unknown>), $id: snapshot.id })),
+    [firestore, hostId],
+  )
+  const liveRegister = usableRegisters.find((register: any) => register.$id === registerId)
+  const offline = usePosOffline({
+    hostId,
+    user,
+    registerId,
+    openShiftId: liveRegister ? (liveRegister.openShiftId ?? null) : undefined,
+    locationId,
+    ...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {}),
+    liveProducts: products,
+    loadCatalog,
+  })
+  const [offlineCheckout, setOfflineCheckout] = useState(false)
+  /** Open sales left unpaid when the connection dropped, voided once it returns. */
+  const strandedSales = useRef<string[]>([])
+  useEffect(() => {
+    if (offline.offline || !user || !strandedSales.current.length) return
+    const orderIds = strandedSales.current.splice(0)
+    for (const orderId of orderIds) {
+      void posTender(user, hostId, orderId, 'void').catch(() => undefined)
+    }
+  }, [offline.offline, user, hostId])
+  const sellProducts = useMemo(
+    () => (offline.offline && offline.ready ? offline.gridProducts(search, categoryId, POS_QUICK_KEYS) : products),
+    [offline, search, categoryId, products],
+  )
   const productsById = useMemo(
-    () => new Map(products.map((product: any) => [product.$id, product])),
-    [products],
+    () => new Map<string, any>(sellProducts.map((product: any) => [product.$id, product] as const)),
+    [sellProducts],
   )
   /** AGL-2357: warns, never blocks. */
   const shortfalls = useMemo(
@@ -494,6 +539,13 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const lookupCode = useCallback(async (scanned: string) => {
     const needle = scanned.trim().toLowerCase()
     if (!needle || sale) return
+    if (offline.offline) {
+      const found = offline.findByCode(needle)
+      if (!found) return void notify(`No product matches “${scanned.trim()}”`, 'warning')
+      tapProduct(found.product, found.variant)
+      setSearch('')
+      return
+    }
     const lookup = async (field: 'barcodes' | 'skus') => {
       const found = await getDocs(
         query(
@@ -509,6 +561,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       hit = (await lookup('barcodes')) ?? (await lookup('skus'))
     } catch (error) {
       console.error(error)
+      offline.reportNetworkFailure()
       return void notify('Could not reach the catalog — try again', 'warning')
     }
     if (!hit) return void notify(`No product matches “${scanned.trim()}”`, 'warning')
@@ -522,7 +575,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     // for them, with that variant already picked.
     tapProduct(product, variant)
     setSearch('')
-  }, [sale, firestore, hostId, tapProduct, notify])
+  }, [sale, firestore, hostId, tapProduct, notify, offline])
   const handleSearchEnter = useCallback(() => lookupCode(search), [lookupCode, search])
   // A scanner fired while focus is on a product or a button (AGL-3619), and
   // the camera; neither while a sale is taking payment or an item is open.
@@ -540,6 +593,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const charge = useCallback(async () => {
     if (chargeInFlight.current || lines.length === 0 || !user) return
     if (!registerId) return void notify('Select a register before taking payment', 'warning')
+    // Offline, the basket rings as a cash sale kept on this register (AGL-3625).
+    if (offline.offline) {
+      if (!offline.ready) return void notify(offline.unavailableReason ?? 'Offline selling is unavailable', 'warning')
+      setOfflineCheckout(true)
+      return
+    }
     if (!attemptKey.current) attemptKey.current = newAttemptKey()
     chargeInFlight.current = true
     setOpening(true)
@@ -567,12 +626,18 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       })
       setSheetOpen(true)
     } catch (error) {
-      notify(error instanceof PosRequestError ? error.message : 'Sale failed', 'error')
+      if (error instanceof PosRequestError) {
+        notify(error.message, 'error')
+      } else {
+        // The request never reached the server: the register is offline.
+        offline.reportNetworkFailure()
+        notify('The register lost its connection. Charge again to take cash offline.', 'warning')
+      }
     } finally {
       chargeInFlight.current = false
       setOpening(false)
     }
-  }, [lines, user, registerId, hostId, discountPct, customerEmail, customer, cashier.assertion, locationId, notify])
+  }, [lines, user, registerId, hostId, discountPct, customerEmail, customer, cashier.assertion, locationId, notify, offline])
 
   const resetSale = useCallback(() => {
     if (sale?.status === 'paid') setLastReceipt({ orderId: sale.orderId })
@@ -813,6 +878,19 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             onTipChange={setPendingTipCents}
             {...(cashier.assertion ? { cashierAssertion: cashier.assertion } : {})}
             notify={notify}
+            offline={offline.offline}
+            {...(offline.ready
+              ? {
+                  onSellOffline: () => {
+                    // The server's open sale took no payment; it is voided once
+                    // the connection returns, and the basket rings offline.
+                    strandedSales.current.push(sale.orderId)
+                    setSale(null)
+                    setSaleLines([])
+                    setOfflineCheckout(true)
+                  },
+                }
+              : {})}
           />
         )
       ) : (
@@ -831,7 +909,11 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             onClick={() => void charge()}
             sx={{ minHeight: 56 }}
           >
-            {opening ? 'Pricing…' : `Charge ${usd(estimateCents)}`}
+            {opening
+              ? 'Pricing…'
+              : offline.offline
+                ? `Cash ${usd(offline.totalsFor(lines, discountPct)?.totalCents ?? estimateCents)} (offline)`
+                : `Charge ${usd(estimateCents)}`}
           </Button>
           {lastReceipt ? (
             <PosLastReceipt
@@ -860,6 +942,9 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         }}
       >
         <Box sx={{ flex: 1, p: 2, overflowY: 'auto', pb: wide ? 2 : 12 }}>
+          <Box sx={{ mb: 2, '&:empty': { display: 'none' } }}>
+            <PosOfflineBanner offline={offline} />
+          </Box>
           {/* Orders other channels send to the counter (AGL-3644). */}
           {WidgetSlot ? <PosOrdersZone renderer={WidgetSlot} hostId={hostId} registerId={registerId || null} /> : null}
           <PosProductGrid
@@ -875,7 +960,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             onCategory={setCategoryId}
             notices={gridPlan.notices}
             hostId={hostId}
-            products={products}
+            products={sellProducts}
             basketCounts={basketCounts}
             onTap={(product) => {
               if (sale) return void notify('Finish or void the open sale first', 'info')
@@ -977,6 +1062,25 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               },
             }
           : {})}
+      />
+      <PosOfflineCheckout
+        open={offlineCheckout}
+        offline={offline}
+        hostId={hostId}
+        lines={lines}
+        discountPct={discountPct}
+        customer={customer}
+        {...(registerName ? { registerName } : {})}
+        {...(cashier.cashier ? { cashierName: cashier.cashier.name } : {})}
+        onClose={() => setOfflineCheckout(false)}
+        onRung={() => undefined}
+        onDone={() => {
+          setOfflineCheckout(false)
+          setLines([])
+          setDiscountPct(0)
+          setCustomer(null)
+          setSheetOpen(false)
+        }}
       />
       <Dialog open={Boolean(pairing)} onClose={() => setPairing(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{'Pair a customer display'}</DialogTitle>

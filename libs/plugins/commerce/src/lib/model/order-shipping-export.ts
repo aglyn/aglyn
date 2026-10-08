@@ -17,6 +17,7 @@
 
 import type { HostOrder, OrderAddress, OrderFulfillment, OrderLineItem } from './commerce-orders'
 import { fulfillmentIsActive, lineRequiresShipping, remainingFulfillmentLines } from './order-fulfillment'
+import { orderIsLocallyFulfilled } from './order-local-fulfillment'
 
 /*
  * AN ORDER AS A SHIPPING TOOL READS IT (AGL-3613).
@@ -64,6 +65,9 @@ export function ouncesToPounds(ounces: number): number {
  * ships when it carries an address.
  */
 export function orderRequiresShipping(order: Partial<HostOrder>): boolean {
+  // Collected at a location or brought by the store's own driver (AGL-3624):
+  // nothing for a shipping tool to label, whatever is in it.
+  if (orderIsLocallyFulfilled(order)) return false
   const lines = Array.isArray(order.lineItems) ? order.lineItems : []
   const address = hasShippingAddress(order.shippingAddress)
   if (!lines.length) return address

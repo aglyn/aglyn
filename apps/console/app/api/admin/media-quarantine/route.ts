@@ -136,6 +136,7 @@ import {
   compareDenyRows,
   DENY_FILTER_FIELDS,
   DENY_SEARCH_PATHS,
+  DENY_SORT_COLUMNS,
   denyListRow,
   type QuarantineRecord,
 } from '../../../../utils/media-quarantine-list-query'
@@ -531,6 +532,8 @@ async function handler(request: Request): Promise<Response> {
               searchPaths: DENY_SEARCH_PATHS,
               request: listRequest,
               cursorOf: (row) => row.key,
+              // A header sort, over every entry before the page (AGL-3680).
+              sorts: DENY_SORT_COLUMNS,
             }),
             readAtMs,
           },

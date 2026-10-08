@@ -699,6 +699,11 @@
           "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
         },
         {
+          "name": "posOfflineSales",
+          "mediaScan": "none",
+          "mediaScanReason": "The offline register's sync records (AGL-3625): one per cash sale rung offline, holding its order id, flags and stock conflicts, written only by the sync route. No content field, and a busy offline register writes one per sale."
+        },
+        {
           "name": "terminal",
           "mediaScan": "none",
           "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."

@@ -54,13 +54,16 @@ export interface StockHoldLine {
  *
  * - `sold-out` — the units are not there, or are spoken for by another live
  *   checkout. The one refusal a shopper is told about by name.
+ * - `sold-out-at-location` — the store has the units, but not free at the
+ *   location the buyer chose to collect from or be delivered from (AGL-3624).
+ *   The buyer can pick another location, or have it shipped.
  * - `missing` — the product document is gone, deleted between the pricing
  *   loop's read and this transaction.
  * - `error` — Firestore refused. The checkout is REFUSED rather than allowed
  *   through unreserved: passing a shopper to Stripe on a reservation that
  *   could not be taken is exactly the defect this file closes.
  */
-export type StockHoldRefusal = 'sold-out' | 'missing' | 'error'
+export type StockHoldRefusal = 'sold-out' | 'sold-out-at-location' | 'missing' | 'error'
 
 /**
  * A two-member union with `reason` and `productName` present on BOTH members
@@ -138,8 +141,14 @@ export async function holdStock(options: {
   nowMs?: number
   /** Label for the failure log; never shown to a shopper. */
   label: string
+  /**
+   * Reserve at this location's stock bucket (AGL-3624): the pickup location
+   * the buyer chose, or the one local deliveries leave from.
+   */
+  locationId?: string
 }): Promise<StockHoldOutcome> {
   const { firestore, hostRef, holdKey, lines, label } = options
+  const locationId = String(options.locationId ?? '').slice(0, 120) || undefined
   const nowMs = options.nowMs ?? Date.now()
   const expiresAtMs = nowMs + CommerceModel.STOCK_HOLD_TTL_MS
   const byProduct = groupLines(lines)
@@ -195,10 +204,16 @@ export async function holdStock(options: {
               // retry must re-claim what it already reserved, or the second
               // press of the same button refuses the shopper their own units.
               holdKey,
+              locationId,
             )
           ) {
+            // Short HERE but not everywhere: the buyer is told the location
+            // is the problem, so they can pick another or have it shipped.
+            const elsewhere =
+              Boolean(locationId) &&
+              CommerceModel.canReserveStock(product, variantId, quantity, nowMs, holdKey)
             return {
-              kind: 'sold-out' as const,
+              kind: elsewhere ? ('sold-out-at-location' as const) : ('sold-out' as const),
               productName: String(product?.name ?? ''),
             }
           }
@@ -232,7 +247,7 @@ export async function holdStock(options: {
               // A whole-object write for THIS key, not a nested merge: the
               // retry of an attempt whose cart shrank must not keep reserving
               // the line it dropped, and a deep merge of `units` would.
-              [holdKey]: { expiresAtMs, units },
+              [holdKey]: { expiresAtMs, units, ...(locationId ? { locationId } : {}) },
             },
           },
         })
@@ -257,6 +272,7 @@ export async function holdStock(options: {
           ),
           expiresAtMs,
           createdAtMs: nowMs,
+          ...(locationId ? { locationId } : {}),
         },
         { merge: false },
       )

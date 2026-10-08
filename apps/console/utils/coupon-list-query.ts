@@ -15,8 +15,13 @@
  * limitations under the License.
  */
 
+import { rateCouponAgainstFullUse } from '@aglyn/aglyn/app-utils/full-use-cost'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import {
+  type StaffCompleteListColumns,
+  staffCompleteListSorts,
+} from './staff-complete-list-sort'
 
 /*
  * THE STAFF COUPONS LIST (AGL-3321) — an exception to "every clause on the
@@ -129,3 +134,57 @@ export const COUPON_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterO
 
 /** The search: a coupon's name, its Stripe id, or any of its promotion codes. */
 export const COUPON_SEARCH_PATHS: readonly string[] = ['name', 'id', 'codeText']
+
+/**
+ * A coupon's full-use verdict (AGL-3473): the worst plan and billing
+ * combination it could be redeemed on. The page's Full-use cost column and
+ * its sort both read it.
+ */
+export function couponFullUse(
+  row: Pick<CouponRow, 'percentOff' | 'amountOffUsd' | 'duration' | 'durationInMonths'>,
+) {
+  return rateCouponAgainstFullUse(
+    row.percentOff != null
+      ? { percentOff: row.percentOff }
+      : row.amountOffUsd != null
+        ? { amountOffUsd: row.amountOffUsd }
+        : {},
+    { duration: row.duration, durationInMonths: row.durationInMonths },
+  )
+}
+
+/*
+ * THE HEADER SORTS (AGL-3680, strategy 4s): every column, ordered by the
+ * route over the complete read and then paged — see
+ * `utils/staff-complete-list-sort.ts`. Each compares what the column SHOWS.
+ * With none asked the list stays in Stripe's order, newest first.
+ */
+export const COUPON_SORT_COLUMNS: StaffCompleteListColumns<CouponListRow> = {
+  name: { label: 'Coupon', value: (row) => row.name ?? row.id },
+  // Percent-off and amount-off coupons are different units: each kind
+  // together, by size within it ("amount 10" before "amount 25").
+  discount: {
+    label: 'Discount',
+    value: (row) =>
+      row.percentOff != null
+        ? `percent ${row.percentOff}`
+        : row.amountOffUsd != null
+          ? `amount ${row.amountOffUsd}`
+          : null,
+  },
+  duration: {
+    label: 'Duration',
+    value: (row) =>
+      row.duration === 'repeating' ? `repeating ${row.durationInMonths ?? ''}` : row.duration,
+  },
+  // How far the worst charge covers its full-use cost: the riskiest first ascending.
+  fullUse: { label: 'Full-use cost', value: (row) => couponFullUse(row).worst.coverage },
+  codes: {
+    label: 'Codes',
+    value: (row) => [...row.codeText].sort().join(' ') || null,
+  },
+  timesRedeemed: { label: 'Redeemed', value: (row) => row.timesRedeemed },
+  status: { label: 'Status', value: (row) => row.status },
+}
+
+export const COUPON_COLUMN_SORTS = staffCompleteListSorts(COUPON_SORT_COLUMNS)

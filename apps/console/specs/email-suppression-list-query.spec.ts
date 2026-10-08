@@ -118,7 +118,7 @@ describe('every clause and the search word land on one query', () => {
       'suppressedAt >=',
     ])
     expect(answer.filters[1].value).toBe(false)
-    expect(answer.orderBy).toEqual({ path: 'suppressedAt', direction: 'desc' })
+    expect(answer.orderBy).toMatchObject({ path: 'suppressedAt', direction: 'desc' })
   })
 
   it('a whole day is two bounds under the list’s own order', () => {

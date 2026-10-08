@@ -33,8 +33,8 @@ import type {
  *
  * ## One order, merged indexes
  *
- * `suppressedAt` DESC — newest failure first — is the only order, so the
- * only range is over `suppressedAt` itself (Last reported). Each equality
+ * `suppressedAt` DESC — newest failure first — is the default order, and
+ * the only range is over `suppressedAt` itself (Last reported). Each equality
  * (Status, Reason, Learned from, Site ID) and the search token merge with it
  * through their own `(field, suppressedAt DESC)` composite, so any
  * combination of them is one query with no index of its own; the spec pins
@@ -55,10 +55,11 @@ import type {
  * on the records that predate them.
  */
 
-/** The one order the list keeps, and pages by. */
+/** The default order the list keeps, and pages by. */
 export const SUPPRESSION_LIST_SORT: ListQuerySort = {
   path: 'suppressedAt',
   direction: 'desc',
+  label: 'Last reported',
 }
 
 export const SUPPRESSION_FILTER_FIELDS: readonly ListFilterField[] = [
@@ -82,10 +83,37 @@ export const SUPPRESSION_FILTER_FIELDS: readonly ListFilterField[] = [
   },
 ]
 
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Last reported newest first stays the default and full order. Every header
+ * orders the query by the field it shows, `alone` — served with no filter or
+ * search on — so on this top-level collection none costs a composite:
+ * Address (`email`), Reason, Learned from (`context`), Status (`released`)
+ * and Since (`createdAt`, which `suppressEmail` stamps when it creates a
+ * record). `tools/scripts/backfill-staff-list-sort-fields.mjs` stamps the
+ * older records — `createdAt` from `suppressedAt`, the date the Since column
+ * already falls back to, and `email`/`context` null where none was kept —
+ * because an `orderBy` drops a document that lacks its field.
+ */
+const suppressionAlone = (path: string, column: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label, alone: true },
+  { path, direction: 'desc', column, label, alone: true },
+]
+
+export const SUPPRESSION_COLUMN_SORTS: readonly ListQuerySort[] = [
+  SUPPRESSION_LIST_SORT,
+  ...suppressionAlone('email', 'email', 'Address'),
+  ...suppressionAlone('reason', 'reason', 'Reason'),
+  ...suppressionAlone('context', 'context', 'Learned from'),
+  ...suppressionAlone('released', 'status', 'Status'),
+  ...suppressionAlone('createdAt', 'createdAt', 'Since'),
+]
+
 /** The list's query: every field above and a word prefix of the address. */
 export const SUPPRESSION_LIST_QUERY: ListQueryDeclaration = {
   fields: SUPPRESSION_FILTER_FIELDS,
-  sorts: [SUPPRESSION_LIST_SORT],
+  sorts: SUPPRESSION_COLUMN_SORTS,
   search: { tokensPath: 'emailTokens' },
 }
 

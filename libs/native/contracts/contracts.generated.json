@@ -2094,6 +2094,45 @@
       "value": "AnimalShelter"
     }
   ],
+  "LOCAL_FULFILLMENT_OPEN_STATUSES": [
+    "paid",
+    "partially_fulfilled",
+    "fulfilled"
+  ],
+  "LOCAL_FULFILLMENT_QUEUE_FIELDS": {
+    "due": "fulfillmentDueMs",
+    "key": "fulfillmentKey",
+    "location": "fulfillmentLocationId",
+    "status": "status"
+  },
+  "LOCAL_FULFILLMENT_QUEUE_LIMIT": 50,
+  "LOCAL_FULFILLMENT_QUEUE_TABS": [
+    {
+      "key": "pickup_preparing",
+      "label": "To prepare",
+      "method": "pickup"
+    },
+    {
+      "key": "pickup_ready",
+      "label": "Ready for pickup",
+      "method": "pickup"
+    },
+    {
+      "key": "delivery_scheduled",
+      "label": "To deliver",
+      "method": "local_delivery"
+    },
+    {
+      "key": "delivery_out_for_delivery",
+      "label": "Out for delivery",
+      "method": "local_delivery"
+    },
+    {
+      "key": "delivery_failed",
+      "label": "Delivery failed",
+      "method": "local_delivery"
+    }
+  ],
   "MEDIA_ALT_MAX_LENGTH": 300,
   "MEDIA_ALT_OPTIONS": [
     {
@@ -2747,6 +2786,11 @@
       "value": "settled"
     }
   ],
+  "ORDER_FULFILLMENT_METHOD_LABELS": {
+    "local_delivery": "Local delivery",
+    "pickup": "Pickup",
+    "shipping": "Shipping"
+  },
   "ORDER_LIST_HEADERS": {
     "channelKey": "Channel",
     "createdAtMs": "Date",
@@ -2913,6 +2957,17 @@
     "productIds",
     "disputeKey"
   ],
+  "ORDER_LOCAL_DELIVERY_STATUS_LABELS": {
+    "delivered": "Delivered",
+    "failed": "Delivery failed",
+    "out_for_delivery": "Out for delivery",
+    "scheduled": "Scheduled"
+  },
+  "ORDER_PICKUP_STATUS_LABELS": {
+    "picked_up": "Picked up",
+    "preparing": "Preparing",
+    "ready": "Ready for pickup"
+  },
   "ORDER_STATUS_COLOR": {
     "cancelled": "default",
     "delivered": "info",
@@ -3340,6 +3395,36 @@
   "OUTREACH_SEQUENCE_NAME_MAX": 120,
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "POS_OFFLINE_CLOCK_SKEW_MS": 600000,
+  "POS_OFFLINE_DISABLED_TENDERS": {
+    "card_keyed": "Typed cards need the connection.",
+    "card_link": "The QR card link needs the connection.",
+    "card_present": "Card readers need the connection.",
+    "credit": "Store credit and rewards balances can only be checked online.",
+    "folio": "Room charges are checked against the stay online.",
+    "gift_card": "A gift card balance can only be checked online."
+  },
+  "POS_OFFLINE_FLAG_LABELS": {
+    "cash-short": "The cash recorded is less than the total",
+    "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
+    "clock-adjusted": "The device clock was off; the sale is dated when it synced",
+    "discount-over-limit": "The discount is above this register’s limit",
+    "late-sync": "Synced more than a day after it was rung",
+    "no-shift": "Rung with no shift open, on a site that requires one",
+    "price-changed": "A price changed after the register cached it; the sale kept the price it was rung at",
+    "register-over-cap": "The register it was rung on is over the plan’s register limit",
+    "shift-closed": "Rung in a shift that closed before the sale synced; its Z report does not include it",
+    "stock-short": "Stock went short: more was sold than the shelf held",
+    "tax-differs": "The tax rung differs from the store’s rate now; the sale kept the tax it collected",
+    "totals-restated": "The register’s totals did not add up; the server restated them from the lines",
+    "unknown-product": "A product was deleted before the sale synced; the line kept what the receipt printed",
+    "unknown-register": "The register it was rung on no longer exists"
+  },
+  "POS_OFFLINE_LATE_SYNC_MS": 86400000,
+  "POS_OFFLINE_MAX_AGE_MS": 2592000000,
+  "POS_OFFLINE_SALE_MAX_LINES": 100,
+  "POS_OFFLINE_SYNC_BATCH_MAX": 25,
+  "POS_OFFLINE_SYNC_ROUTE": "/api/commerce/pos-offline-sync",
   "PRICE_RANGE_MAX_LENGTH": 100,
   "PRODUCT_LIST_BASE": [
     {
@@ -4433,6 +4518,193 @@
         }
       ],
       "name": "Order canceled",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "Your order is ready for pickup",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Order {{order.number}} is ready at {{pickup.location}}.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{order.summary}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{pickup.hours}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{pickup.instructions}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Bring your order number, {{order.number}}.",
+          "variant": "caption"
+        },
+        {
+          "block": "button",
+          "href": "{{order.statusUrl}}",
+          "label": "View your order"
+        }
+      ],
+      "defaultSubject": "Your order {{order.number}} is ready for pickup",
+      "description": "Tells the buyer their pickup order is ready, where to collect it, the pickup hours and any arrival instructions.",
+      "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}.",
+      "key": "order-ready-for-pickup",
+      "mergeTokens": [
+        {
+          "description": "The order number, as the store shows it",
+          "name": "order.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The ordered items, one per line",
+          "name": "order.summary",
+          "sample": "2× House Blend"
+        },
+        {
+          "description": "The pickup location’s name and address",
+          "name": "pickup.location",
+          "sample": "Main Street shop, 12 Main St, Springfield"
+        },
+        {
+          "description": "The location’s pickup hours; empty when it lists none",
+          "name": "pickup.hours",
+          "sample": "Pickup hours:\nMo-Fr 09:00-17:00"
+        },
+        {
+          "description": "What to do on arrival, as the store wrote it; empty when it wrote none",
+          "name": "pickup.instructions",
+          "sample": "Ring the bell at the side door."
+        },
+        {
+          "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+          "name": "order.statusUrl",
+          "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+        }
+      ],
+      "name": "Order ready for pickup",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "Thanks for picking up your order",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Order {{order.number}} was picked up from {{pickup.location}}.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{order.summary}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "If something is missing or not right, reply to this email or contact {{host.businessName}}.",
+          "variant": "caption"
+        }
+      ],
+      "defaultSubject": "You picked up order {{order.number}}",
+      "description": "Confirms to the buyer that their pickup order was collected.",
+      "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}.",
+      "key": "order-picked-up",
+      "mergeTokens": [
+        {
+          "description": "The order number, as the store shows it",
+          "name": "order.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The ordered items, one per line",
+          "name": "order.summary",
+          "sample": "2× House Blend"
+        },
+        {
+          "description": "The pickup location’s name and address",
+          "name": "pickup.location",
+          "sample": "Main Street shop, 12 Main St, Springfield"
+        },
+        {
+          "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+          "name": "order.statusUrl",
+          "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+        }
+      ],
+      "name": "Order picked up",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "Your order is on its way",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "{{host.businessName}} is out delivering order {{order.number}}. Your window: {{delivery.window}}.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{order.summary}}",
+          "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{order.statusUrl}}",
+          "label": "View your order"
+        }
+      ],
+      "defaultSubject": "Your order {{order.number}} is out for delivery",
+      "description": "Tells the buyer the store’s own driver is on the way with their local delivery, in the window they booked.",
+      "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}.",
+      "key": "order-out-for-delivery",
+      "mergeTokens": [
+        {
+          "description": "The order number, as the store shows it",
+          "name": "order.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The ordered items, one per line",
+          "name": "order.summary",
+          "sample": "2× House Blend"
+        },
+        {
+          "description": "The delivery window the buyer booked",
+          "name": "delivery.window",
+          "sample": "Tue, Oct 14, 9:00 AM – 12:00 PM"
+        },
+        {
+          "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+          "name": "order.statusUrl",
+          "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+        }
+      ],
+      "name": "Order out for delivery",
       "plugin": "Commerce",
       "pluginId": "commerce"
     },

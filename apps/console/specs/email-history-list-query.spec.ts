@@ -83,39 +83,68 @@ function snapshot(path: string) {
   }
 }
 
-const newestFirst = (a: string, b: string) => {
-  const at = (path: string) => Number(stored.get(path)?.['firstSeenAtMs'] ?? 0)
+/** An order as the double answers it: the field in its direction, then the id the same way. */
+interface Order {
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+const NEWEST_FIRST: Order = { field: 'firstSeenAtMs', direction: 'desc' }
+
+/** Firestore's own order across the values the double stores: null, numbers, then text. */
+const rank = (value: unknown) => (value === null || value === undefined ? 0 : typeof value === 'number' ? 1 : 2)
+
+const inOrder = (order: Order) => (a: string, b: string) => {
+  const sign = order.direction === 'desc' ? -1 : 1
+  const left = stored.get(a)?.[order.field]
+  const right = stored.get(b)?.[order.field]
+  const byValue =
+    rank(left) - rank(right) ||
+    (typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left ?? '') < String(right ?? '')
+        ? -1
+        : String(left ?? '') > String(right ?? '')
+          ? 1
+          : 0)
   const ida = a.split('/').pop() as string
   const idb = b.split('/').pop() as string
-  return at(b) - at(a) || (ida < idb ? 1 : ida > idb ? -1 : 0)
+  return sign * byValue || sign * (ida < idb ? -1 : ida > idb ? 1 : 0)
 }
+
+const newestFirst = inOrder(NEWEST_FIRST)
+
+/** The header orders the double answers (AGL-3680): one field each, either way. */
+const ORDERABLE = new Set(['firstSeenAtMs', 'subject', 'context', 'status', 'openCount', 'clickCount'])
 
 function messagesQuery(
   parent: string,
   wheres: Where[] = [],
   after: string | null = null,
   count = Number.POSITIVE_INFINITY,
+  order: Order = NEWEST_FIRST,
 ): any {
   return {
     doc: (id: string) => ({ get: async () => snapshot(`${parent}/${id}`) }),
     where: (field: unknown, op: string, value: unknown) =>
-      messagesQuery(parent, [...wheres, { field: String(field), op, value }], after, count),
+      messagesQuery(parent, [...wheres, { field: String(field), op, value }], after, count, order),
     orderBy: (field: unknown, direction: string) => {
-      if (String(field) !== 'firstSeenAtMs' || direction !== 'desc') {
+      if (!ORDERABLE.has(String(field)) || (direction !== 'desc' && direction !== 'asc')) {
         throw new Error(`ordered by ${String(field)} ${direction}`)
       }
-      return messagesQuery(parent, wheres, after, count)
+      return messagesQuery(parent, wheres, after, count, { field: String(field), direction })
     },
     startAfter: (cursor: { ref: { path: string } }) =>
-      messagesQuery(parent, wheres, cursor.ref.path, count),
-    limit: (next: number) => messagesQuery(parent, wheres, after, next),
+      messagesQuery(parent, wheres, cursor.ref.path, count, order),
+    limit: (next: number) => messagesQuery(parent, wheres, after, next, order),
     get: async () => {
       ran.push(wheres)
+      const compare = inOrder(order)
       let paths = [...stored.keys()]
         .filter((path) => path.startsWith(`${parent}/`))
         .filter((path) => wheres.every((where) => holds(where, stored.get(path) ?? {})))
-        .sort(newestFirst)
-      if (after) paths = paths.filter((path) => newestFirst(after, path) < 0)
+        .sort(compare)
+      if (after) paths = paths.filter((path) => compare(after, path) < 0)
       return { docs: paths.slice(0, count).map(snapshot) }
     },
   }
@@ -272,6 +301,29 @@ describe('every address, newest first, a page at a time', () => {
     const expected = [...stored.keys()].sort(newestFirst).map((path) => path.split('/').pop())
     expect(rows.map((row: any) => row.messageId)).toEqual(expected)
     expect(new Set(rows.map((row: any) => row.$id)).size).toBe(rows.length)
+  })
+})
+
+describe('a header sort is every address’s order, merged in it (AGL-3680)', () => {
+  it.each([
+    ['subject', 'asc'],
+    ['subject', 'desc'],
+    ['context', 'asc'],
+    ['firstSeenAtMs', 'asc'],
+  ] as const)('%s %s pages through both addresses in that order, none twice or skipped', async (field, direction) => {
+    const rows = await everyPage({ pageSize: '7', sort: `${field}:${direction}` })
+    const expected = [...stored.keys()]
+      .sort(inOrder({ field, direction }))
+      .map((path) => path.split('/').pop())
+    expect(rows.map((row: any) => row.messageId)).toEqual(expected)
+  })
+
+  it('falls back to newest first, and says so, when a filter is on', async () => {
+    const page = await history({
+      sort: 'subject:asc',
+      filters: JSON.stringify([{ field: 'status', op: 'equals', value: 'delivered' }]),
+    })
+    expect(page.notices).toEqual([expect.stringContaining('Message sorts only with no filter or search on')])
   })
 })
 

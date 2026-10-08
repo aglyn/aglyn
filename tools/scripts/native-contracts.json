@@ -76,6 +76,33 @@
         "ReceiptTender"
       ]
     },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts": {
+      "types": [
+        "PosOfflineSaleLine",
+        "PosOfflineSaleCustomer",
+        "PosOfflineSale",
+        "PosOfflineFlag",
+        "PosOfflineStockConflict",
+        "PosOfflineOrderStamp",
+        "PosOfflineRefusal",
+        "PosOfflineOutcomeStatus",
+        "PosOfflineSaleOutcome",
+        "PosOfflineSyncRequest",
+        "PosOfflineSyncResponse",
+        "PosOfflineKitRegister",
+        "PosOfflineKit"
+      ],
+      "values": [
+        "POS_OFFLINE_SYNC_ROUTE",
+        "POS_OFFLINE_SYNC_BATCH_MAX",
+        "POS_OFFLINE_SALE_MAX_LINES",
+        "POS_OFFLINE_LATE_SYNC_MS",
+        "POS_OFFLINE_MAX_AGE_MS",
+        "POS_OFFLINE_CLOCK_SKEW_MS",
+        "POS_OFFLINE_DISABLED_TENDERS",
+        "POS_OFFLINE_FLAG_LABELS"
+      ]
+    },
     "libs/plugins/redirects/src/lib/model/redirects.ts": {
       "types": [
         "HostRedirect"
@@ -433,6 +460,33 @@
         "WORKFLOW_MAX_STEPS",
         "CROSS_MAX_DEPTH"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts": {
+      "types": [
+        "OrderFulfillmentMethod",
+        "OrderPickupStatus",
+        "OrderLocalDeliveryStatus",
+        "OrderPickup",
+        "OrderLocalDelivery",
+        "OrderFulfillmentKey",
+        "PickupLocationSettings"
+      ],
+      "values": [
+        "ORDER_PICKUP_STATUS_LABELS",
+        "ORDER_LOCAL_DELIVERY_STATUS_LABELS",
+        "ORDER_FULFILLMENT_METHOD_LABELS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts": {
+      "types": [
+        "LocalFulfillmentQueueTab"
+      ],
+      "values": [
+        "LOCAL_FULFILLMENT_QUEUE_TABS",
+        "LOCAL_FULFILLMENT_OPEN_STATUSES",
+        "LOCAL_FULFILLMENT_QUEUE_LIMIT",
+        "LOCAL_FULFILLMENT_QUEUE_FIELDS"
+      ]
     }
   },
   "ints": [
@@ -469,7 +523,10 @@
     "OrderTotals",
     "HostProduct",
     "ProductVariant",
-    "TenantEmailEntry"
+    "TenantEmailEntry",
+    "OrderPickup",
+    "OrderLocalDelivery",
+    "PickupLocationSettings"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -7353,6 +7410,228 @@
         ],
         [
           "dealWon"
+        ]
+      ]
+    },
+    "posOfflineSaleTotals": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              },
+              {
+                "unitAmountCents": 2500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 10,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": true
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 999,
+                "quantity": 3
+              }
+            ],
+            "discountPct": 12.5,
+            "tax": {
+              "pct": 7.25,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 100,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1999,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": null,
+              "pricesIncludeTax": false
+            }
+          }
+        ]
+      ]
+    },
+    "posOfflineChangeCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          4763,
+          5000
+        ],
+        [
+          4763,
+          4763
+        ],
+        [
+          4763,
+          4000
+        ]
+      ]
+    },
+    "posOfflineSaleKeyIsValid": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          "off8f2f9807c22c4fe3b1ed9042c497949d"
+        ],
+        [
+          "short"
+        ],
+        [
+          "../orders/abcdefghijklmnop"
+        ],
+        [
+          "__abcdefghijklmnop__"
+        ]
+      ]
+    },
+    "posOfflineSoldAt": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          1799999000000,
+          1800000000000
+        ],
+        [
+          1800000300000,
+          1800000000000
+        ],
+        [
+          1800001000000,
+          1800000000000
+        ],
+        [
+          1797000000000,
+          1800000000000
+        ]
+      ]
+    },
+    "canTransitionPickup": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ],
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ]
+      ]
+    },
+    "canTransitionLocalDelivery": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ],
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ]
+      ]
+    },
+    "orderLocalFulfillmentListFields": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "args": [
+        [
+          {
+            "fulfillmentMethod": "pickup",
+            "pickup": {
+              "locationId": "loc1",
+              "locationName": "Main",
+              "status": "ready"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "local_delivery",
+            "localDelivery": {
+              "zoneId": "z",
+              "zoneName": "Z",
+              "feeCents": 500,
+              "windowStartMs": 5000,
+              "windowEndMs": 9000,
+              "status": "out_for_delivery"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "shipping",
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "localFulfillmentQueueQuery": {
+      "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "args": [
+        [
+          "pickup_ready"
+        ],
+        [
+          "delivery_scheduled",
+          "loc1"
         ]
       ]
     }

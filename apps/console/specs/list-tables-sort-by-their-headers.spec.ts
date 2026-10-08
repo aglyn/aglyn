@@ -64,19 +64,8 @@ const switchesSortingOff = (source: string): boolean => /\bdisableColumnSorting\
  */
 const NOT_YET_CONVERTED: readonly string[] = [
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-  'apps/console/app/(app)/admin/audit/page.tsx',
-  'apps/console/app/(app)/admin/coupons/page.tsx',
-  'apps/console/app/(app)/admin/health/page.tsx',
-  'apps/console/app/(app)/admin/media-quarantine/page.tsx',
   'apps/console/components/host-components-card.component.tsx',
-  'apps/console/components/idempotency-claims-card.component.tsx',
-  'apps/console/components/mail-gateway-ledger-card.component.tsx',
-  'apps/console/components/pending-erasures-card.component.tsx',
   'apps/console/components/staff-doc-table.component.tsx',
-  'apps/console/components/staff-email-deliveries-card.component.tsx',
-  'apps/console/components/staff-email-suppressions-card.component.tsx',
-  'apps/console/components/staff-tax-findings-card.component.tsx',
-  'apps/console/components/staff-user-email-history-card.component.tsx',
   'apps/console/components/templates/host-templates-card.component.tsx',
 ]
 

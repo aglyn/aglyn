@@ -138,6 +138,9 @@ export async function printPosSale(
   try {
     const order = await readOrder(deps, event.hostId, event.orderId)
     if (!order || order.channel !== 'pos' || !order.registerId) return { jobIds: [] }
+    // A sale rung offline printed its receipt at the counter, and its drawer
+    // opened then; syncing it later prints nothing and opens nothing (AGL-3625).
+    if (order.offline) return { jobIds: [] }
     const settings = await deps.registerSettings(event.hostId)
     const plan = posSalePrintPlan(order, settings.receiptDefault)
     // The kitchen ticket prints whatever the customer chose for their own

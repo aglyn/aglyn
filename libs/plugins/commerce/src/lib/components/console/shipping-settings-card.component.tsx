@@ -519,7 +519,9 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
             {
               'A free collection choice at checkout. It does not widen where ' +
               'you ship — a destination none of your rates reaches is still ' +
-              'turned away.'
+              'turned away. To let buyers choose WHERE to collect, with hours ' +
+              'and a ready-for-pickup email, turn on pickup for a location ' +
+              'under Inventory locations; this choice then gives way to it.'
             }
           </Typography>
         </Stack>
