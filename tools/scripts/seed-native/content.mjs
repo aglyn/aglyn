@@ -152,13 +152,13 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
   await put(
     `hosts/${hostId}`,
     {
-      logoUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=256',
+      logoUrl: 'https://demo-site.example.test/logo.png',
       business: {
         supportEmail: 'hello@mobile-demo.test',
         address: '12 Main St\nPortland, OR 97201',
         socialLinks: [
-          { label: 'Instagram', url: 'https://instagram.com/mobiledemo' },
-          { label: 'Facebook', url: 'https://facebook.com/mobiledemo' },
+          { label: 'Instagram', url: 'https://social.example.com/instagram/mobiledemo' },
+          { label: 'Facebook', url: 'https://social.example.com/facebook/mobiledemo' },
         ],
       },
       locales: ['en'],
@@ -167,7 +167,7 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
         title: 'Mobile Demo Bakery',
         description: 'Fresh bread and pastries, baked every morning in Portland.',
         separator: '|',
-        favicon: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=64',
+        favicon: 'https://demo-site.example.test/favicon.png',
         entity: {
           type: '1',
           name: 'Mobile Demo Bakery',
