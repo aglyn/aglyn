@@ -495,7 +495,7 @@ export const AI_IMAGE_VERTEX_PROVIDER_ID = 'google-vertex'
  *
  * Google's row is dated to its change-log entry on `/legal/subprocessors`,
  * published with the Privacy Policy §2 sentence naming Google for image
- * generation (legal v11).
+ * generation (legal v12).
  */
 export const AI_IMAGE_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
   {

@@ -68,7 +68,7 @@ import {
  * because the global endpoint promises no processing location — is declared
  * in the AI catalog
  * (`AI_IMAGE_CATALOG_PROVIDERS`) dated to its change-log entry, with the
- * Privacy Policy §2 sentence beside it (legal v11). Both pages are live
+ * Privacy Policy §2 sentence beside it (legal v12). Both pages are live
  * before either variable is set in production; the wording is in
  * `docs/legal-drafts/AGL-3602-subprocessors.md`.
  *

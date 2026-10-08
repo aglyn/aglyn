@@ -63,7 +63,7 @@ const VERTEX_HOSTS = [
   'aiplatform.eu.rep.googleapis.com',
 ]
 
-/** The Google Vertex AI row as `/legal/subprocessors` carries it (AGL-3602, legal v11). */
+/** The Google Vertex AI row as `/legal/subprocessors` carries it (AGL-3602, legal v12). */
 const PUBLISHED_GOOGLE_VERTEX_ROW = {
   entity: 'Google LLC (Google Cloud Vertex AI)',
   region: 'Global — Google selects where requests are processed',
