@@ -416,6 +416,135 @@
           ]
         }
       ]
+    },
+    {
+      "id": "core.plugins",
+      "title": "Plugins",
+      "subtitle": "Built-in plugins on or off for every site",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "org",
+      "group": "workspace",
+      "order": 35,
+      "links": ["/plugins", "/settings/plugins"],
+      "load": { "plugins": { "switchboard": "org" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!org.manager",
+          "text": "Only owners and admins can switch plugins. You can see what this workspace runs."
+        },
+        {
+          "type": "list",
+          "id": "builtIn",
+          "title": "Built in",
+          "items": "data.plugins.rows",
+          "primary": "{item.label}",
+          "secondary": "{item.description}",
+          "footer": "The plugins that ship with Aglyn. Turning one off removes it from navigation, the editor, published sites and the API for every site in this workspace.",
+          "badges": [{ "when": "item.locked", "text": "Always on", "tone": "info" }],
+          "open": { "screen": "core.plugin", "params": { "pluginId": "{item.id}" } },
+          "toggle": {
+            "value": "{item.on}",
+            "disabled": "item.locked || !org.manager",
+            "label": "{item.label} for every site",
+            "on": {
+              "id": "on",
+              "label": "Turn on",
+              "icon": "power|power_settings_new",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{item.enable}" },
+              "success": "Plugins updated",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turning {item.label} off also turns off {item.cascade}, which need it, on every site in this workspace.",
+              "confirmWhen": "item.cascade",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{item.disable}" },
+              "success": "Plugins updated",
+              "reload": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.plugin",
+      "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
+      "label": "Plugin",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "org",
+      "links": ["/plugins/:pluginId"],
+      "load": { "plugins": { "switchboard": "org" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.plugins.rows[id=params.pluginId].locked",
+          "text": "Always on. Every workspace runs it, so it has no switch."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "!data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].on",
+          "text": "On for every site in this workspace. A site can still turn it off for itself."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!data.plugins.rows[id=params.pluginId].on",
+          "text": "Off for every site in this workspace. No site can turn it on until the workspace does."
+        },
+        {
+          "type": "fields",
+          "title": "About",
+          "rows": [
+            { "label": "What it does", "value": "{data.plugins.rows[id=params.pluginId].description|'—'}" },
+            { "label": "Needs", "value": "{data.plugins.rows[id=params.pluginId].requires|'Nothing else'}" },
+            { "label": "Needed by", "value": "{data.plugins.rows[id=params.pluginId].dependents|'Nothing else'}" }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "org.manager && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
+          "text": "Turning it off also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
+        },
+        {
+          "type": "actions",
+          "when": "org.manager && !data.plugins.rows[id=params.pluginId].locked",
+          "items": [
+            {
+              "id": "on",
+              "label": "Turn on",
+              "icon": "power|power_settings_new",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{data.plugins.rows[id=params.pluginId].enable}" },
+              "success": "Plugins updated",
+              "reload": true,
+              "when": "!data.plugins.rows[id=params.pluginId].on"
+            },
+            {
+              "id": "off",
+              "label": "Turn off",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turn {data.plugins.rows[id=params.pluginId].label} off for every site in this workspace?",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{data.plugins.rows[id=params.pluginId].disable}" },
+              "success": "Plugins updated",
+              "reload": true,
+              "when": "data.plugins.rows[id=params.pluginId].on"
+            }
+          ]
+        },
+        { "type": "zone", "name": "pluginSettings", "title": "Settings", "params": { "pluginId": "{params.pluginId}" } }
+      ]
     }
   ]
 }

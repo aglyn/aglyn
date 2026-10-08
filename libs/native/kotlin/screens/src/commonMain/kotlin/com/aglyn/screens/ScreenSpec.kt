@@ -68,6 +68,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val doc: String? = json.str("doc")
   /** A Firestore collection query to read instead of a route. */
   val query: JsonElement? = json.obj("query")
+  /** `org` or `site`: the plugin switchboard's rows ([SwitchboardRows]). */
+  val switchboard: String? = json.str("switchboard")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
@@ -89,6 +91,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val url: String? = json.str("url")
   val body: JsonElement? = json.obj("body")
   val confirm: String? = json.str("confirm")
+  /** When set, the confirmation is asked only while this condition holds. */
+  val confirmWhen: String? = json.str("confirmWhen")
   val destructive: Boolean = json.isTrue("destructive")
   val reason: Boolean = json.isTrue("reason")
   val prompt: List<FieldSpec> = json.arr("prompt").mapNotNull { FieldSpec.parse(it) }

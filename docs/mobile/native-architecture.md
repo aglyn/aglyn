@@ -840,12 +840,12 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read; each lands at `data.<key>` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
-| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone` |
+| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
-An action is `{ label, icon, method, url, body, confirm, destructive, prompt,
+An action is `{ label, icon, method, url, body, confirm, confirmWhen, destructive, prompt,
 reason, success, open, navigate, back, reload, when, link, copy, reveal,
 else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
@@ -866,6 +866,19 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
 in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
+
+### The plugin switchboard
+
+`{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`
+also reads `hosts/{site}`, as the console's switchboards do, and resolves them
+with the enabled-plugins resolvers ported to `AglynContracts` and
+`com.aglyn.contracts` (`PluginSwitchboard`), which replay the console's answers
+from `function-cases.generated.json` over the generated `FIRST_PARTY_PLUGINS`
+catalog. Each row carries what it shows (`on`, `locked`, the site `state`,
+the `cascade` a switch-off strands) and exactly what its switch writes: the
+whole workspace list for `/api/orgs/settings` `set-enabled-plugins`
+(`enable`, `disable`), or the site's `disabledPlugins` and `enabledPlugins`
+(`turnOn`, `turnOff`) merged into the host document under the rules.
 
 ### Rules the specs keep
 

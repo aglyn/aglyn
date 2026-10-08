@@ -32,6 +32,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
@@ -226,7 +227,7 @@ private fun SpecBody(
   fun trigger(action: ActionSpec, actionScope: JsonElement) {
     when {
       action.inputs.isNotEmpty() -> prompting = Pending(action, actionScope)
-      action.confirm != null -> confirming = Pending(action, actionScope)
+      action.confirm != null && ScreenValues.condition(action.confirmWhen, actionScope) -> confirming = Pending(action, actionScope)
       else -> scope.launch { execute(action, actionScope) }
     }
   }
@@ -617,6 +618,16 @@ private fun ListRow(
     val text = ScreenValues.render(badge.str("text").orEmpty(), scope)
     if (text.isEmpty()) null else text to toneFor(badge, text, scope)
   }
+  // `toggle: { value, disabled, on, off }`: a switch at the row's end whose
+  // flip runs the `on` or `off` action (with its confirmation) against the
+  // row; the screen's reload then shows what was stored.
+  val toggle = block["toggle"]?.takeIf { ScreenValues.condition(it.str("when"), scope) }
+  val toggleOn = toggle?.let { ScreenValues.truthy(ScreenValues.resolve(it.str("value") ?: "{item.on}", scope)) } ?: false
+  val toggleOnAction = toggle?.obj("on")?.let { ActionSpec.parse(it) }
+  val toggleOffAction = toggle?.obj("off")?.let { ActionSpec.parse(it) }
+  val toggleEnabled = toggle != null && !(toggle.str("disabled")?.let { ScreenValues.condition(it, scope) } ?: false) &&
+    (if (toggleOn) toggleOffAction != null else toggleOnAction != null)
+  val toggleLabel = toggle?.let { ScreenValues.render(it.str("label") ?: "Turn $primary on or off", scope) }
   var menu by remember { mutableStateOf(false) }
   val supporting = listOfNotNull(secondary, tertiary).joinToString("\n").ifEmpty { null }
   Column {
@@ -626,9 +637,17 @@ private fun ListRow(
       icon = block.string("icon")?.let { AglynIcons.named(materialIcon(ScreenValues.render(it, scope))) },
       selected = target != null && target == selection,
       onClick = target?.let { { open(it.screen, it.params) } },
-      trailing = if (trailingText == null && actions.isEmpty() && target == null) null else ({
+      trailing = if (trailingText == null && actions.isEmpty() && target == null && toggle == null) null else ({
         Row(verticalAlignment = Alignment.CenterVertically) {
           trailingText?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+          if (toggle != null) {
+            Switch(
+              checked = toggleOn,
+              onCheckedChange = { next -> (if (next) toggleOnAction else toggleOffAction)?.let { trigger(it, scope) } },
+              enabled = toggleEnabled,
+              modifier = Modifier.testTag("row-toggle").semantics { contentDescription = toggleLabel.orEmpty() },
+            )
+          }
           if (actions.isNotEmpty()) {
             Box {
               IconButton(onClick = { menu = true }, modifier = Modifier.testTag("row-menu")) {

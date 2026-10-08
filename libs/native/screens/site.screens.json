@@ -1040,6 +1040,226 @@
           ]
         }
       ]
+    },
+    {
+      "id": "core.site.plugins",
+      "title": "Plugins",
+      "subtitle": "What runs on this site",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "site",
+      "group": "site",
+      "order": 45,
+      "links": ["/admin/plugins"],
+      "load": { "plugins": { "switchboard": "site" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!org.manager",
+          "text": "Only site admins can switch plugins for this site. You can see what runs here."
+        },
+        {
+          "type": "list",
+          "id": "site",
+          "title": "On this site",
+          "items": "data.plugins.rows",
+          "primary": "{item.label}",
+          "secondary": "{const.states[state=item.state].label}",
+          "footer": "A site narrows what the workspace enables. It can switch a plugin off for itself, and can never switch on one the workspace has switched off.",
+          "badges": [
+            { "when": "item.state == off-for-workspace", "text": "Off for the workspace", "tone": "warning" },
+            { "when": "item.state == awaiting-opt-in", "text": "Opt in", "tone": "info" }
+          ],
+          "open": { "screen": "core.site.plugin", "params": { "pluginId": "{item.id}" } },
+          "toggle": {
+            "value": "{item.on}",
+            "disabled": "item.locked || !item.workspaceOn || !org.manager",
+            "label": "{item.label} on this site",
+            "on": {
+              "id": "on",
+              "label": "Turn on for this site",
+              "icon": "power|power_settings_new",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": { "disabledPlugins": "{item.turnOn.disabledPlugins}", "enabledPlugins": "{item.turnOn.enabledPlugins}" }
+              },
+              "success": "Site plugins saved",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off for this site",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turn {item.label} off for this site? {item.stops|''}",
+              "confirmWhen": "item.confirmOff",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": { "disabledPlugins": "{item.turnOff.disabledPlugins}", "enabledPlugins": "{item.turnOff.enabledPlugins}" }
+              },
+              "success": "Site plugins saved",
+              "reload": true
+            }
+          }
+        }
+      ],
+      "constants": {
+        "states": [
+          {
+            "state": "always-on",
+            "label": "Always on",
+            "text": "Always on. It is what sites are built out of, so it cannot be turned off for one site any more than for the workspace."
+          },
+          {
+            "state": "runs-here",
+            "label": "Runs on this site",
+            "text": "The workspace enables this plugin and this site has not turned it off, so it runs here."
+          },
+          {
+            "state": "awaiting-opt-in",
+            "label": "Not turned on for this site",
+            "text": "The workspace enables this plugin, but it stays off for a site until that site opts in — and this one has not."
+          },
+          {
+            "state": "off-for-site",
+            "label": "Off for this site",
+            "text": "The workspace enables this plugin, but this site has turned it off: it is gone from this site’s navigation, editor, published pages and API."
+          },
+          {
+            "state": "off-for-workspace",
+            "label": "Off for the workspace",
+            "text": "The workspace has this plugin switched off, so it runs on none of its sites. A site can never turn on what the workspace has turned off."
+          }
+        ]
+      }
+    },
+    {
+      "id": "core.site.plugin",
+      "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
+      "label": "Plugin",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "site",
+      "links": ["/admin/plugins/:pluginId"],
+      "load": { "plugins": { "switchboard": "site" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!org.manager",
+          "text": "Only site admins can change a plugin for this site. You can read what is set here."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.plugins.rows[id=params.pluginId].state == always-on",
+          "text": "Always on. Always on. It is what sites are built out of, so it cannot be turned off for one site any more than for the workspace."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.plugins.rows[id=params.pluginId].state == runs-here",
+          "text": "Runs on this site. The workspace enables this plugin and this site has not turned it off, so it runs here."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.plugins.rows[id=params.pluginId].state == awaiting-opt-in",
+          "text": "Not turned on for this site. The workspace enables this plugin, but it stays off for a site until that site opts in — and this one has not."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.plugins.rows[id=params.pluginId].state == off-for-site",
+          "text": "Off for this site. The workspace enables this plugin, but this site has turned it off: it is gone from this site’s navigation, editor, published pages and API."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.plugins.rows[id=params.pluginId].state == off-for-workspace",
+          "text": "Off for the workspace. The workspace has this plugin switched off, so it runs on none of its sites. A site can never turn on what the workspace has turned off."
+        },
+        { "type": "fields", "rows": [{ "label": "Enabled for the workspace", "value": "{data.plugins.rows[id=params.pluginId].workspaceOn:yesno}" }] },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.plugins.rows[id=params.pluginId].description",
+          "text": "{data.plugins.rows[id=params.pluginId].description}"
+        },
+        {
+          "type": "fields",
+          "title": "Switching it off for this site",
+          "when": "data.plugins.rows[id=params.pluginId].stops && !data.plugins.rows[id=params.pluginId].locked",
+          "rows": [
+            { "label": "Stops", "value": "{data.plugins.rows[id=params.pluginId].stops}" },
+            { "label": "Keeps", "value": "{data.plugins.rows[id=params.pluginId].keeps}" }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Depends on",
+          "rows": [
+            { "label": "Needs", "value": "{data.plugins.rows[id=params.pluginId].requires|'Nothing else'}" },
+            { "label": "Needed by", "value": "{data.plugins.rows[id=params.pluginId].dependents|'Nothing else'}" }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "org.manager && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
+          "text": "Turning it off here also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
+        },
+        {
+          "type": "actions",
+          "when": "org.manager && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn",
+          "items": [
+            {
+              "id": "on",
+              "label": "Turn on for this site",
+              "icon": "power|power_settings_new",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "disabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOn.disabledPlugins}",
+                  "enabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOn.enabledPlugins}"
+                }
+              },
+              "success": "Site plugins saved",
+              "reload": true,
+              "when": "!data.plugins.rows[id=params.pluginId].on"
+            },
+            {
+              "id": "off",
+              "label": "Turn off for this site",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turn {data.plugins.rows[id=params.pluginId].label} off for this site? {data.plugins.rows[id=params.pluginId].stops|''}",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "disabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOff.disabledPlugins}",
+                  "enabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOff.enabledPlugins}"
+                }
+              },
+              "success": "Site plugins saved",
+              "reload": true,
+              "when": "data.plugins.rows[id=params.pluginId].on"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Workspace settings",
+              "subtitle": "The value every site follows",
+              "icon": "gearshape.2|settings",
+              "screen": "core.plugin",
+              "params": { "pluginId": "{params.pluginId}" }
+            }
+          ]
+        },
+        { "type": "zone", "name": "sitePluginSettings", "title": "Settings for this site", "params": { "pluginId": "{params.pluginId}" } }
+      ]
     }
   ]
 }

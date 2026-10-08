@@ -77,6 +77,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let doc: String?
   /// A Firestore collection query to read instead of a route.
   public let query: JSONValue?
+  /// `org` or `site`: the plugin switchboard's rows (SwitchboardRows).
+  public let switchboard: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -88,6 +90,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.items = nil
       self.doc = nil
       self.query = nil
+      self.switchboard = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -99,6 +102,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.items = json["items"]?.stringValue
       self.doc = json["doc"]?.stringValue
       self.query = json["query"]
+      self.switchboard = json["switchboard"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
@@ -137,6 +141,8 @@ public struct ActionSpec: Sendable, Identifiable {
   public let url: String?
   public let body: JSONValue?
   public let confirm: String?
+  /// When set, the confirmation is asked only while this condition holds.
+  public let confirmWhen: String?
   public let destructive: Bool
   public let reason: Bool
   public let prompt: [FieldSpec]
@@ -173,6 +179,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.url = json["url"]?.stringValue
     self.body = json["body"]
     self.confirm = json["confirm"]?.stringValue
+    self.confirmWhen = json["confirmWhen"]?.stringValue
     self.destructive = json["destructive"] == .bool(true)
     self.reason = json["reason"] == .bool(true)
     self.prompt = json["prompt"].array.compactMap(FieldSpec.init)

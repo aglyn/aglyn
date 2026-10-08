@@ -178,6 +178,13 @@ class ScreenModel(
     load.query?.let { query ->
       return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
     }
+    load.switchboard?.let { scope ->
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", context))
+      if (scope != "site") return Triple(load.key, SwitchboardRows.org(org), null)
+      val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", context))
+      return Triple(load.key, SwitchboardRows.site(org, host), null)
+    }
     val value = client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
     return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
   }

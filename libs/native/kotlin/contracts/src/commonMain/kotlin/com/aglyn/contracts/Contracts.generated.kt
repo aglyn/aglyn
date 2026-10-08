@@ -58,6 +58,33 @@ internal object ApnsEnvironmentSerializer :
     RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
 
 @Serializable
+data class FirstPartyPlugin(
+    val alwaysOn: Boolean? = null,
+    val alwaysOnForWorkspace: Boolean? = null,
+    val defaultOffPerSite: Boolean? = null,
+    val description: String? = null,
+    val id: String,
+    val label: String,
+    val releaseFlag: String? = null,
+    val requires: List<String>? = null,
+    val siteOff: FirstPartyPluginSiteOff? = null,
+)
+
+@Serializable
+data class FirstPartyPluginSiteOff(
+    val confirm: Boolean? = null,
+    val keeps: String,
+    val pages: FirstPartyPluginSiteOffPages? = null,
+    val stops: String,
+)
+
+@Serializable
+data class FirstPartyPluginSiteOffPages(
+    val heading: String,
+    val none: String,
+)
+
+@Serializable
 data class HostOrder(
     val amountCents: Double? = null,
     val billingAddress: OrderAddress? = null,
@@ -967,6 +994,7 @@ data class ReceiptTender(
 /** The values in contracts.generated.json, keyed as the TypeScript exports are. */
 @Serializable
 data class ContractValues(
+    @SerialName("FIRST_PARTY_PLUGINS") val firstPartyPlugins: List<FirstPartyPlugin>,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,

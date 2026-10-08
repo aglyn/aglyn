@@ -42,6 +42,14 @@
       "why": "Reached by host-naming: the tenant apex domain constants."
     },
     {
+      "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "why": "The plugin switchboard resolvers (which plugins a workspace and a site run, what switching one off strands), ported for the native Plugins screens and replayed from function-cases (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
+      "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
       "why": "The orders list query declaration the console grid plans with; the Commerce app screens (AGL-3621) plan the same Firestore query from it."
     },

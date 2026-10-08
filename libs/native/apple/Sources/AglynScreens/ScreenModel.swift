@@ -211,6 +211,13 @@ public final class ScreenModel {
       let value = try await FirestoreLoads.document(reader, ScreenValues.render(doc, in: context))
       return (load.key, value, nil)
     }
+    if let scope = load.switchboard {
+      guard let reader else { return (load.key, .null, nil) }
+      let org = try await FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", in: context))
+      guard scope == "site" else { return (load.key, SwitchboardRows.org(org), nil) }
+      let host = try await FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", in: context))
+      return (load.key, SwitchboardRows.site(org, host), nil)
+    }
     if let query = load.query {
       guard let reader else { return (load.key, .null, nil) }
       return (load.key, try await FirestoreLoads.query(reader, query, in: context), nil)

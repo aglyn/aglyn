@@ -84,6 +84,54 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct FirstPartyPlugin: Codable, Hashable, Sendable {
+  public var alwaysOn: Bool?
+  public var alwaysOnForWorkspace: Bool?
+  public var defaultOffPerSite: Bool?
+  public var description: String?
+  public var id: String
+  public var label: String
+  public var releaseFlag: String?
+  public var requires: [String]?
+  public var siteOff: FirstPartyPluginSiteOff?
+
+  public init(alwaysOn: Bool? = nil, alwaysOnForWorkspace: Bool? = nil, defaultOffPerSite: Bool? = nil, description: String? = nil, id: String, label: String, releaseFlag: String? = nil, requires: [String]? = nil, siteOff: FirstPartyPluginSiteOff? = nil) {
+    self.alwaysOn = alwaysOn
+    self.alwaysOnForWorkspace = alwaysOnForWorkspace
+    self.defaultOffPerSite = defaultOffPerSite
+    self.description = description
+    self.id = id
+    self.label = label
+    self.releaseFlag = releaseFlag
+    self.requires = requires
+    self.siteOff = siteOff
+  }
+}
+
+public struct FirstPartyPluginSiteOff: Codable, Hashable, Sendable {
+  public var confirm: Bool?
+  public var keeps: String
+  public var pages: FirstPartyPluginSiteOffPages?
+  public var stops: String
+
+  public init(confirm: Bool? = nil, keeps: String, pages: FirstPartyPluginSiteOffPages? = nil, stops: String) {
+    self.confirm = confirm
+    self.keeps = keeps
+    self.pages = pages
+    self.stops = stops
+  }
+}
+
+public struct FirstPartyPluginSiteOffPages: Codable, Hashable, Sendable {
+  public var heading: String
+  public var none: String
+
+  public init(heading: String, none: String) {
+    self.heading = heading
+    self.none = none
+  }
+}
+
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
   public var billingAddress: OrderAddress?
@@ -1477,6 +1525,7 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
 
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
+  public let firstPartyPlugins: [FirstPartyPlugin]
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
   public let nameTokenLimit: Int
@@ -1499,6 +1548,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let scopedSearchJoin: String
 
   enum CodingKeys: String, CodingKey {
+    case firstPartyPlugins = "FIRST_PARTY_PLUGINS"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
     case nameTokenLimit = "NAME_TOKEN_LIMIT"

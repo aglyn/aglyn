@@ -226,8 +226,9 @@ struct ListRow: View {
       }
     }
     .contentShape(Rectangle())
+    .accessibilityElement(children: .combine)
 
-    Group {
+    HStack(spacing: 12) {
       if let target {
         Button {
           open(target.screen, target.params)
@@ -235,11 +236,12 @@ struct ListRow: View {
           row
         }
         .buttonStyle(.plain)
-        .listRowBackground(selection?.wrappedValue == target ? AglynColor.tint.opacity(0.14) : nil)
       } else {
         row
       }
+      if let toggle = rowToggle(primary) { toggle }
     }
+    .listRowBackground(target != nil && selection?.wrappedValue == target ? AglynColor.tint.opacity(0.14) : nil)
     .contextMenu { menuItems }
     #if os(iOS)
       .swipeActions(edge: .trailing) {
@@ -248,7 +250,31 @@ struct ListRow: View {
         }
       }
     #endif
-    .accessibilityElement(children: .combine)
+  }
+
+  /// `toggle: { value, disabled, on, off }`: a switch at the row's end whose
+  /// flip runs the `on` or `off` action (with its confirmation) against the
+  /// row; the screen's reload then shows what was stored.
+  private func rowToggle(_ primary: String) -> AnyView? {
+    guard let spec = block["toggle"], ScreenValues.condition(spec["when"]?.stringValue, in: scope) else { return nil }
+    let isOn = ScreenValues.truthy(ScreenValues.resolve(spec["value"]?.stringValue ?? "{item.on}", in: scope))
+    let disabled = spec["disabled"]?.stringValue.map { ScreenValues.condition($0, in: scope) } ?? false
+    let onAction = spec["on"].flatMap(ActionSpec.init)
+    let offAction = spec["off"].flatMap(ActionSpec.init)
+    let label = ScreenValues.render(spec["label"]?.stringValue ?? "Turn \(primary) on or off", in: scope)
+    return AnyView(
+      Toggle(
+        label,
+        isOn: Binding(
+          get: { isOn },
+          set: { next in
+            if let action = next ? onAction : offAction { trigger(action, scope) }
+          })
+      )
+      .labelsHidden()
+      .disabled(disabled || (isOn ? offAction == nil : onAction == nil))
+      .accessibilityLabel(label)
+    )
   }
 
   @ViewBuilder
