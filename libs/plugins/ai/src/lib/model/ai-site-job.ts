@@ -133,7 +133,7 @@ export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
   plan: 35,
   look: 7,
   layout: 23,
-  form: 28,
+  form: 29,
   page: 43,
   section: 4,
   retry: 64,

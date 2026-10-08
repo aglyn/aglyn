@@ -112,6 +112,7 @@ import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS, aiCatalogEntry, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiUsage } from '../providers/contract'
 import { validateAiBuildPlan } from '../runtime/ai-doctrine-validators'
+import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
@@ -126,6 +127,7 @@ import { AI_SITE_LOOK_TOOL_NAME } from '../model/ai-site-look'
 import { generateAiBlogPost } from '../runtime/ai-blog-post-generation'
 import { AI_BLOG_POST_TOOL_NAME } from '../tools/ai-blog-post-tool'
 import { aiSiteContentPart } from './ai-job-site-content'
+import { AI_YOGA_SITE_PLAN_FIRST_ANSWER, AI_YOGA_SITE_PLAN_REDO_ANSWER } from './fixtures/ai-yoga-site-plan-recording'
 import { aiDoctrineScopeFor, aiDoctrineSystemBlocks } from '../runtime/ai-doctrine'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_LAYOUT_FRAME_TOOL, AI_LAYOUT_PAGE_TOOL } from '../layout-language/ai-layout-language'
@@ -522,6 +524,63 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     expect([outcome.review?.findings, (outcome.plan as AiJobPlan | undefined)?.screens[0].sections.length]).toEqual([[], 5])
   })
 
+  describe('the recorded yoga redo (2026-10-08): told only "plan at most 8", it cut a home of 6 to 4', () => {
+    const empty = emptyAiSiteInventory('host-1')
+    const freeEmpty = () =>
+      aiSitePlanCapabilities(yogaJob(), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })) as AiPlanCapabilities
+    const wall = (plan: AiBuildPlan) =>
+      validateAiBuildPlan(plan, empty, null, freeEmpty()).filter((violation) => violation.code === 'plan-over-free-wall')
+    /** The redo as it should come back: the home keeps five, Classes gives up one. */
+    const fivePlusThree: AiBuildPlan = {
+      ...AI_YOGA_SITE_PLAN_REDO_ANSWER,
+      screens: [
+        {
+          ...AI_YOGA_SITE_PLAN_REDO_ANSWER.screens[0],
+          sections: [
+            ...AI_YOGA_SITE_PLAN_REDO_ANSWER.screens[0].sections.slice(0, 3),
+            { name: 'Student Stories', uses: [], items: 0 },
+            AI_YOGA_SITE_PLAN_REDO_ANSWER.screens[0].sections[3],
+          ],
+        },
+        {
+          ...AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1],
+          // Classes Hero dropped: Class Schedule, Class Descriptions, Get Started.
+          sections: AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1].sections.slice(1),
+        },
+      ],
+    }
+
+    it('refuses the first answer — 6 + 4 — on the wall, and the redo names the home’s five and where the rest come from', () => {
+      const [violation] = wall(AI_YOGA_SITE_PLAN_FIRST_ANSWER)
+      expect(violation?.message).toContain('This plan asks for 10 sections')
+      expect(violation?.message).toContain('Keep the home page at / at 5 or more sections, and take the rest from the other page.')
+      expect(fivePlusThree.screens.map((screen) => screen.sections.length)).toEqual([5, 3])
+      expect(wall(fivePlusThree)).toEqual([])
+    })
+
+    it('keeps the home’s five through the plan step: 6 + 4, then 5 + 3', async () => {
+      mockRunAiRequest.mockReset()
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
+      const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
+      const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
+      expect(sent).toHaveLength(2)
+      expect(sent[1]).toContain('Keep the home page at / at 5 or more sections')
+      expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.sections.length)).toEqual([5, 3])
+    })
+
+    it('keeps the recorded 4 + 2 redo rather than stopping the start: it is the loop’s last answer, and a third ask is past the plan’s two', async () => {
+      mockRunAiRequest.mockReset()
+      mockRunAiRequest
+        .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER))
+        .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_REDO_ANSWER))
+        .mockResolvedValueOnce(toolAnswer(fivePlusThree))
+      const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(AI_GENERATION_MAX_ATTEMPTS)
+      expect(outcome.uncredited).toBeUndefined()
+      expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.sections.length)).toEqual([4, 2])
+    })
+  })
+
   it('names a thin home, and no home where the plan builds none at /', () => {
     expect(aiSiteThinHomeViolations(YOGA_THIN, { min: 5, across: 8 })).toEqual([
       expect.objectContaining({
@@ -675,10 +734,10 @@ const MEASURED_SITE_LOOK_CREDITS = 7
  * build's figures are never priced under: the dearest page of the
  * 2026-10-07 business layout eval (re-asked, 32 to 45 credits), the largest
  * frame answer it wrote, and the layout and form steps of the local Free
- * yoga guided start that night (plan 19, look 4, layout 23, form 28, pages
- * 37 and 22).
+ * yoga guided starts: layout 23 on both, and the form at the dearer of its
+ * two, 29 on 2026-10-08 (28 on 2026-10-07).
  */
-const MEASURED_LANGUAGE = { pageMostCredits: 45, frameMostOutputTokens: 583, layoutCredits: 23, formCredits: 28 } as const
+const MEASURED_LANGUAGE = { pageMostCredits: 45, frameMostOutputTokens: 583, layoutCredits: 23, formCredits: 29 } as const
 
 /** One exchange, metered as the machine meters a step: billed, in credits, rounded up. */
 const creditsOf = (usage: AiUsage, model: string) => assistCreditsFromUsd(usd(usage, model))

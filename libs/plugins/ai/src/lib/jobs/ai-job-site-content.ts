@@ -68,7 +68,7 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  * ── Not on the Free taste ────────────────────────────────────────────────
  *
  * A guided start's Free site, built on an empty site with its layout and
- * form, leaves 19 credits once its eight sections and its retried page's
+ * form, leaves 18 credits once its eight sections and its retried page's
  * room are held (`aiFreeSiteSectionsWithin`, AGL-3660), under the 23 one post
  * costs at its worst; and a Free plan includes neither
  * the `commerce` feature nor a product (`productsPerHost` is 0).

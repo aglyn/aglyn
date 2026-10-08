@@ -2788,7 +2788,7 @@ the element budget its request asks for.
   The build is priced as the layout language builds it (re-derived in AGL-3660; the
   per-section passes it replaced no longer run on a site): a guided start creates its
   site EMPTY, so it builds its layout (23, the live guided start's layout step, above the
-  frame's prefix and its largest live answer) and its saved form (28, the live form
+  frame's prefix and its largest live answer) and its saved form (29, the live form
   step) before its pages, and a Free start writes no welcome email. A page is ONE
   answer: 43 for its prefix written, its turn and the whole 2,000-token thinking room,
   4 a section at the 250 tokens a section is written in at most, and 3 for its listing.
@@ -2799,10 +2799,10 @@ the element budget its request asks for.
   ceilings; every answer at its full ceiling would come to more than the 300 for the
   layout, the form and two pages alone, which no section count changes. A Free site
   plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
-  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 281 credits
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 282 credits
   of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
   figures it derives, and the Free wall holds a Free site's plan to that section count
-  and to its page cap. That leaves 19 credits, and one post at its worst on the fast
+  and to its page cap. That leaves 18 credits, and one post at its worst on the fast
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
   blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
   for five pages, where the routing table's ceiling with thinking spent 227.

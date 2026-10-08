@@ -59,7 +59,7 @@ import {
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiFreeSiteSectionsWithin } from '../model/ai-site-job'
+import { aiFreeSiteSectionsWithin, aiSiteHomeMinSections, aiSitePlanIsHome } from '../model/ai-site-job'
 import {
   AI_INSTANCE_REF_PROP,
   validateAiNodeTree,
@@ -4048,11 +4048,21 @@ export function detectPlanOverFreeWall(
   if (asked <= fits) return []
   const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'
   const beside = layouts ? ` that creates ${layouts > 1 ? `${layouts} layouts` : 'its layout'}` : ''
+  // A site start's home keeps its full five (AGL-3660): told only "plan at
+  // most 8", the live yoga start of 2026-10-08 cut a home of 6 to 4 and kept
+  // its other page, so the redo names where the sections come from.
+  const homeMin =
+    sitePages !== undefined && plan.screens.some(aiSitePlanIsHome)
+      ? aiSiteHomeMinSections({ pages, across: fits })
+      : 0
+  const keepHome = homeMin
+    ? ` Keep the home page at / at ${homeMin} or more sections, and take the rest from the other ${pages > 2 ? 'pages' : 'page'}.`
+    : ''
   return [
     {
       rule: null,
       code: 'plan-over-free-wall',
-      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`,
+      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.${keepHome}`,
       paths: plan.screens.map((_, index) => `screens[${index}].sections`),
     },
   ]
