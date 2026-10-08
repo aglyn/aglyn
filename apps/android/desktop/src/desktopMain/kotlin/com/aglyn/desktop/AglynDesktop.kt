@@ -27,6 +27,7 @@ fun main() {
           Item("Orders", shortcut = shortcut(Key.Four), onClick = { navigator.select(ShellNavigator.screenKey("commerce.orders")) })
           Item("Bookings", shortcut = shortcut(Key.Five), onClick = { navigator.select(ShellNavigator.screenKey("bookings.calendar")) })
           Item("Analytics", shortcut = shortcut(Key.Six), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Analytics) })
+          Item("Automation", shortcut = shortcut(Key.Seven), onClick = { navigator.select(ShellNavigator.screenKey("workflows.automation")) })
           Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.select(ShellNavigator.SETTINGS) })
           Separator()
           Item("Back", shortcut = shortcut(Key.LeftBracket), onClick = { navigator.back() })

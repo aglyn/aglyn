@@ -118,6 +118,16 @@ tasks.register<JavaExec>("posSnapshots") {
   (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
 }
 
+// The Automation screens, wide and narrow (a development tool; see AutomationSnapshots.kt).
+tasks.register<JavaExec>("automationSnapshots") {
+  val test = kotlin.jvm("desktop").compilations.getByName("test")
+  dependsOn(test.compileTaskProvider)
+  classpath = files(test.output.allOutputs, test.runtimeDependencyFiles)
+  mainClass.set("com.aglyn.desktop.AutomationSnapshotsKt")
+  jvmArgs((findProperty("aglyn.jvmArgs") as String?)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList<String>())
+  (findProperty("aglyn.snapshotDir") as String?)?.let { systemProperty("aglyn.snapshotDir", it) }
+}
+
 // This module's test source set holds the snapshot tool, not tests; the
 // shells' UI tests live in libs/native/kotlin/shell.
 tasks.withType<Test>().configureEach { failOnNoDiscoveredTests.set(false) }
