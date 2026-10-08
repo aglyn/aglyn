@@ -16,6 +16,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
@@ -104,7 +105,9 @@ async function gate(req: Parameters<PluginApiHandler>[0], res: Reply, hostId: st
   let decoded: Record<string, unknown> & { uid: string }
   try {
     decoded = await deps.verifyIdToken(token)
-  } catch {
+  } catch (error) {
+    // Only a refused token is the caller's; an Auth outage is a 500 (AGL-2852).
+    if (!isRefusedIdToken(error)) throw error
     return void res.status(401).json({ error: 'Sign in again to continue' }), null
   }
   const staff = decoded['staff'] === true
