@@ -709,24 +709,26 @@ async function walk(page, db, auth, identity, created) {
    * a working sign-up from one that never gets a workspace.
    *
    * It waits on Firestore, never on the address bar (see
-   * `signup-canary-marker-wiring.spec.ts`). It reloads every 20s, because a
-   * page that redeemed while its token still said unverified only provisions
-   * on a re-read.
+   * `signup-canary-marker-wiring.spec.ts`).
+   *
+   * The tab that opened the code stops on "Email verified" and leaves the
+   * next move to the person, so the canary clicks "Continue to Aglyn" the way
+   * a person does. It must NOT reload: a reload re-redeems a spent code and
+   * lands on "You're already verified". That is how the first graded run
+   * failed both legs. A "Sign in to continue" there means the tab lost its
+   * session, and the failure below reports it.
    */
   let orgs = null
   const workspaceBy = Date.now() + 90_000
-  let nextReload = Date.now() + 20_000
   while (Date.now() < workspaceBy) {
     orgs = await db
       .collection('orgs')
       .where('ownerUid', '==', created.uid)
       .get()
     if (orgs.size > 0) break
-    if (Date.now() > nextReload) {
-      await page
-        .reload({ waitUntil: 'domcontentloaded' })
-        .catch(() => undefined)
-      nextReload = Date.now() + 20_000
+    const proceed = page.getByRole('button', { name: /^Continue to / })
+    if (await proceed.isVisible().catch(() => false)) {
+      await proceed.click().catch(() => undefined)
     }
     await new Promise((r) => setTimeout(r, 3_000))
   }
