@@ -73,7 +73,7 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
       purpose:
         "AI image generation: creating images for a customer's media library from a description a user writes",
       region: 'Global — Google selects where requests are processed',
-      publishedOn: '2026-10-07',
+      publishedOn: '2026-10-08',
       reaches: [
         'aiplatform.eu.rep.googleapis.com',
         'aiplatform.googleapis.com',

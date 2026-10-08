@@ -69,7 +69,7 @@ const PUBLISHED_GOOGLE_VERTEX_ROW = {
   region: 'Global — Google selects where requests are processed',
   purpose:
     "AI image generation: creating images for a customer's media library from a description a user writes",
-  publishedOn: '2026-10-07',
+  publishedOn: '2026-10-08',
   reason:
     "Reached through the AI plugin's Vertex AI image adapter (`libs/plugins/ai/src/lib/providers/vertex-image.ts`) by the Media library's Create with AI door (`libs/plugins/ai/src/lib/server/ai-media-image.ts`) for every kind that is not drawn as SVG, as the platform's own service account. Off unless `AI_IMAGE_VERTEX_PROJECT` names a Google Cloud project; the console offers those kinds only where `NEXT_PUBLIC_AI_IMAGE_PHOTOS` is `on`. The request carries the description and the kind's fixed style wording, the shape and fixed settings, and nothing else.",
   dataReceived:

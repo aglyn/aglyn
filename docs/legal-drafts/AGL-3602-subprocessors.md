@@ -1,13 +1,18 @@
 # Subprocessors and Privacy: Create with AI in Media (AGL-3602)
 
-**Status: APPROVED 2026-10-07, with Location "Global — Google selects where
-requests are processed" (the default `global` Vertex AI endpoint, which makes
-no processing-location promise) and the purpose worded as images rather than
-photos. The final text is below.** SUB-1
-and PP-1 are published together as legal **v12** with re-acceptance (Zach,
-2026-10-07; v11 was
-taken on 2026-10-07 by the commerce subprocessors, AGL-3666); SUB-2 is not
-applied (see below). The AI catalog declares the SUB-1 row dated 2026-10-07
+**Status: PUBLISHED 2026-10-08 00:00 CT as legal v12 with re-acceptance.**
+Approved by Zach 2026-10-07: Location "Global — Google selects where requests
+are processed" (the default `global` Vertex AI endpoint, which makes no
+processing-location promise), the purpose worded as images rather than
+photos, v12 with re-acceptance (v11 was taken on 2026-10-07 by the commerce
+subprocessors, AGL-3666), and the §2 opener naming Google. Google Doc masters
+first, then the pages; privacy captured from the live page (25972 bytes,
+`02d60d…`), terms the control; archived in
+`Platform Docs/Legal/Acceptance-Snapshots/v12/` and pinned in
+`apps/console/constants/legal-documents.ts`. The published record is
+`Platform Docs/Legal/Proposed/2026-10-08-vertex-ai-images/`. Every date
+below reads October 8, 2026, the publish date; SUB-2 is not applied (see
+below). The AI catalog declares the SUB-1 row dated 2026-10-08
 (`AI_IMAGE_CATALOG_PROVIDERS` in `libs/plugins/ai/src/lib/providers/catalog.ts`),
 so the subprocessor inventory carries `aiplatform.googleapis.com`.
 
@@ -71,7 +76,7 @@ entity, so the row is:
 
 **Change-log entry** (new first item):
 
-> **October 7, 2026** — Added Google LLC (Google Cloud Vertex AI) for AI image
+> **October 8, 2026** — Added Google LLC (Google Cloud Vertex AI) for AI image
 > generation: when a user creates an image in the media library, the
 > description they write and the shape they choose are sent to Google's image
 > models on Google Cloud Vertex AI, which processes each request at a location
@@ -80,7 +85,7 @@ entity, so the row is:
 
 The catalog row (`AI_IMAGE_CATALOG_PROVIDERS` in
 `libs/plugins/ai/src/lib/providers/catalog.ts`) carries this wording dated
-`2026-10-07`, pinned by `libs/plugins/ai/src/lib/subprocessors.spec.ts` and
+`2026-10-08`, pinned by `libs/plugins/ai/src/lib/subprocessors.spec.ts` and
 `apps/console/constants/subprocessor-inventory-plugins.spec.ts`. If the page
 goes live on another date, move `publishedOn` and both pins to it.
 
