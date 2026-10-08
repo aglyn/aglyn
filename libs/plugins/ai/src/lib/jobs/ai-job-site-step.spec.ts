@@ -997,7 +997,7 @@ describe('what a scaffold is admitted with', () => {
     })
     const refused = await admission(70)(context(2))
     expect(refused).toEqual({ status: 429, error: aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, '2026-11-01') })
-    expect(refused?.error).toMatch(/up to about 216 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
+    expect(refused?.error).toMatch(/up to about 218 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
     expect(seen).toEqual(['org-1'])
     // Enough left for the figure the dialog quotes: admitted.
     await expect(admission(aiFreeSiteCreditEstimate(2))(context(2))).resolves.toBeNull()

@@ -450,8 +450,9 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
     expect(aiFreeSiteShortfall({ left: needed - 1 }, 2)).toEqual({ needed, left: needed - 1 })
     expect(aiFreeSiteShortfall({ left: needed }, 2)).toBeNull()
     expect(aiFreeSiteShortfall(null, 2)).toBeNull()
-    // The prod case: a person with 70 left was quoted 216 of 300.
-    expect(aiFreeSiteShortfall({ left: 70 }, 2)).toEqual({ needed: 216, left: 70 })
+    // The prod case: a person with 70 left was quoted 216 of 300 — 218 since
+    // the wall prices the guided start's form at what it metered (AGL-3660).
+    expect(aiFreeSiteShortfall({ left: 70 }, 2)).toEqual({ needed: 218, left: 70 })
   })
 
   it('says how many are left, when they reset, that they are shared, and the way on', () => {
