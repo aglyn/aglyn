@@ -1,7 +1,7 @@
 ---
 sidebar_position: 14
 title: AI monitoring
-description: How staff watch one organization's AI usage — the add-on, credit pool, overage, refusals, jobs, tokens and cache hit rate, top spenders and margin — read what it asked Aglyn AI and what it answered, and where those figures appear across the staff console.
+description: How staff watch one organization's AI usage — add-on, credits, overage, refusals, jobs, tokens, cache hits and margin — read its AI conversations, and find those figures across the staff console.
 ---
 
 # AI monitoring

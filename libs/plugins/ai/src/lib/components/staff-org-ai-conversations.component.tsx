@@ -20,6 +20,7 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -34,13 +35,14 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useRef, useState, type ReactNode } from 'react'
-import type {
-  StaffAiAssistRow,
-  StaffAiConversationKind,
-  StaffAiConversationPerson,
-  StaffAiConversationsResponse,
-  StaffAiJobResult,
-  StaffAiJobRow,
+import {
+  STAFF_AI_CONVERSATIONS_PAGE,
+  type StaffAiAssistRow,
+  type StaffAiConversationKind,
+  type StaffAiConversationPerson,
+  type StaffAiConversationsResponse,
+  type StaffAiJobResult,
+  type StaffAiJobRow,
 } from '../usage/staff-org-ai-conversations'
 
 /**
@@ -158,12 +160,17 @@ const StaffOrgAiConversations = ({ orgId }: { orgId: string }) => {
   userRef.current = user
   const [kind, setKind] = useState<StaffAiConversationKind | null>(null)
   const [rows, setRows] = useState<Array<StaffAiAssistRow | StaffAiJobRow>>([])
+  // The cursor that opens each page: `cursors[page]` is the `after` its
+  // request carries, so Previous re-reads a page rather than keeping every
+  // page read so far in memory.
+  const [cursors, setCursors] = useState<Array<string | null>>([null])
+  const [page, setPage] = useState(0)
   const [next, setNext] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(
-    async (target: StaffAiConversationKind, after: string | null) => {
+    async (target: StaffAiConversationKind, targetPage: number, after: string | null) => {
       const current = userRef.current
       if (!current || !orgId) return
       setLoading(true)
@@ -179,8 +186,13 @@ const StaffOrgAiConversations = ({ orgId }: { orgId: string }) => {
           setError(payload?.error ?? 'The conversations could not be read.')
           return
         }
-        setRows((existing) => (after ? [...existing, ...payload.rows] : payload.rows))
+        setRows(payload.rows)
+        setPage(targetPage)
         setNext(payload.next)
+        setCursors((existing) => {
+          const kept = existing.slice(0, targetPage + 1)
+          return payload.next ? [...kept, payload.next] : kept
+        })
       } catch {
         setError('The conversations could not be read.')
       } finally {
@@ -195,7 +207,9 @@ const StaffOrgAiConversations = ({ orgId }: { orgId: string }) => {
       setKind(target)
       setRows([])
       setNext(null)
-      void load(target, null)
+      setPage(0)
+      setCursors([null])
+      void load(target, 0, null)
     },
     [load],
   )
@@ -255,12 +269,16 @@ const StaffOrgAiConversations = ({ orgId }: { orgId: string }) => {
             <Typography variant="body2" color="text.secondary">
               {'Loading…'}
             </Typography>
-          ) : next ? (
-            <Box>
-              <Button size="small" onClick={() => void load(kind, next)}>
-                {'Load more'}
-              </Button>
-            </Box>
+          ) : null}
+          {rows.length || page > 0 ? (
+            <ListPagination
+              page={page}
+              pageSize={STAFF_AI_CONVERSATIONS_PAGE}
+              rowCount={rows.length}
+              hasMore={Boolean(next)}
+              disabled={loading}
+              onPageChange={(target) => void load(kind, target, cursors[target] ?? null)}
+            />
           ) : null}
         </Stack>
       )}
