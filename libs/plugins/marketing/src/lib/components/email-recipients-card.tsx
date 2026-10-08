@@ -24,6 +24,8 @@ import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -57,6 +59,31 @@ const RECIPIENT_FILTER_OPTIONS = {
   ],
 }
 const RECIPIENT_HIDDEN_COLUMNS = { engagement: false }
+
+/*
+ * EVERY HEADER SORTS, OVER THE PAGE (AGL-3680). The rows are an aggregate
+ * the recipients route builds from the per-recipient delivery log across
+ * the template's emails, paged by its cursor newest first — no query here
+ * can order them by a column — so each header sorts the page on screen and
+ * says so.
+ */
+const RECIPIENT_PAGE_SORTS = {
+  to: (row: RecipientRow) => row.to,
+  subject: (row: RecipientRow) => row.subject,
+  status: (row: RecipientRow) => row.status,
+  openCount: (row: RecipientRow) => row.openCount,
+  clickCount: (row: RecipientRow) => row.clickCount,
+  lastEventAtMs: (row: RecipientRow) => row.lastEventAtMs || null,
+}
+const RECIPIENT_PAGE_SORT_HEADERS = {
+  to: 'Recipient',
+  subject: 'Email',
+  status: 'State',
+  openCount: 'Opens',
+  clickCount: 'Clicks',
+  lastEventAtMs: 'Last event',
+}
+const NO_QUERY_SORTS = [] as const
 
 interface RecipientRow {
   messageId: string
@@ -312,6 +339,12 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
     ],
     [emailId],
   )
+  const columnSort = useListColumnSort<RecipientRow>({
+    sorts: NO_QUERY_SORTS,
+    rows,
+    pageSorts: RECIPIENT_PAGE_SORTS,
+    headers: RECIPIENT_PAGE_SORT_HEADERS,
+  })
   const filterColumns = useMemo(
     () =>
       listFilterGridColumns(
@@ -351,6 +384,8 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
 
         {failure ? <Alert severity="warning">{failure}</Alert> : null}
 
+        <ListQueryNotices refused={[]} notices={columnSort.notices} />
+
         {campaignsOmitted ? (
           <Alert severity="info">
             {'This template has been used by more emails than one read can ' +
@@ -368,7 +403,7 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
         ) : (
           <ListTable
             aria-label="Recipients"
-            rows={rows}
+            rows={columnSort.rows}
             columns={filterColumns}
             loading={loading}
             getRowId={(row: RecipientRow) => row.messageId}
@@ -381,7 +416,7 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
             // Its panel's one filter is the route's (AGL-3317). Nor does it
             // sort: a header sort would order that one page, not the log.
             hideFooter
-            disableColumnSorting
+            columnSort={columnSort}
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}

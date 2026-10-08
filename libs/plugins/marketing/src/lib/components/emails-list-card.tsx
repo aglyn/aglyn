@@ -44,6 +44,8 @@ import {
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
@@ -99,6 +101,16 @@ import {
  * same read serves both. A picker's options, not a list.
  */
 const CONTAINER_CEILING = 50
+
+/** The headers a page sort names in its notice. */
+const EMAIL_PAGE_SORT_HEADERS = {
+  site: 'Site',
+  state: 'State',
+  when: 'When',
+  recipients: 'Addressed',
+  opens: 'Opens',
+  clicks: 'Clicks',
+}
 
 /**
  * Why discard is refused, keyed by the state that refuses it.
@@ -217,6 +229,12 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const gridFilter = useListGridFilter({
     selectFields: ['status', 'emailCampaignId', 'site'],
   })
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Subject orders the query
+   * (`declaration.sorts`); Site, State, When and the figures are derived or
+   * may be absent, and sort the page.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const emailPage = useListQuery<any>({
     collection: campaignSendsCollection(firestore, orgId),
     declaration,
@@ -224,9 +242,34 @@ export function EmailsListCard(props: EmailsListCardProps) {
       clauses: emailCampaignQueryClauses(gridFilter.clauses),
       search: gridFilter.searchWords,
       base: campaignSendsScope(hostId),
+      sort: askedSort,
     },
     deps: [firestore, orgId, hostId],
     idField: '$id',
+  })
+  const emailPageSorts = useMemo(
+    () => ({
+      ...(orgMount
+        ? { site: (row: any) => (row?.hostId ? orgSiteName(orgMount, row.hostId) : null) }
+        : {}),
+      state: (row: any) => campaignSendDisplay(row).label,
+      when: (row: any) => emailListTimeMs(row),
+      // Counters stay absent until something is counted (see
+      // `campaign-list-query.ts`), so no query can order by them.
+      recipients: (row: any) => row.stats?.recipients ?? null,
+      opens: (row: any) => row.stats?.opens ?? null,
+      clicks: (row: any) => row.stats?.clicks ?? null,
+    }),
+    [orgMount],
+  )
+  const emailSort = useListColumnSort<any>({
+    sorts: declaration.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: emailPage.plan.orderBy,
+    rows: emailPage.rows,
+    pageSorts: emailPageSorts,
+    headers: EMAIL_PAGE_SORT_HEADERS,
   })
   const emails = emailPage.rows
   const filtering =
@@ -747,11 +790,11 @@ export function EmailsListCard(props: EmailsListCardProps) {
                 headers: EMAIL_FILTER_HEADERS,
                 options: filterOptions,
               })}
-              notices={emailPage.plan.notices}
+              notices={[...emailPage.plan.notices, ...emailSort.notices]}
             />
             <ListTable
               aria-label="Messages"
-              rows={emails}
+              rows={emailSort.rows}
               columns={gridColumns}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, row) => router.push(emailHref(row))}
@@ -759,14 +802,15 @@ export function EmailsListCard(props: EmailsListCardProps) {
               /*
                * The panel and the search are the grid's; every clause and
                * the search word are on the list's query (AGL-3321), and the
-               * grid neither filters nor sorts the page it is handed: the
-               * query's one order, newest first, is the list's.
+               * grid neither filters nor sorts the page it is handed:
+               * Subject's header orders the query, the rest the page
+               * (AGL-3680), newest first until one is clicked.
                */
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
+              columnSort={emailSort}
               hideFooter
               initialState={{
                 columns: {

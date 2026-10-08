@@ -32,6 +32,8 @@ import ListQueryNotices, {
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   Button,
   Card,
@@ -42,7 +44,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   OUTREACH_SEQUENCE_STATUSES,
   type OutreachMailbox,
@@ -177,6 +179,30 @@ const COUNT_COLUMNS: ReadonlyArray<[keyof OutreachSequenceCounts, string]> = [
   ['optedOut', 'Opted out'],
 ]
 
+/** A sequences-grid row: the sequence's name, mailbox label, status and counts. */
+type SequenceTableRow = { $id: string; name: string; mailbox: string; status: string } & Record<
+  string,
+  string
+>
+
+/*
+ * Name and Status order the query (`OUTREACH_SEQUENCE_LIST_QUERY.sorts`);
+ * the mailbox's label is looked up and the counts are counted for the page,
+ * so those sort the page on screen (AGL-3680).
+ */
+const countValue = (raw: string | undefined): number | null =>
+  raw && raw !== '—' && Number.isFinite(Number(raw)) ? Number(raw) : null
+const SEQUENCE_PAGE_SORTS = {
+  mailbox: (row: SequenceTableRow) => row.mailbox,
+  ...Object.fromEntries(
+    COUNT_COLUMNS.map(([key]) => [key, (row: SequenceTableRow) => countValue(row[key])]),
+  ),
+}
+const SEQUENCE_PAGE_SORT_HEADERS = {
+  mailbox: 'Mailbox',
+  ...Object.fromEntries(COUNT_COLUMNS),
+}
+
 /*
  * What the sequences grid's Filters panel offers (AGL-3317), each field on
  * the list's Firestore query (AGL-3321, `OUTREACH_SEQUENCE_LIST_QUERY`).
@@ -225,9 +251,11 @@ export function OutreachSequenceList(props: {
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useOutreachNavigate()
   const gridFilter = useListGridFilter({ selectFields: ['status', 'mailbox'] })
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const sequences = useOutreachSequenceList(orgId, {
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
   })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
@@ -285,6 +313,24 @@ export function OutreachSequenceList(props: {
     sequence: OutreachSequence,
     key: keyof OutreachSequenceCounts,
   ) => (counts[sequence.id] ? String(counts[sequence.id][key]) : '—')
+  const tableRows: SequenceTableRow[] = pageRows.map((sequence) => ({
+    $id: sequence.id,
+    name: sequence.name || 'Untitled',
+    mailbox: mailboxLabel(sequence),
+    status: sequence.status,
+    ...Object.fromEntries(
+      COUNT_COLUMNS.map(([key]) => [key, count(sequence, key)]),
+    ),
+  }))
+  const columnSort = useListColumnSort<SequenceTableRow>({
+    sorts: OUTREACH_SEQUENCE_LIST_QUERY.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: sequences.plan.orderBy,
+    rows: tableRows,
+    pageSorts: SEQUENCE_PAGE_SORTS,
+    headers: SEQUENCE_PAGE_SORT_HEADERS,
+  })
 
   const chips = (
     <ListFilterChips
@@ -302,7 +348,7 @@ export function OutreachSequenceList(props: {
         headers: SEQUENCE_FILTER_HEADERS,
         options: filterOptions,
       })}
-      notices={sequences.plan.notices}
+      notices={[...sequences.plan.notices, ...columnSort.notices]}
     />
   )
   /** Nothing stored at all — not a filter that matched nothing. */
@@ -421,28 +467,21 @@ export function OutreachSequenceList(props: {
           aria-label="Sequences"
           columns={columns}
           initialState={{ columns: { columnVisibilityModel: SEQUENCE_HIDDEN_COLUMNS } }}
-          rows={pageRows.map((sequence) => ({
-            $id: sequence.id,
-            name: sequence.name || 'Untitled',
-            mailbox: mailboxLabel(sequence),
-            status: sequence.status,
-            ...Object.fromEntries(
-              COUNT_COLUMNS.map(([key]) => [key, count(sequence, key)]),
-            ),
-          }))}
+          rows={columnSort.rows}
           onOpen={(id) => navigate(`${sectionPath}/${id}`)}
           loading={sequences.status === 'loading'}
           /*
            * The panel and the search are the grid's; every clause and the
            * search word are on the list's query (AGL-3321), and the grid
-           * neither filters nor sorts the page it is handed: the query's
-           * one order, newest first, is the list's.
+           * neither filters nor sorts the page it is handed: Name and
+           * Status order the query, the rest the page (AGL-3680), newest
+           * first until a header is clicked.
            */
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           quickFilter
-          disableColumnSorting
+          columnSort={columnSort}
           noRowsLabel="No sequences match these filters"
           hideFooter
         />

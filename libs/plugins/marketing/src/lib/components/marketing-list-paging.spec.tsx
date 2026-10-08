@@ -294,7 +294,7 @@ describe('the experiments search is asked of Firestore (AGL-3321)', () => {
       op: 'array-contains',
       value: '33',
     })
-    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'name', direction: 'asc' })
+    expect(lastListQueryPlan()?.orderBy).toMatchObject({ path: 'name', direction: 'asc' })
   })
 })
 
