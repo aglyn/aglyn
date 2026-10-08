@@ -134,5 +134,9 @@
   "zapier": {
     "baseline": 3724,
     "budget": 5120
+  },
+  "paypal": {
+    "baseline": 2478,
+    "budget": 4096
   }
 }

@@ -94,13 +94,13 @@ export function renderPayNotice(title: string, message: string, backUrl: string 
 
 function style(nonce: string): string {
   return `<style nonce="${nonce}">
-:root{color-scheme:light dark;--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--bg:#fff;--card:#f6f8fa}
-@media (prefers-color-scheme:dark){:root{--fg:#f0f6fc;--muted:#9198a1;--line:#3d444d;--bg:#0d1117;--card:#151b23}}
+:root{color-scheme:light dark;--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--bg:#fff;--card:#f6f8fa;--error:#cf222e}
+@media (prefers-color-scheme:dark){:root{--fg:#f0f6fc;--muted:#9198a1;--line:#3d444d;--bg:#0d1117;--card:#151b23;--error:#f85149}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:480px;margin:0 auto;padding:24px 16px 48px}h1{font-size:1.375rem;margin:0 0 4px}
 .muted{color:var(--muted);font-size:.9375rem}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:20px 0}
 .row{display:flex;justify-content:space-between;gap:16px;padding:4px 0}.row.total{border-top:1px solid var(--line);margin-top:8px;padding-top:12px;font-weight:600}
-#buttons{display:flex;flex-direction:column;gap:12px;min-height:56px}#message{margin:16px 0 0}#message.error{color:#cf222e}
+#buttons{display:flex;flex-direction:column;gap:12px;min-height:56px}#message{margin:16px 0 0}#message.error{color:var(--error)}
 a{color:inherit}.back{display:inline-block;margin-top:24px}
 </style>`
 }

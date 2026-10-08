@@ -76,7 +76,6 @@
   "libs/plugins/mui/src/lib/components/toolbar.ts": 2,
   "libs/plugins/mui/src/lib/components/typography.tsx": 2,
   "libs/plugins/mui/src/lib/components/video.tsx": 2,
-  "libs/plugins/paypal/src/lib/server/pay-page.ts": 1,
   "libs/shared/ui/color-picker/src/lib/color-swatch.tsx": 1,
   "libs/shared/ui/jsx-forms/src/lib/mapper/css-gradient.tsx": 1,
   "libs/shared/ui/jsx/src/lib/components/status-screen-plain.component.tsx": 6,
