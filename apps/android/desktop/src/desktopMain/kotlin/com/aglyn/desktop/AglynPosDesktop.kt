@@ -8,8 +8,9 @@ import com.aglyn.shell.DesktopShell
 import com.aglyn.shell.PosShell
 
 /** "Aglyn POS" on the desktop: smart readers only (AGL-3607's server-driven flow). */
-fun main() {
+fun main(args: Array<String>) {
   val services = DesktopShell.services(NativeApp.POS, DesktopShell.envFromSystem(), NativePluginManifest.entries, DesktopShell.posPeripherals())
+  if (LAUNCH_CHECK_ARG in args) launchCheck("Aglyn POS") { PosShell(services) }
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   application {
     AglynWindow(
