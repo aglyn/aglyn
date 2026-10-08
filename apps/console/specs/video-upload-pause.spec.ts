@@ -174,6 +174,14 @@ const CANNOT_STORE_VIDEO: Record<string, { why: string; proof: string }> = {
       '(AGL-3331). It stores no new file.',
     proof: 'sanitizeEmbeddedPatch(current.format, body?.patch)',
   },
+  'apps/console/utils/server/media-ingest.ts': {
+    why:
+      "the server's media door (`core.media-ingest`, AGL-3660), which a " +
+      'server process uses to keep a stock photo in a site library. It ' +
+      'accepts raster images only — JPEG, PNG, WebP and GIF — and refuses ' +
+      'every other type, a video included, before any bytes are inspected.',
+    proof: "if (!RASTER_TYPES.has(contentType)) return refuse(415, 'Only photos can be stored this way')",
+  },
   'libs/tenant/data/admin/src/lib/server/transfer-jobs.ts': {
     why:
       'an import file (AGL-3524): it is inspected and stored only as text — ' +

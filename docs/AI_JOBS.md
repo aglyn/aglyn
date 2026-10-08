@@ -2208,6 +2208,27 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   a source that throws, takes a starter photo. A picture never fails a job: on
   any error the page keeps its slots as the compiler wrote them. The resolver
   costs no AI credits.
+- **Stock photos.** The page step hands the resolver
+  `aiLayoutStockPhotoSource` (`src/lib/jobs/ai-layout-stock-photos.ts`), which
+  names no library: it asks core for the deployment's stock photo provider
+  (`core.stock-photos`, filled by the `stock-photos` plugin with Pixabay once the
+  console holds `PIXABAY_API_KEY`) and for the media library's server door
+  (`core.media-ingest`, registered by the console), and builds no source when
+  either is missing. Per slot it searches plain words — the head of the site's
+  business type for the hero ("yoga studio"), the picture's subject from its alt
+  text (else its section's name) with the business for the rest, people for an
+  about picture — at the frame's orientation and a minimum size; picks among
+  the first hits not already on the page by the job's seed and the slot; reuses
+  a photo the site's library already holds by its source key, or downloads it
+  and stores it in the site's library as the job's creator with its credit
+  (`stockPhoto` on the asset, and "Photo by … on Pixabay." as its description).
+  The page names the site's own asset, never the library's address. A page asks
+  at most eight searches and spends at most 20 s on photos inside the step's own
+  signal; a refusal to store (the storage band, a lockdown) stops copying for
+  the rest of the page, and every slot left empty takes a starter photo. The
+  provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
+  library's rate limit. No AI model is called, and the guided start's credit
+  estimate is unchanged.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
