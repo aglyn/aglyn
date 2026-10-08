@@ -226,6 +226,38 @@ function leadSourceDirectionField(doc, context) {
     : {}
 }
 
+/*
+ * THE HEADER SORT KEYS (AGL-3680) — `crmSortKey`, `crmSortNumber`,
+ * `crmPersonSortKey`, `crmTaskPriorityRank`: what a CRM table's text,
+ * optional-number and priority headers sort by on the query, stored on every
+ * record (`null` for none) because an `orderBy` leaves out a document
+ * without its field.
+ */
+
+/** `crmSortKey`: a text value's key, `null` for none. */
+export function crmSortKey(value) {
+  return (typeof value === 'string' && nameSearchKey(value)) || null
+}
+
+/** `crmSortNumber`: a finite number, `null` for none. */
+export function crmSortNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** `crmPersonSortKey`: the name's key, or the address's when there is no name. */
+export function crmPersonSortKey(doc) {
+  return crmSortKey(doc.name) ?? crmSortKey(doc.email)
+}
+
+/** `CRM_TASK_PRIORITY_RANK`: a task's priorities, lowest first. */
+const CRM_TASK_PRIORITY_RANK = ['low', 'normal', 'high']
+
+/** `crmTaskPriorityRank`: the priority's rank, `normal`'s for none. */
+export function crmTaskPriorityRank(priority) {
+  const at = CRM_TASK_PRIORITY_RANK.indexOf(priority)
+  return at === -1 ? CRM_TASK_PRIORITY_RANK.indexOf('normal') : at
+}
+
 /** `crmFacetKeyValue`: a facet value as its key spells it, or `null`. */
 export function crmFacetKeyValue(value) {
   if (typeof value === 'boolean') return value ? 'true' : 'false'
@@ -351,6 +383,10 @@ export function crmListFields(collection, record, context = {}) {
         // The Industry and Rating the Leads list filters by (AGL-3513).
         industryKey: crmLeadSourceKey(doc.industry),
         ratingKey: crmLeadSourceKey(doc.rating),
+        // The Lead, Company and Title headers' sort keys (AGL-3680).
+        nameSortKey: crmPersonSortKey(doc),
+        companyLower: crmSortKey(doc.company),
+        jobTitleLower: crmSortKey(doc.jobTitle),
       }
     case 'contacts':
       return {
@@ -360,6 +396,8 @@ export function crmListFields(collection, record, context = {}) {
         ]),
         facetKeys: crmContactFacetKeys(doc),
         emailStatus: crmEmailStatusKey(doc),
+        // The Contact header's sort key (AGL-3680).
+        nameSortKey: crmPersonSortKey(doc),
       }
     case 'companies':
       return {
@@ -379,9 +417,17 @@ export function crmListFields(collection, record, context = {}) {
         leadSourceKey: crmLeadSourceKey(doc.leadSource),
         // The deal's contact roles (AGL-3521).
         ...crmDealContactRoleListFields(doc),
+        // The Amount and Expected close headers' sort keys (AGL-3680).
+        amountSortCents: crmSortNumber(doc.amountCents),
+        expectedCloseSortAtMs: crmSortNumber(doc.expectedCloseAtMs),
       }
     case 'crmTasks':
-      return searchFields(doc.visibleTo, [doc.title])
+      return {
+        ...searchFields(doc.visibleTo, [doc.title]),
+        // The Task and Priority headers' sort keys (AGL-3680).
+        titleLower: crmSortKey(doc.title),
+        priorityRank: crmTaskPriorityRank(doc.priority),
+      }
     default:
       throw new Error(`crmListFields: unknown collection ${collection}`)
   }
@@ -420,7 +466,40 @@ export function crmListFieldsBackfillPatch(collection, record, context = {}) {
   }
   const nullable = CRM_LIST_NULLABLE_FIELD[collection]
   if (nullable && record?.[nullable] === undefined) patch[nullable] = null
+  // The Leads list's default order (AGL-3680): see `leadLastSeenAtMs`.
+  if (collection === 'leads' && typeof record?.lastSeenAtMs !== 'number') {
+    patch.lastSeenAtMs = leadLastSeenAtMs(record)
+  }
   return patch
+}
+
+/** An instant as epoch milliseconds — a number, a Timestamp, a Date or its JSON forms — or null. */
+function millisOf(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (!value) return null
+  if (typeof value.toMillis === 'function') return value.toMillis()
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.getTime()
+  const seconds = value.seconds ?? value._seconds
+  if (typeof seconds === 'number') {
+    return seconds * 1000 + Math.floor((value.nanoseconds ?? value._nanoseconds ?? 0) / 1e6)
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+  return null
+}
+
+/**
+ * A lead's `lastSeenAtMs` where it has none (AGL-3680). The Leads list
+ * orders by it, and an `orderBy` leaves a document without the field out of
+ * the answer — so a lead carried over before the lead door stamped it was
+ * on no page of the list at all. Every capture through the door stamps it
+ * (`addHostLead`); a lead without it was last seen when it was first seen:
+ * `firstSeenAtMs`, else its `createdAt`, else 0 (the end of the list).
+ */
+export function leadLastSeenAtMs(record) {
+  return millisOf(record?.firstSeenAtMs) ?? millisOf(record?.createdAt) ?? 0
 }
 
 const LIST_COLLECTIONS = new Set(['leads', 'contacts', 'companies', 'deals', 'crmTasks'])

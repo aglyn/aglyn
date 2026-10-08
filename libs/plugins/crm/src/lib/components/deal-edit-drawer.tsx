@@ -91,6 +91,7 @@ import { CrmPicklistSelect } from './picklist-select'
 import { CrmSitePicker } from './crm-site-picker'
 import {
   CRM_CLIENT_SEARCH_FIELDS,
+  CRM_CLIENT_SORT_FIELDS,
   CRM_DEAL_CONTACT_ROLE_LIST_FIELDS,
   crmClientListFields,
 } from '../model/crm-list-query'
@@ -129,6 +130,8 @@ const COMPANY_MATCHES = 8
 /** The list fields an edit restamps: the title's search words, the two picklist keys. */
 const DEAL_CLIENT_LIST_FIELDS = [
   ...CRM_CLIENT_SEARCH_FIELDS,
+  // The Deal, Amount and Expected close headers' sort keys (AGL-3680).
+  ...CRM_CLIENT_SORT_FIELDS,
   'typeKey',
   'leadSourceKey',
   // The arrays a deal's contact roles are found by (AGL-3521).

@@ -43,6 +43,7 @@ import {
   useListGridFilter,
 } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { collection } from 'firebase/firestore'
 import { type ReactNode, useMemo } from 'react'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -308,6 +309,35 @@ export function OrgLicencesPanel({
       ),
     [listingNames, basePath, heldOptions],
   )
+  /*
+   * EVERY HEADER SORTS, OVER THE PAGE (AGL-3680). Both tables walk their
+   * licenses in document order, and what each column shows is looked up —
+   * the listing's name, who bought it, the workspace's name — or computed
+   * (paid before tax), so each header sorts the page on screen and says so.
+   */
+  const listingName = (row: any) =>
+    listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? '')
+  const heldPageSorts = useMemo<Record<string, LicencePageSort>>(
+    () => ({
+      listingId: listingName,
+      buyerUid: (row) => row.boughtBy,
+      amountCents: (row) => Number(row.amountCents ?? 0) - Number(row.taxCents ?? 0),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [listingNames],
+  )
+  const minePageSorts = useMemo<Record<string, LicencePageSort>>(
+    () => ({
+      listingId: listingName,
+      buyerOrgId: (row) => {
+        const licensedOrg = String(row.buyerOrgId ?? '')
+        if (!licensedOrg) return 'Every workspace you belong to'
+        return licensedOrg === orgId ? 'This workspace' : (orgNames[licensedOrg] ?? licensedOrg)
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [listingNames, orgId, orgNames],
+  )
   const mineColumns = useMemo<GridColDef[]>(
     () =>
       listFilterGridColumns(
@@ -422,6 +452,8 @@ export function OrgLicencesPanel({
             read={heldRead}
             rows={held}
             columns={heldColumns}
+            pageSorts={heldPageSorts}
+            sortHeaders={HELD_SORT_HEADERS}
           />
         </CardDisplay>
       )}
@@ -462,12 +494,20 @@ export function OrgLicencesPanel({
             read={mineRead}
             rows={mine}
             columns={mineColumns}
+            pageSorts={minePageSorts}
+            sortHeaders={MINE_SORT_HEADERS}
           />
         </CardDisplay>
       )}
     </Stack>
   )
 }
+
+const NO_QUERY_SORTS = [] as const
+/** How a license column reads a row for its page sort. */
+type LicencePageSort = (row: any) => string | number | null
+const HELD_SORT_HEADERS = { listingId: 'Listing', buyerUid: 'Bought by', amountCents: 'Paid' }
+const MINE_SORT_HEADERS = { listingId: 'Listing', buyerOrgId: 'Licensed to' }
 
 /**
  * One license grid: its clause chips, what the query refused or said, the
@@ -483,6 +523,8 @@ function LicenceTable(props: {
   read: UseListQueryResult<any>
   rows: any[]
   columns: GridColDef[]
+  pageSorts: Readonly<Record<string, LicencePageSort>>
+  sortHeaders: Readonly<Record<string, string>>
 }): ReactNode {
   const {
     label,
@@ -494,7 +536,10 @@ function LicenceTable(props: {
     read,
     rows,
     columns,
+    pageSorts,
+    sortHeaders,
   } = props
+  const columnSort = useListColumnSort({ sorts: NO_QUERY_SORTS, rows, pageSorts, headers: sortHeaders })
   const refused = listQueryRefusals([...lookup.refused, ...read.plan.refused], {
     fields: declaration.fields,
     headers,
@@ -509,18 +554,17 @@ function LicenceTable(props: {
         onChange={gridFilter.setClauses}
         options={options}
       />
-      <ListQueryNotices refused={refused} notices={lookup.notices} />
+      <ListQueryNotices refused={refused} notices={[...lookup.notices, ...columnSort.notices]} />
       <ListTable
         aria-label={label}
-        rows={rows}
+        rows={columnSort.rows}
         columns={columns}
         filterMode="server"
         filterModel={gridFilter.filterModel}
         onFilterModelChange={gridFilter.onFilterModelChange}
         quickFilter
-        // The query's order is the purchases' own; the grid does not re-sort a page.
-        sortingMode="server"
-        disableColumnSorting
+        // The query's order is the purchases' own; a header sorts the page and says so.
+        columnSort={columnSort}
         // `ListPagination` below pages the query.
         hideFooter
         rowHeight={TABLE_ROW_HEIGHT}

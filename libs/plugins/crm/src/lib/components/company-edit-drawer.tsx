@@ -84,7 +84,11 @@ import {
 } from '../model/crm-custom-draft'
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
-import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
+import {
+  CRM_CLIENT_SEARCH_FIELDS,
+  CRM_CLIENT_SORT_FIELDS,
+  crmClientListFields,
+} from '../model/crm-list-query'
 
 /**
  * The list fields a client edit of a company rewrites: the search tokens,
@@ -93,6 +97,8 @@ import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list
  */
 const COMPANY_CLIENT_LIST_FIELDS = [
   ...CRM_CLIENT_SEARCH_FIELDS,
+  // Any header sort key the edit's inputs move (AGL-3680).
+  ...CRM_CLIENT_SORT_FIELDS,
   ...CRM_COMPANY_PICKLIST_FIELDS.flatMap((entry) => ('keyField' in entry ? [entry.keyField] : [])),
 ]
 import { useCrmSharingFollowUp } from '../hooks/use-crm-sharing'

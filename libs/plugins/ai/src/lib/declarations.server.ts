@@ -34,7 +34,7 @@ import {
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { AI_PLUGIN_ID, AI_USAGE_METER_ID } from './constants'
-import { AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
+import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED, AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
 import { registerAiDeclarations } from './declarations'
 
 /** The provider-spend staff alerts' contributor id under the plugin. */
@@ -159,9 +159,12 @@ export function registerAiServerDeclarations(): void {
       { pluginId: AI_PLUGIN_ID },
     )
   }
-  // The platform provider account alert (AGL-3377), listed on Staff →
-  // Operator alerts before the first one is ever raised.
-  registerOperatorAlerts([AI_PROVIDER_UNAVAILABLE], { pluginId: AI_PLUGIN_ID })
+  // The platform provider account alert (AGL-3377), and a job failing or a
+  // build finishing with parts failed on our side (AGL-3683), listed on
+  // Staff → Operator alerts before the first one is raised.
+  registerOperatorAlerts([AI_PROVIDER_UNAVAILABLE, AI_JOB_FAILED, AI_BUILD_PARTLY_FAILED], {
+    pluginId: AI_PLUGIN_ID,
+  })
   if (
     !listUsageAlertContributors().some(
       (contributor) =>
