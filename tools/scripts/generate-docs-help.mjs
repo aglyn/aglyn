@@ -133,6 +133,8 @@ const PLUGIN_TOPICS = {
   aglynAssist: '/getting-started/aglyn-assist',
   aiAutomations: '/ai/automations-with-ai',
   aiCrm: '/ai/crm-by-ai',
+  // What Aglyn AI learned from a site's edits, on Setup → Business profile (AGL-3661).
+  aiBusinessProfile: '/ai/business-profile',
   aiExperiments: '/ai/ab-tests-with-ai',
   aiMarketing: '/ai/marketing-with-ai',
   aiInsights: '/marketing-and-automation/analytics/insights',
