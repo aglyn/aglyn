@@ -259,7 +259,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     keywords: ['photographer', 'photography', 'photo', 'photos', 'videographer', 'wedding photographer', 'portraits'],
     starter: 'portfolio',
     look: { bases: ['minimal', 'cupertino'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['instrument', 'garamond', 'inter', 'grotesk'], corners: ['sharp'], buttons: 'square', headingScale: 1.2, density: 'airy' },
-    design: 'Gallery-first: one full image to open, then galleries as image cards by subject, a short personal about, packages only as the brief gives them, and a booking enquiry. Few words, many images, mostly plain bands and one dark band.',
+    design: 'Gallery-first: one full image to open, then galleries as image cards by subject, a short personal about, packages only as the brief gives them, and a booking inquiry. Few words, many images, mostly plain bands and one dark band.',
     pages: 'Home, Galleries or Portfolio, About, and Book or Contact with the form.',
   },
   {
@@ -336,7 +336,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     keywords: ['course', 'courses', 'school', 'tutoring', 'tutor', 'teacher', 'lessons', 'academy', 'education', 'learning', 'training', 'daycare', 'preschool', 'music lessons', 'driving'],
     starter: 'business',
     look: { bases: ['material3', 'ant-design', 'material-ui'], chroma: 'balanced', hues: [[200, 240], [140, 170], [30, 50], [260, 290]], grounds: ['white', 'tinted', 'cool'], fonts: ['nunito', 'outfit', 'jakarta', 'lora', 'manrope'], corners: ['round', 'soft'], buttons: 'rounded', headingScale: 1, density: 'regular' },
-    design: 'Clear and encouraging: who it is for and the result they get, courses or subjects as cards, how it works as steps, common questions as an FAQ, and a sign-up or enquiry section.',
+    design: 'Clear and encouraging: who it is for and the result they get, courses or subjects as cards, how it works as steps, common questions as an FAQ, and a sign-up or inquiry section.',
     pages: 'Home, Courses or Lessons, About or Teachers, and Enroll or Contact with the form.',
   },
   {

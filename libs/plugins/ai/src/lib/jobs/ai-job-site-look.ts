@@ -72,7 +72,7 @@ export const AI_SITE_LOOK_BUDGET = aiJobStepBudget({ tier: 'fast', maxTokens: AI
 export const AI_SITE_LOOK_KIND = 'site-look'
 
 /** The base themes as the model reads them; `starter` is the one a new site is born with. */
-const STARTER_WORDS = 'Aglyn starter: a soft neutral ground, rounder corners and calm buttons'
+const STARTER_WORDS = 'the starter theme a new site is born with: a soft neutral ground, rounder corners and calm buttons'
 
 /** The look door's cached instructions. */
 export const AI_SITE_LOOK_INSTRUCTIONS: readonly AiSystemBlock[] = [
