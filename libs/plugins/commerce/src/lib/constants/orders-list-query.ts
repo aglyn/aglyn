@@ -20,7 +20,10 @@ import type {
   ListFilterClause,
   ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type {
+  ListQueryDeclaration,
+  ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   ORDER_CHANNEL_LABELS,
   ORDER_STATUS_LABELS,
@@ -52,6 +55,19 @@ import {
  * A second range (a total, say) would be a new `sorts` entry and one more
  * composite per filterable field beneath it — eight — plus the range field's
  * own order; nothing else here moves.
+ *
+ * ## Every header sorts (AGL-3680)
+ *
+ * `ORDER_LIST_COLUMN_SORTS`: Date either way, and Order, Customer, Channel and
+ * Status, each on the field `orderListFields` stamps on every order —
+ * `number` (null on an order with none: POS, draft and channel orders are
+ * unnumbered), `customerEmailLower`, `channel`, `status`.
+ * `tools/scripts/backfill-orders-list-fields.mjs` stamps `number` and an
+ * absent `customerEmailLower` on the orders written before. Every order but
+ * the default is `alone`: served with no filter or search on, it costs no
+ * composite on this unscoped list, and asked under a filter it falls back to
+ * newest first and says so. Total is computed from the refunds, so it sorts
+ * the page on screen.
  */
 
 /** The grid columns, each as the query reads it. */
@@ -112,10 +128,27 @@ export const ORDER_LIST_FIELDS: readonly ListFilterField[] = [
   },
 ]
 
-/** The list's query: its fields, its one order and its search. */
+/**
+ * The orders the grid's headers ask for, newest first FIRST — see "Every
+ * header sorts" above.
+ */
+export const ORDER_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'createdAtMs', direction: 'desc', column: 'createdAtMs', label: 'Date' },
+  { path: 'createdAtMs', direction: 'asc', column: 'createdAtMs', label: 'Date', alone: true },
+  { path: 'number', direction: 'desc', column: 'orderLabel', label: 'Order', alone: true },
+  { path: 'number', direction: 'asc', column: 'orderLabel', label: 'Order', alone: true },
+  { path: 'customerEmailLower', direction: 'asc', column: 'customerEmail', label: 'Customer', alone: true },
+  { path: 'customerEmailLower', direction: 'desc', column: 'customerEmail', label: 'Customer', alone: true },
+  { path: 'channel', direction: 'asc', column: 'channelKey', label: 'Channel', alone: true },
+  { path: 'channel', direction: 'desc', column: 'channelKey', label: 'Channel', alone: true },
+  { path: 'status', direction: 'asc', column: 'statusKey', label: 'Status', alone: true },
+  { path: 'status', direction: 'desc', column: 'statusKey', label: 'Status', alone: true },
+]
+
+/** The list's query: its fields, its header orders and its search. */
 export const ORDER_LIST_QUERY: ListQueryDeclaration = {
   fields: ORDER_LIST_FIELDS,
-  sorts: [{ path: 'createdAtMs', direction: 'desc', column: 'createdAtMs' }],
+  sorts: ORDER_LIST_COLUMN_SORTS,
   search: { tokensPath: 'searchTokens' },
 }
 
