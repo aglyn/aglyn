@@ -130,7 +130,8 @@ if (flag('help')) {
   --style <label|id>      Style of site, or "auto" for the one the brief suggests (default auto)
   --submissions <id>      inbox | lead (default inbox)
   --pages <n>             Pages to plan (default 2, the Free maximum; a paid start plans 4 to 8)
-  --plan <id>             The workspace's plan: free (default) or a paid one such as pro
+  --plan <id>             The workspace's plan: free (default) or a paid one such as pro,
+                          which is given the Aglyn AI add-on the guided start needs
   --site-name <text>      The site's name (default "Hillside Dog Grooming"); " || " as --brief
   --runs <n>              Fresh workspace + site per run (default 1)
   --app-root <checkout>   Serve this checkout's console and tenant (default this one)
@@ -694,8 +695,10 @@ async function runOnce(context, index) {
       {
         releaseFlags: { release_ai_generative: true },
         // The emulator stack has no Stripe; a paid run's plan is written as
-        // the billing webhook would write it.
-        ...(orgPlan === 'free' ? {} : { plan: orgPlan }),
+        // the billing webhook would write it, with the Aglyn AI add-on
+        // (AGL-2896): no paid tier includes generative building, so a paid
+        // workspace without it is never offered the guided start at all.
+        ...(orgPlan === 'free' ? {} : { plan: orgPlan, seatAddons: { aiAddon: 1 } }),
       },
       { merge: true },
     )
