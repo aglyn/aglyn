@@ -17,6 +17,8 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { notifyUsers } from '@aglyn/tenant-data-admin/server/notifications'
+import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
+import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED } from '../operator-alerts'
 import { aiJobNotice } from '../model/ai-job-notice'
 import { aiBusinessProfilePrefiller } from './ai-business-profile-prefill'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
@@ -50,17 +52,80 @@ export function aiJobTransitionNotifier(
   }
 }
 
+/** The longest runner error an alert quotes; the log has the rest. */
+const ALERT_ERROR_MAX = 300
+
+/** At most this many failed parts are named in a partial-build alert. */
+const ALERT_ITEMS_MAX = 5
+
+const capped = (text: string): string =>
+  text.length > ALERT_ERROR_MAX ? `${text.slice(0, ALERT_ERROR_MAX)}…` : text
+
 /**
- * Registers what the jobs machine tells about each change: the notifier, and
- * the business profile's prefill from a site job (AGL-3661). One listener,
- * the two in turn; the prefill swallows its own failures, so it never costs
- * the person their notice.
+ * Staff are told when a job fails on our side (`ai.jobFailed`), and when a
+ * build finishes `done` with parts that failed on our side
+ * (`ai.buildPartlyFailed`) — each deduped per job kind, so a broken provider
+ * or a broken step is heard about the hour it starts. A failure that is the
+ * customer's — the model declined the brief or a part of it, the site
+ * switched AI off — raises nothing. `raiseOperatorAlert` never throws.
+ */
+export function aiJobFailureAlerter(
+  raise: typeof raiseOperatorAlert = raiseOperatorAlert,
+): AiJobTransitionListener {
+  return async ({ job, to, failure }) => {
+    if (to === 'done') {
+      const items = job.items ?? []
+      const ours = items.filter((row) => row.status === 'failed' && row.failure?.ours)
+      if (!ours.length) return
+      const named = ours
+        .slice(0, ALERT_ITEMS_MAX)
+        .map((row) => `${row.label} (${row.failure?.reason}${row.failure?.detail ? `: ${row.failure.detail}` : ''})`)
+        .join('; ')
+      await raise(AI_BUILD_PARTLY_FAILED, {
+        dedupeKey: job.kind,
+        orgId: job.orgId,
+        ...(job.hostId ? { hostId: job.hostId } : {}),
+        context: {
+          kind: job.kind,
+          jobId: job.$id,
+          orgId: job.orgId,
+          failed: ours.length,
+          total: items.length,
+          items: capped(ours.length > ALERT_ITEMS_MAX ? `${named}; and ${ours.length - ALERT_ITEMS_MAX} more` : named),
+        },
+      })
+      return
+    }
+    if (to !== 'failed' || !failure?.ours) return
+    const error = failure.error ?? job.error ?? 'no error recorded'
+    await raise(AI_JOB_FAILED, {
+      dedupeKey: job.kind,
+      orgId: job.orgId,
+      ...(job.hostId ? { hostId: job.hostId } : {}),
+      context: {
+        kind: job.kind,
+        jobId: job.$id,
+        orgId: job.orgId,
+        step: failure.stepIndex === null ? 'n/a' : job.steps[failure.stepIndex]?.name ?? failure.stepIndex,
+        error: capped(error),
+      },
+    })
+  }
+}
+
+/**
+ * Registers what the jobs machine tells about each change: the notifier, the
+ * staff alert for a failure on our side, and the business profile's prefill
+ * from a site job (AGL-3661). One listener, each in turn; the alert and the
+ * prefill swallow their own failures, so neither costs the person their notice.
  */
 export function registerAiJobsNotify(): void {
   const notify = aiJobTransitionNotifier()
+  const alert = aiJobFailureAlerter()
   const prefill = aiBusinessProfilePrefiller(() => firebaseAdmin.app().firestore())
   registerAiJobTransitionListener(async (change) => {
     await notify(change)
+    await alert(change)
     await prefill(change)
   })
 }
