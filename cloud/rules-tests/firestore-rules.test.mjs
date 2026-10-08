@@ -13692,6 +13692,62 @@ describe('print-on-demand records are the server’s alone (AGL-3641)', () => {
   })
 })
 
+describe('rewards records are the server’s alone (AGL-3640)', () => {
+  // A store's loyalty program, its members' points and store credit, the
+  // rewards codes that spend them, every movement, each sale's redemption and
+  // a friend's referral claim. Written and read through the Admin SDK by the
+  // loyalty plugin's routes and checkout-credit provider; the owner, an
+  // editor and staff are refused like everyone. A readable member would hand
+  // out a rewards code, which spends like a gift card.
+  const ORG_DOCS = [
+    ['loyaltyPrograms', HOST],
+    ['loyaltyMembers', `${HOST}__member-1`],
+    ['loyaltyCodes', `${HOST}__RW-AAAA-BBBB-CCCC`],
+    ['loyaltyLedger', `${HOST}__earn__order-1`],
+    ['loyaltyRedemptions', `${HOST}__order-1__member-1`],
+    ['loyaltyReferralClaims', `${HOST}__member-2`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, points: 100, creditCents: 500 })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { creditCents: 1_000_000 }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, name, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+
+  it('no client reaches a document nested beneath one, either', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      const nested = doc(db, 'orgs', ORG, 'loyaltyMembers', `${HOST}__member-1`, 'anything', 'x')
+      await mustDeny(`${who} reading beneath a member`, getDoc(nested))
+      await mustDeny(`${who} writing beneath a member`, setDoc(nested, { creditCents: 1 }))
+    }
+  })
+})
+
 describe('tax service records are the server’s alone (AGL-3631)', () => {
   // A site's connection holds the merchant's sealed AvaTax or TaxJar
   // credential; the exemptions decide who pays no tax; the records say which

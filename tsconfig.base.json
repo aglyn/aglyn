@@ -111,6 +111,8 @@
       "@aglyn/plugins-print-on-demand/*": ["./libs/plugins/print-on-demand/src/lib/*"],
       "@aglyn/plugins-redirects": ["./libs/plugins/redirects/src/index.ts"],
       "@aglyn/plugins-redirects/*": ["./libs/plugins/redirects/src/lib/*"],
+      "@aglyn/plugins-loyalty": ["./libs/plugins/loyalty/src/index.ts"],
+      "@aglyn/plugins-loyalty/*": ["./libs/plugins/loyalty/src/lib/*"],
       "@aglyn/plugins-post-purchase": ["./libs/plugins/post-purchase/src/index.ts"],
       "@aglyn/plugins-post-purchase/*": ["./libs/plugins/post-purchase/src/lib/*"],
       "@aglyn/plugins-shipping": ["./libs/plugins/shipping/src/index.ts"],

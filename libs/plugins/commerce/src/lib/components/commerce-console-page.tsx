@@ -52,7 +52,7 @@ import StoreSettingsCard from './console/store-settings-card.component'
 import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
-import { COMMERCE_SETTINGS_ZONE } from './console/store-zones'
+import { COMMERCE_PROMOTIONS_ZONE, COMMERCE_SETTINGS_ZONE } from './console/store-zones'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 /**
@@ -63,6 +63,17 @@ function CommerceSettingsZone(props: { hostId: string }) {
   const WidgetSlot = useConsoleWidgetSlot()
   return WidgetSlot ? (
     <WidgetSlot slot={COMMERCE_SETTINGS_ZONE.id} hostId={props.hostId} orgId={undefined} />
+  ) : null
+}
+
+/**
+ * The `commercePromotions` zone (AGL-3640): other plugins' programs beside
+ * the store's own money-off surfaces — a rewards program first.
+ */
+function CommercePromotionsZone(props: { hostId: string }) {
+  const WidgetSlot = useConsoleWidgetSlot()
+  return WidgetSlot ? (
+    <WidgetSlot slot={COMMERCE_PROMOTIONS_ZONE.id} hostId={props.hostId} orgId={undefined} />
   ) : null
 }
 
@@ -138,6 +149,10 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <ReviewsModerationCard hostId={hostId} />,
+            },
+            {
+              size: { xs: 12 },
+              children: <CommercePromotionsZone hostId={hostId} />,
             },
           ]}
         />

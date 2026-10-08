@@ -137,6 +137,8 @@ function CartLines(props: {
   const [email, setEmail] = useState('')
   const [optIn, setOptIn] = useState(false)
   const [giftCard, setGiftCard] = useState('')
+  // A rewards or referral code (AGL-3640), asked only where the store takes one.
+  const [creditCode, setCreditCode] = useState('')
   // Where the parcel is going (AGL-1721). Asked ONLY when the server says it
   // cannot price shipping without it — a merchant with one zone, one
   // rest-of-world zone, or no shipping at all never sees this field, which is
@@ -253,7 +255,7 @@ function CartLines(props: {
   const extrasSignature = extras.chosenIds.join(',')
   useEffect(() => {
     attemptKey.current = ''
-  }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal, extrasSignature])
+  }, [cartSignature, email, coupon, giftCard, creditCode, shipTo, shipPostal, extrasSignature])
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -279,6 +281,7 @@ function CartLines(props: {
           ...(optIn ? { marketingOptIn: true } : {}),
           ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
           ...(giftCard.trim() ? { giftCardCode: giftCard.trim() } : {}),
+          ...(creditCode.trim() && extras.credits.length ? { creditCode: creditCode.trim() } : {}),
           // A request, never an instruction: the server resolves the rates
           // for this country AND restricts the session's collectable
           // addresses to it, so declaring one cannot buy a cheaper zone's
@@ -403,7 +406,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload])
+  }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -546,6 +549,17 @@ function CartLines(props: {
             placeholder="GC-…"
           />
         </>
+      ) : null}
+      {extras.credits.length ? (
+        // Drawn wherever the store takes a code, coupon field or not: a
+        // member was emailed theirs and comes here to spend it (AGL-3640).
+        <TextField
+          label={`${extras.credits[0].label} code`}
+          value={creditCode}
+          onChange={(event) => setCreditCode(event.target.value)}
+          size="small"
+          slotProps={{ htmlInput: { 'data-testid': 'cart-credit-code' } }}
+        />
       ) : null}
       {shipCountries ? (
         <TextField

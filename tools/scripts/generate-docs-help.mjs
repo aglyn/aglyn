@@ -201,6 +201,9 @@ const PLUGIN_TOPICS = {
   // delivery orders (AGL-3644). Unlisted until the deployment offers a
   // service; see PLUGIN_UNLISTED_TOPICS.
   deliveryApps: '/commerce-and-bookings/commerce/delivery-apps',
+  // The Rewards cards under the store's Promotions and the order dialog's
+  // Rewards section (AGL-3640).
+  loyalty: '/commerce-and-bookings/commerce/rewards-and-referrals',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',

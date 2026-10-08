@@ -78,10 +78,6 @@ const NOT_YET_CONVERTED: readonly string[] = [
   'apps/console/components/staff-tax-findings-card.component.tsx',
   'apps/console/components/staff-user-email-history-card.component.tsx',
   'apps/console/components/templates/host-templates-card.component.tsx',
-  'libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx',
-  'libs/plugins/commerce/src/lib/components/console/pos-ops/pos-shift-history-card.component.tsx',
-  'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
-  'libs/plugins/commerce/src/lib/components/console/stock-movements-card.component.tsx',
 ]
 
 describe('every table sorts by its column headers (AGL-3680)', () => {
