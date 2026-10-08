@@ -522,6 +522,9 @@ export async function raiseOperatorAlert(
       emailNow ? { skipEmail: true } : {},
     )
     if (!enabled) return { outcome: 'console-only', type: typeId }
+    // Cloud Logging, for the platform's Cloud Monitoring policies (AGL-3683).
+    const { writeOperatorAlertLog } = await import('./operator-alerts-log')
+    await writeOperatorAlertLog(alert)
     if (delivery === 'digest') {
       await queueOperatorAlertForDigest(alert)
       return { outcome: 'queued', type: typeId }
