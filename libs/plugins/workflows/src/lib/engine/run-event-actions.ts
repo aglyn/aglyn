@@ -75,6 +75,7 @@ import { renderSiteTextEmail } from '@aglyn/tenant-data-admin/server/host-email-
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
+import { webhookSummaryText } from '../model/webhook-text'
 import {
   ACTION_MAX_EVENT_DEPTH,
   type HostWorkflow,
@@ -591,9 +592,12 @@ async function runServerStep(
       ) {
         return failed(`unknown webhook "${step.webhookName || step.webhookId}"`)
       }
+      // `text` is what a Slack, Google Chat or Teams incoming webhook posts
+      // (AGL-3684); without it Slack refuses the body with `400 no_text`.
       const body = JSON.stringify({
         event,
         payload,
+        text: webhookSummaryText(event, payload as Record<string, unknown>),
         sentAt: new Date().toISOString(),
       })
       const signature = hook.secret
