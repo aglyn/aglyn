@@ -49,6 +49,7 @@ import {
 } from '../model/ai-build-job'
 import { isAiPlanNewRef } from '../model/ai-build-plan'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
+import { aiUnrestrictedPlanCapabilities } from '../model/ai-plan-capabilities'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
@@ -173,7 +174,10 @@ describeLive('the canonical request, planned by the real model (AGL-3616)', () =
     const outcome = (await createAiJobPlanStep({
       readInventory: async () => INVENTORY,
       findPlansByKey: null,
-      readCapabilities: async () => null,
+      // A paid workspace's capabilities, as production reads them for a site:
+      // `null` would hold the plan to the doctrine whole, which no build is
+      // (`aiSitePlanCapabilities`).
+      readCapabilities: async () => aiUnrestrictedPlanCapabilities(),
       readOps: async () => OPS,
       admissionRefusal: async () => null,
     })({

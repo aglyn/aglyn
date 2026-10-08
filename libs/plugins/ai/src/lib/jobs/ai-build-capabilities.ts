@@ -339,7 +339,13 @@ export function aiBuildOpLines(ops: AiBuildOps, structural: readonly string[]): 
   for (const one of items) {
     const args = Object.entries(one.argsSchema.properties).map(([name, property]) => {
       const required = one.argsSchema.required?.includes(name) ? '' : ' (optional)'
-      const choices = property.enum ? ` one of ${property.enum.join('|')}` : ''
+      // An array's values are named too (AGL-3616): told only "days: array",
+      // the live canonical plan wrote "monday" for the enum's "mon".
+      const choices = property.enum
+        ? ` one of ${property.enum.join('|')}`
+        : property.items?.enum
+          ? ` of ${property.items.enum.join('|')}`
+          : ''
       return `${name}: ${property.type}${choices}${required} — ${property.description}`
     })
     lines.push(
