@@ -57,6 +57,129 @@ enum class ApnsEnvironment(val raw: String) {
 internal object ApnsEnvironmentSerializer :
     RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
 
+@Serializable
+data class BookingActions(
+    val cancel: Boolean,
+    val checkIn: Boolean,
+    val refundCents: Long,
+    val reschedule: Boolean,
+    val undoCheckIn: Boolean,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BookingFieldAskSerializer::class)
+enum class BookingFieldAsk(val raw: String) {
+    OFF("off"),
+    OPTIONAL("optional"),
+    REQUIRED("required"),
+    UNKNOWN(""),
+}
+
+internal object BookingFieldAskSerializer :
+    RawEnumSerializer<BookingFieldAsk>("com.aglyn.contracts.BookingFieldAsk", BookingFieldAsk.entries, BookingFieldAsk.UNKNOWN, { it.raw })
+
+@Serializable
+data class BookingInPersonPayment(
+    val amountCents: Long,
+    val attempt: String? = null,
+    val feeCents: Long,
+    val paidAtMs: Long? = null,
+    val paymentIntentId: String,
+    val serviceCents: Long,
+    val startedAtMs: Long,
+    val startedBy: String,
+    val status: BookingInPersonPaymentStatus,
+    val taxCents: Long,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BookingInPersonPaymentStatusSerializer::class)
+enum class BookingInPersonPaymentStatus(val raw: String) {
+    CANCELED("canceled"),
+    PAID("paid"),
+    PENDING("pending"),
+    UNKNOWN(""),
+}
+
+internal object BookingInPersonPaymentStatusSerializer :
+    RawEnumSerializer<BookingInPersonPaymentStatus>("com.aglyn.contracts.BookingInPersonPaymentStatus", BookingInPersonPaymentStatus.entries, BookingInPersonPaymentStatus.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BookingInPersonStateSerializer::class)
+enum class BookingInPersonState(val raw: String) {
+    AWAITING_ONLINE("awaiting-online"),
+    CANCELED("canceled"),
+    COLLECTING("collecting"),
+    PAID("paid"),
+    PAYABLE("payable"),
+    UNKNOWN(""),
+}
+
+internal object BookingInPersonStateSerializer :
+    RawEnumSerializer<BookingInPersonState>("com.aglyn.contracts.BookingInPersonState", BookingInPersonState.entries, BookingInPersonState.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BookingPriceDisplaySerializer::class)
+enum class BookingPriceDisplay(val raw: String) {
+    CONTACT("contact"),
+    ESTIMATE("estimate"),
+    FIXED("fixed"),
+    VARIES("varies"),
+    UNKNOWN(""),
+}
+
+internal object BookingPriceDisplaySerializer :
+    RawEnumSerializer<BookingPriceDisplay>("com.aglyn.contracts.BookingPriceDisplay", BookingPriceDisplay.entries, BookingPriceDisplay.UNKNOWN, { it.raw })
+
+@Serializable
+data class BookingServiceDraft(
+    val askAddress: BookingFieldAsk,
+    val askPhone: BookingFieldAsk,
+    val crmFollowUpTask: Boolean,
+    val crmMeetingActivity: Boolean,
+    val description: String,
+    val durationMinutes: String,
+    val name: String,
+    val priceDisplay: BookingPriceDisplay,
+    val priceUsd: String,
+    val timezone: String,
+    val windowText: List<String>,
+)
+
+@Serializable
+data class BookingServiceFields(
+    val askAddress: BookingFieldAsk,
+    val askPhone: BookingFieldAsk,
+    val crmFollowUpTask: Boolean,
+    val crmMeetingActivity: Boolean,
+    val description: String,
+    val durationMinutes: Long,
+    val name: String,
+    val priceDisplay: BookingPriceDisplay,
+    val priceUsd: Long,
+    val timezone: String,
+    val windows: Map<String, List<BookingWindow>>,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BookingStateSerializer::class)
+enum class BookingState(val raw: String) {
+    CANCELED("canceled"),
+    CONFIRMED("confirmed"),
+    EXPIRED("expired"),
+    PENDING_PAYMENT("pendingPayment"),
+    UNKNOWN(""),
+}
+
+internal object BookingStateSerializer :
+    RawEnumSerializer<BookingState>("com.aglyn.contracts.BookingState", BookingState.entries, BookingState.UNKNOWN, { it.raw })
+
+@Serializable
+data class BookingWindow(
+    val end: Long,
+    val start: Long,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = ContentSchemaTypeSerializer::class)
 enum class ContentSchemaType(val raw: String) {
@@ -114,9 +237,73 @@ internal object CrmForecastCategorySerializer :
     RawEnumSerializer<CrmForecastCategory>("com.aglyn.contracts.CrmForecastCategory", CrmForecastCategory.entries, CrmForecastCategory.UNKNOWN, { it.raw })
 
 @Serializable
+data class DeviceSplitEntry(
+    val count: Long,
+    val device: String,
+    val percent: Long,
+)
+
+@Serializable
 data class EntryStatusOptionsItem(
     val label: String,
     val value: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = EventRemovableFieldSerializer::class)
+enum class EventRemovableField(val raw: String) {
+    COVER_IMAGE("coverImage"),
+    COVER_IMAGE_ALT("coverImageAlt"),
+    DESCRIPTION("description"),
+    LOCATION("location"),
+    ORGANIZER("organizer"),
+    UNKNOWN(""),
+}
+
+internal object EventRemovableFieldSerializer :
+    RawEnumSerializer<EventRemovableField>("com.aglyn.contracts.EventRemovableField", EventRemovableField.entries, EventRemovableField.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = EventStatusSerializer::class)
+enum class EventStatus(val raw: String) {
+    DRAFT("draft"),
+    PUBLISHED("published"),
+    UNKNOWN(""),
+}
+
+internal object EventStatusSerializer :
+    RawEnumSerializer<EventStatus>("com.aglyn.contracts.EventStatus", EventStatus.entries, EventStatus.UNKNOWN, { it.raw })
+
+@Serializable
+data class EventStoredFields(
+    val coverImage: String? = null,
+    val coverImageAlt: String? = null,
+    val description: String? = null,
+    val endsAtMs: Long,
+    val location: String? = null,
+    val organizer: String? = null,
+    val startsAtMs: Long,
+    val status: EventStatus,
+    val title: String,
+)
+
+@Serializable
+data class EventWrite(
+    val fields: EventStoredFields,
+    val remove: List<EventRemovableField>,
+)
+
+@Serializable
+data class EventWriteInput(
+    val coverImage: String? = null,
+    val coverImageAlt: String? = null,
+    val description: String? = null,
+    val endsAtMs: Long? = null,
+    val location: String? = null,
+    val organizer: String? = null,
+    val startsAtMs: Long,
+    val status: EventStatus,
+    val title: String,
 )
 
 @Serializable
@@ -129,6 +316,16 @@ data class FormLeadRoutingOptionsItem(
 data class FormStatusOptionsItem(
     val label: String,
     val value: String,
+)
+
+@Serializable
+data class HostEventDeclaration(
+    val label: String,
+    val order: Double,
+    val payloadKeys: List<String>? = null,
+    val pluginId: String? = null,
+    val recipientActed: Boolean? = null,
+    val type: String,
 )
 
 @Serializable
@@ -539,6 +736,17 @@ internal object ListQuerySortDirectionSerializer :
 data class LocalBusinessTypeOptionsItem(
     val label: String,
     val value: String,
+)
+
+@Serializable
+data class ManagedBooking(
+    val checkedInAtMs: Double? = null,
+    val endsAtMs: Double? = null,
+    val expiresAtMs: Double? = null,
+    val paidAmountCents: Double? = null,
+    val refundedCents: Double? = null,
+    val startsAtMs: Double? = null,
+    val status: String? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -1118,6 +1326,14 @@ data class ReceiptTender(
 )
 
 @Serializable
+data class ScreenTrafficRow(
+    val devices: Map<String, Double>,
+    val referrers: Map<String, Double>,
+    val screenId: String,
+    val total: Long,
+)
+
+@Serializable
 data class SiteFilterOptions(
     val hasCustomDomain: List<SiteFilterOptionsHasCustomDomainItem>,
 )
@@ -1158,6 +1374,16 @@ data class TenantEmailEntry(
 @Serializable
 data class ContractValues(
     @SerialName("AREA_SERVED_MAX") val areaServedMax: Long,
+    @SerialName("BOOKING_FIELD_ASKS") val bookingFieldAsks: List<BookingFieldAsk>,
+    @SerialName("BOOKING_IN_PERSON_MAX_CENTS") val bookingInPersonMaxCents: Long,
+    @SerialName("BOOKING_IN_PERSON_MIN_CENTS") val bookingInPersonMinCents: Long,
+    @SerialName("BOOKING_MAX_DAYS_AHEAD") val bookingMaxDaysAhead: Long,
+    @SerialName("BOOKING_PRICE_DISPLAYS") val bookingPriceDisplays: List<BookingPriceDisplay>,
+    @SerialName("BOOKING_PRICE_LABELS") val bookingPriceLabels: Map<String, String>,
+    @SerialName("BOOKING_SERVICE_DESCRIPTION_MAX") val bookingServiceDescriptionMax: Long,
+    @SerialName("BOOKING_SERVICE_NAME_MAX") val bookingServiceNameMax: Long,
+    @SerialName("BOOKING_STATE_LABELS") val bookingStateLabels: Map<String, String>,
+    @SerialName("BOOKING_WEEKDAYS") val bookingWeekdays: List<String>,
     @SerialName("CAMPAIGN_EMAILS_QUERY") val campaignEmailsQuery: ListQueryDeclaration,
     @SerialName("COMPANY_LIST_DECLARATION") val companyListDeclaration: ListQueryDeclaration,
     @SerialName("COMPONENT_LIST_QUERY") val componentListQuery: ListQueryDeclaration,
@@ -1174,6 +1400,7 @@ data class ContractValues(
     @SerialName("CRM_LEAD_STATUS_LABELS") val crmLeadStatusLabels: Map<String, String>,
     @SerialName("CRM_REPORT_PERIOD_LABELS") val crmReportPeriodLabels: Map<String, String>,
     @SerialName("CRM_TASK_KIND_LABELS") val crmTaskKindLabels: Map<String, String>,
+    @SerialName("CROSS_MAX_DEPTH") val crossMaxDepth: Long,
     @SerialName("DEAL_LIST_DECLARATION") val dealListDeclaration: ListQueryDeclaration,
     @SerialName("DEFAULT_DEAL_STAGES") val defaultDealStages: List<CrmDealStage>,
     @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
@@ -1182,6 +1409,12 @@ data class ContractValues(
     @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
     @SerialName("ENTRY_LIST_QUERY") val entryListQuery: ListQueryDeclaration,
     @SerialName("ENTRY_STATUS_OPTIONS") val entryStatusOptions: List<EntryStatusOptionsItem>,
+    @SerialName("EVENT_COVER_ALT_MAX_LENGTH") val eventCoverAltMaxLength: Long,
+    @SerialName("EVENT_DEFAULT_DURATION_MS") val eventDefaultDurationMs: Double,
+    @SerialName("EVENT_DESCRIPTION_MAX_LENGTH") val eventDescriptionMaxLength: Long,
+    @SerialName("EVENT_LOCATION_MAX_LENGTH") val eventLocationMaxLength: Long,
+    @SerialName("EVENT_ORGANIZER_MAX_LENGTH") val eventOrganizerMaxLength: Long,
+    @SerialName("EVENT_TITLE_MAX_LENGTH") val eventTitleMaxLength: Long,
     @SerialName("EXPERIMENT_LIST_QUERY") val experimentListQuery: ListQueryDeclaration,
     @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
     @SerialName("FORM_LEAD_ROUTING_OPTIONS") val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem>,
@@ -1189,6 +1422,9 @@ data class ContractValues(
     @SerialName("FORM_LIST_QUERY") val formListQuery: ListQueryDeclaration,
     @SerialName("FORM_SCOPED_SUBMISSION_LIST_QUERY") val formScopedSubmissionListQuery: ListQueryDeclaration,
     @SerialName("FORM_STATUS_OPTIONS") val formStatusOptions: List<FormStatusOptionsItem>,
+    @SerialName("FUNCTION_BUILTIN_NAMES") val functionBuiltinNames: List<String>,
+    @SerialName("FUNCTION_MAX_OPERATIONS") val functionMaxOperations: Long,
+    @SerialName("HOST_EVENTS") val hostEvents: List<HostEventDeclaration>,
     @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
     @SerialName("LEAD_LIST_QUERY") val leadListQuery: ListQueryDeclaration,
@@ -1255,6 +1491,8 @@ data class ContractValues(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
+    @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
+    @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
     @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
@@ -1275,4 +1513,5 @@ data class ContractValues(
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
+    @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )

@@ -28,10 +28,10 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Inbox | `inbox` | AGL-3669 | [x] | [x] |
 | Emails, campaigns, funnels, texts | `email`, `marketing`, `funnels`, `sms` (email design = Besigner) | AGL-3669 | [ ] | [ ] |
 | Sequences (internal only) | `outreach`, where the console shows it | AGL-3669 | [x] | [x] |
-| Bookings, events calendar | `bookings`, `events-calendar` | AGL-3670 | [ ] | [ ] |
-| Analytics | `hosts/[host]/analytics` | AGL-3670 | [ ] | [ ] |
-| Automations | `workflows` | AGL-3670 | [ ] | [ ] |
-| Notifications and their settings | `manage/notifications/*` | AGL-3670 | [ ] | [ ] |
+| Bookings, events calendar | `bookings`, `events-calendar` | AGL-3670 | [x] | [x] |
+| Analytics | `hosts/[host]/analytics` | AGL-3670 | [x] | [x] |
+| Automations | `workflows` | AGL-3670 | [x] | [x] |
+| Notifications and their settings | `manage/notifications/*` | AGL-3670 | [x] | [x] |
 | AI | `ai` (credits, jobs, settings) | AGL-3671 | [ ] | [ ] |
 | Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [ ] | [ ] |
 | Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [ ] | [ ] |

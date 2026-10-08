@@ -84,6 +84,183 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct BookingActions: Codable, Hashable, Sendable {
+  public var cancel: Bool
+  public var checkIn: Bool
+  public var refundCents: Int
+  public var reschedule: Bool
+  public var undoCheckIn: Bool
+
+  public init(cancel: Bool, checkIn: Bool, refundCents: Int, reschedule: Bool, undoCheckIn: Bool) {
+    self.cancel = cancel
+    self.checkIn = checkIn
+    self.refundCents = refundCents
+    self.reschedule = reschedule
+    self.undoCheckIn = undoCheckIn
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BookingFieldAsk: String, Codable, CaseIterable, Hashable, Sendable {
+  case off = "off"
+  case optional = "optional"
+  case required = "required"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct BookingInPersonPayment: Codable, Hashable, Sendable {
+  public var amountCents: Int
+  public var attempt: String?
+  public var feeCents: Int
+  public var paidAtMs: Int?
+  public var paymentIntentId: String
+  public var serviceCents: Int
+  public var startedAtMs: Int
+  public var startedBy: String
+  public var status: BookingInPersonPaymentStatus
+  public var taxCents: Int
+
+  public init(amountCents: Int, attempt: String? = nil, feeCents: Int, paidAtMs: Int? = nil, paymentIntentId: String, serviceCents: Int, startedAtMs: Int, startedBy: String, status: BookingInPersonPaymentStatus, taxCents: Int) {
+    self.amountCents = amountCents
+    self.attempt = attempt
+    self.feeCents = feeCents
+    self.paidAtMs = paidAtMs
+    self.paymentIntentId = paymentIntentId
+    self.serviceCents = serviceCents
+    self.startedAtMs = startedAtMs
+    self.startedBy = startedBy
+    self.status = status
+    self.taxCents = taxCents
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BookingInPersonPaymentStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case canceled = "canceled"
+  case paid = "paid"
+  case pending = "pending"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BookingInPersonState: String, Codable, CaseIterable, Hashable, Sendable {
+  case awaitingOnline = "awaiting-online"
+  case canceled = "canceled"
+  case collecting = "collecting"
+  case paid = "paid"
+  case payable = "payable"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BookingPriceDisplay: String, Codable, CaseIterable, Hashable, Sendable {
+  case contact = "contact"
+  case estimate = "estimate"
+  case fixed = "fixed"
+  case varies = "varies"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct BookingServiceDraft: Codable, Hashable, Sendable {
+  public var askAddress: BookingFieldAsk
+  public var askPhone: BookingFieldAsk
+  public var crmFollowUpTask: Bool
+  public var crmMeetingActivity: Bool
+  public var description: String
+  public var durationMinutes: String
+  public var name: String
+  public var priceDisplay: BookingPriceDisplay
+  public var priceUsd: String
+  public var timezone: String
+  public var windowText: [String]
+
+  public init(askAddress: BookingFieldAsk, askPhone: BookingFieldAsk, crmFollowUpTask: Bool, crmMeetingActivity: Bool, description: String, durationMinutes: String, name: String, priceDisplay: BookingPriceDisplay, priceUsd: String, timezone: String, windowText: [String]) {
+    self.askAddress = askAddress
+    self.askPhone = askPhone
+    self.crmFollowUpTask = crmFollowUpTask
+    self.crmMeetingActivity = crmMeetingActivity
+    self.description = description
+    self.durationMinutes = durationMinutes
+    self.name = name
+    self.priceDisplay = priceDisplay
+    self.priceUsd = priceUsd
+    self.timezone = timezone
+    self.windowText = windowText
+  }
+}
+
+public struct BookingServiceFields: Codable, Hashable, Sendable {
+  public var askAddress: BookingFieldAsk
+  public var askPhone: BookingFieldAsk
+  public var crmFollowUpTask: Bool
+  public var crmMeetingActivity: Bool
+  public var description: String
+  public var durationMinutes: Int
+  public var name: String
+  public var priceDisplay: BookingPriceDisplay
+  public var priceUsd: Int
+  public var timezone: String
+  public var windows: [String: [BookingWindow]]
+
+  public init(askAddress: BookingFieldAsk, askPhone: BookingFieldAsk, crmFollowUpTask: Bool, crmMeetingActivity: Bool, description: String, durationMinutes: Int, name: String, priceDisplay: BookingPriceDisplay, priceUsd: Int, timezone: String, windows: [String: [BookingWindow]]) {
+    self.askAddress = askAddress
+    self.askPhone = askPhone
+    self.crmFollowUpTask = crmFollowUpTask
+    self.crmMeetingActivity = crmMeetingActivity
+    self.description = description
+    self.durationMinutes = durationMinutes
+    self.name = name
+    self.priceDisplay = priceDisplay
+    self.priceUsd = priceUsd
+    self.timezone = timezone
+    self.windows = windows
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BookingState: String, Codable, CaseIterable, Hashable, Sendable {
+  case canceled = "canceled"
+  case confirmed = "confirmed"
+  case expired = "expired"
+  case pendingPayment = "pendingPayment"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct BookingWindow: Codable, Hashable, Sendable {
+  public var end: Int
+  public var start: Int
+
+  public init(end: Int, start: Int) {
+    self.end = end
+    self.start = start
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum ContentSchemaType: String, Codable, CaseIterable, Hashable, Sendable {
   case article = "Article"
@@ -156,6 +333,18 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   }
 }
 
+public struct DeviceSplitEntry: Codable, Hashable, Sendable {
+  public var count: Int
+  public var device: String
+  public var percent: Int
+
+  public init(count: Int, device: String, percent: Int) {
+    self.count = count
+    self.device = device
+    self.percent = percent
+  }
+}
+
 public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   public var label: String
   public var value: String
@@ -163,6 +352,91 @@ public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   public init(label: String, value: String) {
     self.label = label
     self.value = value
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EventRemovableField: String, Codable, CaseIterable, Hashable, Sendable {
+  case coverImage = "coverImage"
+  case coverImageAlt = "coverImageAlt"
+  case description = "description"
+  case location = "location"
+  case organizer = "organizer"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EventStatus: String, Codable, CaseIterable, Hashable, Sendable {
+  case draft = "draft"
+  case published = "published"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct EventStoredFields: Codable, Hashable, Sendable {
+  public var coverImage: String?
+  public var coverImageAlt: String?
+  public var description: String?
+  public var endsAtMs: Int
+  public var location: String?
+  public var organizer: String?
+  public var startsAtMs: Int
+  public var status: EventStatus
+  public var title: String
+
+  public init(coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int, location: String? = nil, organizer: String? = nil, startsAtMs: Int, status: EventStatus, title: String) {
+    self.coverImage = coverImage
+    self.coverImageAlt = coverImageAlt
+    self.description = description
+    self.endsAtMs = endsAtMs
+    self.location = location
+    self.organizer = organizer
+    self.startsAtMs = startsAtMs
+    self.status = status
+    self.title = title
+  }
+}
+
+public struct EventWrite: Codable, Hashable, Sendable {
+  public var fields: EventStoredFields
+  public var remove: [EventRemovableField]
+
+  public init(fields: EventStoredFields, remove: [EventRemovableField]) {
+    self.fields = fields
+    self.remove = remove
+  }
+}
+
+public struct EventWriteInput: Codable, Hashable, Sendable {
+  public var coverImage: String?
+  public var coverImageAlt: String?
+  public var description: String?
+  public var endsAtMs: Int?
+  public var location: String?
+  public var organizer: String?
+  public var startsAtMs: Int
+  public var status: EventStatus
+  public var title: String
+
+  public init(coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int? = nil, location: String? = nil, organizer: String? = nil, startsAtMs: Int, status: EventStatus, title: String) {
+    self.coverImage = coverImage
+    self.coverImageAlt = coverImageAlt
+    self.description = description
+    self.endsAtMs = endsAtMs
+    self.location = location
+    self.organizer = organizer
+    self.startsAtMs = startsAtMs
+    self.status = status
+    self.title = title
   }
 }
 
@@ -183,6 +457,24 @@ public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
   public init(label: String, value: String) {
     self.label = label
     self.value = value
+  }
+}
+
+public struct HostEventDeclaration: Codable, Hashable, Sendable {
+  public var label: String
+  public var order: Double
+  public var payloadKeys: [String]?
+  public var pluginId: String?
+  public var recipientActed: Bool?
+  public var type: String
+
+  public init(label: String, order: Double, payloadKeys: [String]? = nil, pluginId: String? = nil, recipientActed: Bool? = nil, type: String) {
+    self.label = label
+    self.order = order
+    self.payloadKeys = payloadKeys
+    self.pluginId = pluginId
+    self.recipientActed = recipientActed
+    self.type = type
   }
 }
 
@@ -811,6 +1103,26 @@ public struct LocalBusinessTypeOptionsItem: Codable, Hashable, Sendable {
   public init(label: String, value: String) {
     self.label = label
     self.value = value
+  }
+}
+
+public struct ManagedBooking: Codable, Hashable, Sendable {
+  public var checkedInAtMs: Double?
+  public var endsAtMs: Double?
+  public var expiresAtMs: Double?
+  public var paidAmountCents: Double?
+  public var refundedCents: Double?
+  public var startsAtMs: Double?
+  public var status: String?
+
+  public init(checkedInAtMs: Double? = nil, endsAtMs: Double? = nil, expiresAtMs: Double? = nil, paidAmountCents: Double? = nil, refundedCents: Double? = nil, startsAtMs: Double? = nil, status: String? = nil) {
+    self.checkedInAtMs = checkedInAtMs
+    self.endsAtMs = endsAtMs
+    self.expiresAtMs = expiresAtMs
+    self.paidAmountCents = paidAmountCents
+    self.refundedCents = refundedCents
+    self.startsAtMs = startsAtMs
+    self.status = status
   }
 }
 
@@ -1683,6 +1995,20 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
   }
 }
 
+public struct ScreenTrafficRow: Codable, Hashable, Sendable {
+  public var devices: [String: Double]
+  public var referrers: [String: Double]
+  public var screenId: String
+  public var total: Int
+
+  public init(devices: [String: Double], referrers: [String: Double], screenId: String, total: Int) {
+    self.devices = devices
+    self.referrers = referrers
+    self.screenId = screenId
+    self.total = total
+  }
+}
+
 public struct SiteFilterOptions: Codable, Hashable, Sendable {
   public var hasCustomDomain: [SiteFilterOptionsHasCustomDomainItem]
 
@@ -1743,6 +2069,16 @@ public struct TenantEmailEntry: Codable, Hashable, Sendable {
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let areaServedMax: Int
+  public let bookingFieldAsks: [BookingFieldAsk]
+  public let bookingInPersonMaxCents: Int
+  public let bookingInPersonMinCents: Int
+  public let bookingMaxDaysAhead: Int
+  public let bookingPriceDisplays: [BookingPriceDisplay]
+  public let bookingPriceLabels: [String: String]
+  public let bookingServiceDescriptionMax: Int
+  public let bookingServiceNameMax: Int
+  public let bookingStateLabels: [String: String]
+  public let bookingWeekdays: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
@@ -1759,6 +2095,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmLeadStatusLabels: [String: String]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
+  public let crossMaxDepth: Int
   public let dealListDeclaration: ListQueryDeclaration
   public let defaultDealStages: [CrmDealStage]
   public let defaultTitlePattern: String
@@ -1767,6 +2104,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let entryListFilterHeaders: [String: String]
   public let entryListQuery: ListQueryDeclaration
   public let entryStatusOptions: [EntryStatusOptionsItem]
+  public let eventCoverAltMaxLength: Int
+  public let eventDefaultDurationMs: Double
+  public let eventDescriptionMaxLength: Int
+  public let eventLocationMaxLength: Int
+  public let eventOrganizerMaxLength: Int
+  public let eventTitleMaxLength: Int
   public let experimentListQuery: ListQueryDeclaration
   public let formInUse: ListQueryFilter
   public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
@@ -1774,6 +2117,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let formListQuery: ListQueryDeclaration
   public let formScopedSubmissionListQuery: ListQueryDeclaration
   public let formStatusOptions: [FormStatusOptionsItem]
+  public let functionBuiltinNames: [String]
+  public let functionMaxOperations: Int
+  public let hostEvents: [HostEventDeclaration]
   public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
   public let leadListQuery: ListQueryDeclaration
@@ -1840,6 +2186,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
+  public let reminderWindowEndHours: Int
+  public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
   public let replySubjectMax: Int
   public let scopedSearchJoin: String
@@ -1860,9 +2208,20 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let templateListQuery: ListQueryDeclaration
   public let tenantEmailCollection: String
   public let tenantEmails: [TenantEmailEntry]
+  public let workflowMaxSteps: Int
 
   enum CodingKeys: String, CodingKey {
     case areaServedMax = "AREA_SERVED_MAX"
+    case bookingFieldAsks = "BOOKING_FIELD_ASKS"
+    case bookingInPersonMaxCents = "BOOKING_IN_PERSON_MAX_CENTS"
+    case bookingInPersonMinCents = "BOOKING_IN_PERSON_MIN_CENTS"
+    case bookingMaxDaysAhead = "BOOKING_MAX_DAYS_AHEAD"
+    case bookingPriceDisplays = "BOOKING_PRICE_DISPLAYS"
+    case bookingPriceLabels = "BOOKING_PRICE_LABELS"
+    case bookingServiceDescriptionMax = "BOOKING_SERVICE_DESCRIPTION_MAX"
+    case bookingServiceNameMax = "BOOKING_SERVICE_NAME_MAX"
+    case bookingStateLabels = "BOOKING_STATE_LABELS"
+    case bookingWeekdays = "BOOKING_WEEKDAYS"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
@@ -1879,6 +2238,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmLeadStatusLabels = "CRM_LEAD_STATUS_LABELS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
+    case crossMaxDepth = "CROSS_MAX_DEPTH"
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
@@ -1887,6 +2247,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
     case entryListQuery = "ENTRY_LIST_QUERY"
     case entryStatusOptions = "ENTRY_STATUS_OPTIONS"
+    case eventCoverAltMaxLength = "EVENT_COVER_ALT_MAX_LENGTH"
+    case eventDefaultDurationMs = "EVENT_DEFAULT_DURATION_MS"
+    case eventDescriptionMaxLength = "EVENT_DESCRIPTION_MAX_LENGTH"
+    case eventLocationMaxLength = "EVENT_LOCATION_MAX_LENGTH"
+    case eventOrganizerMaxLength = "EVENT_ORGANIZER_MAX_LENGTH"
+    case eventTitleMaxLength = "EVENT_TITLE_MAX_LENGTH"
     case experimentListQuery = "EXPERIMENT_LIST_QUERY"
     case formInUse = "FORM_IN_USE"
     case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
@@ -1894,6 +2260,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case formListQuery = "FORM_LIST_QUERY"
     case formScopedSubmissionListQuery = "FORM_SCOPED_SUBMISSION_LIST_QUERY"
     case formStatusOptions = "FORM_STATUS_OPTIONS"
+    case functionBuiltinNames = "FUNCTION_BUILTIN_NAMES"
+    case functionMaxOperations = "FUNCTION_MAX_OPERATIONS"
+    case hostEvents = "HOST_EVENTS"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
     case leadListQuery = "LEAD_LIST_QUERY"
@@ -1960,6 +2329,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
+    case reminderWindowEndHours = "REMINDER_WINDOW_END_HOURS"
+    case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
@@ -1980,5 +2351,6 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case templateListQuery = "TEMPLATE_LIST_QUERY"
     case tenantEmailCollection = "TENANT_EMAIL_COLLECTION"
     case tenantEmails = "TENANT_EMAILS"
+    case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
   }
 }

@@ -1,10 +1,34 @@
 package com.aglyn.ui
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Today
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.PlayCircleOutline
+import androidx.compose.material.icons.outlined.ViewWeek
+import androidx.compose.material.icons.outlined.ViewDay
+import androidx.compose.material.icons.outlined.ViewAgenda
+import androidx.compose.material.icons.outlined.DesignServices
+import androidx.compose.material.icons.outlined.Webhook
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.HowToReg
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
-import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Pause
@@ -87,8 +111,11 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FileCopy
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.Handshake
 import androidx.compose.material.icons.outlined.PersonAdd
@@ -102,14 +129,10 @@ import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Segment
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.CallMerge
@@ -199,9 +222,37 @@ object AglynIcons {
     "done_all" to Icons.Outlined.DoneAll,
     "location_on" to Icons.Outlined.LocationOn,
     "undo" to Icons.AutoMirrored.Outlined.Undo,
-    // CRM, Inbox and Email (AGL-3669).
-    "expand_more" to Icons.Outlined.ExpandMore,
+    "filter_list" to Icons.Outlined.FilterList,
+    "done" to Icons.Outlined.Done,
+    "calendar_month" to Icons.Outlined.CalendarMonth,
+    "today" to Icons.Outlined.Today,
+    "chevron_left" to Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+    "event_available" to Icons.Outlined.EventAvailable,
+    "event_busy" to Icons.Outlined.EventBusy,
+    "phone" to Icons.Outlined.Phone,
     "edit" to Icons.Outlined.Edit,
+    "account_tree" to Icons.Outlined.AccountTree,
+    "bar_chart" to Icons.Outlined.BarChart,
+    "play_circle" to Icons.Outlined.PlayCircleOutline,
+    "view_week" to Icons.Outlined.ViewWeek,
+    "view_day" to Icons.Outlined.ViewDay,
+    "view_agenda" to Icons.Outlined.ViewAgenda,
+    "design_services" to Icons.Outlined.DesignServices,
+    "webhook" to Icons.Outlined.Webhook,
+    "link" to Icons.Outlined.Link,
+    "devices" to Icons.Outlined.Devices,
+    "trending_up" to Icons.AutoMirrored.Outlined.TrendingUp,
+    "filter_alt" to Icons.Outlined.FilterAlt,
+    "person_check" to Icons.Outlined.HowToReg,
+    "content_copy" to Icons.Outlined.ContentCopy,
+    "visibility" to Icons.Outlined.Visibility,
+    "mouse" to Icons.Outlined.Mouse,
+    "expand_more" to Icons.Outlined.ExpandMore,
+    "expand_less" to Icons.Outlined.ExpandLess,
+    "file_copy" to Icons.Outlined.FileCopy,
+    "key" to Icons.Outlined.Key,
+    "play_arrow" to Icons.Outlined.PlayArrow,
+    // CRM, Inbox and Email (AGL-3669).
     "business" to Icons.Outlined.Business,
     "handshake" to Icons.Outlined.Handshake,
     "person_add" to Icons.Outlined.PersonAdd,
@@ -215,9 +266,6 @@ object AglynIcons {
     "mark_unread" to Icons.Outlined.MarkEmailUnread,
     "mark_read" to Icons.Outlined.Drafts,
     "send" to Icons.AutoMirrored.Outlined.Send,
-    "filter_list" to Icons.Outlined.FilterList,
-    "bar_chart" to Icons.Outlined.BarChart,
-    "filter_alt" to Icons.Outlined.FilterAlt,
     "list" to Icons.AutoMirrored.Outlined.List,
     "label" to Icons.AutoMirrored.Outlined.Label,
     "timeline" to Icons.Outlined.Timeline,
@@ -237,7 +285,6 @@ object AglynIcons {
     "web_asset" to Icons.Outlined.WebAsset,
     "archive" to Icons.Outlined.Archive,
     "lock" to Icons.Outlined.Lock,
-    "link" to Icons.Outlined.Link,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: CONTENT_ICONS[name] ?: Icons.Outlined.Extension

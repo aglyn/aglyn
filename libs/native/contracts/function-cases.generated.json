@@ -191,6 +191,99 @@
         }
       ]
     },
+    "aggregateScreenDays": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "screenId": "home",
+                "day": "2026-10-01",
+                "total": 5,
+                "devices": {
+                  "mobile": 3,
+                  "desktop": 2
+                },
+                "referrers": {
+                  "google.com": 2
+                }
+              },
+              {
+                "screenId": "home",
+                "day": "2026-10-02",
+                "total": 4,
+                "devices": {
+                  "mobile": 1
+                },
+                "referrers": {
+                  "bing.com": 3
+                }
+              },
+              {
+                "screenId": "about",
+                "total": 2,
+                "devices": {
+                  "desktop": 2
+                }
+              },
+              {
+                "screenId": "",
+                "total": 9
+              },
+              {
+                "screenId": "x",
+                "total": 0
+              },
+              {
+                "screenId": "y",
+                "total": "3",
+                "devices": {
+                  "tablet": "2",
+                  "bad": -1
+                }
+              }
+            ]
+          ],
+          "result": [
+            {
+              "devices": {
+                "desktop": 2,
+                "mobile": 4
+              },
+              "referrers": {
+                "bing.com": 3,
+                "google.com": 2
+              },
+              "screenId": "home",
+              "total": 9
+            },
+            {
+              "devices": {
+                "tablet": 2
+              },
+              "referrers": {},
+              "screenId": "y",
+              "total": 3
+            },
+            {
+              "devices": {
+                "desktop": 2
+              },
+              "referrers": {},
+              "screenId": "about",
+              "total": 2
+            }
+          ]
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": []
+        }
+      ]
+    },
     "apportionCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -278,6 +371,1087 @@
             10
           ],
           "result": []
+        }
+      ]
+    },
+    "bookingActions": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "cases": [
+        {
+          "args": [
+            {},
+            1800000000000
+          ],
+          "result": {
+            "cancel": true,
+            "checkIn": true,
+            "refundCents": 0,
+            "reschedule": false,
+            "undoCheckIn": false
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": false,
+            "checkIn": false,
+            "refundCents": 4500,
+            "reschedule": false,
+            "undoCheckIn": false
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": true,
+            "checkIn": false,
+            "refundCents": 0,
+            "reschedule": false,
+            "undoCheckIn": false
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": true,
+            "checkIn": false,
+            "refundCents": 0,
+            "reschedule": false,
+            "undoCheckIn": false
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": true,
+            "checkIn": true,
+            "refundCents": 0,
+            "reschedule": true,
+            "undoCheckIn": false
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": true,
+            "checkIn": true,
+            "refundCents": 3500,
+            "reschedule": false,
+            "undoCheckIn": false
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": false,
+            "checkIn": false,
+            "refundCents": 4500,
+            "reschedule": false,
+            "undoCheckIn": true
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            1800000000000
+          ],
+          "result": {
+            "cancel": true,
+            "checkIn": true,
+            "refundCents": 4500,
+            "reschedule": true,
+            "undoCheckIn": false
+          }
+        }
+      ]
+    },
+    "bookingChargeUsd": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 45
+            }
+          ],
+          "result": 45
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 45,
+              "priceDisplay": "varies"
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "priceDisplay": "estimate"
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "priceDisplay": "contact",
+              "priceUsd": 10
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "priceUsd": -3
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "priceUsd": "12.5"
+            }
+          ],
+          "result": 12.5
+        },
+        {
+          "args": [
+            {
+              "priceDisplay": "weird",
+              "priceUsd": 20
+            }
+          ],
+          "result": 20
+        }
+      ]
+    },
+    "bookingDurationMs": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "cases": [
+        {
+          "args": [
+            {},
+            45
+          ],
+          "result": 2700000
+        },
+        {
+          "args": [
+            {},
+            0
+          ],
+          "result": 1800000
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            45
+          ],
+          "result": 2700000
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            0
+          ],
+          "result": 1800000
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            45
+          ],
+          "result": 2700000
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            0
+          ],
+          "result": 1800000
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            45
+          ],
+          "result": 2700000
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            0
+          ],
+          "result": 1800000
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            45
+          ],
+          "result": 3600000
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            0
+          ],
+          "result": 3600000
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            45
+          ],
+          "result": 3600000
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            0
+          ],
+          "result": 3600000
+        }
+      ]
+    },
+    "bookingInPersonAmountProblem": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "Enter the amount to charge."
+        },
+        {
+          "args": [
+            49
+          ],
+          "result": "Card payments start at $0.50."
+        },
+        {
+          "args": [
+            50
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            1000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            1000001
+          ],
+          "result": "Charge at most $10,000 at a time."
+        },
+        {
+          "args": [
+            "abc"
+          ],
+          "result": "Enter the amount to charge."
+        },
+        {
+          "args": [
+            2500.5
+          ],
+          "result": "Enter the amount to charge."
+        }
+      ]
+    },
+    "bookingInPersonState": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "cases": [
+        {
+          "args": [
+            {},
+            1800000000000
+          ],
+          "result": "payable"
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            1800000000000
+          ],
+          "result": "paid"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            1800000000000
+          ],
+          "result": "awaiting-online"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            1800000000000
+          ],
+          "result": "canceled"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            1800000000000
+          ],
+          "result": "payable"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            1800000000000
+          ],
+          "result": "paid"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            1800000000000
+          ],
+          "result": "paid"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            1800000000000
+          ],
+          "result": "paid"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "inPersonPayment": {
+                "status": "pending"
+              }
+            },
+            1800000000000
+          ],
+          "result": "collecting"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "inPersonPayment": {
+                "status": "paid"
+              }
+            },
+            1800000000000
+          ],
+          "result": "paid"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "paymentIntentId": "pi_1"
+            },
+            1800000000000
+          ],
+          "result": "paid"
+        }
+      ]
+    },
+    "bookingOutstandingCents": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            }
+          ],
+          "result": 4500
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            }
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            }
+          ],
+          "result": 3500
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            }
+          ],
+          "result": 4500
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            }
+          ],
+          "result": 4500
+        }
+      ]
+    },
+    "bookingPriceDisplay": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "cases": [
+        {
+          "args": [
+            "fixed"
+          ],
+          "result": "fixed"
+        },
+        {
+          "args": [
+            "varies"
+          ],
+          "result": "varies"
+        },
+        {
+          "args": [
+            "estimate"
+          ],
+          "result": "estimate"
+        },
+        {
+          "args": [
+            "contact"
+          ],
+          "result": "contact"
+        },
+        {
+          "args": [
+            "x"
+          ],
+          "result": "fixed"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "fixed"
+        }
+      ]
+    },
+    "bookingPriceText": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "Free"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": "Free"
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 45
+            }
+          ],
+          "result": "$45"
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 45,
+              "priceDisplay": "varies"
+            }
+          ],
+          "result": "Price varies"
+        },
+        {
+          "args": [
+            {
+              "priceDisplay": "estimate"
+            }
+          ],
+          "result": "Free estimate"
+        },
+        {
+          "args": [
+            {
+              "priceDisplay": "contact",
+              "priceUsd": 10
+            }
+          ],
+          "result": "Contact for price"
+        },
+        {
+          "args": [
+            {
+              "priceUsd": -3
+            }
+          ],
+          "result": "Free"
+        },
+        {
+          "args": [
+            {
+              "priceUsd": "12.5"
+            }
+          ],
+          "result": "$12.5"
+        },
+        {
+          "args": [
+            {
+              "priceDisplay": "weird",
+              "priceUsd": 20
+            }
+          ],
+          "result": "$20"
+        }
+      ]
+    },
+    "bookingServiceDraftFrom": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "askAddress": "off",
+            "askPhone": "off",
+            "crmFollowUpTask": false,
+            "crmMeetingActivity": true,
+            "description": "",
+            "durationMinutes": "30",
+            "name": "",
+            "priceDisplay": "fixed",
+            "priceUsd": "0",
+            "timezone": "UTC",
+            "windowText": [
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Color",
+              "durationMinutes": 45,
+              "priceUsd": 60,
+              "timezone": "Europe/Paris",
+              "description": "Hi",
+              "windows": {
+                "2": [
+                  {
+                    "start": 600,
+                    "end": 660
+                  }
+                ]
+              },
+              "priceDisplay": "nope",
+              "askPhone": "required",
+              "crmMeetingActivity": false,
+              "crmFollowUpTask": true
+            }
+          ],
+          "result": {
+            "askAddress": "off",
+            "askPhone": "required",
+            "crmFollowUpTask": true,
+            "crmMeetingActivity": false,
+            "description": "Hi",
+            "durationMinutes": "45",
+            "name": "Color",
+            "priceDisplay": "fixed",
+            "priceUsd": "60",
+            "timezone": "Europe/Paris",
+            "windowText": [
+              "",
+              "",
+              "10:00-11:00",
+              "",
+              "",
+              "",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    "bookingServiceDraftProblem": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "  "
+            }
+          ],
+          "result": "A service needs a name."
+        },
+        {
+          "args": [
+            {
+              "name": "Cut"
+            }
+          ],
+          "result": null
+        }
+      ]
+    },
+    "bookingServiceFields": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "  Haircut  ",
+              "durationMinutes": "1000",
+              "priceUsd": "19.6",
+              "timezone": " ",
+              "description": "  Trim  ",
+              "windowText": [
+                "",
+                "09:00-17:00",
+                "bad",
+                "10:00-11:00, 12:00-13:00",
+                "",
+                "",
+                ""
+              ],
+              "crmMeetingActivity": true,
+              "crmFollowUpTask": false,
+              "askPhone": "optional",
+              "askAddress": "off",
+              "priceDisplay": "varies"
+            }
+          ],
+          "result": {
+            "askAddress": "off",
+            "askPhone": "optional",
+            "crmFollowUpTask": false,
+            "crmMeetingActivity": true,
+            "description": "Trim",
+            "durationMinutes": 480,
+            "name": "Haircut",
+            "priceDisplay": "varies",
+            "priceUsd": 20,
+            "timezone": "UTC",
+            "windows": {
+              "0": [],
+              "1": [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              "2": [],
+              "3": [
+                {
+                  "end": 660,
+                  "start": 600
+                },
+                {
+                  "end": 780,
+                  "start": 720
+                }
+              ],
+              "4": [],
+              "5": [],
+              "6": []
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "durationMinutes": "abc",
+              "priceUsd": "-3",
+              "timezone": "UTC",
+              "description": "",
+              "windowText": [
+                "",
+                "09:00-17:00",
+                "bad",
+                "10:00-11:00, 12:00-13:00",
+                "",
+                "",
+                ""
+              ],
+              "crmMeetingActivity": true,
+              "crmFollowUpTask": false,
+              "askPhone": "optional",
+              "askAddress": "off",
+              "priceDisplay": "varies"
+            }
+          ],
+          "result": {
+            "askAddress": "off",
+            "askPhone": "optional",
+            "crmFollowUpTask": false,
+            "crmMeetingActivity": true,
+            "description": "",
+            "durationMinutes": 30,
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "priceDisplay": "varies",
+            "priceUsd": 0,
+            "timezone": "UTC",
+            "windows": {
+              "0": [],
+              "1": [
+                {
+                  "end": 1020,
+                  "start": 540
+                }
+              ],
+              "2": [],
+              "3": [
+                {
+                  "end": 660,
+                  "start": 600
+                },
+                {
+                  "end": 780,
+                  "start": 720
+                }
+              ],
+              "4": [],
+              "5": [],
+              "6": []
+            }
+          }
+        }
+      ]
+    },
+    "bookingState": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "cases": [
+        {
+          "args": [
+            {},
+            1800000000000
+          ],
+          "result": "confirmed"
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            1800000000000
+          ],
+          "result": "canceled"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            1800000000000
+          ],
+          "result": "pendingPayment"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            1800000000000
+          ],
+          "result": "expired"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            1800000000000
+          ],
+          "result": "confirmed"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            1800000000000
+          ],
+          "result": "confirmed"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            1800000000000
+          ],
+          "result": "confirmed"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            1800000000000
+          ],
+          "result": "confirmed"
+        }
+      ]
+    },
+    "bookingSuggestedCents": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 45
+            }
+          ],
+          "result": 4500
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 0.4
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 45,
+              "priceDisplay": "varies"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "priceUsd": 12.345,
+              "priceDisplay": "fixed"
+            }
+          ],
+          "result": 1235
         }
       ]
     },
@@ -1059,6 +2233,201 @@
         }
       ]
     },
+    "checkInRefusal": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "cases": [
+        {
+          "args": [
+            {},
+            true,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {},
+            false,
+            1800000000000
+          ],
+          "result": "This guest is not checked in"
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            true,
+            1800000000000
+          ],
+          "result": "This booking was canceled"
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            false,
+            1800000000000
+          ],
+          "result": "This booking was canceled"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            true,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            false,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            true,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            false,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            true,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            false,
+            1800000000000
+          ],
+          "result": "This guest is not checked in"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            true,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            false,
+            1800000000000
+          ],
+          "result": "This guest is not checked in"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            true,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            false,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            true,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            false,
+            1800000000000
+          ],
+          "result": "This guest is not checked in"
+        }
+      ]
+    },
     "consentGroupForHost": {
       "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
       "cases": [
@@ -1556,6 +2925,154 @@
         }
       ]
     },
+    "deviceSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "mobile": 61,
+              "desktop": 39
+            }
+          ],
+          "result": [
+            {
+              "count": 61,
+              "device": "mobile",
+              "percent": 61
+            },
+            {
+              "count": 39,
+              "device": "desktop",
+              "percent": 39
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "desktop": 1,
+              "mobile": 1,
+              "tablet": 1
+            }
+          ],
+          "result": [
+            {
+              "count": 1,
+              "device": "desktop",
+              "percent": 33
+            },
+            {
+              "count": 1,
+              "device": "mobile",
+              "percent": 33
+            },
+            {
+              "count": 1,
+              "device": "tablet",
+              "percent": 33
+            }
+          ]
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "mobile": 0,
+              "desktop": -2
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "desktop": 2,
+              "mobile": 5,
+              "tablet": 3
+            }
+          ],
+          "result": [
+            {
+              "count": 5,
+              "device": "mobile",
+              "percent": 50
+            },
+            {
+              "count": 3,
+              "device": "tablet",
+              "percent": 30
+            },
+            {
+              "count": 2,
+              "device": "desktop",
+              "percent": 20
+            }
+          ]
+        }
+      ]
+    },
+    "deviceSplitLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "device": "mobile",
+                "count": 61,
+                "percent": 61
+              },
+              {
+                "device": "desktop",
+                "count": 39,
+                "percent": 39
+              }
+            ]
+          ],
+          "result": "Mobile / Desktop"
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        }
+      ]
+    },
+    "deviceSplitValue": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "device": "mobile",
+                "count": 61,
+                "percent": 61
+              },
+              {
+                "device": "desktop",
+                "count": 39,
+                "percent": 39
+              }
+            ]
+          ],
+          "result": "61% / 39%"
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        }
+      ]
+    },
     "emailDesignDocuments": {
       "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
       "cases": [
@@ -1628,6 +3145,1154 @@
               }
             }
           }
+        }
+      ]
+    },
+    "evaluateExpression": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "cases": [
+        {
+          "args": [
+            "1 + 2 * 3",
+            {}
+          ],
+          "result": 7
+        },
+        {
+          "args": [
+            "(1 + 2) * 3",
+            {}
+          ],
+          "result": 9
+        },
+        {
+          "args": [
+            "10 / 4",
+            {}
+          ],
+          "result": 2.5
+        },
+        {
+          "args": [
+            "-3 + 5",
+            {}
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "- -2",
+            {}
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "price * qty",
+            {
+              "price": 2.5,
+              "qty": 4
+            }
+          ],
+          "result": 10
+        },
+        {
+          "args": [
+            "'a' + 1",
+            {}
+          ],
+          "result": "a1"
+        },
+        {
+          "args": [
+            "\"x\" + name",
+            {
+              "name": "y"
+            }
+          ],
+          "result": "xy"
+        },
+        {
+          "args": [
+            "1 + true",
+            {}
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "flag",
+            {
+              "flag": true
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "n + 1",
+            {
+              "n": "41"
+            }
+          ],
+          "result": "411"
+        },
+        {
+          "args": [
+            "min(3, 1, 2)",
+            {}
+          ],
+          "result": 1
+        },
+        {
+          "args": [
+            "max(1, 7)",
+            {}
+          ],
+          "result": 7
+        },
+        {
+          "args": [
+            "round(2.345, 2)",
+            {}
+          ],
+          "result": 2.35
+        },
+        {
+          "args": [
+            "round(2.5)",
+            {}
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            "floor(2.9)",
+            {}
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "ceil(2.1)",
+            {}
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            "abs(-4)",
+            {}
+          ],
+          "result": 4
+        },
+        {
+          "args": [
+            "format(1234.5, 2)",
+            {}
+          ],
+          "result": "1,234.50"
+        },
+        {
+          "args": [
+            "format(1234567)",
+            {}
+          ],
+          "result": "1,234,567"
+        },
+        {
+          "args": [
+            "format(0.125, 2)",
+            {}
+          ],
+          "result": "0.13"
+        },
+        {
+          "args": [
+            "plan.monthly * 12",
+            {
+              "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+            }
+          ],
+          "result": 348
+        },
+        {
+          "args": [
+            "plan.name",
+            {
+              "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+            }
+          ],
+          "result": "Pro"
+        },
+        {
+          "args": [
+            "plan.on",
+            {
+              "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "min",
+            {
+              "min": 3
+            }
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            ".5 + 1",
+            {}
+          ],
+          "result": 1.5
+        },
+        {
+          "args": [
+            "1.5 * 2",
+            {}
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            "7 - 2 - 1",
+            {}
+          ],
+          "result": 4
+        },
+        {
+          "args": [
+            "8 / 2 / 2",
+            {}
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "round(1.005, 2)",
+            {}
+          ],
+          "result": 1.01
+        },
+        {
+          "args": [
+            "round(-2.5)",
+            {}
+          ],
+          "result": -3
+        }
+      ]
+    },
+    "evaluateHostFunction": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            {
+              "qty": 3
+            }
+          ],
+          "result": {
+            "ok": true,
+            "scope": {
+              "label": "hi",
+              "note": "hi",
+              "qty": 3,
+              "total": 30,
+              "vip": false
+            },
+            "value": 30
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            {
+              "qty": "6",
+              "vip": "true"
+            }
+          ],
+          "result": {
+            "ok": true,
+            "scope": {
+              "label": "hi",
+              "note": "hi",
+              "qty": 6,
+              "total": 48,
+              "vip": true
+            },
+            "value": 48
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            {}
+          ],
+          "result": {
+            "error": "Parameter \"qty\" is required",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            {
+              "qty": "abc"
+            }
+          ],
+          "result": {
+            "error": "\"abc\" is not a number",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "label"
+            },
+            {
+              "qty": 10,
+              "note": "x"
+            }
+          ],
+          "result": {
+            "ok": true,
+            "scope": {
+              "label": "big x",
+              "note": "x",
+              "qty": 10,
+              "total": 100,
+              "vip": false
+            },
+            "value": "big x"
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "g",
+              "parameters": [],
+              "variables": [],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "<",
+                    "right": "2"
+                  },
+                  "then": [
+                    {
+                      "set": "rate",
+                      "expression": "1"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ]
+            },
+            {}
+          ],
+          "result": {
+            "error": "Unknown variable \"rate\"",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "g",
+              "parameters": [],
+              "variables": [
+                {
+                  "name": "v",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "v",
+                      "expression": "rate * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "v"
+            },
+            {},
+            {
+              "globals": {
+                "rate": 21
+              }
+            }
+          ],
+          "result": {
+            "ok": true,
+            "scope": {
+              "rate": 21,
+              "v": 42
+            },
+            "value": 42
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "g",
+              "parameters": [],
+              "variables": [],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "rate",
+                      "expression": "1"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ]
+            },
+            {},
+            {
+              "globals": {
+                "rate": 21
+              }
+            }
+          ],
+          "result": {
+            "error": "\"rate\" is a site variable: a function can read it, not set it",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "g",
+              "parameters": [],
+              "variables": [
+                {
+                  "name": "v",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "v",
+                      "workflow": "w"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "v"
+            },
+            {}
+          ],
+          "result": {
+            "error": "Workflow calls are not available here",
+            "ok": false
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "g",
+              "parameters": [],
+              "variables": [
+                {
+                  "name": "v",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "'a'",
+                    "comparator": "!=",
+                    "right": "'b'"
+                  },
+                  "then": [
+                    {
+                      "set": "v",
+                      "expression": "bad +"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "v"
+            },
+            {}
+          ],
+          "result": {
+            "error": "Unknown name \"bad\"",
+            "ok": false
+          }
+        }
+      ]
+    },
+    "eventEndsAtMs": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "cases": [
+        {
+          "args": [
+            1800000000000,
+            1800000000005
+          ],
+          "result": 1800000000005
+        },
+        {
+          "args": [
+            1800000000000,
+            1800000000000
+          ],
+          "result": 1800003600000
+        },
+        {
+          "args": [
+            1800000000000,
+            null
+          ],
+          "result": 1800003600000
+        },
+        {
+          "args": [
+            1800000000000,
+            0
+          ],
+          "result": 1800003600000
+        },
+        {
+          "args": [
+            1800000000000,
+            1799999999990
+          ],
+          "result": 1800003600000
+        }
+      ]
+    },
+    "eventStatusOf": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "cases": [
+        {
+          "args": [
+            "draft"
+          ],
+          "result": "draft"
+        },
+        {
+          "args": [
+            " Published "
+          ],
+          "result": "published"
+        },
+        {
+          "args": [
+            "deleted"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            3
+          ],
+          "result": null
+        }
+      ]
+    },
+    "eventWrite": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "title": "  Launch party  ",
+              "startsAtMs": 1800000000000,
+              "endsAtMs": 1800007200000,
+              "location": " Hall ",
+              "organizer": "Ada",
+              "description": "Bring a friend",
+              "coverImage": "/api/media/cdn/h1/m1",
+              "coverImageAlt": " A crowd ",
+              "status": "published"
+            }
+          ],
+          "result": {
+            "fields": {
+              "coverImage": "/api/media/cdn/h1/m1",
+              "coverImageAlt": "A crowd",
+              "description": "Bring a friend",
+              "endsAtMs": 1800007200000,
+              "location": "Hall",
+              "organizer": "Ada",
+              "startsAtMs": 1800000000000,
+              "status": "published",
+              "title": "Launch party"
+            },
+            "remove": []
+          }
+        },
+        {
+          "args": [
+            {
+              "title": "Talk",
+              "startsAtMs": 1800000000000,
+              "endsAtMs": null,
+              "location": "",
+              "organizer": null,
+              "description": "  ",
+              "coverImage": "",
+              "coverImageAlt": "orphan",
+              "status": "draft"
+            }
+          ],
+          "result": {
+            "fields": {
+              "endsAtMs": 1800003600000,
+              "startsAtMs": 1800000000000,
+              "status": "draft",
+              "title": "Talk"
+            },
+            "remove": [
+              "coverImageAlt"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "title": "Talk",
+              "startsAtMs": 1800000000000,
+              "endsAtMs": null,
+              "location": "",
+              "organizer": null,
+              "description": "  ",
+              "coverImage": "",
+              "coverImageAlt": "orphan",
+              "status": "draft"
+            },
+            {
+              "clearBlank": true
+            }
+          ],
+          "result": {
+            "fields": {
+              "endsAtMs": 1800003600000,
+              "startsAtMs": 1800000000000,
+              "status": "draft",
+              "title": "Talk"
+            },
+            "remove": [
+              "location",
+              "organizer",
+              "description",
+              "coverImage",
+              "coverImageAlt"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "title": "Talk",
+              "startsAtMs": 1800000000000,
+              "endsAtMs": 1799999999000,
+              "location": "",
+              "organizer": null,
+              "description": "  ",
+              "coverImage": "",
+              "coverImageAlt": "orphan",
+              "status": "draft"
+            }
+          ],
+          "result": {
+            "fields": {
+              "endsAtMs": 1800003600000,
+              "startsAtMs": 1800000000000,
+              "status": "draft",
+              "title": "Talk"
+            },
+            "remove": [
+              "coverImageAlt"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "startsAtMs": 1800000000000,
+              "endsAtMs": 1800000000001,
+              "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+              "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+              "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "coverImage": "c",
+              "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "status": "published"
+            }
+          ],
+          "result": {
+            "fields": {
+              "coverImage": "c",
+              "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "endsAtMs": 1800000000001,
+              "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+              "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+              "startsAtMs": 1800000000000,
+              "status": "published",
+              "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            },
+            "remove": []
+          }
+        },
+        {
+          "args": [
+            {
+              "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "startsAtMs": 1800000000000,
+              "endsAtMs": 1800000000001,
+              "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+              "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+              "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "coverImage": "c",
+              "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "status": "published"
+            },
+            {
+              "clearBlank": true
+            }
+          ],
+          "result": {
+            "fields": {
+              "coverImage": "c",
+              "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "endsAtMs": 1800000000001,
+              "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+              "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+              "startsAtMs": 1800000000000,
+              "status": "published",
+              "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            },
+            "remove": []
+          }
+        }
+      ]
+    },
+    "eventWriteProblem": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "title": "",
+              "startsAtMs": 1800000000000
+            }
+          ],
+          "result": "An event needs a title."
+        },
+        {
+          "args": [
+            {
+              "title": "  ",
+              "startsAtMs": 1800000000000
+            }
+          ],
+          "result": "An event needs a title."
+        },
+        {
+          "args": [
+            {
+              "title": "x",
+              "startsAtMs": 0
+            }
+          ],
+          "result": "An event needs a start time."
+        },
+        {
+          "args": [
+            {
+              "title": "x",
+              "startsAtMs": 1800000000000
+            }
+          ],
+          "result": null
         }
       ]
     },
@@ -1841,6 +4506,113 @@
         }
       ]
     },
+    "expressionSyntaxError": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "cases": [
+        {
+          "args": [
+            "subscribe"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "a + b"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "(a + b"
+          ],
+          "result": "Missing closing parenthesis"
+        },
+        {
+          "args": [
+            "a +"
+          ],
+          "result": "Unexpected end of expression"
+        },
+        {
+          "args": [
+            "a b"
+          ],
+          "result": "Unexpected trailing input"
+        },
+        {
+          "args": [
+            "'open"
+          ],
+          "result": "Unterminated string"
+        },
+        {
+          "args": [
+            "a == b"
+          ],
+          "result": "Unexpected character \"=\""
+        },
+        {
+          "args": [
+            "nope(1)"
+          ],
+          "result": "Unknown function \"nope\""
+        },
+        {
+          "args": [
+            "min(1,)"
+          ],
+          "result": "Unexpected token"
+        },
+        {
+          "args": [
+            "min()"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1 # 2"
+          ],
+          "result": "Unexpected character \"#\""
+        },
+        {
+          "args": [
+            "a.b.c"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "a."
+          ],
+          "result": "Bad number at \".\""
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "Unexpected end of expression"
+        },
+        {
+          "args": [
+            "max(1, (2 + 3))"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            ")"
+          ],
+          "result": "Unexpected token"
+        },
+        {
+          "args": [
+            "a,b"
+          ],
+          "result": "Unexpected trailing input"
+        }
+      ]
+    },
     "extractSearchEngineVerificationToken": {
       "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
       "cases": [
@@ -1909,6 +4681,79 @@
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           ],
           "result": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
+    "formatBookingWindows": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "start": 540,
+                "end": 720
+              },
+              {
+                "start": 780,
+                "end": 1050
+              }
+            ]
+          ],
+          "result": "09:00-12:00, 13:00-17:30"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        }
+      ]
+    },
+    "formatDwell": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "cases": [
+        {
+          "args": [
+            0
+          ],
+          "result": "0s"
+        },
+        {
+          "args": [
+            4400
+          ],
+          "result": "4s"
+        },
+        {
+          "args": [
+            65000
+          ],
+          "result": "1m 05s"
+        },
+        {
+          "args": [
+            3600000
+          ],
+          "result": "1h 00m"
+        },
+        {
+          "args": [
+            3725000
+          ],
+          "result": "1h 02m"
+        },
+        {
+          "args": [
+            -5
+          ],
+          "result": "0s"
         }
       ]
     },
@@ -2062,6 +4907,264 @@
             "Not/AZone"
           ],
           "result": "Oct 13, 2026, 2:04 PM"
+        }
+      ]
+    },
+    "hostEventLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "cases": [
+        {
+          "args": [
+            "formSubmission"
+          ],
+          "result": "Form submitted"
+        },
+        {
+          "args": [
+            "pageView"
+          ],
+          "result": "Page viewed"
+        },
+        {
+          "args": [
+            "booking"
+          ],
+          "result": "New booking"
+        },
+        {
+          "args": [
+            "dealWon"
+          ],
+          "result": "Deal won"
+        },
+        {
+          "args": [
+            "orderRefunded"
+          ],
+          "result": "Order refunded"
+        },
+        {
+          "args": [
+            "returnRequested"
+          ],
+          "result": "Return requested"
+        },
+        {
+          "args": [
+            "funnelLeft"
+          ],
+          "result": "Left a funnel"
+        },
+        {
+          "args": [
+            "myCustom"
+          ],
+          "result": "myCustom"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "Event"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "Event"
+        }
+      ]
+    },
+    "hostEventPayloadHint": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "cases": [
+        {
+          "args": [
+            "formSubmission"
+          ],
+          "result": "In scope: formId, formName, path, and every submitted field by name."
+        },
+        {
+          "args": [
+            "pageView"
+          ],
+          "result": "In scope: path."
+        },
+        {
+          "args": [
+            "booking"
+          ],
+          "result": "In scope: serviceName, email, startsAtMs."
+        },
+        {
+          "args": [
+            "lead"
+          ],
+          "result": "In scope: leadId, email, name, source, hostId, formId, campaignIds."
+        },
+        {
+          "args": [
+            "dealWon"
+          ],
+          "result": "In scope: dealId, title, amountCents, currency, stageId, previousStageId, ownerUid, contactId, companyId."
+        },
+        {
+          "args": [
+            "myCustom"
+          ],
+          "result": null
+        }
+      ]
+    },
+    "hostEventRecipientActed": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "cases": [
+        {
+          "args": [
+            "formSubmission"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "booking"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "memberSignUp"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "lead"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "pageView"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "dealWon"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isBookingReminderDue": {
+      "module": "libs/plugins/bookings/src/lib/model/bookings.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "email": "a@b.c",
+              "startsAtMs": 1800086400000
+            },
+            1800000000000
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "email": "a@b.c",
+              "startsAtMs": 1800082800000
+            },
+            1800000000000
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "email": "a@b.c",
+              "startsAtMs": 1800090000000
+            },
+            1800000000000
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "email": "a@b.c",
+              "startsAtMs": 1800090000001
+            },
+            1800000000000
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "email": "a@b.c",
+              "startsAtMs": 1800079200000
+            },
+            1800000000000
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "email": "a@b.c",
+              "startsAtMs": 1800086400000
+            },
+            1800000000000
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "email": "a@b.c",
+              "startsAtMs": 1800086400000
+            },
+            1800000000000
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800086400000
+            },
+            1800000000000
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "email": "a@b.c",
+              "startsAtMs": 1800086400000,
+              "reminderSentAt": 123
+            },
+            1800000000000
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {},
+            1800000000000
+          ],
+          "result": false
         }
       ]
     },
@@ -2757,6 +5860,63 @@
           "result": {
             "email": "a@example.com b@example.com",
             "name": "Bo"
+          }
+        }
+      ]
+    },
+    "newBookingServiceDraft": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "cases": [
+        {
+          "args": [
+            "America/Chicago"
+          ],
+          "result": {
+            "askAddress": "off",
+            "askPhone": "off",
+            "crmFollowUpTask": false,
+            "crmMeetingActivity": true,
+            "description": "",
+            "durationMinutes": "30",
+            "name": "",
+            "priceDisplay": "fixed",
+            "priceUsd": "0",
+            "timezone": "America/Chicago",
+            "windowText": [
+              "",
+              "09:00-17:00",
+              "09:00-17:00",
+              "09:00-17:00",
+              "09:00-17:00",
+              "09:00-17:00",
+              ""
+            ]
+          }
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": {
+            "askAddress": "off",
+            "askPhone": "off",
+            "crmFollowUpTask": false,
+            "crmMeetingActivity": true,
+            "description": "",
+            "durationMinutes": "30",
+            "name": "",
+            "priceDisplay": "fixed",
+            "priceUsd": "0",
+            "timezone": "UTC",
+            "windowText": [
+              "",
+              "09:00-17:00",
+              "09:00-17:00",
+              "09:00-17:00",
+              "09:00-17:00",
+              "09:00-17:00",
+              ""
+            ]
           }
         }
       ]
@@ -4025,6 +7185,54 @@
         }
       ]
     },
+    "parseBookingWindows": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "cases": [
+        {
+          "args": [
+            "09:00-12:00, 13:00-17:30"
+          ],
+          "result": [
+            {
+              "end": 720,
+              "start": 540
+            },
+            {
+              "end": 1050,
+              "start": 780
+            }
+          ]
+        },
+        {
+          "args": [
+            "9:00 - 10:00, nonsense, 18:00-17:00, 23:00-24:30"
+          ],
+          "result": [
+            {
+              "end": 600,
+              "start": 540
+            }
+          ]
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "00:00-24:00"
+          ],
+          "result": [
+            {
+              "end": 1440,
+              "start": 0
+            }
+          ]
+        }
+      ]
+    },
     "pipelineTotals": {
       "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
       "cases": [
@@ -4539,6 +7747,263 @@
         }
       ]
     },
+    "rescheduleRefusal": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "cases": [
+        {
+          "args": [
+            {},
+            1800010800000,
+            1800000000000
+          ],
+          "result": "This booking has already ended"
+        },
+        {
+          "args": [
+            {},
+            1799996400000,
+            1800000000000
+          ],
+          "result": "This booking has already ended"
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": "This booking was canceled"
+        },
+        {
+          "args": [
+            {
+              "status": "canceled",
+              "paidAmountCents": 4500
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "This booking was canceled"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1800000060000
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "pendingPayment",
+              "expiresAtMs": 1799999940000
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "This booking is not paid yet"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "Pick a time that has not passed"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": "This booking has already ended"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799992800000,
+              "endsAtMs": 1799996400000,
+              "paidAmountCents": 4500,
+              "refundedCents": 1000
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "This booking has already ended"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": "This guest is already checked in"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1800003600000,
+              "endsAtMs": 1800007200000,
+              "checkedInAtMs": 1799999999000,
+              "paidAmountCents": 4500
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "This guest is already checked in"
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            1800010800000,
+            1800000000000
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "confirmed",
+              "startsAtMs": 1799998200000,
+              "endsAtMs": 1800001800000,
+              "paidAmountCents": 4500.4,
+              "refundedCents": -5
+            },
+            1799996400000,
+            1800000000000
+          ],
+          "result": "Pick a time that has not passed"
+        }
+      ]
+    },
+    "rollUp": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "paths": {
+                  "/": 3,
+                  "/a": 1
+                }
+              },
+              {
+                "paths": {
+                  "/a": 5
+                }
+              },
+              {}
+            ],
+            "paths"
+          ],
+          "result": [
+            [
+              "/a",
+              6
+            ],
+            [
+              "/",
+              3
+            ]
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "referrers": {
+                  "google.com": 2
+                }
+              },
+              {
+                "referrers": {
+                  "bing.com": 2,
+                  "google.com": 1
+                }
+              }
+            ],
+            "referrers"
+          ],
+          "result": [
+            [
+              "google.com",
+              3
+            ],
+            [
+              "bing.com",
+              2
+            ]
+          ]
+        }
+      ]
+    },
     "routingChips": {
       "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
       "cases": [
@@ -4633,6 +8098,961 @@
               "label": "Not added to the dataset"
             }
           ]
+        }
+      ]
+    },
+    "runWorkflow": {
+      "module": "libs/plugins/workflows/src/lib/model/workflows.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": [
+                {
+                  "functionName": "double",
+                  "args": [
+                    "base"
+                  ],
+                  "resultName": "d"
+                },
+                {
+                  "functionName": "double",
+                  "args": [
+                    "d + 1"
+                  ]
+                }
+              ]
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {
+              "v1": {
+                "name": "base",
+                "type": "number",
+                "value": "5"
+              },
+              "v2": {
+                "name": "flag",
+                "type": "boolean",
+                "value": "true"
+              }
+            }
+          ],
+          "result": {
+            "ok": true,
+            "results": {
+              "d": 10,
+              "step2": 22
+            },
+            "value": 22
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": [
+                {
+                  "functionName": "price",
+                  "args": [
+                    "3",
+                    "flag"
+                  ]
+                }
+              ],
+              "returnValue": "step1"
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {
+              "v1": {
+                "name": "base",
+                "type": "number",
+                "value": "5"
+              },
+              "v2": {
+                "name": "flag",
+                "type": "boolean",
+                "value": "true"
+              }
+            }
+          ],
+          "result": {
+            "ok": true,
+            "results": {
+              "step1": 24
+            },
+            "value": 24
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": [
+                {
+                  "functionName": "missing",
+                  "args": []
+                }
+              ]
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {
+              "v1": {
+                "name": "base",
+                "type": "number",
+                "value": "5"
+              },
+              "v2": {
+                "name": "flag",
+                "type": "boolean",
+                "value": "true"
+              }
+            }
+          ],
+          "result": {
+            "error": "Unknown function \"missing\"",
+            "ok": false,
+            "step": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": [
+                {
+                  "functionName": "double",
+                  "args": [
+                    "nope"
+                  ]
+                }
+              ]
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {
+              "v1": {
+                "name": "base",
+                "type": "number",
+                "value": "5"
+              },
+              "v2": {
+                "name": "flag",
+                "type": "boolean",
+                "value": "true"
+              }
+            }
+          ],
+          "result": {
+            "error": "Step 1: Unknown name \"nope\"",
+            "ok": false,
+            "step": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": [
+                {
+                  "functionName": "double",
+                  "args": [
+                    "qty"
+                  ],
+                  "resultName": "r"
+                }
+              ],
+              "returnValue": "r"
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {},
+            {
+              "qty": 7
+            }
+          ],
+          "result": {
+            "ok": true,
+            "results": {
+              "r": 14
+            },
+            "value": 14
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": []
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {}
+          ],
+          "result": {
+            "ok": true,
+            "results": {},
+            "value": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "w",
+              "steps": [
+                {
+                  "functionName": "double",
+                  "args": [
+                    "1"
+                  ],
+                  "resultName": "a"
+                },
+                {
+                  "functionName": "double",
+                  "args": [
+                    "a"
+                  ],
+                  "resultName": "b"
+                }
+              ],
+              "returnValue": "a"
+            },
+            {
+              "price": {
+                "name": "price",
+                "parameters": [
+                  {
+                    "name": "qty",
+                    "type": "number",
+                    "required": true
+                  },
+                  {
+                    "name": "vip",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "note",
+                    "type": "text",
+                    "defaultValue": "hi"
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "total",
+                    "type": "number"
+                  },
+                  {
+                    "name": "label",
+                    "type": "text"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "vip",
+                      "comparator": "==",
+                      "right": "true"
+                    },
+                    "then": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 8"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "total",
+                        "expression": "qty * 10"
+                      }
+                    ]
+                  },
+                  {
+                    "if": {
+                      "left": "total",
+                      "comparator": ">=",
+                      "right": "50"
+                    },
+                    "then": [
+                      {
+                        "set": "label",
+                        "expression": "'big ' + note"
+                      }
+                    ],
+                    "otherwise": [
+                      {
+                        "set": "label",
+                        "expression": "note"
+                      }
+                    ]
+                  }
+                ],
+                "returnValue": "total"
+              },
+              "double": {
+                "name": "double",
+                "parameters": [
+                  {
+                    "name": "x",
+                    "type": "number",
+                    "required": true
+                  }
+                ],
+                "variables": [
+                  {
+                    "name": "out",
+                    "type": "number"
+                  }
+                ],
+                "operations": [
+                  {
+                    "if": {
+                      "left": "1",
+                      "comparator": "==",
+                      "right": "1"
+                    },
+                    "then": [
+                      {
+                        "set": "out",
+                        "expression": "x * 2"
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ],
+                "returnValue": "out"
+              }
+            },
+            {}
+          ],
+          "result": {
+            "ok": true,
+            "results": {
+              "a": 2,
+              "b": 4
+            },
+            "value": 2
+          }
         }
       ]
     },
@@ -4781,6 +9201,113 @@
             "initials": "JL",
             "label": "Jean-Luc Picard"
           }
+        }
+      ]
+    },
+    "topDevice": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "screenId": "a",
+              "total": 3,
+              "devices": {
+                "mobile": 1,
+                "desktop": 2
+              },
+              "referrers": {}
+            }
+          ],
+          "result": "desktop"
+        },
+        {
+          "args": [
+            {
+              "screenId": "a",
+              "total": 0,
+              "devices": {},
+              "referrers": {}
+            }
+          ],
+          "result": ""
+        }
+      ]
+    },
+    "topReferrer": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "screenId": "a",
+              "total": 3,
+              "devices": {},
+              "referrers": {
+                "x.com": 1,
+                "y.com": 4
+              }
+            }
+          ],
+          "result": "y.com"
+        },
+        {
+          "args": [
+            {
+              "screenId": "a",
+              "total": 0,
+              "devices": {},
+              "referrers": {}
+            }
+          ],
+          "result": ""
+        }
+      ]
+    },
+    "trafficDeltaPct": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "cases": [
+        {
+          "args": [
+            120,
+            100
+          ],
+          "result": 20
+        },
+        {
+          "args": [
+            100,
+            120
+          ],
+          "result": -16.7
+        },
+        {
+          "args": [
+            5,
+            0
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            0,
+            7
+          ],
+          "result": -100
+        },
+        {
+          "args": [
+            1,
+            3
+          ],
+          "result": -66.7
+        },
+        {
+          "args": [
+            333,
+            1000
+          ],
+          "result": -66.7
         }
       ]
     },

@@ -50,6 +50,8 @@ import {
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -128,6 +130,23 @@ const formatDay = (ms: number | null): string =>
 /** A rolled-up figure, or an em dash where nothing recorded one. */
 const figure = (value: CampaignAggregate): string =>
   value.value === null ? '—' : value.value.toLocaleString()
+
+/*
+ * EVERY HEADER SORTS (AGL-3680). A campaign's name and a single send's
+ * subject order the kind's query (`declaration.sorts`); what a row is drawn
+ * from — its sites, its window, its lists, and its figures (a campaign's
+ * summed from its emails for the page, a send's counters absent until
+ * something is counted) — sorts the page.
+ */
+const CAMPAIGN_PAGE_SORT_HEADERS = {
+  sitesLabel: 'Sites',
+  windowState: 'Window',
+  listIds: 'Lists',
+  emails: 'Emails',
+  sent: 'Mail sent',
+  opens: 'Mail opens',
+  clicks: 'Mail clicks',
+}
 
 const WINDOW_LABEL: Record<CampaignListRow['windowState'], string> = {
   undated: 'No dates',
@@ -239,6 +258,8 @@ export function HostCampaignsCard(props: {
    * words are the reader's and carry across.
    *=========================================*/
   const [kind, setKind] = useState<CampaignListKind>('campaign')
+  // The header order asked of the kind on screen; a new kind starts unsorted.
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const [clausesByKind, setClausesByKind] = useState(NO_CLAUSES)
   const [searchWords, setSearchWords] = useState<string[]>([])
   const setKindClauses = useCallback(
@@ -277,6 +298,7 @@ export function HostCampaignsCard(props: {
           : [],
       search: hostId ? [] : gridFilter.searchWords,
       base: campaignContainersScope(hostId),
+      sort: kind === 'campaign' ? askedSort : null,
     },
     deps: [firestore, orgId, hostId, kind],
     idField: '$id',
@@ -288,6 +310,7 @@ export function HostCampaignsCard(props: {
       clauses: kind === 'single' ? gridFilter.clauses : [],
       search: gridFilter.searchWords,
       base: [SINGLE_SENDS_BASE, ...campaignSendsScope(hostId)],
+      sort: kind === 'single' ? askedSort : null,
     },
     deps: [firestore, orgId, hostId, kind],
     idField: '$id',
@@ -422,6 +445,29 @@ export function HostCampaignsCard(props: {
           : '',
       }))
   }, [kind, page.rows, firstSends.rows, restSends.rows, orgMount])
+
+  const pageSorts = useMemo(
+    () => ({
+      sitesLabel: (row: any) => row.sitesLabel || null,
+      windowState: (row: any) => row.startAtMs ?? row.endAtMs ?? null,
+      listIds: (row: any) =>
+        (row.listIds as string[]).map((id) => listNames.get(id) ?? id).join(', ') || null,
+      emails: (row: any) => row.rollup.sends,
+      sent: (row: any) => row.rollup.sent.value,
+      opens: (row: any) => row.rollup.opens.value,
+      clicks: (row: any) => row.rollup.clicks.value,
+    }),
+    [listNames],
+  )
+  const columnSort = useListColumnSort<any>({
+    sorts: declaration.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: page.plan.orderBy,
+    rows,
+    pageSorts,
+    headers: CAMPAIGN_PAGE_SORT_HEADERS,
+  })
 
   /*
    * The choices the picked fields offer. A campaign's Sites are asked by
@@ -938,7 +984,10 @@ export function HostCampaignsCard(props: {
           size="small"
           value={kind}
           onChange={(_event, next: CampaignListKind | null) => {
-            if (next) setKind(next)
+            if (next) {
+              setKind(next)
+              setAskedSort(null)
+            }
           }}
           aria-label="Which rows the table lists"
           sx={{ alignSelf: 'flex-start' }}
@@ -959,14 +1008,14 @@ export function HostCampaignsCard(props: {
             headers: filterHeaders,
             options: filterOptions,
           })}
-          notices={
-            siteSearch
-              ? [CAMPAIGN_SITE_SEARCH_NOTICE, ...page.plan.notices]
-              : page.plan.notices
-          }
+          notices={[
+            ...(siteSearch ? [CAMPAIGN_SITE_SEARCH_NOTICE] : []),
+            ...page.plan.notices,
+            ...columnSort.notices,
+          ]}
         />
         <ListTable
-          rows={rows}
+          rows={columnSort.rows}
           columns={listFilterGridColumns(
             columns as any,
             declaration.fields,
@@ -978,13 +1027,15 @@ export function HostCampaignsCard(props: {
           /*
            * The panel and the search are the grid's; every clause and the
            * search word are on the list's query (AGL-3321), and the grid
-           * neither filters nor sorts the page it is handed.
+           * neither filters nor sorts the page it is handed: a stored
+           * column's header orders the query, a drawn one the page
+           * (AGL-3680).
            */
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           quickFilter
-          disableColumnSorting
+          columnSort={columnSort}
           hideFooter
           initialState={{
             columns: {

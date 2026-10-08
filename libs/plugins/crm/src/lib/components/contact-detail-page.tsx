@@ -50,7 +50,7 @@ import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
 import { CrmEmailStateChip } from './crm-email-state-chip'
-import { CrmEmailGatewayChip } from './crm-email-check'
+import { CrmAccountLockChip, CrmEmailGatewayChip } from './crm-email-check'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
@@ -423,6 +423,11 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 hostId={siteHostId}
                 email={record.email}
                 emailState={record.emailState}
+                enabled={suiteIncluded}
+              />
+              <CrmAccountLockChip
+                hostId={siteHostId}
+                email={record.email}
                 enabled={suiteIncluded}
               />
               <CrmRecordChip

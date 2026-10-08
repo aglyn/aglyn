@@ -133,6 +133,8 @@ const areas = [
   ['marketing', 'seedMarketing'],
   ['email', 'seedEmail'],
   ['store', 'seedCommerce'],
+  ['insights', 'seedInsights'],
+  ['site-rules', 'seedAutomation'],
   ['pos', 'seedPos'],
   ['notifications', 'seedNotifications'],
   ['content', 'seedContent'],

@@ -35,6 +35,8 @@ import {
   type ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   Card,
   CardContent,
@@ -46,7 +48,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import { type MouseEvent, type ReactNode, useMemo } from 'react'
+import { type MouseEvent, type ReactNode, useMemo, useState } from 'react'
 import {
   outreachClickCountLabel,
   outreachClickSummary,
@@ -251,6 +253,38 @@ function filterRow(
     clicked: clicks.clicks > 0 ? OUTREACH_CLICKED_FILTER_VALUE : OUTREACH_UNCLICKED_FILTER_VALUE,
     link: clicks.followed,
   }
+}
+
+/** One table row: the enrollment and what its cells draw. */
+type EnrollmentTableRow = ReturnType<typeof filterRow> & {
+  $id: string
+  openSummary: OutreachOpenSummary
+  clickSummary: OutreachClickSummary
+}
+
+/*
+ * The columns read from `engagement.*` — absent until a person's first
+ * event — and the derived Last activity sort the page on screen (AGL-3680);
+ * Person, Status, Current step, Next send and Stop reason order the query
+ * (`OUTREACH_ENROLLMENT_LIST_QUERY.sorts`).
+ */
+const ENROLLMENT_PAGE_SORTS = {
+  lastActivity: (row: EnrollmentTableRow) => lastActivityMs(row.enrollment) || null,
+  opens: (row: EnrollmentTableRow) => row.openSummary.opens,
+  lastOpen: (row: EnrollmentTableRow) => row.openSummary.lastOpenAtMs,
+  clicks: (row: EnrollmentTableRow) => row.clickSummary.clicks,
+  linksFollowed: (row: EnrollmentTableRow) => row.clickSummary.followed.length,
+  lastClick: (row: EnrollmentTableRow) => row.enrollment.engagement?.lastClickAtMs ?? null,
+  scannerClicks: (row: EnrollmentTableRow) => row.clickSummary.machineClicks,
+}
+const ENROLLMENT_PAGE_SORT_HEADERS = {
+  lastActivity: 'Last activity',
+  opens: 'Opens',
+  lastOpen: 'Last open',
+  clicks: 'Clicks',
+  linksFollowed: 'Links followed',
+  lastClick: 'Last click',
+  scannerClicks: 'Scanner clicks',
 }
 
 /** The stop reason: its short label, with every word of it on hover and on the person's page. */
@@ -502,9 +536,11 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
    * click filters (AGL-3332) are on it too, answered by the `clicked` flag
    * and the destinations the click route stores on each enrollment.
    */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const enrollments = useOutreachEnrollmentList(props.orgId, props.sequenceId, {
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
   })
   const loadedData = enrollments.rows
   const summaries = useMemo(
@@ -569,6 +605,60 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
       options={filterOptions}
     />
   )
+  /*
+   * A next send whose time has come says it is queued, and why, rather than
+   * showing a time already past (AGL-3366): the mailbox sends its share of
+   * the day each run, follow-ups first, so a first email can wait its turn
+   * for an hour or more without anything having failed.
+   */
+  const nextSendState = (enrollment: OutreachEnrollment) =>
+    outreachNextSendState({
+      enrollment,
+      sequence: props.sequence ?? null,
+      mailbox: props.mailbox,
+      nowMs,
+    })
+  const pageRows = enrollments.rows
+  const tableRows: EnrollmentTableRow[] = pageRows.map((enrollment) => {
+    const clicks = clicksOf(enrollment)
+    const opens = outreachOpenSummary(enrollment.engagement)
+    const next = nextSendState(enrollment)
+    return {
+      $id: enrollment.id,
+      ...filterRow(enrollment, steps, clicks),
+      nextSendState: next,
+      // What the export writes: the label, and for a queued send, why.
+      nextSend: [outreachNextSendLabel(next, timeZone), outreachNextSendDetail(next, timeZone)]
+        .filter(Boolean)
+        .join(' — '),
+      lastActivity: formatOutreachTime(
+        lastActivityMs(enrollment),
+        timeZone,
+      ),
+      // What the export writes; the cells draw these their own way.
+      openSummary: opens,
+      clickSummary: clicks,
+      opens: outreachOpenCountLabel(opens),
+      lastOpen: opens.opens ? formatOutreachTime(opens.lastOpenAtMs, timeZone) : '—',
+      clicks: outreachClickCountLabel(clicks),
+      linksFollowed: clicks.followed.join(' ') || '—',
+      lastClick: clicks.clicks
+        ? formatOutreachTime(enrollment.engagement?.lastClickAtMs, timeZone)
+        : '—',
+      scannerClicks: clicks.machineClicks ? String(clicks.machineClicks) : '—',
+      stopReason: outreachStopLabel(enrollment) || '—',
+    } as EnrollmentTableRow
+  })
+  const columnSort = useListColumnSort<EnrollmentTableRow>({
+    sorts: OUTREACH_ENROLLMENT_LIST_QUERY.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: enrollments.plan.orderBy,
+    rows: tableRows,
+    pageSorts: ENROLLMENT_PAGE_SORTS,
+    headers: ENROLLMENT_PAGE_SORT_HEADERS,
+  })
+
   if (enrollments.status === 'loading' && !filtering)
     return <OutreachLoading label="Loading enrollments…" />
   if (enrollments.status === 'error' || enrollments.status === 'refused') {
@@ -602,19 +692,6 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
       items={actions.menuItems(enrollment)}
     />
   )
-  /*
-   * A next send whose time has come says it is queued, and why, rather than
-   * showing a time already past (AGL-3366): the mailbox sends its share of
-   * the day each run, follow-ups first, so a first email can wait its turn
-   * for an hour or more without anything having failed.
-   */
-  const nextSendState = (enrollment: OutreachEnrollment) =>
-    outreachNextSendState({
-      enrollment,
-      sequence: props.sequence ?? null,
-      mailbox: props.mailbox,
-      nowMs,
-    })
   const personName = (enrollment: OutreachEnrollment) => {
     const name = enrollment.contactName || enrollment.email
     if (!hrefFor) return <Typography variant="body2">{name}</Typography>
@@ -649,7 +726,6 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
     </Stack>
   )
 
-  const pageRows = enrollments.rows
 
   return (
     <Stack spacing={1.5}>
@@ -660,7 +736,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
           headers: ENROLLMENT_FILTER_HEADERS,
           options: filterOptions,
         })}
-        notices={enrollments.plan.notices}
+        notices={[...enrollments.plan.notices, ...columnSort.notices]}
       />
       {linkFilterMayMiss ? (
         <Typography variant="caption" color="text.secondary">
@@ -745,35 +821,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
           )}
           initialState={{ columns: { columnVisibilityModel: hiddenColumns } }}
           loading={enrollments.status === 'loading'}
-          rows={pageRows.map((enrollment) => {
-            const clicks = clicksOf(enrollment)
-            const opens = outreachOpenSummary(enrollment.engagement)
-            const next = nextSendState(enrollment)
-            return {
-              $id: enrollment.id,
-              ...filterRow(enrollment, steps, clicks),
-              nextSendState: next,
-              // What the export writes: the label, and for a queued send, why.
-              nextSend: [outreachNextSendLabel(next, timeZone), outreachNextSendDetail(next, timeZone)]
-                .filter(Boolean)
-                .join(' — '),
-              lastActivity: formatOutreachTime(
-                lastActivityMs(enrollment),
-                timeZone,
-              ),
-              // What the export writes; the cells draw these their own way.
-              openSummary: opens,
-              opens: outreachOpenCountLabel(opens),
-              lastOpen: opens.opens ? formatOutreachTime(opens.lastOpenAtMs, timeZone) : '—',
-              clicks: outreachClickCountLabel(clicks),
-              linksFollowed: clicks.followed.join(' ') || '—',
-              lastClick: clicks.clicks
-                ? formatOutreachTime(enrollment.engagement?.lastClickAtMs, timeZone)
-                : '—',
-              scannerClicks: clicks.machineClicks ? String(clicks.machineClicks) : '—',
-              stopReason: outreachStopLabel(enrollment) || '—',
-            }
-          })}
+          rows={columnSort.rows}
           onOpen={
             onOpen
               ? (_id, row: { enrollment: OutreachEnrollment }) => onOpen(row.enrollment)
@@ -782,14 +830,15 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
           /*
            * The panel and the search are the grid's; every clause and the
            * search word are on the table's query (AGL-3321). The grid
-           * neither filters nor sorts the page it is handed: the query's
-           * one order, newest enrolled first, is the table's.
+           * neither filters nor sorts the page it is handed: a stored
+           * column's header orders the query, an engagement one the page
+           * (AGL-3680), newest enrolled first until one is clicked.
            */
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           quickFilter
-          disableColumnSorting
+          columnSort={columnSort}
           noRowsLabel="No enrollments match these filters"
           hideFooter
         />

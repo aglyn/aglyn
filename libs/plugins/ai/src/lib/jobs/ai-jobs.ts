@@ -405,9 +405,23 @@ export function registerAiJobPauseReader(reader: AiJobPauseReader | null): void 
  */
 export type AiJobTransition = 'needs-review' | 'done' | 'failed'
 
+/**
+ * Why a job failed, for staff only (never shown to the customer): whether
+ * the failure was ours — a provider error, a step that produced nothing, a
+ * build that delivered nothing — rather than the model declining the brief
+ * or the site having AI switched off, and what the runner actually said.
+ */
+export interface AiJobFailureCause {
+  ours: boolean
+  stepIndex: number | null
+  error: string | null
+}
+
 export type AiJobTransitionListener = (input: {
   job: AiJob
   to: AiJobTransition
+  /** Present on `failed` only. */
+  failure?: AiJobFailureCause
 }) => Promise<void> | void
 
 let transitionListener: AiJobTransitionListener | null = null
@@ -430,10 +444,14 @@ export function aiJobTransitionListenerRegistered(): boolean {
 }
 
 /** Tells the listener; a listener that throws never fails the write it follows. */
-async function announceAiJobTransition(job: AiJob, to: AiJobTransition): Promise<void> {
+async function announceAiJobTransition(
+  job: AiJob,
+  to: AiJobTransition,
+  failure?: AiJobFailureCause,
+): Promise<void> {
   if (!transitionListener) return
   try {
-    await transitionListener({ job, to })
+    await transitionListener(failure ? { job, to, failure } : { job, to })
   } catch (error) {
     console.error('ai job transition listener failed', { orgId: job.orgId, jobId: job.$id, to, error })
   }
@@ -1174,7 +1192,7 @@ export async function failAiJob(
   orgId: string,
   jobId: string,
   message: string,
-  detail?: { stepIndex?: number; error?: unknown },
+  detail?: { stepIndex?: number; error?: unknown; ours?: boolean },
   now = new Date(),
 ): Promise<AiJob> {
   console.error('ai job failed', {
@@ -1199,7 +1217,13 @@ export async function failAiJob(
           updatedAt: now,
         },
   )
-  if (changed) await announceAiJobTransition(job, 'failed')
+  if (changed) {
+    await announceAiJobTransition(job, 'failed', {
+      ours: detail?.ours ?? false,
+      stepIndex: detail?.stepIndex ?? null,
+      error: detail?.error instanceof Error ? detail.error.message : detail?.error == null ? null : String(detail.error),
+    })
+  }
   return job
 }
 
@@ -1366,7 +1390,7 @@ async function failOurFailure(
   if (current && !isAiJobTerminal(current.status)) {
     await refundOurFailure(firestore, orgId, current, { ...refund, now })
   }
-  return failAiJob(firestore, orgId, jobId, message, detail, now)
+  return failAiJob(firestore, orgId, jobId, message, { ...detail, ours: true }, now)
 }
 
 // ── A build's settlement (AGL-3616) ──────────────────────────────────────
@@ -1593,6 +1617,8 @@ export async function settleAiBuildJob(
   const nothing = job.kind === 'site' ? AI_SITE_GUIDED_BUILD_FAILED_COPY : AI_BUILD_NOTHING_BUILT_COPY
   return failAiJob(firestore, orgId, jobId, stopped?.message ?? nothing, {
     error: 'build delivered nothing',
+    // Ours unless every item that failed was the model declining (AGL-3616).
+    ours: Boolean(stopped) || (job.items ?? []).some((row) => row.status === 'failed' && row.failure?.ours),
   }, now)
 }
 

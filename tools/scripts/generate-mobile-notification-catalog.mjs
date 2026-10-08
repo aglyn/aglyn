@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 /** The catalog the native apps' push settings and notification rows read (docs/mobile/native-architecture.md §6). */
 export const NATIVE_CATALOG_FILE = 'libs/native/contracts/notification-catalog.generated.json'
+export const NATIVE_SETTINGS_CASES_FILE = 'libs/native/contracts/notification-settings-cases.generated.json'
 const SOURCE = 'libs/aglyn/src/lib/app-utils/notifications.ts'
 
 /** The catalog a member's push settings draw, from the core's notifications module. */
@@ -67,12 +68,90 @@ export function nativeCatalogFrom(notifications) {
     levels: notifications.NOTIFICATION_LEVELS.map((id) => ({ id, label: notifications.NOTIFICATION_LEVEL_LABELS[id] })),
     categories: categories.map((category) => ({
       ...category,
+      // The settings page's one-line answer for what the category covers,
+      // and what each channel does when nobody has answered for it.
+      description: notifications.NOTIFICATION_CATEGORY_DESCRIPTIONS[category.id] ?? '',
+      channelDefaults: { ...notifications.NOTIFICATION_CHANNEL_DEFAULTS[category.id] },
       types: category.types.map((type) => ({
         ...type,
+        emailDefault: notifications.notificationTypeChannelDefault(type.type, 'email'),
         level: notifications.NOTIFICATION_TYPE_LEVELS[type.type] ?? 'neutral',
+        // A type that sends its own email: its Email switch says why instead.
+        ...(notifications.NOTIFICATION_SELF_SENT_EMAIL_TYPES.has(type.type)
+          ? { selfSentEmail: notifications.selfSentEmailNote(type.type) }
+          : {}),
       })),
     })),
+    // The digests the settings page lists, under the keys their senders read.
+    digests: notifications.NOTIFICATION_DIGESTS.map(({ key, label, description }) => ({ key, label, description })),
+    digestPrefsField: notifications.DIGEST_PREFS_FIELD,
+    insightDigestsField: notifications.INSIGHT_DIGESTS_FIELD,
   }
+}
+
+/**
+ * The console's own answers for the settings page's switches, replayed by
+ * both native ports: the account card's category value (its own answer, the
+ * legacy console mute, the category default) and type value (the resolver at
+ * the account layer, `notificationChannelEnabled` with no scope), and the
+ * scopes a person has changed.
+ */
+export function settingsCasesFrom(notifications) {
+  const { categories } = catalogFrom(notifications)
+  const fixtures = [
+    { name: 'empty', settings: {}, legacy: {} },
+    {
+      name: 'account answers',
+      settings: {
+        account: { content: { email: false, console: false }, billing: { email: true } },
+        accountTypes: { 'content.order': { email: true }, 'billing.invoice': { console: false } },
+      },
+      legacy: {},
+    },
+    { name: 'legacy mute', settings: { account: { team: { email: true } } }, legacy: { team: false, content: false } },
+    {
+      name: 'scopes',
+      settings: {
+        orgs: { 'org-b': { content: { console: false } }, 'org-a': {} },
+        hosts: { 'host-1': { billing: {} } },
+        orgTypes: { 'org-c': { 'content.order': { email: true } } },
+        hostTypes: { 'host-2': { 'content.booking': { console: false } }, 'host-3': { 'content.order': {} } },
+      },
+      legacy: {},
+    },
+  ]
+  return fixtures.map(({ name, settings, legacy }) => {
+    const categoryValues = {}
+    const typeValues = {}
+    for (const category of categories) {
+      for (const channel of ['console', 'email']) {
+        const own = notifications.notificationScopePref(settings, { kind: 'account' }, category.id, channel)
+        categoryValues[`${category.id}:${channel}`] =
+          typeof own === 'boolean'
+            ? own
+            : channel === 'console' && legacy[category.id] === false
+              ? false
+              : notifications.NOTIFICATION_CHANNEL_DEFAULTS[category.id][channel]
+        for (const { type } of category.types) {
+          typeValues[`${type}:${channel}`] = notifications.notificationChannelEnabled(
+            settings,
+            channel,
+            type,
+            undefined,
+            legacy,
+          )
+        }
+      }
+    }
+    return {
+      name,
+      settings,
+      legacy,
+      categoryValues,
+      typeValues,
+      overridden: notifications.notificationOverriddenScopes(settings),
+    }
+  })
 }
 
 export function catalogContent(catalog, reader) {
@@ -96,7 +175,14 @@ async function main() {
   const outputs = [
     {
       file: NATIVE_CATALOG_FILE,
-      content: catalogContent(nativeCatalogFrom(notifications), "the native apps' push settings and notification rows"),
+      content: catalogContent(nativeCatalogFrom(notifications), "the native apps' notification settings and rows"),
+    },
+    {
+      file: NATIVE_SETTINGS_CASES_FILE,
+      content: catalogContent(
+        { cases: settingsCasesFrom(notifications) },
+        "the native settings screens' tests, which replay the console's answers",
+      ),
     },
   ]
   if (process.argv.includes('--check')) {

@@ -49,6 +49,9 @@ const mockRead = jest.fn(async (input: { email: string; from?: string | null }) 
   chip: { label: 'No MX record — cannot receive mail', tone: 'blocked' },
 }))
 
+let mockAccountLock: 'banned' | 'locked' | null = null
+const mockLockState = jest.fn(async (input: { hostId: string; email: string }) => (input.email ? mockAccountLock : null))
+
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => mockPermissions,
 }))
@@ -74,6 +77,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('@aglyn/tenant-data-admin/server/capture-email-check', () => ({
   __esModule: true,
   readAddressDeliverability: (input: { email: string; from?: string | null }) => mockRead(input),
+}))
+
+jest.mock('@aglyn/tenant-data-admin/server/account-lock-mail', () => ({
+  __esModule: true,
+  accountLockStateFor: (input: { hostId: string; email: string }) => mockLockState(input),
 }))
 
 import { CRM_EMAIL_CHECK_ROUTE, crmEmailCheckHandler } from './email-check'
@@ -116,6 +124,7 @@ beforeEach(() => {
     hostRole: 'editor',
   }
   mockPlan = 'agency'
+  mockAccountLock = null
 })
 
 describe('crm/email-check', () => {
@@ -166,5 +175,33 @@ describe('crm/email-check', () => {
     mockPermissions = { ...mockPermissions, orgWide: false }
     expect((await call({ orgId: ORG, email: 'pat@x.example' })).status).toBe(403)
     expect(mockRead).not.toHaveBeenCalled()
+  })
+
+  describe('an address held by a locked account (AGL-3686)', () => {
+    it('says banned or locked, read on the mounted site', async () => {
+      mockAccountLock = 'banned'
+      const { answer } = await call({ hostId: HOST, email: 'Pat@X.example' })
+      expect(answer).toMatchObject({ ok: true, accountLock: 'banned' })
+      expect(mockLockState).toHaveBeenCalledWith({ hostId: HOST, email: 'pat@x.example' })
+      mockAccountLock = 'locked'
+      expect((await call({ hostId: HOST, email: 'pat@x.example' })).answer.accountLock).toBe('locked')
+    })
+
+    it('says nothing for an address no lock holds', async () => {
+      expect((await call({ hostId: HOST, email: 'pat@x.example' })).answer.accountLock).toBeNull()
+    })
+
+    it('reads no site at the organization level when the named site is not the org’s', async () => {
+      mockAccountLock = 'banned'
+      const { answer } = await call({ orgId: ORG, hostId: OTHER_HOST, email: 'pat@x.example' })
+      expect(answer.accountLock).toBeNull()
+      expect(mockLockState).not.toHaveBeenCalled()
+    })
+
+    it('is not read for a caller the route refuses', async () => {
+      mockPermitted = false
+      await call({ hostId: HOST, email: 'pat@x.example' })
+      expect(mockLockState).not.toHaveBeenCalled()
+    })
   })
 })

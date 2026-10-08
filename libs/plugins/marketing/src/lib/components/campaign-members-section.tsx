@@ -31,6 +31,8 @@ import ListQueryNotices, {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
@@ -50,7 +52,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -520,6 +522,15 @@ const MEMBER_FIGURES = [
   ['leads', 'Leads'],
 ] as const
 
+/*
+ * The figures are summed from the campaign's visits for the members on the
+ * page, so they sort the page; Name orders the query (AGL-3680).
+ */
+const MEMBER_PAGE_SORTS = Object.fromEntries(
+  MEMBER_FIGURES.map(([figure]) => [figure, (row: MemberRow) => row.totals?.[figure] ?? null]),
+)
+const MEMBER_PAGE_SORT_HEADERS = Object.fromEntries(MEMBER_FIGURES)
+
 /** How the search reads on a notice: the box, not a column. */
 const MEMBER_SEARCH_HEADERS: Readonly<Record<string, string>> = {
   name: 'Search',
@@ -555,17 +566,28 @@ function MemberTable(props: {
   const firestore = useFirestore()
   const gridFilter = useListGridFilter({})
   const search = campaignMembersSearchClause(gridFilter.searchWords)
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const page = useListQuery<Record<string, unknown>>({
     collection: collection(firestore, 'hosts', hostId, collectionName),
     declaration: CAMPAIGN_MEMBERS_QUERY,
     request: {
       clauses: search ? [search] : [],
       base: campaignMembersBase(collectionName, campaignId),
+      sort: askedSort,
     },
     deps: [firestore, hostId, collectionName, campaignId],
     idField: '$id',
   })
   const rows = useMemo(() => page.rows.map(toRow), [page.rows, toRow])
+  const columnSort = useListColumnSort<MemberRow>({
+    sorts: CAMPAIGN_MEMBERS_QUERY.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: page.plan.orderBy,
+    rows,
+    pageSorts: figures ? MEMBER_PAGE_SORTS : undefined,
+    headers: MEMBER_PAGE_SORT_HEADERS,
+  })
   // Nothing typed and nothing on the first page: the campaign holds none,
   // which is said in words rather than as an empty grid.
   const none = !search && page.page === 0 && rows.length === 0
@@ -639,15 +661,15 @@ function MemberTable(props: {
               fields: CAMPAIGN_MEMBERS_QUERY.fields,
               headers: MEMBER_SEARCH_HEADERS,
             })}
-            notices={
-              search
-                ? [CAMPAIGN_MEMBERS_SEARCH_NOTICE, ...page.plan.notices]
-                : page.plan.notices
-            }
+            notices={[
+              ...(search ? [CAMPAIGN_MEMBERS_SEARCH_NOTICE] : []),
+              ...page.plan.notices,
+              ...columnSort.notices,
+            ]}
           />
           <ListTable
             aria-label={heading}
-            rows={rows}
+            rows={columnSort.rows}
             columns={columns}
             getRowId={(row: MemberRow) => row.id}
             rowHeight={TABLE_ROW_HEIGHT}
@@ -660,7 +682,8 @@ function MemberTable(props: {
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
             disableColumnFilter
-            disableColumnSorting
+            // Name orders the query, the figures the page (AGL-3680).
+            columnSort={columnSort}
             hideFooter
             noRowsLabel={`No ${noun} in this campaign starts with that`}
           />

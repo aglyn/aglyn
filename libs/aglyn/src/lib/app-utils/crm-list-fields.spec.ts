@@ -235,9 +235,12 @@ describe('restamping', () => {
     const record = { title: 'Acme renewal', visibleTo: ['org'] }
     const patch = crmListFieldsPatch('deals', record)
     expect(Object.keys(patch).sort()).toEqual([
+      // The Amount and Expected close sort keys (AGL-3680), null on a deal with neither.
+      'amountSortCents',
       // The contact role arrays (AGL-3521), empty on a deal with no contact.
       'contactRoleContactIds',
       'contactRoleKeys',
+      'expectedCloseSortAtMs',
       'leadSourceKey',
       'scopedContactRoleContactIds',
       'scopedSearchTokens',
@@ -246,6 +249,28 @@ describe('restamping', () => {
       'typeKey',
     ])
     expect(crmListFieldsPatch('deals', { ...record, ...patch })).toEqual({})
+  })
+
+  it('stores a header sort key on every record, null for none (AGL-3680)', () => {
+    expect(crmListFields('leads', { name: '  Dana  Ruiz ', company: 'ACME' })).toMatchObject({
+      nameSortKey: 'dana ruiz',
+      companyLower: 'acme',
+      jobTitleLower: null,
+    })
+    // A person with no name sorts by the address the row shows instead.
+    expect(crmListFields('contacts', { email: 'Zed@Example.com' })).toMatchObject({
+      nameSortKey: 'zed@example.com',
+    })
+    expect(crmListFields('crmTasks', { title: 'Call Back', priority: 'high' })).toMatchObject({
+      titleLower: 'call back',
+      priorityRank: 2,
+    })
+    // A task naming no priority ranks as normal.
+    expect(crmListFields('crmTasks', {})).toMatchObject({ titleLower: null, priorityRank: 1 })
+    expect(crmListFields('deals', { amountCents: 0 })).toMatchObject({
+      amountSortCents: 0,
+      expectedCloseSortAtMs: null,
+    })
   })
 
   it("keys a deal's Type and Lead source as the picklist compares them (AGL-3516)", () => {

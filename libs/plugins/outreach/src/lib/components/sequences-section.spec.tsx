@@ -257,7 +257,7 @@ describe('the sequence list asks its query, not its loaded rows (AGL-3321)', () 
   it('offers the mailbox as the org’s mailboxes and asks by id', () => {
     mockSequences = page('ready', [sequence('seq-1', 'Second locations', 'active')])
     renderSection()
-    expect(mockRequests.at(-1)).toEqual({ clauses: [], search: [] })
+    expect(mockRequests.at(-1)).toEqual({ clauses: [], search: [], sort: null })
   })
 
   it('says what the query could not take, beside the list', () => {

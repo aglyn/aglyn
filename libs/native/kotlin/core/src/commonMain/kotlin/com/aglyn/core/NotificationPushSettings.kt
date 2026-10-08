@@ -89,3 +89,38 @@ fun settlePending(pending: Map<String, Boolean>, userData: Map<String, Any?>?): 
   val stored = accountPushSettingsOf(userData).accountTypes.orEmpty()
   return pending.filterNot { (type, value) -> stored[type]?.push == value }
 }
+
+/*
+ * The rest of the console's settings page writes, each touching only the
+ * leaf it changes. Clearing an answer deletes its key (Inherit), and a cell
+ * left with no answers is deleted whole, so an emptied override leaves no
+ * husk behind for the "scopes you have changed" list to keep reporting.
+ */
+
+/** The merge that sets or clears ([value] null) one answer at [scope] for a category or ([types]) a type. */
+fun notificationAnswerWrite(
+  settings: Map<String, Any?>?,
+  scope: com.aglyn.contracts.NotificationScope,
+  key: String,
+  types: Boolean,
+  channel: com.aglyn.contracts.NotificationChannel,
+  value: Boolean?,
+): Map<String, Any?> {
+  val layer = if (types) com.aglyn.contracts.notificationTypeLayer(settings, scope) else com.aglyn.contracts.notificationCategoryLayer(settings, scope)
+  val cell = (layer?.get(key) as? Map<*, *>).orEmpty()
+  val leaf: Any? = when {
+    value != null -> mapOf(channel.wire to value)
+    // The last answer in the cell: the cell goes.
+    cell.keys.all { it == channel.wire } -> FirestoreDelete
+    else -> mapOf(channel.wire to FirestoreDelete)
+  }
+  val path = com.aglyn.contracts.notificationLayerPath(scope, types) + key
+  return mapOf(NOTIFICATION_SETTINGS_FIELD to path.foldRight(leaf) { segment, inner -> mapOf(segment to inner) })
+}
+
+/** Puts a type back on its category at the account: every channel at once. */
+fun notificationTypeResetWrite(type: String): Map<String, Any?> =
+  mapOf(NOTIFICATION_SETTINGS_FIELD to mapOf("accountTypes" to mapOf(type to FirestoreDelete)))
+
+/** A digest's switch, under the key its sender reads. */
+fun digestWrite(field: String, key: String, enabled: Boolean): Map<String, Any?> = mapOf(field to mapOf(key to enabled))

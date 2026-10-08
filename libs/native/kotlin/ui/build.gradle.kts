@@ -32,6 +32,8 @@ kotlin {
       implementation(project(":native-core"))
       implementation(libs.compose.components.resources)
       implementation(libs.compose.ui.backhandler)
+      // The calendars read days on a zone's wall clock (LocalDays).
+      implementation(project(":native-contracts"))
     }
   }
 }

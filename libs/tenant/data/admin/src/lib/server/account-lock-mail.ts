@@ -17,11 +17,16 @@
 
 import { resolveAccountAddresses } from './account-addresses'
 import {
+  emailSuppressionKey,
+  HOST_ACCOUNT_LOCK_SUPPRESSION_REASON,
+  HOST_SUPPRESSIONS_SUBCOLLECTION,
+  isAccountBanSuppression,
   releaseAccountBanSuppressions,
   releaseAccountLockSuppression,
   suppressEmail,
   suppressEmailForAccountLock,
 } from './email-suppression'
+import firebaseAdmin from './firebase-admin'
 import { getOrgForHost } from './organizations'
 import { platformMarketingHostId } from './platform-marketing-consent'
 
@@ -184,4 +189,40 @@ export async function liftAccountLockFromMail(
     }
   }
   return report
+}
+
+/**
+ * What a lock does to one address, as a house site's record page shows it
+ * (AGL-3686): `banned` while a live ban row holds the address, `locked`
+ * while the site holds the lock's own row, else `null`.
+ *
+ * Answered for the house workspace's sites only, and `null` everywhere
+ * else: no other workspace learns that an address belongs to a locked
+ * Aglyn account. The ban is read off the platform list rather than the
+ * site's row because a lock writes no row where one already stood — a
+ * banned address that had unsubscribed carries only its unsubscribe there.
+ * Fails open, logging: the chip says nothing rather than something wrong.
+ */
+export async function accountLockStateFor(input: {
+  hostId: string
+  email: string
+  firestore?: any
+}): Promise<'banned' | 'locked' | null> {
+  const key = emailSuppressionKey(input.email)
+  if (!key || !input.hostId) return null
+  try {
+    if (!(await houseSiteIds()).includes(input.hostId)) return null
+    if (await isAccountBanSuppression(input.email, input.firestore)) return 'banned'
+    const db = input.firestore ?? firebaseAdmin.app().firestore()
+    const row = await db
+      .collection('hosts')
+      .doc(input.hostId)
+      .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+      .doc(key)
+      .get()
+    return row?.exists && row.get('reason') === HOST_ACCOUNT_LOCK_SUPPRESSION_REASON ? 'locked' : null
+  } catch (error) {
+    console.error('[account-lock-mail] lock state lookup failed', input.hostId, error)
+    return null
+  }
 }
