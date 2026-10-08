@@ -40,6 +40,22 @@ public enum AuthTransport: String, Sendable {
   }
 }
 
+/// The Keychain service a REST session is kept under: per build, since the
+/// REST path is the Mac build without a team signature, whose every rebuild
+/// is a new ad-hoc signature that another build's item would prompt for.
+func restAuthKeychainService(bundleID: String, buildHash: String?) -> String {
+  guard let buildHash, !buildHash.isEmpty else { return "\(bundleID).rest-auth" }
+  return "\(bundleID).rest-auth.\(buildHash.prefix(16))"
+}
+
+private func restBuildHash() -> String? {
+  #if os(macOS)
+    return CodeSignature.currentUniqueHash()
+  #else
+    return nil
+  #endif
+}
+
 #if os(macOS)
   enum CodeSignature {
     /// The team that signed this process, or nil for an ad-hoc or unsigned build.
@@ -56,6 +72,21 @@ public enum AuthTransport: String, Sendable {
       else { return nil }
       let team = values[kSecCodeInfoTeamIdentifier as String] as? String
       return team?.isEmpty == false ? team : nil
+    }
+
+    /// This build's code directory hash in hex, or nil when it cannot be read.
+    static func currentUniqueHash() -> String? {
+      var code: SecCode?
+      guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+      var staticCode: SecStaticCode?
+      guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+      var info: CFDictionary?
+      guard
+        SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
+          == errSecSuccess,
+        let values = info as? [String: Any], let unique = values[kSecCodeInfoUnique as String] as? Data
+      else { return nil }
+      return unique.map { String(format: "%02x", $0) }.joined()
     }
   }
 #endif
@@ -146,7 +177,8 @@ public final class AuthSession {
         apiKey: config.firebase.apiKey,
         emulatorHost: config.authEmulatorHost,
         store: KeychainCredentialStore(
-          service: "\(Bundle.main.bundleIdentifier ?? "com.aglyn.app").rest-auth",
+          service: restAuthKeychainService(
+            bundleID: Bundle.main.bundleIdentifier ?? "com.aglyn.app", buildHash: restBuildHash()),
           account: config.firebase.projectID)))
   }
 
