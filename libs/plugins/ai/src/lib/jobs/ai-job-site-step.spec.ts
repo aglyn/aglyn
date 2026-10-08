@@ -1154,6 +1154,33 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     expect(publish).not.toHaveBeenCalled()
   })
 
+  it('publishes what was built when the last unit fails, since no pass comes after it (AGL-3676)', async () => {
+    // The local store run: the welcome email, the last unit, broke a building
+    // rule twice, and the site it ended was never published.
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({})), email: fakeRunner([], () => ({ refused: true })) },
+      { publish },
+    )
+    const job = siteJob({
+      inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: true, autoConfirm: true },
+      outputs: [LOOK, ...['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))],
+    })
+    const outcome = await step(context(job))
+    expect(outcome.item).toMatchObject({ slot: 'e', status: 'failed' })
+    expect(outcome.continue).toBeUndefined()
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[] }]
+    expect(input.outputs.map((entry) => entry.id)).toEqual(['screen-0', 'screen-1', 'screen-2', 'screen-3'])
+    expect(outcome.sitePublish).toEqual(SITE_PUBLISH)
+    // A unit that fails with others still open publishes nothing yet.
+    publish.mockClear()
+    await stepWith({ page: fakeRunner([], () => ({ refused: true })) }, { publish })(
+      context(siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, autoConfirm: true } })),
+    )
+    expect(publish).not.toHaveBeenCalled()
+  })
+
   it('leaves every other site job’s pages as drafts', async () => {
     const publish = jest.fn(async () => SITE_PUBLISH)
     const step = stepWith(

@@ -748,7 +748,13 @@ await put(contactsRef.doc('seed-contact-2'), { name: 'Casey Morales' })
 await put(contactsRef.doc('seed-contact-3'), { name: 'Alex Kim' })
 await put(
   firestore.collection('hosts').doc(hostId).collection('siteMembers').doc('seed-site-member'),
-  { displayName: 'Rae Donovan' },
+  // The name keys travel with the name (AGL-3680): the Site users list sorts
+  // and filters by `displayNameLower`.
+  {
+    displayName: 'Rae Donovan',
+    displayNameLower: 'rae donovan',
+    displayNameTokens: nameSearchTokens('Rae Donovan'),
+  },
 )
 
 // ── Business profile (AGL-3661) ───────────────────────────────────────────

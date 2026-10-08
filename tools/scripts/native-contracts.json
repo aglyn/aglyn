@@ -151,6 +151,57 @@
         "SUBMISSION_READ_OPTIONS",
         "SUBMISSION_FILTER_HEADERS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/artifact-list-queries.ts": {
+      "values": [
+        "LAYOUT_LIST_QUERY",
+        "COMPONENT_LIST_QUERY",
+        "TEMPLATE_LIST_BASE",
+        "TEMPLATE_LIST_QUERY",
+        "TEMPLATE_KIND_OPTIONS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts": {
+      "values": [
+        "ENTRY_LIST_QUERY",
+        "ENTRY_STATUS_OPTIONS",
+        "ENTRY_LIST_FILTER_HEADERS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/content-schema-type.ts": {
+      "values": [
+        "CONTENT_SCHEMA_TYPE_OPTIONS",
+        "CONTENT_SCHEMA_TYPE_DEFAULT"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/local-business.ts": {
+      "values": [
+        "LOCAL_BUSINESS_TYPE_OPTIONS",
+        "AREA_SERVED_MAX",
+        "PRICE_RANGE_MAX_LENGTH",
+        "PAYMENT_ACCEPTED_MAX_LENGTH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/search-engine-verification.ts": {
+      "values": [
+        "SEARCH_ENGINE_VERIFICATION_LABELS",
+        "SEARCH_ENGINE_VERIFICATION_META_NAMES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/seo-title-variables.ts": {
+      "values": [
+        "DEFAULT_TITLE_PATTERN"
+      ]
+    },
+    "libs/shared/util/email/src/lib/tenant-email-catalog.ts": {
+      "types": [
+        "TenantEmailEntry",
+        "TenantEmailControl"
+      ],
+      "values": [
+        "TENANT_EMAILS",
+        "TENANT_EMAIL_COLLECTION"
+      ]
     }
   },
   "ints": [],
@@ -159,13 +210,16 @@
     "ListQueryRefusal.clause"
   ],
   "omit": [
-    "HostProduct.deletedAt"
+    "HostProduct.deletedAt",
+    "TenantEmailEntry.mergeTokens",
+    "TenantEmailEntry.defaultBody"
   ],
   "optional": [
     "HostOrder",
     "OrderTotals",
     "HostProduct",
-    "ProductVariant"
+    "ProductVariant",
+    "TenantEmailEntry"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -174,7 +228,13 @@
     },
     "SITE_LIST_DECLARATION": {},
     "FORM_LIST_QUERY": {},
-    "SUBMISSION_LIST_QUERY": {}
+    "SUBMISSION_LIST_QUERY": {},
+    "LAYOUT_LIST_QUERY": {},
+    "COMPONENT_LIST_QUERY": {},
+    "TEMPLATE_LIST_QUERY": {
+      "base": "TEMPLATE_LIST_BASE"
+    },
+    "ENTRY_LIST_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -2004,6 +2064,82 @@
         ],
         [
           null
+        ]
+      ]
+    },
+    "extractSearchEngineVerificationToken": {
+      "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "args": [
+        [
+          "abc_DEF-123"
+        ],
+        [
+          "  token-with-space  "
+        ],
+        [
+          "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+        ],
+        [
+          "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
+        ],
+        [
+          "<meta name=google-site-verification content=bare>"
+        ],
+        [
+          "content=\"only-content\""
+        ],
+        [
+          "<meta name=\"other\">"
+        ],
+        [
+          "has spaces inside"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "isSearchEngineVerificationToken": {
+      "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "args": [
+        [
+          "abc_DEF-123"
+        ],
+        [
+          "  token-with-space  "
+        ],
+        [
+          "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+        ],
+        [
+          "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
+        ],
+        [
+          "<meta name=google-site-verification content=bare>"
+        ],
+        [
+          "content=\"only-content\""
+        ],
+        [
+          "<meta name=\"other\">"
+        ],
+        [
+          "has spaces inside"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         ]
       ]
     }

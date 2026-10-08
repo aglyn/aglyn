@@ -13,6 +13,8 @@ let package = Package(
   dependencies: [
     .package(path: "../../../libs/native/apple"),
     .package(path: "Plugins/AglynCommercePlugin"),
+    .package(path: "Plugins/AglynFormsPlugin"),
+    .package(path: "Plugins/AglynInboxPlugin"),
     .package(path: "Plugins/AglynRedirectsPlugin"),
   ],
   targets: [
@@ -21,6 +23,8 @@ let package = Package(
       dependencies: [
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynCommercePlugin", package: "AglynCommercePlugin"),
+        .product(name: "AglynFormsPlugin", package: "AglynFormsPlugin"),
+        .product(name: "AglynInboxPlugin", package: "AglynInboxPlugin"),
         .product(name: "AglynRedirectsPlugin", package: "AglynRedirectsPlugin"),
       ]
     ),

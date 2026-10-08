@@ -16,6 +16,8 @@
  */
 
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type { ListPageSort } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 
 /**
  * What each console list can be filtered by (AGL-2501).
@@ -150,6 +152,51 @@ export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: MEMORY_DATE_OPERATORS,
   },
 ]
+
+/*
+ * THE ACCOUNT LIST'S HEADER SORTS (AGL-3680).
+ *
+ * Firebase Auth lists in its own order and cannot be asked for another, and
+ * the `users/{uid}` profile documents are no mirror of it — not every account
+ * has one, and none carries the sign-in times. So `/api/admin/users` sorts
+ * the COMPLETE directory it already reads to answer a filter, when that read
+ * fits its scan bound, and pages the sorted answer; past the bound it sorts
+ * the page it walked and says so. Every column sorts. `path` is the
+ * serialized row's field, and `USER_LIST_SORT_VALUES` reads it.
+ */
+export const USER_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'email', direction: 'asc', column: 'email', label: 'User' },
+  { path: 'email', direction: 'desc', column: 'email', label: 'User' },
+  { path: 'staffRole', direction: 'asc', column: 'staffRole', label: 'Status' },
+  { path: 'staffRole', direction: 'desc', column: 'staffRole', label: 'Status' },
+  { path: 'createdAt', direction: 'desc', column: 'createdAt', label: 'Created' },
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Created' },
+  { path: 'lastSignInAt', direction: 'desc', column: 'lastSignInAt', label: 'Last sign-in' },
+  { path: 'lastSignInAt', direction: 'asc', column: 'lastSignInAt', label: 'Last sign-in' },
+]
+
+/** An account row as the route serializes it, for what the sorts read. */
+interface UserSortRow {
+  email: string | null
+  displayName: string | null
+  staff: boolean
+  staffRole: string | null
+  disabled: boolean
+  createdAt: string | null
+  lastSignInAt: string | null
+}
+
+const day = (value: string | null) => (value ? new Date(value) : null)
+
+/** What each sort compares — what the column SHOWS, not the raw claim. */
+export const USER_LIST_SORT_VALUES: Readonly<Record<string, ListPageSort<UserSortRow>>> = {
+  email: (row) => row.email ?? row.displayName,
+  // The Status column: a role-less staff account reads as `support`.
+  staffRole: (row) =>
+    row.staff ? (row.staffRole ?? 'support') : row.disabled ? 'disabled' : null,
+  createdAt: (row) => day(row.createdAt),
+  lastSignInAt: (row) => day(row.lastSignInAt),
+}
 
 /** How each account field reads — as a hidden column's header, and on a chip. */
 export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
@@ -299,85 +346,11 @@ export const SITE_MEMBER_LIST_FILTER_OPTIONS = {
   ],
 }
 
-/*
- * Content entries (`hosts/{hostId}/collections/{collectionId}/entries`).
- *
- * EVERY clause below is on the Firestore query together (AGL-3321), composed
- * by `planListQuery` through `ENTRY_LIST_QUERY` in
- * `components/content/entry-list-query.ts`, which also holds the orders a
- * filtered list may take. Nothing is matched over the rows a page loaded.
- *
- * The equalities — status, category, author — and the title search each need
- * one composite per filtered order (index merging serves every combination of
- * them), which is what keeps this list's filtered orders to three. The two
- * dates are ranges over fields those orders already walk, so they cost no
- * index of their own; a range leads the order, and so reads with ONE ordered
- * query rather than the two-segment walk: every entry it matches carries the
- * field it ranges over.
- *
- * `status` matches the stored word. An entry with no `status` at all — only a
- * hand-written import bundle produces one — matches none of the three, and is
- * still on the unfiltered list.
- *
- * `categoryId` and `authorId` match the stable ids the entry editor writes.
- * An entry that still carries only the legacy free-typed `category` or
- * `authorName` matches no id until one is picked for it in the editor.
- *
- * `title` is WORD-level, over `titleTokens` (`entryTitleSearchFields`): the
- * quick search reads the same array, and a query holds one array clause, so
- * the two do not combine.
- *
- * `publishedAt` is the Published column, and ranges over the date that column
- * shows — `publishSortAt`, the scheduled date while an entry waits and the
- * published date after (AGL-3323). A draft has neither and matches no range.
- */
-export const ENTRY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
-  {
-    column: 'title',
-    kind: 'text',
-    path: 'title',
-    tokensPath: 'titleTokens',
-    operators: ['contains'],
-  },
-  {
-    column: 'status',
-    kind: 'exact',
-    path: 'status',
-    operators: ['equals', 'isAnyOf'],
-  },
-  {
-    column: 'categoryId',
-    kind: 'exact',
-    path: 'categoryId',
-    operators: ['equals', 'isAnyOf'],
-  },
-  {
-    column: 'authorId',
-    kind: 'exact',
-    path: 'authorId',
-    operators: ['equals', 'isAnyOf'],
-  },
-  {
-    column: 'publishedAt',
-    kind: 'date',
-    path: 'publishSortAt',
-    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
-  },
-  {
-    column: 'updatedAt',
-    kind: 'date',
-    path: 'updatedAt',
-    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
-  },
-]
-
-/** How each entry field reads — as a hidden column's header, and on a chip. */
-export const ENTRY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  title: 'Title',
-  status: 'Status',
-  categoryId: 'Category',
-  authorId: 'Author',
-  publishedAt: 'Published',
-  updatedAt: 'Updated',
-}
+// Content entries' fields and headers live beside their list declaration in
+// `@aglyn/aglyn/app-utils/entry-list-declaration` (AGL-3668), a pure module
+// the native apps plan the same query from.
+export {
+  ENTRY_LIST_FILTER_FIELDS,
+  ENTRY_LIST_FILTER_HEADERS,
+} from '@aglyn/aglyn/app-utils/entry-list-declaration'
 

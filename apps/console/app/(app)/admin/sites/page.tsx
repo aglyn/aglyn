@@ -31,12 +31,18 @@ import {
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import {
+  type ListQuerySort,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Chip, Stack, Typography } from '@mui/material'
 import { type GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -49,9 +55,11 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH, TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
+  STAFF_SITE_LIST_COLUMN_SORTS,
   STAFF_SITE_LIST_FILTER_FIELDS,
   STAFF_SITE_LIST_FILTER_HEADERS,
   STAFF_SITE_LIST_FILTER_OPTIONS,
+  STAFF_SITE_LIST_QUERY,
 } from '../../../../utils/staff-site-list-query'
 
 /**
@@ -60,6 +68,24 @@ import {
  * columns.
  */
 const SITE_FILTER_COLUMNS = ['displayName', 'hasCustomDomain', 'createdAt']
+
+/**
+ * The columns the route JOINS or derives — the organization and its owner,
+ * the domain, the published-page count — sort the page on screen
+ * (AGL-3680); Site and Created order the query (`STAFF_SITE_LIST_COLUMN_SORTS`).
+ */
+const SITE_PAGE_SORTS = {
+  organization: (row: StaffSiteRow) => row.org?.name ?? row.orgId ?? null,
+  owner: (row: StaffSiteRow) => row.owner?.email ?? row.owner?.uid ?? null,
+  hasCustomDomain: (row: StaffSiteRow) => row.cname ?? null,
+  publishedPages: (row: StaffSiteRow) => row.publishedPages,
+}
+const SITE_PAGE_SORT_HEADERS = {
+  organization: 'Organization',
+  owner: 'Owner',
+  hasCustomDomain: 'Custom domain',
+  publishedPages: 'Status',
+}
 
 /**
  * Staff site list (AGL-3378): every site on the platform, with its
@@ -83,14 +109,39 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
    * starts over at page one. A clause the query cannot hold alongside the
    * rest comes back refused and is named above the grid, not applied.
    */
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Site and Created on the route's query,
+   * the joined columns over the page — see `SITE_PAGE_SORTS`. The plan says
+   * which order the route will read in, so the header shows that one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const orderPlan = useMemo(
+    () =>
+      planListQuery(
+        STAFF_SITE_LIST_QUERY,
+        { clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort },
+        nameSearchNormalizers,
+      ),
+    [gridFilter.clauses, gridFilter.searchWords, askedSort],
+  )
   const pagination = useStaffListQuery<StaffSiteRow>({
     endpoint: '/api/admin/sites',
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
     rowsKey: 'sites',
     onError: reportError,
   })
   const { rows: sites, loading, filtering } = pagination
+  const columnSort = useListColumnSort<StaffSiteRow>({
+    sorts: STAFF_SITE_LIST_COLUMN_SORTS,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: orderPlan.orderBy,
+    rows: sites,
+    pageSorts: SITE_PAGE_SORTS,
+    headers: SITE_PAGE_SORT_HEADERS,
+  })
 
   /*
    * One row grammar, the console's (AGL-2501): the primary cell is a real
@@ -303,7 +354,7 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
                   headers: STAFF_SITE_LIST_FILTER_HEADERS,
                   options: STAFF_SITE_LIST_FILTER_OPTIONS,
                 })}
-                notices={pagination.notices}
+                notices={[...pagination.notices, ...columnSort.notices]}
               />
               {sites.length === 0 && !filtering ? (
                 <Typography variant="body2" color="text.secondary">
@@ -311,12 +362,12 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : (
                 <ListTable
-                  rows={sites}
+                  rows={columnSort.rows}
                   columns={columns}
                   loading={loading}
-                  // One page of the query's walk; a header sort would order
-                  // the page and read as the whole list's.
-                  disableColumnSorting
+                  // Site and Created order the route's query; the joined
+                  // columns sort this page and say so (`columnSort`).
+                  columnSort={columnSort}
                   // The server answers the clauses and the search; a second
                   // pass here would drop rows the query matched.
                   filterMode="server"

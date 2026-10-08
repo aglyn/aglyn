@@ -50,7 +50,10 @@ import {
  * fields EVERY organization carries are offered — `nameLower` and `createdAt`
  * are stamped by `createOrganization`. The stored plan and the billing status
  * are absent on an org that never had one, so their columns do not sort: the
- * sort would hide exactly those orgs. Each order costs one
+ * sort would hide exactly those orgs — so Plan, Subscription and Site limit,
+ * which the row DERIVES (the effective plan, the billing subcollection, the
+ * entitlements), sort the page on screen instead and say so (AGL-3680). Each
+ * order costs one
  * `(field, order)` composite per equality and for the search token
  * (`listQueryIndexes`), pinned by `specs/org-list-query.spec.ts`.
  *
@@ -197,10 +200,10 @@ export const ORG_LIST_SORT: ListQuerySort = { path: LIST_QUERY_ID_PATH, directio
  * orders" above.
  */
 export const ORG_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
-  { path: 'createdAt', direction: 'desc', column: 'createdAt' },
-  { path: 'createdAt', direction: 'asc', column: 'createdAt' },
-  { path: 'nameLower', direction: 'asc', column: 'name' },
-  { path: 'nameLower', direction: 'desc', column: 'name' },
+  { path: 'createdAt', direction: 'desc', column: 'createdAt', label: 'Created' },
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Created' },
+  { path: 'nameLower', direction: 'asc', column: 'name', label: 'Organization' },
+  { path: 'nameLower', direction: 'desc', column: 'name', label: 'Organization' },
 ]
 
 /** Where an organization's search tokens are stored. */

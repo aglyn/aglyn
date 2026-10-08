@@ -5,6 +5,8 @@
 
 import AglynPluginHost
 import AglynCommercePlugin
+import AglynFormsPlugin
+import AglynInboxPlugin
 import AglynRedirectsPlugin
 
 public enum NativePluginManifest {
@@ -13,6 +15,16 @@ public enum NativePluginManifest {
       id: "commerce",
       contributes: ["screens": ["commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
+    ),
+    NativePluginManifestEntry(
+      id: "forms",
+      contributes: ["screens": ["forms.form", "forms.list"], "quickActions": ["forms.open"], "deepLinks": ["forms.page", "forms.record"]],
+      register: AglynFormsPlugin.registerFormsNative
+    ),
+    NativePluginManifestEntry(
+      id: "inbox",
+      contributes: ["screens": ["inbox.submission", "inbox.submissions"], "deepLinks": ["inbox.submissions-page"]],
+      register: AglynInboxPlugin.registerInboxNative
     ),
     NativePluginManifestEntry(
       id: "redirects",

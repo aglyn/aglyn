@@ -9,6 +9,8 @@ import com.aglyn.contracts.ListQueryDeclaration
 import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
 import com.aglyn.contracts.ListQueryPlan
+import com.aglyn.contracts.ListQueryPlanSortFallback
+import com.aglyn.contracts.ListQueryPlanSortFallbackReason
 import com.aglyn.contracts.ListQueryRefusal
 import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.contracts.ListQuerySort
@@ -343,9 +345,17 @@ fun planListQuery(
     disjunctions = product
   }
 
-  // The order. A range leads with the field it ranges over, in the asked
-  // direction when the asked order is that field.
-  val asked = request.sort?.let { sort -> declaration.sorts.firstOrNull { it.path == sort.path && it.direction == sort.direction } }
+  // The order. An `alone` order holds only while nothing narrows the list
+  // past its base (AGL-3680); a range leads with the field it ranges over, in
+  // the asked direction when the asked order is that field.
+  val declared = request.sort?.let { sort -> declaration.sorts.firstOrNull { it.path == sort.path && it.direction == sort.direction } }
+  var sortFallback: ListQueryPlanSortFallback? = null
+  var asked = declared
+  if (declared?.alone == true && (served.isNotEmpty() || searched != null)) {
+    asked = defaultHeaderSort(declaration)
+    sortFallback = ListQueryPlanSortFallback(asked = declared, reason = ListQueryPlanSortFallbackReason.ALONE)
+    notices += "Sorted by ${sortLabel(asked)}: ${sortLabel(declared)} sorts only with no filter or search on."
+  }
   val range = inequality
   val orderBy = if (range != null) {
     if (asked?.path == range) {
@@ -360,6 +370,26 @@ fun planListQuery(
   } else {
     asked ?: declaration.sorts.firstOrNull() ?: ListQuerySort(path = LIST_QUERY_ID_PATH, direction = ListQuerySortDirection.ASC)
   }
+  // A range took the order from a header the reader picked: say so.
+  if (
+    sortFallback == null &&
+    declared != null &&
+    declared != declaration.sorts.firstOrNull() &&
+    declared != defaultHeaderSort(declaration) &&
+    orderBy.path != declared.path
+  ) {
+    sortFallback = ListQueryPlanSortFallback(asked = declared, reason = ListQueryPlanSortFallbackReason.RANGE)
+    val label = sortLabel(orderBy)
+    notices += "Sorted by $label: a $label filter orders the list by it."
+  }
 
-  return ListQueryPlan(filters = filters, notices = notices, orderBy = orderBy, refused = refused, searched = searched, served = served)
+  return ListQueryPlan(filters = filters, notices = notices, orderBy = orderBy, refused = refused, searched = searched, served = served, sortFallback = sortFallback)
 }
+
+private fun sortLabel(sort: ListQuerySort): String = sort.label ?: sort.column ?: sort.path
+
+/** The order an `alone` sort falls back to: the first header order that is not itself `alone`. */
+fun defaultHeaderSort(declaration: ListQueryDeclaration): ListQuerySort =
+  declaration.sorts.firstOrNull { it.column != null && it.alone != true }
+    ?: declaration.sorts.firstOrNull { it.alone != true }
+    ?: ListQuerySort(path = LIST_QUERY_ID_PATH, direction = ListQuerySortDirection.ASC)
