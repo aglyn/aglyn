@@ -29,7 +29,9 @@ import { AI_TEMPLATE_SUBJECTS } from '../model/ai-template-subjects'
 import { AI_SITE_PASS_CREDITS } from '../model/ai-site-job'
 import type { AiBuildOps } from '../model/ai-build-job'
 import { AI_LOGIC_FUNCTION_RESOURCE } from '../model/ai-logic-job'
+import { AI_AUTOMATION_RESOURCE } from '../model/ai-workflow-job'
 import { AI_EDIT_TARGET_KINDS } from '../model/ai-edit-job'
+import { AI_CAMPAIGN_RESOURCE } from './ai-job-campaign-step'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
 
@@ -238,6 +240,11 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
  */
 export const AI_OWNED_OP_WRITERS: Readonly<Partial<Record<string, string>>> = {
   function: AI_LOGIC_FUNCTION_RESOURCE,
+  // A campaign is written by the marketing plugin's campaign writer, an
+  // automation by the workflows plugin's: neither is offered where its
+  // writer's plugin is off, rather than planned and then skipped.
+  campaign: AI_CAMPAIGN_RESOURCE,
+  workflow: AI_AUTOMATION_RESOURCE,
 }
 
 /** Registers this plugin's build operations; the console surface calls it. */

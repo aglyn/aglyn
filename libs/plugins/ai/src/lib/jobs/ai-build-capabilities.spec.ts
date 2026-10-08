@@ -106,6 +106,30 @@ describe('the site function operation', () => {
   })
 })
 
+describe('the campaign and automation operations', () => {
+  it('are offered only where the plugin that writes them runs on the site', async () => {
+    const owners: Record<string, string> = { campaign: 'marketing', automation: 'workflows' }
+    const deps = {
+      capabilities,
+      hasRunner: () => true,
+      writerOwner: (resource: string) => owners[resource] ?? null,
+    }
+    const paid = { org: { plan: 'pro' }, freeTaste: false }
+    const on = await aiBuildOps(context(paid), { ...deps, releasedPlugins: async (ids) => ids })
+    expect(on.has('campaign')).toBe(true)
+    expect(on.has('workflow')).toBe(true)
+    const marketingOff = await aiBuildOps(context({ ...paid, host: { orgId: 'org-1', disabledPlugins: ['marketing'] } }), {
+      ...deps,
+      releasedPlugins: async (ids) => ids,
+    })
+    expect(marketingOff.has('campaign')).toBe(false)
+    expect(marketingOff.has('workflow')).toBe(true)
+    const unwritten = await aiBuildOps(context(paid), { ...deps, releasedPlugins: async (ids) => ids, writerOwner: () => null })
+    expect(unwritten.has('campaign')).toBe(false)
+    expect(unwritten.has('workflow')).toBe(false)
+  })
+})
+
 describe('the page change operation', () => {
   it('is well-formed: run by the edit runner, one generation, naming an existing page or layout', () => {
     expect(EDIT).toBeDefined()
