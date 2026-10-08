@@ -89,6 +89,8 @@
       "@aglyn/plugins-marketing-platforms/*": ["./libs/plugins/marketing-platforms/src/lib/*"],
       "@aglyn/plugins-fulfillment-networks": ["./libs/plugins/fulfillment-networks/src/index.ts"],
       "@aglyn/plugins-fulfillment-networks/*": ["./libs/plugins/fulfillment-networks/src/lib/*"],
+      "@aglyn/plugins-marketplaces": ["./libs/plugins/marketplaces/src/index.ts"],
+      "@aglyn/plugins-marketplaces/*": ["./libs/plugins/marketplaces/src/lib/*"],
       "@aglyn/plugins-crm": ["./libs/plugins/crm/src/index.ts"],
       "@aglyn/plugins-crm/*": ["./libs/plugins/crm/src/lib/*"],
       "@aglyn/plugins-outreach": ["./libs/plugins/outreach/src/index.ts"],

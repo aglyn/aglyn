@@ -14,6 +14,7 @@
   },
   "ORDER_CHANNEL_LABELS": {
     "draft": "Draft",
+    "marketplace": "Marketplace",
     "online": "Online",
     "pos": "POS",
     "subscription": "Subscription"
@@ -34,6 +35,10 @@
     {
       "label": "Subscription",
       "value": "subscription"
+    },
+    {
+      "label": "Marketplace",
+      "value": "marketplace"
     }
   ],
   "ORDER_DISPUTE_OPTIONS": [

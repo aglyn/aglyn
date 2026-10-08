@@ -246,6 +246,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order."
     }
   },
+  {
+    "id": "marketplaces",
+    "label": "Marketplaces",
+    "alwaysOnForWorkspace": true,
+    "description": "Sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire from one stock count: their orders come in as yours, and tracking goes back.",
+    "siteOff": {
+      "stops": "Switching Marketplaces off for this site stops importing its marketplace orders, sending tracking to the marketplaces, and keeping their listings in step with its stock.",
+      "keeps": "The connections and every order already imported are kept, and switching it back on resumes from where the orders were last read."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -276,6 +286,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "fonts": "console-only",
   "post-purchase": "console-only",
   "fulfillment-networks": "console-only",
+  "marketplaces": "console-only",
 }
 
 /**
@@ -2249,6 +2260,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "fulfillment-networks",
     "name": "fulfillmentNetworkOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketplaces",
+    "name": "marketplaceConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "marketplaces",
+    "name": "marketplaceOrders",
     "orgField": "orgId"
   },
 ]

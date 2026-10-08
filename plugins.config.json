@@ -2940,6 +2940,52 @@
       }
     },
     {
+      "id": "marketplaces",
+      "package": "@aglyn/plugins-marketplaces",
+      "register": {
+        "console": "registerMarketplacesConsole",
+        "consoleApi": "registerMarketplacesConsoleApi",
+        "serverDeclarations": "registerMarketplacesServerDeclarations",
+        "consoleServerDeclarations": "registerMarketplacesConsoleServerDeclarations",
+        "subprocessors": "marketplacesSubprocessors"
+      },
+      "apiPrefixes": [
+        "marketplaces"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account, its grant sealed, with its settings, its order cursor, its log and listingState subcollections (AGL-3638). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "marketplaceConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One marketplace order and the Aglyn order it became, with the shipments to confirm back to the marketplace and its fees (AGL-3638). Written by the console job and the order-event intake.",
+          "name": "marketplaceOrders",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 27,
+        "$comment": "Marketplace listing and order sync for the commerce plugin (AGL-3638): the merchant's OWN Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account, connected by OAuth through the deployment's app. Listing quantities (and, by choice, prices) follow the catalog read through core's core.product-catalog; marketplace orders become real orders through core's core.channel-orders, whose seller takes their units off the shelf in the same transaction; shipments go back with tracking from commerce's order.fulfilled event. It imports no other plugin. Sold with commerce (`features.commerce`), no price of its own; marketplace fees are recorded on the order and never charged by Aglyn. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds MARKETPLACES_TOKEN_KEY and a marketplace's app credentials (MARKETPLACES_* in .env.selfhost.example).",
+        "label": "Marketplaces",
+        "alwaysOnForWorkspace": true,
+        "description": "Sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire from one stock count: their orders come in as yours, and tracking goes back.",
+        "siteOff": {
+          "stops": "Switching Marketplaces off for this site stops importing its marketplace orders, sending tracking to the marketplaces, and keeping their listings in step with its stock.",
+          "keeps": "The connections and every order already imported are kept, and switching it back on resumes from where the orders were last read."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
       "id": "sales-channels",
       "package": "@aglyn/plugins-sales-channels",
       "register": {

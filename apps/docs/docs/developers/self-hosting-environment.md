@@ -934,6 +934,47 @@ redirect URI in both apps. ShipBob's webhooks are subscribed for each
 connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
 with a token of their own; nothing needs registering for them.
 
+### Marketplaces: Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire {#marketplaces}
+
+A store can keep its listings on the merchant's **own** marketplace seller
+accounts in step with its stock, bring their orders in as its own orders, and
+send tracking back. No marketplace takes a key a merchant could paste: each
+needs an app the deployment registers with the marketplace, and the merchant
+signs in to grant it. A marketplace is offered only when its app's variables
+**and** the token key are set; with none set, no Marketplaces card appears and
+nothing is sent. Set these on the **console only**: the job runs there, and the
+tenant runtime never opens a grant.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `MARKETPLACES_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored grant with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`). **Losing the key loses every connection**: each merchant connects again. |
+| `MARKETPLACES_AMAZON_APPLICATION_ID` | Optional | Runtime, console | The selling-partner app's id (`amzn1.sp.solution.…`). Amazon is offered only with it and the two Login with Amazon values below. |
+| `MARKETPLACES_AMAZON_LWA_CLIENT_ID` | Optional | Runtime, console | The app's Login with Amazon client id. |
+| `MARKETPLACES_AMAZON_LWA_CLIENT_SECRET` | Optional | Runtime, console | The app's Login with Amazon client secret. |
+| `MARKETPLACES_AMAZON_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`. |
+| `MARKETPLACES_AMAZON_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
+| `MARKETPLACES_AMAZON_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+| `MARKETPLACES_EBAY_CLIENT_ID` | Optional | Runtime, console | The eBay keyset's App ID. eBay is offered only with it, its Cert ID and the RuName. |
+| `MARKETPLACES_EBAY_CLIENT_SECRET` | Optional | Runtime, console | The keyset's Cert ID. |
+| `MARKETPLACES_EBAY_RU_NAME` | Optional | Runtime, console | The RuName whose accept URL is the redirect address below. |
+| `MARKETPLACES_EBAY_ENVIRONMENT` | Optional | Runtime, console | `sandbox` for eBay's sandbox. Unset is production. |
+| `MARKETPLACES_EBAY_MARKETPLACE_ID` | Optional | Runtime, console | The eBay site listings go to, `EBAY_US` by default. |
+| `MARKETPLACES_ETSY_KEYSTRING` | Optional | Runtime, console | The Etsy app's keystring. Etsy is offered only with it and the shared secret. Etsy has no sandbox. |
+| `MARKETPLACES_ETSY_SHARED_SECRET` | Optional | Runtime, console | The Etsy app's shared secret. |
+| `MARKETPLACES_TIKTOK_APP_KEY` | Optional | Runtime, console | The TikTok Shop app's key. TikTok Shop is offered only with it, its secret and its service id. It has no sandbox. |
+| `MARKETPLACES_TIKTOK_APP_SECRET` | Optional | Runtime, console | The app's secret. |
+| `MARKETPLACES_TIKTOK_SERVICE_ID` | Optional | Runtime, console | The app's service id, from its authorization link in Partner Center. |
+| `MARKETPLACES_TIKTOK_REGION` | Optional | Runtime, console | `us` (default) or `global`: which consent page sellers are sent to. |
+| `MARKETPLACES_WALMART_CLIENT_ID` | Optional | Runtime, console | The Walmart solution-provider app's client id. Walmart is offered only with it and its secret. |
+| `MARKETPLACES_WALMART_CLIENT_SECRET` | Optional | Runtime, console | The app's client secret. |
+| `MARKETPLACES_WALMART_ENVIRONMENT` | Optional | Runtime, console | `sandbox` for Walmart's sandbox. Unset is production. |
+| `MARKETPLACES_WALMART_CHANNEL_TYPE` | Optional | Runtime, console | The `WM_CONSUMER.CHANNEL.TYPE` value Walmart issued the solution provider, when it issued one. |
+| `MARKETPLACES_FAIRE_APPLICATION_ID` | Optional | Runtime, console | The Faire app's application id. Faire is offered only with it and its secret. It has no sandbox. |
+| `MARKETPLACES_FAIRE_APPLICATION_SECRET` | Optional | Runtime, console | The Faire app's application secret. |
+
+Register `https://<console>/api/marketplaces/oauth/callback` as the redirect
+address in every app (for eBay, as the accept URL of the RuName).
+
 ---
 
 ## Mobile apps and push {#mobile}

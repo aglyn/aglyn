@@ -109,6 +109,23 @@ for the how-to.
 -->
 
 <!--
+  AGL-3638 — Marketplaces are built and hidden until a deployment holds an app
+  for at least one of Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire and sets
+  MARKETPLACES_TOKEN_KEY on the console. This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once a marketplace is configured on
+  aglyn.com, remove this comment's markers, move "(newest)" here from the top
+  heading, and delete `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/marketplaces.md.
+
+## October 2026 — sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire
+
+- **[Marketplaces](commerce-and-bookings/commerce/marketplaces.md)** — connect your own
+  seller account and sell everywhere from one stock count. Listings follow your stock
+  (and your prices, if you choose), marketplace orders come in as your orders and take
+  their units off the same shelf, and the tracking goes back when you ship.
+-->
+
+<!--
   AGL-3634 — Fulfillment networks are built and hidden until a deployment holds a
   ShipBob developer app or an Amazon selling-partner app and sets
   FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,

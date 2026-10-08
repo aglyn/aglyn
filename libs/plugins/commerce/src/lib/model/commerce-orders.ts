@@ -50,7 +50,36 @@ export type OrderStatus =
  * there is nothing to ship, and AGL-1732's "a subscription is not an order"
  * stands for them.
  */
-export type OrderChannel = 'online' | 'pos' | 'draft' | 'subscription'
+export type OrderChannel = 'online' | 'pos' | 'draft' | 'subscription' | 'marketplace'
+
+/**
+ * Where an order sold on an outside channel came from (AGL-3638): a
+ * marketplace that took the buyer's money and pays the merchant out. Written
+ * once, by the import that recorded the order (`server/channel-orders.ts`).
+ */
+export interface OrderChannelSource {
+  /** The importer's id for the channel, e.g. `ebay`. */
+  channelId: string
+  /** What the merchant calls it, e.g. `eBay`. */
+  channelLabel: string
+  /** The channel's own order id, the import's idempotency key. */
+  externalOrderId: string
+  /** What the merchant sees on the channel. */
+  externalRef: string
+  /** Which order line each of the channel's lines became, for a shipment sent back to it. */
+  lines: Array<{ lineIndex: number; externalLineId: string }>
+  /** ISO 4217, upper case: the currency every amount on the order is in. */
+  currency: string
+  /** The channel collected this order's tax and remits it, as the marketplace facilitator. */
+  taxRemittedByChannel: true
+  /**
+   * What the channel charged the merchant for the sale, RECORDED for the
+   * merchant's books and never charged by Aglyn; `null` until the channel
+   * says.
+   */
+  fees: Array<{ label: string; amountCents: number }> | null
+  feesTotalCents: number | null
+}
 
 /** Snapshot of what was bought — self-contained for history. */
 export interface OrderLineItem {
@@ -334,6 +363,8 @@ export interface HostOrder {
   extras?: OrderExtra[]
   status: OrderStatus
   channel?: OrderChannel
+  /** The outside channel an order with channel `marketplace` was sold on (AGL-3638). */
+  channelSource?: OrderChannelSource
   /**
    * Which location's stock this sale came off, for the multi-location counts
    * of AGL-286. Written by the POS register, the only sale path that decrements
@@ -1623,6 +1654,7 @@ export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
   pos: 'POS',
   draft: 'Draft',
   subscription: 'Subscription',
+  marketplace: 'Marketplace',
 }
 
 /** Human label for a channel, tolerating a legacy/unknown value. */

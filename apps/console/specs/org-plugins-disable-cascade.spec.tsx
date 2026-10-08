@@ -193,6 +193,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'fonts',
       'post-purchase',
       'fulfillment-networks',
+      'marketplaces',
       'commerce',
     ])
   })
@@ -254,6 +255,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'fonts',
         'post-purchase',
         'fulfillment-networks',
+        'marketplaces',
       ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',

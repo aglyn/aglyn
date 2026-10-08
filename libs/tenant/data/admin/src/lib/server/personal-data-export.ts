@@ -256,6 +256,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each paid order’s hand-off to a fulfillment network (AGL-3634): the order number, the lines sent with SKU and quantity, the network’s reference, the parcels read back with carrier, tracking number and status, and why anything was not sent. The merchant’s own fulfillment record of a SHOPPER’s order, so disclosed to the ORG only.',
   },
   {
+    collection: 'marketplaceConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account (AGL-3638): marketplace, status, account name, the marketplace sites the account sells on, the listing and order settings, the order cursor and the last sync’s counts. The sealed access and refresh tokens and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the account’s marketplace ids are disclosed as stored. The document id is the site id and the marketplace. Its `log` and `listingState` subcollections (what each listing was last sent) are not read by this export.',
+  },
+  {
+    collection: 'marketplaceOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each marketplace order the store imported (AGL-3638): the marketplace and its order id, the store order it became, which order line each marketplace line became, the marketplace’s fees, and each shipment confirmed back with carrier and tracking number. The merchant’s own record of a marketplace BUYER’s order, so disclosed to the ORG only; the buyer’s name and address are on the store’s order, not here.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1056,6 +1070,8 @@ export async function exportOrgData(
     'marketingPlatformEvents',
     'fulfillmentNetworkConnections',
     'fulfillmentNetworkOrders',
+    'marketplaceConnections',
+    'marketplaceOrders',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

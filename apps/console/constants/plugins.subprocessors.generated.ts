@@ -451,6 +451,166 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'marketplaces',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "auth.ebay.com",
+        disposition: "no-request",
+        reason: "eBay's app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/ebay.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "auth.sandbox.ebay.com",
+        disposition: "no-request",
+        reason: "eBay sandbox's app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/ebay.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "api.ebay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The eBay API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/ebay.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "api.sandbox.ebay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The eBay sandbox API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/ebay.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in. Used only by a deployment pointed at the sandbox, where nothing real sells.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "apiz.ebay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The eBay identity API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/ebay.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "apiz.sandbox.ebay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The eBay identity sandbox API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/ebay.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in. Used only by a deployment pointed at the sandbox, where nothing real sells.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "www.etsy.com",
+        disposition: "no-request",
+        reason: "Etsy's app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/etsy.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "api.etsy.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Etsy API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/etsy.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "services.us.tiktokshop.com",
+        disposition: "no-request",
+        reason: "TikTok Shop (US)'s app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/tiktok.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "services.tiktokshop.com",
+        disposition: "no-request",
+        reason: "TikTok Shop's app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/tiktok.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "auth.tiktok-shops.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. TikTok Shop's OAuth token endpoint, for a deployment that registered a TikTok Shop app: the code exchange when a merchant connects their own account, and each refresh (`libs/plugins/marketplaces/src/lib/providers/tiktok.ts`).",
+        dataReceived: "The deployment's OAuth client credentials, and the authorization code or refresh token the marketplace itself issued — credentials, never orders or listings.",
+      },
+      {
+        host: "open-api.tiktokglobalshop.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The TikTok Shop API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/tiktok.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "login.account.wal-mart.com",
+        disposition: "no-request",
+        reason: "Walmart's app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/walmart.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "marketplace.walmartapis.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Walmart Marketplace API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/walmart.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "sandbox.walmartapis.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Walmart Marketplace sandbox API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/walmart.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in. Used only by a deployment pointed at the sandbox, where nothing real sells.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "faire.com",
+        disposition: "no-request",
+        reason: "Faire's app consent page, built by the authorize address in `libs/plugins/marketplaces/src/lib/providers/faire.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
+        dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "www.faire.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Faire API of the seller account a site's admin connects in the store's settings, reached only from `libs/plugins/marketplaces/src/lib/providers/faire.ts` with the merchant's own grant, to keep its listings in step with the store and bring its orders in.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+    ],
+    uses: [
+      {
+        host: "sellingpartnerapi-na.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the Listings Items, Orders, Sellers and Finances APIs of the seller account a site's admin connects, with the merchant's own grant, to keep its listings' quantity and price in step with the store, bring its orders in, confirm their shipments and read the fees Amazon charged.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "sandbox.sellingpartnerapi-na.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the Listings Items, Orders, Sellers and Finances APIs of the seller account a site's admin connects, with the merchant's own grant, to keep its listings' quantity and price in step with the store, bring its orders in, confirm their shipments and read the fees Amazon charged.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "sellingpartnerapi-eu.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the Listings Items, Orders, Sellers and Finances APIs of the seller account a site's admin connects, with the merchant's own grant, to keep its listings' quantity and price in step with the store, bring its orders in, confirm their shipments and read the fees Amazon charged.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "sandbox.sellingpartnerapi-eu.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the Listings Items, Orders, Sellers and Finances APIs of the seller account a site's admin connects, with the merchant's own grant, to keep its listings' quantity and price in step with the store, bring its orders in, confirm their shipments and read the fees Amazon charged.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "sellingpartnerapi-fe.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the Listings Items, Orders, Sellers and Finances APIs of the seller account a site's admin connects, with the merchant's own grant, to keep its listings' quantity and price in step with the store, bring its orders in, confirm their shipments and read the fees Amazon charged.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "sandbox.sellingpartnerapi-fe.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the Listings Items, Orders, Sellers and Finances APIs of the seller account a site's admin connects, with the merchant's own grant, to keep its listings' quantity and price in step with the store, bring its orders in, confirm their shipments and read the fees Amazon charged.",
+        dataReceived: "For each product the merchant's store lists there: its SKU, title, description, photos' addresses, price in the store's currency, units in stock, and the brand, GTIN, MPN, condition, weight and size the merchant entered. For each order that marketplace itself sold and the merchant ships from the store: the marketplace's own order and line ids, the carrier, the tracking number and the ship date. Read back: that marketplace's orders for the merchant's account (its buyer's name and shipping address, the items, the amounts and the marketplace's fees), and its listings' ids. Also the access token the merchant's grant issued, which authenticates each call. No payment details are sent, and no customer of the store who did not buy on that marketplace is ever sent.",
+      },
+      {
+        host: "api.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the code exchange when a merchant connects their seller account for listings and orders, and each refresh.",
+        dataReceived: "The deployment's OAuth client credentials, and the authorization code or refresh token the marketplace itself issued — credentials, never orders or listings.",
+      },
+      {
+        host: "sellercentral.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the consent page a merchant's browser opens to connect their seller account for listings and orders. No server of ours requests it.",
+        dataReceived: "Nothing from our servers.",
+      },
+      {
+        host: "sellercentral-europe.amazon.com",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the consent page a merchant's browser opens to connect their seller account for listings and orders. No server of ours requests it.",
+        dataReceived: "Nothing from our servers.",
+      },
+      {
+        host: "sellercentral.amazon.co.jp",
+        reason: "Also the marketplaces plugin (`libs/plugins/marketplaces/src/lib/providers/amazon.ts`): the consent page a merchant's browser opens to connect their seller account for listings and orders. No server of ours requests it.",
+        dataReceived: "Nothing from our servers.",
+      },
+    ],
+  },
+  {
     pluginId: 'sales-channels',
     subprocessors: [],
     hosts: [
