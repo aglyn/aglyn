@@ -354,7 +354,11 @@ export function aiLayoutPageCheck(
     // The last answer a generation takes has its gaps taken out rather than asked about again.
     answers += 1
     const last = answers >= AI_GENERATION_MAX_ATTEMPTS
-    const reading = aiReadLayoutPage(answer, fills.length)
+    const reading = aiReadLayoutPage(
+      answer,
+      fills.length,
+      fills.map((index) => input.screen.sections[index]),
+    )
     reading.sections.forEach((section, position) => {
       // A section the answer gives is taken as given; one it leaves out keeps
       // what an earlier answer gave, so a re-ask may send only what was missing.
