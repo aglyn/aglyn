@@ -13,7 +13,8 @@ final class ShellTests: XCTestCase {
     let registry = NativePluginRegistry()
     let result = NativePluginLoader.load(NativePluginManifest.entries, into: registry)
     XCTAssertEqual(result.failed, [])
-    XCTAssertEqual(result.loaded, ["redirects"])
+    // Every plugin the generated manifest names loads, whichever lands next.
+    XCTAssertEqual(result.loaded.sorted(), NativePluginManifest.entries.map(\.id).sorted())
     XCTAssertNotNil(registry.screen("redirects.list"))
   }
 
