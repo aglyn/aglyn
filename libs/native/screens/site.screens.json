@@ -152,6 +152,10 @@
         "status": "/api/domains/status?hostId={site.id}",
         "site": {
           "doc": "hosts/{site.id}"
+        },
+        "org": {
+          "doc": "orgs/{org.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -281,6 +285,18 @@
               "success": "Disconnected"
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.org.plan || data.org.plan == free",
+          "text": "Published sites on the Free plan carry a small “Made with Aglyn” badge; paid plans drop it."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.org.plan && data.org.plan != free",
+          "text": "Your published pages do not show the “Made with Aglyn” badge."
         }
       ]
     },

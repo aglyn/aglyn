@@ -128,13 +128,18 @@ public final class ScreenModel {
   public var search: [String: String] = [:]
   @ObservationIgnored private let api: ConsoleAPIClient?
   @ObservationIgnored private let reader: FirestoreReader?
+  @ObservationIgnored private let writer: FirestoreWriter?
 
-  public init(spec: ScreenSpec, context: JSONValue, api: ConsoleAPIClient?, reader: FirestoreReader? = nil) {
+  public init(
+    spec: ScreenSpec, context: JSONValue, api: ConsoleAPIClient?, reader: FirestoreReader? = nil,
+    writer: FirestoreWriter? = nil
+  ) {
     self.spec = spec
     // A spec's fixed rows (`constants`) read as `const`.
     self.context = spec.raw["constants"].map { ScreenContext.with(context, "const", $0) } ?? context
     self.api = api
     self.reader = reader
+    self.writer = writer
   }
 
   /// Seeds data without a network (previews, snapshot tests).
@@ -259,12 +264,11 @@ public final class ScreenModel {
 
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     if let write = action.write {
-      guard let reader, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
+      guard let writer, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
       do {
         let fields = ScreenValues.resolveBody(write["fields"] ?? [:], in: scope)
-        try await reader.setDocument(
-          FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(fields) as? [String: Any] ?? [:],
-          merge: true)
+        try await writer.merge(
+          FirestoreLoads.segments(ScreenValues.render(doc, in: scope)), FirestoreLoads.plain(fields) as? [String: Any] ?? [:])
         return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
       } catch {
         return .failed(error.localizedDescription)
