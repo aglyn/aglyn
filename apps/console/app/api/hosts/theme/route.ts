@@ -17,6 +17,7 @@
 
 import type { ThemeLibraryAction } from '@aglyn/aglyn/app-utils/theme-library'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
 import { resolveSiteTheme, themeOverridePatch } from '@aglyn/aglyn/app-utils/site-theme'
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
@@ -38,6 +39,7 @@ import {
 } from '@aglyn/shared-ui-theme/util/theme-editor-edits'
 import { Timestamp } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { presetTargetFromRegistry, summarizeThemePresets } from '../../_lib/theme-presets'
 
 /**
  * A built-in theme arrives in the request, because the plugin contributing it
@@ -70,6 +72,14 @@ function readAction(body: Record<string, unknown>): ThemeLibraryAction | string 
       }
       if (kind === 'preset') {
         const theme = target?.['theme']
+        // An app that does not run the themes plugin's console code sends
+        // only the id (AGL-3668); the server reads the theme from the
+        // presets its plugins registered.
+        if (theme === undefined) {
+          const registered = presetTargetFromRegistry(str(target?.['id']), listServerThemePresets())
+          if (!registered) return 'That built-in theme is not available.'
+          return { action: 'select', target: { kind, ...registered } }
+        }
         if (!theme || typeof theme !== 'object' || Array.isArray(theme)) {
           return 'That theme could not be read.'
         }
@@ -149,7 +159,11 @@ async function editorAction(
   const host = hostSnapshot.data() as Record<string, any>
   if (action === 'values') {
     return Response.json(
-      { values: readThemeEditorValues(resolveSiteTheme(host)), catalog: THEME_EDITOR_CATALOG },
+      {
+        values: readThemeEditorValues(resolveSiteTheme(host)),
+        catalog: THEME_EDITOR_CATALOG,
+        presets: summarizeThemePresets(listServerThemePresets()),
+      },
       { status: 200 },
     )
   }
