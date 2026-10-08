@@ -2934,7 +2934,8 @@
             "post-purchase",
             "fulfillment-networks",
             "marketplaces",
-            "print-on-demand"
+            "print-on-demand",
+            "inventory-sync"
           ]
         },
         {
@@ -2970,7 +2971,8 @@
             "post-purchase",
             "fulfillment-networks",
             "marketplaces",
-            "print-on-demand"
+            "print-on-demand",
+            "inventory-sync"
           ]
         },
         {
@@ -2993,7 +2995,8 @@
             "post-purchase",
             "fulfillment-networks",
             "marketplaces",
-            "print-on-demand"
+            "print-on-demand",
+            "inventory-sync"
           ]
         },
         {
@@ -3021,6 +3024,7 @@
             "fulfillment-networks",
             "marketplaces",
             "print-on-demand",
+            "inventory-sync",
             "crm",
             "commerce"
           ]
@@ -3050,6 +3054,7 @@
             "fulfillment-networks",
             "marketplaces",
             "print-on-demand",
+            "inventory-sync",
             "accounts",
             "commerce",
             "bookings"
@@ -3093,7 +3098,8 @@
             "post-purchase",
             "fulfillment-networks",
             "marketplaces",
-            "print-on-demand"
+            "print-on-demand",
+            "inventory-sync"
           ]
         },
         {
@@ -3122,6 +3128,7 @@
             "fulfillment-networks",
             "marketplaces",
             "print-on-demand",
+            "inventory-sync",
             "commerce",
             "crm"
           ]
@@ -3156,6 +3163,7 @@
             "fulfillment-networks",
             "marketplaces",
             "print-on-demand",
+            "inventory-sync",
             "commerce",
             "accounts",
             "crm"
@@ -3195,6 +3203,7 @@
             "fulfillment-networks",
             "marketplaces",
             "print-on-demand",
+            "inventory-sync",
             "commerce",
             "accounts"
           ]
@@ -3239,7 +3248,8 @@
             "post-purchase",
             "fulfillment-networks",
             "marketplaces",
-            "print-on-demand"
+            "print-on-demand",
+            "inventory-sync"
           ]
         }
       ]

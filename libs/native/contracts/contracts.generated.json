@@ -234,6 +234,16 @@
         "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders.",
         "stops": "Switching Print on demand off for this site stops new paid orders being sent to Printful or Printify, and stops imported products updating."
       }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+      "id": "inventory-sync",
+      "label": "Inventory sync",
+      "siteOff": {
+        "keeps": "The connection and its settings are kept, and everything already synced stays on both sides.",
+        "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl."
+      }
     }
   ],
   "LIST_QUERY_DISJUNCTIONS": 30,
