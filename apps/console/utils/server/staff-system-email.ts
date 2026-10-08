@@ -19,6 +19,7 @@ import {
   getSystemEmailTemplate,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { AuthActionKind } from '../../app/api/_lib/auth-action-url'
 
 /**
@@ -111,10 +112,7 @@ export interface StaffSendTarget {
 
 /** The console origin links are built against, without a trailing slash. */
 export function consoleOriginForEmail(): string {
-  return (
-    (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim().replace(/\/+$/, '') ||
-    'https://app.aglyn.com'
-  )
+  return platformConsoleOrigin()
 }
 
 /** First name to greet with: the profile's, else the display name's first word. */

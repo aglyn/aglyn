@@ -18,13 +18,17 @@
 import { EMAIL_NODE_ROOT_ID, renderEmailHtml, substituteMergeTokens } from './email-render'
 import {
   PRODUCT_TIP_RETENTION_EMAILS,
-  RETENTION_SYSTEM_EMAIL_TEMPLATES,
   RETENTION_VERIFY_REMINDER_EMAIL,
 } from './retention-emails'
 import {
+  SYSTEM_EMAIL_TEMPLATES,
   buildDefaultEmailNodeMap,
   getSystemEmailTemplate,
 } from './system-email-catalog'
+
+const RETENTION_SYSTEM_EMAIL_TEMPLATES = SYSTEM_EMAIL_TEMPLATES.filter((entry) =>
+  entry.key.startsWith('retention-'),
+)
 
 /**
  * The getting-started emails' copy (AGL-3692), held to the house rules a
@@ -52,6 +56,7 @@ describe('RETENTION_SYSTEM_EMAIL_TEMPLATES', () => {
   const keys = RETENTION_SYSTEM_EMAIL_TEMPLATES.map((entry) => entry.key)
 
   it('are all in the catalog, so staff can send each by hand', () => {
+    expect(keys).toHaveLength(5)
     for (const key of keys) expect(getSystemEmailTemplate(key)?.deliveredBy).toBe('resend')
   })
 

@@ -52,10 +52,6 @@ import type {
   SystemEmailTemplateDefinition,
 } from './system-email-catalog'
 
-const SAMPLE_CONSOLE_ORIGIN: string =
-  (process.env.NEXT_PUBLIC_CONSOLE_URL || '').trim().replace(/\/+$/, '') ||
-  'https://app.aglyn.com'
-
 export const RETENTION_VERIFY_REMINDER_EMAIL = 'retention-verify-reminder'
 export const RETENTION_BUILD_SITE_EMAIL = 'retention-build-site'
 export const RETENTION_PUBLISH_REMINDER_EMAIL = 'retention-publish-reminder'
@@ -73,38 +69,47 @@ export const PRODUCT_TIP_RETENTION_EMAILS: ReadonlySet<string> = new Set([
   RETENTION_NEXT_STEPS_EMAIL,
 ])
 
-const NAME_TOKEN: SystemEmailMergeToken = {
-  name: 'name',
-  description: "The account holder's first name, or “there”",
-  sample: 'Alex',
-}
+/**
+ * The getting-started entries, built on the catalog's sample console origin.
+ *
+ * A function rather than a constant so that origin is the catalog's own
+ * `SAMPLE_CONSOLE_ORIGIN`, one reading of `NEXT_PUBLIC_CONSOLE_URL` for every
+ * preview sample, rather than a second spelled-out default here.
+ */
+export function retentionSystemEmailTemplates(
+  SAMPLE_CONSOLE_ORIGIN: string,
+): readonly SystemEmailTemplateDefinition[] {
+  const NAME_TOKEN: SystemEmailMergeToken = {
+    name: 'name',
+    description: "The account holder's first name, or “there”",
+    sample: 'Alex',
+  }
 
-const SITE_NAME_TOKEN: SystemEmailMergeToken = {
-  name: 'site.name',
-  description: 'The name of their site',
-  sample: 'Test Site',
-}
+  const SITE_NAME_TOKEN: SystemEmailMergeToken = {
+    name: 'site.name',
+    description: 'The name of their site',
+    sample: 'Test Site',
+  }
 
-const CTA_TOKEN: SystemEmailMergeToken = {
-  name: 'ctaUrl',
-  description: 'Where the button opens in the console',
-  sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/hosts/test-site`,
-}
+  const CTA_TOKEN: SystemEmailMergeToken = {
+    name: 'ctaUrl',
+    description: 'Where the button opens in the console',
+    sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/hosts/test-site`,
+  }
 
-const PREFERENCES_TOKEN: SystemEmailMergeToken = {
-  name: 'preferencesUrl',
-  description: 'The product email switch in account settings',
-  sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user/emails`,
-}
+  const PREFERENCES_TOKEN: SystemEmailMergeToken = {
+    name: 'preferencesUrl',
+    description: 'The product email switch in account settings',
+    sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user/emails`,
+  }
 
-const PREFERENCES_CAPTION: SystemEmailDefaultBlock = {
-  block: 'text',
-  text: 'Rather not get tips like this? Turn off product emails: {{preferencesUrl}}',
-  variant: 'caption',
-}
+  const PREFERENCES_CAPTION: SystemEmailDefaultBlock = {
+    block: 'text',
+    text: 'Rather not get tips like this? Turn off product emails: {{preferencesUrl}}',
+    variant: 'caption',
+  }
 
-export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
-  [
+  return [
     {
       key: RETENTION_VERIFY_REMINDER_EMAIL,
       name: 'Getting started: confirm your email',
@@ -112,7 +117,8 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
         'Sent about an hour, and again a day, after sign-up to an account ' +
         'that has not confirmed its email address. Carries a fresh link.',
       deliveredBy: 'resend',
-      defaultSubject: 'Confirm your email to open your {{brand.productName}} workspace',
+      defaultSubject:
+        'Confirm your email to open your {{brand.productName}} workspace',
       mergeTokens: [
         NAME_TOKEN,
         {
@@ -122,7 +128,11 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
         },
       ],
       defaultBody: [
-        { block: 'text', text: 'Confirm your email to finish signing up', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Confirm your email to finish signing up',
+          variant: 'heading',
+        },
         {
           block: 'text',
           text:
@@ -156,7 +166,11 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
       defaultSubject: 'Your website is a few minutes away',
       mergeTokens: [NAME_TOKEN, CTA_TOKEN, PREFERENCES_TOKEN],
       defaultBody: [
-        { block: 'text', text: 'Build your website with {{brand.productName}} AI', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Build your website with {{brand.productName}} AI',
+          variant: 'heading',
+        },
         {
           block: 'text',
           text:
@@ -190,7 +204,11 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
       defaultSubject: 'Your changes on {{site.name}} are not live yet',
       mergeTokens: [NAME_TOKEN, SITE_NAME_TOKEN, CTA_TOKEN, PREFERENCES_TOKEN],
       defaultBody: [
-        { block: 'text', text: 'Your edits are saved, not published', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Your edits are saved, not published',
+          variant: 'heading',
+        },
         {
           block: 'text',
           text:
@@ -218,7 +236,11 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
       defaultSubject: 'Pick up where you left off on {{site.name}}',
       mergeTokens: [NAME_TOKEN, SITE_NAME_TOKEN, CTA_TOKEN, PREFERENCES_TOKEN],
       defaultBody: [
-        { block: 'text', text: 'Pick up where you left off on {{site.name}}', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Pick up where you left off on {{site.name}}',
+          variant: 'heading',
+        },
         {
           block: 'text',
           text:
@@ -257,7 +279,7 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
         {
           name: 'siteUrl',
           description: 'The published site',
-          sample: 'https://test-site.aglyn.app',
+          sample: 'https://www.example.com',
         },
         {
           name: 'domainUrl',
@@ -299,3 +321,4 @@ export const RETENTION_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefin
       source: 'apps/console/app/api/admin/retention-emails/route.ts',
     },
   ]
+}
