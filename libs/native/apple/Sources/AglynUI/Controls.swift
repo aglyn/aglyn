@@ -118,11 +118,20 @@ public struct AglynNotice: View {
   let message: String
   let tone: AglynTone
   let onDismiss: (() -> Void)?
+  let actionTitle: String?
+  let action: (() -> Void)?
 
-  public init(_ message: String, tone: AglynTone, onDismiss: (() -> Void)? = nil) {
+  /// `actionTitle` and `action` add one button beside the message ("Undo").
+  /// A trailing closure is still `onDismiss`.
+  public init(
+    _ message: String, tone: AglynTone, onDismiss: (() -> Void)? = nil, actionTitle: String? = nil,
+    action: (() -> Void)? = nil
+  ) {
     self.message = message
     self.tone = tone
     self.onDismiss = onDismiss
+    self.actionTitle = actionTitle
+    self.action = action
   }
 
   private var symbol: String {
@@ -138,6 +147,11 @@ public struct AglynNotice: View {
     HStack(alignment: .top, spacing: AglynSpace.one) {
       Image(systemName: symbol).foregroundStyle(tone.color).accessibilityHidden(true)
       Text(message).font(AglynFont.subheadline).frame(maxWidth: .infinity, alignment: .leading)
+      if let actionTitle, let action {
+        Button(actionTitle, action: action)
+          .font(AglynFont.subheadline.weight(.semibold))
+          .buttonStyle(.borderless)
+      }
       if let onDismiss {
         Button(action: onDismiss) { Image(systemName: "xmark").imageScale(.small) }
           .buttonStyle(.plain)
@@ -147,7 +161,7 @@ public struct AglynNotice: View {
     }
     .padding(AglynSpace.oneAndHalf)
     .background(tone.color.opacity(0.12), in: RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
-    .accessibilityElement(children: .combine)
+    .accessibilityElement(children: action == nil && onDismiss == nil ? .combine : .contain)
   }
 }
 
