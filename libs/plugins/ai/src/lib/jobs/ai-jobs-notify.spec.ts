@@ -149,3 +149,67 @@ describe('aiJobFailureAlerter', () => {
     expect(raise).not.toHaveBeenCalled()
   })
 })
+
+describe('aiJobFailureAlerter on a build that finished (AGL-3683)', () => {
+  const row = (slot: string, label: string, patch: Record<string, unknown> = {}) => ({
+    slot, op: 'page', label, status: 'succeeded', ...patch,
+  })
+
+  it('tells staff which parts failed on our side, and not the ones the model declined', async () => {
+    const raise = jest.fn().mockResolvedValue(undefined)
+    await aiJobFailureAlerter(raise)({
+      job: job({
+        status: 'done',
+        review: null,
+        items: [
+          row('p0', 'Home'),
+          row('p1', 'Services', { status: 'failed', failure: { ours: true, reason: 'provider', message: 'x' } }),
+          row('p2', 'About', { status: 'failed', failure: { ours: true, reason: 'doctrine-refused', message: 'x', detail: 'Rule 16' } }),
+          row('p3', 'Prices', { status: 'failed', failure: { ours: false, reason: 'refused', message: 'x' } }),
+        ] as never,
+      }),
+      to: 'done',
+    })
+    expect(raise).toHaveBeenCalledTimes(1)
+    expect(raise.mock.calls[0][0]).toMatchObject({ type: 'ai.buildPartlyFailed' })
+    expect(raise.mock.calls[0][1]).toEqual({
+      dedupeKey: 'site',
+      orgId: 'org-1',
+      hostId: 'host-1',
+      context: {
+        kind: 'site',
+        jobId: 'job-1',
+        orgId: 'org-1',
+        failed: 2,
+        total: 4,
+        items: 'Services (provider); About (doctrine-refused: Rule 16)',
+      },
+    })
+  })
+
+  it('names five parts and counts the rest', async () => {
+    const raise = jest.fn().mockResolvedValue(undefined)
+    const failed = Array.from({ length: 7 }, (_, i) =>
+      row(`p${i}`, `P${i}`, { status: 'failed', failure: { ours: true, reason: 'provider', message: 'x' } }))
+    await aiJobFailureAlerter(raise)({ job: job({ status: 'done', review: null, items: failed as never }), to: 'done' })
+    expect(raise.mock.calls[0][1].context.items).toBe(
+      'P0 (provider); P1 (provider); P2 (provider); P3 (provider); P4 (provider); and 2 more',
+    )
+  })
+
+  it('raises nothing for a build that is whole, or whose only failures were declined', async () => {
+    const raise = jest.fn()
+    const alerter = aiJobFailureAlerter(raise)
+    await alerter({ job: job({ status: 'done', review: null, items: [row('p0', 'Home')] as never }), to: 'done' })
+    await alerter({
+      job: job({
+        status: 'done',
+        review: null,
+        items: [row('p0', 'Home'), row('p1', 'X', { status: 'failed', failure: { ours: false, reason: 'refused', message: 'x' } })] as never,
+      }),
+      to: 'done',
+    })
+    await alerter({ job: job({ status: 'done', review: null }), to: 'done' })
+    expect(raise).not.toHaveBeenCalled()
+  })
+})

@@ -65,3 +65,28 @@ export const AI_JOB_FAILED: OperatorAlertDefinition = {
   dedupeWindowMinutes: 60,
   defaultEnabled: true,
 }
+
+/**
+ * A build finished with part of it missing: it delivered something, so the
+ * job is `done`, but one or more of its items failed on our side (AGL-3683).
+ * The customer has a site or build with holes in it and no failed job to
+ * show for it, which is why it is its own alert. Items the model declined
+ * are the customer's and do not count. Deduped per job kind, like
+ * `ai.jobFailed`.
+ */
+export const AI_BUILD_PARTLY_FAILED: OperatorAlertDefinition = {
+  type: 'ai.buildPartlyFailed',
+  pluginId: AI_PLUGIN_ID,
+  label: 'An AI build finished with parts missing',
+  description:
+    'An AI build (a site, or a multi-part build) finished, but some of its parts failed on the platform’s side, so the customer got less than they asked for. Read which parts and why, then search the logs for the job id.',
+  tier: 'should',
+  category: 'ops',
+  title: 'An AI {{kind}} build finished with {{failed}} of {{total}} parts failed',
+  body:
+    'AI job {{jobId}} ({{kind}}) in workspace {{orgId}} finished, but {{failed}} of its {{total}} parts failed on our side: {{items}}. The customer was given back those parts’ credits. Further partial {{kind}} builds within the hour are counted into the next alert.',
+  link: '/admin/orgs/{{orgId}}',
+  delivery: 'immediate',
+  dedupeWindowMinutes: 60,
+  defaultEnabled: true,
+}
