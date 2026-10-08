@@ -267,7 +267,7 @@ export function StaffUserSendEmailCard({ uid }: { uid: string }) {
                 border: 1,
                 borderColor: 'divider',
                 borderRadius: 1,
-                backgroundColor: '#ffffff',
+                backgroundColor: 'common.white',
               }}
             />
           ) : null}
