@@ -29,7 +29,7 @@ struct SubmissionsScreen: View {
   @State private var deleting: Submission?
   @State private var replying: Submission?
   @State private var site = ObservedDocument()
-  @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: formName($0)) }
+  @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: inboxFormName($0)) }
 
   init(context: NativePluginContext, formID: String?, formName: String?, initialSubmissionID: String?) {
     self.context = context

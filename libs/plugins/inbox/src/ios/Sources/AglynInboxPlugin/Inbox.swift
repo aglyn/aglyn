@@ -26,7 +26,7 @@ func formsQuery(_ hostID: String) -> FirestoreQuery {
   FirestoreQuery(["hosts", hostID, "forms"], order: [.init("__name__")], limit: 51)
 }
 
-func formName(_ doc: FirestoreDocument) -> String {
+func inboxFormName(_ doc: FirestoreDocument) -> String {
   [doc.string("displayName"), doc.string("name")].compactMap { $0 }.first { !$0.isEmpty } ?? doc.id
 }
 
