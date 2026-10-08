@@ -198,7 +198,8 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // a merchant's own vendor account.
     // Marketplaces (AGL-3638) the same way, Print on demand (AGL-3641),
     // Inventory sync (AGL-3642), and Delivery apps (AGL-3644), sold with the
-    // register.
+    // register. Rewards (AGL-3640): sold with commerce, and a store's
+    // program is off until its merchant turns it on.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -214,6 +215,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'print-on-demand',
       'inventory-sync',
       'delivery-apps',
+      'loyalty',
     ])
   })
 
