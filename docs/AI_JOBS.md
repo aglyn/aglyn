@@ -1312,8 +1312,9 @@ nothing itself.
   The scaffold asks no model anything.
 - **The units, in build order.** The site's LOOK first (AGL-3660, below), then
   the layout every page renders inside and the form
-  they place — a page binds both by id, so they must exist — then the pages,
-  then the welcome email. Each unit's derived job carries as its `$id` the id
+  they place — a page binds both by id, so they must exist — then, on a paid
+  plan, a blog's first posts or a store's first products (AGL-3676, below),
+  then the pages, then the welcome email. Each unit's derived job carries as its `$id` the id
   its plan entry recorded (the welcome email's is on the scaffold's own step),
   which is what a step that recorded no id of its own names its draft by, so a
   unit re-run after its write finds its own draft rather than writing a
@@ -1334,6 +1335,27 @@ nothing itself.
   and it is why a page places the scaffold's own form by id rather than planning
   one of its own. SEO travels with each page: the page step writes its search
   listing on its own last pass.
+- **A blog's first posts and a store's first products** (AGL-3676,
+  `ai-job-site-content.ts`). A site whose kind is Blog & writing gets the row
+  "Writing your first posts": a content collection "Blog" (the platform's own
+  blog, served at `/{slug}` with a page per post, its slug clear of the planned
+  pages' addresses) and three posts, one `copy.blog` generation a pass through
+  the strict `write_blog_post` tool, each written as a draft by
+  `@aglyn/tenant-data-admin/server/content-entry-drafts` — the console routes'
+  allow-list, caps, slug claim and draft stamp — bylined with the business's
+  name and given a starter photo as its cover. A guided start publishes them with
+  its pages (publish role and byline, as the entry editor's Publish requires) and
+  drops the blog's cached addresses. A site whose kind is Online store gets
+  "Adding your first products": the `products` step's catalog asked for 3 to 6,
+  each written by the commerce plugin's `product` draft writer as an UNPRICED
+  draft with no photo — off the storefront until the owner prices it, since no
+  price is ever invented. Each part asks before its first pass whether the member
+  and the plan may have it (the role; for products the `commerce` feature,
+  Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent
+  nothing. The pages built after are told the posts' titles or the products'
+  names, so the writing page and the shop feature what exists. Neither part runs
+  on the Free taste: its sections cap spends the whole wall (below), and a Free
+  plan includes neither commerce nor a product.
 - **What the welcome email is told** (AGL-2918). Who the site is for, what became
   of the message it answers — the person's own `submissions` answer, so the email
   and the form it acknowledges cannot say different things — and which KIND of
@@ -2585,7 +2607,10 @@ the element budget its request asks for.
   for one retried section: a Free site fits 8 sections across its two pages, at most 256 credits
   of the 300. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the plan it derives
   and to the Free page's build figures, and the Free wall holds a Free site's plan to
-  that section count and to its page cap. On a paid workspace a site plan's one answer comes to at most 84 credits
+  that section count and to its page cap. That leaves 0 credits on a site with no
+  new layout and 16 on one with a layout, and one post at its worst on the fast
+  tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
+  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
   for five pages, where the routing table's ceiling with thinking spent 227.
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten

@@ -67,8 +67,24 @@ interface NativePluginContext {
    */
   val deviceStore: KeyValueStore
 
+  /**
+   * The person's role on the picked site (`admin`, `editor`, `author` or
+   * `viewer`), as their membership row names it; null without a site. A
+   * screen reads it only to grey out what the rules would refuse.
+   */
+  val siteRole: String? get() = null
+
+  /** The person's role in the picked workspace (`owner`, `admin`, `editor`, `viewer`). */
+  val orgRole: String? get() = null
+
+  /** Makes [hostId] the picked site, as the site switcher does. */
+  fun selectSite(hostId: String) {}
+
   /** Opens a registered screen by id. */
   fun navigate(screenId: String, params: NativeParams = emptyMap())
+
+  /** Leaves the current screen, as the back button does. */
+  fun back() {}
 
   /**
    * Opens the Besigner, the apps' only web content, in the authenticated web

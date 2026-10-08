@@ -111,6 +111,9 @@ import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { aiPlanSiteLines, aiSitePlanCapabilities, createAiJobPlanStep } from './ai-job-plan-step'
 import { aiRunSiteLook } from './ai-job-site-look'
 import { AI_SITE_LOOK_TOOL_NAME } from '../model/ai-site-look'
+import { generateAiBlogPost } from '../runtime/ai-blog-post-generation'
+import { AI_BLOG_POST_TOOL_NAME } from '../tools/ai-blog-post-tool'
+import { aiSiteContentPart } from './ai-job-site-content'
 
 // The reader's pure halves, past the mock that keeps its Admin SDK out.
 const { aiStarterHomeCandidate, aiStarterHomeUntouched } = jest.requireActual(
@@ -559,6 +562,52 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     expect(credits).toBeLessThanOrEqual(90)
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
     expect([credits, notes.includes(`a site plan's one answer comes to at most ${credits} credits`)]).toEqual([credits, true])
+  })
+
+  it('writes a Free blog no first posts and a Free store no products: one post at its worst needs more than the wall leaves (AGL-3676)', async () => {
+    // A post at its worst on the model a Free site runs on: its answer at the
+    // post's own ceiling, writing its cached prefix, and its one re-ask
+    // reading it — the two exchanges the wall counts for the plan, too.
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValue({ ...toolAnswer({}), toolUse: [{ name: AI_BLOG_POST_TOOL_NAME, input: {} }] })
+    const fast = AI_MODEL_CATALOG.find((entry) => entry.tier === 'fast')?.id as string
+    await generateAiBlogPost({ brief: siteJob().brief, merchantWords: siteJob().brief, earlierTitles: [], index: 1, total: 3, model: fast })
+    const requests = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+    expect(requests.map((request) => request.model)).toEqual([fast, fast])
+    const post = assistCreditsFromUsd(
+      requests.reduce((sum, request, index) => {
+        const { cached, uncached } = spans(request)
+        return (
+          sum +
+          usd(
+            {
+              inputTokens: realTokens(uncached),
+              outputTokens: request.maxTokens,
+              cacheReadTokens: index === 0 ? 0 : realTokens(cached),
+              cacheWriteTokens: index === 0 ? realTokens(cached) : 0,
+            },
+            request.model,
+          )
+        )
+      }, 0),
+    )
+    // What a two-page Free site leaves once its sections take all the cap
+    // allows, its retried section's room held back as the wall holds it.
+    const credits = AI_FREE_SITE_WORST_CASE_CREDITS
+    const pages = AI_SITE_FREE_PAGES.max
+    for (const layouts of [0, 1]) {
+      const sections = aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      const total =
+        credits.plan + credits.look + layouts * credits.layout + pages * (credits.listing + credits.firstSection) + (sections - pages) * credits.laterSection
+      const left = FREE_AI_TASTE_CREDITS_PER_MONTH - credits.firstSection - total
+      expect({ layouts, post, left, fits: post <= left }).toEqual({ layouts, post, left, fits: false })
+    }
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    expect([post, notes.includes(`its re-ask — is ${post}, so a Free blog writes no first posts`)]).toEqual([post, true])
+    // So the guided start owes a Free blog and a Free store no part of their own.
+    expect(aiSiteContentPart({ siteKind: 'blog' }, true)).toBeNull()
+    expect(aiSiteContentPart({ siteKind: 'store' }, true)).toBeNull()
+    expect(aiSiteContentPart({ siteKind: 'blog' }, false)).toBe('posts')
   })
 })
 

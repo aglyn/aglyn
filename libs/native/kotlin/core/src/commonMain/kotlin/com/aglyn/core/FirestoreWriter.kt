@@ -8,7 +8,31 @@ package com.aglyn.core
  */
 interface FirestoreWriter {
   suspend fun merge(path: String, data: Map<String, Any?>)
+
+  /**
+   * The web SDK's `updateDoc(ref, data)`: each key of [data] is one top-level
+   * field, replaced whole (a map value is not merged into the stored map),
+   * and the document must already exist.
+   */
+  suspend fun update(path: String, data: Map<String, Any?>): Unit =
+    throw IllegalStateException("Saving is not available here.")
+
+  /** The web SDK's `deleteDoc(ref)`. */
+  suspend fun delete(path: String): Unit =
+    throw IllegalStateException("Deleting is not available here.")
+
+  /** The web SDK's `addDoc(collection, data)`: a new document under a generated id, which it answers. */
+  suspend fun add(collectionPath: String, data: Map<String, Any?>): String {
+    val id = newDocumentId()
+    merge("$collectionPath/$id", data)
+    return id
+  }
 }
+
+private const val ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+/** A new document id as the SDKs mint them: 20 random letters and digits. */
+fun newDocumentId(): String = buildString { repeat(20) { append(ID_ALPHABET[kotlin.random.Random.nextInt(ID_ALPHABET.length)]) } }
 
 /**
  * A merge value that removes its field: the web SDK's `deleteField()`. A

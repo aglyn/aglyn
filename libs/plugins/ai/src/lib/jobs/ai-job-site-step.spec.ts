@@ -77,12 +77,21 @@ import {
   aiCreationUnit,
   aiRunJobUnit,
   aiSiteBuiltRefs,
+  aiSiteInitialLedger,
+  aiSiteJobRunMinimumMs,
   aiSiteJobUnits,
+  aiSiteLedgerUnits,
   aiSitePendingUnits,
   aiSiteUnitJob,
   createAiJobSiteStep,
   registerAiSiteJob,
 } from './ai-job-site-step'
+import {
+  AI_SITE_POST_BUDGET,
+  AI_SITE_POSTS,
+  AI_SITE_POSTS_LABEL,
+  AI_SITE_PRODUCTS_LABEL,
+} from './ai-job-site-content'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -1172,5 +1181,121 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     expect(last.failure).toBeUndefined()
     expect(last.sitePublish).toBeUndefined()
     error.mockRestore()
+  })
+})
+
+describe('a blog’s first posts and a store’s first products (AGL-3676)', () => {
+  const blogInputs = { businessType: 'a pottery blog', siteKind: 'blog', businessName: 'Clay Notes', pages: AI_SITE_PAGES.min, welcomeEmail: false }
+  const storeInputs = { businessType: 'a candle shop', siteKind: 'store', pages: AI_SITE_PAGES.min, welcomeEmail: false }
+  const entry = (id: string, label: string): AiJobOutput => ({
+    resource: 'entry',
+    id,
+    hostId: 'host-1',
+    label,
+    proposal: { collectionId: 'job-1-posts', collectionSlug: 'blog', slug: id },
+  })
+  const pageRunner = () => fakeRunner([], () => ({ outputs: [output('screen', 'screen-x')] }))
+
+  it('builds the part after the layout and the form and before the pages, as its own row', () => {
+    const plan = confirmedPlan({ create: [LAYOUT, FORM] })
+    expect(aiSiteJobUnits(plan, { content: 'posts' }).map((unit) => unit.slot)).toEqual(['t', 'l', 'f', 'posts', 'p0', 'p1', 'p2', 'p3'])
+    const units = aiSiteJobUnits(plan, { content: 'products' })
+    expect(units[3]).toMatchObject({ kind: 'products', jobKind: 'products', resource: 'product', label: AI_SITE_PRODUCTS_LABEL })
+    expect(aiSiteLedgerUnits(units)[3]).toMatchObject({ slot: 'products', op: 'products', deps: [] })
+    expect(aiSiteLedgerUnits(aiSiteJobUnits(plan, { content: 'posts' }))[3]).toMatchObject({ op: 'posts', label: AI_SITE_POSTS_LABEL })
+    expect(aiSiteJobUnits(plan).some((unit) => unit.kind === 'posts' || unit.kind === 'products')).toBe(false)
+  })
+
+  it('writes a paid blog’s posts after its look, told the posts written, the pages’ addresses and the byline', async () => {
+    const seen: AiJob[] = []
+    const contentRefusal = jest.fn(async () => null)
+    const step = stepWith({ page: pageRunner() }, { posts: fakeRunner(seen, () => ({ outputs: [entry('job-1-posts-0', 'One')], continue: true })), contentRefusal })
+    const outcome = await step(context(siteJob({ inputs: blogInputs })))
+    expect(contentRefusal).toHaveBeenCalledWith('posts', expect.objectContaining({ job: expect.objectContaining({ $id: 'job-1' }) }))
+    expect(seen.map((job) => job.$id)).toEqual(['job-1-posts'])
+    expect(seen[0].inputs['siteContent']).toEqual({
+      written: [],
+      total: AI_SITE_POSTS,
+      avoidSlugs: ['page-0', 'page-1', 'page-2', 'page-3'],
+      byline: 'Clay Notes',
+    })
+    expect(outcome.item).toMatchObject({ slot: 'posts', status: 'running', outputs: ['job-1-posts-0'] })
+    expect(outcome.continue).toBe(true)
+  })
+
+  it('asks no admission again on a later pass of the same part, and tells it what was written', async () => {
+    const seen: AiJob[] = []
+    const contentRefusal = jest.fn(async () => 'never asked')
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const outputs = [LOOK, entry('job-1-posts-0', 'One')]
+    const items = aiSiteInitialLedger(units, [LOOK]).map((row) =>
+      row.slot === 'posts' ? { ...row, status: 'running' as const, outputs: ['job-1-posts-0'] } : row,
+    )
+    const step = stepWith({ page: pageRunner() }, { posts: fakeRunner(seen, () => ({ outputs: [entry('job-1-posts-1', 'Two')], continue: true })), contentRefusal })
+    await step(context(siteJob({ inputs: blogInputs, outputs, items })))
+    expect(contentRefusal).not.toHaveBeenCalled()
+    expect((seen[0].inputs['siteContent'] as { written: unknown[] }).written).toEqual([{ id: 'job-1-posts-0', title: 'One' }])
+  })
+
+  it('skips the part, unspent, where the member or the plan may not have it, and says why', async () => {
+    const posts = jest.fn()
+    const step = stepWith({ page: pageRunner() }, { posts, contentRefusal: async () => 'Editing requires the editor role' })
+    const outcome = await step(context(siteJob({ inputs: blogInputs })))
+    expect(posts).not.toHaveBeenCalled()
+    expect(outcome.item).toEqual({ slot: 'posts', status: 'skipped', note: 'Not built: Editing requires the editor role' })
+    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+    expect(outcome.continue).toBe(true)
+  })
+
+  it('asks a store’s catalog for 3 to 6 products under the products step, as a catalog', async () => {
+    const seen: AiJob[] = []
+    const products = fakeRunner(seen, () => ({ outputs: [output('product', 'job-1-products-0', 'Candle')] }))
+    // Owed only where the step that proposes a catalog is loaded.
+    expect((await stepWith({ page: pageRunner() }, { products })(context(siteJob({ inputs: storeInputs })))).item?.slot).toBe('p0')
+    const step = stepWith({ page: pageRunner(), products: fakeRunner([], () => ({})) }, { products, contentRefusal: async () => null })
+    const outcome = await step(context(siteJob({ inputs: storeInputs })))
+    expect(seen[0]).toMatchObject({ $id: 'job-1-products', kind: 'products', inputs: { target: 'catalog' } })
+    expect(seen[0].brief.split('\n').pop()).toBe("Propose between 3 and 6 products: the store's first ones.")
+    expect(outcome.item).toMatchObject({ slot: 'products', status: 'succeeded', outputs: ['job-1-products-0'] })
+  })
+
+  it('tells each page the posts and the products built before it, by name', () => {
+    const plan = confirmedPlan()
+    const page = aiSiteJobUnits(plan).find((unit) => unit.kind === 'page')
+    if (!page) throw new Error('a page is a unit')
+    const blog = aiSiteUnitJob(siteJob({ inputs: blogInputs, outputs: [LOOK, entry('a', 'Centering clay'), entry('b', 'Trimming feet')] }), page, new Map())
+    expect(blog.brief).toContain('This site\'s blog at /blog has these posts: “Centering clay”, “Trimming feet”.')
+    const store = aiSiteUnitJob(siteJob({ inputs: storeInputs, outputs: [LOOK, output('product', 'p0', 'Fig candle')] }), page, new Map())
+    expect(store.brief).toContain('This store\'s products are: “Fig candle”.')
+    expect(aiSiteUnitJob(siteJob(), page, new Map()).brief).not.toContain('This site\'s blog')
+  })
+
+  it('publishes a guided blog’s posts once its pages are live, and drops the blog’s cached addresses', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const posts = [entry('job-1-posts-0', 'One'), entry('job-1-posts-1', 'Two'), entry('job-1-posts-2', 'Three')]
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const items = aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) =>
+      row.slot === 'posts' ? { ...row, status: 'succeeded' as const, outputs: posts.map((post) => post.id) } : row,
+    )
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [{ id: 'screen-3', label: 'Home', path: '/' }], drafts: [] }))
+    const publishPosts = jest.fn(async () => ({ published: 3, kept: 0, paths: ['/blog', '/blog/one'] }))
+    const dropCache = jest.fn(async () => ({ complete: true }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts, dropCache: dropCache as never },
+    )
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items })))
+    expect(publishPosts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ outputs: posts }))
+    expect(dropCache).toHaveBeenCalledWith(expect.objectContaining({ hostIds: ['host-1'], paths: { 'host-1': ['/blog', '/blog/one'] } }))
+    // Nothing published, nothing for the posts either.
+    publishPosts.mockClear()
+    publish.mockResolvedValueOnce({ liveUrl: null, published: [], drafts: [] })
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items })))
+    expect(publishPosts).not.toHaveBeenCalled()
+  })
+
+  it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
+    expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
+    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_POSTS + 1)
   })
 })

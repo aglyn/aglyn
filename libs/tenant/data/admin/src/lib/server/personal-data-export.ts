@@ -291,6 +291,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Each product linked between the store and the connected inventory system (AGL-3642): the system’s product id, the SKU, the version last synced, the store’s product and variant ids, and why it was not synced. Catalog data, no person’s.',
   },
   {
+    collection: 'deliveryAppStores',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each site’s link to the merchant’s own DoorDash, Uber Eats or Grubhub store (AGL-3644): the service, the store id it shows the merchant, the settings (accept automatically, prep minutes), the items matched to products and those waiting, and the menu’s last send. No credential is stored: every call is signed with the deployment’s partner credentials.',
+  },
+  {
+    collection: 'deliveryAppOrders',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each order a delivery service sent a site’s register (AGL-3644): the service and its order id and short code, the items with their options and instructions, the totals and refunds, where it stood at the counter, and the store order it became. The buyer appears by first name and last initial only. The merchant’s own record of a delivery BUYER’s order, so disclosed to the ORG only.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1096,6 +1110,8 @@ export async function exportOrgData(
     'inventorySyncConnections',
     'inventorySyncOrders',
     'inventorySyncProducts',
+    'deliveryAppStores',
+    'deliveryAppOrders',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }

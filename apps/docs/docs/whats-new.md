@@ -143,6 +143,20 @@ for the how-to.
   follow whichever side you say is right, products come into your store from it (or go
   the other way), and paid orders arrive there as sales orders, each once, with
   anything it could not take listed for you to send again.
+  AGL-3644 — Delivery apps are built and hidden until a deployment holds a partner
+  account with DoorDash, Uber Eats or Grubhub and sets its DELIVERY_APPS_* variables
+  on the console. This entry is held unpublished, like the guide it links
+  (`unlisted: true`): once a service is configured on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/delivery-apps.md.
+
+## October 2026 — DoorDash, Uber Eats and Grubhub orders at your register
+
+- **[Delivery apps](commerce-and-bookings/commerce/delivery-apps.md)** — link your own
+  DoorDash, Uber Eats or Grubhub store and take its orders at your POS register: accept
+  or reject, mark ready and picked up, and each accepted order takes its items off the
+  same shelf as every other sale. Send your menu from your products in one step.
 -->
 
 <!--

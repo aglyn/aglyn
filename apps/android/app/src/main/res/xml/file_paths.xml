@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Camera shots for media uploads, and exports shared from the app, both in its cache. -->
+<paths>
+  <cache-path name="aglyn_camera" path="aglyn_camera/" />
+  <cache-path name="aglyn_exports" path="aglyn_exports/" />
+</paths>

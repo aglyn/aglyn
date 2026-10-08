@@ -126,5 +126,9 @@
   "inventory-sync": {
     "baseline": 6766,
     "budget": 9216
+  },
+  "delivery-apps": {
+    "baseline": 5173,
+    "budget": 7168
   }
 }
