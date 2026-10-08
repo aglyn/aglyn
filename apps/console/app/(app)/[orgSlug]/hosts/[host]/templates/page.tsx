@@ -17,14 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { mdiBookmarkOutline } from '@aglyn/shared-data-mdi'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { Bytes, doc, setDoc } from 'firebase/firestore'
+import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -58,7 +55,7 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
   // The org the header's plugin actions start under (AGL-3043): the scope's,
   // read from context, and `undefined` until the scope names one.
   const { currentOrg } = useOrgScope()
-  const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
 
@@ -78,39 +75,30 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
     setCreateError(null)
     try {
       const templateId = Aglyn.createResourceUid()
-      const timestamp = Timestamp.now()
-      await setDoc(doc(firestore, 'hosts', hostId, 'templates', templateId), {
+      // Template DOC creation is API-only by rule (`allow create: if
+      // isStaff()`), like components and layouts: this wrote `setDoc`
+      // directly and every non-staff create died on a rules denial. The
+      // resources route checks the plan's allowance, encodes `nodes` at rest
+      // (AGL-1151), stamps `source: authored` and the list keys (AGL-3321),
+      // and the native apps create through the same route (AGL-3668).
+      await createHostResource({
         hostId,
-        kind: values.kind ?? 'page',
-        displayName: values.displayName,
-        description: values.description ?? '',
-        // A canvas needs a ROOT node — `{}` renders as "Invalid node".
-        rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-        // Compressed at rest (AGL-1151). This `setDoc` deliberately bypasses
-        // `useHostTemplateRef` — it is a create, and the converter stamps an
-        // `updatedAt` this write already carries — so the encoding has to be
-        // applied here or the document arrives in a form its own editor's
-        // converter would never write again.
-        nodes: Bytes.fromUint8Array(
-          Aglyn.encodeStoredNodes({
+        resource: 'template',
+        id: templateId,
+        data: {
+          kind: values.kind ?? 'page',
+          displayName: values.displayName,
+          description: values.description ?? '',
+          // A canvas needs a ROOT node — `{}` renders as "Invalid node".
+          rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+          nodes: {
             [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
               $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
               componentId: 'div',
               nodes: [],
             },
-          })!,
-        ),
-        // Explicit rather than absent: an absent source reads as "unknown"
-        // to the badge and the marketplace update path, not as "mine".
-        source: { type: 'authored' },
-        // The keys the library's list queries by (AGL-3321).
-        ...artifactCreateListKeys('templates', {
-          kind: values.kind ?? 'page',
-          displayName: values.displayName,
-          source: { type: 'authored' },
-        }),
-        createdAt: timestamp,
-        updatedAt: timestamp,
+          },
+        },
       })
       setCreateOpen(false)
       router.push(
@@ -127,7 +115,7 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
       setCreating(false)
     }
     },
-    [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar],
+    [creating, createHostResource, hostId, router, orgSlug, host, enqueueSnackbar],
   )
 
   return (

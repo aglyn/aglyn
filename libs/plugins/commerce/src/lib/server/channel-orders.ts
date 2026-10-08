@@ -32,6 +32,7 @@ import { ORDER_CANCELLED_EVENT, ORDER_PAID_EVENT } from '../model/order-events'
 import { alertLowStockCrossing } from './low-stock'
 import { stageOrderEvent } from './order-events'
 import { capRestockLines, resolveTrackedRestockLines, saleReleaseCaps } from './restock-flag'
+import { completeChannelOrder, recordChannelOrderRefund } from './channel-order-updates'
 
 /**
  * ORDERS SOLD ON ANOTHER CHANNEL (AGL-3638): commerce's implementation of
@@ -337,6 +338,7 @@ export async function importChannelOrder(
         taxRemittedByChannel: true as const,
         fees: fees.fees,
         feesTotalCents: fees.totalCents,
+        ...(order.handoff === 'courier' ? { handoff: 'courier' as const } : {}),
       },
       lineItems,
       totals: {
@@ -376,7 +378,10 @@ export async function importChannelOrder(
     title: `New ${channelLabel} order on {site} — ${totalLabel}`,
     body:
       `Order ${displayRef} came in from ${channelLabel} (their order ${clip(order.externalRef, 120) || order.externalOrderId}): ` +
-      `${units} item${units === 1 ? '' : 's'}, ${totalLabel}. Ship it from the order here and the tracking goes back to ${channelLabel}.`,
+      `${units} item${units === 1 ? '' : 's'}, ${totalLabel}. ` +
+      (order.handoff === 'courier'
+        ? `Have it ready for the ${channelLabel} courier.`
+        : `Ship it from the order here and the tracking goes back to ${channelLabel}.`),
     link: `/${order.hostId}/products`,
   })
   if (result.shortfalls.length) {
@@ -517,4 +522,7 @@ export const commerceChannelOrders: PluginChannelOrders = {
   importOrder: (order) => importChannelOrder(order),
   cancelOrder: (request) => cancelChannelOrder(request),
   recordFees: (request) => recordChannelOrderFees(request),
+  // A courier's pickup and a channel's refund or adjustment (AGL-3644).
+  completeOrder: (request) => completeChannelOrder(request),
+  recordRefund: (request) => recordChannelOrderRefund(request),
 }

@@ -295,6 +295,8 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'layout-frame': 'fields',
   // A site's look (AGL-3660): a dozen values code builds the theme from.
   'site-look': 'fields',
+  // A site's first posts (AGL-3676): an entry's fields, which its own check holds.
+  'blog-post': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */

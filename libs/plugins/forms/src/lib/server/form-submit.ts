@@ -1037,6 +1037,9 @@ export async function POST(request: Request): Promise<Response> {
       // sent one in the shape the recorder mints.
       {
         actor: { kind: 'visitor', ...(submittedEmail ? { email: submittedEmail } : {}) },
+        // The stored submission (AGL-3643), for a listener that hands it to
+        // an outside system by the id `/v1/…/form-submissions` reads.
+        recordId: submissionRef.id,
         ...(SITE_JOURNEY_ID_PATTERN.test(String(payload[SITE_JOURNEY_SUBMISSION_FIELD] ?? ''))
           ? { journeyId: String(payload[SITE_JOURNEY_SUBMISSION_FIELD]) }
           : {}),

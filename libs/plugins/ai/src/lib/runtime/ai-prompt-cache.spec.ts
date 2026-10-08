@@ -90,6 +90,8 @@ import {
   AI_CATEGORIES_INSTRUCTIONS,
   AI_PRODUCT_COPY_INSTRUCTIONS,
 } from './ai-products-generation'
+import { AI_BLOG_POST_INSTRUCTIONS } from './ai-blog-post-generation'
+import { AI_BLOG_POST_TOOL } from '../tools/ai-blog-post-tool'
 import {
   AI_CATALOG_TOOL,
   AI_CATEGORIES_TOOL,
@@ -284,6 +286,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.products',
     caches: true,
     why: "the doctrine, the rules and the tool of a product's copy, a catalog, or categories and discounts; the product, its photo and the brief ride uncached",
+  },
+  'runtime/ai-blog-post-generation.ts': {
+    step: 'copy.blog',
+    caches: true,
+    why: "the doctrine's fields block, a post's rules and its tool (AGL-3676); the site's brief, the posts already written and which post this is ride uncached",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -513,6 +520,13 @@ const REQUESTS: Record<string, Composed> = {
     step: 'job.products',
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATALOG_INSTRUCTIONS }),
     tools: () => [AI_CATALOG_TOOL],
+  },
+  // A site's first post (AGL-3676): the brief and the posts written are the user turn.
+  'blog-post': {
+    door: 'runtime/ai-blog-post-generation.ts',
+    step: 'copy.blog',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_BLOG_POST_INSTRUCTIONS, scope: 'fields' }),
+    tools: () => [AI_BLOG_POST_TOOL],
   },
   categories: {
     door: 'runtime/ai-products-generation.ts',
@@ -894,6 +908,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
       catalog: { prefixTokens: 2_449, minimum: 512, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
+      // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
+      'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },

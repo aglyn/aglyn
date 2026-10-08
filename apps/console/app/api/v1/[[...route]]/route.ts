@@ -157,7 +157,9 @@ async function dispatch(
   }
   if (segments.length === 1 && segments[0] === 'me' && request.method === 'GET') {
     return apiJson(
-      { object: 'api_key', org: context.orgId, scopes: context.scopes },
+      // `name` (AGL-3643) is how an integration that holds several keys —
+      // Zapier's connection label — tells them apart without the secret.
+      { object: 'api_key', org: context.orgId, name: context.keyName, scopes: context.scopes },
       { headers },
     )
   }

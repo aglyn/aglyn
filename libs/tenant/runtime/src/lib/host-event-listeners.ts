@@ -79,6 +79,15 @@ export interface HostEventContext {
    * records no visits or the visitor's consent did not allow one.
    */
   journeyId?: string
+  /**
+   * The id of the record the event's write created (AGL-3643) — a form
+   * submission's — for a listener that names it to an outside system or
+   * reads it back over the REST API. Kept out of the payload for the reason
+   * the actor is: a payload seeds a workflow's scope, and a form's own field
+   * could otherwise claim the name. Absent when the door made no record, or
+   * its payload already names it.
+   */
+  recordId?: string
 }
 
 export interface HostEventListener {

@@ -361,6 +361,18 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'zapier',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "hooks.zapier.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The REST hook URL Zapier mints for a Zap the merchant built in their own Zapier account, subscribed with the merchant's own API key through `POST /v1/sites/{siteId}/hooks` and posted to only by the Zapier plugin's delivery (`libs/plugins/zapier/src/lib/server/deliver.ts`), until the Zap is turned off, the key is revoked or Zapier answers 410.",
+        dataReceived: "Only the events the merchant's Zap subscribed to, each held to the scope its key holds: an order as the REST API publishes it (number, status, totals, line items, the buyer's name, email and shipping address, shipments and refunds), a booking (service, time, the guest's name, email, phone and address when asked, what was paid), a new contact (id, email, name, source, lifecycle stage), or a form submission (the form, the page and every submitted field). No payment details, API keys or passwords are sent.",
+      },
+    ],
+  },
+  {
     pluginId: 'fulfillment-networks',
     subprocessors: [],
     hosts: [
@@ -673,6 +685,42 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "not-a-subprocessor",
         reason: "Customer-chosen destination. Brightpearl's OAuth host, for a deployment that registered a Brightpearl app: its consent page, which the merchant's own browser opens to grant access to their own Brightpearl account, and its token endpoint, for the code exchange and each refresh (`libs/plugins/inventory-sync/src/lib/server/oauth.ts`). The grant names the account's own datacenter (a `brightpearl.com` or `brightpearlconnect.com` host), where every API call of `libs/plugins/inventory-sync/src/lib/providers/brightpearl.ts` then goes, with the same data as Cin7 Core and inFlow receive.",
         dataReceived: "At this host: the deployment's app reference (and client secret, for an app with confidential OAuth), the merchant's account code, and the authorization code or refresh token Brightpearl itself issued — credentials, never orders. At the account's datacenter: For each paid order the store sends to the system: its number and our reference, its date, the buyer's name and email address, the shipping address (name, street, city, state, postal code, country and phone), its items (SKU, name, quantity and unit price), shipping, discount, tax and total, under the customer the merchant chose. For stock kept in step from the store: each SKU's count adjustment at the merchant's chosen location. For products made in the system from the store: SKU, name, description, price, weight and barcode. Read back: the system's products (id, SKU, name, description, price, weight, barcode, status), its count of each SKU, its locations and customers, and the orders it recorded under our references. Also the merchant's own API key or access token, which authenticates each call. No payment details are sent.",
+      },
+    ],
+  },
+  {
+    pluginId: 'delivery-apps',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "openapi.doordash.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The DoorDash API for the merchant's own DoorDash store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/doordash.ts` to answer that store's orders and send its menu.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+      {
+        host: "api.uber.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Uber Eats API for the merchant's own Uber Eats store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/uber-eats.ts` to answer that store's orders and send its menu.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+      {
+        host: "auth.uber.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Uber's OAuth token endpoint, for the client-credentials token each Uber Eats call carries (`libs/plugins/delivery-apps/src/lib/providers/uber-eats.ts`).",
+        dataReceived: "The deployment's Uber client id and secret and the scopes asked for — credentials, never orders or menus.",
+      },
+      {
+        host: "api-third-party-gtm.grubhub.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Grubhub API for the merchant's own Grubhub store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/grubhub.ts` to answer that store's orders and send its menu.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
+      },
+      {
+        host: "api-third-party-gtm-pp.grubhub.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Grubhub API for the merchant's own Grubhub store, which a site's admin links by its store id in the store's settings, reached only from `libs/plugins/delivery-apps/src/lib/providers/grubhub.ts` to answer that store's orders and send its menu. Its pre-production host, used only by a deployment set to the sandbox, where nothing real sells.",
+        dataReceived: "For an order the service sent a store connected here: the service's own order id and store id, the answer (accepted with the minutes the kitchen needs, rejected with the merchant's reason, or ready for pickup), and the number of the store order it became. For the menu, when the merchant sends it: each product's name, choices, description, price, photo address and whether it is in stock. No buyer's details are sent: the buyer's name, phone and the order's items come FROM the service, in its webhook or when its order is read. Each call is signed with the deployment's partner credentials.",
       },
     ],
   },
