@@ -54,6 +54,10 @@ export const saveFunnel = (
     ...(funnelId ? { funnelId } : {}),
   })
 
+/** Puts a draft funnel live: it is measured, and the site records visits (AGL-3616). */
+export const activateFunnel = (user: User, hostId: string, funnelId: string) =>
+  post<{ funnelId: string; recordingChanged: boolean }>(user, 'activate', { hostId, funnelId })
+
 export const deleteFunnel = (user: User, hostId: string, funnelId: string) =>
   post<{ deleted: boolean; recordingChanged: boolean }>(user, 'delete', { hostId, funnelId })
 

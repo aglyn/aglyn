@@ -147,6 +147,7 @@ changes, because every rule is by tag.
 | `plugins-themes` | `@aglyn/plugins-themes` | `libs/plugins/themes` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-video-delivery` | `@aglyn/plugins-video-delivery` | `libs/plugins/video-delivery` | `scope:plugin` `type:feature` | yes — library video served from Cloudflare R2 through a Worker, behind core's `core.media-delivery` contract | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes — the Automation section and the automation engine | `.`, `./*` |
+| `plugins-zapier` | `@aglyn/plugins-zapier` | `libs/plugins/zapier` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-zapier --publish`, then `trust:packages --set`); the REST hooks Aglyn's Zapier app (`apps/zapier`) subscribes to, delivering commerce's order events and the bookings plugin's booking events by name, and relayed contact and form host events, through core's domain-event outbox | `.`, `./*` |
 
 **What a plugin contributes, and where (AGL-3116).** Every plugin declares
 `contributes` — its `plugins.config.json` entry for the packages above, its
@@ -233,6 +234,7 @@ would need from `apps/console` has moved into libs — see the rules below.
 | `ios` | `apps/ios` | `scope:app` `scope:mobile` `type:app` | The Aglyn and Aglyn POS apps for iPhone, iPad and Mac (SwiftUI, one Xcode project); not a package. |
 | `android` | `apps/android` | `scope:app` `scope:mobile` `type:app` | Aglyn (`com.aglyn.app`) and Aglyn POS (`com.aglyn.pos`) for Android, and both on the JVM desktop (Windows); the Gradle root for every Kotlin module; not a package. |
 | `cloud-functions` | `cloud/functions` | `scope:app` | Cloud Functions; a deploy unit, not a package. |
+| `zapier` | `apps/zapier` | `scope:app` `type:app` | Aglyn on Zapier: the Zapier platform app (plain CommonJS on the public REST API, its triggers the `plugins-zapier` REST hooks), published by the operator with the Zapier CLI; imports no project; not a package. |
 | `console-e2e` | `apps/console-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |
 | `tenant-e2e` | `apps/tenant-e2e` | `scope:app` `scope:e2e` | End-to-end suites; not a package. |
 

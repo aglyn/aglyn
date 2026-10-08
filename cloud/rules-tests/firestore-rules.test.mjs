@@ -13739,6 +13739,53 @@ describe('tax service records are the server’s alone (AGL-3631)', () => {
   })
 })
 
+describe('zapier hooks are the server’s alone (AGL-3643)', () => {
+  // A hook holds the URL Zapier minted for a merchant's Zap — a capability —
+  // and decides where a site's orders, bookings and contacts are posted; a
+  // delivery marker decides whether an event is posted again. All written
+  // and read by the zapier plugin's routes and outbox subscribers through
+  // the Admin SDK.
+  const DOCS = [
+    ['zapierHooks', 'hook-1'],
+    ['zapierHookDeliveries', 'abc123'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), {
+          orgId: ORG,
+          hostId: HOST,
+          targetUrl: 'https://hooks.zapier.com/hooks/standard/1/abc/',
+          events: ['order.paid'],
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG, targetUrl: 'https://evil.example.com/' }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, 'new'), { orgId: ORG, hostId: HOST }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('email platform connections are the server’s alone (AGL-3639)', () => {
   // A connection holds the merchant's sealed Mailchimp, Klaviyo, Omnisend or
   // Attentive credential and the cursors the sync resumes from; an owed

@@ -325,6 +325,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       'the largest function the tool accepts — twelve parameters, twenty-four operations — is far past any description; a function of eight operations is about 2,400 characters of JSON, at three characters a token with as much again to think in, as ai-job-logic-step.spec.ts measures it',
     eval: { kinds: ['logic'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
+  'job.edit': {
+    // A change to a page or a layout the site has (AGL-3616): which elements
+    // a request means, on an outline with no selection, is the judgment the
+    // step sells, so it thinks before it answers.
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 6144,
+    maxTokensBasis:
+      "the Assist edit rung's own ceiling for the proposal's tool call (ASSIST_EDIT_MAX_OUTPUT_TOKENS, 4,096: forty new elements written as name/value pairs), with half as much again to think in, as ai-job-edit-step.spec.ts holds it; the whole of it twice, as a re-ask may, still fits one beat on the balanced tier",
+    eval: { kinds: ['edit'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+  },
   'job.seo': {
     thinking: null,
     effort: null,

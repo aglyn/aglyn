@@ -131,6 +131,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms/server'),
   },
   {
+    id: 'zapier',
+    apiPrefixes: ["zapier"],
+    register: {"consoleApi":"registerZapierConsoleApi"},
+    load: () => import('@aglyn/plugins-zapier/server'),
+  },
+  {
     id: 'fulfillment-networks',
     apiPrefixes: ["fulfillment-networks"],
     register: {"consoleApi":"registerFulfillmentNetworksConsoleApi"},

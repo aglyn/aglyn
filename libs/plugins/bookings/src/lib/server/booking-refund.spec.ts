@@ -65,6 +65,16 @@ jest.mock(
   }),
 )
 
+/*
+ * `booking.canceled` (AGL-3643): a full refund is what cancels a paid
+ * booking, so it is announced to the plugins listening for it — once, and
+ * never for a partial.
+ */
+const raiseBookingEvent = jest.fn(async (...args: unknown[]) => void args)
+jest.mock('./booking-events', () => ({
+  raiseBookingEvent: (...args: unknown[]) => raiseBookingEvent(...args),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const booking: Record<string, unknown> = {}
   const claims = new Map<string, Record<string, unknown>>()
@@ -95,6 +105,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     get: async () => ({
       exists: state.bookingExists,
       get: (field: string) => booking[field],
+      data: () => ({ ...booking }),
     }),
     set: async (data: Record<string, unknown>) => {
       merge(booking, data)
@@ -313,6 +324,23 @@ describe('a booking refund reverses the seller share (AGL-2315)', () => {
     expect(reverseAttributedRevenue).toHaveBeenCalledWith(
       expect.objectContaining({ amountCents: 7500, closedTheOrder: true }),
     )
+  })
+
+  it('announces booking.canceled when a refund ends the booking, and not for a partial', async () => {
+    raiseBookingEvent.mockClear()
+    const partial = makeRes()
+    await bookingRefundHandler(makeReq({ amountCents: 3000 }, 'p'), partial)
+    expect(partial.statusCode).toBe(200)
+    expect(raiseBookingEvent).not.toHaveBeenCalled()
+    const rest = makeRes()
+    await bookingRefundHandler(makeReq({}, 'r'), rest)
+    expect(rest.statusCode).toBe(200)
+    expect(raiseBookingEvent).toHaveBeenCalledTimes(1)
+    expect(raiseBookingEvent.mock.calls[0][1]).toMatchObject({
+      event: 'booking.canceled',
+      bookingId: 'booking-1',
+      booking: { status: 'canceled', refundedCents: 7500 },
+    })
   })
 
   it('accumulates partials and ends the booking when they reach the total', async () => {

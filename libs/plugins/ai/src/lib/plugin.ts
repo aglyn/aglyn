@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME, aiAddonName, registerConsoleExtension } from '@aglyn/aglyn'
 import { LinearProgress } from '@mui/material'
 import { createElement } from 'react'
 import { AiAssistProviderOnHost } from './components/ai-assist-provider-on-host.component'
@@ -198,6 +198,9 @@ const AiSiteSeoStartCard = lazyWidget('AiSiteSeoStartCard', () =>
   import('./components/ai-site-seo-start-card.component').then(
     (m) => m.default,
   ),
+)
+const AiSiteMemoryCard = lazyWidget('AiSiteMemoryCard', () =>
+  import('./components/ai-site-memory-card.component').then((m) => m.default),
 )
 const AiSiteStartCard = lazyWidget('AiSiteStartCard', () =>
   import('./components/ai-site-start-card.component').then((m) => m.default),
@@ -918,6 +921,17 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiSiteSeoStartCard,
+      },
+      // What Aglyn AI learned from the site's applied edits (AGL-3661), on
+      // Setup → Business profile, where the owner reads and forgets it. No
+      // generate permission: reading and clearing what the AI keeps about a
+      // site is every editor's, and the rules hold the write to the server.
+      {
+        slot: 'hostBusinessProfile',
+        widgetId: 'ai-site-memory',
+        title: `What ${aiAddonName()} learned`,
+        featureFlag: 'aiGenerative',
+        Component: AiSiteMemoryCard,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route
