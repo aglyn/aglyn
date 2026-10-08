@@ -58,6 +58,13 @@ class ConsoleApiClient(
     return origin + path + if (params.isEmpty()) "" else "?" + params.joinToString("&")
   }
 
+  /**
+   * The signed-in member's ID token claims (its payload, decoded; never
+   * verified here, since the routes and rules verify the token itself). A
+   * screen reads a claim the console reads the same way, such as `staff`.
+   */
+  suspend fun claims(): kotlinx.serialization.json.JsonObject = getIdToken(false)?.let(::jwtPayload) ?: kotlinx.serialization.json.JsonObject(emptyMap())
+
   /** Calls a route and returns its JSON body (null for an empty body). */
   suspend fun request(
     path: String,
@@ -141,4 +148,14 @@ class ConsoleApiClient(
       }
     }
   }
+}
+
+/** A JWT's payload as JSON (base64url, unpadded); empty when it is not one. */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+fun jwtPayload(token: String): kotlinx.serialization.json.JsonObject {
+  val part = token.split('.').getOrNull(1) ?: return kotlinx.serialization.json.JsonObject(emptyMap())
+  return runCatching {
+    val bytes = kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL).decode(part)
+    kotlinx.serialization.json.Json.parseToJsonElement(bytes.decodeToString()) as kotlinx.serialization.json.JsonObject
+  }.getOrElse { kotlinx.serialization.json.JsonObject(emptyMap()) }
 }

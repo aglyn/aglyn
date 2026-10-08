@@ -28,6 +28,7 @@ class ListQueryCasesTest {
   private fun declaration(name: String): ListQueryDeclaration = when (name) {
     "ORDER_LIST_QUERY" -> Contracts.orderListQuery
     "PRODUCT_LIST_QUERY" -> Contracts.productListQuery
+    "SUBMISSION_LIST_QUERY" -> Contracts.submissionListQuery
     else -> error("no declaration $name")
   }
 

@@ -54,3 +54,18 @@ private val PLAIN_SEGMENT = Regex("^[A-Za-z_][A-Za-z_0-9]*$")
 
 fun quoteFieldPathSegment(segment: String): String =
   if (PLAIN_SEGMENT.matches(segment)) segment else "`" + segment.replace("\\", "\\\\").replace("`", "\\`") + "`"
+
+/**
+ * A merge that leaves the document exactly [next], given what it holds now
+ * ([existing]): every field [existing] has that [next] lacks is deleted, at
+ * every depth, so a writer with only `merge` makes the console's whole-document
+ * `set` (an overlay's save, for one).
+ */
+@Suppress("UNCHECKED_CAST")
+fun replacementMerge(existing: Map<String, Any?>?, next: Map<String, Any?>): Map<String, Any?> = buildMap {
+  for ((key, value) in next) {
+    val before = existing?.get(key)
+    put(key, if (value is Map<*, *> && before is Map<*, *>) replacementMerge(before as Map<String, Any?>, value as Map<String, Any?>) else value)
+  }
+  existing?.keys?.filter { it !in next }?.forEach { put(it, FirestoreDelete) }
+}

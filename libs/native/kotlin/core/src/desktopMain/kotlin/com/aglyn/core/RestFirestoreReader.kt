@@ -257,6 +257,9 @@ class RestFirestoreReader(
       is Number -> buildJsonObject { put("doubleValue", value.toDouble()) }
       is String -> buildJsonObject { put("stringValue", value) }
       is FirestoreTimestamp -> buildJsonObject { put("timestampValue", Instant.ofEpochSecond(value.seconds, value.nanos.toLong()).toString()) }
+      // A PATCH carries no transforms: the server's time is approximated by this machine's, so a rule
+      // that pins a field to `request.time` refuses it (callers treat such a write as best effort).
+      ServerTimestamp -> encodeValue(firestoreNow())
       is List<*> -> buildJsonObject { put("arrayValue", buildJsonObject { put("values", JsonArray(value.map(::encodeValue))) }) }
       is Map<*, *> -> buildJsonObject {
         put("mapValue", buildJsonObject { put("fields", JsonObject(value.entries.associate { it.key.toString() to encodeValue(it.value) })) })

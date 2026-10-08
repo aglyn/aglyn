@@ -4,6 +4,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.WebAsset
@@ -234,6 +236,8 @@ object AglynIcons {
     "science" to Icons.Outlined.Science,
     "web_asset" to Icons.Outlined.WebAsset,
     "archive" to Icons.Outlined.Archive,
+    "lock" to Icons.Outlined.Lock,
+    "link" to Icons.Outlined.Link,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: Icons.Outlined.Extension

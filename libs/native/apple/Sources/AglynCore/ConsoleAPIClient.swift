@@ -87,6 +87,23 @@ public final class ConsoleAPIClient: Sendable {
     self.maxAttempts = max(1, maxAttempts)
   }
 
+  /// The signed-in member's ID token claims (its payload, decoded; never verified here, since the
+  /// routes and rules verify the token itself). A screen reads a claim the console reads the same
+  /// way, such as `staff` for a staff preview.
+  public func claims() async -> [String: Any] {
+    guard let token = try? await getIDToken(false) else { return [:] }
+    return Self.jwtPayload(token)
+  }
+
+  static func jwtPayload(_ token: String) -> [String: Any] {
+    let parts = token.split(separator: ".")
+    guard parts.count >= 2 else { return [:] }
+    var base64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    while base64.count % 4 != 0 { base64 += "=" }
+    guard let data = Data(base64Encoded: base64), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+    return object
+  }
+
   /// `encodeURIComponent`'s unreserved set.
   private static let componentAllowed: CharacterSet = {
     var set = CharacterSet.alphanumerics.intersection(CharacterSet(charactersIn: Unicode.Scalar(0)..<Unicode.Scalar(128)))
