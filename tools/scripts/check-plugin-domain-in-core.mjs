@@ -276,8 +276,10 @@ export function domainsDeclared(text) {
  * `sms` is also a URL scheme (`sms:`) that core's link sanitizers allow-list
  * (AGL-3610), which names no plugin. `fonts` is also a field of core's own
  * theme (`HostTheme.fonts`), which every theme reader names (AGL-3656).
+ * `paypal` is also a brand the outbound phishing screen lists as an
+ * impersonation target (AGL-3630), which names no plugin either.
  */
-const AMBIGUOUS_IDS = new Set(['ai', 'data', 'email', 'fonts', 'forms', 'logic', 'mui', 'sms'])
+const AMBIGUOUS_IDS = new Set(['ai', 'data', 'email', 'fonts', 'forms', 'logic', 'mui', 'paypal', 'sms'])
 
 const PLUGIN_IMPORT =
   /from\s+['"](@aglyn\/plugins-[a-z-]+)(?:\/[^'"]*)?['"]|import\(\s*['"](@aglyn\/plugins-[a-z-]+)|(?:\.\.\/)+(libs\/plugins\/[a-z-]+)\//

@@ -2406,6 +2406,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // PayPal (AGL-3630): a workspace's seller account (the merchant id PayPal
+    // returned and whether it may take payments), each buyer's checkout (what
+    // the seller priced, the PayPal orders opened for it, its capture and
+    // refunds), and the PayPal webhook events already applied. Written and
+    // read by the paypal plugin's server half through the Admin SDK only.
+    // Deny ALL client access, staff and the owner included: a client that
+    // could write a checkout could change what a buyer is charged or mark it
+    // captured, and one that could write a seller could point a store's
+    // payments at another PayPal account. Org erasure destroys sellers and
+    // checkouts by the `orgId` field; the event log expires by TTL.
+    match /paypalSellers/{orgId} {
+      allow read, write: if false;
+    }
+    match /paypalCheckouts/{checkoutId} {
+      allow read, write: if false;
+    }
+    match /paypalWebhookEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     // Tax services (AGL-3631): a site's connection to the merchant's OWN
     // Avalara AvaTax or TaxJar account, its credential sealed; each product's
     // tax code; the customers the merchant recorded as exempt; and each

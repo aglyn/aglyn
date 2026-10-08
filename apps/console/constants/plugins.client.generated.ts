@@ -160,6 +160,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-themes'),
   },
   {
+    id: 'paypal',
+    apiPrefixes: ["paypal"],
+    register: {"console":"registerPayPalConsole"},
+    contributes: {"console":{"slots":["commerceSettings"]}},
+    load: () => import('@aglyn/plugins-paypal'),
+  },
+  {
     id: 'shipping',
     apiPrefixes: ["shipping"],
     register: {"console":"registerShippingConsole"},

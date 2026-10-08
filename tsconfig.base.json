@@ -117,6 +117,8 @@
       "@aglyn/plugins-shipping/*": ["./libs/plugins/shipping/src/lib/*"],
       "@aglyn/plugins-themes": ["./libs/plugins/themes/src/index.ts"],
       "@aglyn/plugins-themes/*": ["./libs/plugins/themes/src/lib/*"],
+      "@aglyn/plugins-paypal": ["./libs/plugins/paypal/src/index.ts"],
+      "@aglyn/plugins-paypal/*": ["./libs/plugins/paypal/src/lib/*"],
       "@aglyn/plugins-sms": ["./libs/plugins/sms/src/index.ts"],
       "@aglyn/plugins-sms/*": ["./libs/plugins/sms/src/lib/*"],
       "@aglyn/plugins-tax-engines": ["./libs/plugins/tax-engines/src/index.ts"],

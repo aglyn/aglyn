@@ -260,6 +260,12 @@ const POLICIES: Array<{
     writers: ['libs/plugins/zapier/src/lib/server/store.ts'],
     stamp: 'expiresAt: deliveryMarkerExpiry(input.nowMs)',
   },
+  // AGL-3630: the PayPal webhook events already applied, thirty days.
+  {
+    collectionGroup: 'paypalWebhookEvents',
+    writers: ['libs/plugins/paypal/src/lib/server/webhooks.ts'],
+    stamp: 'expiresAt: new Date(',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {

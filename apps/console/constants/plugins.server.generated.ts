@@ -107,6 +107,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-sms/server'),
   },
   {
+    id: 'paypal',
+    apiPrefixes: ["paypal"],
+    register: {"consoleApi":"registerPayPalConsoleApi"},
+    load: () => import('@aglyn/plugins-paypal/server'),
+  },
+  {
     id: 'shipping',
     apiPrefixes: ["shipping"],
     register: {"consoleApi":"registerShippingConsoleApi"},

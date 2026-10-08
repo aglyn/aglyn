@@ -217,4 +217,11 @@ export const TTL_POLICIES = Object.freeze([
     // (`ZAPIER_DELIVERY_MARKER_RETENTION_MS`).
     why: 'Zapier hook delivery markers (ids only), 3 days',
   },
+  {
+    collection: 'paypalWebhookEvents',
+    field: 'expiresAt',
+    // AGL-3630 — the PayPal webhook events already applied, kept longer than
+    // PayPal retries a delivery so a redelivery is recognized.
+    why: 'applied PayPal webhook event ids, 30 days',
+  },
 ])

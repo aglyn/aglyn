@@ -248,6 +248,12 @@
       "@aglyn/plugins-themes/*": [
         "../../libs/plugins/themes/src/lib/*"
       ],
+      "@aglyn/plugins-paypal": [
+        "../../libs/plugins/paypal/src/index.ts"
+      ],
+      "@aglyn/plugins-paypal/*": [
+        "../../libs/plugins/paypal/src/lib/*"
+      ],
       "@aglyn/plugins-sms": [
         "../../libs/plugins/sms/src/index.ts"
       ],

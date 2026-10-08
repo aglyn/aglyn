@@ -216,6 +216,52 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'paypal',
+    subprocessors: [
+      {
+        host: "api-m.paypal.com",
+        entity: "PayPal, Inc. (PayPal and Venmo)",
+        region: "United States",
+        purpose: "Payments for merchants who accept PayPal and Venmo at their store’s checkout and register: taking the buyer’s payment, refunds, the platform fee, and onboarding the merchant’s PayPal account",
+        publishedOn: "2026-10-07",
+        reason: "The PayPal plugin (`libs/plugins/paypal`), PayPal's partner (multiparty) integration under Aglyn's partner account: Partner Referrals onboarding, Orders v2 with the platform fee, refunds and webhooks, every call with the platform's credentials. Reached only while every `PAYPAL_*` variable is set (`libs/plugins/paypal/src/lib/server/config.ts`); the buyer's browser loads PayPal's buttons from www.paypal.com on the plugin's own pay page and nowhere else.",
+        dataReceived: "For each workspace that connects PayPal: a tracking id naming the workspace, and the merchant id PayPal returns. For each PayPal or Venmo checkout: the store’s name, each item’s name, SKU, quantity and price, the discount, tax and delivery options with their prices, the platform fee, the store’s order reference and the buyer’s return address on the store. PayPal returns the buyer’s name, email and delivery address, which Aglyn records on the order. For a refund: the payment, the amount and the note to the buyer. No card or bank details pass through Aglyn.",
+      },
+      {
+        host: "api-m.sandbox.paypal.com",
+        entity: "PayPal, Inc. (PayPal and Venmo)",
+        region: "United States",
+        purpose: "Payments for merchants who accept PayPal and Venmo at their store’s checkout and register: taking the buyer’s payment, refunds, the platform fee, and onboarding the merchant’s PayPal account",
+        publishedOn: "2026-10-07",
+        reason: "The PayPal plugin (`libs/plugins/paypal`), PayPal's partner (multiparty) integration under Aglyn's partner account: Partner Referrals onboarding, Orders v2 with the platform fee, refunds and webhooks, every call with the platform's credentials. Reached only while every `PAYPAL_*` variable is set (`libs/plugins/paypal/src/lib/server/config.ts`); the buyer's browser loads PayPal's buttons from www.paypal.com on the plugin's own pay page and nowhere else.",
+        dataReceived: "For each workspace that connects PayPal: a tracking id naming the workspace, and the merchant id PayPal returns. For each PayPal or Venmo checkout: the store’s name, each item’s name, SKU, quantity and price, the discount, tax and delivery options with their prices, the platform fee, the store’s order reference and the buyer’s return address on the store. PayPal returns the buyer’s name, email and delivery address, which Aglyn records on the order. For a refund: the payment, the amount and the note to the buyer. No card or bank details pass through Aglyn.",
+      },
+      {
+        host: "www.paypal.com",
+        entity: "PayPal, Inc. (PayPal and Venmo)",
+        region: "United States",
+        purpose: "Payments for merchants who accept PayPal and Venmo at their store’s checkout and register: taking the buyer’s payment, refunds, the platform fee, and onboarding the merchant’s PayPal account",
+        publishedOn: "2026-10-07",
+        reason: "The PayPal plugin (`libs/plugins/paypal`), PayPal's partner (multiparty) integration under Aglyn's partner account: Partner Referrals onboarding, Orders v2 with the platform fee, refunds and webhooks, every call with the platform's credentials. Reached only while every `PAYPAL_*` variable is set (`libs/plugins/paypal/src/lib/server/config.ts`); the buyer's browser loads PayPal's buttons from www.paypal.com on the plugin's own pay page and nowhere else.",
+        dataReceived: "For each workspace that connects PayPal: a tracking id naming the workspace, and the merchant id PayPal returns. For each PayPal or Venmo checkout: the store’s name, each item’s name, SKU, quantity and price, the discount, tax and delivery options with their prices, the platform fee, the store’s order reference and the buyer’s return address on the store. PayPal returns the buyer’s name, email and delivery address, which Aglyn records on the order. For a refund: the payment, the amount and the note to the buyer. No card or bank details pass through Aglyn.",
+      },
+    ],
+    hosts: [
+      {
+        host: "uri.paypal.com",
+        disposition: "no-request",
+        reason: "PayPal names the permissions a merchant grants as URIs on this host (`https://uri.paypal.com/services/payments/…`); the PayPal plugin reads them in a merchant integration and its specs spell them. They are identifiers, never fetched.",
+        dataReceived: "Nothing: no request is made to this host.",
+      },
+      {
+        host: "www.sandbox.paypal.com",
+        disposition: "no-request",
+        reason: "PayPal's sandbox sign-up page, which PayPal's own onboarding link (`action_url`) opens in the merchant's browser in a sandbox deployment; the plugin's specs spell it. Aglyn's servers send it nothing.",
+        dataReceived: "Nothing from Aglyn: the merchant signs in to PayPal there themselves.",
+      },
+    ],
+  },
+  {
     pluginId: 'shipping',
     subprocessors: [
       {

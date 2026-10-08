@@ -13604,6 +13604,50 @@ describe('shipping records are the server’s alone (AGL-3612)', () => {
   })
 })
 
+describe('PayPal records are the server’s alone (AGL-3630)', () => {
+  // A workspace's PayPal seller account, each buyer's PayPal checkout (what
+  // was priced, the PayPal orders, the capture and refunds) and the webhook
+  // events already applied. Written and read by the paypal plugin's server
+  // half through the Admin SDK only; the owner and staff are refused like
+  // everyone, because a client that could write a checkout could change what
+  // a buyer is charged or mark it paid.
+  const DOCS = [
+    ['paypalSellers', ORG],
+    ['paypalCheckouts', 'ppc_0123456789abcdef0123456789abcdef01234567'],
+    ['paypalWebhookEvents', 'WH-1'],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of DOCS) {
+        await setDoc(doc(db, name, id), { orgId: ORG, hostId: HOST, status: 'open', merchantId: 'MERCHANT1' })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of DOCS) {
+        const ref = doc(db, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { status: 'captured', merchantId: 'MINE' }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('post-purchase records are the server’s alone (AGL-3635)', () => {
   // A site's AfterShip, Route and Narvar switches with the merchant's sealed
   // credentials, and what each service was told about an order. Written and

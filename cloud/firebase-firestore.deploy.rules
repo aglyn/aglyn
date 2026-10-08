@@ -2416,6 +2416,26 @@ allow read, write: if false;
 
 
 
+match /paypalSellers/{orgId} {
+allow read, write: if false;
+}
+match /paypalCheckouts/{checkoutId} {
+allow read, write: if false;
+}
+match /paypalWebhookEvents/{eventId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /taxEngineConnections/{hostId} {
 allow read, write: if false;
 }

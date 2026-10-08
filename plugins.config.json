@@ -2737,6 +2737,37 @@
       "contributes": {}
     },
     {
+      "id": "paypal",
+      "$comment": "AGL-3630: PayPal and Venmo through PayPal's partner (multiparty) integration, behind core's core.payment-providers contract; commerce registers the checkout owners and never imports it. Infrastructure, like sms: no catalog entry and no switch, and no route names a hostId (the console routes name ?orgId=, the buyer's pay page ?c=). Hidden everywhere until PAYPAL_ENVIRONMENT, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_PARTNER_MERCHANT_ID, PAYPAL_PARTNER_ATTRIBUTION_ID and PAYPAL_WEBHOOK_ID are all set, which waits on the partner application and the published Subprocessors row. consoleApi serves the owner's seller routes and PayPal's verified webhook at /api/paypal/webhook; both apps serve the pay page.",
+      "package": "@aglyn/plugins-paypal",
+      "register": {
+        "console": "registerPayPalConsole",
+        "tenantApi": "registerPayPalTenantApi",
+        "consoleApi": "registerPayPalConsoleApi",
+        "serverDeclarations": "registerPayPalServerDeclarations",
+        "consoleServerDeclarations": "registerPayPalConsoleServerDeclarations",
+        "subprocessors": "payPalSubprocessors"
+      },
+      "apiPrefixes": ["paypal"],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A workspace's PayPal seller account: the merchant id PayPal returned and its readiness (AGL-3630). Keyed by the org id; org erasure removes it by orgId.",
+          "name": "paypalSellers",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One buyer's PayPal checkout: what the seller priced, the PayPal orders opened for it, its capture and refunds (AGL-3630).",
+          "name": "paypalCheckouts",
+          "orgField": "orgId"
+        }
+      ],
+      "contributes": {
+        "console": {
+          "slots": ["commerceSettings"]
+        }
+      }
+    },
+    {
       "id": "shipping",
       "package": "@aglyn/plugins-shipping",
       "register": {

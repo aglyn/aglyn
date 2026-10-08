@@ -2246,6 +2246,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
     "orgField": "orgId"
   },
   {
+    "pluginId": "paypal",
+    "name": "paypalSellers",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "paypal",
+    "name": "paypalCheckouts",
+    "orgField": "orgId"
+  },
+  {
     "pluginId": "shipping",
     "name": "shippingTrackers",
     "orgField": "orgId"
