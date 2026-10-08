@@ -102,6 +102,13 @@ export interface AiPlanCapabilities {
    * calls a repeat. A plan is then not asked for a component for a section's
    * repeated items (AGL-3616); a section two pages share still is one. The
    * plan step sets it for a `build` job. Absent is `false`.
+   *
+   * It is the plan half of one rule. The page half is the tree check's
+   * `AiDoctrineTreeContext.repeatsCompiled`, which every page the layout
+   * language compiles is checked with: where the site's design draws a
+   * section's items as picture cards — larger than the compact form, and so
+   * a block rule 1 would count — those cards are the compiler's, not a block
+   * typed out twice, and rule 1 asks no component of them (AGL-3660).
    */
   repeatsCompiled?: boolean
 }

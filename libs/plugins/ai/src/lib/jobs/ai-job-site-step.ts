@@ -51,6 +51,7 @@ import {
   aiSiteWords,
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
+  aiSiteBlogNavPage,
 } from '../model/ai-site-job'
 import {
   AI_SITE_SEO_OUTPUT_ID,
@@ -60,7 +61,12 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
-import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
+import {
+  AI_LAYOUT_SITE_PAGES_INPUT,
+  AI_LAYOUT_SITE_PAGES_MAX,
+  aiLayoutIsHomeSlug,
+  aiLayoutSitePagesOfPlan,
+} from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
@@ -603,8 +609,17 @@ export function aiSiteUnitJob(
   // ids are minted on the plan, and the platform writes the header's links.
   // A page is told them too, so its buttons may go to a page built after it.
   if (job.kind === 'site' && (unit.kind === 'layout' || unit.kind === 'page')) {
-    // A guided start links every page the person asked for (AGL-3660).
-    const pages = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
+    // A guided start links every page the person asked for (AGL-3660), and
+    // the blog its first posts are written into, by its path, second after
+    // Home (AGL-3676): the live Slow Roads start linked an "Articles" page
+    // and never the blog.
+    const planned = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
+    const blog = aiSiteWritesPosts(job) ? [aiSiteBlogNavPage(plan.screens)] : []
+    const homes = planned.filter((page) => aiLayoutIsHomeSlug(page.slug))
+    const pages = [...homes, ...blog, ...planned.filter((page) => !aiLayoutIsHomeSlug(page.slug))].slice(
+      0,
+      AI_LAYOUT_SITE_PAGES_MAX,
+    )
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
   }
   // A site's pages and its layout are designed in the layout language and
@@ -613,7 +628,7 @@ export function aiSiteUnitJob(
     // The look designed first (AGL-3660): its header arrangement and band rhythm.
     const look = (job.outputs ?? []).find((output) => output.resource === 'theme' && output.id === 'look')
     const style = look?.proposal?.['style'] as Record<string, unknown> | undefined
-    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'] }
+    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'], seed: style['seed'] }
     unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
@@ -651,6 +666,15 @@ export function aiSiteUnitJob(
           : unitInputs,
     brief: brief.join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }
+}
+
+/**
+ * Whether this site start writes its first posts (AGL-3676): its ledger owes
+ * the posts part and has not given up on it. The ledger is written before the
+ * layout is built, so the header knows the blog before it exists.
+ */
+export function aiSiteWritesPosts(job: Pick<AiJob, 'items'>): boolean {
+  return (job.items ?? []).some((row) => row.slot === 'posts' && row.status !== 'skipped' && row.status !== 'failed')
 }
 
 /**
@@ -883,10 +907,14 @@ export function createAiJobSiteStep(
     /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      // A blog the header links by path before its posts exist (AGL-3660):
+      // owed and not delivered, its links come out of what is published.
+      const postsRow = rows.get('posts')
       const sitePublish = await publish(context.firestore, {
         job,
         outputs: pages,
         now: context.now,
+        ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })

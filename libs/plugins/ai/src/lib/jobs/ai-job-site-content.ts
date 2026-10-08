@@ -25,6 +25,7 @@ import {
 import { aiProductsProposalOf } from '../model/ai-products'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import {
@@ -67,9 +68,10 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *
  * ── Not on the Free taste ────────────────────────────────────────────────
  *
- * A Free site's sections cap is DERIVED to spend the whole taste less one
- * retried section (`aiFreeSiteSectionsWithin`), so there is no slack a post
- * could use without taking a section away; and a Free plan includes neither
+ * A guided start's Free site, built on an empty site with its layout and
+ * form, leaves 18 credits once its eight sections and its retried page's
+ * room are held (`aiFreeSiteSectionsWithin`, AGL-3660), under the 23 one post
+ * costs at its worst; and a Free plan includes neither
  * the `commerce` feature nor a product (`productsPerHost` is 0).
  * `ai-job-free-site.spec.ts` shows the arithmetic. Free sites keep the pages
  * their kind already describes; the owner adds posts and products after.
@@ -85,9 +87,8 @@ export const AI_SITE_PRODUCTS = { min: 3, max: 6 } as const
 export const AI_SITE_POSTS_LABEL = 'Writing your first posts'
 export const AI_SITE_PRODUCTS_LABEL = 'Adding your first products'
 
-/** The blog the posts go in, and the addresses it may answer at, in order of preference. */
-export const AI_SITE_BLOG_NAME = 'Blog'
-export const AI_SITE_BLOG_SLUGS = ['blog', 'posts', 'journal', 'articles', 'writing', 'stories'] as const
+/** The blog the posts go in, and the addresses it may answer at (`model/ai-site-job.ts`). */
+export { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 
 /** The input a site unit's own job carries what the part needs in. */
 export const AI_SITE_CONTENT_INPUT = 'siteContent'

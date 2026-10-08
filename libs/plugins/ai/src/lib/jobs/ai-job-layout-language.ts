@@ -16,6 +16,7 @@
  */
 
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
+import { aiLayoutDesignChoices, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiCompileLayoutFrame } from '../layout-language/ai-layout-frame'
 import {
   AI_LAYOUT_FRAME_TOOL,
@@ -176,6 +177,8 @@ export function aiLayoutFrameCheck(input: {
   pages: readonly AiLayoutPage[]
   targets: AiLayoutTargets
   extend: (tree: AiValidatedTree) => AiDoctrineViolation[]
+  /** The site's design (`aiLayoutDesignOf`), whose pages' closing band the footer sits under. */
+  design?: AiLayoutDesign | null
 }): AiGenerationCheck<AiLayoutFrameBuilt> {
   let answers = 0
   return (answer) => {
@@ -186,7 +189,12 @@ export function aiLayoutFrameCheck(input: {
     if (input.headerAlign && frame.header) frame.header.align = input.headerAlign
     const compiled = aiCompileLayoutFrame(
       frame,
-      { siteName: input.siteName, homeId: input.homeId, navPages: input.pages },
+      {
+        siteName: input.siteName,
+        homeId: input.homeId,
+        navPages: input.pages,
+        closesDark: input.design ? aiLayoutDesignChoices(input.design).coverClose : false,
+      },
       input.targets,
     )
     const context = {

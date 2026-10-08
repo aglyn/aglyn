@@ -1950,6 +1950,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         hideOnScroll: {
           type: 'boolean',
         },
+        overHero: {
+          type: 'boolean',
+        },
       },
       required: [],
       additionalProperties: false,
@@ -1964,6 +1967,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       position: 'select',
       shrinkOnScroll: 'switch',
       hideOnScroll: 'switch',
+      overHero: 'switch',
     },
     textLimits: {
       ariaLabel: 200,
@@ -4071,6 +4075,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['site', 'light', 'dark'],
         },
+        underHeader: {
+          type: 'boolean',
+        },
       },
       required: [],
       additionalProperties: false,
@@ -4082,6 +4089,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       element: 'select',
       ariaLabel: 'text-field',
       colorScheme: 'select',
+      underHeader: 'switch',
     },
     textLimits: {
       ariaLabel: 200,
@@ -4739,6 +4747,12 @@ export const AI_SX_TOKENS: AiSxTokens = {
     'bodyCompact',
     'micro',
   ],
+}
+
+/** Props only the platform's code sets (AGL-3660): stored, never described to a model. */
+export const AI_CODE_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
+  section: ['underHeader'],
+  muiAppBar: ['overHero'],
 }
 
 /** The prompt catalog of each surface. */
