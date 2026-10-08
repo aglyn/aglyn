@@ -208,7 +208,7 @@ export async function POST(
 async function aiBuildRetryRefusal(
   gate: { firestore: FirebaseFirestore.Firestore; org: object | null },
   job: AiJob,
-): Promise<{ status: 400 | 403 | 404 | 409; error: string } | null> {
+): Promise<{ status: 400 | 403 | 404 | 409 | 429; error: string } | null> {
   const plan = job.plan?.status === 'confirmed' ? job.plan : null
   if (!aiBuildRetryable(job) || !plan || !job.items?.length) {
     return { status: 409, error: 'Only a finished build can try its failed items again' }

@@ -22,7 +22,7 @@
  */
 
 import { normalizeNotificationLink, notificationLevel } from '@aglyn/aglyn/app-utils/notifications'
-import { aiJobNotice, type AiJobNoticeSource } from './ai-job-notice'
+import { AI_JOB_PAUSED_NEXT_COPY, aiJobNotice, type AiJobNoticeSource } from './ai-job-notice'
 
 const screen = (id: string, versionId = `${id}-v1`) => ({
   resource: 'screen' as const,
@@ -195,5 +195,24 @@ describe('a building rule never reaches the notification (AGL-3596)', () => {
     expect(parked.body).toBe("Aglyn AI couldn’t lay this page out cleanly, so we stopped rather than publish a broken page.")
     const stopped = aiJobNotice(source({ kind: 'form', error: RULE }), 'failed')
     expect(stopped.body).toBe("Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.")
+  })
+})
+
+describe('a job the meter paused (AGL-3660)', () => {
+  const OUT = 'Your free AI credits for this month are used across your workspaces — upgrade any workspace to keep going.'
+
+  it('says it paused and why, that nothing is lost, and how it carries on — as a warning, on the job’s page', () => {
+    const notice = aiJobNotice(source({ error: OUT }), 'paused')
+    expect(notice.type).toBe('content.aiJobNeedsYou')
+    expect(notificationLevel(notice)).toBe('warning')
+    expect(notice.title).toBe('Your site is paused')
+    expect(notice.body).toBe(`${OUT} ${AI_JOB_PAUSED_NEXT_COPY}`)
+    expect(notice.body).toMatch(/Nothing is lost/)
+    expect(notice.body).toMatch(/choose Resume/)
+    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers/ai-jobs/job-1')
+  })
+
+  it('names what any other kind builds', () => {
+    expect(aiJobNotice(source({ kind: 'page', error: OUT }), 'paused').title).toBe('Your page is paused')
   })
 })
