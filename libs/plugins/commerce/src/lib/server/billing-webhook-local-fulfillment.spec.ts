@@ -111,7 +111,6 @@ const fakeFirestore = {
 }
 
 const notifications: any[] = []
-let contactUpserts: PluginContactCaptureRequest[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The real `updateExisting` (AGL-1767's pattern): the cart branch closes its
