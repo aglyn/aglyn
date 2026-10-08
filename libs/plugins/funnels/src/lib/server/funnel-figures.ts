@@ -28,6 +28,7 @@ import {
   FUNNEL_FEATURE,
   FUNNELS_COLLECTION,
   FUNNELS_MAX_PER_SITE,
+  isFunnelDraft,
   type FunnelDefinition,
 } from '../model/funnels.types'
 import { readJourneys } from './funnel-results.server'
@@ -58,6 +59,8 @@ async function readFunnels(
     .get()
   const out: Array<{ id: string; funnel: FunnelDefinition }> = []
   for (const doc of snapshot.docs) {
+    // A draft is measured once a person activates it, not before (AGL-3616).
+    if (isFunnelDraft(doc.data())) continue
     const normalized = normalizeFunnelDefinition(doc.data())
     if ('funnel' in normalized) out.push({ id: doc.id, funnel: normalized.funnel })
   }

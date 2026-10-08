@@ -55,6 +55,8 @@ import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-ema
 import { AI_JOB_FORM_INSTRUCTIONS, AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_JOB_EXPERIMENT_SYSTEM } from '../jobs/ai-job-experiment-step'
 import { AI_JOB_LOGIC_INSTRUCTIONS } from '../jobs/ai-job-logic-step'
+import { aiJobEditInstructions } from '../jobs/ai-job-edit-step'
+import { assistEditTool } from '../server/assist-edit'
 import { aiLogicFunctionTool, aiLogicVariableTool } from '../tools/ai-logic-tool'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
@@ -77,6 +79,12 @@ import {
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { resolveBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
+import {
+  AI_SITE_CONTEXT_MAX_CHARS,
+  aiInstructionsWithSiteContext,
+  type AiSiteContextInput,
+} from '../model/ai-site-context'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
@@ -88,6 +96,8 @@ import {
   AI_CATEGORIES_INSTRUCTIONS,
   AI_PRODUCT_COPY_INSTRUCTIONS,
 } from './ai-products-generation'
+import { AI_BLOG_POST_INSTRUCTIONS } from './ai-blog-post-generation'
+import { AI_BLOG_POST_TOOL } from '../tools/ai-blog-post-tool'
 import {
   AI_CATALOG_TOOL,
   AI_CATEGORIES_TOOL,
@@ -263,6 +273,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: "one rules block — the grammar, a variable's stored forms and how to explain — so every tool's prefix clears the balanced tier's minimum; the site's variables and the request ride uncached",
   },
+  'jobs/ai-job-edit-step.ts': {
+    step: 'job.edit',
+    caches: true,
+    why: "the document doctrine, the job's own rules and the edit rung's protocol and catalog for the document's kind, one prefix a kind; the outline of the page and the request ride uncached (AGL-3616)",
+  },
   'jobs/ai-job-experiment-step.ts': {
     step: 'job.experiment',
     caches: true,
@@ -277,6 +292,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.products',
     caches: true,
     why: "the doctrine, the rules and the tool of a product's copy, a catalog, or categories and discounts; the product, its photo and the brief ride uncached",
+  },
+  'runtime/ai-blog-post-generation.ts': {
+    step: 'copy.blog',
+    caches: true,
+    why: "the doctrine's fields block, a post's rules and its tool (AGL-3676); the site's brief, the posts already written and which post this is ride uncached",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -507,6 +527,13 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATALOG_INSTRUCTIONS }),
     tools: () => [AI_CATALOG_TOOL],
   },
+  // A site's first post (AGL-3676): the brief and the posts written are the user turn.
+  'blog-post': {
+    door: 'runtime/ai-blog-post-generation.ts',
+    step: 'copy.blog',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_BLOG_POST_INSTRUCTIONS, scope: 'fields' }),
+    tools: () => [AI_BLOG_POST_TOOL],
+  },
   categories: {
     door: 'runtime/ai-products-generation.ts',
     step: 'job.products',
@@ -607,6 +634,28 @@ const REQUESTS: Record<string, Composed> = {
         scope: aiDoctrineScopeFor('logic'),
       }),
     tools: () => [aiWorkflowExplanationTool()],
+  },
+  // An edit to a page or a layout (AGL-3616): the rung's tool and catalog per
+  // kind, a page's tool also offering its search fields.
+  'edit-screen': {
+    door: 'jobs/ai-job-edit-step.ts',
+    step: 'job.edit',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiJobEditInstructions('screen'),
+        scope: aiDoctrineScopeFor('edit'),
+      }),
+    tools: () => [assistEditTool('screen')],
+  },
+  'edit-layout': {
+    door: 'jobs/ai-job-edit-step.ts',
+    step: 'job.edit',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiJobEditInstructions('layout'),
+        scope: aiDoctrineScopeFor('edit'),
+      }),
+    tools: () => [assistEditTool('layout')],
   },
   'experiment-explain': {
     door: 'jobs/ai-job-experiment-step.ts',
@@ -849,6 +898,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'logic-function': { prefixTokens: 1_556, minimum: 512, caches: true, toolsStable: true },
       'logic-variable': { prefixTokens: 1_087, minimum: 512, caches: true, toolsStable: true },
       'logic-explain': { prefixTokens: 1_077, minimum: 512, caches: true, toolsStable: true },
+      // An edit to a page or a layout (AGL-3616): the document doctrine, the
+      // job's rules, and the edit rung's protocol and element catalog for the
+      // kind, so a page's and a layout's prefix each cache.
+      'edit-screen': { prefixTokens: 5_970, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 5_958, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },
@@ -860,6 +914,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
       catalog: { prefixTokens: 2_449, minimum: 512, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
+      // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
+      'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
@@ -984,3 +1040,66 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     }
   })
 })
+
+/**
+ * THE PER-SITE BLOCK (AGL-3661). A site's business profile, status and
+ * remembered preferences ride as one cached block AFTER every platform-wide
+ * block, so the doors that read it hold two cache entries: the platform's,
+ * shared by every workspace and measured in the ledger above, and the
+ * site's, read by every request of a job on that site. Each row below is a
+ * ledger row's request with the context added the way its door adds it.
+ */
+describe('a site’s context block extends the shared prefix, never enters it (AGL-3661)', () => {
+  const context = (name: string, email: string): AiSiteContextInput => ({
+    profile: resolveBusinessProfile({
+      host: { displayName: name, business: { supportEmail: email } },
+      site: { services: ['Repairs', 'Inspections'], tone: 'friendly', sources: { services: 'owner', tone: 'owner' } },
+    }),
+    preferences: ['Prefers short, concise copy'],
+  })
+  const CONTEXT_A = context('Acme Roofing', 'hello@acme.test')
+  const CONTEXT_B = context('Bakery', 'orders@bakery.test')
+  const SITE_REQUESTS: Record<string, { base: string; blocks: (site: AiSiteInventory, ctx: AiSiteContextInput | null) => AiSystemBlock[] }> = {
+    plan: {
+      base: 'plan',
+      blocks: (site, ctx) =>
+        aiDoctrineSystemBlocks(site, { instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, ctx) }),
+    },
+    'insight-answer': {
+      base: 'insight-answer',
+      blocks: (_site, ctx) => [...aiInstructionsWithSiteContext(AI_JOB_INSIGHT_SYSTEM, ctx)],
+    },
+  }
+  /** Every block through the last breakpoint that is NOT a site's: what every workspace shares. */
+  const platformPrefix = (blocks: readonly AiSystemBlock[]) =>
+    cachedPrefix(blocks.filter((block) => !block.site))
+
+  it.each(Object.keys(SITE_REQUESTS))('%s shares its platform prefix byte for byte across two sites', (name) => {
+    const row = SITE_REQUESTS[name]
+    const a = row.blocks(SITE_A, CONTEXT_A)
+    const b = row.blocks(SITE_B, CONTEXT_B)
+    expect(platformPrefix(a)).toBe(platformPrefix(b))
+    expect(platformPrefix(a)).not.toContain('Acme Roofing')
+    expect(platformPrefix(a)).toBe(cachedPrefix(REQUESTS[row.base].blocks(SITE_A)))
+    expect(() => validateAiSystemBlocks(a)).not.toThrow()
+    expect(() => validateAiSystemBlocks(b)).not.toThrow()
+  })
+
+  it.each(Object.keys(SITE_REQUESTS))('%s caches the site block last, at most 400 tokens, and only the site’s', (name) => {
+    const blocks = SITE_REQUESTS[name].blocks(SITE_A, CONTEXT_A)
+    const last = blocks.map((block) => Boolean(block.cacheBreakpoint)).lastIndexOf(true)
+    const site = blocks.filter((block) => block.site)
+    expect(site).toHaveLength(1)
+    expect(blocks[last]).toBe(site[0])
+    expect(site[0].text).toContain('Acme Roofing')
+    expect(site[0].text).toContain('hello@acme.test')
+    expect(site[0].text.length).toBeLessThanOrEqual(AI_SITE_CONTEXT_MAX_CHARS)
+    expect(blocks.slice(last + 1).filter((block) => !block.volatile)).toEqual([])
+  })
+
+  it.each(Object.keys(SITE_REQUESTS))('%s is byte-identical to its ledger row for a site with no context', (name) => {
+    const row = SITE_REQUESTS[name]
+    expect(row.blocks(SITE_A, null)).toEqual(REQUESTS[row.base].blocks(SITE_A))
+  })
+})
+

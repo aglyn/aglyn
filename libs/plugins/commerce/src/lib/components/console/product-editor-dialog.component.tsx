@@ -1575,65 +1575,14 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (!current.name.trim() || error) return
-    const primaryVariant = current.variants[0]
-    // JSON-safe base (no Firestore Timestamp — it won't survive the API
-    // hop); millis fields are what the checkout + Product block read.
-    /**
-     * `$id` is dropped, not carried (AGL-1374).
-     *
-     * `current` is `draft ?? liftLegacyProduct(product)`, and the hub stamps
-     * `$id` onto every row it lists (`{...liftLegacyProduct(p), $id: p.$id}`)
-     * — a SYNTHETIC key `idField: '$id'` puts on the in-memory object, which
-     * nothing persists. Spreading `current` carried it into the payload, and
-     * this write is `merge: false`, so it was stored as a real field on every
-     * product save. Nothing reads it; it is the listener's bookkeeping
-     * leaking into storage, and once there no reader can tell it from a field
-     * the editor meant to write. Excluding it also CLEANS the key off any
-     * product a previous save corrupted, because a replacing write stores
-     * exactly the payload.
-     *
-     * `product.$id` is still the doc path below — reading the synthetic key
-     * is what it is for. Writing it is the bug.
-     */
-    const seeded = current as typeof current & {
-      $id?: string
-      skus?: string[]
-      barcodes?: string[]
-    }
     /*
-     * The seed's `skus` / `barcodes` are dropped too (AGL-3321):
-     * `productSearchFields` below OMITS each when no variant has one, so a
-     * seeded copy would survive a save that removed the last SKU, and the
-     * product would go on answering a SKU filter for a code it no longer has.
+     * The fields the save writes — `$id` and the seed's `skus`/`barcodes`
+     * dropped, the name with its search keys, slug, price, stock fields,
+     * image — are `productSaveFields`, the same code the native apps' save
+     * route runs (AGL-3652). JSON-safe: no Firestore Timestamp, which would
+     * not survive the API hop; millis fields are what checkout reads.
      */
-    const {
-      $id: _syntheticId,
-      skus: _seededSkus,
-      barcodes: _seededBarcodes,
-      ...currentFields
-    } = seeded
-    const base = {
-      ...currentFields,
-      /*
-       * `name` comes from `productSearchFields`, not from a bare assignment
-       * (AGL-2501) — it returns the trimmed name ALONGSIDE the keys derived
-       * from it, so the two cannot drift. Writing the name here and the keys
-       * anywhere else is the shape that leaves a renamed product findable
-       * only by what it used to be called.
-       */
-      ...CommerceModel.productSearchFields({
-        name: current.name.trim().slice(0, 120),
-        variants: current.variants,
-      }),
-      slug: current.slug || CommerceModel.commerceSlug(current.name),
-      priceUsd: primaryVariant?.priceUsd ?? 0,
-      ...CommerceModel.productStockFields({
-        variants: current.variants,
-        oversellPolicy: current.oversellPolicy,
-      }),
-      imageUrl: current.mediaUrls?.[0] ?? current.imageUrl ?? null,
-      updatedAtMs: Date.now(),
-    }
+    const base = CommerceModel.productSaveFields(current, Date.now())
     try {
       /**
        * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
@@ -1663,13 +1612,11 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         async () => {
           // The smart collections this product's rules answer, from the
           // host's rules as they stand now (AGL-3321).
-          const membership = await productCollectionFields(firestore, hostId, {
-            name: base.name,
-            type: current.type,
-            tags: current.tags,
-            categoryIds: current.categoryIds,
-            variants: current.variants,
-          })
+          const membership = await productCollectionFields(
+            firestore,
+            hostId,
+            CommerceModel.productMembershipInput(base, current),
+          )
           if (product) {
             /**
              * RESERVATIONS ARE NOT THE EDITOR'S TO WRITE (AGL-2356).
@@ -1697,8 +1644,6 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               'products',
               product.$id,
             )
-            const { stockHolds: _seededHolds, ...withoutHolds } =
-              base as typeof base & { stockHolds?: Record<string, unknown> }
             const liveHolds = await getDoc(productRef)
               .then((snapshot) => snapshot.get('stockHolds'))
               .catch(() => undefined)
@@ -1713,14 +1658,12 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                 batch.set(
                   productRef,
                   {
-                    ...withoutHolds,
+                    // The seed's holds dropped, the live ones carried, and
+                    // `deletedAt: null` — the editor edits a LIVE product, and
+                    // the products table lists only `deletedAt == null`
+                    // (AGL-3321).
+                    ...CommerceModel.productEditWrite(base, liveHolds),
                     ...membership,
-                    ...(liveHolds ? { stockHolds: liveHolds } : {}),
-                    // The editor edits a LIVE product, and the products table
-                    // lists only `deletedAt == null` (AGL-3321): a replace
-                    // whose seed lacked the field would take the product off
-                    // the list.
-                    deletedAt: null,
                     updatedAt: Timestamp.now(),
                   },
                   { merge: false },

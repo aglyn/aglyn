@@ -61,6 +61,30 @@ describe('core.channel-orders (AGL-3638)', () => {
     })
   })
 
+  it('passes a courier hand-off and a channel refund through to a seller that records them (AGL-3644)', async () => {
+    const seen: unknown[] = []
+    registerPluginChannelOrders(
+      {
+        ...seller(),
+        completeOrder: async (request) => (seen.push(request), { outcome: 'completed' }),
+        recordRefund: async (request) => (seen.push(request), { outcome: 'recorded', refundedCents: request.amountCents, restockedUnits: 1 }),
+      },
+      { pluginId: 'seller' },
+    )
+    const orders = pluginChannelOrders()
+    await expect(orders?.completeOrder?.({ hostId: 'h', recordId: 'r', note: 'Picked up' })).resolves.toEqual({ outcome: 'completed' })
+    await expect(
+      orders?.recordRefund?.({ hostId: 'h', recordId: 'r', refundId: 'adj-1', amountCents: 450, reason: 'Item removed', restock: [{ lineIndex: 0, quantity: 1 }] }),
+    ).resolves.toEqual({ outcome: 'recorded', refundedCents: 450, restockedUnits: 1 })
+    expect(seen).toHaveLength(2)
+  })
+
+  it('leaves both optional: a seller without them still registers', () => {
+    registerPluginChannelOrders(seller(), { pluginId: 'seller' })
+    expect(pluginChannelOrders()?.completeOrder).toBeUndefined()
+    expect(pluginChannelOrders()?.recordRefund).toBeUndefined()
+  })
+
   it('refuses a second seller, naming both', () => {
     registerPluginChannelOrders(seller(), { pluginId: 'one' })
     expect(() => registerPluginChannelOrders(seller(), { pluginId: 'two' })).toThrow(/one.*two/)

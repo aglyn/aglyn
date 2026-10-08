@@ -471,16 +471,36 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         }
       }
 
-      await updateDoc(
-        doc(firestore, 'hosts', hostId, 'bookings', booking.$id),
-        { status: 'canceled' },
-      )
+      // Through the cancel route (AGL-3643), not a direct write: the route
+      // holds the rule that a paid booking cancels through its refund, and
+      // tells the plugins listening for `booking.canceled`.
+      try {
+        const response = await authorizedFetch(user, '/api/bookings/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, bookingId: booking.$id }),
+        })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) {
+          enqueueSnackbar(payload?.error ?? 'The booking was not canceled', {
+            variant: response.status === 409 ? 'warning' : 'error',
+            allowDuplicate: true,
+          })
+          return
+        }
+      } catch {
+        enqueueSnackbar('The booking was not canceled', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+        return
+      }
       enqueueSnackbar('Booking canceled', {
         variant: 'success',
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar, user],
+    [confirm, hostId, enqueueSnackbar, user],
   )
 
   return (

@@ -30,11 +30,14 @@
  *    (band rhythm, image share, density) and which pages it usually has.
  *
  * Every page a kind suggests is one the site job builds itself out of the
- * layout language: sections, cards, images, a form. A blog's posts, a
- * store's products and an event list are written as sections of pages; the
- * site job creates no collection, product catalog or event records, so no
- * guidance here promises one (the owner adds those from the Data, Commerce
- * and Events sections afterward).
+ * layout language: sections, cards, images, a form. On a paid plan the site
+ * job also writes a blog's first posts into a content collection and a
+ * store's first products as unpriced drafts (AGL-3676,
+ * `jobs/ai-job-site-content.ts`), and the pages are told their titles; on
+ * the Free taste it writes neither. No event records are created, and no
+ * guidance here promises posts, products or events, since the plan reads it
+ * on every plan (the owner adds more from the Content, Commerce and Events
+ * sections afterward).
  *
  * Pure data and two small readers, safe for the console to import: no
  * theme compiler, no network.

@@ -260,4 +260,69 @@ describe('the build step (AGL-3616)', () => {
     })
     expect(derived.inputs['publish']).toBeUndefined()
   })
+
+  const editPlan = (): AiJobPlan => ({
+    ...plan(),
+    screens: [],
+    items: [
+      {
+        slot: 'i0',
+        op: 'edit',
+        name: 'Shorter hero',
+        why: 'The home page hero is too tall.',
+        dependsOn: [],
+        degrade: 'omit',
+        args: { target: 'home', targetKind: 'screen' },
+        id: 'edit-1',
+      },
+    ],
+  })
+
+  it('hands an edit item its target as inputs, named by its item, with no plan to build', () => {
+    const units = aiBuildUnits(editPlan())
+    const derived = aiBuildUnitJob(job({ plan: editPlan() }), units[0], {
+      kind: 'edit',
+      units,
+      ledger: aiBuildInitialLedger(units),
+      ops: OPS,
+    })
+    expect(derived).toMatchObject({
+      $id: 'edit-1',
+      kind: 'edit',
+      inputs: { target: 'home', targetKind: 'screen', originJobId: 'build-1' },
+      plan: null,
+    })
+    expect(derived.brief).toContain('Build the page change “Shorter hero”: The home page hero is too tall.')
+  })
+
+  it('runs an edit item through the edit runner after its admission, and skips it with the admission’s words', async () => {
+    const seen: AiJob[] = []
+    const editRunner: AiJobStepRunner = async ({ job: handed }) => {
+      seen.push(handed)
+      return {
+        outputs: [{ resource: 'screen', id: 'home', versionId: handed.$id, hostId: 'host-1', label: 'Home' }],
+        usage: AI_JOB_ZERO_USAGE,
+        estCostUsd: 0.02,
+        model: 'm',
+        stopReason: 'tool_use',
+      }
+    }
+    const build = (refusal: string | null) =>
+      createAiJobBuildStep({
+        runnerFor: ((kind: string) => (kind === 'edit' ? editRunner : null)) as never,
+        opsFor: async () => OPS,
+        admissionFor: async (kind) => (kind === 'edit' && refusal ? { status: 403, error: refusal } : null),
+      })
+    const built = await build(null)(context(job({ plan: editPlan() })))
+    expect(seen.map((handed) => [handed.$id, handed.kind])).toEqual([['edit-1', 'edit']])
+    expect(built.item).toMatchObject({ slot: 'i0', status: 'succeeded', outputs: ['home'] })
+    expect(built.outputs[0]).toMatchObject({ resource: 'screen', id: 'home', versionId: 'edit-1' })
+    const refused = await build('Version history requires a Pro plan — see Billing to upgrade')(context(job({ plan: editPlan() })))
+    expect(seen).toHaveLength(1)
+    expect(refused.item).toMatchObject({
+      slot: 'i0',
+      status: 'skipped',
+      note: 'Not built: Version history requires a Pro plan — see Billing to upgrade',
+    })
+  })
 })

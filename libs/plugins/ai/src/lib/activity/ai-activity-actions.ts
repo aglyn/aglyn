@@ -179,6 +179,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   logic: 'content',
   // So does an org automation's (AGL-3603): the editor's Save is the write.
   orgAutomation: 'content',
+  // A blog post a guided start wrote (AGL-3676) is the site's content.
+  entry: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {
