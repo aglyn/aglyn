@@ -17,6 +17,7 @@
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/app-utils/api-plugins'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { registerFunnelAiCapability } from './server/funnel-ai-capability'
 import { registerFunnelDraftWriter } from './server/funnel-drafts'
 import { registerFunnelFigureReaders } from './server/funnel-figures'
 import {
@@ -33,7 +34,7 @@ import {
  * The funnels plugin's console API (AGL-3605): its seven doors under
  * `/api/funnels/*`, the `funnels.*` figure readers the AI insight job reads
  * from the same process, and — since only the console runs AI jobs — the
- * `funnel` draft writer (AGL-3616).
+ * `funnel` draft writer and the build operation it executes (AGL-3616).
  */
 export function registerFunnelsConsoleApi(): void {
   registerPluginApiRoute('funnels/inventory', funnelsInventoryHandler)
@@ -44,8 +45,10 @@ export function registerFunnelsConsoleApi(): void {
   registerPluginApiRoute('funnels/propose', funnelsProposeHandler)
   registerPluginApiRoute('funnels/act', funnelsActHandler)
   registerFunnelFigureReaders(() => firebaseAdmin.app().firestore())
-  // A draft funnel another plugin asks for by name — an AI build.
+  // A draft funnel another plugin asks for by name — an AI build…
   registerFunnelDraftWriter()
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerFunnelAiCapability()
 }
 
 /**
