@@ -1619,6 +1619,12 @@ describe('hosts', () => {
       // short PIN's hash to crack offline, a write plants a PIN or lifts a
       // lockout. Named here for the `registers` reason above.
       'posStaffPins',
+      // The offline register's sync record (AGL-3625), created with the order
+      // it names by /api/commerce/pos-offline-sync. A client delete would let
+      // one offline cash sale record a second order; a client create would
+      // block a real sale from syncing. Named here for the `registers` reason
+      // above.
+      'posOfflineSales',
       // A site's shopping-channel feeds and connections (AGL-3637). A feed
       // document holds the token that is the catalog feed's only lock, and a
       // connection a sealed channel OAuth token; only the sales-channels

@@ -25,6 +25,8 @@ import {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -42,10 +44,12 @@ import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
+  ERASURE_COLUMN_SORTS,
   ERASURE_FILTER_FIELDS,
   ERASURE_FILTER_HEADERS,
   ERASURE_FILTER_OPTIONS,
   ERASURE_SEARCH_HINT,
+  ERASURE_LIST_SORT,
   ERASURE_SELECT_FIELDS,
 } from '../utils/pending-erasures-list-query'
 import StaffListPaginationControls from './staff-list-pagination.component'
@@ -75,6 +79,12 @@ import StaffListPaginationControls from './staff-list-pagination.component'
  * `eraseOrg` — which re-verifies the hold itself, so this card cannot make it
  * delete something early even if the list is stale.
  */
+
+/** The organization's name sorts the page on screen (AGL-3680). */
+const ERASURE_PAGE_SORTS = {
+  name: (row: PendingErasure) => row.name || row.slug || row.orgId,
+}
+const ERASURE_PAGE_SORT_HEADERS = { name: 'Organization' }
 
 interface PendingErasure {
   orgId: string
@@ -131,11 +141,27 @@ export function PendingErasuresCard() {
       ),
     [],
   )
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Requested, Hold expires and State order
+   * the route's query by the request time (`ERASURE_COLUMN_SORTS`); the
+   * organization's name sorts the page.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const queue = useStaffListQuery<PendingErasure>({
     endpoint: '/api/admin/run-erasures',
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
     onError: onListError,
+  })
+  const columnSort = useListColumnSort<PendingErasure>({
+    sorts: ERASURE_COLUMN_SORTS,
+    defaultSort: ERASURE_LIST_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    rows: queue.rows,
+    pageSorts: ERASURE_PAGE_SORTS,
+    headers: ERASURE_PAGE_SORT_HEADERS,
   })
   const { refresh: refreshQueue } = queue
 
@@ -219,8 +245,7 @@ export function PendingErasuresCard() {
         headerName: 'Requested',
         flex: 1,
         minWidth: 170,
-        // Sorted on the instant, rendered as a date — a grid sorting the
-        // rendered text would order it alphabetically.
+        // Rendered as a date; its header orders the queue's query.
         valueGetter: (_value, row: any) => row.requestedAtMs ?? 0,
         renderCell: ({ row }: any) => formatWhen(row.requestedAtMs),
       },
@@ -324,7 +349,7 @@ export function PendingErasuresCard() {
                 headers: ERASURE_FILTER_HEADERS,
                 options: ERASURE_FILTER_OPTIONS,
               })}
-              notices={queue.notices}
+              notices={[...queue.notices, ...columnSort.notices]}
             />
             {gridFilter.searchWords.join('').trim() ? (
               <Typography variant="caption" color="text.secondary">
@@ -333,7 +358,7 @@ export function PendingErasuresCard() {
             ) : null}
             <ListTable
               aria-label="Pending erasures"
-              rows={queue.rows}
+              rows={columnSort.rows}
               columns={erasureColumns}
               loading={queue.loading}
               filterMode="server"
@@ -354,9 +379,9 @@ export function PendingErasuresCard() {
                * never a reason to withhold the pager.
                */
               hideFooter
-              // The rows keep the queue's order; a header sort would order
-              // only the page on screen.
-              disableColumnSorting
+              // A date header orders the queue's query; Organization sorts
+              // this page and says so (`columnSort`).
+              columnSort={columnSort}
             />
             <StaffListPaginationControls
               pagination={queue}

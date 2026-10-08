@@ -1885,6 +1885,123 @@
         }
       ]
     },
+    "canTransitionLocalDelivery": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            "scheduled",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "scheduled",
+            "out_for_delivery"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "scheduled",
+            "delivered"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "scheduled",
+            "failed"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "out_for_delivery"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "delivered"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "out_for_delivery",
+            "failed"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "delivered",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "delivered",
+            "out_for_delivery"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "delivered",
+            "delivered"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "delivered",
+            "failed"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "failed",
+            "scheduled"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "failed",
+            "out_for_delivery"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "failed",
+            "delivered"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "failed",
+            "failed"
+          ],
+          "result": false
+        }
+      ]
+    },
     "canTransitionOrder": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -2228,6 +2345,74 @@
           "args": [
             "refunded",
             "refunded"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "canTransitionPickup": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            "preparing",
+            "preparing"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "preparing",
+            "ready"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "preparing",
+            "picked_up"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "ready",
+            "preparing"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "ready",
+            "ready"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "ready",
+            "picked_up"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "picked_up",
+            "preparing"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "picked_up",
+            "ready"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "picked_up",
+            "picked_up"
           ],
           "result": false
         }
@@ -5643,6 +5828,73 @@
         }
       ]
     },
+    "localFulfillmentQueueQuery": {
+      "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "cases": [
+        {
+          "args": [
+            "pickup_ready"
+          ],
+          "result": {
+            "limit": 50,
+            "orderBy": {
+              "direction": "asc",
+              "field": "fulfillmentDueMs"
+            },
+            "where": [
+              {
+                "field": "fulfillmentKey",
+                "op": "==",
+                "value": "pickup_ready"
+              },
+              {
+                "field": "status",
+                "op": "in",
+                "value": [
+                  "paid",
+                  "partially_fulfilled",
+                  "fulfilled"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            "delivery_scheduled",
+            "loc1"
+          ],
+          "result": {
+            "limit": 50,
+            "orderBy": {
+              "direction": "asc",
+              "field": "fulfillmentDueMs"
+            },
+            "where": [
+              {
+                "field": "fulfillmentLocationId",
+                "op": "==",
+                "value": "loc1"
+              },
+              {
+                "field": "fulfillmentKey",
+                "op": "==",
+                "value": "delivery_scheduled"
+              },
+              {
+                "field": "status",
+                "op": "in",
+                "value": [
+                  "paid",
+                  "partially_fulfilled",
+                  "fulfilled"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
     "mediaKindOf": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "cases": [
@@ -6646,6 +6898,65 @@
         }
       ]
     },
+    "orderLocalFulfillmentListFields": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "fulfillmentMethod": "pickup",
+              "pickup": {
+                "locationId": "loc1",
+                "locationName": "Main",
+                "status": "ready"
+              },
+              "createdAtMs": 1000
+            }
+          ],
+          "result": {
+            "fulfillmentDueMs": 1000,
+            "fulfillmentKey": "pickup_ready",
+            "fulfillmentLocationId": "loc1"
+          }
+        },
+        {
+          "args": [
+            {
+              "fulfillmentMethod": "local_delivery",
+              "localDelivery": {
+                "zoneId": "z",
+                "zoneName": "Z",
+                "feeCents": 500,
+                "windowStartMs": 5000,
+                "windowEndMs": 9000,
+                "status": "out_for_delivery"
+              },
+              "createdAtMs": 1000
+            }
+          ],
+          "result": {
+            "fulfillmentDueMs": 5000,
+            "fulfillmentKey": "delivery_out_for_delivery",
+            "fulfillmentLocationId": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "fulfillmentMethod": "shipping",
+              "createdAtMs": 1000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        }
+      ]
+    },
     "orderNetCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -7390,6 +7701,240 @@
               "count": 0
             },
             "weightedCents": 0
+          }
+        }
+      ]
+    },
+    "posOfflineChangeCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            4763,
+            5000
+          ],
+          "result": 237
+        },
+        {
+          "args": [
+            4763,
+            4763
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            4763,
+            4000
+          ],
+          "result": 0
+        }
+      ]
+    },
+    "posOfflineSaleKeyIsValid": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            "off8f2f9807c22c4fe3b1ed9042c497949d"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "short"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "../orders/abcdefghijklmnop"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "__abcdefghijklmnop__"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "posOfflineSaleTotals": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "lines": [
+                {
+                  "unitAmountCents": 1200,
+                  "quantity": 2
+                },
+                {
+                  "unitAmountCents": 2500,
+                  "quantity": 1
+                }
+              ],
+              "discountPct": 10,
+              "tax": {
+                "pct": 8,
+                "pricesIncludeTax": false
+              }
+            }
+          ],
+          "result": {
+            "discountCents": 490,
+            "feeCents": 0,
+            "itemsCents": 4900,
+            "shippingCents": 0,
+            "taxCents": 353,
+            "totalCents": 4763
+          }
+        },
+        {
+          "args": [
+            {
+              "lines": [
+                {
+                  "unitAmountCents": 1200,
+                  "quantity": 2
+                }
+              ],
+              "discountPct": 0,
+              "tax": {
+                "pct": 8,
+                "pricesIncludeTax": true
+              }
+            }
+          ],
+          "result": {
+            "discountCents": 0,
+            "feeCents": 0,
+            "itemsCents": 2400,
+            "shippingCents": 0,
+            "taxCents": 0,
+            "totalCents": 2400
+          }
+        },
+        {
+          "args": [
+            {
+              "lines": [
+                {
+                  "unitAmountCents": 999,
+                  "quantity": 3
+                }
+              ],
+              "discountPct": 12.5,
+              "tax": {
+                "pct": 7.25,
+                "pricesIncludeTax": false
+              }
+            }
+          ],
+          "result": {
+            "discountCents": 375,
+            "feeCents": 0,
+            "itemsCents": 2997,
+            "shippingCents": 0,
+            "taxCents": 190,
+            "totalCents": 2812
+          }
+        },
+        {
+          "args": [
+            {
+              "lines": [
+                {
+                  "unitAmountCents": 500,
+                  "quantity": 1
+                }
+              ],
+              "discountPct": 100,
+              "tax": {
+                "pct": 8,
+                "pricesIncludeTax": false
+              }
+            }
+          ],
+          "result": {
+            "discountCents": 500,
+            "feeCents": 0,
+            "itemsCents": 500,
+            "shippingCents": 0,
+            "taxCents": 0,
+            "totalCents": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "lines": [
+                {
+                  "unitAmountCents": 1999,
+                  "quantity": 1
+                }
+              ],
+              "discountPct": 0,
+              "tax": {
+                "pct": null,
+                "pricesIncludeTax": false
+              }
+            }
+          ],
+          "result": {
+            "discountCents": 0,
+            "feeCents": 0,
+            "itemsCents": 1999,
+            "shippingCents": 0,
+            "taxCents": 0,
+            "totalCents": 1999
+          }
+        }
+      ]
+    },
+    "posOfflineSoldAt": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "cases": [
+        {
+          "args": [
+            1799999000000,
+            1800000000000
+          ],
+          "result": {
+            "adjusted": false,
+            "atMs": 1799999000000
+          }
+        },
+        {
+          "args": [
+            1800000300000,
+            1800000000000
+          ],
+          "result": {
+            "adjusted": false,
+            "atMs": 1800000000000
+          }
+        },
+        {
+          "args": [
+            1800001000000,
+            1800000000000
+          ],
+          "result": {
+            "adjusted": true,
+            "atMs": 1800000000000
+          }
+        },
+        {
+          "args": [
+            1797000000000,
+            1800000000000
+          ],
+          "result": {
+            "adjusted": true,
+            "atMs": 1800000000000
           }
         }
       ]

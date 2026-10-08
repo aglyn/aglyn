@@ -103,6 +103,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
 ;(global as any).__org = () => org
 
 import { GET } from '../app/api/admin/email-deliveries/route'
+import {
+  listQueryIndexes,
+  missingListQueryIndexes,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { EMAIL_DELIVERIES_LIST_QUERY } from '../utils/email-deliveries-list-query'
 
 const get = (params: Record<string, string>) => {
   const url = new URL('https://console.test/api/admin/email-deliveries')
@@ -139,6 +144,23 @@ describe('the staff delivery log by site', () => {
   it("reads every live site of an organization's", async () => {
     expect((await get({ orgId: 'o1' })).status).toBe(200)
     expect(wheres).toEqual([['hostId', 'in', ['h1', 'h2']]])
+  })
+
+  it('orders by the header asked for, and ignores an order it does not offer (AGL-3680)', async () => {
+    expect((await get({ hostId: 'h1', sort: 'subject:asc' })).status).toBe(200)
+    expect(orders).toEqual([['subject', 'asc']])
+    orders = []
+    expect((await get({ hostId: 'h1', sort: 'detail:asc' })).status).toBe(200)
+    expect(orders).toEqual([['firstSeenAtMs', 'desc']])
+  })
+
+  it('every header order has its collection-group composite beside the site scope', () => {
+    const file = JSON.parse(
+      readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),
+    )
+    const needed = listQueryIndexes(EMAIL_DELIVERIES_LIST_QUERY, [{ path: 'hostId' }])
+    expect(needed).toHaveLength(EMAIL_DELIVERIES_LIST_QUERY.sorts.length)
+    expect(missingListQueryIndexes(file, 'messages', needed, 'COLLECTION_GROUP')).toEqual([])
   })
 
   it('the query has its index', () => {

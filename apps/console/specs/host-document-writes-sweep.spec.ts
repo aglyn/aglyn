@@ -258,6 +258,14 @@ describe("plugins: a console card's write of something a page renders carries th
           'Writes only `settings/store.tax`, which checkout reads per ' +
           'request; no cached page renders the rates.',
       },
+    'libs/plugins/commerce/src/lib/components/console/local-delivery-settings-card.component.tsx':
+      {
+        writes: /\{\s*localDelivery:\s*value\s*\}/,
+        why:
+          'Writes only `settings/store.localDelivery` (AGL-3624), which the ' +
+          'cart asks for at /api/commerce/local-fulfillment-options and ' +
+          'checkout reads per request; no cached page renders it.',
+      },
     'libs/plugins/commerce/src/lib/components/console/customer-notifications-card.component.tsx':
       {
         writes: /\{\s*buyerNotifications:\s*\{\s*\[key\]:\s*on\s*\}\s*\}/,

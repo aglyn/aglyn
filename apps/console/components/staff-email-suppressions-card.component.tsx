@@ -29,6 +29,12 @@ import {
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import {
+  type ListQuerySort,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -46,9 +52,11 @@ import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
+  SUPPRESSION_COLUMN_SORTS,
   SUPPRESSION_FILTER_FIELDS,
   SUPPRESSION_FILTER_HEADERS,
   SUPPRESSION_FILTER_OPTIONS,
+  SUPPRESSION_LIST_QUERY,
   SUPPRESSION_REASON_LABELS,
   SUPPRESSION_SEARCH_HINT,
   SUPPRESSION_SELECT_FIELDS,
@@ -156,13 +164,36 @@ export default function StaffEmailSuppressionsCard() {
    *
    * A new filter or search is a new walk that starts at its first page.
    */
+  /*
+   * EVERY HEADER SORTS (AGL-3680), on the route's query
+   * (`SUPPRESSION_COLUMN_SORTS`); the plan says which order it reads in, so
+   * the header shows that one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const orderPlan = useMemo(
+    () =>
+      planListQuery(
+        SUPPRESSION_LIST_QUERY,
+        { clauses: gridFilter.clauses, search: gridFilter.searchWords, sort: askedSort },
+        nameSearchNormalizers,
+      ),
+    [gridFilter.clauses, gridFilter.searchWords, askedSort],
+  )
   const pagination = useStaffListQuery<PlatformSuppression>({
     endpoint: '/api/admin/emails/suppressions',
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: askedSort,
     onError,
   })
-  const entries = pagination.rows
+  const columnSort = useListColumnSort<PlatformSuppression>({
+    sorts: SUPPRESSION_COLUMN_SORTS,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: orderPlan.orderBy,
+    rows: pagination.rows,
+  })
+  const entries = columnSort.rows
   const filtering = pagination.filtering
   useEffect(() => {
     if (!pagination.failed) setError(null)
@@ -381,7 +412,7 @@ export default function StaffEmailSuppressionsCard() {
             headers: SUPPRESSION_FILTER_HEADERS,
             options: SUPPRESSION_FILTER_OPTIONS,
           })}
-          notices={pagination.notices}
+          notices={[...pagination.notices, ...columnSort.notices]}
         />
         {gridFilter.searchWords.join('').trim() ? (
           <Typography variant="caption" color="text.secondary">
@@ -409,11 +440,10 @@ export default function StaffEmailSuppressionsCard() {
             getRowHeight={() => 'auto'}
             // One page of a cursor walk, turned by the footer below: the grid
             // neither slices it nor filters it and calls that the list. The
-            // route answers the panel and the search. Nor does it sort: the
-            // rows keep the query's order, and a header sort would order one
-            // page of it.
+            // route answers the panel and the search. Nor does it sort: a
+            // header asks the route's query for its order (`columnSort`).
             hideFooter
-            disableColumnSorting
+            columnSort={columnSort}
             filterMode="server"
             quickFilter
             filterModel={gridFilter.filterModel}

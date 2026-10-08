@@ -49,9 +49,12 @@ test('the stamp keeps the row, adding only the stamped fields', () => {
     'actionGroup',
     'before',
     'kind',
+    // On every row, null when the writer has none (AGL-3680).
+    'scope',
     'searchTokens',
     'target',
     'targetHostId',
     'targetKind',
   ])
+  assert.equal(row.scope, null)
 })

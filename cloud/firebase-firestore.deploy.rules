@@ -3840,7 +3840,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory']) &&
@@ -3848,6 +3848,14 @@ subcollection != 'salesChannels' && (isStaff() ||
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
+
 
 
 
@@ -4001,7 +4009,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory'])));
@@ -4059,7 +4067,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }
