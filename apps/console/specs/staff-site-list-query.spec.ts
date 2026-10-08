@@ -102,7 +102,7 @@ describe('every clause and the search word land on one query', () => {
       { field: 'subdomain', op: 'equals', value: 'Harbor-Bakery' },
     ])
     expect(answer.refused).toEqual([])
-    expect(answer.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
     expect(answer.filters).toEqual(
       expect.arrayContaining([
         { path: 'nameLower', op: '==', value: 'harbor bakery' },
@@ -124,7 +124,7 @@ describe('every clause and the search word land on one query', () => {
         { path: 'hasCustomDomain', op: '==', value: true },
       ]),
     )
-    expect(answer.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('a site id or several is the document id', () => {
@@ -137,5 +137,37 @@ describe('every clause and the search word land on one query', () => {
     const answer = plan([{ field: 'status', op: 'equals', value: 'live' }])
     expect(answer.served).toEqual([])
     expect(answer.refused).toHaveLength(1)
+  })
+})
+
+describe('every header sorts, at no new composite (AGL-3680)', () => {
+  const sorted = (
+    sort: { path: string; direction: 'asc' | 'desc' },
+    clauses: Array<{ field: string; op: string; value: string }> = [],
+    search: string[] = [],
+  ) => planListQuery(STAFF_SITE_LIST_QUERY, { clauses, search, sort }, nameSearchNormalizers)
+
+  it('orders by Site with nothing narrowing the list', () => {
+    expect(sorted({ path: 'nameLower', direction: 'desc' }).orderBy).toMatchObject({
+      path: 'nameLower',
+      direction: 'desc',
+    })
+  })
+
+  it('falls back to Created newest first under a filter or the search, and says so', () => {
+    const answer = sorted({ path: 'nameLower', direction: 'asc' }, [
+      { field: 'orgId', op: 'equals', value: 'o1' },
+    ])
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    expect(answer.notices).toEqual(['Sorted by Created: Site sorts only with no filter or search on.'])
+    expect(sorted({ path: 'createdAt', direction: 'asc' }, [], ['acme']).orderBy.direction).toBe('desc')
+  })
+
+  it("keeps Created newest first under every filter: its composites are the range's", () => {
+    const answer = sorted({ path: 'createdAt', direction: 'desc' }, [
+      { field: 'suspended', op: 'equals', value: 'true' },
+    ])
+    expect(answer.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
+    expect(answer.notices).toEqual([])
   })
 })

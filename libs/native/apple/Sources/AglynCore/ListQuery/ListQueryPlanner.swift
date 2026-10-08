@@ -360,10 +360,20 @@ public func planListQuery(
     product = next
   }
 
-  // The order. A range leads with the field it ranges over, in the asked
-  // direction when the asked order is that field.
-  let asked = request.sort.flatMap { sort in
+  // The order. An `alone` order holds only while nothing narrows the list
+  // past its base (AGL-3680); a range leads with the field it ranges over, in
+  // the asked direction when the asked order is that field.
+  let declared = request.sort.flatMap { sort in
     declaration.sorts.first { $0.path == sort.path && $0.direction == sort.direction }
+  }
+  var sortFallback: ListQueryPlanSortFallback?
+  var asked = declared
+  if let declared, declared.alone == true, !served.isEmpty || searched != nil {
+    let fallback = defaultHeaderSort(declaration)
+    asked = fallback
+    sortFallback = ListQueryPlanSortFallback(asked: declared, reason: .alone)
+    notices.append(
+      "Sorted by \(sortLabel(fallback)): \(sortLabel(declared)) sorts only with no filter or search on.")
   }
   let orderBy: ListQuerySort
   if let range = inequality {
@@ -378,9 +388,27 @@ public func planListQuery(
       asked ?? declaration.sorts.first
       ?? ListQuerySort(direction: .asc, path: ContractValues.shared.listQueryIdPath)
   }
+  // A range took the order from a header the reader picked: say so.
+  if sortFallback == nil, let declared, declared != declaration.sorts.first,
+    declared != defaultHeaderSort(declaration), orderBy.path != declared.path
+  {
+    sortFallback = ListQueryPlanSortFallback(asked: declared, reason: .range)
+    let label = sortLabel(orderBy)
+    notices.append("Sorted by \(label): a \(label) filter orders the list by it.")
+  }
 
   return ListQueryPlan(
-    filters: filters, notices: notices, orderBy: orderBy, refused: refused, searched: searched, served: served)
+    filters: filters, notices: notices, orderBy: orderBy, refused: refused, searched: searched, served: served,
+    sortFallback: sortFallback)
+}
+
+private func sortLabel(_ sort: ListQuerySort) -> String { sort.label ?? sort.column ?? sort.path }
+
+/// The order an `alone` sort falls back to: the first header order that is not itself `alone`.
+public func defaultHeaderSort(_ declaration: ListQueryDeclaration) -> ListQuerySort {
+  declaration.sorts.first { $0.column != nil && $0.alone != true }
+    ?? declaration.sorts.first { $0.alone != true }
+    ?? ListQuerySort(direction: .asc, path: ContractValues.shared.listQueryIdPath)
 }
 
 // MARK: - Days

@@ -182,19 +182,20 @@ describe('the staff Organizations list draws its zone through it', () => {
 
   it('reads the zone, orders its own rows, and hands the grid those rows', () => {
     expect(page).toContain("usePluginListColumns('staffOrgsListColumn')")
-    expect(page).toContain('usePluginColumnSort(orgs)')
+    // The plugin's comparator sorts the page through the list's one column
+    // sort (AGL-3680), and the grid draws the rows it sorted.
+    expect(page).toContain('sortPage: onPluginSort } = columnSort')
     expect(page).toContain('pluginGridColumns(pluginColumns, {')
-    expect(page).toContain('rows={sortedOrgs}')
+    expect(page).toContain('rows={columnSort.rows}')
   })
 
   it("hands the grid's own header sorts to the query, never to the page", () => {
     // A grid-side sort would order the ten rows on screen and read as the
-    // whole list's; the header's order goes to the route instead.
-    expect(page).toContain('sortingMode="server"')
-    expect(page).toContain('sort: columnSort,')
-    expect(page).toContain('onSortModelChange={onSortModelChange}')
-    // A grid header click hands the order back from a plugin's page sort.
-    expect(page).toContain('onPluginSort(pluginSortedBy, null)')
+    // whole list's; the header's order goes to the route instead, and
+    // `useListColumnSort` clears a plugin's page sort on a header click.
+    expect(page).toContain('columnSort={columnSort}')
+    expect(page).toContain('sort: askedSort,')
+    expect(page).toContain('useListColumnSort<any>({')
   })
 
   it('places the columns after the limits and before Created', () => {

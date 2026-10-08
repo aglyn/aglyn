@@ -70,7 +70,7 @@ final class ListQueryCasesTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(Self.root.cases.count, 40)
     // Every key the console writes in a plan is one the Swift plan carries.
     let raw = try JSONSerialization.jsonObject(with: Self.data) as! [String: Any]
-    let known: Set<String> = ["filters", "notices", "orderBy", "refused", "searched", "served"]
+    let known: Set<String> = ["filters", "notices", "orderBy", "refused", "searched", "served", "sortFallback"]
     for item in raw["cases"] as! [[String: Any]] {
       XCTAssertTrue(Set((item["plan"] as! [String: Any]).keys).isSubset(of: known), "\(item["label"] ?? "")")
     }
@@ -87,6 +87,7 @@ final class ListQueryCasesTests: XCTestCase {
       XCTAssertEqual(plan.searched, item.plan.searched, "searched — \(label)")
       XCTAssertEqual(plan.refused, item.plan.refused, "refused — \(label)")
       XCTAssertEqual(plan.notices, item.plan.notices, "notices — \(label)")
+      XCTAssertEqual(plan.sortFallback, item.plan.sortFallback, "sortFallback — \(label)")
     }
   }
 

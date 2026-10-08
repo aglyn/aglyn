@@ -53,7 +53,7 @@ import { putMediaDocument } from './lib/media-counter.mjs'
 import { seedClientSite } from './lib/seed-client-site.mjs'
 import { listingQueryFieldsPatch } from './lib/listing-query-fields.mjs'
 import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
-import { displayNameSearchFields, nameSearchTokens } from './lib/name-search-tokens.mjs'
+import { displayNameSearchFields, nameSearchKey, nameSearchTokens } from './lib/name-search-tokens.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -682,6 +682,10 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
 await put(hostRef.collection('siteMembers').doc('seed-site-member'), {
   email: 'visitor@aglyn.test',
   displayName: 'Rae Visitor',
+  // The Name sort's key, as sign-up stamps it (AGL-3680): an `orderBy` on
+  // `displayNameLower` lists no member without it.
+  displayNameLower: nameSearchKey('Rae Visitor'),
+  displayNameTokens: nameSearchTokens('Rae Visitor'),
   // As sign-up writes it: the console's Status filter reads the boolean.
   suspended: false,
   createdAt: now,

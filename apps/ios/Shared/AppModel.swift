@@ -5,6 +5,7 @@ import AglynCore
 import AglynPluginHost
 import AglynPluginManifest
 import AglynScreens
+import AglynSite
 import Foundation
 import Observation
 
@@ -66,13 +67,17 @@ final class AppModel {
       self.reader = nil
       self.api = nil
     }
-    // Core's own console areas load first, as the plugin "core" (libs/native/screens).
-    let result = NativePluginLoader.load([CoreScreens.manifestEntry] + NativePluginManifest.entries, into: registry)
+    let result = NativePluginLoader.load([CoreScreens.manifestEntry] + Self.platformEntries + NativePluginManifest.entries, into: registry)
     pluginFailures = result.failed
     for failure in result.failed {
       print("Aglyn: plugin \(failure.pluginID) did not load: \(failure.error)")
     }
   }
+
+  /// The platform's own content screens (sites, pages, media…), which are
+  /// core rather than a plugin's: loaded before the generated plugin
+  /// manifest, through the same registrar and declaration check.
+  static var platformEntries: [NativePluginManifestEntry] { NativePlatformEntries.entries }
 
   var brandName: String { config?.brandName ?? AglynConfig.defaultBrandName }
 
@@ -130,7 +135,13 @@ final class AppModel {
       api: api,
       writer: ReaderMergeWriter(reader),
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
-      openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) })
+      openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) },
+      siteRole: workspace?.site?.role, orgRole: workspace?.org?.role,
+      selectSite: { [weak workspace = self.workspace] hostID in workspace?.selectSite(hostID) },
+      back: { [weak navigation] in
+        guard let navigation else { return }
+        _ = navigation.paths[navigation.section]?.popLast()
+      })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

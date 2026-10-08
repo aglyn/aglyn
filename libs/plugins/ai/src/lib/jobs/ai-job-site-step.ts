@@ -946,6 +946,14 @@ export function createAiJobSiteStep(
       item,
       ...(item.status === 'running' || othersOpen ? { continue: true } : {}),
     })
+    /**
+     * A unit that failed or was skipped with nothing else open ends the job
+     * on this pass (AGL-3676): a guided start whose last unit — its welcome
+     * email — failed was never published, because the pass that publishes is
+     * the one after. So the end is the publish, whatever the last unit came to.
+     */
+    const closing = async (outcome: AiJobStepOutcome): Promise<AiJobStepOutcome> =>
+      outcome.continue ? outcome : finish(outcome, builtPages())
 
     // A blog's posts and a store's products ask, before their first pass,
     // whether this member may have them here (AGL-3676): a refusal spends
@@ -955,7 +963,7 @@ export function createAiJobSiteStep(
         console.error('ai site part admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
         return AI_SITE_UNIT_EMPTY_COPY
       })
-      if (refusal) return settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
     }
 
     // A page whose layout or form failed is built without it, and says so.
@@ -974,16 +982,18 @@ export function createAiJobSiteStep(
     } catch (error) {
       if (aiUnitErrorRetryable(error)) throw error
       console.error('ai site unit threw', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
-      return settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } })
+      return closing(settle({ slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'provider', message: AI_SITE_UNIT_EMPTY_COPY } }))
     }
     const spent = aiUnitSpend(outcome)
     const stopped = aiUnitFailure(unit.slot, outcome)
     if (stopped) {
-      return settle(
-        stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
-          ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
-          : stopped,
-        spent,
+      return closing(
+        settle(
+          stopped.status === 'failed' && stopped.failure && !outcome.failure && !outcome.refused && !outcome.review
+            ? { ...stopped, failure: { ...stopped.failure, message: AI_SITE_UNIT_EMPTY_COPY } }
+            : stopped,
+          spent,
+        ),
       )
     }
     // A page counts as built only when its plan's sections are in it
@@ -998,9 +1008,11 @@ export function createAiJobSiteStep(
           readNodes,
         ))
       if (!written) {
-        return settle(
-          { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
-          { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+        return closing(
+          settle(
+            { slot: unit.slot, status: 'failed', failure: { ours: true, reason: 'step-failure', message: AI_SITE_PAGE_NOT_WRITTEN_COPY } },
+            { ...spent, outputs: spent.outputs.filter((output) => output.resource !== 'screen') },
+          ),
         )
       }
     }

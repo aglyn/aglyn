@@ -43,7 +43,7 @@ Each capability has its own page, next to the thing it builds:
 | A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
 | A reusable component | **Components → Create with AI** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
 | A form | **Forms → Create with AI** | [Generate a form](generate-a-form.md) |
-| Illustrations, icons, patterns, logo marks and photos | **Media → Create with AI** | [Create images with AI](create-images.md) |
+| Illustrations, icons, patterns, logo marks, photos, art and design images | **Media → Create with AI** | [Create images with AI](create-images.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
 | Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Change your theme with AI](theme-assist.md) |
@@ -66,6 +66,10 @@ theme's colors and spacing, one reusable component for a repeat, images from you
 library with alt text, and a measured size. They are written out on
 [How Aglyn AI builds](how-aglyn-ai-builds.md), and every plan and every generated
 document is checked against them before you see it.
+
+Each job also reads the site's [business profile](business-profile.md) — what the
+business does, who it is for, how it sounds and how to reach it — and the edits you
+kept from earlier jobs.
 
 ## The Aglyn AI add-on {#the-add-on}
 
@@ -168,6 +172,7 @@ contact, lead, deal, form submission or list member is read to build a page.
 ## Related
 
 - [How Aglyn AI builds](how-aglyn-ai-builds.md)
+- [Business profile](business-profile.md)
 - [Aglyn Assist](../getting-started/aglyn-assist.md)
 - [AI allotments, usage and model choice](ai-allotments.md)
 - [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)

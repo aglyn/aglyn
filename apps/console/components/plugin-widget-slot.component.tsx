@@ -150,6 +150,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // A panel among a search listing editor's own fields.
   seoFields: 'bare',
   hostSeo: 'stack',
+  // Cards under the site's business profile (AGL-3661).
+  hostBusinessProfile: 'stack',
   // A button in a site resource page's row of header actions: Screens,
   // Templates, Layouts and Components.
   hostScreens: 'bare',

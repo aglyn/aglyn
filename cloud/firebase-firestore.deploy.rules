@@ -1181,6 +1181,16 @@ allow write: if isStaff() ||
 
 
 
+match /businessProfile/{docId} {
+allow read: if isStaff() || isOrgMember();
+allow write: if isStaff() ||
+(docId == 'defaults' && canManageOrg() && isVerified() && orgNotSuspended());
+}
+
+
+
+
+
 
 
 
@@ -3776,6 +3786,12 @@ subcollection != 'salesChannels' &&
 
 
 
+
+
+
+
+
+
 allow create: if subcollection != 'siteMemberCredentials' &&
 subcollection != 'orderWebhookSecrets' &&
 subcollection != 'posStaffPins' &&
@@ -3797,7 +3813,8 @@ subcollection != 'salesChannels' && (isStaff() ||
 'flowEnrollments', 'leads', 'siteMembers',
 'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults']) &&
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
+'aiMemory']) &&
 
 
 
@@ -3957,7 +3974,8 @@ subcollection != 'salesChannels' && (isStaff() ||
 'flowEnrollments', 'leads', 'siteMembers',
 'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
-'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
+'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
+'aiMemory'])));
 
 
 

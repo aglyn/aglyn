@@ -43,8 +43,10 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { registerPluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
+import { funnelHostState, resetFunnelHostStateForTests } from './funnel-host-state'
 import {
   funnelsActHandler,
+  funnelsActivateHandler,
   funnelsDeleteHandler,
   funnelsProposeHandler,
   funnelsResultsHandler,
@@ -300,5 +302,76 @@ describe('Act on this drop-off (AGL-3605)', () => {
     site(role)
     withFunnel()
     expect((await act()).code).toBe(403)
+  })
+})
+
+describe('a draft funnel changes nothing live (AGL-3616)', () => {
+  const DRAFT = { ...FUNNEL, status: 'draft' }
+
+  it('stays a draft when edited, and an edit does not switch recording on', async () => {
+    mockDb.seed('hosts/h1/funnels/d1', DRAFT)
+    const response = await call(funnelsSaveHandler, { hostId: 'h1', funnelId: 'd1', funnel: { ...FUNNEL, name: 'Renamed' } })
+    expect(response).toMatchObject({ code: 200, body: { funnelId: 'd1', recordingChanged: false, status: 'draft' } })
+    expect(mockDb.docs.get('hosts/h1/funnels/d1')).toMatchObject({ name: 'Renamed', status: 'draft' })
+    expect(mockDb.docs.get('hosts/h1')).not.toHaveProperty('funnelRecording')
+  })
+
+  it('is not measured and takes no drop-off follow-up', async () => {
+    mockDb.seed('hosts/h1/funnels/d1', DRAFT)
+    const results = await call(funnelsResultsHandler, { hostId: 'h1', funnelId: 'd1', from: '2026-10-01', to: '2026-10-02' })
+    expect(results).toMatchObject({ code: 409, body: { reason: 'draft' } })
+    const act = await call(funnelsActHandler, { hostId: 'h1', funnelId: 'd1', step: 1, afterHours: 24, action: 'email' })
+    expect(act).toMatchObject({ code: 409, body: { reason: 'draft' } })
+  })
+
+  it('is activated by an admin or editor: checked, made active, and recording switched on', async () => {
+    mockDb.seed('hosts/h1/funnels/d1', DRAFT)
+    const response = await call(funnelsActivateHandler, { hostId: 'h1', funnelId: 'd1' })
+    expect(response).toMatchObject({ code: 200, body: { funnelId: 'd1', recordingChanged: true } })
+    expect(mockDb.docs.get('hosts/h1/funnels/d1')).not.toHaveProperty('status')
+    expect(mockDb.docs.get('hosts/h1/funnels/d1')?.['updatedAt']).toBe('SERVER_TIME')
+    expect(mockDb.docs.get('hosts/h1')?.['funnelRecording']).toBe(true)
+  })
+
+  it('is not activated while a step names something the site no longer has', async () => {
+    mockDb.seed('hosts/h1/funnels/d1', { ...DRAFT, steps: [FUNNEL.steps[0], { type: 'form', key: 'gone' }] })
+    const response = await call(funnelsActivateHandler, { hostId: 'h1', funnelId: 'd1' })
+    expect(response.code).toBe(400)
+    expect(response.body.error).toMatch(/^Step 2: .* Edit the step, then activate it\.$/)
+    expect(mockDb.docs.get('hosts/h1/funnels/d1')?.['status']).toBe('draft')
+    expect(mockDb.docs.get('hosts/h1')).not.toHaveProperty('funnelRecording')
+  })
+
+  it.each(['author', 'viewer'])('is not activated by an %s', async (role) => {
+    site(role)
+    mockDb.seed('hosts/h1/funnels/d1', DRAFT)
+    expect((await call(funnelsActivateHandler, { hostId: 'h1', funnelId: 'd1' })).code).toBe(403)
+  })
+
+  it('refuses activation on a plan without per-page analytics, and an unknown funnel', async () => {
+    mockDb.seed('hosts/h1/funnels/d1', DRAFT)
+    expect((await call(funnelsActivateHandler, { hostId: 'h1', funnelId: 'nope' })).code).toBe(404)
+    mockOrg.mockResolvedValue({ orgId: 'o1', org: { plan: 'starter' } })
+    expect((await call(funnelsActivateHandler, { hostId: 'h1', funnelId: 'd1' })).code).toBe(403)
+  })
+
+  it('does not keep recording on for drafts once the last active funnel goes', async () => {
+    site('editor', { funnelRecording: true })
+    mockDb.seed('hosts/h1/funnels/a', FUNNEL).seed('hosts/h1/funnels/d1', DRAFT)
+    const response = await call(funnelsDeleteHandler, { hostId: 'h1', funnelId: 'a' })
+    expect(response.body.recordingChanged).toBe(true)
+    expect(mockDb.docs.get('hosts/h1')?.['funnelRecording']).toBe(false)
+    expect(mockDb.docs.has('hosts/h1/funnels/d1')).toBe(true)
+  })
+
+  it('carries no drop-off watch into the sweep', async () => {
+    resetFunnelHostStateForTests()
+    site('admin', { funnelRecording: true })
+    const watches = [{ step: 1, afterHours: 24 }]
+    mockDb
+      .seed('hosts/h1/funnels/a', { ...FUNNEL, dropOffWatches: watches })
+      .seed('hosts/h1/funnels/d1', { ...DRAFT, dropOffWatches: watches })
+    const state = await funnelHostState(mockDb, 'h1')
+    expect(state.watched.map((one) => one.id)).toEqual(['a'])
   })
 })
