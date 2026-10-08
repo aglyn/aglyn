@@ -96,6 +96,46 @@ export const iconSources = () =>
     ...new Set(APP_ICONS.flatMap((icon) => [...icon.layers, icon.mark.source])),
   ].sort()
 
+/**
+ * The launch screen's logo (`UILaunchScreen` → `UIImageName`), in each app's
+ * own asset catalog: the console's full logo, light and dark, at the size
+ * `AglynLaunchView` draws it (its 200 x 56 frame, fitted to the 79:24 logo),
+ * so the system's first frame and the SwiftUI launch view line up.
+ */
+export const LAUNCH_LOGO = {
+  apple: 'LaunchLogo',
+  light: 'aglyn-logo-full-dark.svg',
+  dark: 'aglyn-logo-full-light.svg',
+  width: 184,
+  height: 56,
+}
+
+export const appleLaunchSet = (app) =>
+  `apps/ios/${app}/Assets.xcassets/${LAUNCH_LOGO.apple}.imageset`
+
+/**
+ * A brand SVG with an explicit size on its root element, everything else
+ * byte for byte: the console's files say `width="100%"`, which an asset
+ * catalog cannot size a launch image from.
+ */
+export function sizedSvg(svg, width, height, where = 'svg') {
+  const text = svg.toString('utf8')
+  const root = /<svg\b[^>]*>/.exec(text)
+  if (!root) throw new Error(`${where}: no <svg> element`)
+  let tag = root[0]
+  for (const [name, value] of [
+    ['width', width],
+    ['height', height],
+  ]) {
+    tag = new RegExp(`\\s${name}="[^"]*"`).test(tag)
+      ? tag.replace(new RegExp(`(\\s${name}=)"[^"]*"`), `$1"${value}"`)
+      : tag.replace(/^<svg\b/, `<svg ${name}="${value}"`)
+  }
+  return (
+    text.slice(0, root.index) + tag + text.slice(root.index + root[0].length)
+  )
+}
+
 export const appleIconSet = (app) =>
   `apps/ios/${app}/Assets.xcassets/AppIcon.appiconset`
 export const androidRes = (app) => `apps/android/${app}/src/main/res`
@@ -618,6 +658,25 @@ export function brandTextOutputs(read) {
       file: `${appleIconSet(icon.apple)}/Contents.json`,
       content: appIconContents(),
     })
+    const launch = appleLaunchSet(icon.apple)
+    outputs.push({
+      file: `${launch}/Contents.json`,
+      content: imageSetContents(LAUNCH_LOGO),
+    })
+    for (const [suffix, source] of [
+      ['', LAUNCH_LOGO.light],
+      ['-dark', LAUNCH_LOGO.dark],
+    ]) {
+      outputs.push({
+        file: `${launch}/${LAUNCH_LOGO.apple}${suffix}.svg`,
+        content: sizedSvg(
+          read(source),
+          LAUNCH_LOGO.width,
+          LAUNCH_LOGO.height,
+          source,
+        ),
+      })
+    }
     const res = androidRes(icon.android)
     outputs.push({
       file: `${res}/mipmap-anydpi-v26/ic_launcher.xml`,
