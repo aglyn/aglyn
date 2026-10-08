@@ -82,6 +82,7 @@ import {
 import { AI_JOB_TEMPLATE_STEP_BUDGET } from './ai-job-template-step'
 import { AI_JOB_TEXT_STEP_BUDGET } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_BUDGET, AI_THEME_BRAND_BUDGET_MS } from './ai-job-theme-budget'
+import { AI_EDIT_READS_MS, AI_JOB_EDIT_STEP_BUDGET } from './ai-job-edit-step'
 import { AI_JOB_WORKFLOW_STEP_BUDGET, AI_WORKFLOW_RECORDS_READ_MS } from './ai-job-workflow-step'
 import {
   AI_JOB_PLAN_STEP,
@@ -157,6 +158,15 @@ const STEP_TIMES: readonly StepTime[] = [
     ceiling: AI_JOB_PAGE_SECTION_TOKENS,
     cap: AI_JOB_PAGE_SECTION_MAX_TOKENS,
     shape: shape(),
+  },
+  {
+    row: '`edit`',
+    kind: 'edit',
+    routing: 'job.edit',
+    budget: AI_JOB_EDIT_STEP_BUDGET,
+    ceiling: routed('job.edit'),
+    cap: routed('job.edit'),
+    shape: shape({ lookups: 0, ownReadsMs: AI_EDIT_READS_MS }),
   },
   {
     row: '`theme`',

@@ -1585,11 +1585,19 @@ server canvas refuses exactly what the validator refuses. Inputs: `target`
 - **What it cannot do server-side** — save a reusable component, or write a
   published page's search listing — is left out and named on the output.
 - **Routing.** `job.edit`, balanced tier, adaptive thinking, 6,144 tokens:
-  the edit rung's tool-call ceiling with half as much again to think in.
-  Evals: `tools/ai-eval/cases/edit`.
+  the edit rung's tool-call ceiling with half as much again to think in. Its
+  cached prefix is 5,970 tokens for a page and 5,958 for a layout. Evals:
+  `tools/ai-eval/cases/edit`.
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| --- | --- | --- | --- | --- |
+| `edit` | balanced | 0 | 6,144 / 6,144 / 4,096 | 2 × 3 s + 2 × 102,400 ms + 3 s + 2 s = 215,800 ms |
+
 - **In a build.** The `edit` operation names an inventory page or layout;
   "…and make the home page's hero shorter" becomes one item beside the new
-  pages. Not on Free (no version history, and a build's pages are new ones).
+  pages. Not offered on Free: without version history only an unpublished
+  page could take the change, which is rarely the page meant, so the item
+  would be skipped after the plan was confirmed.
 
 ### Live runs this needs (founder's go only)
 

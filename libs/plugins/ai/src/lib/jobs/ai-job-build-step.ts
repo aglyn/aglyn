@@ -542,6 +542,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   template: 'template',
   campaign: 'campaign',
   workflow: 'workflow',
+  function: 'logic',
   edit: 'edit',
 }
 
