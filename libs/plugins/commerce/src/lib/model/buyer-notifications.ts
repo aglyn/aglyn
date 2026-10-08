@@ -18,8 +18,10 @@
 /**
  * What a store tells its buyer, and when (AGL-3610).
  *
- * Five moments in an order's life each send the buyer one message: the
- * receipt, each shipment, delivery, each refund and a cancellation. A store
+ * Each moment in an order's life sends the buyer one message: the receipt,
+ * each shipment, delivery, each refund and a cancellation — and, for an
+ * order collected or brought by the store (AGL-3624), ready for pickup,
+ * picked up and out for delivery. A store
  * turns any of them off on `hosts/{hostId}/settings/store.buyerNotifications`
  * — and ONLY off: every moment is ON unless an explicit `false` is stored,
  * because transaction messages are on by default for every store, existing
@@ -37,6 +39,10 @@ export const BUYER_NOTIFICATION_EVENTS = [
   'delivered',
   'refunded',
   'cancelled',
+  // Pickup and the store's own delivery (AGL-3624).
+  'ready_for_pickup',
+  'picked_up',
+  'out_for_delivery',
 ] as const
 
 export type BuyerNotificationEvent = (typeof BUYER_NOTIFICATION_EVENTS)[number]
@@ -56,6 +62,9 @@ export const BUYER_NOTIFICATION_EMAIL_KEYS: Readonly<
   delivered: 'order-delivered',
   refunded: 'order-refunded',
   cancelled: 'order-cancelled',
+  ready_for_pickup: 'order-ready-for-pickup',
+  picked_up: 'order-picked-up',
+  out_for_delivery: 'order-out-for-delivery',
 }
 
 /** How the store settings card names each moment. */
@@ -83,6 +92,18 @@ export const BUYER_NOTIFICATION_LABELS: Readonly<
   cancelled: {
     label: 'Order canceled',
     description: 'When you cancel an order.',
+  },
+  ready_for_pickup: {
+    label: 'Ready for pickup',
+    description: 'When you mark a pickup order ready, with where to collect it and the pickup hours.',
+  },
+  picked_up: {
+    label: 'Order picked up',
+    description: 'When a pickup order is collected.',
+  },
+  out_for_delivery: {
+    label: 'Out for delivery',
+    description: 'When your own driver sets out with a local delivery order.',
   },
 }
 

@@ -26,13 +26,18 @@ jest.mock('@aglyn/tenant-data-admin/server/notifications', () => ({
   notifyUsers: jest.fn(),
 }))
 
+jest.mock('@aglyn/tenant-data-admin/server/operator-alerts', () => ({
+  __esModule: true,
+  raiseOperatorAlert: jest.fn(),
+}))
+
 jest.mock('./ai-jobs', () => ({
   __esModule: true,
   registerAiJobTransitionListener: jest.fn(),
 }))
 
 import type { AiJob } from '../model/ai-jobs.types'
-import { aiJobTransitionNotifier } from './ai-jobs-notify'
+import { aiJobFailureAlerter, aiJobTransitionNotifier } from './ai-jobs-notify'
 
 const job = (patch: Partial<AiJob> = {}) =>
   ({
@@ -101,5 +106,110 @@ describe('aiJobTransitionNotifier', () => {
     const notify = jest.fn()
     await aiJobTransitionNotifier(notify)({ job: job({ createdBy: '' }), to: 'done' })
     expect(notify).not.toHaveBeenCalled()
+  })
+})
+
+describe('aiJobFailureAlerter', () => {
+  const failed = (patch: Partial<AiJob> = {}) =>
+    job({ status: 'failed', review: null, error: 'It stopped.', steps: [{ name: 'plan' }, { name: 'site' }] as never, ...patch })
+
+  it('tells staff when a job fails on our side, deduped per kind, with the runner’s own words', async () => {
+    const raise = jest.fn().mockResolvedValue(undefined)
+    await aiJobFailureAlerter(raise)({
+      job: failed(),
+      to: 'failed',
+      failure: { ours: true, stepIndex: 1, error: 'upstream 529 overloaded' },
+    })
+    expect(raise).toHaveBeenCalledTimes(1)
+    expect(raise.mock.calls[0][0]).toMatchObject({ type: 'ai.jobFailed' })
+    expect(raise.mock.calls[0][1]).toEqual({
+      dedupeKey: 'site',
+      orgId: 'org-1',
+      hostId: 'host-1',
+      context: { kind: 'site', jobId: 'job-1', orgId: 'org-1', step: 'site', error: 'upstream 529 overloaded' },
+    })
+  })
+
+  it('cuts a long error short; the log keeps the rest', async () => {
+    const raise = jest.fn().mockResolvedValue(undefined)
+    await aiJobFailureAlerter(raise)({
+      job: failed(),
+      to: 'failed',
+      failure: { ours: true, stepIndex: null, error: 'x'.repeat(500) },
+    })
+    expect(raise.mock.calls[0][1].context).toMatchObject({ step: 'n/a', error: `${'x'.repeat(300)}…` })
+  })
+
+  it('raises nothing for a failure that is the customer’s, or for any other change', async () => {
+    const raise = jest.fn()
+    const alerter = aiJobFailureAlerter(raise)
+    await alerter({ job: failed(), to: 'failed', failure: { ours: false, stepIndex: 1, error: 'stop_reason refusal' } })
+    await alerter({ job: failed(), to: 'failed' })
+    await alerter({ job: job({ status: 'done', review: null }), to: 'done' })
+    expect(raise).not.toHaveBeenCalled()
+  })
+})
+
+describe('aiJobFailureAlerter on a build that finished (AGL-3683)', () => {
+  const row = (slot: string, label: string, patch: Record<string, unknown> = {}) => ({
+    slot, op: 'page', label, status: 'succeeded', ...patch,
+  })
+
+  it('tells staff which parts failed on our side, and not the ones the model declined', async () => {
+    const raise = jest.fn().mockResolvedValue(undefined)
+    await aiJobFailureAlerter(raise)({
+      job: job({
+        status: 'done',
+        review: null,
+        items: [
+          row('p0', 'Home'),
+          row('p1', 'Services', { status: 'failed', failure: { ours: true, reason: 'provider', message: 'x' } }),
+          row('p2', 'About', { status: 'failed', failure: { ours: true, reason: 'doctrine-refused', message: 'x', detail: 'Rule 16' } }),
+          row('p3', 'Prices', { status: 'failed', failure: { ours: false, reason: 'refused', message: 'x' } }),
+        ] as never,
+      }),
+      to: 'done',
+    })
+    expect(raise).toHaveBeenCalledTimes(1)
+    expect(raise.mock.calls[0][0]).toMatchObject({ type: 'ai.buildPartlyFailed' })
+    expect(raise.mock.calls[0][1]).toEqual({
+      dedupeKey: 'site',
+      orgId: 'org-1',
+      hostId: 'host-1',
+      context: {
+        kind: 'site',
+        jobId: 'job-1',
+        orgId: 'org-1',
+        failed: 2,
+        total: 4,
+        items: 'Services (provider); About (doctrine-refused: Rule 16)',
+      },
+    })
+  })
+
+  it('names five parts and counts the rest', async () => {
+    const raise = jest.fn().mockResolvedValue(undefined)
+    const failed = Array.from({ length: 7 }, (_, i) =>
+      row(`p${i}`, `P${i}`, { status: 'failed', failure: { ours: true, reason: 'provider', message: 'x' } }))
+    await aiJobFailureAlerter(raise)({ job: job({ status: 'done', review: null, items: failed as never }), to: 'done' })
+    expect(raise.mock.calls[0][1].context.items).toBe(
+      'P0 (provider); P1 (provider); P2 (provider); P3 (provider); P4 (provider); and 2 more',
+    )
+  })
+
+  it('raises nothing for a build that is whole, or whose only failures were declined', async () => {
+    const raise = jest.fn()
+    const alerter = aiJobFailureAlerter(raise)
+    await alerter({ job: job({ status: 'done', review: null, items: [row('p0', 'Home')] as never }), to: 'done' })
+    await alerter({
+      job: job({
+        status: 'done',
+        review: null,
+        items: [row('p0', 'Home'), row('p1', 'X', { status: 'failed', failure: { ours: false, reason: 'refused', message: 'x' } })] as never,
+      }),
+      to: 'done',
+    })
+    await alerter({ job: job({ status: 'done', review: null }), to: 'done' })
+    expect(raise).not.toHaveBeenCalled()
   })
 })

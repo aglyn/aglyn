@@ -16,6 +16,19 @@
  */
 
 import { sendAnalyticsBeacon } from './analytics-beacon'
+import {
+  SITE_JOURNEY_KEY_MAX,
+  type SiteJourneyStepType,
+  isSiteJourneyStepType,
+} from './site-journey-steps'
+
+export {
+  SITE_JOURNEY_EMAIL_KEYS,
+  SITE_JOURNEY_KEY_MAX,
+  SITE_JOURNEY_STEP_TYPES,
+  type SiteJourneyStepType,
+  isSiteJourneyStepType,
+} from './site-journey-steps'
 
 /**
  * A VISIT'S STEPS, IN ORDER (AGL-3605): the one per-visit record the site
@@ -68,46 +81,8 @@ import { sendAnalyticsBeacon } from './analytics-beacon'
 /** The body field that marks a collector beacon as a journey step. */
 export const SITE_JOURNEY_BEACON_FIELD = 'journey'
 
-/**
- * What a step can be — only what the platform already sees happen.
- *
- * - `page`: a page was viewed; key = the path.
- * - `form`: a form was submitted successfully; key = the form id.
- * - `booking`: a booking was made (a free one confirmed, or a paid one's
- *   payment settled); key = the service id.
- * - `cart`: a product was added to the cart; key = the product id.
- * - `order`: a storefront order was placed and paid; no key.
- * - `overlay`: an announcement bar or popup was clicked; key = the overlay id.
- * - `event`: a custom event an interaction fired; key = the event name.
- * - `email`: a person the visit identified opened or clicked an email the
- *   site sent them; key = `opened` or `clicked`. Recorded by the SERVER from
- *   the delivery log, never by a page: a browser that sends one is refused.
- */
-export const SITE_JOURNEY_STEP_TYPES = [
-  'page',
-  'form',
-  'booking',
-  'cart',
-  'order',
-  'overlay',
-  'event',
-  'email',
-] as const
-
-export type SiteJourneyStepType = (typeof SITE_JOURNEY_STEP_TYPES)[number]
-
-export function isSiteJourneyStepType(value: unknown): value is SiteJourneyStepType {
-  return (
-    typeof value === 'string' &&
-    (SITE_JOURNEY_STEP_TYPES as readonly string[]).includes(value)
-  )
-}
-
 /** The step types only the server records; a page's beacon naming one is refused. */
 export const SITE_JOURNEY_SERVER_STEP_TYPES: ReadonlySet<SiteJourneyStepType> = new Set(['email'])
-
-/** The keys an `email` step carries. */
-export const SITE_JOURNEY_EMAIL_KEYS = ['opened', 'clicked'] as const
 
 /**
  * The body field an identifying door (a form submission) carries the visit
@@ -119,8 +94,6 @@ export const SITE_JOURNEY_SUBMISSION_FIELD = 'journey'
 /** The most steps one visit records. A visit past it records nothing more. */
 export const SITE_JOURNEY_MAX_STEPS = 60
 
-/** The longest key a step carries; longer keys are cut. */
-export const SITE_JOURNEY_KEY_MAX = 200
 
 /** A visit id's shape: 22 URL-safe characters (128 random bits). */
 export const SITE_JOURNEY_ID_PATTERN = /^[A-Za-z0-9_-]{22}$/

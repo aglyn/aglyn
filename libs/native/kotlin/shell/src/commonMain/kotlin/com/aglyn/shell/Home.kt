@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,7 +60,9 @@ private data class ShellAction(val key: String, val title: String, val icon: Str
 
 // Pages, Sites and the rest of a site's content are the site registration's
 // own quick actions (libs/native/kotlin/site), listed with the plugins'.
-private val SHELL_ACTIONS = emptyList<ShellAction>()
+private val SHELL_ACTIONS = listOf(
+  ShellAction("analytics", "Analytics", "bar_chart", 110, Route.Analytics),
+)
 
 /** How many recent notifications the dashboard reads. */
 private const val RECENT_WINDOW = 50
@@ -325,15 +328,19 @@ internal fun levelTint(level: String?): Color {
 
 @Composable
 internal fun NotificationRows(rows: List<FeedNotification>, now: Long, context: ShellPluginContext) {
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
   for (row in rows) {
     ActivityRow(
       title = row.title,
       body = row.body,
       time = row.createdAt?.let { relativeTime(it.epochMillis, now) },
       icon = notificationIcon(row.type),
-      tint = levelTint(row.level),
+      tint = levelTint(com.aglyn.contracts.Notifications.level(row.level, row.type)),
       unread = !row.read,
-      onClick = row.link?.let { link -> { context.openLink(link) } },
+      onClick = {
+        if (!row.read) scope.launch { runCatching { markNotificationRead(context.writer, context.uid, row.id) } }
+        if (row.inviteId != null) context.showNotifications() else context.openNotification(row)
+      },
       modifier = Modifier.testTag("notification-${row.id}"),
     )
   }
@@ -348,20 +355,7 @@ internal fun notificationFeed(services: ShellServices, uid: String, count: Int):
   }
   val live by flow.collectAsState(Live.Loading)
   return when (val value = live) {
-    is Live.Ready -> Live.Ready(
-      value.value.map {
-        FeedNotification(
-          id = it.id,
-          title = it.string("title") ?: "",
-          body = it.string("body"),
-          link = it.string("link"),
-          read = it.bool("read") == true,
-          level = it.string("level"),
-          type = it.string("type"),
-          createdAt = it.data["createdAt"] as? FirestoreTimestamp,
-        )
-      },
-    )
+    is Live.Ready -> Live.Ready(value.value.map(::feedNotificationOf))
     is Live.Failed -> value
     Live.Loading -> Live.Loading
   }

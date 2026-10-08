@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v11'
+export const LEGAL_DOCUMENT_VERSION = 'v12'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -680,6 +680,34 @@ export interface LegalDocumentManifestEntry {
  * the correction were shown, stays in the archive beside it as
  * `v11/privacy.superseded-2026-10-07-006fe7.txt`.
  *
+ * v12 (2026-10-08, AGL-3602): Google Cloud Vertex AI makes images for the
+ * media library.
+ *
+ *   - Privacy §2's "AI features" opener names Google beside Anthropic, for
+ *     creating images; "What AI features send" says that for an image other
+ *     than an SVG illustration we send Google the description and the shape
+ *     and nothing else from the account or site, and for an SVG illustration,
+ *     icon, pattern or logo mark we send our AI provider the description, the
+ *     kind and shape of picture, and the site's theme colors or the colors
+ *     chosen. §3 names Google Cloud Vertex AI among the providers AI features
+ *     use.
+ *   - The Subprocessors page lists Google Cloud Vertex AI (Google LLC), its
+ *     location "Global — Google selects where requests are processed", with
+ *     a change-log entry; it is not acceptance-pinned. The DPA, the Terms and
+ *     the Cookie Policy are unchanged.
+ *
+ * Privacy, Subprocessors and their `/legal` index cards move "Last updated"
+ * to October 8, 2026, published just after midnight Central. The wording is
+ * recorded in `Platform Docs/Legal/Proposed/2026-10-08-vertex-ai-images/PROPOSAL.md`.
+ *
+ * Publication-first: the Google Doc masters were edited and verified through
+ * the Docs API, the pages were published, the live pages confirmed serving the
+ * new text, and only then was privacy captured: 25972 bytes (`02d60d…`),
+ * identical across two requests and a cache-busting query. The Terms did not
+ * change, so they were the control: the live terms page reproduced its `v9`
+ * pin (44131 bytes / `c48915…`) byte for byte before and after publication,
+ * and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -746,7 +774,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'dbe5c9d7628db353cc2a756372cf7cb7cbebdf8cedc2cc6887bc6219ccabd7bf',
-    bytes: 25496,
+      '02d60d28bd44a8433a8e7379897049b3adafd5ee296d17a925e69e7b5623167c',
+    bytes: 25972,
   },
 ]

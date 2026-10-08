@@ -49,6 +49,7 @@ import { notifyPosSaleCompleted } from './pos-sale'
 import { posSaleStamp } from './pos-sale-stamp'
 import { quoteSaleTaxWithEngine } from './tax-engine-quote'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { posKioskPrincipal } from './pos-kiosk-principal'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -77,7 +78,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined
-  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  // A self-service kiosk's cart (AGL-3623), handed over in-process by
+  // `pos-kiosk.ts` as the staff member who paired it — checked below exactly
+  // as that member's own sale would be. Only an open sale, on its own
+  // register: the kiosk route never sends a discount, a coupon, a stay or a
+  // customer, and this refuses them should it ever try.
+  const kiosk = posKioskPrincipal(req)
+  if (!idToken && !kiosk) return res.status(401).json({ error: 'Unauthenticated' })
   const body =
     typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
   const hostId = String(body.hostId ?? '')
@@ -127,6 +134,19 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || rawLines.length === 0) {
     return res.status(400).json({ error: 'Missing hostId or lines' })
   }
+  if (
+    kiosk &&
+    (payment !== 'open' ||
+      registerId !== kiosk.registerId ||
+      discountPct !== 0 ||
+      couponCode ||
+      reservationId ||
+      customerEmail ||
+      body.customer ||
+      body.cashierAssertion)
+  ) {
+    return res.status(400).json({ error: 'A kiosk order cannot carry that' })
+  }
 
   let claim: AttemptClaim | null = null
   /**
@@ -145,7 +165,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (slot) await slot.release()
   }
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const decoded = kiosk
+      ? { uid: kiosk.uid }
+      : await firebaseAdmin.app().auth().verifyIdToken(idToken as string)
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
@@ -815,7 +837,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           ...(offlineFeeOrgId ? { posFeeOrgId: offlineFeeOrgId } : {}),
           payments: [],
           customerEmail: customerEmail || null,
-          timeline: [{ atMs: Date.now(), event: 'pos-sale-opened' }],
+          // Built by a customer at a self-service kiosk (AGL-3623).
+          ...(kiosk ? { posSource: 'kiosk', kioskDeviceId: kiosk.deviceId } : {}),
+          timeline: [{ atMs: Date.now(), event: kiosk ? 'pos-kiosk-order-opened' : 'pos-sale-opened' }],
           createdAtMs: Date.now(),
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         }))

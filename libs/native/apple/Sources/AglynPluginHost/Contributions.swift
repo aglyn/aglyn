@@ -49,14 +49,25 @@ public struct NativePluginContext {
   /// Writes the console makes straight to Firestore (no route), made the
   /// same way under the same security rules, as the signed-in person.
   public let writer: FirestoreWriter
+  /// The person's role on the picked site (`admin`, `editor`, `author` or
+  /// `viewer`), as their membership row names it; nil without a site. A
+  /// screen reads it only to grey out what the rules would refuse.
+  public let siteRole: String?
+  /// The person's role in the picked workspace (`owner`, `admin`, `editor`, `viewer`).
+  public let orgRole: String?
   private let navigateAction: @MainActor (String, NativeParams) -> Void
   private let openBesignerAction: @MainActor (String) -> Void
+  private let selectSiteAction: (@MainActor (String) -> Void)?
+  private let backAction: (@MainActor () -> Void)?
 
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
     firestore: FirestoreReader, api: ConsoleAPIClient, writer: FirestoreWriter = NoFirestoreWrites(),
     navigate: @escaping @MainActor (String, NativeParams) -> Void,
-    openBesigner: @escaping @MainActor (String) -> Void
+    openBesigner: @escaping @MainActor (String) -> Void,
+    siteRole: String? = nil, orgRole: String? = nil,
+    selectSite: (@MainActor (String) -> Void)? = nil,
+    back: (@MainActor () -> Void)? = nil
   ) {
     self.uid = uid
     self.orgID = orgID
@@ -68,6 +79,20 @@ public struct NativePluginContext {
     self.writer = writer
     self.navigateAction = navigate
     self.openBesignerAction = openBesigner
+    self.siteRole = siteRole
+    self.orgRole = orgRole
+    self.selectSiteAction = selectSite
+    self.backAction = back
+  }
+
+  /// Makes `hostID` the picked site, as the site switcher does.
+  @MainActor public func selectSite(_ hostID: String) {
+    selectSiteAction?(hostID)
+  }
+
+  /// Leaves the current screen, as the back button does.
+  @MainActor public func back() {
+    backAction?()
   }
 
   /// Opens a registered screen by id.
@@ -135,6 +160,9 @@ public struct NativeWidget: Identifiable {
   public let size: WidgetSize
   public let requiresSite: Bool
   public let apps: Set<AglynAppKind>
+  /// A core page's slot it renders in instead of Home, the native twin of
+  /// the console's `PluginWidgetSlot` (`hostAnalytics` is the Analytics page's).
+  public var slot: String? = nil
   public let make: WidgetBuilder
 }
 

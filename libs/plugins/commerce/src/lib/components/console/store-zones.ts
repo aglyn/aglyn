@@ -51,7 +51,17 @@ export const ORDERS_BULK_ZONE = definePluginZone<ConsoleOrdersBulkZoneProps>('or
 export const COMMERCE_SETTINGS_ZONE =
   definePluginZone<ConsoleCommerceSettingsZoneProps>('commerceSettings')
 
-/** Declares both, from the console registrar. */
+/** What `commercePromotions` hands a widget: the site (AGL-3640). */
+export type ConsoleCommercePromotionsZoneProps = ConsoleCommerceSettingsZoneProps
+
+/**
+ * At the foot of the store's Promotions, beside its discounts and gift
+ * cards (AGL-3640): a rewards program is the first widget.
+ */
+export const COMMERCE_PROMOTIONS_ZONE =
+  definePluginZone<ConsoleCommercePromotionsZoneProps>('commercePromotions')
+
+/** Declares them, from the console registrar. */
 export function registerCommerceStoreZones(): void {
   const owner = { pluginId: BUNDLE_ID }
   registerPluginZone(
@@ -62,6 +72,16 @@ export function registerCommerceStoreZones(): void {
       layout: 'bare',
       description:
         'Beside the orders list’s bulk actions, while orders are ticked. A widget here acts on the ticked orders through its own routes and writes no order itself.',
+    },
+    owner,
+  )
+  registerPluginZone(
+    {
+      zone: COMMERCE_PROMOTIONS_ZONE,
+      label: 'Store promotions',
+      surface: 'console',
+      description:
+        'At the foot of the store’s Promotions, beside its discounts and gift cards. A widget here keeps its own programs and balances through its own routes; it writes none of the store’s.',
     },
     owner,
   )

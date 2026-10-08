@@ -128,6 +128,29 @@ jest.mock('@mui/material', () => ({
   ...jest.requireActual('@mui/material'),
   useMediaQuery: () => true,
 }))
+// The offline register (AGL-3625) has specs of its own; online, it is inert.
+jest.mock('./pos-offline/register-offline', () => {
+  const inert = {
+    offline: false,
+    ready: false,
+    unavailableReason: null,
+    kit: null,
+    queue: [],
+    syncing: false,
+    syncError: null,
+    notices: [],
+    gridProducts: () => [],
+    findByCode: () => null,
+    totalsFor: () => null,
+    ringCashSale: async () => null,
+    reportNetworkFailure: () => undefined,
+    syncNow: async () => undefined,
+    dismissNotices: () => undefined,
+    discard: async () => undefined,
+  }
+  return { PosOfflineBanner: () => null, PosOfflineCheckout: () => null, usePosOffline: () => inert }
+})
+
 jest.mock('./pos-ops/register-ops', () => ({
   PosOperationsBar: () => null,
   PosCustomerLookup: () => null,
@@ -254,7 +277,13 @@ describe('every shape the till asks has its index (AGL-3321)', () => {
     )
     const hub = listQueryIndexes(PRODUCT_LIST_QUERY, PRODUCT_LIST_INDEX_BASE)
     const used = new Set(['deletedAt', 'status', 'nameTokens', 'barcodes', 'skus'])
-    const needed = hub.filter((index) => used.has(index.fields[0].fieldPath))
+    // The till asks in the table's default order, A to Z — not its header orders (AGL-3680).
+    const needed = hub.filter(
+      (index) =>
+        used.has(index.fields[0].fieldPath) &&
+        index.fields[1]?.fieldPath === 'nameLower' &&
+        index.fields[1]?.order === 'ASCENDING',
+    )
     expect(needed).toHaveLength(used.size)
     expect(missingListQueryIndexes(indexFile, 'products', needed)).toEqual([])
   })

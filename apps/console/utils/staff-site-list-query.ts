@@ -154,9 +154,27 @@ export const STAFF_SITE_LIST_FILTER_OPTIONS = {
 /** The list's order while no range is in force. */
 export const STAFF_SITE_LIST_SORT: ListQuerySort = { path: LIST_QUERY_ID_PATH, direction: 'asc' }
 
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Site (`nameLower`, stamped on every site — see above) and Created order the
+ * QUERY. Created newest first is a full order: it is the order the Created
+ * range already imposes, so every equality already has its composite. The
+ * rest are `alone` — served only with no filter or search on, falling back to
+ * Created newest first with a notice — so on this top-level collection they
+ * need no composite at all. Organization, Owner, Custom domain and Status are
+ * joined or derived by the route, and sort the page on screen.
+ */
+export const STAFF_SITE_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'createdAt', direction: 'desc', column: 'createdAt', label: 'Created' },
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Created', alone: true },
+  { path: 'nameLower', direction: 'asc', column: 'displayName', label: 'Site', alone: true },
+  { path: 'nameLower', direction: 'desc', column: 'displayName', label: 'Site', alone: true },
+]
+
 /** The staff Sites list's query: every field above, and the search. */
 export const STAFF_SITE_LIST_QUERY: ListQueryDeclaration = {
   fields: STAFF_SITE_LIST_FILTER_FIELDS,
-  sorts: [STAFF_SITE_LIST_SORT],
+  sorts: [STAFF_SITE_LIST_SORT, ...STAFF_SITE_LIST_COLUMN_SORTS],
   search: { tokensPath: 'searchTokens' },
 }

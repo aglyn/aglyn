@@ -143,7 +143,7 @@ describe('opened for one form', () => {
     renderList()
     const plan = lastListQueryPlan()
     expect(plan?.filters).toEqual([{ path: 'formIds', op: 'array-contains', value: 'Fx9_Q-mixed' }])
-    expect(plan?.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    expect(plan?.orderBy).toMatchObject({ path: 'updatedAt', direction: 'desc' })
     // The source beside it would be a second array clause; the form implies it.
     expect(plan?.refused).toEqual([])
   })
@@ -155,7 +155,7 @@ describe('opened for one form', () => {
     expect(plan?.filters).toEqual([
       expect.objectContaining({ path: 'visibleTo', op: 'array-contains-any' }),
     ])
-    expect(plan?.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    expect(plan?.orderBy).toMatchObject({ path: 'updatedAt', direction: 'desc' })
   })
 })
 

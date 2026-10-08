@@ -179,9 +179,7 @@ const PLUGIN_TOPICS = {
   deals: '/content-and-data/crm/deals',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
-  // The Email platforms cards on a site's setup page (AGL-3639). Unlisted
-  // until the deployment sets MARKETING_PLATFORMS_TOKEN_KEY; see
-  // PLUGIN_UNLISTED_TOPICS.
+  // The Email platforms cards on a site's setup page (AGL-3639).
   emailPlatforms: '/marketing-and-automation/email-campaigns/email-platforms',
   // The Fulfillment networks cards under the store's Settings and the order
   // dialog's section (AGL-3634). Unlisted until the deployment offers a
@@ -203,6 +201,13 @@ const PLUGIN_TOPICS = {
   // delivery orders (AGL-3644). Unlisted until the deployment offers a
   // service; see PLUGIN_UNLISTED_TOPICS.
   deliveryApps: '/commerce-and-bookings/commerce/delivery-apps',
+  // The Rewards cards under the store's Promotions and the order dialog's
+  // Rewards section (AGL-3640).
+  loyalty: '/commerce-and-bookings/commerce/rewards-and-referrals',
+  // The Rewards account card above the program, for a merchant's own Smile.io
+  // or Yotpo Loyalty account (AGL-3677). Unlisted until the deployment sets
+  // LOYALTY_CONNECTORS_TOKEN_KEY; see PLUGIN_UNLISTED_TOPICS.
+  loyaltyConnectors: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   funnels: '/marketing-and-automation/analytics/funnels',
@@ -228,8 +233,7 @@ const PLUGIN_TOPICS = {
   // The Shipping labels and Carrier accounts cards under the store's
   // Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
-  // The Tax service card under the store's Settings (AGL-3631). The guide is
-  // unlisted while the service is rolling out; see PLUGIN_UNLISTED_TOPICS.
+  // The Tax service card under the store's Settings (AGL-3631).
   taxServices: '/commerce-and-bookings/commerce/tax-services',
   // The Print on demand card under the store's Settings, and its product and
   // order widgets (AGL-3641). Unlisted while rolling out; see
@@ -272,13 +276,6 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',
   'connectXero',
-  // The Tax service card draws nothing until the server reports a tax
-  // service configured for the deployment, which aglyn.com is not while the
-  // guide is unlisted (AGL-3631).
-  'taxServices',
-  // The Email platforms cards draw nothing until the console holds
-  // MARKETING_PLATFORMS_TOKEN_KEY, the same gate the guide waits on (AGL-3639).
-  'emailPlatforms',
   // The Fulfillment networks cards draw nothing until the console holds
   // FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app, the gate the guide
   // waits on (AGL-3634).
@@ -304,6 +301,9 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Zapier card draws nothing until the console holds ZAPIER_APP_URL, the
   // published app's link, which the guide waits on too (AGL-3643).
   'zapier',
+  // The Rewards account card draws nothing until the console holds
+  // LOYALTY_CONNECTORS_TOKEN_KEY, the gate the guide waits on (AGL-3677).
+  'loyaltyConnectors',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

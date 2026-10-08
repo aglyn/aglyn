@@ -31,6 +31,7 @@ import {
 import { listQueryRefusals } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   PRODUCT_LIST_BASE,
+  PRODUCT_LIST_COLUMN_SORTS,
   PRODUCT_LIST_FIELDS,
   PRODUCT_LIST_HEADERS,
   PRODUCT_LIST_INDEX_BASE,
@@ -71,7 +72,7 @@ describe('the products table puts every clause on its query', () => {
   it('lists live products only, ordered by name, with nothing asked', () => {
     const shape = plan([])
     expect(shape.filters).toEqual([{ path: 'deletedAt', op: '==', value: null }])
-    expect(shape.orderBy).toEqual({ path: 'nameLower', direction: 'asc', column: 'name' })
+    expect(shape.orderBy).toEqual({ path: 'nameLower', direction: 'asc', column: 'name', label: 'Product' })
   })
 
   it('serves the search, Status and Type together', () => {
@@ -143,6 +144,46 @@ describe('the products table puts every clause on its query', () => {
   })
 })
 
+describe('every header sorts (AGL-3680)', () => {
+  it('a header order keeps the live-only scope and reads the stored key', () => {
+    const shape = planListQuery(
+      PRODUCT_LIST_QUERY,
+      {
+        clauses: [],
+        base: PRODUCT_LIST_BASE,
+        sort: PRODUCT_LIST_COLUMN_SORTS.find((sort) => sort.column === 'priceUsd'),
+      },
+      nameSearchNormalizers,
+    )
+    expect(shape.filters).toEqual([{ path: 'deletedAt', op: '==', value: null }])
+    expect(shape.orderBy).toMatchObject({ path: 'priceFromCents', direction: 'asc' })
+  })
+
+  it('every product write that carries its variants stamps the price key', () => {
+    expect(productSearchFields({ name: 'Mug', variants: [{ id: 'v1', priceUsd: 12 }] as never })).toMatchObject({
+      priceFromCents: 1200,
+    })
+    // An unpriced variant is still a price key: 0, never absent.
+    expect(productSearchFields({ name: 'Mug', variants: [{ id: 'v1' }] as never })).toMatchObject({
+      priceFromCents: 0,
+    })
+  })
+
+  it('falls back to A to Z under a filter, and says so', () => {
+    const shape = planListQuery(
+      PRODUCT_LIST_QUERY,
+      {
+        clauses: [{ field: 'status', op: 'equals', value: 'active' }],
+        base: PRODUCT_LIST_BASE,
+        sort: PRODUCT_LIST_COLUMN_SORTS.find((sort) => sort.column === 'type'),
+      },
+      nameSearchNormalizers,
+    )
+    expect(shape.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
+    expect(shape.notices).toEqual(['Sorted by Product: Type sorts only with no filter or search on.'])
+  })
+})
+
 describe('the index file serves every shape the products table can ask', () => {
   const indexFile = JSON.parse(read('cloud/firebase-firestore.indexes.json'))
   const needed = listQueryIndexes(PRODUCT_LIST_QUERY, PRODUCT_LIST_INDEX_BASE)
@@ -151,13 +192,21 @@ describe('the index file serves every shape the products table can ask', () => {
     expect(missingListQueryIndexes(indexFile, 'products', needed, 'COLLECTION')).toEqual([])
   })
 
-  it('needs one composite per filterable field and the scope, within the budget', () => {
+  it('needs one composite per filterable field and the scope, and the scope per header order, within the budget', () => {
     expect(
       needed.map((index) =>
         index.fields.map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`).join(','),
       ),
     ).toEqual([
       'deletedAt:ASCENDING,nameLower:ASCENDING',
+      // The header orders (AGL-3680), `alone`: paired with the scope only.
+      'deletedAt:ASCENDING,nameLower:DESCENDING',
+      'deletedAt:ASCENDING,status:ASCENDING',
+      'deletedAt:ASCENDING,status:DESCENDING',
+      'deletedAt:ASCENDING,type:ASCENDING',
+      'deletedAt:ASCENDING,type:DESCENDING',
+      'deletedAt:ASCENDING,priceFromCents:ASCENDING',
+      'deletedAt:ASCENDING,priceFromCents:DESCENDING',
       'nameTokens:CONTAINS,nameLower:ASCENDING',
       'status:ASCENDING,nameLower:ASCENDING',
       'type:ASCENDING,nameLower:ASCENDING',
@@ -165,7 +214,7 @@ describe('the index file serves every shape the products table can ask', () => {
       'skus:CONTAINS,nameLower:ASCENDING',
       'barcodes:CONTAINS,nameLower:ASCENDING',
     ])
-    expect(needed.length).toBeLessThanOrEqual(12)
+    expect(needed.length).toBeLessThanOrEqual(14)
   })
 })
 

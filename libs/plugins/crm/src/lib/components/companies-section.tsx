@@ -21,6 +21,7 @@ import {
   CRM_COLLECTIONS,
   type CrmCompany,
   crmPicklistKey,
+  crmPicklistRank,
   pluginDocsHelp,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
@@ -57,9 +58,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   COMPANY_LIST_DECLARATION,
   COMPANY_LIST_FILTER_FIELDS,
+  COMPANY_LIST_SORTS,
   COMPANY_PICKLIST_FILTERS,
   COMPANY_PREFIX_SEARCH,
 } from '../constants/company-filters'
+import { crmViewQuerySort, useCrmColumnSort } from '../hooks/use-crm-column-sort'
 import { useCompanyPicklists } from '../hooks/use-company-picklists'
 import { formatMoney } from '../model/deal-board-model'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
@@ -187,6 +190,11 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const viewFilters = views.state.filters
   const [searchWords, setSearchWords] = useState<string[]>([])
   const foldsScope = useCrmFoldsScope(orgId, visibleTo)
+  // The header order the view asks (AGL-3680), read before the query it orders.
+  const companySort = useMemo(
+    () => crmViewQuerySort(COMPANY_LIST_SORTS, views.state.sort, COMPANY_LIST_SORTS[0]),
+    [views.state.sort],
+  )
   const {
     rows: companies,
     status,
@@ -205,6 +213,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
     clauses: viewFilters,
     search: searchWords,
     prefixSearch: COMPANY_PREFIX_SEARCH,
+    sort: companySort.sort,
   })
   const nowMs = useMemo(() => Date.now(), [])
 
@@ -510,6 +519,37 @@ export function CompaniesSection(props: CompaniesSectionProps) {
    * view opened from its address reads as filtered, not as a mystery.
    */
   const grid = useCrmViewGrid(views, filterColumns, COMPANY_HIDDEN_COLUMNS)
+  /*
+   * EVERY HEADER SORTS (AGL-3680). The grid used to sort the view's order
+   * over the one page on screen while the footer paged the query, which read
+   * as the whole list's order. Company, Updated and Next activity sort the
+   * QUERY now (`COMPANY_LIST_SORTS`); the rest sort the page and say so —
+   * Type, Industry and Rating in the order the org keeps their values.
+   */
+  const pageSorts = useMemo(
+    () =>
+      Object.fromEntries(
+        COMPANY_PICKLIST_FILTERS.map((entry) => [
+          entry.column,
+          (row: CompanyRow) => {
+            const label = row[entry.column as 'type' | 'industry' | 'rating']
+            const list = picklists.lists[entry.picklistId]
+            return list && label ? crmPicklistRank(list, label) : null
+          },
+        ]),
+      ),
+    [picklists.lists],
+  )
+  const columnSort = useCrmColumnSort<CompanyRow>({
+    views,
+    sorts: COMPANY_LIST_SORTS,
+    defaultSort: COMPANY_LIST_SORTS[0],
+    asked: companySort,
+    orderBy: plan.orderBy,
+    rows: companies,
+    columns: grid.columns,
+    pageSorts,
+  })
 
   /** Whether anything narrows the list, so an empty one is "no match", not "none yet". */
   const narrowed = viewFilters.length > 0 || searchWords.some((word) => word.trim())
@@ -563,7 +603,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
             marksServed={false}
           />
         </CrmListToolbar>
-        <ListQueryNotices refused={refused} notices={plan.notices} />
+        <ListQueryNotices refused={refused} notices={[...plan.notices, ...columnSort.notices]} />
         <CompaniesBulkBar
           hostId={hostId}
           scope={scope}
@@ -577,7 +617,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
             rowHeight={TABLE_ROW_HEIGHT}
             columns={grid.columns}
             slots={CRM_LIST_SLOTS}
-            rows={companies}
+            rows={columnSort.rows}
+            columnSort={columnSort}
             selectable={{ selected: selectedIds, onChange: setSelectedIds }}
             noRowsLabel={narrowed ? 'No companies match these filters' : 'No companies yet'}
             noRowsDescription={
@@ -598,11 +639,10 @@ export function CompaniesSection(props: CompaniesSectionProps) {
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            // Columns and sort are the view's, controlled (AGL-2617).
+            // Columns are the view's, controlled (AGL-2617); so is the
+            // header order, which `columnSort` keeps in it (AGL-3680).
             columnVisibilityModel={grid.columnVisibilityModel}
             onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-            sortModel={grid.sortModel}
-            onSortModelChange={grid.onSortModelChange}
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
           />

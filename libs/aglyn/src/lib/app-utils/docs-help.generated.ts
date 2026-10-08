@@ -245,7 +245,7 @@ export const PLUGIN_DOCS = {
   emailPlatforms: {
     path: '/marketing-and-automation/email-campaigns/email-platforms',
     title: 'Email platforms (Mailchimp, Klaviyo, Omnisend)',
-    excerpt: 'Keep your contacts and their unsubscribes in step with your own Mailchimp, Klaviyo or Omnisend account, both ways, and send your orders to Klaviyo and Omnisend for their abandoned-cart and post-purchase flows. Rolling out.',
+    excerpt: 'Keep your contacts and their unsubscribes in step with your own Mailchimp, Klaviyo or Omnisend account, both ways, and send your orders to Klaviyo and Omnisend for their abandoned-cart and post-purchase flows.',
   },
   events: {
     path: '/content-and-data/events/overview',
@@ -281,6 +281,16 @@ export const PLUGIN_DOCS = {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
     title: 'Invite teammates',
     excerpt: 'Add people to your site and understand how team members act within your organization.',
+  },
+  loyalty: {
+    path: '/commerce-and-bookings/commerce/rewards-and-referrals',
+    title: 'Rewards, referrals and store credit',
+    excerpt: 'Give customers points on every order, online and at the register, let them spend points and store credit at checkout or the till, and reward members whose friends buy.',
+  },
+  loyaltyConnectors: {
+    path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
+    title: 'Connect Smile.io or Yotpo Loyalty',
+    excerpt: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register. Rolling out.',
   },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
@@ -330,7 +340,7 @@ export const PLUGIN_DOCS = {
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
-    excerpt: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, and printed thermal receipts.',
+    excerpt: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
   },
   postPurchase: {
     path: '/commerce-and-bookings/commerce/tracking-and-protection',
@@ -395,7 +405,7 @@ export const PLUGIN_DOCS = {
   taxServices: {
     path: '/commerce-and-bookings/commerce/tax-services',
     title: 'Tax services (Avalara AvaTax and TaxJar)',
-    excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there. Rolling out.',
+    excerpt: 'Connect your own Avalara AvaTax or TaxJar account so checkout and the register charge the sales tax it calculates, and your paid orders and refunds are recorded there.',
   },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
@@ -432,7 +442,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   bookings: ['#set-up-bookings', '#draft-services', '#price-labels', '#phone-and-address', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#export-bookings', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
-  commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
+  commerce: ['#products-hub', '#inventory', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
   connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
@@ -462,6 +472,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
   inventorySync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
+  loyalty: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
+  loyaltyConnectors: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#related'],
   marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
@@ -469,9 +481,9 @@ export const PLUGIN_DOCS_ANCHORS = {
   ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
-  pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#reservations', '#related'],
+  pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
-  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#related'],
+  posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
   postPurchase: ['#connect-a-service', '#afterships-webhook', '#package-protection-at-checkout', '#branded-tracking-pages', '#on-the-order', '#switching-it-off-for-a-site'],
   printOnDemand: ['#before-you-start', '#connect', '#import-products', '#costs-and-margins', '#orders', '#test-orders', '#canceling-and-refunding', '#shipments-and-tracking', '#disconnect', '#what-is-sent-to-the-service'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
@@ -485,7 +497,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   shipStation: ['#connect', '#what-imports', '#ship', '#manage', '#troubleshooting', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#emails-sent', '#users-admin', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#platform-suppressions', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   taxServices: ['#before-you-start', '#connect', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
-  webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
+  webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
   zapier: ['#connect-aglyn-to-zapier', '#triggers', '#actions-and-searches', '#what-each-needs', '#see-and-disconnect-your-zaps'],
 } as const satisfies Partial<Record<PluginDocsKey, readonly `#${string}`[]>>
 

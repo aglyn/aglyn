@@ -34,6 +34,7 @@ import { answerListQuery } from '@aglyn/tenant-feature-instance/testing/list-que
 import {
   OPEN_DISPUTE_CLAUSE,
   ORDER_DISPUTE_OPTIONS,
+  ORDER_LIST_COLUMN_SORTS,
   ORDER_LIST_FIELDS,
   ORDER_LIST_HEADERS,
   ORDER_LIST_QUERY,
@@ -131,6 +132,46 @@ describe('the orders list puts every clause on its query', () => {
     const tones = ['open', 'lost', 'won', 'settled']
     expect(ORDER_DISPUTE_OPTIONS.map((option) => option.value).sort()).toEqual([...tones].sort())
     expect(OPEN_DISPUTE_CLAUSE).toEqual({ field: 'disputeKey', op: 'equals', value: 'open' })
+  })
+})
+
+describe('every header sorts (AGL-3680)', () => {
+  it('orders only by fields every writer stamps, null included, never absent', () => {
+    // An order with nothing to say: no number, no address, no status.
+    const bare = orderListFields({}, 'pos1') as unknown as Record<string, unknown>
+    for (const sort of ORDER_LIST_COLUMN_SORTS) {
+      if (sort.path === 'createdAtMs') continue
+      expect(sort.path in bare).toBe(true)
+    }
+    expect(bare['number']).toBeNull()
+    expect(bare['customerEmailLower']).toBeNull()
+    expect(orderListFields({ number: 1042 }, 'o1').number).toBe(1042)
+  })
+
+  it('serves a header order with nothing narrowing the list', () => {
+    const shape = planListQuery(
+      ORDER_LIST_QUERY,
+      { clauses: [], sort: ORDER_LIST_COLUMN_SORTS.find((sort) => sort.path === 'number') },
+      nameSearchNormalizers,
+    )
+    expect(shape.orderBy).toMatchObject({ path: 'number', column: 'orderLabel' })
+    expect(shape.sortFallback).toBeUndefined()
+  })
+
+  it('falls back to newest first under a filter, and says so', () => {
+    const shape = planListQuery(
+      ORDER_LIST_QUERY,
+      {
+        clauses: [{ field: 'statusKey', op: 'equals', value: 'paid' }],
+        sort: ORDER_LIST_COLUMN_SORTS.find((sort) => sort.path === 'customerEmailLower'),
+      },
+      nameSearchNormalizers,
+    )
+    expect(shape.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'desc' })
+    expect(shape.sortFallback?.reason).toBe('alone')
+    expect(shape.notices).toEqual([
+      'Sorted by Date: Customer sorts only with no filter or search on.',
+    ])
   })
 })
 

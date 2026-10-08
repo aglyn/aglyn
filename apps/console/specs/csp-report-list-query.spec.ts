@@ -111,7 +111,7 @@ describe('every clause and the search word land on the query, beneath the window
     ])
     // The origin is asked the way the collector stored it: lower case.
     expect(answer.filters.find((filter) => filter.path === 'origin')?.value).toBe('cdn.example.com')
-    expect(answer.orderBy).toEqual({ path: 'day', direction: 'desc', column: 'day' })
+    expect(answer.orderBy).toMatchObject({ path: 'day', direction: 'desc', column: 'day' })
   })
 
   it('finds a counter by any part of its origin, as the collector stamps it', () => {

@@ -76,6 +76,8 @@ import {
   useLiveArtifactCount,
 } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID, FORMS_DOCUMENT_SEGMENT } from '../constants/bundle-common'
@@ -97,6 +99,10 @@ import { HOST_FORMS_ZONE } from './form-zones'
  * Status, Lead routing, Campaign, In a campaign — reaches the Filters panel as hidden
  * columns (`hiddenFilterColumns`).
  */
+/** Status sorts the loaded page (AGL-3680): Active before Retired. */
+const FORM_PAGE_SORTS = { status: (row: any) => isFormArchived(row) }
+const FORM_PAGE_SORT_HEADERS = { status: 'Status' }
+
 const FORM_VISIBLE_FILTER_COLUMNS = [
   'displayName',
   'slug',
@@ -290,6 +296,13 @@ export function HostFormsCard(props: HostFormsCardProps) {
     () => collection(firestore, 'hosts', hostId, 'forms'),
     [firestore, hostId],
   )
+  /*
+   * EVERY HEADER SORTS (AGL-3680): each stored column orders the QUERY
+   * (`FORM_LIST_COLUMN_SORTS`), served while no filter or search narrows the
+   * list — otherwise it keeps document order and the notices say why.
+   * Status sorts the page: the list in use is all Active.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const {
     status,
     rows: forms,
@@ -302,9 +315,18 @@ export function HostFormsCard(props: HostFormsCardProps) {
   } = useListQuery<any>({
     collection: formsCollection,
     declaration: FORM_LIST_QUERY,
-    request: formListRequest(gridFilter.clauses, gridFilter.searchWords),
+    request: formListRequest(gridFilter.clauses, gridFilter.searchWords, askedSort),
     deps: [firestore, hostId],
     idField: '$id',
+  })
+  const columnSort = useListColumnSort<any>({
+    sorts: FORM_LIST_QUERY.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: forms,
+    pageSorts: FORM_PAGE_SORTS,
+    headers: FORM_PAGE_SORT_HEADERS,
   })
 
   /*
@@ -760,9 +782,10 @@ export function HostFormsCard(props: HostFormsCardProps) {
             headers: FORM_LIST_FILTER_HEADERS,
             options: formFilterOptions,
           })}
-          notices={plan.notices}
+          notices={[...plan.notices, ...columnSort.notices]}
         />
         <ListTable
+          columnSort={columnSort}
           rowHeight={TABLE_ROW_HEIGHT}
           columns={listFilterGridColumns(
             columns,
@@ -803,7 +826,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
                   </Stack>
                 ),
               })}
-          rows={forms}
+          rows={columnSort.rows}
           // The whole row opens the detail page; the action cluster stops
           // propagation so a menu click never navigates underneath it.
           onOpen={(id) => router.push(formHref(String(id)))}
@@ -812,9 +835,6 @@ export function HostFormsCard(props: HostFormsCardProps) {
           loading={status === 'loading'}
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
-          // The rows keep the query's order; a header sort would order only
-          // the page on screen and read as the whole list's.
-          disableColumnSorting
         />
         <ListPagination
           page={page}

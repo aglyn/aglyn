@@ -19,6 +19,7 @@
 import {
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
+  crmPicklistRank,
   crmPicklistShownLabel,
   crmTaskPicklistLabels,
   crmTaskStatusWrite,
@@ -58,8 +59,13 @@ import {
   CRM_TASK_PRIORITIES,
   CRM_TASK_VIEWS,
   type CrmTaskView,
+  crmTaskViewPlan,
+  crmTaskViewSort,
   TASK_LIST_QUERY_FIELDS,
+  TASK_LIST_SORTS,
+  taskRecordLink,
 } from '../model/task-views'
+import { crmViewQuerySort, useCrmColumnSort } from '../hooks/use-crm-column-sort'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -106,6 +112,13 @@ const TASK_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = { view: false }
 const CALENDAR_PAGE_SIZE = 200
 /** No `view` clause is "My tasks", which the section opened on before views existed. */
 const TASK_VIEW_DEFAULT: CrmViewFilterClause = { field: 'view', op: 'equals', value: 'mine' }
+
+/** The row controls no header sorts (AGL-3680): the done box, an action like Complete. */
+const TASK_ROW_CONTROLS = ['status'] as const
+
+/** A label's place in its org list, for a page sort; `null` for none (sorted last). */
+const picklistRank = (picklist: Parameters<typeof crmPicklistRank>[0], label: string) =>
+  label ? crmPicklistRank(picklist, label) : null
 const EMPTY_LABEL: Record<CrmTaskView, string> = {
   mine: 'Nothing is assigned to you',
   overdue: 'Nothing is overdue',
@@ -204,6 +217,16 @@ export function TasksSection(props: ConsolePluginPageProps) {
     () => clauses.filter((clause) => clause.field !== 'view'),
     [clauses],
   )
+  /*
+   * The header order the view asks (AGL-3680), read before the query it
+   * orders; with none, the task view's own Due order.
+   */
+  const viewDirection = crmTaskViewPlan(view, { nowMs, uid: user?.uid }).direction
+  const taskSort = useMemo(
+    () =>
+      crmViewQuerySort(TASK_LIST_SORTS, views.state.sort, crmTaskViewSort({ direction: viewDirection })),
+    [views.state.sort, viewDirection],
+  )
   const list = useCrmTaskList({
     hostId,
     org: orgRecord,
@@ -212,6 +235,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
     nowMs,
     clauses: queryClauses,
     search: gridFilter.searchWords,
+    sort: taskSort.sort,
   })
   const { tasks, status, fromCache, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
@@ -494,6 +518,36 @@ export function TasksSection(props: ConsolePluginPageProps) {
     [columns, filterOptions],
   )
   const grid = useCrmViewGrid(views, filterColumns, TASK_HIDDEN_COLUMNS)
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Due, Task and Priority on the query
+   * (`TASK_LIST_SORTS`), the rest over the page, saying so — Type and Status
+   * in the order the org keeps their values, For by the record's name. The
+   * done box is a row control, like an actions column, and sorts nothing.
+   */
+  const pageSorts = useMemo(
+    () => ({
+      kind: (row: CrmTaskRow) =>
+        picklistRank(picklists.type, crmTaskPicklistLabels(row, picklists).type),
+      statusLabel: (row: CrmTaskRow) =>
+        picklistRank(picklists.status, crmTaskPicklistLabels(row, picklists).status),
+      record: (row: CrmTaskRow) => {
+        const link = taskRecordLink(row, routes)
+        return link ? (nameOf(link.kind, link.id) ?? null) : null
+      },
+    }),
+    [picklists, routes, nameOf],
+  )
+  const columnSort = useCrmColumnSort<CrmTaskRow>({
+    views,
+    sorts: TASK_LIST_SORTS,
+    defaultSort: crmTaskViewSort({ direction: viewDirection }),
+    asked: taskSort,
+    orderBy: list.plan.orderBy,
+    rows: tasks,
+    columns: grid.columns,
+    pageSorts,
+    unsortable: TASK_ROW_CONTROLS,
+  })
 
   return (
     <>
@@ -555,7 +609,10 @@ export function TasksSection(props: ConsolePluginPageProps) {
               <ToggleButton value="calendar">{'Calendar'}</ToggleButton>
             </ToggleButtonGroup>
           </CrmListToolbar>
-          <ListQueryNotices refused={refused} notices={list.plan.notices} />
+          <ListQueryNotices
+            refused={refused}
+            notices={[...list.plan.notices, ...columnSort.notices]}
+          />
           {status === 'error' ? (
             <Typography variant="body2" color="error">
               {'The tasks could not be loaded. Reload to try again.'}
@@ -586,7 +643,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
               />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable
-                  rows={tasks}
+                  rows={columnSort.rows}
+                  columnSort={columnSort}
                   columns={grid.columns}
                   slots={CRM_LIST_SLOTS}
                   selectable={{ selected: selectedIds, onChange: setSelectedIds }}
@@ -620,10 +678,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   onFilterModelChange={gridFilter.onFilterModelChange}
                   quickFilter
                   // The view orders the query (due soonest, or Done most
-                  // recently due), so the grid sorts nothing itself: a
-                  // sort over one page would reorder ten rows.
-                  sortingMode="server"
-                  disableColumnSorting
+                  // recently due) until a header asks otherwise: the headers
+                  // sort through `columnSort` (AGL-3680).
                   // Columns are the view's, controlled (AGL-2617).
                   columnVisibilityModel={grid.columnVisibilityModel}
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}

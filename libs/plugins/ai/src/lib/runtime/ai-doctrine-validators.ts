@@ -223,9 +223,12 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
   /**
    * A page the layout language compiled (AGL-3660), whose picture cards — a
    * picture over its title and words, one to a cell of a grid — the compiler
-   * draws from the site's design, as the 'build' job's plan reads its repeats
-   * as compiled (`repeatsCompiled`, AGL-3616). Rule 1 asks no component of
-   * those cards; every other repeat on the page is still held to it.
+   * draws from the site's design. Rule 1 asks no component of those cards;
+   * every other repeat on the page is still held to it. The page half of the
+   * plan capability of the same name (`AiPlanCapabilities.repeatsCompiled`,
+   * AGL-3616), which spares a build's plan a component for a section's items:
+   * the plan leaves them to the compiler, and this lets the page it compiles
+   * draw them.
    */
   repeatsCompiled?: boolean
   /**
@@ -3180,6 +3183,13 @@ const FORM_SECTION_NAME =
  * Rule 1 (plan): repeated items place a component, and a section two screens
  * share is one. A workspace that keeps no reusable components draws them in
  * their sections instead (AGL-3030), and nothing is refused.
+ *
+ * A job whose pages the layout language compiles (`repeatsCompiled`, a
+ * build) is not asked for a component for a section's repeated items: the
+ * compiler draws them in the section, compact where the plan places none, so
+ * the page answers rule 1 itself (AGL-3660). Held to the first half anyway,
+ * the canonical build request was refused twice for an About page's three
+ * values (AGL-3616). A section two pages share is still one component.
  */
 export function detectPlanRepeats(
   plan: AiBuildPlan,
@@ -3193,10 +3203,12 @@ export function detectPlanRepeats(
     uses.some((ref) => refKind(ref, plan, kinds) === 'component')
   const bound = (uses: string[]) =>
     uses.some((ref) => ['dataset', 'collection'].includes(String(refKind(ref, plan, kinds))))
-  const repeated = sectionPaths(plan).filter(
-    ({ section }) =>
-      section.items >= AI_REPEAT_MIN_COUNT && !placesComponent(section.uses) && !bound(section.uses),
-  )
+  const repeated = capabilities?.repeatsCompiled
+    ? []
+    : sectionPaths(plan).filter(
+        ({ section }) =>
+          section.items >= AI_REPEAT_MIN_COUNT && !placesComponent(section.uses) && !bound(section.uses),
+      )
   if (repeated.length) {
     violations.push({
       rule: 1,
@@ -3303,7 +3315,10 @@ export function detectPlanSplitLists(
         const [{ kind }] = run
         // Rule 1 asks a list this long on a workspace that keeps components to place one for its item.
         const component =
-          !kind.components.length && capabilities?.reusableComponents !== false && run.length >= AI_REPEAT_MIN_COUNT
+          !kind.components.length &&
+          capabilities?.reusableComponents !== false &&
+          !capabilities?.repeatsCompiled &&
+          run.length >= AI_REPEAT_MIN_COUNT
         const section = { name: kind.name, uses: component ? ['new:<name>'] : kind.components, items: run.length }
         const instead = component
           ? `, placing one reusable component for the item: reuse one the site has by its id, or declare one in create and place it as new:<name>, as in ${JSON.stringify(section)}.`

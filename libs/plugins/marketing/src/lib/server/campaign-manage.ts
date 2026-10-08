@@ -748,6 +748,7 @@ export function campaignDraftEmailId(campaignId: string): string {
 /** Every field a drafted email is written with, and so every field it can hold. */
 export const CAMPAIGN_DRAFT_EMAIL_FIELDS = [
   'subject',
+  'subjectLower',
   'subjectTokens',
   'preheader',
   'templateScreenId',

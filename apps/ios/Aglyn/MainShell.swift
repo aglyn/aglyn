@@ -60,6 +60,7 @@ struct MainShell: View {
     case .notifications: NotificationsView()
     case .settings: SettingsView()
     case .more: MoreView()
+    case .analytics: AnalyticsView()
     case .plugin(let screen): PluginScreenView(screenID: screen)
     }
   }
@@ -104,8 +105,11 @@ struct MainShell: View {
           Label("Home", systemImage: "house").tag(ShellSection.home)
           Label("Notifications", systemImage: "bell").tag(ShellSection.notifications)
         }
-        if !screens.isEmpty {
+        if model.workspace?.site != nil || !screens.isEmpty {
           Section(model.workspace?.site?.name ?? "Site") {
+            if model.workspace?.site != nil {
+              Label("Analytics", systemImage: "chart.bar.xaxis").tag(ShellSection.analytics)
+            }
             ForEach(screens) { item in
               Label(item.title, systemImage: item.icon).tag(ShellSection.plugin(item.screen))
             }
@@ -178,8 +182,19 @@ struct MoreView: View {
     let tabs = Set(model.registry.tabs(for: .aglyn).map(\.screen))
     let screens = SidebarScreen.all(model).filter { !tabs.contains($0.screen) }
     List {
-      if !screens.isEmpty {
+      if model.workspace?.site != nil || !screens.isEmpty {
         Section(model.workspace?.site?.name ?? "Site") {
+          if model.workspace?.site != nil {
+            Button {
+              navigation.push(.analytics)
+            } label: {
+              AglynRow("Analytics", systemImage: "chart.bar.xaxis") {
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+              }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("more-analytics")
+          }
           ForEach(screens) { item in
             Button {
               navigation.push(.screen(item.screen, [:]))

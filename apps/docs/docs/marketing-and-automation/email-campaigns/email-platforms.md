@@ -1,17 +1,10 @@
 ---
 sidebar_position: 5
 title: Email platforms (Mailchimp, Klaviyo, Omnisend)
-description: Keep your contacts and their unsubscribes in step with your own Mailchimp, Klaviyo or Omnisend account, both ways, and send your orders to Klaviyo and Omnisend for their abandoned-cart and post-purchase flows. Rolling out.
-unlisted: true
+description: Keep your contacts and their unsubscribes in step with your own Mailchimp, Klaviyo or Omnisend account, both ways, and send your orders to Klaviyo and Omnisend for their abandoned-cart and post-purchase flows.
 ---
 
 # Email platforms: Mailchimp, Klaviyo and Omnisend
-
-:::caution Rolling out
-Email platform connections are **not yet available** on aglyn.com-hosted
-workspaces. Until they are, no **Email platforms** card appears on your
-site's setup page.
-:::
 
 If you already send newsletters or automated flows from **Mailchimp**,
 **Klaviyo** or **Omnisend**, connect your account to a site and Aglyn keeps it

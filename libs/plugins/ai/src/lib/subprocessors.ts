@@ -16,7 +16,8 @@
  */
 
 import type { PluginSubprocessorDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
-import { AI_CATALOG_PROVIDERS } from './providers/catalog'
+import { AI_CATALOG_PROVIDERS, AI_IMAGE_CATALOG_PROVIDERS } from './providers/catalog'
+import { AI_IMAGE_PROVIDER_HOSTS } from './providers/image-endpoints'
 import { listAiProviders } from './providers/registry'
 
 /**
@@ -32,6 +33,10 @@ import { listAiProviders } from './providers/registry'
  * and the credential's name are the adapter's; this module names no
  * vendor. A provider whose endpoint an operator names carries no row in the
  * catalog, so it contributes nothing here.
+ *
+ * The image providers follow: each `AI_IMAGE_CATALOG_PROVIDERS` row at
+ * every host `AI_IMAGE_PROVIDER_HOSTS` publishes for it, one row on the
+ * published list reaching all of them.
  */
 
 /** Stands for the provider's `apiKeyEnv` in the catalog wording. */
@@ -52,6 +57,13 @@ export function aiSubprocessors(): PluginSubprocessorDeclaration[] {
       reason: fill(wording.reason),
       dataReceived: fill(wording.dataReceived),
     })
+  }
+  for (const provider of AI_IMAGE_CATALOG_PROVIDERS) {
+    const wording = provider.subprocessor
+    if (!wording) continue
+    for (const host of AI_IMAGE_PROVIDER_HOSTS[provider.id] ?? []) {
+      declarations.push({ host, ...wording })
+    }
   }
   return declarations
 }

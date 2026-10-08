@@ -56,7 +56,7 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
-import { WEBHOOK_URL_PATTERN } from '../model/webhooks'
+import { WEBHOOK_URL_PATTERN, maskedWebhookUrl } from '../model/webhooks'
 import { WEBHOOK_MAX_PER_HOST } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 
 /**
@@ -302,7 +302,7 @@ export function HostWebhooksCard(props: {
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
                 {hook.direction === 'outbound'
-                  ? `outbound · ${hook.url}`
+                  ? `outbound · ${maskedWebhookUrl(hook.url)}`
                   : `inbound · ${siteBase}/api/hooks/${hostId}/${hook.$id}` +
                     ` → ${hook.workflowName}`}
               </Typography>

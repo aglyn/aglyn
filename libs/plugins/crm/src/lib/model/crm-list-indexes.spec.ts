@@ -32,7 +32,7 @@ import {
 } from '../constants/deal-filters'
 import { CRM_FIELD_LIST_QUERY } from '../constants/field-list-query'
 import { CRM_LIST_BASE_INDEX } from './crm-list-query'
-import { LEAD_LIST_DECLARATION, leadIndexShapes } from './lead-filters'
+import { LEAD_LIST_DECLARATION, LEAD_LIST_STATUS_BASE_INDEX, leadIndexShapes } from './lead-filters'
 import { TASK_LIST_DECLARATION, TASK_LIST_VIEW_BASE_INDEX } from './task-views'
 
 /**
@@ -54,6 +54,8 @@ const INDEX_FILE = JSON.parse(
 )
 
 const DEAL_BASE = [...CRM_LIST_BASE_INDEX, ...DEAL_LIST_PIPELINE_BASE_INDEX]
+// The Status the Leads list always asks is its base (AGL-3680).
+const LEAD_BASE = [...CRM_LIST_BASE_INDEX, ...LEAD_LIST_STATUS_BASE_INDEX]
 
 const LISTS: Array<{
   list: string
@@ -61,12 +63,12 @@ const LISTS: Array<{
   declaration: ListQueryDeclaration
   base: ReadonlyArray<{ path: string; array?: boolean }>
 }> = [
-  { list: 'Leads', collection: 'leads', declaration: LEAD_LIST_DECLARATION, base: CRM_LIST_BASE_INDEX },
+  { list: 'Leads', collection: 'leads', declaration: LEAD_LIST_DECLARATION, base: LEAD_BASE },
   ...leadIndexShapes().map((declaration, at) => ({
     list: `Leads (collaborator search #${at})`,
     collection: 'leads',
     declaration,
-    base: CRM_LIST_BASE_INDEX,
+    base: LEAD_BASE,
   })),
   ...contactIndexShapes().map((declaration, at) => ({
     list: `Contacts (${['filters and search', 'a solo range'][at]})`,

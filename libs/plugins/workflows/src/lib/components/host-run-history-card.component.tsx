@@ -34,10 +34,12 @@ import ListQueryNotices, {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { Chip, Stack, Tooltip, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -105,6 +107,10 @@ const RUN_FILTER_OPTIONS = {
 }
 const RUN_SELECT_FIELDS = Object.keys(RUN_FILTER_OPTIONS)
 
+/** Who set a run off is read from its actor fields: it sorts the page (AGL-3680). */
+const RUN_PAGE_SORTS = { who: (row: RunRow) => row.who }
+const RUN_PAGE_SORT_HEADERS = { who: 'Who' }
+
 /**
  * The run-history table `/product/workflows` advertises (AGL-2171):
  * `Time | Trigger | Result | What happened`.
@@ -154,6 +160,11 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
     [targetId, targetType, targetName],
   )
   const gridFilter = useListGridFilter({ selectFields: RUN_SELECT_FIELDS })
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Time, Trigger, Result and What happened
+   * on the query (`RUN_HISTORY_QUERY.sorts`), Who over the page.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const activity = useMemo(
     () => (hostId ? collection(firestore, 'hosts', hostId, 'activity') : null),
     [firestore, hostId],
@@ -182,6 +193,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
       clauses: gridFilter.clauses,
       search: gridFilter.searchWords,
       base: runHistoryBase(targetId, gridFilter.clauses),
+      sort: askedSort,
     },
     deps: [firestore, hostId, targetId],
     idField: '$id',
@@ -209,6 +221,16 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
       })),
     [entries],
   )
+  const columnSort = useListColumnSort<RunRow>({
+    sorts: RUN_HISTORY_QUERY.sorts,
+    defaultSort: RUN_HISTORY_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: runs,
+    pageSorts: RUN_PAGE_SORTS,
+    headers: RUN_PAGE_SORT_HEADERS,
+  })
   const refused = useMemo(
     () =>
       listQueryRefusals(plan.refused, {
@@ -321,18 +343,17 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
             onChange={gridFilter.setClauses}
             options={RUN_FILTER_OPTIONS}
           />
-          <ListQueryNotices refused={refused} notices={plan.notices} />
+          <ListQueryNotices refused={refused} notices={[...plan.notices, ...columnSort.notices]} />
           <ListTable
             aria-label="Run history"
-            rows={runs}
+            rows={columnSort.rows}
             columns={columns}
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            // Newest first is the query's one order.
-            sortingMode="server"
-            disableColumnSorting
+            // The headers order the query, Who the page (`columnSort`).
+            columnSort={columnSort}
             // A failed run carries what other plugins add under its summary.
             getRowHeight={() => 'auto'}
             // `ListPagination` below pages the query.

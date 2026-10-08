@@ -40,8 +40,15 @@ export interface CartExtraOffer {
   termsUrl?: string
 }
 
+/** A store-credit code the cart takes (AGL-3640): rewards, referral credit. */
+export interface CartCreditOffer {
+  providerId: string
+  label: string
+}
+
 export function useCartExtras(hostId: string | undefined, cartSignature: string) {
   const [offers, setOffers] = useState<CartExtraOffer[]>([])
+  const [credits, setCredits] = useState<CartCreditOffer[]>([])
   const [chosen, setChosen] = useState<Record<string, boolean>>({})
   const [round, setRound] = useState(0)
   useEffect(() => {
@@ -52,10 +59,11 @@ export function useCartExtras(hostId: string | undefined, cartSignature: string)
     let live = true
     fetch(`/api/commerce/cart-extras?hostId=${encodeURIComponent(hostId)}`)
       .then((response) => (response.ok ? response.json() : { extras: [] }))
-      .then((payload: { extras?: CartExtraOffer[] }) => {
+      .then((payload: { extras?: CartExtraOffer[]; credits?: CartCreditOffer[] }) => {
         if (!live) return
         const next = Array.isArray(payload?.extras) ? payload.extras : []
         setOffers(next)
+        setCredits(Array.isArray(payload?.credits) ? payload.credits : [])
         // A box the shopper already touched keeps their answer.
         setChosen((prior) =>
           Object.fromEntries(next.map((offer) => [offer.id, prior[offer.id] ?? offer.defaultSelected])),
@@ -75,7 +83,7 @@ export function useCartExtras(hostId: string | undefined, cartSignature: string)
   }, [])
   /** Asks again — after the checkout said an offer changed. */
   const reload = useCallback(() => setRound((value) => value + 1), [])
-  return { offers, chosen, chosenIds, toggle, reload }
+  return { offers, chosen, chosenIds, toggle, reload, credits }
 }
 
 export function CartExtras(props: {

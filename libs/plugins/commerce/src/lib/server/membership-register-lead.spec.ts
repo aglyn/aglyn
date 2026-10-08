@@ -207,6 +207,13 @@ describe('the lead a sign-up no longer leaves behind (AGL-3232)', () => {
     expect('displayName' in mockState.members[0]).toBe(false)
   })
 
+  it('stores a null name key for a nameless member, so a Name sort still lists them (AGL-3680)', async () => {
+    await register({})
+    expect(mockState.members[0]['displayNameLower']).toBeNull()
+    await register({ displayName: 'Sam Okafor', email: 'sam@example.com' })
+    expect(mockState.members[1]['displayNameLower']).toBe('sam okafor')
+  })
+
   /*
    * The console's Status filter asks `suspended == false` for the active
    * members (AGL-3321), and a query cannot find a document that lacks the

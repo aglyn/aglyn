@@ -94,7 +94,26 @@ export const OUTREACH_ENROLLMENT_LIST_QUERY: ListQueryDeclaration = {
       operators: ['isAnyOf'],
     },
   ],
-  sorts: [{ path: 'createdAtMs', direction: 'desc' }],
+  /*
+   * The headers (AGL-3680). `buildOutreachEnrollment` stores every one of
+   * these on every enrollment from its first write — `stopReason` and
+   * `nextDueAtMs` as null until they apply — so each orders the query,
+   * `alone`: beside the `sequenceId` base that is one composite per order.
+   * Each costs a composite, so only Person (the stored lower-cased address)
+   * sorts both ways; Status and Stop reason group, Current step reads from
+   * the first step and Next send from the soonest, one direction each.
+   * Last activity and the engagement figures are derived from
+   * `engagement.*`, which is absent until the first event, and sort the page.
+   */
+  sorts: [
+    { path: 'createdAtMs', direction: 'desc', label: 'newest enrolled first' },
+    { path: 'email', direction: 'asc', column: 'person', label: 'Person', alone: true },
+    { path: 'email', direction: 'desc', column: 'person', label: 'Person', alone: true },
+    { path: 'status', direction: 'asc', column: 'status', label: 'Status', alone: true },
+    { path: 'stepIndex', direction: 'asc', column: 'step', label: 'Current step', alone: true },
+    { path: 'nextDueAtMs', direction: 'asc', column: 'nextSend', label: 'Next send', alone: true },
+    { path: 'stopReason', direction: 'asc', column: 'stopReason', label: 'Stop reason', alone: true },
+  ],
   search: { tokensPath: OUTREACH_ENROLLMENT_SEARCH_TOKENS },
 }
 

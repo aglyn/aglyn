@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynContracts
+import AglynHardware
 import AglynPluginHost
 import SwiftUI
 
@@ -28,6 +29,8 @@ public let commerceSalesScreen = "commerce.sales"
 /// ship-orders and scan quick actions.
 @MainActor
 public func registerCommerceNative(_ r: NativePluginRegistrar) {
+  // The device's reader, for any plugin's counter payment (a booking's).
+  if DeviceCardReaders.shared == nil { DeviceCardReaders.shared = DeviceCardCollector.make() }
   r.screen(
     commerceRegisterScreen, title: "Register", requiresSite: true, apps: [.pos], icon: "cashregister",
     placement: .register

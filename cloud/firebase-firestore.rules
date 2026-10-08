@@ -920,6 +920,45 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Rewards (AGL-3640): one store's loyalty program, its members' points,
+      // store credit and live checkout holds, the rewards and referral codes
+      // that spend them, every movement of a balance, what each sale took
+      // from a member, and a friend's one referral credit. Server-written AND
+      // server-read: the loyalty plugin's routes serve what the console shows
+      // and its checkout-credit provider moves the balances inside commerce's
+      // transactions. A client that could read a member could carry off a
+      // rewards code, which spends like a gift card; one that could write
+      // could mint store credit. Each collection is matched by name, with no
+      // wildcard beneath it.
+      match /loyaltyPrograms/{hostId} {
+        allow read, write: if false;
+      }
+      match /loyaltyMembers/{memberId} {
+        allow read, write: if false;
+      }
+      match /loyaltyCodes/{codeId} {
+        allow read, write: if false;
+      }
+      match /loyaltyLedger/{entryId} {
+        allow read, write: if false;
+      }
+      match /loyaltyRedemptions/{redemptionId} {
+        allow read, write: if false;
+      }
+      match /loyaltyReferralClaims/{claimId} {
+        allow read, write: if false;
+      }
+      // The store's own Smile.io or Yotpo Loyalty account (AGL-3677), its
+      // API key sealed, and each points movement on its way there. Closed to
+      // every client like the rest: one holds a merchant's credential, the
+      // other a buyer's address.
+      match /loyaltyConnections/{hostId} {
+        allow read, write: if false;
+      }
+      match /loyaltySync/{rowId} {
+        allow read, write: if false;
+      }
+
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
       // `canReadOutreach()` above.
@@ -3811,7 +3850,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
               'aiMemory']) &&
@@ -3836,6 +3875,14 @@ service cloud.firestore {
         //    the read list too and comes back through the dedicated blocks
         //    below, to the order book's readers only; the secrets have no
         //    reader at all.
+        //
+        //  - `posOfflineSales` (AGL-3625): the offline register's sync record,
+        //    one per sale rung offline, CREATED in the same transaction as the
+        //    order it names. Its existence is what makes a sale sent twice land
+        //    once, so a client delete would let the same cash sale record a
+        //    second order, and a client create would block a real one. The
+        //    sync route is the only writer; READ stays with the catch-all (it
+        //    holds an order id, flags and a member uid, no customer data).
         //
         //  - `printers` and `printJobs` (AGL-3619): a register's cloud receipt
         //    printers and their queue. A printer's `deviceId` and
@@ -3972,7 +4019,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
               'aiMemory'])));
@@ -4030,7 +4077,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+              'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
               'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
       }

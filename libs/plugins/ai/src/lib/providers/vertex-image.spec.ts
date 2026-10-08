@@ -48,6 +48,8 @@ import {
   vertexImageLocation,
   vertexImageModel,
   vertexImageProject,
+  vertexImageRequestBody,
+  vertexImageUrl,
 } from './vertex-image'
 
 const ENV = ['AI_IMAGE_VERTEX_PROJECT', 'AI_IMAGE_VERTEX_LOCATION', 'AI_IMAGE_MODEL'] as const
@@ -94,8 +96,18 @@ const REQUEST = {
   model: 'gemini-3.1-flash-image',
   prompt: 'A red barn at dawn',
   aspectRatio: '16:9' as const,
+  size: '1K' as const,
   count: 2,
 }
+
+describe('size', () => {
+  it('asks for the size the door chose: 512 px on Free, 1K on a paid plan', () => {
+    const body = (size: '512' | '1K') =>
+      (vertexImageRequestBody({ prompt: 'p', aspectRatio: '1:1', size }) as any).generationConfig.imageConfig
+    expect(body('512')).toEqual({ aspectRatio: '1:1', imageSize: '512' })
+    expect(body('1K')).toEqual({ aspectRatio: '1:1', imageSize: '1K' })
+  })
+})
 
 describe('configuration', () => {
   it('is off until a project is named, and ignores a malformed one', () => {
@@ -116,6 +128,15 @@ describe('configuration', () => {
     expect(vertexImageLocation()).toBe('us-central1')
     expect(vertexImageModel()).toBe('gemini-3-pro-image')
     expect(provider(jest.fn()).endpointHost()).toBe('us-central1-aiplatform.googleapis.com')
+  })
+
+  it('sends a multi-region location to its own jurisdictional host, which keeps processing inside it', () => {
+    process.env['AI_IMAGE_VERTEX_LOCATION'] = 'us'
+    expect(vertexImageLocation()).toBe('us')
+    expect(provider(jest.fn()).endpointHost()).toBe('aiplatform.us.rep.googleapis.com')
+    expect(vertexImageUrl('aglyn-main', 'eu', 'gemini-3.1-flash-image')).toBe(
+      'https://aiplatform.eu.rep.googleapis.com/v1/projects/aglyn-main/locations/eu/publishers/google/models/gemini-3.1-flash-image:generateContent',
+    )
   })
 
   it('refuses to call out with no project, before touching the network', async () => {

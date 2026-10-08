@@ -20,7 +20,10 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListQueryNotices } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import {
   Button,
   Chip,
@@ -33,14 +36,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, orderBy, query } from 'firebase/firestore'
-import {
-  useFirestore,
-  useFirestoreCollection,
-  usePagedCollection,
-} from '@aglyn/tenant-feature-instance'
+import { collection, limit, query } from 'firebase/firestore'
+import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useEffect, useMemo, useState } from 'react'
+import {
+  POS_SHIFT_COLUMN_SORTS,
+  POS_SHIFT_LIST_QUERY,
+} from '../../../constants/pos-shift-list-query'
 import { posMoney, posShiftsCsv, type PosShift } from '../../../model/commerce-pos-ops'
 import { PosShiftReportView } from './pos-shift-report.component'
 
@@ -50,8 +54,17 @@ export interface PosShiftHistoryCardProps {
 
 type ShiftRow = PosShift & { $id: string }
 
+/**
+ * "By" is whichever name the shift carries, so it sorts the page on screen
+ * (AGL-3680); every other column is the query's order (`POS_SHIFT_COLUMN_SORTS`).
+ */
+const SHIFT_PAGE_SORTS = {
+  by: (row: ShiftRow) => row.closedByName ?? row.openedByName ?? '',
+}
+const SHIFT_PAGE_SORT_HEADERS = { by: 'By' }
+
 /** A shift's time as the history lists it, in the viewer's locale. */
-const when = (ms?: number) =>
+const when = (ms?: number | null) =>
   ms
     ? new Date(ms).toLocaleString([], {
         month: 'short',
@@ -85,6 +98,18 @@ export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
   useEffect(() => {
     if (!registerId && registers.length) setRegisterId(registers[0].$id)
   }, [registerId, registers])
+  /*
+   * Every header sorts (AGL-3680): the asked order is the query's, over every
+   * shift the register has, newest first until a header is clicked.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(POS_SHIFT_COLUMN_SORTS[0])
+  const shiftsRef = useMemo(
+    () =>
+      registerId
+        ? collection(firestore, 'hosts', hostId, 'registers', registerId, 'shifts')
+        : null,
+    [firestore, hostId, registerId],
+  )
   const {
     rows: shifts,
     hasMore,
@@ -93,18 +118,24 @@ export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
     pageSize,
     setPageSize,
     status,
-  } = usePagedCollection<ShiftRow>(
-    (pageLimit) =>
-      registerId
-        ? query(
-            collection(firestore, 'hosts', hostId, 'registers', registerId, 'shifts'),
-            orderBy('openedAtMs', 'desc'),
-            limit(pageLimit),
-          )
-        : null,
-    [firestore, hostId, registerId],
-    { idField: '$id' },
-  )
+    plan,
+  } = useListQuery<ShiftRow>({
+    collection: shiftsRef,
+    declaration: POS_SHIFT_LIST_QUERY,
+    request: { clauses: [], sort: askedSort },
+    deps: [firestore, hostId, registerId],
+    idField: '$id',
+  })
+  const columnSort = useListColumnSort<ShiftRow>({
+    sorts: POS_SHIFT_COLUMN_SORTS,
+    defaultSort: POS_SHIFT_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: shifts,
+    pageSorts: SHIFT_PAGE_SORTS,
+    headers: SHIFT_PAGE_SORT_HEADERS,
+  })
   const [selected, setSelected] = useState<ShiftRow | null>(null)
   const registerName = registers.find((register: any) => register.$id === registerId)?.name ?? ''
 
@@ -137,21 +168,22 @@ export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
           headerName: 'Net sales',
           type: 'number',
           minWidth: 110,
-          valueGetter: (_value: unknown, row: ShiftRow) => (row.report ? posMoney(row.report.netSalesCents) : '—'),
+          valueGetter: (_value: unknown, row: ShiftRow) =>
+            row.report ? posMoney(row.netSalesCents ?? row.report.netSalesCents) : '—',
         },
         {
           field: 'expectedCashCents',
           headerName: 'Expected',
           type: 'number',
           minWidth: 110,
-          valueFormatter: (value: number | undefined) => (value != null ? posMoney(value) : '—'),
+          valueFormatter: (value: number | null | undefined) => (value != null ? posMoney(value) : '—'),
         },
         {
           field: 'countedCashCents',
           headerName: 'Counted',
           type: 'number',
           minWidth: 110,
-          valueFormatter: (value: number | undefined) => (value != null ? posMoney(value) : '—'),
+          valueFormatter: (value: number | null | undefined) => (value != null ? posMoney(value) : '—'),
         },
         {
           field: 'varianceCents',
@@ -222,22 +254,25 @@ export function PosShiftHistoryCard(props: PosShiftHistoryCardProps) {
             ))}
           </TextField>
         ) : null}
-        {status === 'success' && !shifts.length ? (
+        {/* Empty only in the default order: a header that came back empty keeps the grid to click another. */}
+        {status === 'success' && !shifts.length && askedSort === POS_SHIFT_COLUMN_SORTS[0] ? (
           <Typography variant="body2" color="text.secondary">
             {'No shifts yet. Open one from the register before the first sale of the day.'}
           </Typography>
         ) : (
-          <ListTable
-            aria-label="Shift history"
-            rows={shifts}
-            columns={columns}
-            // The query orders and pages the shifts; the grid only draws them.
-            sortingMode="server"
-            disableColumnSorting
-            hideFooter
-            noRowsLabel="No shifts yet"
-            onOpen={(_id, row) => (row as ShiftRow).report && setSelected(row as ShiftRow)}
-          />
+          <>
+            <ListQueryNotices refused={[]} notices={[...plan.notices, ...columnSort.notices]} />
+            <ListTable
+              aria-label="Shift history"
+              rows={columnSort.rows}
+              columns={columns}
+              // The query orders and pages the shifts, or the page does for "By".
+              columnSort={columnSort}
+              hideFooter
+              noRowsLabel="No shifts yet"
+              onOpen={(_id, row) => (row as ShiftRow).report && setSelected(row as ShiftRow)}
+            />
+          </>
         )}
         <ListPagination
           page={page}

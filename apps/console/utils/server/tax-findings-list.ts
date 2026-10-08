@@ -18,6 +18,7 @@
 import {
   TAX_FINDING_FILTER_FIELDS,
   TAX_FINDING_SEARCH_PATHS,
+  TAX_FINDING_SORT_COLUMNS,
   type TaxFindingListRow,
 } from '../tax-findings-list'
 import { answerStaffCompleteList, type StaffCompleteListPage } from './staff-complete-list'
@@ -33,7 +34,8 @@ const INCOMPLETE =
  * period's COMPLETE rows (`answerStaffCompleteList`) — or, when the read was
  * not complete, the rows unfiltered with every clause and the search refused
  * by name, because a match over part of a period would answer "no such row"
- * for a row the read never reached. The cursor is the invoice id of the last
+ * for a row the read never reached — and a header sort is not applied, with
+ * a notice, for the same reason (AGL-3680). The cursor is the invoice id of the last
  * row of the previous page. See `utils/tax-findings-list.ts`.
  */
 export function serveTaxFindings(
@@ -48,6 +50,9 @@ export function serveTaxFindings(
       searchPaths: TAX_FINDING_SEARCH_PATHS,
       request: asked,
       cursorOf: (row) => row.$id,
+      sorts: TAX_FINDING_SORT_COLUMNS,
+      // An order over part of a period would put first rows that are not.
+      unsortable: complete ? null : 'the period holds more rows than one read can take',
     })
   if (complete) return answer(request)
   const page = answer({ ...request, clauses: [], search: [] })

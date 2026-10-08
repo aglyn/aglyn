@@ -388,7 +388,7 @@ enforcement on.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `AUTH_ACTION_ALLOWED_ORIGINS` | Optional | Runtime | Comma-separated extra origins a password-reset or verify-email link may be built on when the request supplies one. Empty — the default — means request-supplied origins are always ignored and the link is built on `NEXT_PUBLIC_CONSOLE_URL`, which is the safe state. **This is a security boundary:** a wrong entry lets a request-supplied host receive a live reset code. Intended for preview deployments. |
-| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `60`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
+| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `120`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
 
 ---
 
@@ -1214,9 +1214,9 @@ Config.
 | `AI_PROVIDER` | Optional | Runtime | Which registered adapter is the platform default: `anthropic` or `openai-compatible`, or the id of a provider another plugin registers. Unset, the first ready adapter is the default. A workspace's `pluginSettings/ai` may pick its own. |
 | `AI_DEFAULT_MODEL` | Optional | Runtime | A model id, served by the default provider, for every step kind. Unset, each step kind takes its catalog tier on that provider. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
 | `AI_IMAGE_VERTEX_PROJECT` | Feature | Runtime | The Google Cloud project Media's photo mode bills to, through Google's image models on Vertex AI. Unset, no photos are made and the door says so; illustrations are unaffected. The platform's Firebase service account needs the Vertex AI User role there, and the project needs the Vertex AI API enabled. Google becomes a recipient of the descriptions users type, so list it as a subprocessor before you set this. |
-| `AI_IMAGE_VERTEX_LOCATION` | Optional | Runtime | The Vertex AI location photos are made in: `global` (the default) or a region that serves the model. |
+| `AI_IMAGE_VERTEX_LOCATION` | Optional | Runtime | The Vertex AI location images are made in: `global` (the default), the `us` or `eu` multi-region, or a single region that serves the model. Google's global endpoint makes no promise about where a request is processed; `us` or `eu` keeps processing inside that jurisdiction, for the models that offer it, and lists about 10% higher. |
 | `AI_IMAGE_MODEL` | Optional | Runtime | The image model photos are made with. Default `gemini-3.1-flash-image`. An id absent from the built-in image rate table is priced at the dearest known image rate. |
-| `NEXT_PUBLIC_AI_IMAGE_PHOTOS` | Optional | Build | `on` offers the **Photo** mode in Media's Create with AI window. Set it with `AI_IMAGE_VERTEX_PROJECT`; without it the window offers illustrations only. |
+| `NEXT_PUBLIC_AI_IMAGE_PHOTOS` | Optional | Build | `on` offers the Photo, Art and Design kinds in Media's Create with AI window. Set it with `AI_IMAGE_VERTEX_PROJECT`; without it the window offers the Vector kinds only. |
 | `ASSIST_MODEL` | Optional | Runtime | The assistant's own override, above `AI_DEFAULT_MODEL` for the chat door alone — the incident-response lever the assistant has always honored. |
 | `ASSIST_FREE_DAILY_LIMIT` | Optional | Runtime | Messages per free workspace per UTC day. Default **10**. |
 | `ASSIST_ENTITLED_MONTHLY_LIMIT` | Optional | Runtime | Messages per entitled workspace per month. Default **1000**. |

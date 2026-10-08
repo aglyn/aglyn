@@ -97,6 +97,8 @@ import { collection, deleteDoc, doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   LIST_MEMBER_FILTER_HEADERS,
@@ -302,6 +304,8 @@ const VIA_LABELS: Readonly<Record<'rule' | 'manual', string>> = {
 }
 /** The How filter's choices are picked, so the panel shows a select. */
 const MEMBER_SELECT_FIELDS = ['via']
+/** The page-sorted header, for its notice (AGL-3680). */
+const MEMBER_SORT_HEADERS = { consent: 'Consent' }
 
 /** How a row reads `via`: a row that predates the field was added by hand. */
 const viaOf = (member: MemberRow): 'rule' | 'manual' =>
@@ -343,13 +347,23 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
    * `list-members.ts` still adopts predates it. Ordering on it would drop the
    * oldest members from their own list, silently, which is the failure that
    * turned an audience into a random sample (AGL-2501). The id is the one key
-   * every row has.
+   * every row has, so it stays the default. The Joined header asks for
+   * `addedAt` only since the writer stamps it on every row it touches and
+   * `backfill-list-member-sort-fields.mjs` on the rest (AGL-3680).
    *
    * Every filter and search word is a predicate on the same query
    * (AGL-3321) — see `LIST_MEMBER_QUERY` — so a page is a page of the
    * matches.
    */
   const gridFilter = useListGridFilter({ selectFields: MEMBER_SELECT_FIELDS })
+  /*
+   * EVERY HEADER SORTS (AGL-3680). Address, Name, Joined and How order the
+   * QUERY — `enrollListMember` stamps each on every row, null where there is
+   * none, so no order drops a member — each `alone`: under a filter or the
+   * search the list keeps its id order and says so. Consent is read per
+   * viewing consent group, so it sorts the page on screen.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const {
     rows: members,
     hasMore,
@@ -361,9 +375,26 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
   } = useListQuery<MemberRow>({
     collection: collection(firestore, scope[0], scope[1], 'lists', listId, 'members'),
     declaration: LIST_MEMBER_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort: askedSort,
+    },
     deps: [firestore, scope[0], scope[1], listId],
     idField: '$id',
+  })
+  const pageSorts = useMemo(
+    () => ({ consent: (row: MemberRow) => consentLabel(row, consentGroup).label }),
+    [consentGroup],
+  )
+  const columnSort = useListColumnSort<MemberRow>({
+    sorts: LIST_MEMBER_QUERY.sorts,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: members,
+    pageSorts,
+    headers: MEMBER_SORT_HEADERS,
   })
   const filtering =
     gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
@@ -908,10 +939,14 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
             onChange={gridFilter.setClauses}
             options={LIST_MEMBER_FILTER_OPTIONS}
           />
-          <ListQueryNotices refused={refusals} notices={plan.notices} />
+          <ListQueryNotices
+            refused={refusals}
+            notices={[...plan.notices, ...columnSort.notices]}
+          />
           <ListTable
             aria-label={`Members of ${listName}`}
-            rows={members}
+            rows={columnSort.rows}
+            columnSort={columnSort}
             columns={listFilterGridColumns(
               columns,
               LIST_MEMBER_QUERY.fields,
@@ -921,13 +956,12 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
             rowHeight={TABLE_ROW_HEIGHT}
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
-            // The panel and the search go to the query; the grid neither
-            // filters nor sorts the page it holds.
+            // The panel, the search and the headers go to the query (Consent
+            // sorts the page, and says so); the grid itself sorts nothing.
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
             quickFilter
-            disableColumnSorting
             noRowsLabel="No members match these filters"
           />
           <ListPagination

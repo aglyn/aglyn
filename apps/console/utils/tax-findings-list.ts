@@ -17,6 +17,10 @@
 
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
+  type StaffCompleteListColumns,
+  staffCompleteListSorts,
+} from './staff-complete-list-sort'
+import {
   taxReturnFindingGroups,
   type TaxReturnFindingRow,
   type TaxReturnPayload,
@@ -88,6 +92,25 @@ export const TAX_FINDING_SELECT_FIELDS: readonly string[] = ['groups', 'jurisdic
 
 /** What the search box matches: the invoice, its org and its bucket. */
 export const TAX_FINDING_SEARCH_PATHS: readonly string[] = ['invoiceId', 'orgId', 'jurisdiction']
+
+/*
+ * THE HEADER SORTS (AGL-3680, strategy 4s): every column, ordered by the
+ * route over the period's complete read and then paged
+ * (`utils/staff-complete-list-sort.ts`). A period the read cap cut short is
+ * not sorted — an order over part of it would put rows first that are not —
+ * and says so (`serveTaxFindings`). With none asked, blocking findings first.
+ */
+export const TAX_FINDING_SORT_COLUMNS: StaffCompleteListColumns<TaxFindingListRow> = {
+  invoiceId: { label: 'Invoice', value: (row) => row.invoiceId },
+  jurisdiction: { label: 'Bucketed as', value: (row) => row.jurisdiction },
+  grossDollars: { label: 'Gross', value: (row) => Number(row.grossDollars) },
+  taxDollars: { label: 'Tax', value: (row) => Number(row.taxDollars) },
+  paidAt: { label: 'Paid', value: (row) => (row.paidAt ? new Date(row.paidAt) : null) },
+  // How many findings the row raises: the rows with the most to fix together.
+  groups: { label: 'Findings', value: (row) => row.groups.length },
+}
+
+export const TAX_FINDING_COLUMN_SORTS = staffCompleteListSorts(TAX_FINDING_SORT_COLUMNS)
 
 /**
  * Every flagged row of a period, once, in the order the findings are listed
