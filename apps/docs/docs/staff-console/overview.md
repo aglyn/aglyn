@@ -486,6 +486,25 @@ organization's own members — invitations, billing — belongs to no site and i
 each member's staff page. An organization with more than thirty sites reads the
 first thirty and says so.
 
+#### Media library {#staff-media-library}
+
+**Media library** — on an organization's staff page for the workspace's shared
+library, and on a site's for that site's own — lists the stored files, newest
+first: a thumbnail, the name, the type, the size and when it was added. Every
+column header orders the whole library, a page at a time. Files in the trash
+are listed and marked **In trash**, because their bytes are still stored.
+Click a file to open it: a preview, its storage path, who uploaded it, whether
+it is public or private and who it is limited to, and where it is used — the
+same usage scan the library's own "where is this used" runs, across every site
+of the workspace.
+
+The card is read-only: nothing here uploads, replaces or deletes a file.
+A **private** file is previewed through a short-lived signed link minted for
+staff on the media CDN, not by opening up storage; reopen the file for a new
+link once it expires. Opening the card, each page of it and each file are
+recorded in the audit log as data staff looked at (`media.library-viewed`,
+`media.asset-viewed`).
+
 ### Users admin {#users-admin}
 
 Staff-claim management and disabling users, with gated listing; a whole email

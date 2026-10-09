@@ -21,6 +21,7 @@ import {
   isEmailConfigured,
   PRODUCT_TIP_RETENTION_EMAILS,
   RETENTION_VERIFY_REMINDER_EMAIL,
+  retentionDocsMergeValues,
   sendEmail,
 } from '@aglyn/shared-util-email'
 import {
@@ -33,6 +34,7 @@ import { hostOrigin } from '@aglyn/tenant-data-admin/server/held-page-subject'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { renderSystemEmail } from '../../_lib/render-system-email'
+import { DOCS_BASE_URL } from '../../../../constants/docs-links'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -203,6 +205,8 @@ function mergeFor(
       ? `${origin}${buildRoute(Route.HOST_FORMS, { orgSlug: site.orgSlug, host: site.host })}`
       : `${origin}${siteRoute}`,
     preferencesUrl: `${origin}${buildRoute(Route.MANAGE_USER_EMAILS)}`,
+    // The docs page each email points at, on this deployment's docs site.
+    ...retentionDocsMergeValues(DOCS_BASE_URL),
   }
 }
 

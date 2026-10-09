@@ -434,9 +434,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'libs/shared/util/email/src/lib/system-email-catalog.ts',
-    count: 1,
+    count: 2,
     reason:
-      'SAMPLE_CONSOLE_ORIGIN, the default for the staff email-designer preview. The ten literal samples build on it (AGL-2202), and SAMPLE_SUPPORT_URL stopped being a literal of its own when the support entry point became a console route (AGL-3262) — it is now that origin plus `/support`, so an operator who sets NEXT_PUBLIC_CONSOLE_URL gets their own console in the sample.',
+      'SAMPLE_CONSOLE_ORIGIN, the default for the staff email-designer preview. The ten literal samples build on it (AGL-2202), and SAMPLE_SUPPORT_URL stopped being a literal of its own when the support entry point became a console route (AGL-3262) — it is now that origin plus `/support`, so an operator who sets NEXT_PUBLIC_CONSOLE_URL gets their own console in the sample. The second is SAMPLE_DOCS_ORIGIN (AGL-3692), the `||` default of NEXT_PUBLIC_DOCS_ORIGIN for the getting-started emails\' docs-link SAMPLES only; `shared-util-email` may not import the console\'s DOCS_BASE_URL, and the real send fills those links from DOCS_BASE_URL, so an operator who sets the variable gets their own docs in both.',
   },
   {
     file: 'libs/shared/util/next/src/lib/use-continue-url.ts',
