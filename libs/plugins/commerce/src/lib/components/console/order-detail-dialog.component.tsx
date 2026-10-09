@@ -40,7 +40,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { doc, runTransaction, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, runTransaction, updateDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -139,6 +139,24 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const [fulfilling, setFulfilling] = useState(false)
+  // The store's currency, which a hand-entered shipping cost is typed in
+  // (AGL-3705). Read when the Fulfill items panel opens, not before.
+  const [storeCurrency, setStoreCurrency] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (!fulfilling || storeCurrency) return
+    let live = true
+    // A failed read leaves the field in US dollars, the store default.
+    Promise.resolve()
+      .then(() => getDoc(doc(firestore, 'hosts', hostId, 'settings', 'store')))
+      .then((snapshot) => {
+        const currency = String(snapshot.get('currency') ?? '').trim()
+        if (live && currency) setStoreCurrency(currency.toUpperCase())
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [fulfilling, storeCurrency, firestore, hostId])
   const WidgetSlot = useConsoleWidgetSlot()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -319,6 +337,9 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           ...(submission.trackingNumber ? { trackingNumber: submission.trackingNumber } : {}),
           ...(submission.trackingUrl ? { trackingUrl: submission.trackingUrl } : {}),
           ...(submission.labelUrl ? { labelUrl: submission.labelUrl } : {}),
+          ...(typeof submission.shippingCostCents === 'number'
+            ? { shippingCostCents: submission.shippingCostCents }
+            : {}),
           ...(submission.notify ? {} : { notify: false }),
         },
         {
@@ -1102,6 +1123,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             order={order}
             busy={busy}
             onSubmit={handleFulfill}
+            currency={storeCurrency}
             onCancel={() => setFulfilling(false)}
             renderZone={
               WidgetSlot && zoneOrder
