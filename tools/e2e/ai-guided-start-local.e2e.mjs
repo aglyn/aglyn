@@ -818,6 +818,7 @@ async function runOnce(context, index) {
     let lastShot = 0
     let shots = 0
     let job = null
+    let settledSince = null
     const watchStart = Date.now()
     while (Date.now() - watchStart < timeoutMs) {
       job = (await jobRef.get()).data() ?? null
@@ -835,7 +836,17 @@ async function runOnce(context, index) {
           () => undefined,
         )
       }
-      if (job && AI_JOB_SETTLED_STATUSES.includes(job.status)) break
+      // A guided start passes through `needs_input` while its plan is confirmed
+      // on the person's behalf (`autoConfirm`): a run of 2026-10-09 read that
+      // moment as the end, stopped its beat, and stranded the job. A finished
+      // job ends the watch at once; one asking for input must still be asking
+      // a beat later.
+      if (job && AI_JOB_SETTLED_STATUSES.includes(job.status)) {
+        settledSince ??= Date.now()
+        if (job.status !== 'needs_input' || Date.now() - settledSince >= 30_000) break
+      } else {
+        settledSince = null
+      }
       await page.waitForTimeout(1500)
     }
     // The page's own last word, after the job's.
