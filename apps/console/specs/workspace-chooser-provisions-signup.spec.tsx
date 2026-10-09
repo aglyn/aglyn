@@ -215,6 +215,26 @@ describe('AGL-2590 · the first verified session gets the workspace', () => {
     expect(screen.queryByText('Create your first site')).toBeNull()
   })
 
+  it('never claims while the page is already leaving for the editor-hint bounce (AGL-3690)', async () => {
+    // The bounce's navigation keeps this document alive until the other host
+    // answers. A claim started in that gap cleared the held name, and the
+    // create never left the page, so the canary landed on "0 workspaces".
+    const leave = require('../utils/sign-up-landing-hold')
+    mockStoredUserDoc = { pendingSignUpWorkspace: held() }
+    leave.markLeavingConsole()
+    try {
+      render(<OrgJump />)
+      await flush()
+      expect(orgCreateBodies()).toEqual([])
+      // Untouched, so the page the bounce returns to still provisions it.
+      expect(mockStoredUserDoc['pendingSignUpWorkspace']).toEqual(
+        expect.objectContaining({ name: 'Acme Inc' }),
+      )
+    } finally {
+      leave.resetLeavingConsoleForTests()
+    }
+  })
+
   it('asks nothing of an account with no held workspace', async () => {
     render(<OrgJump />)
     await flush()
