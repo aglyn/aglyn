@@ -210,6 +210,14 @@ public enum ScreenValues {
       // `{"$pick": {"a": "{form.x}", "b": "{form.y}"}}`: the keys whose values are truthy, as a list.
       guard case .object(let options)? = record["$pick"] else { return .array([]) }
       return .array(options.keys.sorted().filter { truthy(resolveBody(options[$0]!, in: context)) }.map(JSONValue.string))
+    case .object(let record) where record.count == 1 && record["$split"] != nil:
+      // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
+      let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))
+      return .array(
+        joined.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map { part in
+          if let number = Double(part) { return .number(number) }
+          return .string(part)
+        })
     case .object(let record) where record.count == 1 && (record["$append"] != nil || record["$without"] != nil):
       // `{"$append": {"list": "{a}", "item": "{b}"}}` / `$without`: the list with the item added (once) or removed.
       let adding = record["$append"] != nil
