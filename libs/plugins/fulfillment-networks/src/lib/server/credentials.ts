@@ -22,7 +22,9 @@ import { refreshNetworkGrant } from './oauth'
 import type { NetworkStore, StoredConnection } from './store'
 
 /**
- * Opening a connection's sealed grant for one run (AGL-3634).
+ * Opening a connection's sealed grant for one run (AGL-3634). An API-key
+ * network's key (ShipMonk, AGL-3697) is sealed as the access token with no
+ * expiry and no refresh token, so it opens as-is.
  *
  * The plaintext lives only in the returned object. An access token within
  * five minutes of expiring is refreshed first, and the new grant sealed and
@@ -49,6 +51,7 @@ export function createCredentialOpener(deps: CredentialDeps) {
       accessToken,
       channelId: connection.channelId ?? null,
       marketplaceId: connection.marketplaceId ?? null,
+      storeId: connection.storeId ?? null,
     })
     const open = (sealed: string | null, purpose: 'access' | 'refresh') => {
       if (!sealed) return null

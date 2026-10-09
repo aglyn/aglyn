@@ -23,13 +23,15 @@ import {
   NETWORK_PROVIDERS,
   networkConnectionId,
   networkOrderId,
+  readApiKeyConnect,
   readConnectionSettings,
   type NetworkProviderId,
 } from '../model/networks'
 import { routingHolds } from '../model/routing'
 import { isProviderError, type ProviderHttp } from '../providers/http'
 import type { FulfillmentNetworkProvider, NetworkCredential } from '../providers/provider'
-import { networkSandbox, offeredNetworks, sealGrant, type FulfillmentNetworksConfig } from './config'
+import { SHIPMONK_SIGNATURE_HEADER, verifyShipmonkSignature } from '../providers/shipmonk'
+import { networkSandbox, offeredNetworks, openGrant, sealGrant, type FulfillmentNetworksConfig } from './config'
 import type { Engine } from './engine'
 import {
   exchangeNetworkCode,
@@ -51,11 +53,13 @@ import {
 
 /**
  * The console routes (AGL-3634). Every route but the network's redirect back
- * and ShipBob's webhook is behind {@link NetworkRouteDeps.gate}: a signed-in,
+ * and the networks' webhooks is behind {@link NetworkRouteDeps.gate}: a signed-in,
  * verified member of the site at the role it names, on a plan that sells,
  * with commerce and this plugin on for the site and the site not locked. The
  * redirect back is authenticated by the single-use state its connect stored;
- * the webhook by the token its address carries.
+ * ShipBob's webhook by the token its address carries; ShipMonk's (AGL-3697)
+ * by the HMAC-SHA512 signature ShipMonk computes with the connection's own
+ * signing secret.
  *
  * With no network configured, every gated route answers 404, and the list
  * answers nothing to show, so the console draws nothing.
@@ -125,6 +129,15 @@ const webhookPrefix = (deps: NetworkRouteDeps, requestUrl: string, connectionId:
   return base ? `${base}?${new URLSearchParams({ connection: connectionId }).toString()}` : null
 }
 
+/** ShipMonk's webhook address for one connection, as the merchant gives it to ShipMonk. */
+const shipmonkWebhookUrl = (deps: NetworkRouteDeps, requestUrl: string, connectionId: string): string | null => {
+  const base = deps.consoleAddress(`/api/${FULFILLMENT_NETWORKS_API_ROUTES.webhookShipmonk}`, requestUrl)
+  return base ? `${base}?${new URLSearchParams({ connection: connectionId }).toString()}` : null
+}
+
+/** The most bytes a ShipMonk webhook body may carry before it is refused unread. */
+const WEBHOOK_MAX_BYTES = 1_000_000
+
 export function createNetworkRoutes(deps: NetworkRouteDeps) {
   const offered = () => offeredNetworks(deps.config())
 
@@ -174,6 +187,7 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
       if (!provider) return fail(400, 'Choose a network')
       const config = deps.config()
       if (!offered().includes(provider)) return fail(404, `${NETWORK_PROVIDERS[provider].label} cannot be connected here`)
+      if (NETWORK_PROVIDERS[provider].auth !== 'oauth') return fail(400, `${NETWORK_PROVIDERS[provider].label} connects with an API key`)
       const redirectUri = deps.consoleAddress(`/api/${FULFILLMENT_NETWORKS_API_ROUTES.oauthCallback}`, request.url)
       if (!redirectUri) return fail(503, 'This deployment has no console address to come back to')
       const id = networkConnectionId(gate.hostId, provider)
@@ -472,6 +486,130 @@ export function createNetworkRoutes(deps: NetworkRouteDeps) {
       const outcome = await deps.engine.runRouting(id, { force: true })
       if (outcome === 'leased_elsewhere') return fail(409, 'The order is being worked on. Try again in a moment.')
       return json(await orderAnswer(gate.hostId, recordId))
+    },
+
+    /**
+     * POST { hostId, provider, apiKey, storeId } — connect a network that
+     * takes the merchant's own API key (ShipMonk, AGL-3697), or connect it
+     * again with a new key. The key is tried before it is kept, sealed with
+     * the token key, and never answered back. A first connect also mints the
+     * webhook signing secret, answered ONCE with the address to give ShipMonk.
+     */
+    async connectKey(request: Request): Promise<Response> {
+      if (request.method !== 'POST') return fail(405, 'Method not allowed')
+      const gate = await deps.gate(request, 'admin')
+      if (gate instanceof Response) return gate
+      const provider = readProvider(gate.body, request)
+      if (!provider) return fail(400, 'Choose a network')
+      const network = NETWORK_PROVIDERS[provider].label
+      const config = deps.config()
+      if (!offered().includes(provider) || !config.keyring) return fail(404, `${network} cannot be connected here`)
+      if (NETWORK_PROVIDERS[provider].auth !== 'api-key') return fail(400, `${network} connects by signing in`)
+      const read = readApiKeyConnect(provider, gate.body)
+      if (read.ok === false) return fail(400, read.error)
+      const id = networkConnectionId(gate.hostId, provider)
+      const existing = await deps.store.getConnection(id)
+      if (existing && existing.hostId !== gate.hostId) return fail(404, 'Not found')
+      let account: Awaited<ReturnType<FulfillmentNetworkProvider['account']>>
+      try {
+        account = await deps.provider(provider).account({ accessToken: read.apiKey, storeId: read.storeId })
+      } catch (error) {
+        if (isProviderError(error) && error.kind === 'auth') return fail(400, `${network} refused that API key. Check it and the store id.`)
+        if (isProviderError(error) && error.kind === 'invalid') return fail(400, `${network} refused the connection: ${error.message}`)
+        console.error('[fulfillment-networks] key connect failed', isProviderError(error) ? error.message : error)
+        return fail(502, `${network} could not be reached. Try again in a minute.`)
+      }
+      const nowMs = deps.now()
+      const webhookSecret = existing?.sealedWebhookSecret ? null : newSecret()
+      const stored: Partial<StoredConnection> = {
+        ...(existing ?? emptyConnection({ orgId: gate.orgId, hostId: gate.hostId, provider, sandbox: networkSandbox(config, provider), nowMs })),
+        status: existing?.status === 'paused' ? 'paused' : 'active',
+        sandbox: networkSandbox(config, provider),
+        accountName: account.accountName ?? existing?.accountName ?? null,
+        storeId: read.storeId,
+        sealedAccessToken: sealGrant(read.apiKey, id, 'access', config.keyring),
+        sealedRefreshToken: null,
+        accessTokenExpiresAtMs: null,
+        tokenKeyId: config.keyring.current.id,
+        ...(webhookSecret ? { sealedWebhookSecret: sealGrant(webhookSecret, id, 'webhook', config.keyring) } : {}),
+        // A new store's count is not the old one's.
+        ...(existing?.storeId && existing.storeId !== read.storeId ? { stock: {} } : {}),
+        inventoryDueAtMs: nowMs,
+        lastError: null,
+        connectedAtMs: existing?.connectedAtMs ?? nowMs,
+        connectedByUid: existing?.connectedByUid ?? gate.uid,
+        pendingOAuth: null,
+        updatedAtMs: nowMs,
+      }
+      await deps.store.patchConnection(id, stored)
+      await deps.store.appendLog(id, { atMs: nowMs, kind: 'connected', message: `Connected to ${network}` })
+      await deps.logActivity({ orgId: gate.orgId, uid: gate.uid, action: 'connected', provider, hostId: gate.hostId })
+      const after = await deps.store.getConnection(id)
+      return json({
+        connection: after ? connectionView(id, after) : null,
+        webhook: webhookSecret ? { url: shipmonkWebhookUrl(deps, request.url, id), secret: webhookSecret } : null,
+      })
+    },
+
+    /**
+     * POST { hostId, provider } — a new webhook signing secret for an API-key
+     * network, answered ONCE with the address. The old secret stops working
+     * at once: the merchant puts the new one in ShipMonk.
+     */
+    async webhookSecret(request: Request): Promise<Response> {
+      if (request.method !== 'POST') return fail(405, 'Method not allowed')
+      const gate = await deps.gate(request, 'admin')
+      if (gate instanceof Response) return gate
+      const provider = readProvider(gate.body, request)
+      if (!provider) return fail(400, 'Choose a network')
+      const config = deps.config()
+      if (NETWORK_PROVIDERS[provider].auth !== 'api-key' || !config.keyring) return fail(400, 'This network sets up its own webhooks')
+      const found = await connectionFor(gate, provider)
+      if (!found?.connection.connectedAtMs) return fail(404, `${NETWORK_PROVIDERS[provider].label} is not connected`)
+      const secret = newSecret()
+      await deps.store.patchConnection(found.id, {
+        sealedWebhookSecret: sealGrant(secret, found.id, 'webhook', config.keyring),
+        tokenKeyId: config.keyring.current.id,
+        updatedAtMs: deps.now(),
+      })
+      return json({ webhook: { url: shipmonkWebhookUrl(deps, request.url, found.id), secret } })
+    },
+
+    /**
+     * POST ?connection — ShipMonk's webhook (shipment notification or order
+     * status change). Its `X-Sm-Signature` is checked against the raw body
+     * with the connection's own secret BEFORE the body is parsed; then the
+     * order it names is read back from ShipMonk. Acknowledged once verified,
+     * whatever it names, so ShipMonk stops retrying an order that is not ours.
+     */
+    async webhookShipmonk(request: Request): Promise<Response> {
+      if (request.method !== 'POST') return fail(405, 'Method not allowed')
+      const connectionId = String(new URL(request.url).searchParams.get('connection') ?? '')
+      const connection = /^[A-Za-z0-9_-]{1,200}$/.test(connectionId) ? await deps.store.getConnection(connectionId) : null
+      const keyring = deps.config().keyring
+      const refused = () => fail(401, 'Not a webhook this deployment registered')
+      if (!connection || connection.provider !== 'shipmonk' || !connection.sealedWebhookSecret || !keyring) return refused()
+      const declared = Number(request.headers.get('content-length') ?? 0)
+      if (declared > WEBHOOK_MAX_BYTES) return fail(413, 'Too large')
+      const raw = await request.text().catch(() => '')
+      if (raw.length > WEBHOOK_MAX_BYTES) return fail(413, 'Too large')
+      let secret: string
+      try {
+        secret = openGrant(connection.sealedWebhookSecret, connectionId, 'webhook', keyring).value
+      } catch {
+        return refused()
+      }
+      if (!verifyShipmonkSignature(raw, request.headers.get(SHIPMONK_SIGNATURE_HEADER), secret)) return refused()
+      let body: Record<string, any> | null
+      try {
+        body = JSON.parse(raw)
+      } catch {
+        body = null
+      }
+      // A split part names its parent: the order we sent is the parent.
+      const orderKey = body?.['parent_order_key'] ?? body?.['order_key'] ?? null
+      const result = await deps.engine.applyOrderWebhook(connectionId, orderKey === null || orderKey === undefined ? null : String(orderKey))
+      return json({ ok: true, result })
     },
 
     /** POST ?connection&token&topic — ShipBob's webhook. Acknowledged once verified, whatever it names. */
