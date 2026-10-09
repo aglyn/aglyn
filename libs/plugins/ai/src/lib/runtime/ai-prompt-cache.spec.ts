@@ -905,8 +905,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // job's rules, and the edit rung's protocol and element catalog for the
       // kind, so a page's and a layout's prefix each cache.
       // The edit doors are up 4 at AGL-3717 for the palette's lightbox switch.
-      'edit-screen': { prefixTokens: 5_974, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 5_962, minimum: 512, caches: true, toolsStable: true },
+      // Both up 101 at AGL-3716: the edit protocol's own Music player line,
+      // which is where the player is named now that the catalog leaves it off.
+      'edit-screen': { prefixTokens: 6_075, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 6_063, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },

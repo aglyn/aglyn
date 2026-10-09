@@ -2712,7 +2712,11 @@ needs, and the machine does not start it with less.
   instructions, 4,596, and left five. The Image's and the Image List's
   lightbox switch (AGL-3717) put 4 back, 4,600, and left three: the catalog
   line names the switch and none of the lightbox's dozen look settings, and
-  the Image's `loading` left the line to pay for it. A two-person introduction drawn
+  the Image's `loading` left the line to pay for it. The Music player
+  (AGL-3716) costs a page pass nothing: its elements and its Music playlist
+  block stay off the catalog (Assist's edit protocol names them, and a music
+  site's player is placed by the compiler), so its 65 tokens never reach the
+  page's cached prefix. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,

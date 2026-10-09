@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { aiOwnerAudioRefusal, validateAiNodePatch, validateAiNodeTree } from '../runtime/ai-node-tree'
-import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
+import { AI_PALETTE_CATALOG, AI_SURFACES } from '../runtime/ai-palette.generated'
 import { editCanvasBlock } from './assist-edit'
 import { ASSIST_MUSIC_EDIT_LINE, ASSIST_MUSIC_RULES } from './assist-music'
 
@@ -31,12 +31,15 @@ import { ASSIST_MUSIC_EDIT_LINE, ASSIST_MUSIC_RULES } from './assist-music'
  */
 
 describe('what Assist is told', () => {
-  it('lists the Music player and its tracks in the page catalog it edits from', () => {
+  it('names the Music player and its tracks in its own edit line, which the page catalog leaves to it', () => {
     const block = editCanvasBlock('screen')
     expect(block).toContain('musicPlayer')
     expect(block).toContain('musicTrack')
     expect(block).toContain(ASSIST_MUSIC_EDIT_LINE)
-    expect(AI_PALETTE_CATALOG.screen).toContain('musicPlayer')
+    // Admitted on the page surface, unlisted in its catalog, so a Free page
+    // pass never pays for it (AGL-3716).
+    expect(AI_SURFACES.screen.allow).toEqual(expect.arrayContaining(['musicPlayer', 'musicTrack']))
+    expect(AI_PALETTE_CATALOG.screen).not.toContain('musicPlayer')
     // The owner's rights answer is never on offer to a model.
     expect(AI_PALETTE_CATALOG.screen).not.toContain('rightsConfirmed')
   })

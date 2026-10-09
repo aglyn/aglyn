@@ -184,6 +184,16 @@ const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
 }
 
 /**
+ * Elements a surface admits from a model but leaves off its catalog
+ * (AGL-3716), because the one door that writes them tells the model their
+ * shape itself. Assist's edit protocol carries the Music player's own line
+ * (`ASSIST_MUSIC_EDIT_LINE`), and a music site's player is placed by the
+ * layout compiler, so no page pass needs it listed. Listed, its lines rode the
+ * cached prefix of every Free page pass and put the largest one past the wall.
+ */
+const UNLISTED_IDS: ReadonlySet<string> = new Set(['musicPlayer', 'musicTrack'])
+
+/**
  * Never offered to a model, whatever list they are on: a raw-HTML escape
  * hatch, a code-invoking widget, the canvas root, a reference into another
  * document, and third-party plugin elements.
@@ -601,6 +611,7 @@ function buildCatalog(
   lines.push(`Surface: ${surface}. ${rootLine}`)
   lines.push('Elements (id (name): purpose — children — props; * = required):')
   for (const id of definition.allow) {
+    if (UNLISTED_IDS.has(id)) continue
     const entry = palette[id]
     // A name that only spells its id again — `image (Image)`, `searchBox
     // (Search Box)` — teaches the model nothing, and every request that shows
@@ -613,7 +624,8 @@ function buildCatalog(
       `- ${id}${name}: ${entry.summary || entry.category} — ${holdsLine(entry)} — ${catalogProps(id, entry) || 'no props'}`,
     )
   }
-  const allowed = new Set(definition.allow)
+  // An unlisted element's blocks go unlisted with it (AGL-3716).
+  const allowed = new Set(definition.allow.filter((id) => !UNLISTED_IDS.has(id)))
   // De-duplicated: two blocks that print the same name on the same root read
   // as one example to the model, so the second copy is paid-for prompt that
   // teaches nothing — two FAQ blocks both print `FAQ (muiStack)` (AGL-3411).
