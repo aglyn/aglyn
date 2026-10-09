@@ -20,6 +20,8 @@ import {
   productCopyPatch,
   productPriceMissing,
   unpricedProductDraft,
+  defaultPricedProductDraft,
+  COMMERCE_DEFAULT_PRICE_USD,
   validateProduct,
   variantHasPrice,
   type HostProduct,
@@ -65,10 +67,25 @@ describe('a price a sale can charge', () => {
     expect(productPriceMissing({ variants: [{ priceUsd: 40 }, {}] })).toBe(true)
   })
 
-  it('is what the editor waits for before it saves, in words that say so', () => {
-    const unpriced = { ...LAMP, variants: [{ id: 'default' }] } as unknown as HostProduct
-    expect(validateProduct(unpriced)).toBe('Set a price for every variant')
+  it('does not stop a save: an owner may keep a product unpriced on purpose (AGL-3676)', () => {
+    const unpriced = { ...LAMP, variants: [{ id: 'default' }], options: [] } as unknown as HostProduct
+    expect(validateProduct(unpriced)).toBeNull()
     expect(validateProduct({ ...LAMP, variants: [{ id: 'default', priceUsd: 0 }], options: [] })).toBeNull()
+    // A price that is there is still held to the rules.
+    expect(validateProduct({ ...LAMP, variants: [{ id: 'default', priceUsd: -1 }], options: [] })).toBe(
+      'Variant prices must be zero or more',
+    )
+    // And an unpriced variant's SKU still counts toward uniqueness.
+    expect(
+      validateProduct({
+        ...LAMP,
+        options: [],
+        variants: [
+          { id: 'a', sku: 'X' },
+          { id: 'b', sku: 'X', priceUsd: 4 },
+        ],
+      } as unknown as HostProduct),
+    ).toBe('Variant SKUs must be unique')
   })
 })
 
@@ -143,7 +160,17 @@ describe('a proposed product, created', () => {
     expect(draft.variants.every((variant) => !('priceUsd' in variant))).toBe(true)
     expect('priceUsd' in draft).toBe(false)
     expect(productPriceMissing(draft)).toBe(true)
-    expect(validateProduct(draft as unknown as HostProduct)).toBe('Set a price for every variant')
+    expect(validateProduct(draft as unknown as HostProduct)).toBeNull()
+  })
+
+  it('is created at the default price when accepted, every variant priced and the price keys with it (AGL-3676)', () => {
+    const draft = defaultPricedProductDraft(PROPOSAL, new Set(), 1)
+    expect(COMMERCE_DEFAULT_PRICE_USD).toBe(25)
+    expect(draft.variants.map((variant) => (variant as { priceUsd?: number }).priceUsd)).toEqual([25, 25])
+    expect(draft).toMatchObject({ status: 'draft', priceFromCents: 2500 })
+    expect(productPriceMissing(draft)).toBe(false)
+    expect(defaultPricedProductDraft(PROPOSAL, new Set(), 1, 9.5).variants.map((variant) => (variant as { priceUsd?: number }).priceUsd)).toEqual([9.5, 9.5])
+    expect(productPriceMissing(defaultPricedProductDraft(PROPOSAL, new Set(), 1, null))).toBe(true)
   })
 
   it('has one default variant when it has no options, and is never sold before it is priced', () => {

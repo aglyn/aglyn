@@ -132,13 +132,7 @@ export function OrgGeneralCard() {
   return (
 <CardDisplay
   header={'General'}
-  help={docsHelp('glossary', {
-    anchor: '#workspace',
-    excerpt:
-      'Rename the organization, change its workspace URL and set the ' +
-      'time zone its sites inherit — "workspace" is the console word for ' +
-      'your organization\'s home.',
-  })}
+  help={docsHelp('consoleTour', { anchor: '#organization-general' })}
   contentGutterX
   contentGutterY
 >

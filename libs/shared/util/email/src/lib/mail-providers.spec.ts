@@ -197,7 +197,14 @@ describe('the webhook provider', () => {
     environment({ AGLYN_MAIL_WEBHOOK_URL: RELAY, AGLYN_MAIL_WEBHOOK_TOKEN: 'tok', USAGE_EMAIL_FROM: FROM })
     const fetchMock = mockFetch({})
 
-    const result = await sendEmail({ to: 'a@example.com', subject: 'Hi', text: 'Hello', context: 'invite', replyTo: 'help@aglyn.com' })
+    const result = await sendEmail({
+      to: 'a@example.com',
+      subject: 'Hi',
+      text: 'Hello',
+      context: 'invite',
+      replyTo: 'help@aglyn.com',
+      bcc: 'copy@invite.example.com',
+    })
 
     expect(result).toEqual({ sent: true, id: 'relay_1' })
     const [url, init] = fetchMock.mock.calls[0]
@@ -215,6 +222,7 @@ describe('the webhook provider', () => {
         subject: 'Hi',
         text: 'Hello',
         replyTo: 'help@aglyn.com',
+        bcc: ['copy@invite.example.com'],
         tags: [{ name: 'context', value: 'invite' }],
       },
     })

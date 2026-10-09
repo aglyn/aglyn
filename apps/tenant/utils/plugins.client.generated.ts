@@ -54,6 +54,12 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing/site'),
   },
   {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"site":"registerLiveChatSite"},
+    load: () => import('@aglyn/plugins-live-chat/site'),
+  },
+  {
     id: 'weglot',
     register: {"site":"registerWeglotSite"},
     load: () => import('@aglyn/plugins-weglot/site'),

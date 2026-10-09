@@ -83,6 +83,13 @@ export interface VisitorConsentHost {
     gaMeasurementId?: string
     /** GTM container (AGL-2486) — gated exactly as the GA id is. */
     gtmContainerId?: string
+    /**
+     * Advertising vendor id → the site's account id with that vendor (AGL-1152,
+     * AGL-3694): the merchant's own Meta pixel, TikTok pixel, Pinterest tag,
+     * Google Ads id or LinkedIn partner id, each shaped by
+     * {@link ADVERTISING_TAG_ID_PATTERNS}.
+     */
+    adTags?: Record<string, string> | null
   } | null
   consent?: {
     /**
@@ -314,6 +321,59 @@ export const GOOGLE_ADS_ID_PATTERN = /^AW-[0-9]{6,16}$/
  */
 export const LINKEDIN_PARTNER_ID_PATTERN = /^[0-9]{4,10}$/
 
+/**
+ * A TikTok pixel code (AGL-3694) — upper-case letters and digits, 20 today.
+ * The band is generous on both sides, like the Meta one; what it must refuse
+ * is anything that could escape the inline boot it is written into.
+ */
+export const TIKTOK_PIXEL_ID_PATTERN = /^[A-Z0-9]{16,24}$/
+
+/**
+ * A Pinterest tag id (AGL-3694) — numeric, 13 digits today. Its own field, so
+ * the overlap with the Meta band never lets one vendor's id load the other.
+ */
+export const PINTEREST_TAG_ID_PATTERN = /^[0-9]{10,16}$/
+
+/**
+ * Every advertising vendor a site can configure, by its `analytics.adTags`
+ * key, and the shape its account id must have — the patterns the loader and
+ * the console's Tracking tab share (AGL-3694). Declared here, not beside the
+ * vendor descriptors, because the console may not import the module that
+ * mounts them (`advertising-tag-gate.spec` case (f)).
+ */
+export const ADVERTISING_TAG_ID_PATTERNS: Readonly<Record<string, RegExp>> =
+  Object.freeze({
+    meta: META_PIXEL_ID_PATTERN,
+    'google-ads': GOOGLE_ADS_ID_PATTERN,
+    linkedin: LINKEDIN_PARTNER_ID_PATTERN,
+    tiktok: TIKTOK_PIXEL_ID_PATTERN,
+    pinterest: PINTEREST_TAG_ID_PATTERN,
+  })
+
+/** The site's well-formed account id with one advertising vendor, else null. */
+export function resolveAdvertisingTagId(
+  host: VisitorConsentHost | null | undefined,
+  vendorId: string,
+): string | null {
+  const pattern = ADVERTISING_TAG_ID_PATTERNS[vendorId]
+  if (!pattern) return null
+  const candidate = String(host?.analytics?.adTags?.[vendorId] ?? '')
+  return pattern.test(candidate) ? candidate : null
+}
+
+/**
+ * Whether the site configures ANY advertising tag with a well-formed id
+ * (AGL-3694). A pixel is a tracker in its own right, so a site running one and
+ * no analytics tag still needs the consent machinery in front of it.
+ */
+export function hostConfiguresAdvertisingTag(
+  host: VisitorConsentHost | null | undefined,
+): boolean {
+  return Object.keys(ADVERTISING_TAG_ID_PATTERNS).some(
+    (vendorId) => resolveAdvertisingTagId(host, vendorId) !== null,
+  )
+}
+
 /** The configured GA id when it is well-formed, else null. */
 export function resolveGaMeasurementId(
   host: VisitorConsentHost | null | undefined,
@@ -411,7 +471,12 @@ export function consentGatedCategories(
   // A CONTAINER counts (AGL-2486). Read as the measurement id alone, a site
   // running only a container had no gated category, so no banner rendered
   // and the container loaded ungated — see `hostConfiguresAnalyticsTag`.
-  if (!hostConfiguresAnalyticsTag(host)) return []
+  // An advertising tag counts too (AGL-3694): a site running only a pixel
+  // has a tracker to ask about, and with no category it would get no banner
+  // and its pixel could never be granted.
+  if (!hostConfiguresAnalyticsTag(host) && !hostConfiguresAdvertisingTag(host)) {
+    return []
+  }
   return hostAsksAboutAdvertising(host)
     ? ['analytics', 'advertising']
     : ['analytics']
@@ -432,7 +497,15 @@ export function hostAsksAboutAdvertising(
   // Either tag qualifies (AGL-2486): advertising storage is what a
   // measurement tag reads and what a container's advertising tags read, and
   // a container is the likelier of the two to carry them.
-  return host?.consent?.advertising === true && hostConfiguresAnalyticsTag(host)
+  //
+  // An advertising tag of the site's own qualifies as well (AGL-3694): it is
+  // the most direct thing the question is about, and without this a site
+  // running a pixel and no analytics id could never be asked, so its pixel
+  // could never load.
+  return (
+    host?.consent?.advertising === true &&
+    (hostConfiguresAnalyticsTag(host) || hostConfiguresAdvertisingTag(host))
+  )
 }
 
 /**

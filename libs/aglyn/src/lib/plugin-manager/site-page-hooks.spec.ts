@@ -41,6 +41,7 @@
  * array; nothing here reads a total count.
  */
 import {
+  consentAnalyticsVendorsOf,
   registerSitePageEnricher,
   runSitePageEnrichers,
   type SitePageContext,
@@ -117,5 +118,26 @@ describe('runSitePageEnrichers (AGL-1152 — concurrent)', () => {
     expect(props['overlap2']).toBe(true)
     expect(peak).toBe(3)
     expect(inFlight).toBe(0)
+  })
+})
+
+describe('the shared consent-vendors prop (AGL-3698)', () => {
+  it('joins every enricher’s vendors instead of letting the last one win', async () => {
+    registerSitePageEnricher(async () => ({ consentAnalyticsVendors: ['Tidio chat'] }))
+    registerSitePageEnricher(async () => ({ consentAnalyticsVendors: ['Other chat', 'Tidio chat'] }))
+    registerSitePageEnricher(async () => ({ unrelated: true }))
+
+    const { props } = await runSitePageEnrichers(context)
+
+    expect(consentAnalyticsVendorsOf(props)).toEqual(['Tidio chat', 'Other chat'])
+    expect(props['consentAnalyticsVendors']).toEqual(['Tidio chat', 'Other chat'])
+  })
+
+  it('reads only strings, trimmed and bounded', () => {
+    expect(
+      consentAnalyticsVendorsOf({ consentAnalyticsVendors: [' A ', 1, null, 'x'.repeat(80), 'A'] }),
+    ).toEqual(['A', 'x'.repeat(60)])
+    expect(consentAnalyticsVendorsOf({ consentAnalyticsVendors: 'Tidio' })).toEqual([])
+    expect(consentAnalyticsVendorsOf(undefined)).toEqual([])
   })
 })

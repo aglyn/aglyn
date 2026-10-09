@@ -24,16 +24,23 @@
 import type { ScopeToken } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import {
   coerceDocumentValues,
-  type DatasetFieldEntry,
   type DatasetModel,
   effectiveDatasetModel,
-  humanizeDatasetFieldId,
   validateDocument,
 } from './dataset-models'
 import { fillRecordAddresses } from '../record-pages/record-pages'
+import { DATASET_FIELD_PATTERN } from './dataset-model-core'
 
-/** Dataset field name: starts with a letter; letters/digits/underscores. */
-export const DATASET_FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
+// The field-id and naming helpers are pure and live with the model's pure
+// half (AGL-3668), which the native apps generate from.
+export {
+  DATASET_FIELD_PATTERN,
+  datasetDisplayName,
+  defaultDatasetFieldId,
+  parseDatasetFieldEntries,
+  slugifyDatasetFieldId,
+  validateDatasetFieldId,
+} from './dataset-model-core'
 
 export interface HostDataset {
   $id?: string
@@ -61,88 +68,6 @@ export interface HostDatasetRecord {
   values?: Record<string, unknown>
   /** Row position in the editor and in repeated output. */
   order?: number
-}
-
-
-/**
- * Stable field id from a human name: "Roast preference" → "roast_preference".
- * Mirrors DATASET_FIELD_PATTERN; returns '' when nothing salvageable.
- */
-export function slugifyDatasetFieldId(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_')
-    .replace(/[^a-z0-9_]/g, '')
-    .replace(/^[0-9_]+/, '')
-    .replace(/_+$/, '')
-  return DATASET_FIELD_PATTERN.test(slug) ? slug : ''
-}
-
-/**
- * Default reference id for a new field (AGL-578): the `slugifyDatasetFieldId`
- * slug, suffixed (`_2`, `_3`, …) to stay unique within the dataset. `taken`
- * holds the ids already in use (compared case-insensitively). Returns '' when
- * the name yields nothing valid. The user can override the result.
- */
-export function defaultDatasetFieldId(
-  name: string,
-  taken: ReadonlySet<string>,
-): string {
-  const base = slugifyDatasetFieldId(name)
-  if (!base) return ''
-  const used = new Set([...taken].map((id) => id.toLowerCase()))
-  let candidate = base
-  let suffix = 2
-  while (used.has(candidate.toLowerCase())) candidate = `${base}_${suffix++}`
-  return candidate
-}
-
-/**
- * Validate a user-entered reference id (AGL-578): non-empty, matches
- * `DATASET_FIELD_PATTERN`, and unique within the dataset (`taken` = ids already
- * used, compared case-insensitively). Returns an error message, or null when
- * the id is usable.
- */
-export function validateDatasetFieldId(
-  id: string,
-  taken: ReadonlySet<string>,
-): string | null {
-  const trimmed = id.trim()
-  if (!trimmed) return 'A reference ID is required'
-  if (!DATASET_FIELD_PATTERN.test(trimmed))
-    return 'Start with a letter; use only letters, numbers, and underscores'
-  const used = new Set([...taken].map((existing) => existing.toLowerCase()))
-  if (used.has(trimmed.toLowerCase()))
-    return 'Another field already uses this reference ID'
-  return null
-}
-
-
-/**
- * Parses a comma/newline separated list of HUMAN field names into
- * {id, name} entries — "Roast preference" keeps its pretty name and gets
- * the stable id `roast_preference` (AGL-558). Plain snake_case keys
- * still work and pick up a humanized display name. Duplicate ids and
- * unsalvageable entries are dropped rather than failing the set.
- */
-export function parseDatasetFieldEntries(input: string): DatasetFieldEntry[] {
-  const seen = new Set<string>()
-  const entries: DatasetFieldEntry[] = []
-  for (const raw of input.split(/[,\n]/)) {
-    const trimmed = raw.trim()
-    if (!trimmed) continue
-    const id = slugifyDatasetFieldId(trimmed)
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    entries.push({
-      id,
-      name: DATASET_FIELD_PATTERN.test(trimmed)
-        ? humanizeDatasetFieldId(trimmed)
-        : trimmed,
-    })
-  }
-  return entries
 }
 
 /**
@@ -311,22 +236,6 @@ export function describeDatasetRecordErrors(
   errors: Record<string, string>,
 ): string {
   return Object.values(errors).join('; ')
-}
-
-/**
- * The name a dataset is shown under: `displayName`, which is what every create
- * path writes (AGL-536), then the pre-migration `name`. Blank when the document
- * carries neither.
- */
-export function datasetDisplayName(
-  dataset: { displayName?: unknown; name?: unknown } | null | undefined,
-): string {
-  for (const candidate of [dataset?.displayName, dataset?.name]) {
-    if (typeof candidate === 'string' && candidate.trim()) {
-      return candidate.trim()
-    }
-  }
-  return ''
 }
 
 /** Records sorted by their editor order (then id for stability). */

@@ -44,19 +44,21 @@ final class ListQueryCasesTests: XCTestCase {
 
   private let utc = TimeZone(identifier: "UTC")!
 
+  /// Every generated value by its export name, so a declaration a lane adds
+  /// to `listQueryCases` is replayed here without a hand-kept list.
+  private static let values: [String: Any] = {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()  // AglynCoreTests
+      .deletingLastPathComponent()  // Tests
+      .deletingLastPathComponent()  // apple
+      .deletingLastPathComponent()  // native
+      .appendingPathComponent("contracts/contracts.generated.json")
+    return try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+  }()
+
   private func declaration(_ name: String) -> ListQueryDeclaration? {
-    switch name {
-    case "ORDER_LIST_QUERY": return ContractValues.shared.orderListQuery
-    case "PRODUCT_LIST_QUERY": return ContractValues.shared.productListQuery
-    case "SUBMISSION_LIST_QUERY": return ContractValues.shared.submissionListQuery
-    case "SITE_LIST_DECLARATION": return ContractValues.shared.siteListDeclaration
-    case "FORM_LIST_QUERY": return ContractValues.shared.formListQuery
-    case "ENTRY_LIST_QUERY": return ContractValues.shared.entryListQuery
-    case "COMPONENT_LIST_QUERY": return ContractValues.shared.componentListQuery
-    case "TEMPLATE_LIST_QUERY": return ContractValues.shared.templateListQuery
-    case "LAYOUT_LIST_QUERY": return ContractValues.shared.layoutListQuery
-    default: return nil
-    }
+    guard let raw = Self.values[name], let data = try? JSONSerialization.data(withJSONObject: raw) else { return nil }
+    return try? JSONDecoder().decode(ListQueryDeclaration.self, from: data)
   }
 
   func testNamesKeyTokenAndReverseAsTheConsoleStoresThem() {

@@ -39,7 +39,7 @@ private class PagedReader(private val pages: List<FirestorePage>) : FirestoreRea
   override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = emptyFlow()
 }
 
-private class RecordingApi(var failWith: Throwable? = null) : OrderActionsApi {
+private class RecordingApi(var failWith: Throwable? = null, var verdict: String = "recorded") : OrderActionsApi {
   val calls = mutableListOf<String>()
   private fun record(call: String) {
     calls += call
@@ -52,6 +52,11 @@ private class RecordingApi(var failWith: Throwable? = null) : OrderActionsApi {
   override suspend fun cancel(orderId: String) = record("cancel $orderId")
   override suspend fun receiptChannels() = setOf(ReceiptChannel.EMAIL, ReceiptChannel.SMS)
   override suspend fun sendReceipt(orderId: String, channel: ReceiptChannel, to: String) = record("receipt $orderId ${channel.raw} $to")
+  override suspend fun addNote(orderId: String, note: String) = record("note $orderId $note")
+  override suspend fun answerRestock(orderId: String, resolution: RestockAnswerChoice, flaggedAtMs: Double): String {
+    record("restock $orderId ${resolution.raw} ${flaggedAtMs.toLong()}")
+    return verdict
+  }
 }
 
 class OrdersTest {
@@ -253,5 +258,71 @@ class OrdersTest {
     model.open(OrderDialog.RECEIPT)
     advanceUntilIdle()
     assertEquals(setOf(ReceiptChannel.EMAIL, ReceiptChannel.SMS), model.receiptChannels)
+  }
+
+  @Test
+  fun theTimelineReadsNewestFirstAsTheConsolePrintsIt() {
+    val detail = orderDetail(
+      orderDoc(
+        "o1",
+        "status" to "paid",
+        "timeline" to listOf(
+          mapOf("atMs" to 1_700_000_000_000L, "event" to "paid"),
+          mapOf("atMs" to 1_700_000_100_000L, "event" to "note", "detail" to "Customer called"),
+        ),
+      ),
+    )
+    assertEquals(listOf("note", "paid"), detail.timeline.map { it.event })
+    assertTrue(timelineLine(detail.timeline[0]).endsWith(" — note: Customer called"))
+    assertTrue(timelineLine(detail.timeline[1]).endsWith(" — paid"))
+  }
+
+  @Test
+  fun anAnsweredRestockQuestionIsNotOfferedAgain() {
+    val open = mapOf(
+      "kind" to "refund", "units" to 2L, "fullyReversed" to true, "flaggedAtMs" to 1_000L,
+      "lines" to listOf(mapOf("productId" to "p1", "variantId" to "v", "quantity" to 2L, "name" to "Mug")),
+    )
+    assertEquals(1_000.0, orderDetail(orderDoc("o1", "status" to "paid", "restockCheck" to open)).restock?.flaggedAtMs)
+    assertNull(orderDetail(orderDoc("o1", "status" to "paid", "restockCheck" to open + ("resolution" to "dismissed"))).restock)
+    assertNull(orderDetail(orderDoc("o1", "status" to "paid")).restock)
+  }
+
+  @Test
+  fun aNoteNeedsSomethingWrittenAndRunsOnceThroughTheRoute() = runTest {
+    assertEquals("Write a note first", checkOrderNote("   "))
+    assertNull(checkOrderNote("Customer called"))
+    val api = RecordingApi()
+    val model = OrderActionsModel(api, this)
+    model.open(OrderDialog.NOTE)
+    model.run("The note is on the timeline.") { addNote("o1", "Customer called") }
+    advanceUntilIdle()
+    assertEquals(listOf("note o1 Customer called"), api.calls)
+    assertNull(model.dialog)
+    assertEquals("The note is on the timeline.", model.done)
+  }
+
+  @Test
+  fun aRestockAnswerSaysWhatTheRouteFound() = runTest {
+    val api = RecordingApi()
+    val model = OrderActionsModel(api, this)
+    model.answerRestock("o1", RestockAnswerChoice.RESTOCKED, 1_000.0)
+    advanceUntilIdle()
+    assertEquals("Recorded as restocked", model.done)
+    api.verdict = "answered"
+    model.answerRestock("o1", RestockAnswerChoice.DISMISSED, 1_000.0)
+    advanceUntilIdle()
+    assertEquals("This restock question was already answered — nothing changed.", model.done)
+    api.verdict = "changed"
+    model.answerRestock("o1", RestockAnswerChoice.DISMISSED, 1_000.0)
+    advanceUntilIdle()
+    assertTrue(model.done!!.startsWith("The restock question changed"))
+    assertEquals(listOf("restock o1 restocked 1000", "restock o1 dismissed 1000", "restock o1 dismissed 1000"), api.calls)
+
+    api.failWith = ConsoleApiError("Not permitted", 403, null)
+    model.answerRestock("o1", RestockAnswerChoice.RESTOCKED, 1_000.0)
+    advanceUntilIdle()
+    assertEquals("Not permitted", model.error)
+    assertNull(model.done)
   }
 }

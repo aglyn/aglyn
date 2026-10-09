@@ -68,6 +68,12 @@
       "@aglyn/plugins-accounting/*": [
         "../../libs/plugins/accounting/src/lib/*"
       ],
+      "@aglyn/plugins-ad-conversions": [
+        "../../libs/plugins/ad-conversions/src/index.ts"
+      ],
+      "@aglyn/plugins-ad-conversions/*": [
+        "../../libs/plugins/ad-conversions/src/lib/*"
+      ],
       "@aglyn/plugins-sales-channels": [
         "../../libs/plugins/sales-channels/src/index.ts"
       ],
@@ -164,6 +170,18 @@
       "@aglyn/plugins-zapier/*": [
         "../../libs/plugins/zapier/src/lib/*"
       ],
+      "@aglyn/plugins-couriers": [
+        "../../libs/plugins/couriers/src/index.ts"
+      ],
+      "@aglyn/plugins-couriers/*": [
+        "../../libs/plugins/couriers/src/lib/*"
+      ],
+      "@aglyn/plugins-live-chat": [
+        "../../libs/plugins/live-chat/src/index.ts"
+      ],
+      "@aglyn/plugins-live-chat/*": [
+        "../../libs/plugins/live-chat/src/lib/*"
+      ],
       "@aglyn/plugins-fulfillment-networks": [
         "../../libs/plugins/fulfillment-networks/src/index.ts"
       ],
@@ -241,6 +259,12 @@
       ],
       "@aglyn/plugins-post-purchase/*": [
         "../../libs/plugins/post-purchase/src/lib/*"
+      ],
+      "@aglyn/plugins-review-platforms": [
+        "../../libs/plugins/review-platforms/src/index.ts"
+      ],
+      "@aglyn/plugins-review-platforms/*": [
+        "../../libs/plugins/review-platforms/src/lib/*"
       ],
       "@aglyn/plugins-shipping": [
         "../../libs/plugins/shipping/src/index.ts"

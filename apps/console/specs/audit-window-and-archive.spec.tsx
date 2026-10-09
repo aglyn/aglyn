@@ -206,11 +206,14 @@ const rows = (count: number) =>
     at: { seconds: AT.seconds + ((index * 37) % count) },
   }))
 
-/** The target cells actually on screen, in render order. */
+/**
+ * The target cells actually on screen, in render order. A cell reads the
+ * target in words and keeps the stored path as its tooltip (AGL-3660).
+ */
 const targetsOnScreen = () =>
   screen
-    .queryAllByText(/^plugins\/p-\d{3}$/)
-    .map((node) => node.textContent ?? '')
+    .queryAllByTitle(/^plugins\/p-\d{3}$/)
+    .map((node) => node.getAttribute('title') ?? '')
 
 const byDate = (pool: any[]) => [...pool].sort((a, b) => b.at.seconds - a.at.seconds)
 
@@ -315,7 +318,7 @@ describe('the audit log filters its QUERY (AGL-3321)', () => {
       ]),
     )
     expect(constraint('orderBy')[0]).toMatchObject({ field: 'at', direction: 'desc' })
-    expect(await screen.findByText('orgs/acme')).toBeTruthy()
+    expect(await screen.findByTitle('orgs/acme')).toBeTruthy()
     // A filter change is a new query: page one, no cursor.
     expect(constraint('startAfter')).toHaveLength(0)
   })
@@ -471,8 +474,8 @@ describe('the archive is readable from the product (AGL-2324)', () => {
     // the hot window evicts first and the reason the archive needed a door;
     // asserting only that "some rows appeared" would pass on a reader that
     // returned the first line twice.
-    expect(await screen.findByText('orgs/acme')).toBeTruthy()
-    expect(screen.getByText('users/carol')).toBeTruthy()
+    expect(await screen.findByTitle('orgs/acme')).toBeTruthy()
+    expect(screen.getByTitle('users/carol')).toBeTruthy()
     expect(screen.getByText('Why: enterprise-rate')).toBeTruthy()
     expect(calls[1]).toContain('file=run-a.jsonl')
   })

@@ -24,6 +24,7 @@ let mockUserDoc: Record<string, unknown> = {}
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
+  HelpTip: () => null,
   AppLink: ({ href, children }: { href: string; children: unknown }) => <a href={href}>{children as string}</a>,
 }))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({

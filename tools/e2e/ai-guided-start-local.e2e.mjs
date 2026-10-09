@@ -1268,18 +1268,24 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
         }
       }
       check('the home and the shop list the products', gridOn.some((line) => line.startsWith('/ ')) && gridOn.length >= 2, gridOn.join('; ') || 'none')
-      const soon = store.filter((one) => one.visible.includes('Price coming soon')).map((one) => one.path)
-      check('cards say “Price coming soon”', soon.length > 0, soon.join(', ') || 'none')
+      // A start's products carry the store's default price (AGL-3676), never "coming soon".
+      const priced = store.filter((one) => /\$\s?25(?:\.00)?\b/.test(one.visible)).map((one) => one.path)
+      check('cards show the starting price', priced.length > 0, priced.join(', ') || 'none')
       const pdps = []
       for (const [index, link] of [...productLinks].entries()) {
         const pdp = await visit(link, index === 0 ? '34-product-page' : null)
-        pdps.push(`${link} ${pdp.status}${pdp.visible.includes('Price coming soon') ? '' : ' (no coming-soon)'}${/Add to cart/.test(pdp.visible) ? ' (Add to cart shown)' : ''}`)
+        pdps.push(`${link} ${pdp.status}${pdp.visible.includes('Price coming soon') ? ' (coming soon)' : ''}${/Add to cart/.test(pdp.visible) ? '' : ' (no Add to cart)'}`)
       }
-      check('every product page answers, coming soon, with nothing to buy', pdps.length > 0 && pdps.every((line) => / 200$/.test(line)), pdps.join('; ') || 'none')
+      check('every product page answers, priced, with Add to cart', pdps.length > 0 && pdps.every((line) => / 200$/.test(line)), pdps.join('; ') || 'none')
       const named = products.filter((product) => pageTexts.some((one) => one.text.includes(product.name))).map((product) => product.name)
       check('pages feature the real product names', named.length > 0, `${named.length} of ${products.length} names on a page: ${named.join(', ') || 'none'}`)
-      const prices = pageTexts.flatMap((one) => (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((price) => `${one.path} ${price}`))
-      check('no page states a price', prices.length === 0, prices.join('; ') || 'none')
+      // The Product grid prints the products' own starting price; any other price is the model's words.
+      const prices = pageTexts.flatMap((one) =>
+        (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? [])
+          .filter((price) => !/^\$\s?25(?:\.00)?$/.test(price))
+          .map((price) => `${one.path} ${price}`),
+      )
+      check('no page states a price of its own', prices.length === 0, prices.join('; ') || 'none')
     }
   } finally {
     await visitor.close().catch(() => undefined)

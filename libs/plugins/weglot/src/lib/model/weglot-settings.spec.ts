@@ -23,7 +23,6 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-config'
 import {
   WEGLOT_CONNECT_HOSTS,
-  WEGLOT_ENTITLEMENT,
   WEGLOT_IMAGE_HOSTS,
   WEGLOT_PLUGIN_ID,
 } from '../constants'
@@ -165,13 +164,17 @@ describe('the plugins.config.json declaration', () => {
   ) as { plugins: Array<Record<string, any>> }
   const entry = config.plugins.find((plugin) => plugin['id'] === WEGLOT_PLUGIN_ID)
 
-  it('declares exactly the hosts the loader reaches, behind the same switch and plan', () => {
-    expect(entry?.['siteIntegration']).toMatchObject({
-      configSwitch: 'enabled',
-      entitlement: WEGLOT_ENTITLEMENT,
-      connectHosts: [...WEGLOT_CONNECT_HOSTS],
-      imageHosts: [...WEGLOT_IMAGE_HOSTS],
+  it('declares exactly the hosts the loader reaches, behind the same switch', () => {
+    expect(entry?.['siteCsp']).toMatchObject({
+      switchField: 'enabled',
+      variants: {
+        default: {
+          connect: [...WEGLOT_CONNECT_HOSTS],
+          img: [...WEGLOT_IMAGE_HOSTS],
+        },
+      },
     })
+    expect(entry?.['siteCsp']?.['variantField']).toBeUndefined()
   })
 
   it('is off on every site until an admin switches it on', () => {

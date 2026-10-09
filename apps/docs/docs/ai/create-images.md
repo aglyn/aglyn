@@ -26,7 +26,7 @@ Vector kinds alone.
 Each picture is stored the way a file you upload is stored: in the open folder, counted
 toward your storage, served from the same addresses, and with alt text you can edit.
 
-## Make a picture
+## Make a picture {#make-a-picture}
 
 1. Open **Media**, on a site or for the organization, and open the folder the pictures
    should land in.
@@ -37,8 +37,8 @@ toward your storage, served from the same addresses, and with alt text you can e
    which you can change.
 4. Describe the picture: what is in it and the setting. For a **Photo**, describe the
    style too.
-5. Choose a shape: **Square 1:1**, **Landscape 4:3**, **Portrait 3:4**, **Wide 16:9** or
-   **Tall 9:16**, and how many pictures to make, from one to four.
+5. Choose a shape and how many pictures to make; see
+   [Shapes and how many](#shapes-and-how-many).
 6. For a Vector kind, choose its colors: **Use my site's theme colors**, which reads
    your site's theme, or **Choose colors** to pick up to six. The organization's library
    belongs to no single site, so there you choose the colors. For an Art or Design kind,
@@ -51,7 +51,21 @@ The pictures appear in the library a few seconds later, selected, so you can mov
 open them at once. Nothing is placed on a page: a picture is used only when you put it in
 an **Image** element, a gallery or anywhere else a media field asks for one.
 
-## What each picture gets
+## Shapes and how many {#shapes-and-how-many}
+
+- **Shape:** **Square 1:1**, **Landscape 4:3**, **Portrait 3:4**, **Wide 16:9** or
+  **Tall 9:16**. Choosing a kind picks the shape that suits it, which you can change.
+- **How many:** one to four pictures from one description. Each is charged on its own, and
+  a picture that is declined or does not come out is not charged.
+- **Size:** 512 px on the longer side on the Free plan, about 1024 px on a paid plan. Your
+  plan decides it.
+- **Description:** up to 1,000 characters.
+
+You can make up to six requests a minute. If one set was partly declined, the window says
+how many were added, such as *Added 2 of 4 to the library*, and that the rest were not
+charged.
+
+## What each picture gets {#what-each-picture-gets}
 
 - **Alt text.** A picture from the Photo, Art or Design sections takes your description;
   a Vector picture gets a sentence the AI writes about what it drew. Edit it in the picture's details like any other alt text.
@@ -114,6 +128,20 @@ of real, identifiable people, celebrities or brands may be declined. The people 
 **Lifestyle with people** picture are asked for as made-up people, and a **Cartoon or
 anime** picture as original characters. A description that is declined is answered with a
 message and no picture is charged.
+
+## Declined pictures {#declined-pictures}
+
+When the image service declines a whole description, the window says *The image service
+declined this description. Try describing the scene differently, without real people,
+brands or anything unsafe.* Nothing is charged. Pictures of real, identifiable people,
+celebrities and brands are the usual reason; describe a made-up person, or the scene
+without the brand.
+
+On the Free plan, three declined requests in a day pause free AI generation until the next
+day (UTC).
+
+When the workspace has run out of credits, the window says so and how many the pictures
+need; make fewer pictures, or wait for the monthly reset. See [AI credits](./ai-credits.md).
 
 ## What is sent {#what-is-sent}
 

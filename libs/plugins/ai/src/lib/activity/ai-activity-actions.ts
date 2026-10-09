@@ -31,6 +31,7 @@
  */
 
 import type { AiJobOutputResource } from '../model/ai-jobs.types'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   pluginStaffAuditActionGroup,
   pluginStaffAuditActionGroupLabel,
@@ -73,6 +74,82 @@ export const AI_ACTIVITY_ACTION_LABELS: Record<AiActivityAction, string> = {
   'ai.permission.changed': 'AI permission changed',
   'ai.addon.purchased': 'Added the AI add-on',
   'ai.addon.removed': 'Removed the AI add-on',
+}
+
+/**
+ * The codes whose row reads as a sentence about its target (AGL-3660):
+ * `{target}` is the target's noun and name, so an output row reads
+ * `Created page Home with Aglyn AI` rather than `AI generated` beside a
+ * Target cell that had to finish the thought.
+ */
+export const AI_ACTIVITY_ACTION_SENTENCES: Partial<Record<AiActivityAction, string>> = {
+  'ai.job.output': `Created {target} with ${PLATFORM_BRAND_NAME} AI`,
+  'ai.edit.applied': `Applied ${PLATFORM_BRAND_NAME} AI edits to {target}`,
+  'ai.seo.applied': `Applied ${PLATFORM_BRAND_NAME} AI search fixes to {target}`,
+  'ai.assist.section': `Added a section to {target} with ${PLATFORM_BRAND_NAME} AI`,
+}
+
+/**
+ * What the staff audit trail reads for each code the AI doors write to
+ * `adminAudit` (AGL-3660). `ai.job.output` is spelled out per row by the
+ * shared describer, which names the thing made.
+ */
+export const AI_STAFF_AUDIT_LABELS: Readonly<Record<string, string>> = {
+  'ai.job.output': `Created a draft with ${PLATFORM_BRAND_NAME} AI`,
+  'ai.job.cancel': `Canceled an ${PLATFORM_BRAND_NAME} AI job`,
+  'ai.job.resume': `Confirmed an ${PLATFORM_BRAND_NAME} AI plan`,
+  'ai.job.apply': `Applied an ${PLATFORM_BRAND_NAME} AI result`,
+  'ai.generate': `Generated with ${PLATFORM_BRAND_NAME} AI`,
+  'ai.allotments.set': 'Set AI allotments',
+  'ai.credits.giveBack': 'Gave AI credits back',
+  'ai.credits.reset': 'Reset AI credits',
+  'ai.overage.clearCeiling': 'Cleared the AI overage ceiling',
+  'ai.overage.liftPause': 'Lifted the AI pause',
+  'ai.overage.resetStep': 'Reset the AI overage step',
+  'ai.overage.setCeiling': 'Set the AI overage ceiling',
+  'platform.aiFreeSpend.paused': 'Paused free AI for the day',
+  'org.ai-viewed': 'Viewed the organization’s AI usage',
+  'user.ai-usage-viewed': 'Viewed the account’s AI usage',
+  'org.ai-conversations-viewed': `Viewed the organization’s ${PLATFORM_BRAND_NAME} AI requests`,
+  'user.ai-requests-viewed': `Viewed the account’s ${PLATFORM_BRAND_NAME} AI requests`,
+  ...Object.fromEntries(
+    Object.entries(AI_ACTIVITY_ACTION_LABELS).filter(([key]) => key !== 'ai.job.output'),
+  ),
+}
+
+/** A job output's `resource`, as the noun the audit sentence uses. */
+const AI_OUTPUT_NOUNS: Readonly<Record<string, string>> = {
+  screen: 'page',
+  reusableComponent: 'component',
+  emailScreen: 'email',
+  orgAutomation: 'automation',
+  workflow: 'automation',
+  entry: 'post',
+  text: 'copy',
+  seo: 'search fixes',
+  crm: 'CRM answer',
+  insight: 'insight',
+}
+
+/**
+ * An `ai.job.output` audit row in words (AGL-3660), from the `after` the
+ * job writer stores — `{ resource, label }`: `Created page Home with Aglyn
+ * AI`, and its outcome, a draft.
+ */
+export function aiStaffAuditDescribe(entry: {
+  action: string
+  after: Readonly<Record<string, unknown>>
+}): { action?: string; result?: string } | undefined {
+  if (entry.action !== AI_ACTIVITY_ACTIONS.jobOutput) return undefined
+  const resource = typeof entry.after['resource'] === 'string' ? entry.after['resource'] : ''
+  const label = typeof entry.after['label'] === 'string' ? entry.after['label'].trim() : ''
+  const noun =
+    AI_OUTPUT_NOUNS[resource] ??
+    (resource ? resource.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : 'draft')
+  return {
+    action: `Created ${noun}${label ? ` ${label}` : ''} with ${PLATFORM_BRAND_NAME} AI`,
+    result: 'Draft created',
+  }
 }
 
 /** Every code, in catalog order — what a filter sends as `isAnyOf`. */
@@ -261,11 +338,24 @@ export function registerAiActivityActions(): void {
       // (AGL-2928), which no longer write these, so the rows already in the
       // log still classify as reads; and a staff member reading what an org
       // asked Aglyn AI (AGL-3675), which writes one per page.
-      staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed', 'org.ai-conversations-viewed'],
+      // An account's AI requests on the staff user page (AGL-3660) likewise.
+      staffAuditAccessActions: [
+        'org.ai-viewed',
+        'user.ai-usage-viewed',
+        'org.ai-conversations-viewed',
+        'user.ai-requests-viewed',
+      ],
+      staffAuditLabels: AI_STAFF_AUDIT_LABELS,
+      // The audit trail's words for a job's output, its job collection and
+      // the feed's job rows, read by core's shared describer (AGL-3660).
+      staffAuditDescribe: aiStaffAuditDescribe,
+      staffAuditCollections: { aiJobs: { noun: `${PLATFORM_BRAND_NAME} AI job`, job: true } },
+      jobTargetTypes: ['aiJob'],
     },
     actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
       key,
       label: AI_ACTIVITY_ACTION_LABELS[key],
+      ...(AI_ACTIVITY_ACTION_SENTENCES[key] ? { sentence: AI_ACTIVITY_ACTION_SENTENCES[key] } : {}),
       scope: AI_ACTIVITY_ACTION_SCOPES[key],
     })),
     // A generation job (AGL-2904): the org feed names the job, and each of

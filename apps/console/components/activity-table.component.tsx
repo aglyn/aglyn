@@ -22,8 +22,9 @@ import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { ListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import type { GridColDef, GridFilterModel } from '@mui/x-data-grid'
 import { Alert, Stack, Typography } from '@mui/material'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
 
 export interface ActivityTableProps {
   header: string
@@ -96,6 +97,16 @@ export interface ActivityTableProps {
   /** A client-side list: the real total, which it genuinely knows. */
   count?: number
   paginationDisabled?: boolean
+  /**
+   * What a clicked row shows in the shared details dialog (AGL-3660). Every
+   * activity and audit list passes it, so every row opens the same dialog.
+   */
+  details?: (row: any) => ActivityDetails | null
+  /**
+   * A STAFF list: the dialog adds the stored code, path and the staff-only
+   * fields. A customer's list leaves it off and never shows them.
+   */
+  staff?: boolean
 }
 
 /**
@@ -156,7 +167,10 @@ export function ActivityTable(props: ActivityTableProps) {
     hasMore,
     count,
     paginationDisabled,
+    details,
+    staff = false,
   } = props
+  const [opened, setOpened] = useState<ActivityDetails | null>(null)
 
   return (
     // `contentGutter*` like every other card on these pages — without them a
@@ -189,9 +203,13 @@ export function ActivityTable(props: ActivityTableProps) {
             columns={columns}
             getRowId={getRowId}
             /*
-             * NO `onOpen`. An audit row is not a record you open, and a
-             * row-click would promise a destination these rows do not have.
+             * A row opens the shared details dialog (AGL-3660): what the
+             * line could not hold, in the same words. Not a navigation —
+             * the dialog's own links go where the row points.
              */
+            {...(details
+              ? { onOpen: (_id: string, row: any) => setOpened(details(row)) }
+              : {})}
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
             {...(columnSort ? { columnSort } : {})}
@@ -226,6 +244,9 @@ export function ActivityTable(props: ActivityTableProps) {
           onPageSizeChange={onPageSizeChange}
         />
       </Stack>
+      {details ? (
+        <ActivityDetailsDialog details={opened} staff={staff} onClose={() => setOpened(null)} />
+      ) : null}
     </CardDisplay>
   )
 }

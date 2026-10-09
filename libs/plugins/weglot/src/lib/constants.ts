@@ -47,8 +47,9 @@ export const WEGLOT_SCRIPT_SRC = 'https://cdn.weglot.com/weglot.min.js'
  * translation needs, so a published page's policy refuses it.
  *
  * These are compiled into the site's `connect-src`/`img-src` through the
- * plugin's `siteIntegration` declaration in `plugins.config.json`; this list
- * is what the plugin's spec holds that declaration to.
+ * plugin's `siteCsp` declaration in `plugins.config.json` (core
+ * `plugin-site-csp.ts`, the seam live chat uses too); this list is what the
+ * plugin's spec holds that declaration to.
  */
 export const WEGLOT_CONNECT_HOSTS = [
   'cdn.weglot.com',

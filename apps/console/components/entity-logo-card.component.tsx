@@ -187,7 +187,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
       embedded={embedded}
       header={entityCopy.header}
       help={docsHelp('seo', {
-        anchor: '#structured-data',
+        anchor: '#entity-logo',
         excerpt:
           `The ${entityCopy.noun} of the organization or person publishing ` +
           'this site, emitted as JSON-LD so search engines can show it ' +

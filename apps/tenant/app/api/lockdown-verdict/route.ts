@@ -85,15 +85,69 @@ import {
 // declares it.
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import {
+  firebaseAdmin,
   getDomainLockdown,
   getPlatformLockdown,
-  getPluginConfig,
 } from '@aglyn/tenant-data-admin'
-import { siteIntegrationHosts } from '@aglyn/aglyn/plugin-manager/site-integrations'
+import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+import {
+  pluginSiteCspHosts,
+  pluginSiteCspPluginsToRead,
+  type PluginSiteCspDirective,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-csp'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The hosts this site's plugins need its policy to admit (AGL-3698).
+ *
+ * A plugin that loads a vendor's widget on the site — the merchant's own live
+ * chat — declares the vendor's hosts in `plugins.config.json`, keyed by one of
+ * its site settings (core `plugin-site-csp.ts`). Only a plugin the SITE runs
+ * is asked, and only its settings document is read, so a site that runs none
+ * costs no read at all, and a vendor's hosts reach the policy of exactly the
+ * sites that switched it on.
+ *
+ * Added IN FRONT of the owner's own lists, which `security-origins.js` caps:
+ * an owner who filled their list must not push out the hosts a feature they
+ * turned on depends on. A read that fails adds nothing and is logged — the
+ * lock, the cap and the owner's lists still answer.
+ */
+async function pluginCspHosts(
+  hostId: string,
+  host: Parameters<typeof resolveHostEnabledPlugins>[1],
+  org: Parameters<typeof resolveHostEnabledPlugins>[0],
+): Promise<Record<PluginSiteCspDirective, string[]>> {
+  const enabled = resolveHostEnabledPlugins(org, host)
+  const toRead = pluginSiteCspPluginsToRead(enabled)
+  if (!toRead.length) return pluginSiteCspHosts([], {})
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const snapshots = await Promise.all(
+      toRead.map((pluginId) =>
+        firestore
+          .collection('hosts')
+          .doc(hostId)
+          .collection('pluginSettings')
+          .doc(pluginId)
+          .get(),
+      ),
+    )
+    const settings: Record<string, Record<string, unknown> | null> = {}
+    toRead.forEach((pluginId, index) => {
+      const snapshot = snapshots[index]
+      settings[pluginId] = snapshot.exists
+        ? ((snapshot.data() ?? null) as Record<string, unknown> | null)
+        : null
+    })
+    return pluginSiteCspHosts(enabled, settings)
+  } catch (error) {
+    console.error('[lockdown-verdict] plugin policy hosts unreadable', error)
+    return pluginSiteCspHosts([], {})
+  }
+}
 
 /**
  * The locked answer, shared by the attached-host path and the domain-locked
@@ -121,8 +175,6 @@ function lockedVerdict(
     approvedFrameHosts?: string[]
     runsMeasurement?: boolean
     siteOrigins?: string[]
-    integrationConnectHosts?: string[]
-    integrationImageHosts?: string[]
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -141,8 +193,6 @@ function lockedVerdict(
       approvedFrameHosts: facts.approvedFrameHosts ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
       siteOrigins: facts.siteOrigins ?? [],
-      integrationConnectHosts: facts.integrationConnectHosts ?? [],
-      integrationImageHosts: facts.integrationImageHosts ?? [],
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -279,7 +329,15 @@ export async function GET(request: Request): Promise<Response> {
       Array.isArray(value)
         ? value.filter((entry): entry is string => typeof entry === 'string')
         : []
-    const approvedImageHosts = stringList(hostRes.host.approvedImageHosts)
+    const pluginHosts = await pluginCspHosts(
+      String(hostRes.host.$id ?? ''),
+      hostRes.host as never,
+      orgRes.org as never,
+    )
+    const approvedImageHosts = [
+      ...pluginHosts.img,
+      ...stringList(hostRes.host.approvedImageHosts),
+    ]
     /**
      * The other three owner-widenable directives (AGL-1152). Same disclosure
      * posture as images: a list the owner typed, describing hosts their own
@@ -288,12 +346,18 @@ export async function GET(request: Request): Promise<Response> {
      * report-only — the header has to carry the owner's list from the first
      * report, or the reports describe a policy nobody is going to ship.
      */
-    const approvedMediaHosts = stringList(
-      (hostRes.host as { approvedMediaHosts?: unknown }).approvedMediaHosts,
-    )
-    const approvedFontHosts = stringList(
-      (hostRes.host as { approvedFontHosts?: unknown }).approvedFontHosts,
-    )
+    const approvedMediaHosts = [
+      ...pluginHosts.media,
+      ...stringList(
+        (hostRes.host as { approvedMediaHosts?: unknown }).approvedMediaHosts,
+      ),
+    ]
+    const approvedFontHosts = [
+      ...pluginHosts.font,
+      ...stringList(
+        (hostRes.host as { approvedFontHosts?: unknown }).approvedFontHosts,
+      ),
+    ]
     const approvedFormActions = stringList(
       (hostRes.host as { approvedFormActions?: unknown }).approvedFormActions,
     )
@@ -305,9 +369,12 @@ export async function GET(request: Request): Promise<Response> {
      * the document's `connect-src`: the Custom HTML block's Embed mode runs
      * under this list rather than under a policy of its own.
      */
-    const approvedConnectHosts = stringList(
-      (hostRes.host as { approvedConnectHosts?: unknown }).approvedConnectHosts,
-    )
+    const approvedConnectHosts = [
+      ...pluginHosts.connect,
+      ...stringList(
+        (hostRes.host as { approvedConnectHosts?: unknown }).approvedConnectHosts,
+      ),
+    ]
     /**
      * What this site's pages may EMBED (AGL-1152) — a player, a map, a booking
      * widget. `frame-ancestors` is a different question and is not this one.
@@ -315,9 +382,12 @@ export async function GET(request: Request): Promise<Response> {
      * Same disclosure posture as the lists beside it: an embed is visible in
      * the page's own source to anyone who looks.
      */
-    const approvedFrameHosts = stringList(
-      (hostRes.host as { approvedFrameHosts?: unknown }).approvedFrameHosts,
-    )
+    const approvedFrameHosts = [
+      ...pluginHosts.frame,
+      ...stringList(
+        (hostRes.host as { approvedFrameHosts?: unknown }).approvedFrameHosts,
+      ),
+    ]
     /**
      * Does this site run measurement tags (AGL-1152)?
      *
@@ -361,30 +431,6 @@ export async function GET(request: Request): Promise<Response> {
       // exists to permit would have been the one thing refused.
       Object.keys(analytics?.adTags ?? {}).length > 0,
     )
-    /**
-     * The hosts of the third-party scripts this site's owner switched on
-     * through a plugin (AGL-3700) — Weglot's translation API, say. Only the
-     * hosts the plugin DECLARED, and only while the plugin is on for the
-     * site, its plan has the entitlement and its settings have it enabled:
-     * the same three things the plugin's page enricher checks before the
-     * script is on the page. Settings are read only for a site that passed
-     * the first two, so a site with no integration costs no read.
-     *
-     * Same disclosure posture as the lists above: the script, and so these
-     * hosts, are in the site's own public pages.
-     */
-    const integrations = await siteIntegrationHosts({
-      org: orgRes.org as never,
-      host: hostRes.host as never,
-      readConfig: (pluginId) =>
-        getPluginConfig(
-          (hostRes.host as { orgId?: string }).orgId ?? null,
-          pluginId,
-          { hostId: hostRes.host.$id },
-        ),
-    })
-    const integrationConnectHosts = integrations.connectHosts
-    const integrationImageHosts = integrations.imageHosts
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -409,8 +455,6 @@ export async function GET(request: Request): Promise<Response> {
           approvedFrameHosts,
           runsMeasurement,
           siteOrigins,
-          integrationConnectHosts,
-          integrationImageHosts,
         },
         { status: 200 },
       )
@@ -427,8 +471,6 @@ export async function GET(request: Request): Promise<Response> {
       approvedFrameHosts,
       runsMeasurement,
       siteOrigins,
-      integrationConnectHosts,
-      integrationImageHosts,
     })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)

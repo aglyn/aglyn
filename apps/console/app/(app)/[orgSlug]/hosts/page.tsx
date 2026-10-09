@@ -201,14 +201,7 @@ function SiteCard(props: SiteCardProps) {
       }}
       subheader={hostDisplayDomain(hostAddress(host))}
       header={host?.displayName}
-      help={docsHelp('gettingStarted', {
-        anchor: '#what-a-site-contains',
-        title: 'Your sites',
-        excerpt:
-          'Each site has its own pages, media, users, and ' +
-          'settings. Visit opens the live site; Manage opens ' +
-          'its dashboard.',
-      })}
+      help={docsHelp('consoleTour', { anchor: '#a-site-card' })}
       actions={
         <>
           <AppLink
@@ -226,7 +219,7 @@ function SiteCard(props: SiteCardProps) {
             // a self-hoster's Sites list linked every one of their
             // sites at OUR domain.
             href={`https://${hostDisplayDomain(hostAddress(host))}/?aglyn-edit`}
-            target={'_blank'}
+            newTab
             rel={'nofollow'}
           >
             {'Visit'}

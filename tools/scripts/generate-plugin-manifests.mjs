@@ -2827,58 +2827,6 @@ function analyticsProviderRows() {
 }
 
 /**
- * The site integrations (AGL-3700): a plugin that puts a vendor's script on a
- * merchant's published pages, with the merchant's own account, declares the
- * exact hosts that script reaches under `siteIntegration`, with the boolean
- * setting that turns it on and the plan feature it needs. Compiled into the
- * catalog file because the reader is the tenant's verdict route, which sets
- * the page's Content Security Policy and loads no plugin (core
- * `site-integrations.ts`).
- *
- * Checked here: a plain setting name, a plain entitlement name when given,
- * and hosts that are bare lowercase hostnames — no scheme, no path, no port,
- * no wildcard — because each one widens a published page's policy.
- */
-function siteIntegrationRows() {
-  const rows = []
-  const HOST = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
-  for (const plugin of config.plugins) {
-    const declared = plugin.siteIntegration
-    if (!declared) continue
-    const where = `plugins.config.json: "${plugin.id}" siteIntegration`
-    if (typeof declared.configSwitch !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(declared.configSwitch)) {
-      throw new Error(`${where}: "configSwitch" names the boolean setting that turns it on`)
-    }
-    if (declared.entitlement !== undefined && (typeof declared.entitlement !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(declared.entitlement))) {
-      throw new Error(`${where}: "entitlement" is the plain name of a plan feature`)
-    }
-    const hosts = (field) => {
-      const list = declared[field] ?? []
-      if (!Array.isArray(list)) throw new Error(`${where}: "${field}" is a list of hostnames`)
-      for (const host of list) {
-        if (typeof host !== 'string' || !HOST.test(host)) {
-          throw new Error(`${where}: "${host}" in "${field}" is not a bare lowercase hostname`)
-        }
-      }
-      return [...list]
-    }
-    const connectHosts = hosts('connectHosts')
-    const imageHosts = hosts('imageHosts')
-    if (!connectHosts.length && !imageHosts.length) {
-      throw new Error(`${where} names no host — drop it, or name the hosts its script reaches`)
-    }
-    rows.push({
-      pluginId: plugin.id,
-      configSwitch: declared.configSwitch,
-      ...(declared.entitlement ? { entitlement: declared.entitlement } : {}),
-      connectHosts,
-      imageHosts,
-    })
-  }
-  return rows
-}
-
-/**
  * The notification categories the core owns (`CoreNotificationCategory` in
  * core `notifications.ts`). A declaration may not reuse one: the id keys
  * every stored preference, so a plugin that claimed `billing` would take over
@@ -3388,6 +3336,74 @@ function revenueSourceIds() {
     .map((plugin) => plugin.id)
 }
 
+/**
+ * What each plugin's site feature needs the published page's policy to admit
+ * (AGL-3698), compiled into the catalog file for core's `plugin-site-csp.ts`,
+ * which the tenant's lockdown verdict reads. Each host is held to the parse an
+ * owner's own entry gets in `security-origins.js` — a bare hostname, one
+ * leading `*.` at most — so a declaration cannot widen a directive past a
+ * host, and only the enforced, owner-widenable directives may be named.
+ */
+const SITE_CSP_DIRECTIVES = ['connect', 'frame', 'img', 'media', 'font']
+const SITE_CSP_HOST = /^(\*\.)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
+
+function siteCspRows() {
+  const rows = []
+  for (const plugin of config.plugins) {
+    const declared = plugin.siteCsp
+    if (declared === undefined) continue
+    const what = `plugins.config.json: "${plugin.id}" siteCsp`
+    const { $comment: _note, switchField, variantField, requiredField, variants, ...rest } = declared
+    if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
+    if (!plugin.register?.site) throw new Error(`${what}: only a plugin with a site surface loads anything on a page`)
+    for (const [name, value] of [['switchField', switchField], ['variantField', variantField]]) {
+      // `variantField` is optional: a plugin with one set of hosts (no
+      // provider choice) omits it and declares a single "default" variant.
+      if (name === 'variantField' && value === undefined) continue
+      if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(value)) {
+        throw new Error(`${what}: "${name}" names a settings field`)
+      }
+    }
+    if (variantField === undefined && (Object.keys(variants ?? {}).length !== 1 || !variants?.default)) {
+      throw new Error(`${what}: without "variantField", "variants" holds exactly one variant, "default"`)
+    }
+    if (requiredField !== undefined && (typeof requiredField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(requiredField))) {
+      throw new Error(`${what}: "requiredField" names a settings field`)
+    }
+    if (!variants || typeof variants !== 'object' || !Object.keys(variants).length) {
+      throw new Error(`${what}: "variants" maps each value of "${variantField}" to its hosts`)
+    }
+    const compiled = {}
+    for (const [variant, hosts] of Object.entries(variants)) {
+      if (!/^[a-z0-9-]+$/.test(variant)) throw new Error(`${what}: variant "${variant}" is a lowercase id`)
+      const out = {}
+      for (const [directive, list] of Object.entries(hosts ?? {})) {
+        if (directive === '$comment') continue
+        if (!SITE_CSP_DIRECTIVES.includes(directive)) {
+          throw new Error(`${what}.${variant}: "${directive}" is not one of ${SITE_CSP_DIRECTIVES.join(', ')}`)
+        }
+        if (!Array.isArray(list) || !list.length) throw new Error(`${what}.${variant}.${directive}: a non-empty list of hosts`)
+        for (const host of list) {
+          if (typeof host !== 'string' || !SITE_CSP_HOST.test(host)) {
+            throw new Error(`${what}.${variant}.${directive}: "${host}" is not a bare hostname (one leading "*." at most)`)
+          }
+        }
+        out[directive] = [...list]
+      }
+      if (!Object.keys(out).length) throw new Error(`${what}.${variant}: names no directive`)
+      compiled[variant] = out
+    }
+    rows.push({
+      pluginId: plugin.id,
+      switchField,
+      ...(variantField ? { variantField } : {}),
+      ...(requiredField ? { requiredField } : {}),
+      variants: compiled,
+    })
+  }
+  return rows
+}
+
 function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -3411,7 +3427,7 @@ function catalogContent(videoEmbedRows, planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { SiteIntegrationDeclaration } from './site-integrations'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { ResolvedVideoEmbedProvider } from './video-embed-provider'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -3646,15 +3662,6 @@ ${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: ro
 ]
 
 /**
- * The third-party scripts a plugin may put on a merchant's published pages
- * with the merchant's own account, and the exact hosts each reaches
- * (AGL-3700). Read by the tenant's verdict route for the page's policy.
- */
-export const SITE_INTEGRATIONS_DECLARED: readonly SiteIntegrationDeclaration[] = [
-${siteIntegrationRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
-]
-
-/**
  * Every interaction step a first-party plugin offers in the interaction
  * builder, declared by that plugin (AGL-3080). Core names no plugin step.
  */
@@ -3684,6 +3691,15 @@ ${interactionRecipeRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
 export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries(functionBindingRows()).map(([id, prop]) => `\n  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('')}${Object.keys(functionBindingRows()).length ? '\n' : ''}}
+
+/**
+ * What each plugin's site feature needs the published page's policy to
+ * admit, by the value of one of its site settings (AGL-3698). Core names no
+ * vendor; see \`plugin-site-csp.ts\`.
+ */
+export const PLUGIN_SITE_CSP_DECLARED: readonly PluginSiteCspDeclaration[] = [
+${siteCspRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
 
 /**
  * Every video host whose own player the Video element frames, declared by

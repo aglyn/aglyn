@@ -234,7 +234,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
         breadcrumbItems={[
           { children: 'Support', href: buildRoute(Route.ADMIN_SUPPORT) },
         ]}
-        help="supportQueue"
+        help={{ topic: 'supportQueue', anchor: '#support-queue-page' }}
         header={{
           children: 'Support tickets',
           icon: { path: mdiLifebuoy.path },
@@ -248,11 +248,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                   ? `Support tickets · ${openCount} open`
                   : 'Support tickets'
               }
-              help={docsHelp('supportQueue', {
-                excerpt:
-                  'Every customer support ticket, oldest open first, with the reply ' +
-                  'that closes it.',
-              })}
+              help={docsHelp('supportQueue', { anchor: '#triage' })}
               contentGutterX
               contentGutterY
             >

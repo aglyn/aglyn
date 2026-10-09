@@ -314,6 +314,7 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
         contentGutterY
         header="Theme assistant"
         help={pluginDocsHelp('aiThemes', {
+          anchor: '#describe-a-change',
           excerpt:
             'Describe the change and get a proposal for every control the editor has, previewed before and after. Nothing is saved until you save it in the editor.',
         })}

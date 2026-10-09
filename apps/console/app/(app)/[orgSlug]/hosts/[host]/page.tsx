@@ -57,7 +57,7 @@ function HostDashboard() {
 
   return (
     <DashboardLayout
-      help="consoleTour"
+      help={{ topic: 'consoleTour', anchor: '#a-sites-dashboard' }}
       header={{
         children: 'My Dashboard',
         icon: { path: ICON_VARIANT_HOME.path },
@@ -81,7 +81,7 @@ function HostDashboard() {
               variant="contained"
               color="primary"
               href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}
-              target="_blank"
+              newTab
               rel="nofollow"
             >
               {'Visit site'}

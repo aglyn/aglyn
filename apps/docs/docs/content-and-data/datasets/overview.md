@@ -31,6 +31,13 @@ flowchart LR
 and record caps, and extra-dataset add-ons are available.
 :::
 
+## Where you manage datasets {#organization-data-page}
+
+The organization **Data** page manages every dataset in the workspace in one place —
+create a dataset, edit its schema, add and import records — and sets where new datasets
+start shared. A site's own **Data** page edits the same datasets, limited to the ones
+shared with that site.
+
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,
@@ -183,6 +190,12 @@ Where a new dataset starts depends on where you create it and on your workspace'
   setting says, because there is no site to limit it to.
 - **Installed from the Marketplace, or created through the REST API** — it starts on
   **All sites** too. Both act for the whole organization, not for one site.
+
+### Default sharing for new datasets {#default-dataset-sharing}
+
+**Default sharing for new datasets**, at the top of the organization **Data** page,
+decides what a dataset created on a site's Data page starts shared with: **All sites**,
+or only that site. Only workspace owners and admins can change it.
 
 The setting only decides where a new dataset starts. It changes nothing that already
 exists, and you can widen or narrow any dataset afterwards.

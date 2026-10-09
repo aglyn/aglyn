@@ -28,8 +28,8 @@ import type { ArtifactTypeDeclaration } from './plugin-artifact-types'
 import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
+import type { PluginSiteCspDeclaration } from './plugin-site-csp'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
-import type { SiteIntegrationDeclaration } from './site-integrations'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { ServerStepDeclaration } from './plugin-server-steps'
 import type { InteractionRecipeDeclaration } from './interaction-recipes'
@@ -178,7 +178,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     "id": "accounting",
     "label": "Accounting",
-    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
     "releaseFlag": "release_accounting"
   },
   {
@@ -298,6 +298,37 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "couriers",
+    "label": "Couriers",
+    "alwaysOnForWorkspace": true,
+    "description": "Send a DoorDash courier for your own local deliveries, from your own DoorDash Drive account, with its tracking on the order.",
+    "siteOff": {
+      "stops": "Switching Couriers off for this site stops members sending DoorDash couriers for its local deliveries.",
+      "keeps": "The connection is kept, and a courier already on its way still finishes, with its progress on the order."
+    }
+  },
+  {
+    "id": "live-chat",
+    "label": "Live chat",
+    "alwaysOnForWorkspace": true,
+    "defaultOffPerSite": true,
+    "description": "Chat with visitors through your own Tidio or LiveChat account.",
+    "siteOff": {
+      "stops": "Switching Live chat off for this site removes the chat from its pages.",
+      "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account."
+    }
+  },
+  {
+    "id": "review-platforms",
+    "label": "Review platforms",
+    "alwaysOnForWorkspace": true,
+    "description": "Trustpilot and Yotpo review invitations.",
+    "siteOff": {
+      "stops": "Stops review invitations for new orders.",
+      "keeps": "Reviews already collected stay in your Trustpilot and Yotpo accounts."
+    }
+  },
+  {
     "id": "weglot",
     "label": "Weglot translation",
     "description": "Translate your published site with your own Weglot account.",
@@ -306,6 +337,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "siteOff": {
       "stops": "Stops loading Weglot and its language switcher on this site's pages.",
       "keeps": "Your Weglot settings and your Weglot account's translations are kept."
+    }
+  },
+  {
+    "id": "ad-conversions",
+    "label": "Ad conversions",
+    "alwaysOnForWorkspace": true,
+    "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
+    "siteOff": {
+      "stops": "Switching Ad conversions off for this site stops its purchases and leads being sent to the Meta, TikTok and Pinterest accounts it connected.",
+      "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected."
     }
   },
 ]
@@ -343,7 +384,11 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
   "loyalty": "console-only",
+  "couriers": "console-only",
+  "live-chat": "elements",
+  "review-platforms": "console-only",
   "weglot": "elements",
+  "ad-conversions": "console-only",
 }
 
 /**
@@ -2316,6 +2361,21 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
     "orgField": "orgId"
   },
   {
+    "pluginId": "ad-conversions",
+    "name": "adConversionConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "ad-conversions",
+    "name": "adConversionConsents",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "ad-conversions",
+    "name": "adConversionEvents",
+    "orgField": "orgId"
+  },
+  {
     "pluginId": "zapier",
     "name": "zapierHooks",
     "orgField": "orgId"
@@ -2333,6 +2393,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "fulfillment-networks",
     "name": "fulfillmentNetworkOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "couriers",
+    "name": "courierConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "couriers",
+    "name": "courierDeliveries",
     "orgField": "orgId"
   },
   {
@@ -2497,27 +2567,6 @@ export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration
     "settings": [
       "gaMeasurementId",
       "gtmContainerId"
-    ]
-  },
-]
-
-/**
- * The third-party scripts a plugin may put on a merchant's published pages
- * with the merchant's own account, and the exact hosts each reaches
- * (AGL-3700). Read by the tenant's verdict route for the page's policy.
- */
-export const SITE_INTEGRATIONS_DECLARED: readonly SiteIntegrationDeclaration[] = [
-  {
-    "pluginId": "weglot",
-    "configSwitch": "enabled",
-    "entitlement": "multilingual",
-    "connectHosts": [
-      "cdn.weglot.com",
-      "cdn-api-weglot.com",
-      "api.weglot.com"
-    ],
-    "imageHosts": [
-      "cdn.weglot.com"
     ]
   },
 ]
@@ -2798,6 +2847,90 @@ export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDecl
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
 export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {}
+
+/**
+ * What each plugin's site feature needs the published page's policy to
+ * admit, by the value of one of its site settings (AGL-3698). Core names no
+ * vendor; see `plugin-site-csp.ts`.
+ */
+export const PLUGIN_SITE_CSP_DECLARED: readonly PluginSiteCspDeclaration[] = [
+  {
+    "pluginId": "live-chat",
+    "switchField": "enabled",
+    "variantField": "provider",
+    "requiredField": "publicKey",
+    "variants": {
+      "tidio": {
+        "connect": [
+          "socket.tidio.co",
+          "api-v2.tidio.co",
+          "uploads.tidio.com",
+          "sentry-new.tidio.co",
+          "widget-v4.tidiochat.com"
+        ],
+        "img": [
+          "code.tidio.co",
+          "avatars.tidiochat.com",
+          "tidio-images-messenger.s3.us-east-1.amazonaws.com",
+          "cdnjs.cloudflare.com",
+          "unpkg.com"
+        ],
+        "media": [
+          "code.tidio.co",
+          "widget-v4.tidiochat.com"
+        ],
+        "font": [
+          "code.tidio.co"
+        ]
+      },
+      "livechat": {
+        "connect": [
+          "api.livechatinc.com",
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com",
+          "api.text.com"
+        ],
+        "frame": [
+          "api.livechatinc.com",
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com"
+        ],
+        "img": [
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com",
+          "cdn.livechat-static.com",
+          "cdn.livechat-files.com",
+          "cdn.files-text.com"
+        ],
+        "media": [
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com",
+          "cdn.livechat-static.com"
+        ],
+        "font": [
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com"
+        ]
+      }
+    }
+  },
+  {
+    "pluginId": "weglot",
+    "switchField": "enabled",
+    "variants": {
+      "default": {
+        "connect": [
+          "cdn.weglot.com",
+          "cdn-api-weglot.com",
+          "api.weglot.com"
+        ],
+        "img": [
+          "cdn.weglot.com"
+        ]
+      }
+    }
+  },
+]
 
 /**
  * Every video host whose own player the Video element frames, declared by

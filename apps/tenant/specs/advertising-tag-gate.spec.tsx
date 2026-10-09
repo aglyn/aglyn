@@ -32,6 +32,7 @@
  * the negative cases sit beside a positive control that shares their setup.
  */
 import {
+  ADVERTISING_EVENTS_ATTRIBUTE,
   ADVERTISING_TAG_ATTRIBUTE,
   ADVERTISING_VENDORS,
   GOOGLE_ADS_VENDOR,
@@ -401,33 +402,57 @@ describe('the advertising-tag gate', () => {
     })
   })
 
-  describe('(f) surface scope: our marketing site and nothing else', () => {
-    it("a CUSTOMER's tenant host gets nothing, even fully configured", async () => {
-      // Identical consent record, identical pixel id, identical host shape.
-      // The ONLY difference from the positive control is whose GA property
-      // the site reports to — which is the discriminator, so this is the
-      // narrowest possible test of it.
+  describe('(f) surface scope: our tags on our site, an owner’s own tags on theirs (AGL-3694)', () => {
+    it("a CUSTOMER's site mounts the tag ITS OWNER configured, marked for its events", async () => {
+      // Identical consent record, identical host shape: the customer's own
+      // pixel id on the customer's own host document. Since AGL-3694 that is
+      // the owner's tag, mounted under the same gate — and marked as theirs,
+      // which is what lets the site's conversion events reach it.
       storeVisitorConsent('customer-host', {
         status: 'accepted',
         country: 'US',
         advertising: true,
       })
       await renderGate(CUSTOMER_HOST, 'customer-host')
+      expect(vendorLibrary()).toHaveLength(1)
+      for (const element of vendorScripts()) {
+        expect(element.hasAttribute(ADVERTISING_EVENTS_ATTRIBUTE)).toBe(true)
+      }
+    })
+
+    it('our own tags are never marked as a site owner’s', async () => {
+      storeVisitorConsent(HOST_ID, { status: 'accepted', country: 'US', advertising: true })
+      await renderGate(OUR_HOST)
+      expect(vendorScripts().length).toBeGreaterThan(0)
+      for (const element of vendorScripts()) {
+        expect(element.hasAttribute(ADVERTISING_EVENTS_ATTRIBUTE)).toBe(false)
+      }
+    })
+
+    it("a customer's site mounts nothing for a visitor who did not grant advertising", async () => {
+      storeVisitorConsent('customer-host', { status: 'accepted', country: 'US', advertising: false })
+      await renderGate(CUSTOMER_HOST, 'customer-host')
       expect(vendorScripts()).toHaveLength(0)
     })
 
-    it('and the pure verdict agrees, with the ONLY difference being the property', () => {
+    it('and the pure verdict agrees: the account id is always the host’s own', () => {
       const stored = storeVisitorConsent(HOST_ID, {
         status: 'accepted',
         country: 'US',
         advertising: true,
       })
-      expect(resolveAdvertisingTags(OUR_HOST as any, stored)).toHaveLength(1)
+      const ours = resolveAdvertisingTags(OUR_HOST as any, stored)
+      expect(ours).toHaveLength(1)
+      expect(ours[0].siteOwned).toBeUndefined()
+      const theirs = resolveAdvertisingTags(
+        { ...OUR_HOST, analytics: { gaMeasurementId: 'G-CUST1234', adTags: { meta: '9999999999' } } } as any,
+        stored,
+      )
+      expect(theirs).toHaveLength(1)
+      expect(theirs[0]).toMatchObject({ accountId: '9999999999', siteOwned: true })
+      // A customer's site with no tag of its own gets none — ours never.
       expect(
-        resolveAdvertisingTags(
-          { ...OUR_HOST, analytics: { ...OUR_HOST.analytics, gaMeasurementId: 'G-CUST1234' } } as any,
-          stored,
-        ),
+        resolveAdvertisingTags({ ...OUR_HOST, analytics: { gaMeasurementId: 'G-CUST1234' } } as any, stored),
       ).toHaveLength(0)
     })
 
@@ -792,16 +817,19 @@ describe('the advertising-tag gate', () => {
       theirs.remove()
     })
 
-    it('installs NO withdrawal listener on a customer host', async () => {
+    it('installs NO withdrawal listener on a site that configured no advertising tag', async () => {
       // The second, independent scope. Even a marked element — which cannot
-      // legitimately exist on a customer site — is untouched, because a
+      // legitimately exist on such a site — is untouched, because a
       // withdrawal recorded there never reaches this component's teardown.
       storeVisitorConsent('customer-host', {
         status: 'accepted',
         country: 'US',
         advertising: true,
       })
-      await renderGate(CUSTOMER_HOST, 'customer-host')
+      await renderGate(
+        { ...CUSTOMER_HOST, analytics: { gaMeasurementId: 'G-CUST1234' } },
+        'customer-host',
+      )
 
       const planted = document.createElement('script')
       planted.setAttribute('src', META_PIXEL_VENDOR.scriptSrc)
@@ -1251,8 +1279,6 @@ const ADVERTISING_GATES = [
     name: 'resolveAdvertisingTags',
     file: 'libs/aglyn/src/lib/app-utils/advertising-tags.ts',
     surfaceOnly: {
-      isPlatformMarketingHost:
-        'the tenant runtime serves customer sites too, and only ours may mount our tags',
       hostConsentRequired:
         'a host running its own CMP has no answer of ours to act on',
       advertisingGrantedByRecord:

@@ -41,9 +41,12 @@ import { useResolvedActivityActors } from '@aglyn/tenant-feature-instance/hooks/
 import {
   activityActorLabel,
   activityHref,
-  activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { activityRowText, describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
+import ActivityDetailsDialog, {
+  type ActivityDetails,
+} from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
 
 export interface HostActivityCardProps {
   hostId: string
@@ -149,6 +152,7 @@ export function HostActivityCard(props: HostActivityCardProps) {
   const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const firestore = useFirestore()
   const [attempt, setAttempt] = useState(0)
+  const [opened, setOpened] = useState<ActivityDetails | null>(null)
   const { data: entries, status } = useFirestoreCollection<any>(
     () => {
       // `strictNullChecks` is off repo-wide, so an absent hostId would reach
@@ -247,13 +251,38 @@ export function HostActivityCard(props: HostActivityCardProps) {
           <List dense disablePadding>
             {items.map((entry) => {
               const href = activityHref(entry, { orgSlug, host })
-              const label = activityPrimaryText(entry)
+              const label = activityRowText(entry)
+              // A row opens the shared details dialog (AGL-3660); its link
+              // still goes where the row points.
+              const open = () =>
+                setOpened({
+                  description: describeActivity({ ...entry, scopeType: 'host', scopeId: hostId }),
+                  who: activityActorLabel(entry),
+                  when: entry.createdAt?.toDate?.().toLocaleString() ?? '—',
+                  links: href ? [{ label: 'Open', href }] : [],
+                })
               return (
-                <ListItem key={entry.$id} disableGutters dense>
+                <ListItem
+                  key={entry.$id}
+                  disableGutters
+                  dense
+                  role="button"
+                  tabIndex={0}
+                  onClick={open}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') open()
+                  }}
+                  sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                >
                   <ListItemText
                     primary={
                       href ? (
-                        <AppLink href={href} color="inherit" underline="hover">
+                        <AppLink
+                          href={href}
+                          color="inherit"
+                          underline="hover"
+                          onClick={(event: { stopPropagation: () => void }) => event.stopPropagation()}
+                        >
                           {label}
                         </AppLink>
                       ) : (
@@ -319,6 +348,7 @@ export function HostActivityCard(props: HostActivityCardProps) {
           </Link>
         </Typography>
       ) : null}
+      <ActivityDetailsDialog details={opened} onClose={() => setOpened(null)} />
     </CardDisplay>
   )
 }

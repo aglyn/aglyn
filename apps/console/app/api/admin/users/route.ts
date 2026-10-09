@@ -38,7 +38,7 @@ import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-pla
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import {
-  USER_LIST_COLUMN_SORTS,
+  userListSort,
   USER_LIST_FILTER_FIELDS,
   USER_LIST_SORT_VALUES,
 } from '../../../../utils/list-filters'
@@ -50,8 +50,9 @@ import {
  * and the reader is pointed at the exact lookups, which have no bound.
  *
  * Firebase Auth cannot filter, so anything but an exact email or uid is
- * answered by reading accounts and matching them. That is an expensive read,
- * so it happens only when a request CARRIES a filter — never on a mount.
+ * answered by reading accounts and matching them. Since the list opens newest
+ * account first (AGL-3660) every read sorts, so every read — the mount too —
+ * reads up to this bound: at most a few Auth pages, for a staff-only list.
  */
 const FILTER_SCAN_CAP = 2000
 
@@ -156,6 +157,13 @@ async function handler(request: Request): Promise<Response> {
       uid: record.uid,
       email: record.email ?? null,
       displayName: record.displayName ?? null,
+      // The profile photo for the list's avatar (AGL-3660): the record's,
+      // else a provider's — Google's lives on providerData when the
+      // top-level field was never mirrored.
+      photoUrl:
+        record.photoURL ??
+        record.providerData.find((provider) => provider.photoURL)?.photoURL ??
+        null,
       disabled: record.disabled,
       staff: Boolean(record.customClaims?.['staff']),
       staffRole: record.customClaims?.['staffRole'] ?? null,
@@ -226,89 +234,84 @@ async function handler(request: Request): Promise<Response> {
      * answered like a filter: over the complete directory read, then paged.
      * A sort the list does not offer is ignored, as a query ignores one.
      */
-    const asked = listRequest.sort
-      ? USER_LIST_COLUMN_SORTS.find(
-          (entry) =>
-            entry.path === listRequest.sort?.path &&
-            entry.direction === listRequest.sort?.direction,
-        )
-      : undefined
+    // No sort asked is the default one, newest account first (AGL-3660):
+    // the directory is sorted whole before it is paged, so page one is the
+    // newest accounts there are, not the newest of Auth's first page.
+    const asked = userListSort(listRequest.sort)
     const sortRows = <Row extends ReturnType<typeof serialize>>(rows: Row[]): Row[] =>
-      asked ? sortListRows(rows, USER_LIST_SORT_VALUES[asked.path], asked.direction) : rows
+      sortListRows(rows, USER_LIST_SORT_VALUES[asked.path], asked.direction)
     const notices: string[] = []
-    if (served.length || term || asked) {
-      /*
-       * An exact email or uid is a lookup, not a walk: the one account it can
-       * be, and then every other clause and the search over that account. A
-       * complete address typed in the search box takes the same lookup, and
-       * falls through to the walk when it finds nobody — an address held only
-       * where the lookup missed must still be searched for.
-       */
-      const exact = served.find(
-        (clause) =>
-          clause.op === 'equals' && (clause.field === 'email' || clause.field === 'uid'),
-      )
-      const address = !exact && /^[^@\s]+@[^@\s]+$/.test(search) ? search : ''
-      const looked = exact
-        ? exact.field === 'email'
-          ? await findUserByEmailAcrossPools(exact.value.trim())
-          : await findUserByUidAcrossPools(exact.value.trim())
-        : address
-          ? await findUserByEmailAcrossPools(address)
-          : null
-      if (exact || looked) {
-        const rows = looked ? [serialize(looked)] : []
-        return Response.json({
-          users: exact ? rows.filter(matches) : rows.filter((row) =>
-            served.every((clause) => matchListFilter(row, USER_LIST_FILTER_FIELDS, clause)),
-          ),
-          nextPageToken: null,
-          refused,
-          notices: [],
-        }, { status: 200 })
-      }
-      const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
-      if (!scan.truncated && !scan.tenantTruncated.length) {
-        const matched = sortRows(
-          collapseCrossPoolUidRows(scan.users).map(serialize).filter(matches),
-        )
-        const offset = token?.startsWith(MATCH_CURSOR)
-          ? Math.max(0, Math.floor(Number(token.slice(MATCH_CURSOR.length))) || 0)
-          : 0
-        const next = offset + FILTER_PAGE
-        return Response.json({
-          users: matched.slice(offset, next),
-          nextPageToken: next < matched.length ? `${MATCH_CURSOR}${next}` : null,
-          tenantsIncluded: true,
-          tenantTruncated: [],
-          refused,
-          notices,
-        }, { status: 200 })
-      }
-      /*
-       * The directory outran the bound, or an SSO pool did: a match over what
-       * was read would answer "none" for accounts it never saw. Refused, by
-       * name, and the list below is the unfiltered walk it says it is.
-       */
-      const reason = scan.truncated
-        ? `the directory holds more than ${FILTER_SCAN_CAP.toLocaleString('en-US')} accounts, ` +
-          'more than this list can search at once — find an account by its exact email or uid'
-        : `SSO ${scan.tenantTruncated.length === 1 ? 'tenant' : 'tenants'} ` +
-          `${scan.tenantTruncated.join(', ')} ${scan.tenantTruncated.length === 1 ? 'holds' : 'hold'} ` +
-          'more accounts than this list can search at once — find an account by its exact email or uid'
-      refused.push(
-        ...served.map((clause) => ({ clause, reason })),
-        ...(term ? [{ clause: 'search' as const, reason }] : []),
-      )
-      // The sort cannot reach the whole directory either: it orders the page
-      // walked below, and says so rather than reading as everyone's order.
-      if (asked) {
-        notices.push(
-          `Sorted by ${asked.label ?? asked.path} within each page of the directory: it holds more ` +
-            `than ${FILTER_SCAN_CAP.toLocaleString('en-US')} accounts, more than this list can sort at once.`,
-        )
-      }
+    // Every read is answered over the complete directory when it fits the
+    // bound — a sort always rides, the default one at least (AGL-3660).
+    /*
+     * An exact email or uid is a lookup, not a walk: the one account it can
+     * be, and then every other clause and the search over that account. A
+     * complete address typed in the search box takes the same lookup, and
+     * falls through to the walk when it finds nobody — an address held only
+     * where the lookup missed must still be searched for.
+     */
+    const exact = served.find(
+      (clause) =>
+        clause.op === 'equals' && (clause.field === 'email' || clause.field === 'uid'),
+    )
+    const address = !exact && /^[^@\s]+@[^@\s]+$/.test(search) ? search : ''
+    const looked = exact
+      ? exact.field === 'email'
+        ? await findUserByEmailAcrossPools(exact.value.trim())
+        : await findUserByUidAcrossPools(exact.value.trim())
+      : address
+        ? await findUserByEmailAcrossPools(address)
+        : null
+    if (exact || looked) {
+      const rows = looked ? [serialize(looked)] : []
+      return Response.json({
+        users: exact ? rows.filter(matches) : rows.filter((row) =>
+          served.every((clause) => matchListFilter(row, USER_LIST_FILTER_FIELDS, clause)),
+        ),
+        nextPageToken: null,
+        refused,
+        notices: [],
+      }, { status: 200 })
     }
+    const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
+    if (!scan.truncated && !scan.tenantTruncated.length) {
+      const matched = sortRows(
+        collapseCrossPoolUidRows(scan.users).map(serialize).filter(matches),
+      )
+      const offset = token?.startsWith(MATCH_CURSOR)
+        ? Math.max(0, Math.floor(Number(token.slice(MATCH_CURSOR.length))) || 0)
+        : 0
+      const next = offset + FILTER_PAGE
+      return Response.json({
+        users: matched.slice(offset, next),
+        nextPageToken: next < matched.length ? `${MATCH_CURSOR}${next}` : null,
+        tenantsIncluded: true,
+        tenantTruncated: [],
+        refused,
+        notices,
+      }, { status: 200 })
+    }
+    /*
+     * The directory outran the bound, or an SSO pool did: a match over what
+     * was read would answer "none" for accounts it never saw. Refused, by
+     * name, and the list below is the unfiltered walk it says it is.
+     */
+    const reason = scan.truncated
+      ? `the directory holds more than ${FILTER_SCAN_CAP.toLocaleString('en-US')} accounts, ` +
+        'more than this list can search at once — find an account by its exact email or uid'
+      : `SSO ${scan.tenantTruncated.length === 1 ? 'tenant' : 'tenants'} ` +
+        `${scan.tenantTruncated.join(', ')} ${scan.tenantTruncated.length === 1 ? 'holds' : 'hold'} ` +
+        'more accounts than this list can search at once — find an account by its exact email or uid'
+    refused.push(
+      ...served.map((clause) => ({ clause, reason })),
+      ...(term ? [{ clause: 'search' as const, reason }] : []),
+    )
+    // The sort cannot reach the whole directory either: it orders the page
+    // walked below, and says so rather than reading as everyone's order.
+    notices.push(
+      `Sorted by ${asked.label ?? asked.path} within each page of the directory: it holds more ` +
+        `than ${FILTER_SCAN_CAP.toLocaleString('en-US')} accounts, more than this list can sort at once.`,
+    )
     // A match cursor does not name a place in the walk; it starts it over.
     const pageToken = token?.startsWith(MATCH_CURSOR) ? undefined : token
     const page = await listUsersAcrossPools(200, pageToken)

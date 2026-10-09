@@ -15,10 +15,14 @@
  * limitations under the License.
  */
 
+import { existsSync, readFileSync } from 'fs'
+import { join, resolve } from 'path'
 import { EMAIL_NODE_ROOT_ID, renderEmailHtml, substituteMergeTokens } from './email-render'
 import {
   PRODUCT_TIP_RETENTION_EMAILS,
+  RETENTION_DOCS_PATHS,
   RETENTION_VERIFY_REMINDER_EMAIL,
+  retentionDocsMergeValues,
 } from './retention-emails'
 import {
   SYSTEM_EMAIL_TEMPLATES,
@@ -92,6 +96,100 @@ describe('RETENTION_SYSTEM_EMAIL_TEMPLATES', () => {
       expect(tip).toBe(entry.key !== RETENTION_VERIFY_REMINDER_EMAIL)
       expect(tokens.includes('preferencesUrl')).toBe(tip)
       if (tip) expect(render(entry.key).html).toContain('/manage/user/emails')
+    }
+  })
+
+  it('wear the house design: one button each, and the house opt-out line', () => {
+    for (const entry of RETENTION_SYSTEM_EMAIL_TEMPLATES) {
+      const body = entry.defaultBody ?? []
+      expect(body.filter((block) => block.block === 'button')).toHaveLength(1)
+      if (PRODUCT_TIP_RETENTION_EMAILS.has(entry.key)) {
+        expect(body[body.length - 1]).toEqual({
+          block: 'text',
+          text: 'Change what you are emailed about: {{preferencesUrl}}',
+          variant: 'caption',
+        })
+      }
+    }
+  })
+})
+
+/**
+ * The docs links (AGL-3692). A link to a page the docs site does not serve
+ * is worse than none, so every path is held to a real source file under
+ * `apps/docs/docs`, and every anchor to a heading on that page.
+ */
+describe('the getting-started emails’ docs links', () => {
+  const REPO_ROOT = resolve(__dirname, '../../../../../..')
+  const DOCS_ROOT = join(REPO_ROOT, 'apps/docs/docs')
+
+  /** The source file the docs site serves a path from, or null. */
+  function docsSource(path: string): string | null {
+    for (const candidate of [`${path}.md`, `${path}.mdx`, `${path}/index.md`, `${path}/index.mdx`]) {
+      const file = join(DOCS_ROOT, candidate)
+      if (existsSync(file)) return file
+    }
+    return null
+  }
+
+  /** The heading anchors a page offers: an explicit `{#id}`, else the slug. */
+  function anchorsOf(file: string): Set<string> {
+    const anchors = new Set<string>()
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      const heading = /^#{1,6}\s+(.*)$/.exec(line)
+      if (!heading) continue
+      const text = heading[1] ?? ''
+      const explicit = /\{#([^}]+)\}\s*$/.exec(text)
+      anchors.add(
+        explicit
+          ? (explicit[1] ?? '')
+          : text
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9\s-]/g, '')
+              .replace(/\s/g, '-'),
+      )
+    }
+    return anchors
+  }
+
+  it('point at docs pages that exist, and headings that exist on them', () => {
+    for (const [token, target] of Object.entries(RETENTION_DOCS_PATHS)) {
+      const [path, anchor] = target.split('#') as [string, string | undefined]
+      const file = docsSource(path)
+      expect({ token, path, file: Boolean(file) }).toEqual({ token, path, file: true })
+      if (anchor) expect(anchorsOf(file!)).toContain(anchor)
+    }
+  })
+
+  it('give every email one or two docs links, each a declared token its body uses', () => {
+    const docsTokens = new Set(Object.keys(RETENTION_DOCS_PATHS))
+    for (const entry of RETENTION_SYSTEM_EMAIL_TEMPLATES) {
+      const declared = entry.mergeTokens
+        .map((token) => token.name)
+        .filter((name) => docsTokens.has(name))
+      expect(declared.length).toBeGreaterThanOrEqual(1)
+      expect(declared.length).toBeLessThanOrEqual(2)
+      const copy = (entry.defaultBody ?? [])
+        .map((block) => (block.block === 'text' ? block.text : block.href))
+        .join('\n')
+      for (const name of declared) expect(copy).toContain(`{{${name}}}`)
+      // No docs token in the copy that the email does not declare: a token
+      // the send does not supply is blanked, and leaves a hole in the line.
+      for (const used of copy.match(/\{\{docs\.[^}]+\}\}/g) ?? []) {
+        expect(declared).toContain(used.slice(2, -2))
+      }
+      const { html } = render(entry.key)
+      for (const name of declared) {
+        expect(html).toContain(`href="${SAMPLE(entry.key)[name]}"`)
+      }
+    }
+  })
+
+  it('build every link on the docs origin it is given, never a spelled-out one', () => {
+    const values = retentionDocsMergeValues('https://docs.example.test/')
+    for (const [token, path] of Object.entries(RETENTION_DOCS_PATHS)) {
+      expect(values[token as keyof typeof values]).toBe(`https://docs.example.test${path}`)
     }
   })
 })

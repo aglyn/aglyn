@@ -258,6 +258,7 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
     <CardDisplay
       header="Error pages"
       help={docsHelp('errorScreens', {
+        anchor: '#the-error-screens',
         excerpt:
           'Assign a designed page per status code — the maintenance ' +
           'toggle shows the 503 page everywhere while it is on.',

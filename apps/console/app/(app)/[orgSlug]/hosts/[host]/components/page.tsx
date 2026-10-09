@@ -136,7 +136,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host }),
         },
       ]}
-      help="components"
+      help={{ topic: 'components', anchor: '#manage' }}
       header={{
         children: 'Reusable Components',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },

@@ -43,7 +43,7 @@ prices; Aglyn adds nothing to them.
 
 ## Connect
 
-1. Go to **Commerce → Settings** and find the **Print on demand** card.
+1. Open the store's settings and find the **Print on demand** card.
 2. Select **Connect**, choose Printful or Printify, and paste your token.
 3. If the token reaches more than one store or shop, choose which one to
    connect.

@@ -48,7 +48,9 @@ const state: {
     string,
     { data: Record<string, unknown>; usage?: Record<string, Record<string, unknown>> }
   >
-} = { orgs: {} }
+  /** The Users list's directory size, as `countUsersAcrossPools` reports it. */
+  users: number
+} = { orgs: {}, users: 0 }
 
 const stamp = (millis: number) => ({ toMillis: () => millis })
 
@@ -112,6 +114,7 @@ const emptyListing = (): any => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  countUsersAcrossPools: async () => ({ count: state.users, truncated: false }),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -163,6 +166,7 @@ const overview = (token = 'staff-token') =>
 
 beforeEach(() => {
   state.orgs = {}
+  state.users = 0
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
@@ -273,5 +277,27 @@ describe('the overview reads nothing of the marketplace’s', () => {
     expect(body).not.toHaveProperty('purchases')
     expect(body).not.toHaveProperty('reversalRecovery')
     expect(body.metrics).not.toHaveProperty('reversalOwedCents')
+  })
+})
+
+describe('the overview counts users and labels plans', () => {
+  it('reports the directory total as metrics.users', async () => {
+    state.users = 41
+    const body = await (await overview()).json()
+    expect(body.metrics.users).toBe(41)
+    expect(body.metrics.usersTruncated).toBe(false)
+  })
+
+  it('labels an org that never stored a plan as free, not "no plan"', async () => {
+    state.orgs = {
+      'org-blank': { data: { name: 'Blank Co' } },
+      'org-pro': { data: { name: 'Pro Co', plan: 'pro' } },
+    }
+    const body = await (await overview()).json()
+    const plans = Object.fromEntries(
+      body.newestOrgs.map((org: any) => [org.$id, org.plan]),
+    )
+    expect(plans['org-blank']).toBe('free')
+    expect(plans['org-pro']).not.toBeNull()
   })
 })

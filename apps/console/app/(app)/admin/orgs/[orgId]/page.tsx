@@ -27,7 +27,6 @@ import {
   orgCogsBasisSummary,
   orgCogsPreview,
   netOfProcessorFee,
-  orgOverrideReasonSummary,
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
@@ -47,6 +46,7 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
+import StaffOrgAdminActionsCard from '../../../../../components/staff-org-admin-actions-card.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
@@ -65,7 +65,6 @@ import {
   TableCell,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -93,6 +92,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffSiteDoorFlags from '../../../../../components/staff-site-door-flags.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
+import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
@@ -106,7 +106,6 @@ import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
 } from '../../../../../components/staff-org-usage-table.component'
 import StaffOrgSummaryCard, {
-  staffPersonLabel,
   type StaffPerson,
 } from '../../../../../components/staff-org-summary-card.component'
 import { fetchAllPages } from '../../../../../utils/fetch-all-pages'
@@ -1148,7 +1147,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: org?.name ?? orgId,
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
-      help={{ topic: 'staffConsole', anchor: '#entitlement-editor' }}
+      help={{ topic: 'staffConsole', anchor: '#organization-detail' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
@@ -1174,10 +1173,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 visible before staff act on it. */}
             <CardDisplay
               header={'Staff actions'}
-              help={docsHelp('billing', {
-                anchor: '#tiers--entitlements',
-                excerpt:
-                  'Audited staff controls for this organization — override the plan and entitlements, suspend its sites, or flag GDPR erasure.',
+              help={docsHelp('staffConsole', {
+                anchor: '#org-staff-actions',
               })}
               contentGutterX
               contentGutterY
@@ -1244,10 +1241,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // Direct editing (AGL-358).
                     <CardDisplay
                       header={'Edit organization'}
-                      help={docsHelp('team', {
-                        anchor: '#organizations',
-                        excerpt:
-                          'Rename the organization, update its logo and contact details, or transfer ownership to another member — audited to the org activity log.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-edit',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1385,10 +1380,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={`Sites (${(hostDocs ?? []).length})`}
-                      help={docsHelp('architectureMultiTenancy', {
-                        anchor: '#data-model',
-                        excerpt:
-                          'Every site (host) this organization owns — open one for its staff detail page with usage and subdomain controls.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-sites',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1475,10 +1468,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={`Members (${(memberDocs ?? []).length})`}
-                      help={docsHelp('architectureMultiTenancy', {
-                        anchor: '#membership-lifecycle',
-                        excerpt:
-                          "The organization's member roster with each person's role and whether they can reach all sites.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-members',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1549,10 +1540,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Effective entitlements'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          'Resolved limits after plan defaults and per-org overrides, with current usage against each cap. Overrides are edited on the Organizations page.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-effective-entitlements',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1637,6 +1626,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 // Plugin cards among the staff cards (AGL-2940), where a
                 // plugin's own staff view of the org sits beside the
                 // platform's. No column at all when nothing registered.
+                // Short until opened: the AI requests list draws nothing
+                // until staff ask for it (AGL-3660).
                 ...(staffOrgWidgets.length
                   ? [
                       {
@@ -1653,10 +1644,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // to see.
                     <CardDisplay
                       header={'Metered usage'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          "The organization's monthly usage rollups — page views, storage, form submissions and cost — with month-over-month deltas.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-metered-usage',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1689,10 +1678,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Billing history & payment method'}
-                      help={docsHelp('billing', {
-                        anchor: '#payments',
-                        excerpt:
-                          "The organization's Stripe invoice history and default payment method, including delinquency — read-only.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#billing-insight',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1851,10 +1838,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // Per-org discount (AGL-1105).
                     <CardDisplay
                       header={'Subscription discount'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          "Apply a Stripe coupon to this organization's subscription — the net-margin rating warns before a deal drops below the floor. Audited.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#discount-floors',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2040,10 +2025,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // Enterprise custom billing (AGL-1110).
                     <CardDisplay
                       header={'Enterprise custom billing'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          'Provision a negotiated custom price for this organization — a Stripe subscription (net-30 invoice) or a Checkout link — without leaving Aglyn. Audited.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#enterprise-custom-billing',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2233,129 +2216,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 {
                   children: (
                     <CardDisplay
-                      header={'Recent admin actions on this organization'}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
-                      })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <Stack spacing={1}>
-                        {orgAudit == null ? (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {orgReady
-                              ? 'Could not read the audit slice — a failed ' +
-                                'read, not an empty history.'
-                              : 'Loading…'}
-                          </Typography>
-                        ) : orgAudit.length === 0 ? (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {'No audit entries reference this ' +
-                              'organization in the latest 200.'}
-                          </Typography>
-                        ) : (
-                          orgAudit.map((entry: any) => {
-                            // The actor as a person (AGL-938); the uid
-                            // survives as the tooltip, and an unresolved
-                            // actor (`system:cron`, an erased account)
-                            // stays legible as its raw id.
-                            const actor = staffPersonLabel(
-                              entry.actorUid
-                                ? people[entry.actorUid]
-                                : null,
-                            )
-                            // WHY the action was taken (AGL-1652). This is
-                            // the surface an override is actually looked at
-                            // from, so it is the surface the reason has to
-                            // reach — an audit field nobody renders is the
-                            // same failure as no field.
-                            const why = orgOverrideReasonSummary(
-                              entry.reason,
-                              entry.note,
-                            )
-                            return (
-                              <Stack key={entry.$id} spacing={0.25}>
-                                <Stack
-                                  direction="row"
-                                  spacing={1}
-                                  sx={{ justifyContent: 'space-between' }}
-                                >
-                                  <Chip label={entry.action} size="small" />
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {/* A uid is an account: it links to
-                                        that account's staff page. A
-                                        `system:*` actor has none. */}
-                                    {entry.actorUid &&
-                                    !String(entry.actorUid).includes(':') ? (
-                                      <Tooltip
-                                        title={actor ? entry.actorUid : ''}
-                                      >
-                                        <AppLink
-                                          variant="caption"
-                                          underline="hover"
-                                          href={buildRoute(
-                                            Route.ADMIN_USER_DETAIL,
-                                            { uid: entry.actorUid },
-                                          )}
-                                        >
-                                          {actor ?? entry.actorUid}
-                                        </AppLink>
-                                      </Tooltip>
-                                    ) : (
-                                      (entry.actorUid ?? '—')
-                                    )}
-                                    {` · ${
-                                      entry.at?.seconds
-                                        ? new Date(
-                                            entry.at.seconds * 1000,
-                                          ).toLocaleString()
-                                        : '—'
-                                    }`}
-                                  </Typography>
-                                </Stack>
-                                {why ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {`Why: ${why}`}
-                                  </Typography>
-                                ) : entry.action === 'org.override' ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="warning.main"
-                                  >
-                                    {'Why: not recorded — predates the ' +
-                                      'required reason.'}
-                                  </Typography>
-                                ) : null}
-                              </Stack>
-                            )
-                          })
-                        )}
-                      </Stack>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  children: (
-                    <CardDisplay
                       header={'Success manager'}
                       help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'The named human an Enterprise org is promised. Set here by staff; the customer sees their name and they are copied by email on every ticket.',
+                        anchor: '#success-manager',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2441,9 +2304,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'Staff notes'}
                       help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'Support and billing context on this organization, visible to staff only — never written into tenant-readable data. Audited.',
+                        anchor: '#staff-notes',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2514,34 +2375,47 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </CardDisplay>
                   ),
                 },
-                {
-                  children: (
-                    /*
-                     * The organization's own activity log.
-                     *
-                     * Staff had the audit of what STAFF did to this org and
-                     * no view of what the org itself did — the invites, the
-                     * role changes, the billing edits its own members made.
-                     * `/api/orgs/activity` already answers a staff caller,
-                     * so this is the same feed the owner reads, on the page
-                     * staff are already on.
-                     */
-                    <OrgActivityCard
-                      orgId={orgId}
-                      header={'Organization activity'}
-                      // The org's SITES too. Without it a
-                      // brand-new organization reads as having done nothing
-                      // on the day it published three pages, because the org
-                      // collection holds only invites, roles and billing.
-                      orgWide
-                    />
-                  ),
-                },
               ]}
             />
-            {/* Full width below the columns: a wide table. */}
-            <Stack sx={{ mt: 3 }}>
+            {/*
+              FULL WIDTH BELOW THE COLUMNS (AGL-3660): the wide tables.
+              Multicol cannot break a card, so one card much taller than its
+              share of the flow — the organization's activity, a page of it,
+              at the end of the run — took a column to itself and ended the
+              other one early over a screen of empty space. Each of these is a
+              table a reader scans across, and full width is its shape.
+            */}
+            <Stack spacing={3} sx={{ mt: 3 }}>
+              <StaffOrgAdminActionsCard
+                entries={orgAudit}
+                ready={orgReady}
+                people={people}
+                help={docsHelp('staffConsole', {
+                  anchor: '#org-recent-admin-actions',
+                })}
+              />
+              {/*
+                The organization's own activity log. Staff had the audit of
+                what STAFF did to this org and no view of what the org itself
+                did — the invites, the role changes, the billing edits its own
+                members made. `/api/orgs/activity` already answers a staff
+                caller, so this is the same feed the owner reads.
+              */}
+              <OrgActivityCard
+                orgId={orgId}
+                header={'Organization activity'}
+                // The org's SITES too. Without it a
+                // brand-new organization reads as having done nothing
+                // on the day it published three pages, because the org
+                // collection holds only invites, roles and billing.
+                orgWide
+                staff
+              />
               <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
+            </Stack>
+            {/* The workspace's shared media library, read-only and audited. */}
+            <Stack sx={{ mt: 3 }}>
+              <StaffMediaLibraryCard orgId={orgId} />
             </Stack>
           </>
         </StaffOnly>
