@@ -298,6 +298,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "couriers",
+    "label": "Couriers",
+    "alwaysOnForWorkspace": true,
+    "description": "Send a DoorDash courier for your own local deliveries, from your own DoorDash Drive account, with its tracking on the order.",
+    "siteOff": {
+      "stops": "Switching Couriers off for this site stops members sending DoorDash couriers for its local deliveries.",
+      "keeps": "The connection is kept, and a courier already on its way still finishes, with its progress on the order."
+    }
+  },
+  {
     "id": "live-chat",
     "label": "Live chat",
     "alwaysOnForWorkspace": true,
@@ -343,6 +353,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
   "loyalty": "console-only",
+  "couriers": "console-only",
   "live-chat": "elements",
 }
 
@@ -2333,6 +2344,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "fulfillment-networks",
     "name": "fulfillmentNetworkOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "couriers",
+    "name": "courierConnections",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "couriers",
+    "name": "courierDeliveries",
     "orgField": "orgId"
   },
   {

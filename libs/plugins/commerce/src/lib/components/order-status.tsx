@@ -248,6 +248,31 @@ const OrderStatus = forwardRef<HTMLDivElement, OrderStatusProps>((props, ref) =>
                   {view.localDelivery.windowLabel}
                 </Typography>
               ) : null}
+              {view.localDelivery.courier ? (
+                <>
+                  <Typography variant="body2">
+                    {`${view.localDelivery.courier.providerLabel}: ${view.localDelivery.courier.stateLabel}`}
+                  </Typography>
+                  {view.localDelivery.courier.etaMs ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {`Arriving about ${new Date(view.localDelivery.courier.etaMs).toLocaleTimeString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}`}
+                    </Typography>
+                  ) : null}
+                  {view.localDelivery.courier.trackingUrl ? (
+                    <Link
+                      href={view.localDelivery.courier.trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      variant="body2"
+                    >
+                      {'Track your courier'}
+                    </Link>
+                  ) : null}
+                </>
+              ) : null}
             </Stack>
           </Paper>
         ) : null}

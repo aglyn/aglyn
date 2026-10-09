@@ -276,6 +276,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#known-by': 'On. A collaborator added to particular sites is refused here, with a note pointing at the sites they hold, because this is the one surface that reads across every site; they open the CRM from a site they have access…',
     '#the-contacts-page': 'D\'s activity log is bounded at 5,000 logged activities per record — a call a day for fourteen years — after which the log dialog, the automation step and the API refuse another entry on that record with a message…',
   },
+  couriers: {
+    '#connect-doordash-drive': '*, at DoorDash\'s price for that delivery. Aglyn doesn\'t charge, collect or mark up the courier\'s fee.',
+  },
   crmEmailTemplates: {
     '#managing-templates': 'A template {#saving} Write the email as you would send it, then Save as template… beneath the message asks for a name and whose it is.',
   },

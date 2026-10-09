@@ -14119,6 +14119,52 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
   })
 })
 
+describe('courier records are the server’s alone (AGL-3695)', () => {
+  // A connection holds the merchant's sealed DoorDash Drive signing secret
+  // and the hash of the token DoorDash's webhooks carry; a delivery record
+  // decides whether a courier is booked or called off. All written and read
+  // by the couriers plugin's routes, webhook, event intake and job through
+  // the Admin SDK.
+  const DOCS = [
+    ['courierConnections', `${HOST}_doordash`],
+    ['courierDeliveries', `${HOST}_order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          live: { sealedSigningSecret: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc' },
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('marketplace records are the server’s alone (AGL-3638)', () => {
   // A connection holds the merchant's sealed marketplace grant and what each
   // listing was last sent; an imported order's record says which shipments

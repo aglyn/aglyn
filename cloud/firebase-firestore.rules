@@ -2544,6 +2544,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Couriers (AGL-3695): a site's connection to the merchant's OWN DoorDash
+    // Drive developer account — its live and test keys with the signing
+    // secret sealed, and the hash of the token DoorDash's webhooks carry —
+    // and each local-delivery order's courier: the quote, the one run booked
+    // at a time, and the runs before it. Written and read by the couriers
+    // plugin's console routes, webhook, event intake and job through the Admin
+    // SDK only. Deny ALL client access, staff and the owner included: a client
+    // that could read a connection could carry off a sealed key, and one that
+    // could write a courier record could book or call off a courier the
+    // merchant pays for. Org erasure destroys both by the `orgId` field.
+    match /courierConnections/{connectionId} {
+      allow read, write: if false;
+    }
+    match /courierDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
     // Marketplaces (AGL-3638): a site's connection to the merchant's OWN
     // Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account — its
     // grant sealed, its settings, order cursor, log and what each listing was

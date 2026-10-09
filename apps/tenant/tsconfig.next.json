@@ -164,6 +164,12 @@
       "@aglyn/plugins-zapier/*": [
         "../../libs/plugins/zapier/src/lib/*"
       ],
+      "@aglyn/plugins-couriers": [
+        "../../libs/plugins/couriers/src/index.ts"
+      ],
+      "@aglyn/plugins-couriers/*": [
+        "../../libs/plugins/couriers/src/lib/*"
+      ],
       "@aglyn/plugins-live-chat": [
         "../../libs/plugins/live-chat/src/index.ts"
       ],

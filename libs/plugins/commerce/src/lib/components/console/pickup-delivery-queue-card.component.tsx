@@ -42,7 +42,10 @@ import {
   usePagedCollection,
 } from '@aglyn/tenant-feature-instance'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import OrderDetailDialog from './order-detail-dialog.component'
+import { consoleOrderZoneOrder } from './order-fulfillment-panel.component'
+import { LOCAL_DELIVERY_ROW_ZONE } from './order-zones'
 import { nextLocalFulfillmentSteps, useLocalFulfillmentStep } from './order-local-fulfillment-panel.component'
 
 export interface PickupDeliveryQueueCardProps {
@@ -67,6 +70,9 @@ export function PickupDeliveryQueueCard(props: PickupDeliveryQueueCardProps) {
   const [locationId, setLocationId] = useState('')
   const [open, setOpen] = useState<(CommerceModel.HostOrder & { $id: string }) | null>(null)
   const { run, busy } = useLocalFulfillmentStep(hostId)
+  // The `localDeliveryRow` zone (AGL-3695): a courier plugin's "Send a
+  // courier" beside a delivery's own step buttons.
+  const WidgetSlot = useConsoleWidgetSlot()
 
   const { data: locationDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'locations'), limit(25)),
@@ -217,6 +223,14 @@ export function PickupDeliveryQueueCard(props: PickupDeliveryQueueCardProps) {
                       {entry.label}
                     </Button>
                   ))}
+                {WidgetSlot && order.fulfillmentMethod === 'local_delivery' ? (
+                  <WidgetSlot
+                    slot={LOCAL_DELIVERY_ROW_ZONE.id}
+                    hostId={hostId}
+                    orgId={undefined}
+                    order={consoleOrderZoneOrder(order, order.$id)}
+                  />
+                ) : null}
                 <Button size="small" onClick={() => setOpen(order)}>
                   {'Open'}
                 </Button>
