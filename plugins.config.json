@@ -435,7 +435,7 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
@@ -2928,6 +2928,22 @@
     },
     {
       "id": "post-purchase",
+      "mobile": {
+        "$comment": "AGL-3652: post-purchase services natively: AfterShip tracking, Route package protection and Narvar, with their keys, switches and disconnect, from the spec in src/android/screens/post-purchase.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynPostPurchasePlugin",
+          "register": "registerPostPurchaseNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.postpurchase",
+          "register": "registerPostPurchaseNative"
+        },
+        "contributes": {
+          "screens": [
+            "post-purchase.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-post-purchase",
       "register": {
         "console": "registerPostPurchaseConsole",
@@ -2996,6 +3012,22 @@
     },
     {
       "id": "tax-engines",
+      "mobile": {
+        "$comment": "AGL-3652: the tax service card natively: connect a merchant's own Avalara AvaTax or TaxJar account, test or disconnect it, the ship-from address, the default tax code, whether paid orders are recorded, and exempt customers, from the spec in src/android/screens/tax-engines.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynTaxEnginesPlugin",
+          "register": "registerTaxEnginesNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.taxengines",
+          "register": "registerTaxEnginesNative"
+        },
+        "contributes": {
+          "screens": [
+            "tax-engines.service"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-tax-engines",
       "register": {
         "console": "registerTaxEnginesConsole",
@@ -3125,6 +3157,23 @@
     },
     {
       "id": "fulfillment-networks",
+      "mobile": {
+        "$comment": "AGL-3652: fulfillment networks natively: ShipBob and Amazon Multi-Channel Fulfillment by signing in (the consent page opens in the secure browser), ShipMonk with its API key; each network's status, settings, stock counts and activity, from the spec in src/android/screens/fulfillment-networks.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynFulfillmentNetworksPlugin",
+          "register": "registerFulfillmentNetworksNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.fulfillmentnetworks",
+          "register": "registerFulfillmentNetworksNative"
+        },
+        "contributes": {
+          "screens": [
+            "fulfillment-networks.service",
+            "fulfillment-networks.network"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-fulfillment-networks",
       "register": {
         "console": "registerFulfillmentNetworksConsole",

@@ -5,6 +5,8 @@ import com.aglyn.pluginhost.NativePluginRegistrar
 import com.aglyn.pluginhost.PosPlacement
 import com.aglyn.pluginhost.ScreenLayout
 import com.aglyn.pluginhost.WidgetSize
+import com.aglyn.screens.ScreenSpec
+import com.aglyn.screens.SpecScreens
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDERS_SCREEN
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDER_SCREEN
 import com.aglyn.plugins.commerce.orders.OrdersScreen
@@ -56,6 +58,10 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
     icon = "credit_card",
     placement = PosPlacement.MENU,
   ) { context, _ -> CardReadersScreen(context) }
+
+  // Commerce settings, and the commerceSettings zone other plugins' cards sit in:
+  // a spec screen drawn by :native-screens (screens/commerce.screens.json).
+  SpecScreens.register(CommerceScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 
   r.screen(COMMERCE_ORDERS_SCREEN, title = "Orders", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"])

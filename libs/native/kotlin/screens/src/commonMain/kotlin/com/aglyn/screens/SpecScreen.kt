@@ -293,7 +293,7 @@ private fun SpecBody(
           items(blocks, key = { it.id }) { block ->
             Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
               Block(
-                block, model, context, selection, running,
+                block, plugin, model, context, selection, running,
                 open = ::open,
                 trigger = ::trigger,
                 copy = { clipboard.setText(AnnotatedString(it)); show("Copied", StatusTone.SUCCESS) },
@@ -399,6 +399,7 @@ private fun PromptDialog(pending: Pending, onRun: (JsonElement) -> Unit, onDismi
 @Composable
 private fun Block(
   block: BlockSpec,
+  plugin: NativePluginContext,
   model: ScreenModel,
   context: JsonElement,
   selection: Selection?,
@@ -414,21 +415,31 @@ private fun Block(
     "list" -> ListBlock(block, title, footer, model, context, selection, open, trigger)
     "zone" -> {
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
-      val contributions = ScreenCatalog.zone(block.string("name").orEmpty()).filter { ScreenValues.condition(it.requires, context) }
-      if (contributions.isNotEmpty()) {
-        SectionCard(title) {
-          Column(Modifier.fillMaxWidth()) {
-            contributions.forEachIndexed { index, spec ->
-              if (index > 0) HorizontalDivider()
-              AglynListItem(
-                title = spec.label,
-                supporting = spec.subtitle,
-                icon = AglynIcons.named(spec.icon),
-                trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-                onClick = { open(spec.id, renderParams(block["params"], context)) },
-                modifier = Modifier.testTag("zone-${spec.id}"),
-              )
+      val name = block.string("name").orEmpty()
+      val contributions = ScreenCatalog.zone(name).filter { ScreenValues.condition(it.requires, context) }
+      // Native widgets other plugins put in the same slot sit beside the spec screens.
+      val widgets = plugin.slotWidgets(name)
+      if (contributions.isNotEmpty() || widgets.isNotEmpty()) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
+          if (contributions.isNotEmpty()) {
+            SectionCard(title) {
+              Column(Modifier.fillMaxWidth()) {
+                contributions.forEachIndexed { index, spec ->
+                  if (index > 0) HorizontalDivider()
+                  AglynListItem(
+                    title = spec.label,
+                    supporting = spec.subtitle,
+                    icon = AglynIcons.named(spec.icon),
+                    trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+                    onClick = { open(spec.id, renderParams(block["params"], context)) },
+                    modifier = Modifier.testTag("zone-${spec.id}"),
+                  )
+                }
+              }
             }
+          }
+          widgets.forEach { widget ->
+            Box(Modifier.fillMaxWidth().testTag("zone-widget-${widget.id}")) { widget.content(plugin) }
           }
         }
       }

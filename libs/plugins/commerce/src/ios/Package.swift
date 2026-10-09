@@ -35,8 +35,10 @@ let package = Package(
         .product(name: "AglynUI", package: "apple"),
         .product(name: "AglynHardware", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
+        .product(name: "AglynScreens", package: "apple"),
         .product(name: "StripeTerminal", package: "stripe-terminal-ios", condition: .when(platforms: [.iOS])),
-      ]
+      ],
+      resources: [.copy("Resources/commerce.screens.json")]
     ),
     .testTarget(name: "AglynCommercePluginTests", dependencies: ["AglynCommercePlugin"]),
   ]

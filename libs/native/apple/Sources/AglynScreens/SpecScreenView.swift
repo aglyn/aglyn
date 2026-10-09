@@ -305,8 +305,11 @@ struct SpecScreenBody: View {
       }
     case "zone":
       // A core screen's zone: whatever plugin screens contribute to it, never named here.
-      let contributions = ScreenCatalog.shared.zone(block["name"]?.stringValue ?? "")
+      let name = block["name"]?.stringValue ?? ""
+      let contributions = ScreenCatalog.shared.zone(name)
         .filter { ScreenValues.condition($0.requires, in: context) }
+      // Native widgets other plugins put in the same slot sit beside the spec screens.
+      let widgets = plugin.slotWidgets(name)
       if !contributions.isEmpty {
         section(title, footer) {
           ForEach(contributions) { spec in
@@ -320,6 +323,12 @@ struct SpecScreenBody: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("zone-\(spec.id)")
           }
+        }
+      }
+      ForEach(widgets) { widget in
+        Section {
+          widget.make(plugin)
+            .accessibilityIdentifier("zone-widget-\(widget.id)")
         }
       }
     case "notice":

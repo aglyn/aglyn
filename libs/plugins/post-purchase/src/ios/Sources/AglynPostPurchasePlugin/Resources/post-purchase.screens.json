@@ -1,0 +1,353 @@
+{
+  "$comment": "The Post-purchase plugin's native screen: AfterShip tracking, Route package protection and Narvar, each with its keys (sealed server-side, never read back), switches and disconnect. Routes: GET and POST /api/post-purchase/settings. Only the services the deployment offers are shown. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "post-purchase.service",
+      "title": "Post-purchase",
+      "label": "Post-purchase",
+      "subtitle": "Tracking pages and package protection",
+      "icon": "magnifyingglass|local_shipping",
+      "scope": "site",
+      "order": 50,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "settings": "/api/post-purchase/settings?hostId={site.id}"
+      },
+      "constants": {
+        "vendors": {
+          "aftership": "aftership",
+          "route": "route",
+          "narvar": "narvar"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.settings.vendors",
+          "text": "No post-purchase service is available for this site. They need a plan that sells and a deployment that offers them."
+        },
+        {
+          "type": "fields",
+          "id": "aftershipStatus",
+          "title": "AfterShip",
+          "when": "data.settings.vendors[=const.vendors.aftership]",
+          "footer": "Follow every parcel through AfterShip; its tracking updates come back to the order.",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "On",
+              "chip": true,
+              "tones": {
+                "On": "success"
+              },
+              "when": "data.settings.settings.aftership.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "info"
+              },
+              "when": "data.settings.settings.aftership.connected && !data.settings.settings.aftership.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Not connected",
+              "chip": true,
+              "tones": {
+                "*": "neutral"
+              },
+              "when": "!data.settings.settings.aftership.connected"
+            },
+            {
+              "label": "Webhook address",
+              "value": "{app.origin}/api/post-purchase/webhooks/aftership?hostId={site.id}"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "aftership",
+          "title": "AfterShip settings",
+          "when": "data.settings.vendors[=const.vendors.aftership]",
+          "footer": "Add the webhook address in AfterShip under Notifications, Webhooks. Keys you leave empty stay as stored.",
+          "fields": [
+            {
+              "key": "apiKey",
+              "label": "API key",
+              "kind": "password",
+              "placeholder": "Stored — paste a new one to replace it"
+            },
+            {
+              "key": "webhookSecret",
+              "label": "Webhook secret",
+              "kind": "password",
+              "placeholder": "Stored — paste a new one to replace it"
+            },
+            {
+              "key": "trackingPageUrl",
+              "label": "Tracking page",
+              "kind": "url",
+              "initial": "{data.settings.settings.aftership.trackingPageUrl}",
+              "help": "Your AfterShip tracking page, such as https://yourstore.aftership.com. Optional."
+            },
+            {
+              "key": "enabled",
+              "label": "Follow every parcel through AfterShip",
+              "kind": "toggle",
+              "initial": "{data.settings.settings.aftership.enabled}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/post-purchase/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "change": {
+                "vendor": "aftership",
+                "apiKey": "{form.apiKey}",
+                "webhookSecret": "{form.webhookSecret}",
+                "trackingPageUrl": "{form.trackingPageUrl}",
+                "enabled": "{form.enabled}"
+              }
+            },
+            "success": "AfterShip saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "aftershipManage",
+          "when": "data.settings.vendors[=const.vendors.aftership] && data.settings.settings.aftership.connected",
+          "items": [
+            {
+              "id": "aftershipDisconnect",
+              "label": "Disconnect AfterShip",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect AfterShip? Its keys are deleted.",
+              "url": "/api/post-purchase/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "change": {
+                  "vendor": "aftership",
+                  "disconnect": true
+                }
+              },
+              "success": "AfterShip disconnected"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "routeStatus",
+          "title": "Route",
+          "when": "data.settings.vendors[=const.vendors.route]",
+          "footer": "Offer package protection at checkout.",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "On",
+              "chip": true,
+              "tones": {
+                "On": "success"
+              },
+              "when": "data.settings.settings.route.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "info"
+              },
+              "when": "data.settings.settings.route.connected && !data.settings.settings.route.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Not connected",
+              "chip": true,
+              "tones": {
+                "*": "neutral"
+              },
+              "when": "!data.settings.settings.route.connected"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "route",
+          "title": "Route settings",
+          "when": "data.settings.vendors[=const.vendors.route]",
+          "fields": [
+            {
+              "key": "apiKey",
+              "label": "Secret token",
+              "kind": "password",
+              "placeholder": "Stored — paste a new one to replace it"
+            },
+            {
+              "key": "defaultSelected",
+              "label": "Tick the protection box in the cart by default",
+              "kind": "toggle",
+              "initial": "{data.settings.settings.route.defaultSelected}"
+            },
+            {
+              "key": "enabled",
+              "label": "Offer package protection at checkout",
+              "kind": "toggle",
+              "initial": "{data.settings.settings.route.enabled}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/post-purchase/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "change": {
+                "vendor": "route",
+                "apiKey": "{form.apiKey}",
+                "defaultSelected": "{form.defaultSelected}",
+                "enabled": "{form.enabled}"
+              }
+            },
+            "success": "Route saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "routeManage",
+          "when": "data.settings.vendors[=const.vendors.route] && data.settings.settings.route.connected",
+          "items": [
+            {
+              "id": "routeDisconnect",
+              "label": "Disconnect Route",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect Route? Its keys are deleted.",
+              "url": "/api/post-purchase/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "change": {
+                  "vendor": "route",
+                  "disconnect": true
+                }
+              },
+              "success": "Route disconnected"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "narvarStatus",
+          "title": "Narvar",
+          "when": "data.settings.vendors[=const.vendors.narvar]",
+          "footer": "Send orders to Narvar for its branded tracking.",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "On",
+              "chip": true,
+              "tones": {
+                "On": "success"
+              },
+              "when": "data.settings.settings.narvar.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "info"
+              },
+              "when": "data.settings.settings.narvar.connected && !data.settings.settings.narvar.enabled"
+            },
+            {
+              "label": "Status",
+              "value": "Not connected",
+              "chip": true,
+              "tones": {
+                "*": "neutral"
+              },
+              "when": "!data.settings.settings.narvar.connected"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "narvar",
+          "title": "Narvar settings",
+          "when": "data.settings.vendors[=const.vendors.narvar]",
+          "fields": [
+            {
+              "key": "accountId",
+              "label": "Account id",
+              "kind": "text"
+            },
+            {
+              "key": "authToken",
+              "label": "Auth token",
+              "kind": "password",
+              "placeholder": "Stored — paste a new one to replace it"
+            },
+            {
+              "key": "retailerMoniker",
+              "label": "Retailer name",
+              "kind": "text",
+              "initial": "{data.settings.settings.narvar.retailerMoniker}",
+              "help": "The word before .narvar.com in your tracking page address."
+            },
+            {
+              "key": "enabled",
+              "label": "Send orders to Narvar",
+              "kind": "toggle",
+              "initial": "{data.settings.settings.narvar.enabled}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/post-purchase/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "change": {
+                "vendor": "narvar",
+                "accountId": "{form.accountId}",
+                "authToken": "{form.authToken}",
+                "retailerMoniker": "{form.retailerMoniker}",
+                "enabled": "{form.enabled}"
+              }
+            },
+            "success": "Narvar saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "narvarManage",
+          "when": "data.settings.vendors[=const.vendors.narvar] && data.settings.settings.narvar.connected",
+          "items": [
+            {
+              "id": "narvarDisconnect",
+              "label": "Disconnect Narvar",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect Narvar? Its keys are deleted.",
+              "url": "/api/post-purchase/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "change": {
+                  "vendor": "narvar",
+                  "disconnect": true
+                }
+              },
+              "success": "Narvar disconnected"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

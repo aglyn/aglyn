@@ -11,12 +11,15 @@ import AglynCrmPlugin
 import AglynEmailPlugin
 import AglynEventsCalendarPlugin
 import AglynFormsPlugin
+import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
 import AglynInboxPlugin
 import AglynMarketingPlugin
 import AglynOutreachPlugin
+import AglynPostPurchasePlugin
 import AglynRedirectsPlugin
 import AglynSmsPlugin
+import AglynTaxEnginesPlugin
 import AglynWorkflowsPlugin
 
 public enum NativePluginManifest {
@@ -33,7 +36,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "commerce",
-      contributes: ["screens": ["commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
+      contributes: ["screens": ["commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.orders-page", "commerce.products-page"]],
       register: AglynCommercePlugin.registerCommerceNative
     ),
     NativePluginManifestEntry(
@@ -57,6 +60,11 @@ public enum NativePluginManifest {
       register: AglynFormsPlugin.registerFormsNative
     ),
     NativePluginManifestEntry(
+      id: "fulfillment-networks",
+      contributes: ["screens": ["fulfillment-networks.network", "fulfillment-networks.service"]],
+      register: AglynFulfillmentNetworksPlugin.registerFulfillmentNetworksNative
+    ),
+    NativePluginManifestEntry(
       id: "funnels",
       contributes: ["screens": ["funnels.list"], "quickActions": ["funnels.open"], "deepLinks": ["funnels.page"]],
       register: AglynFunnelsPlugin.registerFunnelsNative
@@ -77,6 +85,11 @@ public enum NativePluginManifest {
       register: AglynOutreachPlugin.registerOutreachNative
     ),
     NativePluginManifestEntry(
+      id: "post-purchase",
+      contributes: ["screens": ["post-purchase.service"]],
+      register: AglynPostPurchasePlugin.registerPostPurchaseNative
+    ),
+    NativePluginManifestEntry(
       id: "redirects",
       contributes: ["screens": ["redirects.list"], "widgets": ["redirects.summary"], "quickActions": ["redirects.open"], "deepLinks": ["redirects.page"]],
       register: AglynRedirectsPlugin.registerRedirectsNative
@@ -85,6 +98,11 @@ public enum NativePluginManifest {
       id: "sms",
       contributes: ["screens": ["sms.texts"], "quickActions": ["sms.open"]],
       register: AglynSmsPlugin.registerSmsNative
+    ),
+    NativePluginManifestEntry(
+      id: "tax-engines",
+      contributes: ["screens": ["tax-engines.service"]],
+      register: AglynTaxEnginesPlugin.registerTaxEnginesNative
     ),
     NativePluginManifestEntry(
       id: "workflows",

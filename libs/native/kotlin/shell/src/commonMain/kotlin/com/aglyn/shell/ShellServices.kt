@@ -133,6 +133,8 @@ internal class ShellPluginContext(
   override val siteRole get() = workspace.site?.role
   override val orgRole get() = workspace.org?.role
 
+  override fun slotWidgets(slot: String) = services.registry.widgets(services.app, slot)
+
   override fun selectSite(hostId: String) = services.workspace.selectSite(hostId)
 
   override fun back() {

@@ -80,6 +80,13 @@ interface NativePluginContext {
   /** Makes [hostId] the picked site, as the site switcher does. */
   fun selectSite(hostId: String) {}
 
+  /**
+   * The widgets other plugins put in a core page's named slot (`commerceSettings`,
+   * `hostAnalytics`), in order. A screen that hosts a slot draws these; core
+   * and the host never name the plugins that contribute.
+   */
+  fun slotWidgets(slot: String): List<NativeWidget> = emptyList()
+
   /** Opens a registered screen by id. */
   fun navigate(screenId: String, params: NativeParams = emptyMap())
 

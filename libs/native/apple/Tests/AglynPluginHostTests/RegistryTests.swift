@@ -102,6 +102,32 @@ final class BesignerOnlyTests: XCTestCase {
     XCTAssertFalse(context.openBesigner("/products/orders"))
     XCTAssertEqual(opened, ["/acme/hosts/shop/screens/s1/versions/v1/besigner"])
   }
+
+  func testTheContextHandsAHostThePluginsWidgetsInAnamedSlot() {
+    let registry = NativePluginRegistry()
+    _ = NativePluginLoader.load(
+      [
+        entry(
+          contributes: ["widgets": ["a.late", "a.early", "a.home"]],
+          register: {
+            $0.widget("a.late", title: "Late", order: 2, slot: "commerceSettings") { _ in EmptyView() }
+            $0.widget("a.early", title: "Early", order: 1, slot: "commerceSettings") { _ in EmptyView() }
+            $0.widget("a.home", title: "Home", order: 1) { _ in EmptyView() }
+          })
+      ], into: registry)
+    let bare = NativePluginContext(
+      uid: "u", orgID: "o", hostID: "h", orgSlug: "acme", hostSlug: "shop", firestore: NullReader(),
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }),
+      navigate: { _, _ in }, openBesigner: { _ in })
+    XCTAssertEqual(bare.slotWidgets("commerceSettings").map(\.id), [], "a shell that hosts no slots hands none")
+    let hosted = NativePluginContext(
+      uid: "u", orgID: "o", hostID: "h", orgSlug: "acme", hostSlug: "shop", firestore: NullReader(),
+      api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }),
+      navigate: { _, _ in }, openBesigner: { _ in },
+      slotWidgets: { registry.widgets(for: .aglyn, slot: $0) })
+    XCTAssertEqual(hosted.slotWidgets("commerceSettings").map(\.id), ["a.early", "a.late"])
+    XCTAssertEqual(hosted.slotWidgets("elsewhere").map(\.id), [])
+  }
 }
 
 private final class NullReader: FirestoreReader, @unchecked Sendable {

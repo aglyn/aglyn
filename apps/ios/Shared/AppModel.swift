@@ -141,7 +141,8 @@ final class AppModel {
       back: { [weak navigation] in
         guard let navigation else { return }
         _ = navigation.paths[navigation.section]?.popLast()
-      })
+      },
+      slotWidgets: { [registry, app] slot in registry.widgets(for: app, slot: slot) })
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

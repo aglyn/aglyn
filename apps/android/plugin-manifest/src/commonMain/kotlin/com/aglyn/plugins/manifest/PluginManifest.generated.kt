@@ -13,12 +13,15 @@ import com.aglyn.plugins.crm.registerCrmNative
 import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
+import com.aglyn.plugins.fulfillmentnetworks.registerFulfillmentNetworksNative
 import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.outreach.registerOutreachNative
+import com.aglyn.plugins.postpurchase.registerPostPurchaseNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 import com.aglyn.plugins.sms.registerSmsNative
+import com.aglyn.plugins.taxengines.registerTaxEnginesNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
 
 object NativePluginManifest {
@@ -35,7 +38,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "commerce",
-            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),
+            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products", "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.orders-page", "commerce.products-page")),
             register = ::registerCommerceNative,
         ),
         NativePluginManifestEntry(
@@ -59,6 +62,11 @@ object NativePluginManifest {
             register = ::registerFormsNative,
         ),
         NativePluginManifestEntry(
+            id = "fulfillment-networks",
+            contributes = mapOf("screens" to listOf("fulfillment-networks.network", "fulfillment-networks.service")),
+            register = ::registerFulfillmentNetworksNative,
+        ),
+        NativePluginManifestEntry(
             id = "funnels",
             contributes = mapOf("screens" to listOf("funnels.list"), "quickActions" to listOf("funnels.open"), "deepLinks" to listOf("funnels.page")),
             register = ::registerFunnelsNative,
@@ -79,6 +87,11 @@ object NativePluginManifest {
             register = ::registerOutreachNative,
         ),
         NativePluginManifestEntry(
+            id = "post-purchase",
+            contributes = mapOf("screens" to listOf("post-purchase.service")),
+            register = ::registerPostPurchaseNative,
+        ),
+        NativePluginManifestEntry(
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
@@ -87,6 +100,11 @@ object NativePluginManifest {
             id = "sms",
             contributes = mapOf("screens" to listOf("sms.texts"), "quickActions" to listOf("sms.open")),
             register = ::registerSmsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "tax-engines",
+            contributes = mapOf("screens" to listOf("tax-engines.service")),
+            register = ::registerTaxEnginesNative,
         ),
         NativePluginManifestEntry(
             id = "workflows",
