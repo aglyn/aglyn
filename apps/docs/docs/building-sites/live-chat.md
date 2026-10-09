@@ -16,6 +16,8 @@ Live chat is included on every plan. You need your own Tidio or LiveChat account
 
 ## Set up live chat
 
+Connect your own Tidio or LiveChat account by its public key or license number, then choose which pages show the chat.
+
 1. Turn on **Live chat** for the site under **Admin → Plugins → Live chat**. It is off
    for every site until you turn it on.
 2. Open the site's **Setup** page and find the **Live chat** card.
