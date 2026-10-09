@@ -82,6 +82,12 @@ let announced = false
  * buries the diagnostics that do.
  */
 function reportDroppedEntry(error: unknown): void {
+  // `already-exists` is not a dropped entry: it is the entry. `addDoc` is a
+  // create under a fresh id, so the only way it meets an existing document is
+  // the SDK replaying a write whose commit landed and whose answer did not (a
+  // flaky connection, a tab waking from sleep). The line is in the log; two
+  // beacon reports on 2026-10-09 paged for exactly that.
+  if ((error as { code?: unknown } | null)?.code === 'already-exists') return
   reportHandledError(error, { kind: 'host-activity-write' })
   if (announced) return
   announced = true

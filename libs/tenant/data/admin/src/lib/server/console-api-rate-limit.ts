@@ -23,6 +23,7 @@ import {
   lockdownIntentForMethod,
 } from '@aglyn/aglyn/server'
 import { consumeRateLimit } from './rate-limit-store'
+import { isCronAuthorized } from './cron-auth'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
@@ -58,6 +59,28 @@ function clientIp(request: {
     readClientIp(headers as { get(name: string): string | null }) ??
     NO_CLIENT_ADDRESS_BUCKET
   )
+}
+
+/**
+ * Did this request present the console's VERIFIED cron secret?
+ *
+ * `isCronAuthorized` compares the value with `CRON_SECRET` in constant time,
+ * so this answers whether the caller holds the credential, not whether it
+ * attached a header with the right name.
+ */
+function presentsCronSecret(request: {
+  headers?: { get?: (name: string) => unknown }
+}): boolean {
+  const headers = request?.headers
+  if (typeof headers?.get !== 'function') return false
+  const read = (name: string) => {
+    const value = headers.get?.(name)
+    return typeof value === 'string' ? value : undefined
+  }
+  return isCronAuthorized({
+    authorization: read('authorization'),
+    'x-cron-secret': read('x-cron-secret'),
+  })
 }
 
 export interface ConsoleApiRateLimitOptions {
@@ -112,6 +135,22 @@ export interface ConsoleApiRateLimitOptions {
  * would also make the surface unlimited for the accounts most likely to be
  * driving it from a script.
  *
+ * ## The cron secret is exempt, verified
+ *
+ * A request that presents the console's `CRON_SECRET` is the platform's own
+ * scheduler, and it is not counted. It carries no Firebase token, so without
+ * this it fell into the client-address bucket, shared with every other
+ * tokenless caller behind the same Cloud Functions egress. On 2026-10-09 at
+ * 14:00Z `consoleAiInsightsDigest` was refused there with a 429 while the
+ * hourly crons fired beside it, and the day's digests went undelivered.
+ *
+ * The list of machine paths stays the first answer (a route that knows it is
+ * a machine's says so), and this is the backstop for one that forgot: a
+ * scheduler holding the secret could already run every cron route on the
+ * console, so counting it bounds nothing an attacker could reach. What is
+ * exempt is the VERIFIED secret, compared in constant time — never the mere
+ * presence of the header, which would let any caller switch the limiter off.
+ *
  * ## What the caller is told
  *
  * A bare 429 with `Retry-After`, following `visitorWriteRateLimitRefusal` and
@@ -124,6 +163,7 @@ export async function consoleApiRateLimitRefusal(
 ): Promise<Response | null> {
   if (lockdownIntentForMethod(options.request?.method) === 'read') return null
   if (isMachinePluginApiPath(options.path)) return null
+  if (presentsCronSecret(options.request)) return null
 
   const nowMs = options.nowMs ?? Date.now()
   // Prefixed, so an address can never collide with a uid: Firebase uids are
