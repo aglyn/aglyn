@@ -128,6 +128,10 @@ const AI_DOORS = new Map<string, string>([
  */
 const MENTIONS_ONLY = new Map<string, string>([
   [
+    'libs/plugins/ai/src/lib/jobs/ai-job-site-plan-context-live.spec.ts',
+    "The guided start's live plan eval with a business profile (AGL-3661). It checks the key is SET before it runs, and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter above, and what it sends is six fixed sample briefs and profiles written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
     'libs/plugins/ai/src/lib/jobs/ai-job-site-plan-live.spec.ts',
     "The guided start's live plan eval (AGL-3596). It checks the key is SET before it runs, and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter above, and what it sends is ten fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],

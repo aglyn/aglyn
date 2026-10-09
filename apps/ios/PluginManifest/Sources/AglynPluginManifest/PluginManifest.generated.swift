@@ -10,6 +10,7 @@ import AglynCrmPlugin
 import AglynEmailPlugin
 import AglynEventsCalendarPlugin
 import AglynFormsPlugin
+import AglynFunnelsPlugin
 import AglynInboxPlugin
 import AglynMarketingPlugin
 import AglynOutreachPlugin
@@ -47,6 +48,11 @@ public enum NativePluginManifest {
       id: "forms",
       contributes: ["screens": ["forms.form", "forms.list"], "quickActions": ["forms.open"], "deepLinks": ["forms.page", "forms.record"]],
       register: AglynFormsPlugin.registerFormsNative
+    ),
+    NativePluginManifestEntry(
+      id: "funnels",
+      contributes: ["screens": ["funnels.list"], "quickActions": ["funnels.open"], "deepLinks": ["funnels.page"]],
+      register: AglynFunnelsPlugin.registerFunnelsNative
     ),
     NativePluginManifestEntry(
       id: "inbox",

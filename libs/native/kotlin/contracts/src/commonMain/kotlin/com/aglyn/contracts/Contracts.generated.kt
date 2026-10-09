@@ -243,6 +243,17 @@ data class DeviceSplitEntry(
     val percent: Long,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = DropOffActionSerializer::class)
+enum class DropOffAction(val raw: String) {
+    EMAIL("email"),
+    TASK("task"),
+    UNKNOWN(""),
+}
+
+internal object DropOffActionSerializer :
+    RawEnumSerializer<DropOffAction>("com.aglyn.contracts.DropOffAction", DropOffAction.entries, DropOffAction.UNKNOWN, { it.raw })
+
 @Serializable
 data class EntryStatusOptionsItem(
     val label: String,
@@ -316,6 +327,80 @@ data class FormLeadRoutingOptionsItem(
 data class FormStatusOptionsItem(
     val label: String,
     val value: String,
+)
+
+@Serializable
+data class FunnelDefinition(
+    val name: String,
+    val steps: List<FunnelStep>,
+)
+
+@Serializable
+data class FunnelInventory(
+    val forms: List<FunnelInventoryItem>,
+    val overlays: List<FunnelInventoryItem>,
+    val pages: List<String>,
+    val products: List<FunnelInventoryItem>,
+    val services: List<FunnelInventoryItem>,
+)
+
+@Serializable
+data class FunnelInventoryItem(
+    val id: String,
+    val name: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = FunnelPageMatchSerializer::class)
+enum class FunnelPageMatch(val raw: String) {
+    EXACT("exact"),
+    PREFIX("prefix"),
+    UNKNOWN(""),
+}
+
+internal object FunnelPageMatchSerializer :
+    RawEnumSerializer<FunnelPageMatch>("com.aglyn.contracts.FunnelPageMatch", FunnelPageMatch.entries, FunnelPageMatch.UNKNOWN, { it.raw })
+
+@Serializable
+data class FunnelResult(
+    val capped: Boolean,
+    val completed: Long,
+    val computedAt: Long,
+    val entered: Long,
+    val from: String,
+    val funnelId: String,
+    val journeysRead: Long,
+    val overall: Double? = null,
+    val sources: List<FunnelSourceResult>,
+    val steps: List<FunnelStepResult>,
+    val to: String,
+)
+
+@Serializable
+data class FunnelSourceResult(
+    val completed: Long,
+    val conversion: Double? = null,
+    val entered: Long,
+    val source: String,
+)
+
+@Serializable
+data class FunnelStep(
+    val key: String,
+    val label: String? = null,
+    val match: FunnelPageMatch? = null,
+    val type: SiteJourneyStepType,
+)
+
+@Serializable
+data class FunnelStepResult(
+    val dropOff: Long,
+    val fromPrevious: Double? = null,
+    val fromStart: Double? = null,
+    val index: Long,
+    val label: String,
+    val medianMsFromPrevious: Double? = null,
+    val visitors: Long,
 )
 
 @Serializable
@@ -1830,6 +1915,23 @@ data class SiteFilterOptionsHasCustomDomainItem(
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = SiteJourneyStepTypeSerializer::class)
+enum class SiteJourneyStepType(val raw: String) {
+    BOOKING("booking"),
+    CART("cart"),
+    EMAIL("email"),
+    EVENT("event"),
+    FORM("form"),
+    ORDER("order"),
+    OVERLAY("overlay"),
+    PAGE("page"),
+    UNKNOWN(""),
+}
+
+internal object SiteJourneyStepTypeSerializer :
+    RawEnumSerializer<SiteJourneyStepType>("com.aglyn.contracts.SiteJourneyStepType", SiteJourneyStepType.entries, SiteJourneyStepType.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = TenantEmailControlSerializer::class)
 enum class TenantEmailControl(val raw: String) {
     BESIGNER("besigner"),
@@ -1889,6 +1991,9 @@ data class ContractValues(
     @SerialName("DEAL_LIST_DECLARATION") val dealListDeclaration: ListQueryDeclaration,
     @SerialName("DEFAULT_DEAL_STAGES") val defaultDealStages: List<CrmDealStage>,
     @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
+    @SerialName("DROP_OFF_MAX_HOURS") val dropOffMaxHours: Double,
+    @SerialName("DROP_OFF_WAIT_HOURS") val dropOffWaitHours: List<Double>,
+    @SerialName("DROP_OFF_WATCHES_MAX") val dropOffWatchesMax: Long,
     @SerialName("EMAIL_LIST_QUERY") val emailListQuery: ListQueryDeclaration,
     @SerialName("EMAIL_TEMPLATE_QUERY") val emailTemplateQuery: ListQueryDeclaration,
     @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
@@ -1909,6 +2014,15 @@ data class ContractValues(
     @SerialName("FORM_STATUS_OPTIONS") val formStatusOptions: List<FormStatusOptionsItem>,
     @SerialName("FUNCTION_BUILTIN_NAMES") val functionBuiltinNames: List<String>,
     @SerialName("FUNCTION_MAX_OPERATIONS") val functionMaxOperations: Long,
+    @SerialName("FUNNEL_EMAIL_KEY_LABELS") val funnelEmailKeyLabels: Map<String, String>,
+    @SerialName("FUNNEL_FEATURE") val funnelFeature: String,
+    @SerialName("FUNNEL_LABEL_MAX") val funnelLabelMax: Long,
+    @SerialName("FUNNEL_MAX_RANGE_DAYS") val funnelMaxRangeDays: Long,
+    @SerialName("FUNNEL_MAX_STEPS") val funnelMaxSteps: Long,
+    @SerialName("FUNNEL_MIN_STEPS") val funnelMinSteps: Long,
+    @SerialName("FUNNEL_NAME_MAX") val funnelNameMax: Long,
+    @SerialName("FUNNEL_STEP_TYPE_LABELS") val funnelStepTypeLabels: Map<String, String>,
+    @SerialName("FUNNELS_MAX_PER_SITE") val funnelsMaxPerSite: Long,
     @SerialName("HOST_EVENTS") val hostEvents: List<HostEventDeclaration>,
     @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
@@ -2012,6 +2126,7 @@ data class ContractValues(
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
     @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
     @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
+    @SerialName("SITE_JOURNEY_KEY_MAX") val siteJourneyKeyMax: Long,
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,

@@ -343,6 +343,7 @@ private fun CatalogPane(
         "Offline. Keep ringing up; hold baskets and charge when you are back online.",
         StatusTone.WARNING,
         Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("pos-offline"),
+        action = { TextButton(onClick = { model.reconnect() }, modifier = Modifier.testTag("pos-reconnect")) { Text("Retry") } },
       )
     }
     val selected = when {

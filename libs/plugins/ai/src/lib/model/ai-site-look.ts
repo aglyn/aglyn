@@ -467,6 +467,20 @@ function labelOn(fill: string, h: number): string {
   return ratio(white, fill) >= 4.5 ? white : ratio(ink, fill) >= 4.5 ? ink : ratio(white, fill) > ratio(ink, fill) ? white : '#000000'
 }
 
+/** How far apart two hues sit on the wheel, in degrees: 0 to 180. */
+export function aiHueGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360
+  return Math.min(d, 360 - d)
+}
+
+/**
+ * The widest gap an accent may keep from the brand hue and still color a
+ * button beside it (AGL-3660). Past it the accent clashes: a live portfolio of
+ * green (hue 131) and magenta (323) showed its outlined buttons as a pink wash
+ * and its footer button as purple under green words, on a Cupertino base.
+ */
+export const AI_SITE_ACCENT_CLASH_DEGREES = 60
+
 const CHROMA: Record<AiSiteChroma, number> = { neutral: 0.15, muted: 0.085, balanced: 0.135, vivid: 0.185 }
 const START_L: Record<AiSiteChroma, number> = { neutral: 0.52, muted: 0.48, balanced: 0.52, vivid: 0.56 }
 
@@ -502,21 +516,29 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
     primaryMain = aiOklchHex(primaryL, chroma, h)
   }
   const accentChroma = neutral ? 0.17 : Math.max(0.07, chroma * 0.95)
+  // A button's colors come from the brand hue where the accent clashes with
+  // it (AGL-3660); the accent keeps its tint and the tertiary.
+  const buttonHue = aiHueGap(style.accent, h) > AI_SITE_ACCENT_CLASH_DEGREES ? h : style.accent
 
   // The secondary color fills a button ON a brand band, so it stands apart from the brand color.
   const secondary = neutral
-    ? { main: aiOklchHex(0.24, 0.012, h), h }
+    ? (() => {
+        // Ink or paper, whichever stands further from the brand color (AGL-3660).
+        const ink = aiOklchHex(0.24, 0.012, h)
+        const paper = aiOklchHex(0.97, 0.008, h)
+        return { main: ratio(ink, primaryMain) >= ratio(paper, primaryMain) ? ink : paper, h }
+      })()
     : (() => {
         // A light wash of the accent rather than the accent at full strength:
         // it reads on the brand color without fighting it.
         const washChroma = Math.min(accentChroma, 0.08)
         let L = 0.9
-        let main = aiOklchHex(L, washChroma, style.accent)
+        let main = aiOklchHex(L, washChroma, buttonHue)
         while (ratio(main, primaryMain) < 3 && L < 0.96) {
           L += 0.02
-          main = aiOklchHex(L, washChroma, style.accent)
+          main = aiOklchHex(L, washChroma, buttonHue)
         }
-        return { main, h: style.accent }
+        return { main, h: buttonHue }
       })()
   const tertiaryHue = (style.accent + 60) % 360
   const tertiaryL = untilContrast(0.52, 0.12, tertiaryHue, white, 4.6, 0)
@@ -549,9 +571,11 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
       secondary: aiOklchHex(0.45, textChroma + 0.005, h),
       disabled: aiOklchHex(0.68, 0.01, h),
     },
+    // The primary's tint is the brand's own wash (AGL-3660): a base fills an
+    // outlined or tinted button with it, under the primary's dark words.
     tint: {
-      primary: aiOklchHex(0.955, neutral ? 0.03 : 0.035, neutral ? style.accent : h),
-      secondary: aiOklchHex(0.955, 0.035, style.accent),
+      primary: aiOklchHex(0.955, neutral ? 0.03 : 0.035, h),
+      secondary: aiOklchHex(0.955, 0.035, buttonHue),
       tertiary: aiOklchHex(0.955, 0.03, tertiaryHue),
     },
     divider: aiOklchHex(0.9, 0.012 * groundChroma, h),
@@ -563,7 +587,7 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
   const darkChroma = Math.min(chroma, 0.14)
   const darkPrimaryL = untilContrast(0.78, darkChroma, h, darkBackground, 4.5, 1)
   const darkPrimary = aiOklchHex(darkPrimaryL, darkChroma, h)
-  const darkSecondary = neutral ? aiOklchHex(0.93, 0.01, h) : aiOklchHex(0.45, accentChroma * 0.85, style.accent)
+  const darkSecondary = neutral ? aiOklchHex(0.93, 0.01, h) : aiOklchHex(0.45, accentChroma * 0.85, buttonHue)
   const darkTertiary = aiOklchHex(0.8, 0.1, tertiaryHue)
   const dark: HostThemeSchemeColors = {
     primary: {
@@ -592,8 +616,8 @@ export function aiSiteColors(style: AiSiteStyle): { light: HostThemeSchemeColors
       disabled: aiOklchHex(0.52, 0.01, h),
     },
     tint: {
-      primary: aiOklchHex(0.27, 0.05, neutral ? style.accent : h),
-      secondary: aiOklchHex(0.27, 0.05, style.accent),
+      primary: aiOklchHex(0.27, 0.05, h),
+      secondary: aiOklchHex(0.27, 0.05, buttonHue),
       tertiary: aiOklchHex(0.27, 0.04, tertiaryHue),
     },
     divider: aiOklchHex(0.32, 0.015 * groundChroma, h),
