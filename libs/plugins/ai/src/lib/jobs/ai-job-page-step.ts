@@ -88,7 +88,11 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
-import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
+import {
+  AI_STOCK_PHOTO_PAGES_INPUT,
+  aiLayoutStockPhotoSource,
+  aiStockPlacedSrcs,
+} from './ai-layout-stock-photos'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   AI_JOB_PAGE_LANGUAGE_BUDGET,
@@ -421,6 +425,29 @@ export const aiPageJobAdmission: AiJobAdmission = async (context) => {
   })
 }
 
+/**
+ * The library photos the job's other pages already show (AGL-3660): read
+ * from the screen drafts a site job names for its page unit
+ * (`AI_STOCK_PHOTO_PAGES_INPUT`), never this page's own, so a pass repeated
+ * over it keeps its photos. Empty on any failure: a repeat is better than a
+ * page that fails over decoration.
+ */
+export async function aiJobPagesPlacedPhotos(
+  firestore: Parameters<typeof readAiDraftNodes>[0],
+  input: { hostId: string; job: Pick<AiJob, 'inputs'>; draftId: string },
+  readNodes: typeof readAiDraftNodes = readAiDraftNodes,
+): Promise<string[]> {
+  const listed = input.job.inputs?.[AI_STOCK_PHOTO_PAGES_INPUT]
+  const ids = Array.isArray(listed)
+    ? [...new Set(listed.filter((id): id is string => typeof id === 'string' && !!id && id !== input.draftId))]
+    : []
+  if (!ids.length) return []
+  const read = await Promise.all(
+    ids.map((id) => readNodes(firestore, { kind: 'screen', hostId: input.hostId, id }).catch(() => null)),
+  )
+  return [...new Set(read.flatMap((stored) => aiStockPlacedSrcs(stored?.nodes)))]
+}
+
 export interface AiJobPageStepDeps {
   /** The inventory reader; specs hand in a fake. */
   readInventory?: typeof readSiteInventory
@@ -750,6 +777,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // library, else a starter photo. No AI credits; never fails the job.
       const sectionNames = screen.sections.map((section) => section.name)
       const seed = `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`
+      // A photo another page of the job already shows is not placed here.
+      const avoid = await aiJobPagesPlacedPhotos(firestore, { hostId, job, draftId })
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
@@ -761,6 +790,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           seed,
           business: aiSiteWords(job.inputs).about,
           sectionNames,
+          jobId: aiOriginJobId(job),
+          ...(avoid.length ? { avoid } : {}),
           ...(signal ? { signal } : {}),
         }),
       })
