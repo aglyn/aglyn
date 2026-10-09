@@ -42,6 +42,8 @@ const connection = (overrides: Partial<NetworkConnectionView> = {}): NetworkConn
   shippingSpeed: 'Standard',
   marketplaceId: null,
   marketplaces: [],
+  storeId: null,
+  webhookSecretSet: false,
   syncInventory: false,
   inventory: { syncedAtMs: 1, skus: 12, updated: 0, unchanged: 0, unknown: 0, untracked: 0, perLocation: 0 },
   lastError: null,
@@ -66,6 +68,8 @@ function api(overrides: Partial<FulfillmentNetworksApi> = {}): FulfillmentNetwor
   return {
     list: jest.fn(async () => ({ offered: [], connections: [] })),
     connect: jest.fn(async () => 'https://auth.test'),
+    connectKey: jest.fn(async () => ({ connection: null, webhook: null })),
+    rotateWebhookSecret: jest.fn(async () => ({ url: 'https://c/hook', secret: 'whsec-new' })),
     update: jest.fn(async (_provider, settings) => connection(settings as never)),
     disconnect: jest.fn(async () => undefined),
     syncNow: jest.fn(async () => connection()),
@@ -117,6 +121,38 @@ describe('the fulfillment networks card (AGL-3634)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
     await waitFor(() => expect(routes.disconnect).toHaveBeenCalledWith('shipbob'))
     expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Disconnect ShipBob?' }))
+  })
+
+  it('connects ShipMonk with the merchant’s own key and store id, then shows the webhook setup once (AGL-3697)', async () => {
+    const shipmonk = connection({ id: 'h_shipmonk', provider: 'shipmonk', accountName: 'Store 11364', storeId: '11364', webhookSecretSet: true })
+    const routes = api({
+      list: jest.fn(async () => ({ offered: [{ id: 'shipmonk' as const, sandbox: false }], connections: [] })),
+      connectKey: jest.fn(async () => ({ connection: shipmonk, webhook: { url: 'https://c/api/fulfillment-networks/webhooks/shipmonk?connection=h_shipmonk', secret: 'whsec-1' } })),
+    })
+    render(<FulfillmentNetworksCard hostId="h" api={routes} />)
+    expect(await screen.findByText(/API key of your own ShipMonk API store/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect ShipMonk' }))
+    expect(routes.connect).not.toHaveBeenCalled()
+    const submit = screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement
+    expect(submit.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sm-live-key-1234' } })
+    fireEvent.change(screen.getByLabelText('Store id'), { target: { value: '11364' } })
+    fireEvent.click(submit)
+    await waitFor(() => expect(routes.connectKey).toHaveBeenCalledWith('shipmonk', { apiKey: 'sm-live-key-1234', storeId: '11364' }))
+    expect(await screen.findByDisplayValue('whsec-1')).toBeTruthy()
+    expect(screen.getByDisplayValue(/webhooks\/shipmonk\?connection=h_shipmonk/)).toBeTruthy()
+    expect(screen.getByLabelText('Shipping service')).toBeTruthy()
+    expect(screen.queryByDisplayValue('sm-live-key-1234')).toBeNull()
+  })
+
+  it('makes a new ShipMonk webhook secret only after asking (AGL-3697)', async () => {
+    const shipmonk = connection({ id: 'h_shipmonk', provider: 'shipmonk', storeId: '11364', webhookSecretSet: true })
+    const routes = api({ list: jest.fn(async () => ({ offered: [{ id: 'shipmonk' as const, sandbox: false }], connections: [shipmonk] })) })
+    render(<FulfillmentNetworksCard hostId="h" api={routes} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New webhook secret' }))
+    await waitFor(() => expect(routes.rotateWebhookSecret).toHaveBeenCalledWith('shipmonk'))
+    expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'New ShipMonk webhook secret?' }))
+    expect(await screen.findByDisplayValue('whsec-new')).toBeTruthy()
   })
 
   it('asks to connect again when the grant was refused', async () => {

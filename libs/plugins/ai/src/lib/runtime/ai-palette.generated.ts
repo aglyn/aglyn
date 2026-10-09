@@ -3815,6 +3815,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        cardStyle: {
+          type: 'string',
+          enum: ['outlined', 'photo'],
+        },
       },
       required: [],
       additionalProperties: false,
@@ -3844,6 +3848,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       showTypeFilter: 'checkbox',
       showPriceFilter: 'checkbox',
       pageSize: 'text-field',
+      cardStyle: 'select',
     },
     textLimits: {
       collectionSlug: 200,
@@ -4520,7 +4525,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
-    codeOnly: ['icon'],
+    codeOnly: ['icon', 'product-grid'],
   },
   email: {
     root: 'div',
@@ -4583,7 +4588,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
-    codeOnly: ['icon', 'muiDrawer', 'muiDrawerToggle'],
+    codeOnly: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
   },
   component: {
     root: 'div',

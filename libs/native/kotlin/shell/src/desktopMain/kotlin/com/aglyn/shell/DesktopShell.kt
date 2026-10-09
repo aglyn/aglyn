@@ -114,6 +114,11 @@ object DesktopShell {
       debugSignIn = debugSignIn,
       peripherals = peripherals,
       writer = firestore,
+      // A JVM has no in-app browser sheet; Stripe's pages open in the system browser, as the console opens them in a tab.
+      openHostedPage = { url ->
+        runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+          .onFailure { System.err.println("Aglyn: could not open $url: ${it.message}") }
+      },
       mediaPicker = DesktopMediaPicker,
       fileExporter = DesktopFileExporter,
     )

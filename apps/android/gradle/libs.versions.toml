@@ -35,6 +35,8 @@ android-minSdk = "26"
 android-targetSdk = "36"
 
 [libraries]
+# Custom Tabs: Stripe's hosted Checkout and Customer Portal open in the secure in-app browser.
+androidx-browser = { module = "androidx.browser:browser", version = "1.9.0" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }

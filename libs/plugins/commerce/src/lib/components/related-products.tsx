@@ -43,6 +43,8 @@ interface CatalogItem {
   slug: string
   priceUsd: number
   imageUrl?: string
+  /** Listed before it has a price (AGL-3676). */
+  priceComingSoon?: boolean
 }
 
 /**
@@ -154,7 +156,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                       {item.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {`$${item.priceUsd}`}
+                      {item.priceComingSoon ? 'Price coming soon' : `$${item.priceUsd}`}
                     </Typography>
                   </CardContent>
                 </CardActionArea>

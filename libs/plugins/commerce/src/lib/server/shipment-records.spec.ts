@@ -170,6 +170,17 @@ describe('writing a label’s shipment', () => {
       },
     ])
   })
+  it('carries what the label cost, for a marketplace that pays shipping back (AGL-3693)', async () => {
+    await commerceShipmentRecords.recordShipment({
+      hostId: 'host-1',
+      recordId: 'order-1',
+      carrier: 'USPS',
+      trackingNumber: 'TRK3',
+      labelRef: 'lbl_def',
+      labelCostCents: 845,
+    })
+    expect(shipmentCalls[shipmentCalls.length - 1]).toMatchObject({ labelRef: 'lbl_def', labelCostCents: 845 })
+  })
 })
 
 describe('tracking', () => {

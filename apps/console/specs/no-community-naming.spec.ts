@@ -109,6 +109,14 @@ const ALLOWED = new Map<string, string>([
     'THE forum’s own page — its heading, its docs anchor, its route.',
   ],
   [
+    'libs/native/screens/account.screens.json',
+    'The native apps’ Support screens name the forum channel, as the console does.',
+  ],
+  [
+    'libs/native/apple/Sources/AglynScreens/Resources/screens/account.screens.json',
+    'The Apple package’s link to the same spec file (a tracked symlink).',
+  ],
+  [
     'apps/console/app/(app)/[orgSlug]/support/forum/layout.tsx',
     'The forum page’s browser title.',
   ],

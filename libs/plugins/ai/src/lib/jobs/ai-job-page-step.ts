@@ -93,6 +93,7 @@ import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-con
 import {
   AI_JOB_PAGE_LANGUAGE_BUDGET,
   aiJobUsesLayoutLanguage,
+  aiLayoutListingContext,
   aiLayoutPageTargets,
   aiRunLayoutPage,
 } from './ai-job-page-language'
@@ -604,7 +605,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // language and compiled (AGL-3660); a record template keeps the raw tree,
     // since its copy binds fields the language does not name.
     const language = aiJobUsesLayoutLanguage(job) && !record
-    const context = {
+    const checked = {
       ...aiPageCheckContext(inventory, {
         reusableComponents,
         sections,
@@ -612,8 +613,17 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         recordTokens: aiPageRecordTokens(record),
         linkablePages,
       }),
-      ...(language ? { codeBuilt: true } : {}),
+      // The last pass holds a compiled page to what its own check did: the
+      // design's picture cards are the compiler's, not a block rule 1 asks a
+      // component of (AGL-3660). Without it, a Pro store's Shop page passed
+      // its check and was refused at the last pass (live run, 2026-10-09).
+      ...(language ? { codeBuilt: true, repeatsCompiled: true } : {}),
     }
+    // And a post's card in a section listing the blog links its post and shows
+    // its cover by the tokens the page fills per post (AGL-3676), as its check admitted.
+    const context = language
+      ? aiLayoutListingContext(checked, aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] }))
+      : checked
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {

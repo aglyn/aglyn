@@ -2671,6 +2671,36 @@
     },
     {
       "id": "ai",
+      "mobile": {
+        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json.",
+        "ios": {
+          "module": "AglynAiPlugin",
+          "register": "registerAINative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.ai",
+          "register": "registerAINative"
+        },
+        "contributes": {
+          "screens": [
+            "ai.jobs",
+            "ai.job",
+            "ai.credits",
+            "ai.member",
+            "ai.staffOrg",
+            "ai.staffUser",
+            "ai.signals"
+          ],
+          "quickActions": [
+            "ai.open"
+          ],
+          "deepLinks": [
+            "ai.jobs.link",
+            "ai.job.link",
+            "ai.signals.link"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-ai",
       "register": {
         "console": "registerAiConsole",
@@ -3108,7 +3138,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, its grant sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "fulfillmentNetworkConnections",
           "orgField": "orgId"
         },

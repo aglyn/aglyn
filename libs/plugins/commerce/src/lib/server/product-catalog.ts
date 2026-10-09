@@ -199,7 +199,11 @@ export function productOffers(productId: string, raw: DocumentData, context: Pag
   if (!raw || raw['deletedAt']) return []
   const product = CommerceModel.liftLegacyProduct(raw as CommerceModel.HostProduct)
   if (product.status !== 'active' || !str(product.name).trim() || !str(product.slug)) return []
-  const variants = (product.variants ?? []).filter((variant) => variant && str(variant.id))
+  // A variant with no price yet is not an offer (AGL-3676): a product listed
+  // as "Price coming soon" is in no shopping feed or marketplace at $0.
+  const variants = (product.variants ?? []).filter(
+    (variant) => variant && str(variant.id) && CommerceModel.variantHasPrice(variant),
+  )
   if (!variants.length) return []
   const hasVariants = variants.length > 1
   const facts = CommerceModel.normalizeProductChannelFacts(product.channel)
@@ -317,7 +321,9 @@ export const productCatalog: PluginProductCatalog = {
       name,
       origin,
       currency: str(settings['currency']).trim().toUpperCase() || 'USD',
-      productPagesServed: Boolean(str(settings['pdpScreenId'])),
+      // Every active product's page answers (AGL-3676): through the
+      // designated template, else the store's built-in product page.
+      productPagesServed: true,
       carrierPricedCountries: carrierPricedCountries(shipping, shippingCountries(shipping)),
     }
   },
