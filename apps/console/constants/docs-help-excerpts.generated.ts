@@ -185,6 +185,7 @@ export const DOCS_HELP_EXCERPTS = {
   reports: 'New contacts, their sources and which convert, the lead funnel and lead sources, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, all exportable as CSV.',
   responsiveStyling: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   revenue: 'What Aglyn earned — contracted plan value and settled Stripe cash side by side, the gap between them broken into named causes, and every deduction between gross and net.',
+  reviewPlatforms: 'Invite customers to review your store on Trustpilot after their order ships or arrives, by copying an order email to your Trustpilot invitation address, or with your own Trustpilot or Yotpo Reviews keys.',
   rewardsAndReferrals: 'Give customers points on every order, online and at the register, let them spend points and store credit at checkout or the till, and reward members whose friends buy.',
   runAnAgencyWorkspace: 'Set up one Aglyn workspace to build and hand off many client sites — templates, collaborator seats, per-site access, domains, backups and billing.',
   salesChannels: 'List your products on Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping with a product feed for each.',
@@ -817,6 +818,11 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#the-two-bases': 'Cts a signup the moment its subscription mirror lands. Settled is money Stripe actually collected.',
     '#where-the-money-came-from': 'Aid. Investigate it. Discounts are reported as context but are not subtracted from the gap: contracted MRR is already net of them, so counting them again would double-explain the difference.',
     '#which-orgs-did-what': 'So they are included in the totals — dropping them would make this page disagree with Stripe\'s own balance.',
+  },
+  reviewPlatforms: {
+    '#on-the-order': 'Shipped orders to Yotpo for review requests, and select Save.',
+    '#trustpilot': 'Y: test-mode orders are never sent; Each order is invited once per service, however many packages it ships in and however many emails it sends.',
+    '#yotpo-reviews': 'Vitation template ID if you use them. Invitations sent this way ask for a review of your store, not of each product.',
   },
   salesChannels: {
     '#brand-barcode-and-category': 'Ping: the cheapest rate to each country your shipping zones name, from the same rates checkout charges.',

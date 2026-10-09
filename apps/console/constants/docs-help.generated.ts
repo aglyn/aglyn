@@ -633,6 +633,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/revenue',
     title: 'Revenue',
   },
+  reviewPlatforms: {
+    path: '/commerce-and-bookings/commerce/review-platforms',
+    title: 'Review platforms (Trustpilot and Yotpo)',
+  },
   rewardsAndReferrals: {
     path: '/commerce-and-bookings/commerce/rewards-and-referrals',
     title: 'Rewards, referrals and store credit',
@@ -1005,6 +1009,7 @@ export const DOCS_HELP_ANCHORS = {
   reports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#lead-sources', '#pipeline', '#forecast-by-close-month', '#by-forecast-category', '#won-and-lost', '#won-and-lost-by-owner', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#mute-a-style', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#borders-without-css', '#picking-a-font', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#pin-a-color-scheme', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   revenue: ['#revenue-page', '#the-two-bases', '#revenue-period', '#how-each-org-is-treated', '#the-gap', '#where-the-money-came-from', '#revenue-by-plugin', '#gross-versus-net', '#three-costs-the-page-flags-but-does-not-net-out', '#which-orgs-did-what', '#rows-that-need-attention', '#related'],
+  reviewPlatforms: ['#who-is-invited', '#trustpilot', '#trustpilot-invitation-address', '#trustpilot-api', '#yotpo-reviews', '#on-the-order', '#switching-it-off-for-a-site', '#related'],
   rewardsAndReferrals: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
@@ -1015,7 +1020,7 @@ export const DOCS_HELP_ANCHORS = {
   screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#console-host', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#honest-limits', '#related'],
-  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#marketing-platforms', '#zapier', '#fulfillment-networks', '#couriers', '#inventory-sync', '#marketplaces', '#print-on-demand', '#delivery-apps', '#mobile', '#analytics', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
+  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#review-platforms', '#marketing-platforms', '#zapier', '#fulfillment-networks', '#couriers', '#inventory-sync', '#marketplaces', '#print-on-demand', '#delivery-apps', '#mobile', '#analytics', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
   seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#variables-so-a-title-is-not-a-copy-of-your-site-name', '#site-wide-defaults', '#site-description', '#title-separator', '#title-pattern', '#favicon', '#app-icon', '#site-social-image', '#every-icon-size-is-generated-for-you', '#your-sites-install-details-the-web-app-manifest', '#what-language-your-site-says-it-is-in', '#seo-check', '#target-keywords', '#check-one-page', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#verify-your-site-with-google-search-console', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#entity-card', '#entity-type', '#entity-name', '#entity-description', '#entity-website', '#entity-contact', '#entity-logo', '#address-card', '#local-businesses', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#ai-agents-card', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
   seoByAi: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#sequence-sending-settings', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#person-activity', '#person-details', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
@@ -1637,6 +1642,11 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#the-two-bases': 'The two bases',
     '#where-the-money-came-from': 'Where the money came from',
     '#which-orgs-did-what': 'Which orgs did what',
+  },
+  reviewPlatforms: {
+    '#on-the-order': 'On the order',
+    '#trustpilot': 'Trustpilot',
+    '#yotpo-reviews': 'Yotpo Reviews',
   },
   salesChannels: {
     '#brand-barcode-and-category': 'Brand, barcode and category',

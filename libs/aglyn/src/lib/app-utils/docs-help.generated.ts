@@ -462,6 +462,11 @@ export const PLUGIN_DOCS = {
     title: 'Redirects',
     excerpt: 'Manage URL redirects with validation, loop detection, and hit metrics.',
   },
+  reviewPlatforms: {
+    path: '/commerce-and-bookings/commerce/review-platforms',
+    title: 'Review platforms (Trustpilot and Yotpo)',
+    excerpt: 'Invite customers to review your store on Trustpilot after their order ships or arrives, by copying an order email to your Trustpilot invitation address, or with your own Trustpilot or Yotpo Reviews keys.',
+  },
   salesChannels: {
     path: '/commerce-and-bookings/commerce/sales-channels',
     title: 'Sales channels',
@@ -603,6 +608,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#import-and-export', '#columns', '#how-a-row-finds-an-existing-rule', '#conflicts-the-dry-run-and-undo', '#metrics', '#match-modes-v2', '#related'],
+  reviewPlatforms: ['#who-is-invited', '#trustpilot', '#trustpilot-invitation-address', '#trustpilot-api', '#yotpo-reviews', '#on-the-order', '#switching-it-off-for-a-site', '#related'],
   salesChannels: ['#set-up-sales-channels', '#turn-on-a-channel', '#keep-the-address-private', '#what-each-product-sends', '#brand-barcode-and-category', '#shipping', '#check-your-products', '#how-fresh-the-feed-is', '#earlier-merchant-center-address', '#turn-off', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#what-a-reviewer-checks', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#sequence-sending-settings', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#person-activity', '#person-details', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
@@ -1126,6 +1132,11 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   redirects: {
     '#manage-redirects': 'Manage redirects',
+  },
+  reviewPlatforms: {
+    '#on-the-order': 'On the order',
+    '#trustpilot': 'Trustpilot',
+    '#yotpo-reviews': 'Yotpo Reviews',
   },
   salesChannels: {
     '#brand-barcode-and-category': 'Brand, barcode and category',

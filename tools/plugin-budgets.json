@@ -143,6 +143,10 @@
     "baseline": 9161,
     "budget": 12288
   },
+  "review-platforms": {
+    "baseline": 5110,
+    "budget": 7168
+  },
   "couriers": {
     "baseline": 4638,
     "budget": 6144

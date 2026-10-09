@@ -535,6 +535,11 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   redirects: {
     '#manage-redirects': 'Rects/redirects-page.png)',
   },
+  reviewPlatforms: {
+    '#on-the-order': 'Shipped orders to Yotpo for review requests, and select Save.',
+    '#trustpilot': 'Y: test-mode orders are never sent; Each order is invited once per service, however many packages it ships in and however many emails it sends.',
+    '#yotpo-reviews': 'Vitation template ID if you use them. Invitations sent this way ask for a review of your store, not of each product.',
+  },
   salesChannels: {
     '#brand-barcode-and-category': 'Ping: the cheapest rate to each country your shipping zones name, from the same rates checkout charges.',
     '#how-fresh-the-feed-is': 'Number, no description (its name is sent instead), a name longer than the channel shows, clothing without a Color and a Size option, or missing shipping.',

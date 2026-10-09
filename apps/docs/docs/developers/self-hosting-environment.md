@@ -617,6 +617,10 @@ did not choose because a name was misspelled.
                "replyTo": "support@example.com" } }
 ```
 
+`bcc`, a list of addresses, is present only when a message carries blind
+copies, such as a review platform's invitation address on an order email.
+Deliver it as blind copies: never add those addresses to the message's own headers.
+
 Answer `2xx` once the message is accepted, with `{ "id": "…" }` if your relay
 has an id for it. Answer `429`, with `Retry-After` in seconds, to ask for a
 slower pace: the message is kept and retried, never dropped. Any other status
@@ -877,6 +881,21 @@ orders and refunds.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `TAX_ENGINES_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored AvaTax license key and TaxJar API token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one the next time its store is taxed. **Losing the key loses every connection**: each merchant connects their account again, and until they do their store taxes at its own rates. |
+
+### Review platforms: Trustpilot and Yotpo {#review-platforms}
+
+A merchant can invite customers to review their store on Trustpilot or Yotpo
+Reviews with their **own** account. Trustpilot's invitation address needs
+nothing of the deployment: it is a blind copy on the buyer's order email. The
+Trustpilot API and Yotpo use the merchant's own keys, and the deployment holds
+only the key those are sealed under. Leave it unset and the Trustpilot card
+offers the invitation address alone, no Yotpo card appears, and no key is sent
+to either service. Set it on the console **and** the tenant runtime, since
+orders are fulfilled and their events handled in both.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `REVIEW_PLATFORMS_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored Trustpilot API key and secret and Yotpo secret key with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens. **Losing the key loses every API connection**: each merchant pastes their keys again. |
 
 ### Email platforms: Mailchimp, Klaviyo, Omnisend and Attentive {#marketing-platforms}
 

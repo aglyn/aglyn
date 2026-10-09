@@ -28,7 +28,16 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — live chat with Tidio or LiveChat (newest)
+## October 2026 — Trustpilot review invitations (newest)
+
+- **[Trustpilot](commerce-and-bookings/commerce/review-platforms.md#trustpilot)** —
+  paste your Trustpilot invitation address and each customer who agreed to your
+  marketing email is invited to review your store once their order ships, or once
+  it arrives: one order email is blind-copied to Trustpilot, once per order, never
+  for a test, canceled or refunded order. Your store's own product reviews stay on
+  your product pages.
+
+## October 2026 — live chat with Tidio or LiveChat
 
 - **[Live chat](building-sites/live-chat.md)** — chat with your visitors through your
   own Tidio or LiveChat account. Paste the key from its install code, choose the pages

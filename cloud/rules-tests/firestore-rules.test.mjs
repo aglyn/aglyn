@@ -13786,6 +13786,48 @@ describe('rewards records are the server’s alone (AGL-3640)', () => {
   })
 })
 
+describe('review platform records are the server’s alone (AGL-3699)', () => {
+  // A site's Trustpilot invitation address and sealed API credentials, its
+  // Yotpo keys, and whether each service was asked to invite one order's
+  // buyer. Written and read through the Admin SDK by the review-platforms
+  // plugin's routes, email copies and event handlers; the owner and staff
+  // are refused like everyone.
+  const ORG_DOCS = [
+    ['reviewPlatformsHostSettings', HOST],
+    ['reviewPlatformsInvitations', `${HOST}__order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, recordId: 'order-1' })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { trustpilot: { bccAddress: 'me@example.com' } }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, name, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('tax service records are the server’s alone (AGL-3631)', () => {
   // A site's connection holds the merchant's sealed AvaTax or TaxJar
   // credential; the exemptions decide who pays no tax; the records say which

@@ -174,6 +174,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-post-purchase'),
   },
   {
+    id: 'review-platforms',
+    apiPrefixes: ["review-platforms"],
+    register: {"console":"registerReviewPlatformsConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    load: () => import('@aglyn/plugins-review-platforms'),
+  },
+  {
     id: 'loyalty',
     apiPrefixes: ["loyalty"],
     register: {"console":"registerLoyaltyConsole"},

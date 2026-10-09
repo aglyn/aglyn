@@ -119,6 +119,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-post-purchase/server'),
   },
   {
+    id: 'review-platforms',
+    apiPrefixes: ["review-platforms"],
+    register: {"consoleApi":"registerReviewPlatformsConsoleApi"},
+    load: () => import('@aglyn/plugins-review-platforms/server'),
+  },
+  {
     id: 'loyalty',
     apiPrefixes: ["loyalty"],
     register: {"consoleApi":"registerLoyaltyConsoleApi"},

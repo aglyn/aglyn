@@ -264,6 +264,9 @@ const PLUGIN_TOPICS = {
   // The Shipping labels and Carrier accounts cards under the store's
   // Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
+  // The Trustpilot and Yotpo Reviews cards under the store's Settings and
+  // the order dialog's Review invitations section (AGL-3699).
+  reviewPlatforms: '/commerce-and-bookings/commerce/review-platforms',
   // The Tax service card under the store's Settings (AGL-3631).
   taxServices: '/commerce-and-bookings/commerce/tax-services',
   // The Print on demand card under the store's Settings, and its product and

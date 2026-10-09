@@ -99,6 +99,7 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     extras: { type: 'array', description: 'Optional lines the buyer added at checkout, such as package protection: `[{ id, pluginId, key, label, amountCents, quoteRef }]`. Empty when there were none.', items: { type: 'object', additionalProperties: true } },
     credits: { type: 'array', description: 'Store credit another plugin kept that paid part of the sale, such as rewards: `[{ providerId, pluginId, reference, label, last4, amountCents, appliedAs }]`. `appliedAs` is `discount` for a checkout redemption and `tender` for a register payment. Empty when there were none.', items: { type: 'object', additionalProperties: true } },
     refundedCents: int('Amount refunded so far.'),
+    livemode: bool('Whether real money moved: `false` for an order paid in Stripe test mode, such as a store rehearsal.'),
     disputed: bool('Whether a chargeback is open.'),
     taxMode: nullable(str('The tax regime: `stripe-automatic` (Stripe Tax, collected and remitted by the platform as marketplace facilitator), `manual` (your own rate) or `none`. `null` on an order from before it was recorded.')),
     taxEngine: nullable(objectOf('The tax service you connected, when one was asked for this sale’s tax: `provider` (`avalara` or `taxjar`), `providerLabel`, `status` (`quoted` when its tax was charged, `fallback` when it did not answer and your own rate was charged), `reason` (`timeout` or `error` on a fallback) and `sandbox`. `null` when no service was asked.')),
