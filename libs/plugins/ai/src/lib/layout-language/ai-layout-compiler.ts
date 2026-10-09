@@ -1121,6 +1121,40 @@ export function destinationProps(
  * `ai-layout-pictures.ts` fills the slot with a photo the site serves itself
  * once the page is checked.
  */
+/**
+ * The site kinds whose galleries open in a lightbox by default (AGL-3717): a
+ * portfolio's or a photographer's work is looked at, not skimmed, and a
+ * visitor who presses a picture expects to see it large and step through the
+ * rest. Every other kind opens a picture only where the design says so.
+ */
+export const AI_LIGHTBOX_GALLERY_KINDS: ReadonlySet<string> = new Set([
+  'portfolio',
+  'photography',
+])
+
+/** The `to` that opens an image block's picture in a lightbox (AGL-3717). */
+export const AI_LAYOUT_LIGHTBOX_TO = 'lightbox'
+
+/** Whether this page's galleries open in a lightbox by default. */
+export function aiOpensGalleriesInLightbox(page: { design: PageScope['design'] }): boolean {
+  const kind = page.design?.input.kind
+  return Boolean(kind && AI_LIGHTBOX_GALLERY_KINDS.has(kind))
+}
+
+/**
+ * The Image props that make a picture open in a lightbox: as one gallery
+ * with the section's other pictures, named for the section, and with the
+ * item's title as its caption. The Image element reads exactly these.
+ */
+function lightboxProps(scope: SectionScope, caption?: string): Record<string, unknown> {
+  const name =
+    aiLayoutFitText(scope.heading, 'alt') ||
+    aiLayoutFitText(scope.page.plan.sections[scope.index]?.name, 'alt') ||
+    `Gallery ${scope.index + 1}`
+  const words = aiLayoutFitText(caption, 'alt')
+  return { lightbox: true, lightboxGallery: name, ...(words ? { lightboxCaption: words } : {}) }
+}
+
 function image(
   scope: SectionScope,
   block: AiLayoutBlock,
@@ -1146,9 +1180,12 @@ function image(
     null,
     'imageIcon',
   )
+  // `to: lightbox` opens the picture large (AGL-3717); one picture is its
+  // own gallery, so it opens alone unless the section has more.
+  const opensLarge = block.to?.trim().toLowerCase() === AI_LAYOUT_LIGHTBOX_TO
   const picture = tree.add(
     'image',
-    { alt, objectFit: 'cover' },
+    { alt, objectFit: 'cover', ...(opensLarge ? lightboxProps(scope) : {}) },
     { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
     null,
     'image',
@@ -2371,7 +2408,15 @@ function designedGroup(
     const span = !mosaic ? 12 / perRow : lone ? 12 : wide ? 7 : 5
     const aspect = !mosaic ? (variant === 'articles' ? '3 / 2' : portrait ? '4 / 5' : '4 / 3') : lone ? '21 / 9' : wide ? '4 / 3' : '4 / 5'
     // The picture is its own frame: its shape its one style, so a grid of them repeats no inline style.
-    const photo = designImage(scope, { alt: standInAlt(scope, item.title || item.text), given: false }, { width: '100%' }, { aspectRatio: { xs: '4 / 3', md: aspect } })
+    // A portfolio's or a photographer's gallery opens in a lightbox, its
+    // pictures one gallery with the item's title as each caption (AGL-3717).
+    const opens = variant === 'pictures' && aiOpensGalleriesInLightbox(page)
+    const photo = designImage(
+      scope,
+      { alt: standInAlt(scope, item.title || item.text), given: false },
+      { width: '100%', ...(opens ? lightboxProps(scope, item.title) : {}) },
+      { aspectRatio: { xs: '4 / 3', md: aspect } },
+    )
     const id = tree.add(
       'muiStack',
       { spacing: '1.5' },

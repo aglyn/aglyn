@@ -163,6 +163,10 @@
     "baseline": 7342,
     "budget": 9216
   },
+  "lightbox": {
+    "baseline": 5225,
+    "budget": 7168
+  },
   "music": {
     "baseline": 13442,
     "budget": 17408

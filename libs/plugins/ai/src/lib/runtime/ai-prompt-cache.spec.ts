@@ -845,22 +845,24 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // up 38 where the others came down. The template's up 16 more at
       // AGL-3143 §16, which tells it copy never prints an address, a slug or
       // a timestamp: a live build printed all three on every article. All
-      // four grew 6 at AGL-3588, the App Bar's shrink and hide switches.
-      layout: { prefixTokens: 4_427, minimum: 512, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_039, minimum: 512, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_038, minimum: 512, caches: true, toolsStable: true },
+      // four grew 6 at AGL-3588, the App Bar's shrink and hide switches, and
+      // 4 at AGL-3717, the Image's and the Image List's lightbox switch.
+      layout: { prefixTokens: 4_431, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_043, minimum: 512, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_042, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
       // says plainly that a subject line and a preheader carry no merge token.
       email: { prefixTokens: 2_970, minimum: 512, caches: true, toolsStable: true },
       form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_596, minimum: 512, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_600, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
       // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
-      // and their system prompt included.
-      'layout-page': { prefixTokens: 1_831, minimum: 512, caches: true, toolsStable: true },
-      'layout-frame': { prefixTokens: 2_202, minimum: 512, caches: true, toolsStable: true },
+      // and their system prompt included. Both up 10 at AGL-3717, which says
+      // an image block whose `to` is lightbox opens its picture large.
+      'layout-page': { prefixTokens: 1_841, minimum: 512, caches: true, toolsStable: true },
+      'layout-frame': { prefixTokens: 2_212, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
       theme: { prefixTokens: 3_517, minimum: 512, caches: true, toolsStable: true },
@@ -902,8 +904,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // An edit to a page or a layout (AGL-3616): the document doctrine, the
       // job's rules, and the edit rung's protocol and element catalog for the
       // kind, so a page's and a layout's prefix each cache.
-      'edit-screen': { prefixTokens: 5_970, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 5_958, minimum: 512, caches: true, toolsStable: true },
+      // The edit doors are up 4 at AGL-3717 for the palette's lightbox switch.
+      'edit-screen': { prefixTokens: 5_974, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 5_962, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },

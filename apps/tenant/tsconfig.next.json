@@ -176,6 +176,12 @@
       "@aglyn/plugins-couriers/*": [
         "../../libs/plugins/couriers/src/lib/*"
       ],
+      "@aglyn/plugins-lightbox": [
+        "../../libs/plugins/lightbox/src/index.ts"
+      ],
+      "@aglyn/plugins-lightbox/*": [
+        "../../libs/plugins/lightbox/src/lib/*"
+      ],
       "@aglyn/plugins-live-chat": [
         "../../libs/plugins/live-chat/src/index.ts"
       ],

@@ -93,6 +93,8 @@
       "@aglyn/plugins-zapier/*": ["./libs/plugins/zapier/src/lib/*"],
       "@aglyn/plugins-couriers": ["./libs/plugins/couriers/src/index.ts"],
       "@aglyn/plugins-couriers/*": ["./libs/plugins/couriers/src/lib/*"],
+      "@aglyn/plugins-lightbox": ["./libs/plugins/lightbox/src/index.ts"],
+      "@aglyn/plugins-lightbox/*": ["./libs/plugins/lightbox/src/lib/*"],
       "@aglyn/plugins-live-chat": ["./libs/plugins/live-chat/src/index.ts"],
       "@aglyn/plugins-live-chat/*": ["./libs/plugins/live-chat/src/lib/*"],
       "@aglyn/plugins-fulfillment-networks": ["./libs/plugins/fulfillment-networks/src/index.ts"],

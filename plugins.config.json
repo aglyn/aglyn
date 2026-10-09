@@ -86,6 +86,32 @@
       }
     },
     {
+      "id": "lightbox",
+      "$comment": "AGL-3717: the Lightbox container element — any elements, hidden until the interactions system's existing Show an element / Hide an element / Show/hide an element steps open it, through core's generic `subscribeElementVisibility` (element-ui.ts). Always on, like the component library, so every site can place it; loaded only on a page that places one (`placedComponents`), and its dialog is a chunk fetched on the first open. The picture lightboxes (Image, Image List gallery) are the MUI elements' own; every lightbox opens the one shared shell in @aglyn/shared-ui-jsx/components/lightbox.",
+      "package": "@aglyn/plugins-lightbox",
+      "alwaysOn": true,
+      "register": {
+        "site": "registerLightboxPlugin"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "catalog": {
+        "order": 34,
+        "label": "Lightbox",
+        "alwaysOn": true,
+        "description": "A lightbox you fill with any elements and open from any button, link or picture.",
+        "publishedSiteImpact": "elements"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "lightbox"
+          ]
+        }
+      }
+    },
+    {
       "id": "forms",
       "package": "@aglyn/plugins-forms",
       "register": {

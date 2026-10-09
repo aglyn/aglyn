@@ -34,11 +34,43 @@ export * from './element-hidden-style'
 export type ElementVisibilityCommand = 'show' | 'hide' | 'toggle'
 
 /**
+ * The event an element hears when a show/hide/toggle step reaches it
+ * (AGL-3717), dispatched ON the element after its hidden class has changed.
+ *
+ * Most elements need nothing more than the class. One whose "shown" is more
+ * than a CSS rule — a lightbox that opens a dialog, a panel that loads its
+ * contents only when revealed — subscribes here and does the rest itself, so
+ * the interactions system's existing "Show an element" step opens it from any
+ * button, link or picture without a step type of its own. Generic on purpose:
+ * any element, from any plugin, may answer.
+ */
+export const ELEMENT_VISIBILITY_EVENT = 'aglyn:element-visibility'
+
+export interface ElementVisibilityDetail {
+  /** Whether the element is hidden now that the step has run. */
+  hidden: boolean
+}
+
+/** Hears visibility steps that reach `element`; returns the unsubscriber. */
+export function subscribeElementVisibility(
+  element: EventTarget,
+  handler: (detail: ElementVisibilityDetail) => void,
+): () => void {
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<ElementVisibilityDetail>).detail
+    if (detail && typeof detail.hidden === 'boolean') handler(detail)
+  }
+  element.addEventListener(ELEMENT_VISIBILITY_EVENT, listener)
+  return () => element.removeEventListener(ELEMENT_VISIBILITY_EVENT, listener)
+}
+
+/**
  * Applies a show/hide/toggle command to every element the selector
  * matches. Hide adds the shared hidden class; show removes it AND any
  * inline `display: none` so an element hidden either way reveals; toggle
- * flips per element. Returns the number of elements touched (0 for a
- * selector that matches nothing — steps never throw).
+ * flips per element. Each element then hears
+ * {@link ELEMENT_VISIBILITY_EVENT}. Returns the number of elements touched
+ * (0 for a selector that matches nothing — steps never throw).
  */
 export function applyElementVisibility(
   command: ElementVisibilityCommand,
@@ -59,6 +91,13 @@ export function applyElementVisibility(
       // Clear a leftover inline hide (e.g. from custom CSS experiments)
       // so "show" always actually reveals.
       if (element.style.display === 'none') element.style.removeProperty('display')
+    }
+    if (typeof CustomEvent === 'function') {
+      element.dispatchEvent(
+        new CustomEvent<ElementVisibilityDetail>(ELEMENT_VISIBILITY_EVENT, {
+          detail: { hidden: nextHidden },
+        }),
+      )
     }
   }
   return elements.length

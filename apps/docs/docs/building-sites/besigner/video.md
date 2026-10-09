@@ -55,6 +55,11 @@ from the keyboard. `Space` or `K` plays and pauses, the left and right arrows sk
 five seconds, `M` mutes, `F` goes full screen, and `Esc` closes the lightbox from any
 control, leaving full screen first if it is on.
 
+The lightbox's backdrop, size, corners, close button and transition are set with the same
+**Lightbox** settings every element has — see
+[How a lightbox looks and closes](lightbox.md#lightbox-settings). Left alone, the film's
+lightbox is wide and black, as it always was.
+
 ## A video hosted on Wistia {#video-wistia}
 
 Paste a Wistia media link into **Video source**: the address of the video's page in

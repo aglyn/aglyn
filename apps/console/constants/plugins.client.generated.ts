@@ -19,6 +19,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-mui/plugin'),
   },
   {
+    id: 'lightbox',
+    alwaysOn: true,
+    register: {"site":"registerLightboxPlugin"},
+    contributes: {},
+    load: () => import('@aglyn/plugins-lightbox/site'),
+  },
+  {
     id: 'forms',
     apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},

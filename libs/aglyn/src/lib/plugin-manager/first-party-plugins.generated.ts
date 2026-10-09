@@ -308,6 +308,12 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "lightbox",
+    "label": "Lightbox",
+    "alwaysOn": true,
+    "description": "A lightbox you fill with any elements and open from any button, link or picture."
+  },
+  {
     "id": "live-chat",
     "label": "Live chat",
     "alwaysOnForWorkspace": true,
@@ -395,6 +401,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "delivery-apps": "console-only",
   "loyalty": "console-only",
   "couriers": "console-only",
+  "lightbox": "elements",
   "live-chat": "elements",
   "review-platforms": "console-only",
   "weglot": "elements",

@@ -1482,6 +1482,66 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['lazy', 'eager'],
         },
+        lightbox: {
+          type: 'boolean',
+        },
+        lightboxCaption: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxGallery: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxThumbnails: {
+          type: 'boolean',
+        },
+        lightboxBackdropColor: {
+          type: 'string',
+        },
+        lightboxBackdropOpacity: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxBackdropBlur: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxMaxWidth: {
+          type: 'string',
+        },
+        lightboxMaxHeight: {
+          type: 'string',
+        },
+        lightboxPadding: {
+          type: 'string',
+        },
+        lightboxRadius: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxCloseStyle: {
+          type: 'string',
+          enum: ['icon', 'filled', 'text'],
+        },
+        lightboxClosePosition: {
+          type: 'string',
+          enum: ['inside-end', 'inside-start', 'outside-end'],
+        },
+        lightboxCaptionPlacement: {
+          type: 'string',
+          enum: ['below', 'overlay', 'hidden'],
+        },
+        lightboxTransition: {
+          type: 'string',
+          enum: ['fade', 'zoom', 'none'],
+        },
+        lightboxCloseOnBackdrop: {
+          type: 'boolean',
+        },
+        lightboxCloseOnEscape: {
+          type: 'boolean',
+        },
         screenId: {
           type: 'string',
         },
@@ -1497,6 +1557,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       alt: 'text',
       title: 'text',
       sizes: 'text',
+      lightboxCaption: 'text',
+      lightboxGallery: 'text',
+      lightboxBackdropOpacity: 'text',
+      lightboxBackdropBlur: 'text',
+      lightboxRadius: 'text',
       screenId: 'screen',
       href: 'url',
     },
@@ -1510,6 +1575,23 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       height: 'css-dimension',
       sizes: 'text-field',
       loading: 'select',
+      lightbox: 'switch',
+      lightboxCaption: 'text-field',
+      lightboxGallery: 'text-field',
+      lightboxThumbnails: 'switch',
+      lightboxBackdropColor: 'color-picker',
+      lightboxBackdropOpacity: 'text-field',
+      lightboxBackdropBlur: 'text-field',
+      lightboxMaxWidth: 'css-dimension',
+      lightboxMaxHeight: 'css-dimension',
+      lightboxPadding: 'css-dimension',
+      lightboxRadius: 'text-field',
+      lightboxCloseStyle: 'select',
+      lightboxClosePosition: 'select',
+      lightboxCaptionPlacement: 'select',
+      lightboxTransition: 'select',
+      lightboxCloseOnBackdrop: 'switch',
+      lightboxCloseOnEscape: 'switch',
       screenId: 'screen-select',
       href: 'text-field',
     },
@@ -1517,6 +1599,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       alt: 200,
       title: 200,
       sizes: 200,
+      lightboxCaption: 200,
+      lightboxGallery: 200,
+      lightboxBackdropOpacity: 200,
+      lightboxBackdropBlur: 200,
+      lightboxRadius: 200,
     },
     presets: ['Image'],
   },
@@ -1589,6 +1676,101 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       caption: 200,
     },
     presets: ['Layout Slot'],
+  },
+  lightbox: {
+    pluginId: 'lightbox',
+    kind: 'element',
+    category: 'Surface',
+    displayName: 'Lightbox',
+    summary:
+      'Any elements in a lightbox, hidden until a "Show an element" interaction opens it.',
+    acceptsChildren: true,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        label: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxBackdropColor: {
+          type: 'string',
+        },
+        lightboxBackdropOpacity: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxBackdropBlur: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxMaxWidth: {
+          type: 'string',
+        },
+        lightboxMaxHeight: {
+          type: 'string',
+        },
+        lightboxPadding: {
+          type: 'string',
+        },
+        lightboxRadius: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxCloseStyle: {
+          type: 'string',
+          enum: ['icon', 'filled', 'text'],
+        },
+        lightboxClosePosition: {
+          type: 'string',
+          enum: ['inside-end', 'inside-start', 'outside-end'],
+        },
+        lightboxCaptionPlacement: {
+          type: 'string',
+          enum: ['below', 'overlay', 'hidden'],
+        },
+        lightboxTransition: {
+          type: 'string',
+          enum: ['fade', 'zoom', 'none'],
+        },
+        lightboxCloseOnBackdrop: {
+          type: 'boolean',
+        },
+        lightboxCloseOnEscape: {
+          type: 'boolean',
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      label: 'text',
+      lightboxBackdropOpacity: 'text',
+      lightboxBackdropBlur: 'text',
+      lightboxRadius: 'text',
+    },
+    propFields: {
+      label: 'text-field',
+      lightboxBackdropColor: 'color-picker',
+      lightboxBackdropOpacity: 'text-field',
+      lightboxBackdropBlur: 'text-field',
+      lightboxMaxWidth: 'css-dimension',
+      lightboxMaxHeight: 'css-dimension',
+      lightboxPadding: 'css-dimension',
+      lightboxRadius: 'text-field',
+      lightboxCloseStyle: 'select',
+      lightboxClosePosition: 'select',
+      lightboxCaptionPlacement: 'select',
+      lightboxTransition: 'select',
+      lightboxCloseOnBackdrop: 'switch',
+      lightboxCloseOnEscape: 'switch',
+    },
+    textLimits: {
+      label: 200,
+      lightboxBackdropOpacity: 200,
+      lightboxBackdropBlur: 200,
+      lightboxRadius: 200,
+    },
+    presets: ['Lightbox'],
   },
   markdown: {
     pluginId: 'mui',
@@ -2554,6 +2736,58 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        lightbox: {
+          type: 'boolean',
+        },
+        lightboxThumbnails: {
+          type: 'boolean',
+        },
+        lightboxBackdropColor: {
+          type: 'string',
+        },
+        lightboxBackdropOpacity: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxBackdropBlur: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxMaxWidth: {
+          type: 'string',
+        },
+        lightboxMaxHeight: {
+          type: 'string',
+        },
+        lightboxPadding: {
+          type: 'string',
+        },
+        lightboxRadius: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxCloseStyle: {
+          type: 'string',
+          enum: ['icon', 'filled', 'text'],
+        },
+        lightboxClosePosition: {
+          type: 'string',
+          enum: ['inside-end', 'inside-start', 'outside-end'],
+        },
+        lightboxCaptionPlacement: {
+          type: 'string',
+          enum: ['below', 'overlay', 'hidden'],
+        },
+        lightboxTransition: {
+          type: 'string',
+          enum: ['fade', 'zoom', 'none'],
+        },
+        lightboxCloseOnBackdrop: {
+          type: 'boolean',
+        },
+        lightboxCloseOnEscape: {
+          type: 'boolean',
+        },
       },
       required: [],
       additionalProperties: false,
@@ -2562,17 +2796,38 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       cols: 'text',
       gap: 'text',
       rowHeight: 'text',
+      lightboxBackdropOpacity: 'text',
+      lightboxBackdropBlur: 'text',
+      lightboxRadius: 'text',
     },
     propFields: {
       variant: 'select',
       cols: 'text-field',
       gap: 'text-field',
       rowHeight: 'text-field',
+      lightbox: 'switch',
+      lightboxThumbnails: 'switch',
+      lightboxBackdropColor: 'color-picker',
+      lightboxBackdropOpacity: 'text-field',
+      lightboxBackdropBlur: 'text-field',
+      lightboxMaxWidth: 'css-dimension',
+      lightboxMaxHeight: 'css-dimension',
+      lightboxPadding: 'css-dimension',
+      lightboxRadius: 'text-field',
+      lightboxCloseStyle: 'select',
+      lightboxClosePosition: 'select',
+      lightboxCaptionPlacement: 'select',
+      lightboxTransition: 'select',
+      lightboxCloseOnBackdrop: 'switch',
+      lightboxCloseOnEscape: 'switch',
     },
     textLimits: {
       cols: 200,
       gap: 200,
       rowHeight: 200,
+      lightboxBackdropOpacity: 200,
+      lightboxBackdropBlur: 200,
+      lightboxRadius: 200,
     },
     presets: ['Image List', 'Image List Masonry'],
   },
@@ -4393,6 +4648,52 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         lightbox: {
           type: 'boolean',
         },
+        lightboxBackdropColor: {
+          type: 'string',
+        },
+        lightboxBackdropOpacity: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxBackdropBlur: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxMaxWidth: {
+          type: 'string',
+        },
+        lightboxMaxHeight: {
+          type: 'string',
+        },
+        lightboxPadding: {
+          type: 'string',
+        },
+        lightboxRadius: {
+          type: 'string',
+          maxLength: 200,
+        },
+        lightboxCloseStyle: {
+          type: 'string',
+          enum: ['icon', 'filled', 'text'],
+        },
+        lightboxClosePosition: {
+          type: 'string',
+          enum: ['inside-end', 'inside-start', 'outside-end'],
+        },
+        lightboxCaptionPlacement: {
+          type: 'string',
+          enum: ['below', 'overlay', 'hidden'],
+        },
+        lightboxTransition: {
+          type: 'string',
+          enum: ['fade', 'zoom', 'none'],
+        },
+        lightboxCloseOnBackdrop: {
+          type: 'boolean',
+        },
+        lightboxCloseOnEscape: {
+          type: 'boolean',
+        },
         loadPlayer: {
           type: 'boolean',
         },
@@ -4444,6 +4745,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       description: 'text',
       uploadDate: 'text',
       durationSeconds: 'text',
+      lightboxBackdropOpacity: 'text',
+      lightboxBackdropBlur: 'text',
+      lightboxRadius: 'text',
       captionsSrc: 'text',
       captionsLabel: 'text',
       captionsLang: 'text',
@@ -4456,6 +4760,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       uploadDate: 'text-field',
       durationSeconds: 'text-field',
       lightbox: 'switch',
+      lightboxBackdropColor: 'color-picker',
+      lightboxBackdropOpacity: 'text-field',
+      lightboxBackdropBlur: 'text-field',
+      lightboxMaxWidth: 'css-dimension',
+      lightboxMaxHeight: 'css-dimension',
+      lightboxPadding: 'css-dimension',
+      lightboxRadius: 'text-field',
+      lightboxCloseStyle: 'select',
+      lightboxClosePosition: 'select',
+      lightboxCaptionPlacement: 'select',
+      lightboxTransition: 'select',
+      lightboxCloseOnBackdrop: 'switch',
+      lightboxCloseOnEscape: 'switch',
       loadPlayer: 'switch',
       preload: 'select',
       controls: 'checkbox',
@@ -4474,6 +4791,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       description: 2000,
       uploadDate: 200,
       durationSeconds: 200,
+      lightboxBackdropOpacity: 200,
+      lightboxBackdropBlur: 200,
+      lightboxRadius: 200,
       captionsSrc: 200,
       captionsLabel: 200,
       captionsLang: 200,
@@ -4902,12 +5222,12 @@ export const AI_CODE_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
 /** The prompt catalog of each surface. */
 export const AI_PALETTE_CATALOG: Record<AiSurface, string> = {
   screen:
-    "Surface: screen. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries: Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch: A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- image: A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, loading=lazy|eager, screenId=screen, href=url\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky, shrinkOnScroll=boolean\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…, colorScheme=site|light|dark\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a page or URL. — leaf — children=text≤40, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, maxWidth=xs|sm|md|lg|xl, colorScheme=site|light|dark\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse, colorScheme=site|light|dark\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Page Link): Links to another page by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- musicPlayer: Plays your own tracks from your media library, one or a playlist. — holds only musicTrack — heading=text≤200, src=media, title=text≤200, artist=text≤200, image=media\n- musicTrack (Track): One track of a music player’s playlist. — leaf — src=media, title=text≤200, artist=text≤200, image=media\n- searchBox: A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section: Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200, colorScheme=site|light|dark\n- socialLinks: A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- video: Plays a video file from your media library or any URL. — leaf — src=media, poster=media\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack); Music playlist (musicPlayer).",
+    "Surface: screen. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries: Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch: A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- image: A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, lightbox=boolean, screenId=screen, href=url\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky, shrinkOnScroll=boolean\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…, colorScheme=site|light|dark\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a page or URL. — leaf — children=text≤40, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, maxWidth=xs|sm|md|lg|xl, colorScheme=site|light|dark\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse, colorScheme=site|light|dark\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200, lightbox=boolean\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Page Link): Links to another page by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- musicPlayer: Plays your own tracks from your media library, one or a playlist. — holds only musicTrack — heading=text≤200, src=media, title=text≤200, artist=text≤200, image=media\n- musicTrack (Track): One track of a music player’s playlist. — leaf — src=media, title=text≤200, artist=text≤200, image=media\n- searchBox: A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section: Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200, colorScheme=site|light|dark\n- socialLinks: A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- video: Plays a video file from your media library or any URL. — leaf — src=media, poster=media\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack); Music playlist (musicPlayer).",
   email:
     'Surface: email. Root: the document wrapper (componentId "div", id "_@_"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- emailButton: A call-to-action button that survives every mail client. — leaf — children=text≤40, href=url, backgroundColor=string, color=string, align=left|center|right\n- emailDivider: A horizontal rule between email sections. — leaf — color=string\n- emailImage: An email-safe image, capped at 600px wide, optionally linked. — leaf — src=media, alt=text≤200, width=text≤200, href=url, align=left|center|right\n- emailProduct: A product card resolved at send time, so it never goes stale. — leaf — buttonLabel=text≤40\n- emailSection: An email-safe band with its own background color and padding. — holds any — backgroundColor=string, padding=text≤200, align=left|center|right\n- emailSpacer: Fixed vertical whitespace between email blocks. — leaf — height=text≤200\n- emailText: A paragraph of email copy in one of the preset styles. — leaf — children=text≤2000, variant=heading|subheading|body|caption, color=string, align=left|center|right\nNamed blocks to imitate: Header (emailSection); Footer (emailSection).',
   form: 'Surface: form. Root: one "form" node.\nElements (id (name): purpose — children — props; * = required):\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\nNamed blocks to imitate: Contact Form (form).',
   layout:
-    "Surface: layout. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries: Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch: A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- image: A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, loading=lazy|eager, screenId=screen, href=url\n- layoutSlot: Marks where each bound page's content renders inside this layout. — leaf — caption=text≤200, component=main|div|section|article\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky, shrinkOnScroll=boolean\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…, colorScheme=site|light|dark\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a page or URL. — leaf — children=text≤40, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, maxWidth=xs|sm|md|lg|xl, colorScheme=site|light|dark\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse, colorScheme=site|light|dark\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Page Link): Links to another page by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- musicPlayer: Plays your own tracks from your media library, one or a playlist. — holds only musicTrack — heading=text≤200, src=media, title=text≤200, artist=text≤200, image=media\n- musicTrack (Track): One track of a music player’s playlist. — leaf — src=media, title=text≤200, artist=text≤200, image=media\n- searchBox: A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section: Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200, colorScheme=site|light|dark\n- socialLinks: A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- video: Plays a video file from your media library or any URL. — leaf — src=media, poster=media\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack); Music playlist (musicPlayer).",
+    "Surface: layout. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries: Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch: A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- image: A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, lightbox=boolean, screenId=screen, href=url\n- layoutSlot: Marks where each bound page's content renders inside this layout. — leaf — caption=text≤200, component=main|div|section|article\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky, shrinkOnScroll=boolean\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…, colorScheme=site|light|dark\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a page or URL. — leaf — children=text≤40, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, maxWidth=xs|sm|md|lg|xl, colorScheme=site|light|dark\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse, colorScheme=site|light|dark\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200, lightbox=boolean\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Page Link): Links to another page by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- musicPlayer: Plays your own tracks from your media library, one or a playlist. — holds only musicTrack — heading=text≤200, src=media, title=text≤200, artist=text≤200, image=media\n- musicTrack (Track): One track of a music player’s playlist. — leaf — src=media, title=text≤200, artist=text≤200, image=media\n- searchBox: A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section: Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200, colorScheme=site|light|dark\n- socialLinks: A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- video: Plays a video file from your media library or any URL. — leaf — src=media, poster=media\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack); Music playlist (musicPlayer).",
   component:
-    "Surface: component. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries: Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch: A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- icon: A single icon from the library, at the size and color you pick. — leaf — iconId=string, size=text≤200, color=text≤200\n- image: A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, loading=lazy|eager, screenId=screen, href=url\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky, shrinkOnScroll=boolean\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…, colorScheme=site|light|dark\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a page or URL. — leaf — children=text≤40, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, maxWidth=xs|sm|md|lg|xl, colorScheme=site|light|dark\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse, colorScheme=site|light|dark\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Page Link): Links to another page by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- musicPlayer: Plays your own tracks from your media library, one or a playlist. — holds only musicTrack — heading=text≤200, src=media, title=text≤200, artist=text≤200, image=media\n- musicTrack (Track): One track of a music player’s playlist. — leaf — src=media, title=text≤200, artist=text≤200, image=media\n- searchBox: A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section: Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200, colorScheme=site|light|dark\n- socialLinks: A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- video: Plays a video file from your media library or any URL. — leaf — src=media, poster=media\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack); Music playlist (musicPlayer).",
+    "Surface: component. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries: Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch: A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form: Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField: One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- icon: A single icon from the library, at the size and color you pick. — leaf — iconId=string, size=text≤200, color=text≤200\n- image: A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, lightbox=boolean, screenId=screen, href=url\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky, shrinkOnScroll=boolean\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…, colorScheme=site|light|dark\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a page or URL. — leaf — children=text≤40, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, maxWidth=xs|sm|md|lg|xl, colorScheme=site|light|dark\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse, colorScheme=site|light|dark\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200, lightbox=boolean\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Page Link): Links to another page by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|tertiary|success|error|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- musicPlayer: Plays your own tracks from your media library, one or a playlist. — holds only musicTrack — heading=text≤200, src=media, title=text≤200, artist=text≤200, image=media\n- musicTrack (Track): One track of a music player’s playlist. — leaf — src=media, title=text≤200, artist=text≤200, image=media\n- searchBox: A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section: Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200, colorScheme=site|light|dark\n- socialLinks: A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- video: Plays a video file from your media library or any URL. — leaf — src=media, poster=media\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack); Music playlist (musicPlayer).",
 }

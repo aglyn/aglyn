@@ -139,6 +139,7 @@ export const DOCS_HELP_EXCERPTS = {
   languageSwitcher: 'Let visitors move between your site\'s locales.',
   layouts: 'A layout is the shared frame your pages render inside — header, nav and footer in one place, nested up to five deep.',
   leads: 'Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.',
+  lightbox: 'Open a picture full size, step through a gallery, or put any elements in a lightbox of your own — and style how every lightbox looks and closes.',
   liveChat: 'Chat with your site\'s visitors through your own Tidio or LiveChat account. The chat loads only when a visitor asks for it, so it never slows your pages.',
   liveCoEditing: 'See who else is editing, work on the same document together, survive save conflicts, and recover unsaved changes after a crash.',
   lockdown: 'The staff panic button — disable access platform-wide or for one workspace, site, or account, with a real logout and a visitor notice.',
