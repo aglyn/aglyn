@@ -22,7 +22,7 @@ import {
   mdiBullhornOutline,
   mdiContentCopy,
   mdiDeleteOutline,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPaletteOutline,
 } from '@aglyn/shared-data-mdi'
 import {
@@ -163,12 +163,7 @@ const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
   createdAtMs: 'Created',
 }
 
-const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#opens--clicks',
-  excerpt:
-    'Every message this site has sent or has scheduled, each with its own ' +
-    'report: what was delivered, who opened it, and which links they followed.',
-})
+const emailsDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#messages-list' })
 
 export interface EmailsListCardProps {
   /** The site, or `null` on the organization's Emails page. */
@@ -433,7 +428,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
       {
         key: 'details',
         label: 'Open report',
-        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
         href: emailHref(email),
       },
       {

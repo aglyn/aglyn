@@ -216,6 +216,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-fulfillment-networks'),
   },
   {
+    id: 'couriers',
+    apiPrefixes: ["couriers"],
+    register: {"console":"registerCouriersConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail","localDeliveryRow"]}},
+    load: () => import('@aglyn/plugins-couriers'),
+  },
+  {
     id: 'marketplaces',
     apiPrefixes: ["marketplaces"],
     register: {"console":"registerMarketplacesConsole"},
@@ -256,5 +263,15 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerFunnelsConsole"},
     contributes: {"console":{"slots":["hostAnalytics"]}},
     load: () => import('@aglyn/plugins-funnels'),
+  },
+  {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"site":"registerLiveChatSite","console":"registerLiveChatConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-live-chat'),
+    loads: {
+      site: () => import('@aglyn/plugins-live-chat/site'),
+    },
   },
 ]

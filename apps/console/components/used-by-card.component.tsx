@@ -303,10 +303,7 @@ export function UsedByCard({
           ? docsHelp('components', { anchor: '#used-by' })
           : kind === 'layout'
             ? docsHelp('layouts', { anchor: '#used-by' })
-            : // No "Used by" heading on the screens topic to deep-link to —
-              // what a screen's dependents ARE is routing, which is the
-              // section that explains how a path is built from the tree.
-              docsHelp('screens', { anchor: '#screens--routing' })
+            : docsHelp('screens', { anchor: '#used-by' })
       }
       contentGutterX
       contentGutterY

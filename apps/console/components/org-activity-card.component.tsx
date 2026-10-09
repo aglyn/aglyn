@@ -47,8 +47,10 @@ import {
   activityActionLabel,
   activityActorLabel,
   activityHref,
-  activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { activityRowText, describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
+import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
+import { staffActivityLinks } from '../utils/activity-details'
 import { listPluginActivityActions, listPluginActivityFilters } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
@@ -85,6 +87,12 @@ export interface OrgActivityCardProps {
    * `readOrgWideActivity`. Opaque from here, like any other cursor.
    */
   orgWide?: boolean
+  /**
+   * The staff org page (AGL-3660): a row's details add the stored code and
+   * path and link to the staff pages. The organization's own pages leave it
+   * off.
+   */
+  staff?: boolean
 }
 
 /** Only the default order: the feeds whose query keeps newest first. */
@@ -131,7 +139,8 @@ interface OrgActivityFacets {
  * resolved per row and always sort the page, saying so.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
-  const { orgId, header = 'Recent Activity', targetId, orgWide } = props
+  const { orgId, header = 'Recent Activity', targetId, orgWide, staff = false } = props
+  const [opened, setOpened] = useState<ActivityDetails | null>(null)
   const { orgSlug } = useParams<{ orgSlug: string }>()
   const { data: user } = useUser()
   // The user object's IDENTITY changes on every render of the provider above,
@@ -334,13 +343,19 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         valueGetter: (_value, row: any) => row.action ?? '',
         renderCell: ({ row }: any) => {
           const href = activityHref(row, { orgSlug })
-          const label = activityPrimaryText(row)
-          return href ? (
-            <AppLink href={href} color="inherit" underline="hover">
-              {label}
-            </AppLink>
-          ) : (
-            label
+          const label = activityRowText(row)
+          // The stored code, where it is one, is the tooltip (AGL-3660).
+          const code = describeActivity(row).code ?? undefined
+          return (
+            <span title={code}>
+              {href ? (
+                <AppLink href={href} color="inherit" underline="hover">
+                  {label}
+                </AppLink>
+              ) : (
+                label
+              )}
+            </span>
           )
         },
       },
@@ -385,7 +400,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   const rows = entries ?? []
   const pageSorts = useMemo(
     () => ({
-      ...(querySorted ? {} : { action: (row: any) => activityPrimaryText(row) || null }),
+      ...(querySorted ? {} : { action: (row: any) => activityRowText(row) || null }),
       actorId: (row: any) => activityActorLabel(row) || null,
       ...(orgWide ? { scopeId: (row: any) => siteLabel(row) } : {}),
     }),
@@ -493,6 +508,24 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
             rows={columnSort.rows}
             columns={columns}
             getRowId={(row: any) => `${row.scopePath ?? ''}:${row.$id}`}
+            // Every row opens the shared details dialog (AGL-3660).
+            onOpen={(_id: string, row: any) => {
+              const where = orgWide ? siteLabel(row) : null
+              const described = describeActivity(row, {
+                hosts: row.scopeType === 'host' && where ? { [row.scopeId]: where } : {},
+              })
+              const href = orgSlug ? activityHref(row, { orgSlug }) : undefined
+              setOpened({
+                description: { ...described, action: activityRowText(row) },
+                who: activityActorLabel(row),
+                when: formatWireTimestamp(row.createdAt),
+                where,
+                links: [
+                  ...(href ? [{ label: 'Open', href }] : []),
+                  ...(staff ? staffActivityLinks({ ...described, orgId: described.orgId ?? orgId }) : []),
+                ],
+              })
+            }}
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
             /*
@@ -540,6 +573,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
           />
         ) : null}
       </Stack>
+      <ActivityDetailsDialog details={opened} staff={staff} onClose={() => setOpened(null)} />
     </CardDisplay>
   )
 }

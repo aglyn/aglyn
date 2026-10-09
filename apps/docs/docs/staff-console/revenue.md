@@ -11,6 +11,12 @@ This page lives at **Staff → Revenue** and requires a staff claim. It is read-
 it reports and writes nothing, to Firestore or to Stripe.
 :::
 
+## The revenue page {#revenue-page}
+
+**Staff → Revenue** reports what Aglyn earned in a month or quarter: pick the period,
+then read contracted value beside settled Stripe cash, the gap between them, and
+every deduction between gross and net.
+
 Revenue has two honest meanings and they rarely agree. **Contracted** is what the book
 bills — plan price times live subscriptions, plus add-ons, net of discounts — and it
 reflects a signup the moment its subscription mirror lands. **Settled** is money Stripe
@@ -18,6 +24,10 @@ actually collected. This page shows both, and treats the difference between them
 main result rather than as an error.
 
 ## The two bases
+
+The **two bases** card sets contracted MRR — what the book bills today — beside
+settled cash, what Stripe collected in the period; the difference between them is the
+useful number.
 
 Pick a month or a quarter from the **Period** menu.
 
@@ -33,7 +43,17 @@ should not be subtracted directly. Use the gap section, which compares like with
 A quarter cannot answer the unbilled-metered-usage question, because the usage rollup
 keys on a single month. Select a month to see that figure.
 
+### Choosing the period {#revenue-period}
+
+Pick a month or a quarter from the **Period** card's menu; every settled figure on
+the page is then ranged over it, while contracted MRR stays what the book bills
+today. Choose a month when you need the unbilled metered usage.
+
 ## How each org is treated
+
+The **How each org is treated** card counts organizations by state — active, trialing,
+past due, comped — and says what each one contributes to contracted and to settled
+revenue, and why.
 
 A plan tier is not a price. The page states each case rather than leaving it in the code:
 
@@ -89,6 +109,10 @@ is already net of them, so counting them again would double-explain the differen
 
 ## Where the money came from
 
+The **Where the money came from** card splits earned revenue by source —
+subscriptions, marketplace commission, storefront commission — each already net of the
+thing that would overstate it.
+
 Earned revenue by source. Every line is already net of the thing that would overstate it:
 
 - **Subscriptions, add-ons and metered usage** — paid invoices, net of sales tax and of
@@ -99,6 +123,12 @@ Earned revenue by source. Every line is already net of the thing that would over
   publisher's transfer are excluded; that money is the publisher's.
 - **Storefront commission** — the advertised take, net of refunds, with Stripe's card
   processing removed.
+
+### Which plugin, and which storefront {#revenue-by-plugin}
+
+Each source's earnings, attributed on the dimension it is measured in: commission by
+the plugin that earned it, take by the storefront that generated it. Every table sums
+to its own line in **Where the money came from**.
 
 ## Gross versus net
 
@@ -147,6 +177,14 @@ rather than overstated — the safe direction.
 - **Internal traffic.** Aglyn's own tagged purchases are real charges that really settled,
   so they are **included** in the totals — dropping them would make this page disagree
   with Stripe's own balance. They are surfaced separately because analytics excludes them.
+
+## Which orgs did what {#which-orgs-did-what}
+
+Every total on the page, traced to the organization behind it: what each one bills
+today (**contracted**) beside what it actually paid during the period, net of tax and
+reversals (**settled**). An organization with one and not the other is usually the
+interesting row, not an error, and an empty list means no organization contributed to
+either base in the period.
 
 ## Rows that need attention
 

@@ -18,6 +18,8 @@
 'use client'
 
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { Box, Button, CircularProgress, Paper, Stack, Typography } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine } from '../model/ai-build-progress'
@@ -50,6 +52,13 @@ export interface AssistBuildCardProps {
   onJob: (job: AiJobSummary) => void
   onNotice: (notice: string | null) => void
 }
+
+/** The card's own section of the Assist builds guide (AGL-3660). */
+const ASSIST_BUILD_HELP = pluginDocsHelp('aiAssistBuilds', {
+  anchor: '#the-plan-card',
+  excerpt:
+    'What one request will build, item by item, with its estimate. Nothing is built until you choose Confirm plan, and what it makes is a draft.',
+})
 
 const ITEM_STATES = { done: 'built', active: 'building', waiting: 'waiting', failed: 'failed', skipped: 'not built' } as const
 
@@ -93,7 +102,10 @@ export function AssistBuildCard({
   const outcome = job ? aiBuildOutcomeLine(job) : null
   return (
     <Paper variant="outlined" sx={{ mt: 1, p: 1.5 }} aria-label="Build plan">
-      <Typography variant="subtitle2">{proposal.summary}</Typography>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+        <Typography variant="subtitle2">{proposal.summary}</Typography>
+        <HelpTip {...ASSIST_BUILD_HELP} />
+      </Stack>
       {!job && !notice && (
         <Stack direction="row" spacing={1} sx={{ mt: 0.5, alignItems: 'center' }}>
           <CircularProgress size={14} />

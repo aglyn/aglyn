@@ -16,12 +16,21 @@
  */
 'use client'
 
-import { DOCS_HELP_EXCERPTS } from '../constants/docs-help-excerpts.generated'
+import {
+  DOCS_HELP_EXCERPTS,
+  DOCS_HELP_SECTION_EXCERPTS,
+} from '../constants/docs-help-excerpts.generated'
 import type { DocsHelpTopicKey } from '../constants/docs-help.generated'
 
 export interface DocsHelpExcerptProps {
   /** Registry key of the docs page whose description to render. */
   topic: DocsHelpTopicKey
+  /**
+   * The heading the tip links to. Its section's opening sentence is the
+   * excerpt when the generator carried one (AGL-3707); the page's
+   * description otherwise.
+   */
+  anchor?: string
 }
 
 /**
@@ -32,8 +41,11 @@ export interface DocsHelpExcerptProps {
  * `next/dynamic`, so the prose is the payload of that chunk rather than of the
  * console shell.
  */
-export function DocsHelpExcerptText({ topic }: DocsHelpExcerptProps) {
-  return DOCS_HELP_EXCERPTS[topic]
+export function DocsHelpExcerptText({ topic, anchor }: DocsHelpExcerptProps) {
+  const sections = DOCS_HELP_SECTION_EXCERPTS[topic] as
+    | Readonly<Record<string, string>>
+    | undefined
+  return (anchor && sections?.[anchor]) || DOCS_HELP_EXCERPTS[topic]
 }
 DocsHelpExcerptText.displayName = 'DocsHelpExcerptText'
 

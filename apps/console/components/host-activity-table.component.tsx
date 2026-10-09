@@ -46,11 +46,12 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import { useResolvedActivityActors } from '@aglyn/tenant-feature-instance/hooks/use-resolved-activity-actors'
 import {
-  activityActionLabel,
   activityActorLabel,
   activityHref,
-  activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
+import ActivityDetailsDialog, { type ActivityDetails } from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
+import { staffActivityLinks } from '../utils/activity-details'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
@@ -84,13 +85,18 @@ import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
 /** Target and Who are derived per row, so they sort the page on screen. */
 const HOST_ACTIVITY_PAGE_SORTS = {
-  target: (row: any) => activityTargetLabel(row.target) || null,
+  target: (row: any) => describeActivity(row).target || null,
   actorEmail: (row: any) => activityActorLabel(row) || null,
 }
 const HOST_ACTIVITY_SORT_HEADERS = { target: 'Target', actorEmail: 'Who (then)' }
 
 export interface HostActivityTableProps {
   hostId: string
+  /**
+   * The staff site page (AGL-3660): a row's details add the stored code and
+   * path and link to the staff pages. A customer's site leaves it off.
+   */
+  staff?: boolean
 }
 
 /**
@@ -99,7 +105,8 @@ export interface HostActivityTableProps {
  * the dashboard card's bounded window.
  */
 export function HostActivityTable(props: HostActivityTableProps) {
-  const { hostId } = props
+  const { hostId, staff = false } = props
+  const [opened, setOpened] = useState<ActivityDetails | null>(null)
   /*
    * The link context is the CUSTOMER route's params, and this table also
    * mounts on the staff host page, whose route has neither. A
@@ -206,16 +213,19 @@ export function HostActivityTable(props: HostActivityTableProps) {
         flex: 1.2,
         minWidth: 180,
         // The STORED action stays the cell's value, so the grid sorts on it;
-        // what is drawn is its label, so a plugin's code (`ai.job.output`)
-        // reads as the sentence its catalog declares.
-        renderCell: ({ row }: any) => activityActionLabel(row.action) || '—',
+        // what is drawn is the shared sentence (AGL-3660), so a plugin's code
+        // (`ai.job.output`) reads as words, the code kept as the tooltip.
+        renderCell: ({ row }: any) => {
+          const described = describeActivity(row)
+          return <span title={described.code ?? undefined}>{described.action}</span>
+        },
       },
       {
         field: 'target',
         headerName: 'Target',
         flex: 1.2,
         minWidth: 180,
-        valueGetter: (_value, row: any) => activityTargetLabel(row.target),
+        valueGetter: (_value, row: any) => describeActivity(row).target,
         renderCell: ({ row }: any) => {
           /*
            * The link context is the CUSTOMER route's params, and this table
@@ -225,7 +235,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
            */
           const href =
             orgSlug && host ? activityHref(row, { orgSlug, host }) : undefined
-          const label = activityTargetLabel(row.target)
+          const label = describeActivity(row).target
           return href ? (
             <AppLink href={href} color="primary" underline="hover">
               {label}
@@ -296,11 +306,25 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const searching = searchWords.some((word) => word.trim())
   const filtered = clauses.length > 0 || searching
 
+  const hostActivityDetails = (row: any): ActivityDetails => {
+    const described = describeActivity({ ...row, scopeType: 'host', scopeId: hostId })
+    const href = orgSlug && host ? activityHref(row, { orgSlug, host }) : undefined
+    return {
+      description: described,
+      who: activityActorLabel(row),
+      when: formatStaffTimestamp(row.createdAt?.toDate?.() ?? null),
+      links: [
+        ...(href ? [{ label: 'Open', href }] : []),
+        ...(staff ? staffActivityLinks(described) : []),
+      ],
+    }
+  }
+
   return (
     <CardDisplay
       header={'Activity'}
       help={docsHelp('inviteTeammates', {
-        anchor: '#activity-log',
+        anchor: '#site-activity-log',
         excerpt:
           'Every change made to this site in the console — who did ' +
           'what, and when.',
@@ -349,9 +373,10 @@ export function HostActivityTable(props: HostActivityTableProps) {
             rows={columnSort.rows}
             columns={filterColumns}
             /*
-             * NO `onOpen`. An audit row is not a record you open: what is worth
-             * reaching is its target, which is already a link in the row.
+             * A row opens the shared details dialog (AGL-3660); its target
+             * stays a link in the row as well.
              */
+            onOpen={(_id: string, row: any) => setOpened(hostActivityDetails(row))}
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
             /*
@@ -385,6 +410,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
           onPageSizeChange={setPageSize}
         />
       </Stack>
+      <ActivityDetailsDialog details={opened} staff={staff} onClose={() => setOpened(null)} />
     </CardDisplay>
   )
 }

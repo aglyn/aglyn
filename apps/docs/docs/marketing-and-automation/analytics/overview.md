@@ -124,6 +124,62 @@ events, and Core Web Vitals.
 the exact parameters it carries — read it before you build a report, because
 GA4 will not surface a custom dimension you have not registered.
 
+## The Tracking card {#tracking-card}
+
+The **Tracking** card in a site's Setup connects your own analytics and advertising
+tags — Google Analytics, Tag Manager, a Meta pixel, Google Ads and LinkedIn — each
+loading only where the visitor's consent allows it.
+
+Every field is optional; fill in the ones for the tools you use, then **Save**. In the
+UK, EU and EEA, and anywhere the visitor's region cannot be determined, nothing loads
+until the visitor accepts; elsewhere the tags load from the first visit and the visitor
+can turn them off at any time. The **Cookie consent** card below it sets that posture.
+
+### Google Analytics measurement ID {#ga-measurement-id}
+
+Paste your GA4 measurement ID (it looks like `G-XXXXXXXXXX`, under **Admin → Data
+streams** in Google Analytics) to track the site in your own property alongside the
+built-in pageview analytics.
+
+The field refuses anything that is not shaped like a measurement ID, so a saved one is
+one that will load. The events your property then receives are listed in
+[Google Analytics events](./google-analytics.md).
+
+### Google Tag Manager container ID {#gtm-container}
+
+Paste your container ID (it looks like `GTM-XXXXXXX`) to load a Tag Manager container
+on the site, with Consent Mode signals set before it loads.
+
+A container is a loader: whatever tags it carries load with it, on the same consent
+terms as the other fields, and advertising tags in it stay denied until the visitor
+allows advertising. Do not put a Google Analytics or Google Ads tag in the container if
+you filled in those fields here — the same measurement would load twice and count every
+visit and conversion twice.
+
+### Meta pixel ID {#meta-pixel}
+
+Paste the numeric pixel ID from Meta Events Manager to run a Meta pixel for ads and
+remarketing; it waits for advertising consent, a separate choice from analytics.
+
+The ID is 8–20 digits. When a visitor withdraws consent, the pixel is removed and its
+cookies are cleared.
+
+### Google Ads conversion ID {#google-ads-tag}
+
+Paste your conversion ID from Google Ads (it looks like `AW-123456789`) to run Ads
+conversion tracking and remarketing without Google Analytics or Tag Manager.
+
+It is a separate field from the measurement ID because they are separate products with
+separate IDs. Consent works the same way as the Meta pixel.
+
+### LinkedIn partner ID {#linkedin-insight-tag}
+
+Paste the numeric partner ID from LinkedIn Campaign Manager to run the LinkedIn Insight
+Tag for ads and remarketing, under the same consent as the other advertising tags.
+
+The ID is 4–10 digits. LinkedIn also sets cookies on its own domain, which only LinkedIn
+can clear.
+
 ## Related
 
 - [Google Analytics events](./google-analytics.md)

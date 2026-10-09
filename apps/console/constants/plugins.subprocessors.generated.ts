@@ -550,6 +550,17 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'couriers',
+    subprocessors: [],
+    uses: [
+      {
+        host: "openapi.doordash.com",
+        reason: "Also customer-chosen: DoorDash Drive's API, reached only from `libs/plugins/couriers/src/lib/providers/doordash.ts` with the merchant's own developer keys (live, or test for DoorDash's sandbox) when a member of the site asks for a courier's quote, books one, cancels one or checks one, and from the console job that follows open deliveries. DoorDash bills the delivery to the merchant's own account.",
+        dataReceived: "For each order a courier is sent for: the order's number and value, the store's name, pickup address, phone and pickup note, and the buyer's name, delivery address and phone number. Read back: the delivery's status, fee, pickup and drop-off estimates, tracking link and any cancellation reason. Each request carries a short-lived token signed with the merchant's signing secret; the secret itself is never sent. No payment details are sent.",
+      },
+    ],
+  },
+  {
     pluginId: 'marketplaces',
     subprocessors: [],
     hosts: [
@@ -922,6 +933,24 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "not-a-subprocessor",
         reason: "Pixabay's image CDN, one of the two hosts the stock-photos plugin's client (`libs/plugins/stock-photos/src/lib/providers/pixabay.ts`) will download a chosen photo's bytes from, on the console's server, before storing them in the site's own media library.",
         dataReceived: "Nothing beyond the request for the image.",
+      },
+    ],
+  },
+  {
+    pluginId: 'live-chat',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "code.tidio.co",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Tidio’s widget loader for the merchant’s own Tidio account, named by the public key a site admin saves in the Live chat card, added to that site’s published pages by `libs/plugins/live-chat/src/lib/loader.ts` only when a visitor asks for the chat (or, where the merchant chose it, once the visitor’s consent grants analytics). The widget then reaches Tidio’s own hosts, which the tenant policy admits for that site alone.",
+        dataReceived: "Nothing from the platform’s servers. The site visitor’s browser loads the vendor’s widget, which then sends the vendor what the visitor types into the chat, the page they are on and the browser’s technical details (IP address, user agent, language), and stores the vendor’s own visitor identifier in the browser. No account, payment or order data the platform holds is sent.",
+      },
+      {
+        host: "cdn.livechatinc.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. LiveChat’s widget loader for the merchant’s own LiveChat account, named by the license number a site admin saves in the Live chat card, added to that site’s published pages by `libs/plugins/live-chat/src/lib/loader.ts` only when a visitor asks for the chat (or, where the merchant chose it, once the visitor’s consent grants analytics). The widget then reaches LiveChat’s own hosts, which the tenant policy admits for that site alone.",
+        dataReceived: "Nothing from the platform’s servers. The site visitor’s browser loads the vendor’s widget, which then sends the vendor what the visitor types into the chat, the page they are on and the browser’s technical details (IP address, user agent, language), and stores the vendor’s own visitor identifier in the browser. No account, payment or order data the platform holds is sent.",
       },
     ],
   },

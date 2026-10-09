@@ -184,6 +184,7 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
   const categoriesJob = latest('categories')
   const tooMany = picked.length > AI_PRODUCTS_BULK_MAX
   const help = pluginDocsHelp('aiProducts', {
+    anchor: '#propose-a-first-catalog',
     excerpt:
       'Write product copy, propose a first catalog, or propose categories and discounts from a brief. You review every proposal before anything is saved.',
   })
@@ -268,7 +269,7 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             {'Build your catalog with AI'}
           </Typography>
-          <Link href={help.href} target="_blank" rel="noopener" variant="caption" title={help.excerpt}>
+          <Link href={help.href} target="_blank" rel="noopener" variant="caption" title={help.excerptText}>
             {'How it works'}
           </Link>
         </Stack>

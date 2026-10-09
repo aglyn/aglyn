@@ -298,7 +298,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Revenue', href: buildRoute(Route.ADMIN_REVENUE) },
       ]}
-      help="revenue"
+      help={{ topic: 'revenue', anchor: '#revenue-page' }}
       header={{
         children: 'Revenue',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -309,11 +309,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
           <Stack spacing={3}>
             <CardDisplay
               header="Period"
-              help={docsHelp('revenue', {
-                anchor: '#the-two-bases',
-                excerpt:
-                  'Pick the month or quarter to report. Settled figures are ranged over the period; contracted MRR is what the book bills today.',
-              })}
+              help={docsHelp('revenue', { anchor: '#revenue-period' })}
               contentGutterX
               contentGutterY
             >
@@ -414,11 +410,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
             {/* ---- The two bases, side by side ---- */}
             <CardDisplay
               header="The two bases"
-              help={docsHelp('revenue', {
-                anchor: '#the-two-bases',
-                excerpt:
-                  'Contracted is what the book bills; settled is what Stripe collected. They answer different questions and the difference between them is the useful number.',
-              })}
+              help={docsHelp('revenue', { anchor: '#the-two-bases' })}
               contentGutterX
               contentGutterY
             >
@@ -466,11 +458,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
             {/* ---- How each org status is treated ---- */}
             <CardDisplay
               header="How each org is treated"
-              help={docsHelp('revenue', {
-                anchor: '#how-each-org-is-treated',
-                excerpt:
-                  'Comped, trialing and past-due orgs each contribute differently to the two bases. Stated here rather than left in the code.',
-              })}
+              help={docsHelp('revenue', { anchor: '#how-each-org-is-treated' })}
               contentGutterX
               contentGutterY
             >
@@ -689,8 +677,6 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               header="Where the money came from"
               help={docsHelp('revenue', {
                 anchor: '#where-the-money-came-from',
-                excerpt:
-                  'Earned revenue by source, each already net of the thing that would overstate it.',
               })}
               contentGutterX
               contentGutterY
@@ -840,11 +826,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
             {/* ---- Who produced the numbers ---- */}
             <CardDisplay
               header="Which orgs did what"
-              help={docsHelp('revenue', {
-                anchor: '#how-each-org-is-treated',
-                excerpt:
-                  'Every figure above, traced to the org behind it. Contracted MRR is measured today; settled cash is measured over the selected period.',
-              })}
+              help={docsHelp('revenue', { anchor: '#which-orgs-did-what' })}
               contentGutterX
               contentGutterY
             >
@@ -974,11 +956,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
             {sources.some((section) => section.attribution.length > 0) ? (
               <CardDisplay
                 header="Which plugin, and which storefront"
-                help={docsHelp('revenue', {
-                  anchor: '#where-the-money-came-from',
-                  excerpt:
-                    'Each plugin’s earnings attributed on the dimension it is measured in. Each table sums to its line in "Where the money came from".',
-                })}
+                help={docsHelp('revenue', { anchor: '#revenue-by-plugin' })}
                 contentGutterX
                 contentGutterY
               >

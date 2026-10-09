@@ -27,6 +27,7 @@ import {
   appIconContents,
   appIconSvg,
   brandTextOutputs,
+  sizedSvg,
   groundGradient,
   iconContainerCount,
   iconRasters,
@@ -276,4 +277,43 @@ test('.ico and .icns hold PNGs and count back', () => {
   assert.equal(icns.toString('ascii', 0, 4), 'icns')
   assert.equal(iconContainerCount(icns, 'icns'), 2)
   assert.equal(iconContainerCount(Buffer.from('nope'), 'icns'), null)
+})
+
+test('the launch logo is the full logo, sized on its root element, light and dark, in both apps', () => {
+  const source =
+    '<?xml version="1.0"?><svg width="100%" height="100%" viewBox="0 0 79 24"><path d="M0,0z"/></svg>'
+  assert.equal(
+    sizedSvg(Buffer.from(source), 184, 56),
+    '<?xml version="1.0"?><svg width="184" height="56" viewBox="0 0 79 24"><path d="M0,0z"/></svg>',
+  )
+  assert.equal(
+    sizedSvg('<svg viewBox="0 0 1 1"/>', 2, 3),
+    '<svg height="3" width="2" viewBox="0 0 1 1"/>',
+  )
+  assert.throws(
+    () => sizedSvg('<path/>', 1, 1, 'x.svg'),
+    /x\.svg: no <svg> element/,
+  )
+  const outputs = brandTextOutputs((name) =>
+    name.startsWith('app-icon/')
+      ? readIcon(name)
+      : Buffer.from(
+          name.includes('full')
+            ? `<svg width="100%" height="100%" viewBox="0 0 79 24" data-ink="${name}"><path d="M0,0z" style="fill:#00b0ff;"/></svg>`
+            : mark,
+        ),
+  )
+  for (const app of ['Aglyn', 'AglynPOS']) {
+    const set = `apps/ios/${app}/Assets.xcassets/LaunchLogo.imageset`
+    const light = outputs.find(({ file }) => file === `${set}/LaunchLogo.svg`)
+    const dark = outputs.find(
+      ({ file }) => file === `${set}/LaunchLogo-dark.svg`,
+    )
+    assert.match(
+      light.content,
+      /width="184" height="56".*data-ink="aglyn-logo-full-dark\.svg"/,
+    )
+    assert.match(dark.content, /data-ink="aglyn-logo-full-light\.svg"/)
+    assert.ok(outputs.some(({ file }) => file === `${set}/Contents.json`))
+  }
 })

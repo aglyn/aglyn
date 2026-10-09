@@ -146,5 +146,13 @@
   "review-platforms": {
     "baseline": 5110,
     "budget": 7168
+  },
+  "couriers": {
+    "baseline": 4638,
+    "budget": 6144
+  },
+  "live-chat": {
+    "baseline": 7342,
+    "budget": 9216
   }
 }

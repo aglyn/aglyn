@@ -53,6 +53,8 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-zapier/declarations.console-server')).registerZapierConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-fulfillment-networks/declarations.server')).registerFulfillmentNetworksServerDeclarations()
     ;(await import('@aglyn/plugins-fulfillment-networks/declarations.console-server')).registerFulfillmentNetworksConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-couriers/declarations.server')).registerCouriersServerDeclarations()
+    ;(await import('@aglyn/plugins-couriers/declarations.console-server')).registerCouriersConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-marketplaces/declarations.server')).registerMarketplacesServerDeclarations()
     ;(await import('@aglyn/plugins-marketplaces/declarations.console-server')).registerMarketplacesConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-print-on-demand/declarations.server')).registerPrintOnDemandServerDeclarations()

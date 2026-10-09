@@ -155,6 +155,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-fulfillment-networks/server'),
   },
   {
+    id: 'couriers',
+    apiPrefixes: ["couriers"],
+    register: {"consoleApi":"registerCouriersConsoleApi"},
+    load: () => import('@aglyn/plugins-couriers/server'),
+  },
+  {
     id: 'marketplaces',
     apiPrefixes: ["marketplaces"],
     register: {"consoleApi":"registerMarketplacesConsoleApi"},
@@ -189,5 +195,11 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["funnels"],
     register: {"consoleApi":"registerFunnelsConsoleApi"},
     load: () => import('@aglyn/plugins-funnels/server'),
+  },
+  {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"consoleApi":"registerLiveChatConsoleApi"},
+    load: () => import('@aglyn/plugins-live-chat/server'),
   },
 ]

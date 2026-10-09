@@ -17,6 +17,7 @@
 
 import type { AdminAuditKind } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import type { ListQueryFilter } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { auditAfterSummary, resolveAuditNames } from './audit-names'
 import { ADMIN_AUDIT_COLLECTION } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   USER_AUDIT_LIST_QUERY,
@@ -112,7 +113,35 @@ export function userAuditRow(doc: FirebaseFirestore.QueryDocumentSnapshot): User
     repeatCount: Number(doc.get('repeatCount')) || 1,
     lastAt: iso(doc.get('lastAt')),
     kind: doc.get('kind') === 'access' ? 'access' : 'change',
+    after: auditAfterSummary(doc.get('after')),
   }
+}
+
+/** Each row with the names of what it mentions, for the shared describer. */
+export async function withAuditNames<Row extends UserAuditRow>(
+  firestore: FirebaseFirestore.Firestore,
+  rows: Row[],
+): Promise<Row[]> {
+  const names = await resolveAuditNames(firestore, rows)
+  const pick = (table: Record<string, unknown> | undefined, ids: Array<string | null | undefined>) =>
+    Object.fromEntries(
+      ids.flatMap((id) => (id && table?.[id] ? [[id, table[id] as string]] : [])),
+    )
+  return rows.map((row) => {
+    const segments = String(row.target ?? '').split('/')
+    const after = (collection: string) => {
+      const at = segments.indexOf(collection)
+      return at >= 0 ? segments[at + 1] : undefined
+    }
+    return {
+      ...row,
+      names: {
+        orgs: pick(names.orgs as Record<string, unknown>, [after('orgs')]),
+        hosts: pick(names.hosts as Record<string, unknown>, [after('hosts'), row.after?.hostId]),
+        users: pick(names.users as Record<string, unknown>, [after('users'), row.subjectUid, row.actorUid]),
+      },
+    }
+  })
 }
 
 /** Newest first, and among equal instants the order Firestore keeps: id, descending. */
@@ -161,7 +190,7 @@ export async function readUserAuditPage(options: {
   // they refuse the same things; the first says it for all of them.
   const [first] = plans
   return {
-    rows: shown.map(userAuditRow),
+    rows: await withAuditNames(firestore, shown.map(userAuditRow)),
     nextCursor: hasMore ? (shown[shown.length - 1]?.ref.path ?? null) : null,
     hasMore,
     refused: first?.refused ?? [],

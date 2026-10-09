@@ -23,6 +23,7 @@ import {
   ADMIN_AUDIT_TARGET_KIND_FIELD,
   type AdminAuditKind,
 } from '@aglyn/aglyn/app-utils/admin-audit-index'
+import type { ActivityNames } from '@aglyn/aglyn/app-utils/activity-labels'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type {
   ListQueryDeclaration,
@@ -235,6 +236,20 @@ export interface UserAuditRow {
   repeatCount: number
   lastAt: string | null
   kind: AdminAuditKind
+  /**
+   * What the act left that a list may show (AGL-3660): an AI act's label,
+   * site and credits. Whitelisted by `auditAfterSummary`.
+   */
+  after?: {
+    label?: string
+    resource?: string
+    hostId?: string
+    credits?: number
+    result?: string
+    status?: string
+  } | null
+  /** The names of the org, site and account this row mentions. */
+  names?: ActivityNames
 }
 
 /** The base every half carries: which of the two tables it fills. */

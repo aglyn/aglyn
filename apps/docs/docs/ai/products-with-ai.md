@@ -64,12 +64,13 @@ a search listing and a sentence saying what its photo should show.
 Review the table, untick any you do not want, and press **Create drafts**. Each product
 is created as a **draft**:
 
-- **Its price is left empty**, and the table marks it **Set a price**. The product editor
-  will not save the product until every variant has a price, and a product with an empty
-  price is never sold.
+- **It starts at a default price of $25** on every variant, for you to change in the
+  product editor. You may clear a price on purpose: the product still saves, the table
+  marks it **Set a price**, and your storefront shows **Price coming soon** with no way to
+  buy it until it has one again.
 - **It has no photo**, and the table marks it **Needs a photo** with the suggested shot.
   Nothing is uploaded or linked for you.
-- **Nothing is on your storefront** until you price it and set it to **Active**.
+- **Nothing is on your storefront** until you set it to **Active**.
 
 A proposed product with the same name as one already in your catalog is left out.
 

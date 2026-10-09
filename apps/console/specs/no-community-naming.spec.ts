@@ -85,6 +85,10 @@ const ALLOWED = new Map<string, string>([
     'libs/plugins/ai/src/lib/model/ai-site-kinds.ts',
     'The nonprofit/community-organization website kind and its search keyword — AGL-3660.',
   ],
+  [
+    'libs/plugins/ai/src/lib/model/ai-site-kinds.spec.ts',
+    'Table-spec briefs for that kind ("a community food bank", "a community center") — AGL-3660.',
+  ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
   [
     'apps/console/app/api/support/forum/route.ts',

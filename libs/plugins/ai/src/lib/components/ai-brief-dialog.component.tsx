@@ -18,6 +18,8 @@
  */
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
@@ -207,6 +209,49 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
 }
 
 /**
+ * Each kind's own help beside the dialog's title (AGL-3660): the guide for
+ * the thing being described, opened at the section about writing its brief,
+ * never one page shared by all seven.
+ */
+const AI_BRIEF_HELP: Readonly<Record<AiBriefKind, ReturnType<typeof pluginDocsHelp>>> = {
+  page: pluginDocsHelp('aiPage', {
+    anchor: '#describe-the-page',
+    excerpt:
+      'Say what the page is for and who it is for. A plan comes first, and the page is built as an unpublished draft once you confirm it.',
+  }),
+  template: pluginDocsHelp('aiTemplate', {
+    anchor: '#generate-a-page-template-with-aglyn-ai',
+    excerpt:
+      'Describe what each page made from the template should show. What changes per page is filled in from each record.',
+  }),
+  layout: pluginDocsHelp('aiLayout', {
+    anchor: '#generate-a-layout-with-aglyn-ai',
+    excerpt:
+      'Describe the header, navigation and footer. The layout is built as a draft, and no page uses it until you assign it.',
+  }),
+  form: pluginDocsHelp('aiForm', {
+    anchor: '#describe-the-form',
+    excerpt:
+      'Say what the form is for. Its fields, marketing consent and where submissions go are planned together, and it collects nothing until you place it.',
+  }),
+  component: pluginDocsHelp('aiComponent', {
+    anchor: '#from-a-brief',
+    excerpt:
+      'Describe one reusable block. What each page can change, such as a name or a photo, becomes a property of the component.',
+  }),
+  email: pluginDocsHelp('aiEmail', {
+    anchor: '#write-the-brief',
+    excerpt:
+      'Say what the email is for. It is built from email blocks with three subject lines to choose from, and nothing is sent.',
+  }),
+  campaign: pluginDocsHelp('aiEmail', {
+    anchor: '#where-to-start-it',
+    excerpt:
+      'Writes the email and a draft campaign that would send it. The campaign is aimed at nobody until you pick its lists and schedule it.',
+  }),
+}
+
+/**
  * The kinds of email a member picks from, as their chips name them. The jobs'
  * own catalog (`AI_EMAIL_TYPES`) also holds `reply`, which only a job the
  * platform composes sets, so it is not offered here.
@@ -380,7 +425,10 @@ export function AiBriefDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{copy.title}</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {copy.title}
+        <HelpTip {...AI_BRIEF_HELP[shownKind]} />
+      </DialogTitle>
       <DialogContent>
         {started && orgId ? (
           <AiJobFollow

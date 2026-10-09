@@ -210,6 +210,7 @@ export function PasskeysCard() {
     <CardDisplay
       header="Passkeys"
       help={docsHelp('account', {
+        anchor: '#passkeys',
         excerpt:
           'Sign in with Touch ID, Face ID, or a security key. Passkeys are ' +
           'an extra sign-in method — your password and providers stay.',

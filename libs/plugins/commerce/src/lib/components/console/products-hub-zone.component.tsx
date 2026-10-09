@@ -63,7 +63,8 @@ import { readSmartCollections } from './smart-collections'
  *   loaded is kept.
  * - **A proposed product** is created through the quota-enforcing resources
  *   API, as Add product and Import create one, after the hub's own allowance
- *   check for the batch. It is a draft with no price (`unpricedProductDraft`).
+ *   check for the batch. It is a draft at the default price
+ *   (`defaultPricedProductDraft`, AGL-3676), for the owner to change.
  * - **A category** is created as the catalog card creates one.
  * - **A discount** is created switched off (`switchedOffDiscount`), for a
  *   person to switch on from the discounts card.
@@ -209,7 +210,7 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
       const created: string[] = []
       try {
         const drafts = fresh.map((proposal) =>
-          CommerceModel.unpricedProductDraft(proposal, NO_SLUGS, Date.now()),
+          CommerceModel.defaultPricedProductDraft(proposal, NO_SLUGS, Date.now()),
         )
         await slugs.ask(drafts.map((draft) => draft.slug))
         const smartCollections = await readSmartCollections(firestore, hostId)

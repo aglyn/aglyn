@@ -19,7 +19,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
-import { mdiBullhornOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
+import { mdiBullhornOutline, mdiPageNextOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Figure,
@@ -76,12 +76,7 @@ import { templateReport, type TemplateCampaign } from '../model/template-report'
  */
 export const TEMPLATE_CAMPAIGN_CEILING = 100
 
-const reportDocsHelp = pluginDocsHelp('designedEmails', {
-  anchor: '#send-it',
-  excerpt:
-    'Every message sent from this template, and what those messages did — ' +
-    'each rate over the population it was measured against.',
-})
+const reportDocsHelp = pluginDocsHelp('designedEmails', { anchor: '#template-report' })
 
 /** What the Email plugin's template page hands its report zone. */
 export interface EmailTemplateReportCardProps {
@@ -240,7 +235,7 @@ export function EmailTemplateReportCard(props: EmailTemplateReportCardProps) {
     {
       key: 'details',
       label: 'Open report',
-      icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+      icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
       href: messageHref(message),
     },
     {

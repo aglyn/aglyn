@@ -20,6 +20,12 @@ later. Digital and service lines have nothing to ship and never hold an order op
 - **Carrier** and **Tracking number** make the tracking link for USPS, UPS, FedEx, DHL,
   Canada Post, Royal Mail and Australia Post. For any other carrier, choose **Other**,
   type its name, and paste the **Tracking link** yourself.
+- **Shipping cost** is optional: what sending this shipment cost you, in your store's
+  currency. Enter `0` for free shipping; leave it empty when you don't know. Each
+  shipment keeps its own cost, so a partial shipment and the rest can differ. It is
+  asked only for a shipment you enter by hand; a label you buy in Aglyn keeps what the
+  label cost. A Faire order sends it to Faire as the shipping you paid
+  ([Marketplaces](marketplaces.md)).
 - **Notify customer** emails the buyer the shipment with its tracking link. Leave it
   off to record a shipment quietly.
 - The order reads **Partially fulfilled** until every unit that ships is out, then

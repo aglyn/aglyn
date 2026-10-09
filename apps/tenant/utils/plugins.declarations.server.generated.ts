@@ -38,6 +38,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-marketing-platforms/declarations.server')).registerMarketingPlatformsServerDeclarations()
     ;(await import('@aglyn/plugins-zapier/declarations.server')).registerZapierServerDeclarations()
     ;(await import('@aglyn/plugins-fulfillment-networks/declarations.server')).registerFulfillmentNetworksServerDeclarations()
+    ;(await import('@aglyn/plugins-couriers/declarations.server')).registerCouriersServerDeclarations()
     ;(await import('@aglyn/plugins-marketplaces/declarations.server')).registerMarketplacesServerDeclarations()
     ;(await import('@aglyn/plugins-print-on-demand/declarations.server')).registerPrintOnDemandServerDeclarations()
     ;(await import('@aglyn/plugins-inventory-sync/declarations.server')).registerInventorySyncServerDeclarations()

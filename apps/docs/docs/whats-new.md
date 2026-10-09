@@ -37,6 +37,21 @@ for the how-to.
   for a test, canceled or refunded order. Your store's own product reviews stay on
   your product pages.
 
+## October 2026 — live chat with Tidio or LiveChat
+
+- **[Live chat](building-sites/live-chat.md)** — chat with your visitors through your
+  own Tidio or LiveChat account. Paste the key from its install code, choose the pages
+  it shows on, and a chat button appears on your site. The chat loads only when a
+  visitor presses the button, so it never slows your pages; you can also have it load
+  with the page for visitors who allowed analytics. Included on every plan.
+
+## October 2026 — shipping cost on a hand-entered shipment
+
+- **[Shipping cost](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  the Fulfill items panel takes an optional shipping cost for a shipment you enter by
+  hand, in your store's currency, one per shipment. A Faire order sends it to Faire as
+  the shipping you paid, the same way a label bought in Aglyn already does.
+
 ## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
@@ -151,7 +166,7 @@ for the how-to.
 
 <!--
   AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
-  deployment has its Intuit or Xero app credentials. This entry is held unpublished, like
+  deployment has its Intuit or Xero app credentials, or a Codat API key (AGL-3636, AGL-3701). This entry is held unpublished, like
   the two guides it links (`unlisted: true`): when the flag is switched on, remove this
   comment's markers, move "(newest)" here from the heading below, and delete
   `unlisted: true` from commerce-and-bookings/commerce/connect-quickbooks-online.md and
@@ -160,7 +175,8 @@ for the how-to.
 ## October 2026 — accounting sync
 
 - **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
-  or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,
+  or [Xero](commerce-and-bookings/commerce/connect-xero.md) — or, where offered, QuickBooks
+  Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave — and every paid order, refund,
   Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
   choose: a sales receipt (or invoice and payment) per order, or one summary journal a
   day. Set a start date to bring in earlier sales; anything the ledger refuses waits
@@ -234,6 +250,23 @@ for the how-to.
   seller account and sell everywhere from one stock count. Listings follow your stock
   (and your prices, if you choose), marketplace orders come in as your orders and take
   their units off the same shelf, and the tracking goes back when you ship.
+-->
+
+<!--
+  AGL-3695 — Couriers are built and hidden until a deployment sets
+  COURIERS_TOKEN_KEY on the console. This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once it is set on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/couriers.md.
+
+## October 2026 — send a DoorDash courier for your local deliveries
+
+- **[Couriers](commerce-and-bookings/commerce/couriers.md)** — connect your own
+  DoorDash Drive account and send a DoorDash courier for any local delivery from the
+  Pickup & delivery queue or the order. Get a quote, send the courier, and follow its
+  progress, tracking link and arrival time on the order and your buyer's status page.
+  DoorDash bills your own account; your buyers pay your delivery zone's fee as before.
 -->
 
 <!--

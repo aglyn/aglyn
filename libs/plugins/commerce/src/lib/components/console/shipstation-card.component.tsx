@@ -18,7 +18,6 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -176,11 +175,7 @@ export function ShipStationCard(props: ShipStationCardProps) {
   return (
     <CardDisplay
       header={'ShipStation'}
-      help={pluginDocsHelp('shipStation', {
-        excerpt:
-          `ShipStation imports your paid orders from ${PLATFORM_BRAND_NAME} and sends each shipment back, which ` +
-          'marks the order shipped and emails your customer the tracking link.',
-      })}
+      help={pluginDocsHelp('shipStation', { anchor: '#connect' })}
       HeaderProps={{ action: actions }}
       contentGutterX
       contentGutterY

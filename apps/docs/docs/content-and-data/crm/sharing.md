@@ -34,8 +34,14 @@ sites you add to the workspace later.
 
 On the site you shared it with, the record appears on the site's own CRM
 lists with a **Shared by** chip. The chip names the person who shared it,
-or the rule that did. The record's page has a **Sharing** card that lists
-where the record is visible and why:
+or the rule that did.
+
+### The Sharing card {#sharing-card}
+
+The **Sharing** card on a lead's, contact's, company's or deal's page lists
+every site that can see the record and why; an owner or admin shares it with
+more sites from **Share with sites…** in the card's header. The card shows once
+the record is shared, and to an owner or admin before then:
 
 - **Held by**: the sites that captured the record. Their visibility comes
   from the record itself, and sharing never removes it.

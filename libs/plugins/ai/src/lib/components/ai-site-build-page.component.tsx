@@ -29,6 +29,7 @@ import {
   mdiPauseCircle,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { newTabLinkProps } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import {
   SITE_LIVE_NOTICE_BODY,
   SITE_LIVE_NOTICE_TITLE,
@@ -484,7 +485,15 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
               {'View your site'}
             </Button>
           ) : links.view ? (
-            <Button variant="contained" size="large" component={AppLink} href={links.view}>
+            // The console's own view of the first page, but still a VIEW, so
+            // it opens beside this page like the live one above (AGL-3660).
+            <Button
+              variant="contained"
+              size="large"
+              component={AppLink}
+              href={links.view}
+              {...newTabLinkProps}
+            >
               {'View your site'}
             </Button>
           ) : null}

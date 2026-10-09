@@ -16,11 +16,8 @@
  */
 'use client'
 
-import {
-  activityActionLabel,
-  activityActorLabel,
-  activityTargetLabel,
-} from '@aglyn/aglyn/app-utils/activity-presenter'
+import { activityActorLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { describeActivity } from '@aglyn/aglyn/app-utils/activity-labels'
 import { listPluginActivityFilters } from '@aglyn/aglyn'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
@@ -50,6 +47,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ActivityTable from './activity-table.component'
+import { staffActivityLinks } from '../utils/activity-details'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
@@ -65,6 +63,8 @@ export interface ActorActivityEntry {
   actorEmailNow?: string | null
   apiKeyName?: string
   createdAt?: { seconds: number } | null
+  /** The site's or organization's name, where the route resolved it (AGL-3660). */
+  scopeName?: string | null
 }
 
 /*
@@ -94,6 +94,11 @@ export interface ActorActivityTableProps {
   description?: string
   /** Site name by host id, so a row can say where rather than which id. */
   scopeNames?: Record<string, string | undefined>
+  /**
+   * The staff user page (AGL-3660): a row's details add the stored code and
+   * path and link to the staff pages. The team member page leaves it off.
+   */
+  staff?: boolean
 }
 
 /**
@@ -118,7 +123,7 @@ export interface ActorActivityTableProps {
  * audit log is a lie with a clean-looking face.
  */
 export function ActorActivityTable(props: ActorActivityTableProps) {
-  const { endpoint, header, help, description, scopeNames } = props
+  const { endpoint, header, help, description, scopeNames, staff = false } = props
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
@@ -224,10 +229,22 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
   const actionClause = clauses.find((clause) => clause.field === 'action')
   const groupValue = (actions: readonly string[]) => actions.join(',')
 
+  const describe = (entry: ActorActivityEntry) =>
+    describeActivity(entry, {
+      hosts:
+        entry.scopeType === 'host'
+          ? { [entry.scopeId]: entry.scopeName ?? scopeNames?.[entry.scopeId] }
+          : {},
+    })
+
+  // The site's or organization's name where the route resolved it
+  // (AGL-3660); a site the route could not name keeps its id.
   const scopeLabel = (entry: ActorActivityEntry): string => {
-    if (entry.scopeType === 'org') return 'Organization'
+    if (entry.scopeType === 'org') {
+      return entry.scopeName ? `${entry.scopeName} (organization)` : 'Organization'
+    }
     if (entry.scopeType === 'host') {
-      return scopeNames?.[entry.scopeId] ?? entry.scopeId
+      return entry.scopeName ?? scopeNames?.[entry.scopeId] ?? entry.scopeId
     }
     return '—'
   }
@@ -241,10 +258,16 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         flex: 1.2,
         minWidth: 180,
         // The STORED action stays the cell's value — it is what the route's
-        // equality filter compares — and the label is only what is drawn,
-        // so an AI code reads as a sentence without breaking the filter.
+        // equality filter compares — and the sentence is only what is drawn,
+        // so an AI code reads as words without breaking the filter. The code
+        // itself is the tooltip (AGL-3660).
         valueGetter: (_value, row: ActorActivityEntry) => row.action ?? '—',
-        renderCell: ({ row }: any) => activityActionLabel(row.action) || '—',
+        renderCell: ({ row }: any) => {
+          const described = describe(row)
+          return (
+            <span title={described.code ?? undefined}>{described.action}</span>
+          )
+        },
       },
       {
         field: 'target',
@@ -254,8 +277,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         // A rendered summary of an object, not a stored scalar — there is
         // nothing for a query to compare.
         filterable: false,
-        valueGetter: (_value, row: ActorActivityEntry) =>
-          activityTargetLabel(row.target as never) || '—',
+        valueGetter: (_value, row: ActorActivityEntry) => describe(row).target,
       },
       {
         field: 'actorEmail',
@@ -309,8 +331,8 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
 
   const pageSorts = useMemo(
     () => ({
-      action: (row: ActorActivityEntry) => activityActionLabel(row.action) || null,
-      target: (row: ActorActivityEntry) => activityTargetLabel(row.target as never) || null,
+      action: (row: ActorActivityEntry) => describe(row).action || null,
+      target: (row: ActorActivityEntry) => describe(row).target || null,
       actorEmail: (row: ActorActivityEntry) => activityActorLabel(row) || null,
       scopeId: (row: ActorActivityEntry) => scopeLabel(row),
     }),
@@ -390,6 +412,17 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
       columns={activityColumns}
       rows={rows}
       getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
+      staff={staff}
+      details={(row: ActorActivityEntry) => {
+        const described = describe(row)
+        return {
+          description: described,
+          who: activityActorLabel(row),
+          when: formatWireTimestamp(row.createdAt),
+          where: scopeLabel(row),
+          ...(staff ? { links: staffActivityLinks(described) } : {}),
+        }
+      }}
       loading={loading}
       unreadable={unreadable}
       /*

@@ -14161,6 +14161,52 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
   })
 })
 
+describe('courier records are the server’s alone (AGL-3695)', () => {
+  // A connection holds the merchant's sealed DoorDash Drive signing secret
+  // and the hash of the token DoorDash's webhooks carry; a delivery record
+  // decides whether a courier is booked or called off. All written and read
+  // by the couriers plugin's routes, webhook, event intake and job through
+  // the Admin SDK.
+  const DOCS = [
+    ['courierConnections', `${HOST}_doordash`],
+    ['courierDeliveries', `${HOST}_order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          live: { sealedSigningSecret: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc' },
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('marketplace records are the server’s alone (AGL-3638)', () => {
   // A connection holds the merchant's sealed marketplace grant and what each
   // listing was last sent; an imported order's record says which shipments
@@ -14295,5 +14341,56 @@ describe('delivery-app records are the server’s alone (AGL-3644)', () => {
         await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
       }
     }
+  })
+})
+
+describe("a site's live chat settings are written by their route alone (AGL-3698)", () => {
+  /*
+   * `hosts/{hostId}/pluginSettings/live-chat` decides which vendor script a
+   * published page loads and which hosts the site's policy admits, so no
+   * member of the site writes it — the owner included. `/api/live-chat/settings`
+   * parses every field and writes it with the Admin SDK. Staff keep the host
+   * catch-all's staff write, as for every subcollection. Members still READ
+   * it, like every other plugin's site settings, and the generic document
+   * beside it keeps its admin write: both halves asserted, so a rule that
+   * closed every plugin's settings would fail here too.
+   */
+  const LIVE_CHAT = ['hosts', HOST, 'pluginSettings', 'live-chat']
+  const settings = {
+    enabled: true,
+    provider: 'tidio',
+    publicKey: 'abcdefghijklmnopqrstuvwxyz123456',
+    pages: 'all',
+    paths: [],
+    position: 'right',
+    loadWithPage: false,
+  }
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), ...LIVE_CHAT), settings)
+    })
+  })
+
+  it("refuses every write by the site's own members, the admin included", async () => {
+    for (const [who, client] of [
+      ['the owner', () => authed(OWNER)],
+      ['an editor', () => authed(EDITOR)],
+      ['a viewer', () => authed(VIEWER)],
+    ]) {
+      await mustDeny(
+        `${who} pointing the chat at another key`,
+        setDoc(doc(client(), ...LIVE_CHAT), { ...settings, publicKey: 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz' }),
+      )
+      await mustDeny(`${who} deleting the chat settings`, deleteDoc(doc(client(), ...LIVE_CHAT)))
+    }
+  })
+
+  it('still lets a member read them, and the owner write another plugin’s', async () => {
+    await mustAllow('the owner reading the chat settings', getDoc(doc(authed(OWNER), ...LIVE_CHAT)))
+    await mustAllow(
+      "the owner writing another plugin's site settings",
+      setDoc(doc(authed(OWNER), 'hosts', HOST, 'pluginSettings', 'marketing'), { fromName: 'Acme' }),
+    )
   })
 })

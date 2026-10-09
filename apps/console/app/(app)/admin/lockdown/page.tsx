@@ -940,7 +940,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Lockdown', href: buildRoute(Route.ADMIN_LOCKDOWN) },
       ]}
-      help="lockdown"
+      help={{ topic: 'lockdown', anchor: '#lockdown-page' }}
       header={{
         children: 'Lockdown',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -1863,11 +1863,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Actions taken in this session'}
-              help={docsHelp('lockdown', {
-                excerpt:
-                  'What you changed since this page loaded, so a session of edits can ' +
-                  'be read back before you leave it.',
-              })}
+              help={docsHelp('lockdown', { anchor: '#lockdown-session-log' })}
               contentGutterX
               contentGutterY
             >
@@ -1903,11 +1899,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Active platform, feature & account lockdowns'}
-              help={docsHelp('lockdown', {
-                excerpt:
-                  'Every lock currently in force, at every scope. This is the list to ' +
-                  'check before asking why a customer is refused.',
-              })}
+              help={docsHelp('lockdown', { anchor: '#active-lockdowns' })}
               contentGutterX
               contentGutterY
             >

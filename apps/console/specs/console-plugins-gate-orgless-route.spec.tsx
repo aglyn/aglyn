@@ -49,6 +49,7 @@ const route = { pathname: '/', subdomainSlug: null as string | null }
 
 const mockEnsure = jest.fn().mockResolvedValue(undefined)
 const mockLoadOrgRealmPlugins = jest.fn().mockResolvedValue(undefined)
+const mockPrefetchRealmInstalls = jest.fn()
 const mockGetIdToken = jest.fn().mockResolvedValue('id-token')
 
 jest.mock('next/navigation', () => ({
@@ -70,6 +71,7 @@ jest.mock('../constants/console-plugin-loader', () => ({
   pluginDeclarationsReady: Promise.resolve(),
 }))
 jest.mock('../utils/realm-plugins.client', () => ({
+  prefetchOrgRealmInstalls: (...args: unknown[]) => mockPrefetchRealmInstalls(...args),
   loadOrgRealmPlugins: (...args: unknown[]) => mockLoadOrgRealmPlugins(...args),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -141,6 +143,7 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
     await settle()
     expect(mockEnsure).not.toHaveBeenCalled()
     expect(mockLoadOrgRealmPlugins).not.toHaveBeenCalled()
+    expect(mockPrefetchRealmInstalls).not.toHaveBeenCalled()
     // Nothing reaches the realm loader for a workspace the user has not
     // opened, so nothing it would authorize is minted either.
     expect(mockGetIdToken).not.toHaveBeenCalled()
@@ -158,6 +161,7 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
       await settle()
       expect(mockEnsure).not.toHaveBeenCalled()
       expect(mockLoadOrgRealmPlugins).not.toHaveBeenCalled()
+      expect(mockPrefetchRealmInstalls).not.toHaveBeenCalled()
       view.unmount()
     }
   })
@@ -170,6 +174,30 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
     await settle()
     expect(mockEnsure).not.toHaveBeenCalled()
     expect(mockLoadOrgRealmPlugins).not.toHaveBeenCalled()
+    expect(mockPrefetchRealmInstalls).not.toHaveBeenCalled()
+  })
+
+  it('asks for the realm install list while the first-party chunks are still loading (AGL-3660)', async () => {
+    route.pathname = '/business1/hosts'
+    let releaseEnsure: () => void = () => undefined
+    mockEnsure.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (releaseEnsure = resolve)),
+    )
+    renderGate(<span data-testid="child" />)
+
+    await waitFor(() => expect(mockEnsure).toHaveBeenCalled())
+    // The list is in flight before the chunk wave lands...
+    expect(mockPrefetchRealmInstalls).toHaveBeenCalledWith(
+      'org-fallback',
+      expect.objectContaining({ getIdToken: mockGetIdToken }),
+    )
+    // ...while registration still waits for the first-party set, as before.
+    expect(mockLoadOrgRealmPlugins).not.toHaveBeenCalled()
+    expect(screen.getByTestId('boot-splash')).toBeTruthy()
+
+    releaseEnsure()
+    await waitFor(() => expect(screen.queryByTestId('child')).toBeTruthy())
+    expect(mockLoadOrgRealmPlugins).toHaveBeenCalledTimes(1)
   })
 
   it('DOES load on a route that names a workspace, and holds the first paint', async () => {

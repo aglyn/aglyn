@@ -61,12 +61,7 @@ import { RecordTasksCard } from './record-tasks-card'
 import { useSiteRouteContext } from './use-site-route-context'
 import { useOrgMembers } from './use-org-members'
 
-const contactDocsHelp = pluginDocsHelp('contacts', {
-  anchor: '#the-contacts-page',
-  excerpt:
-    "One person's record: the profile your team keeps on them, where they " +
-    'came from, what they are filed under, and what the site recorded.',
-})
+const contactDocsHelp = pluginDocsHelp('contactRecord', { anchor: '#the-record-page' })
 
 /**
  * `/crm/contacts/{contactId}` — one person (AGL-2596).

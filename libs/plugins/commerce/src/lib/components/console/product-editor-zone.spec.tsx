@@ -85,7 +85,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 
-import ProductEditorDialog from './product-editor-dialog.component'
+import ProductEditorDialog, { PRODUCT_PRICE_EMPTY_NOTICE } from './product-editor-dialog.component'
 
 /** One double of each for every render, so nothing keys an effect on a fresh object. */
 const mockFirestore = {}
@@ -209,7 +209,32 @@ describe('the product editor’s product zone (AGL-2916)', () => {
     ])
   })
 
-  it('opens a proposed product with its price marked, and saves it only once it has one', async () => {
+  it('opens an unpriced product with a gentle warning, and saves it as it is (AGL-3676)', async () => {
+    renderDialog({
+      $id: 'prod-2',
+      name: 'Wild mint soy candle',
+      slug: 'wild-mint-soy-candle',
+      status: 'active',
+      type: 'physical',
+      variants: [{ id: 'default' }],
+    })
+    expect(screen.getByText(PRODUCT_PRICE_EMPTY_NOTICE)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Save product' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Save product' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const saved = (setDoc as jest.Mock).mock.calls[0][1]
+    expect(saved.variants).toEqual([{ id: 'default' }])
+    // No flat price that would read as free.
+    expect(saved.priceUsd).toBeNull()
+  })
+
+  it('starts a new product at the default price, with no warning (AGL-3676)', () => {
+    renderDialog(null)
+    expect((screen.getByPlaceholderText('Set') as HTMLInputElement).value).toBe('25')
+    expect(screen.queryByText(PRODUCT_PRICE_EMPTY_NOTICE)).toBeNull()
+  })
+
+  it('takes the warning away once the price is set, and back when it is cleared on purpose (AGL-3676)', async () => {
     renderDialog({
       $id: 'prod-2',
       name: 'Wild mint soy candle',
@@ -218,15 +243,14 @@ describe('the product editor’s product zone (AGL-2916)', () => {
       type: 'physical',
       variants: [{ id: 'default' }],
     })
-    expect(screen.getByText('Set a price for every variant')).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Save product' }) as HTMLButtonElement).disabled).toBe(true)
     const price = screen.getByPlaceholderText('Set') as HTMLInputElement
-    expect(price.getAttribute('aria-invalid')).toBe('true')
-
     fireEvent.change(price, { target: { value: '18' } })
-    expect(screen.queryByText('Set a price for every variant')).toBeNull()
+    expect(screen.queryByText(PRODUCT_PRICE_EMPTY_NOTICE)).toBeNull()
+    fireEvent.change(price, { target: { value: '' } })
+    expect(screen.getByText(PRODUCT_PRICE_EMPTY_NOTICE)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save product' }))
     await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
-    expect((setDoc as jest.Mock).mock.calls[0][1].variants).toEqual([{ id: 'default', priceUsd: 18 }])
+    // The cleared price is gone from the variant, not an `undefined` setDoc refuses.
+    expect((setDoc as jest.Mock).mock.calls[0][1].variants).toEqual([{ id: 'default' }])
   })
 })

@@ -133,10 +133,7 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Threads'}
             help={docsHelp('supportAndCommunity', {
-              anchor: '#community-forum',
-              excerpt:
-                'The subscriber forum — ask questions and share tips with ' +
-                `other ${branding.productName} builders.`,
+              anchor: '#forum-threads',
             })}
             contentGutterX
             contentGutterY
