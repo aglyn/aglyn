@@ -64,19 +64,21 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    `AI_SITE_POSTS` posts in it, one generation a pass. Each is written as a
  *    draft through the same rules the console's routes hold
  *    (`content-entry-drafts.ts`), bylined with the business's name the person
- *    gave, and given a starter photo as its cover. They go live with the
+ *    gave, and given a cover: a stock photo of its own title where the
+ *    deployment has a library, else a starter (AGL-3676), which the blog's
+ *    cards show. They go live with the
  *    site: the guided start's publish publishes them with its pages
  *    (`aiPublishSitePosts`), as a person's Publish would.
  *  - ADDING YOUR FIRST PRODUCTS: the `products` step's catalog, asked for
  *    `AI_SITE_PRODUCTS` products, each written through the commerce plugin's
- *    `product` draft writer with NO price, since no price is ever invented.
- *    Since the 2026-10-08 Ember & Wick start, whose store showed no product
- *    at all, each is LISTED before it has a price (`comingSoon`): on the
- *    storefront as "Price coming soon", sold by no door until the owner sets
- *    one — the job's row and the products list both say that is the step
- *    left. Each gets a photo in its slot, a stock photo of its own words
- *    where the deployment has a library, else a starter, for the owner to
- *    replace with their own.
+ *    `product` draft writer. The catalog proposes no price, so each takes
+ *    the writer's default price (Zach, 2026-10-08: "default a price",
+ *    AGL-3676) for the owner to change; the job's row says so. Since the
+ *    2026-10-08 Ember & Wick start, whose store showed no product at all,
+ *    each is LISTED at once (`comingSoon`: written `active`). Each gets a
+ *    photo in its slot, a stock photo of its own words where the deployment
+ *    has a library, else a starter, for the owner to replace with their
+ *    own.
  *
  * The pages built after them are told their titles or names, and the
  * sections that show them list the real records (`aiSiteListings`,
@@ -191,6 +193,70 @@ export interface AiSitePostsRunnerDeps {
   generate?: typeof generateAiBlogPost
   writeCollection?: typeof writeContentCollection
   writeEntry?: typeof writeContentEntryDraft
+  /** Where each post's cover comes from; the stock library, else the starters, otherwise. */
+  cover?: typeof aiSitePostCover
+}
+
+/** A post's cover's shape: the blog's cards' (`COLLECTION_LIST_COVER_RATIO`, the posts listing's). */
+const AI_SITE_POST_COVER_ASPECT = 3 / 2
+
+/**
+ * A post's cover (AGL-3676): a stock photo of the post's own title, copied
+ * into the site's library, where the deployment has a stock library; else the
+ * starter photo a post was always given, turned by the job so blogs differ.
+ * The blog's cards and the post's page show it, for the owner to replace.
+ * Never throws: a post whose search fails takes its starter.
+ */
+export async function aiSitePostCover(input: {
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  title: string
+  index: number
+  total: number
+  signal?: AbortSignal
+  stockPhotos?: typeof aiLayoutStockPhotoSource
+}): Promise<string | null> {
+  const { job, index } = input
+  if (job.hostId && input.title.trim()) {
+    try {
+      const source = (input.stockPhotos ?? aiLayoutStockPhotoSource)({
+        hostId: job.hostId,
+        uid: job.createdBy,
+        seed: `${job.$id}:posts:${index}`,
+        business: aiSiteWords(job.inputs).about || job.brief,
+        sectionNames: ['Blog'],
+        ...(input.signal ? { signal: input.signal } : {}),
+      })
+      const [found] = source
+        ? await source([
+            {
+              imageId: `cover${index}`,
+              frameId: null,
+              iconId: null,
+              alt: input.title,
+              aspect: AI_SITE_POST_COVER_ASPECT,
+              sectionIndex: 0,
+              role: 'gallery' as const,
+            },
+          ])
+        : []
+      if (found?.src) return found.src
+    } catch (error) {
+      console.warn('ai site posts: the stock photo failed; the starter covers it', { error: String(error) })
+    }
+  }
+  const starters = aiLayoutStarterPhotos(
+    Array.from({ length: Math.max(input.total, index + 1) }, (_, slot) => ({
+      imageId: `cover${slot}`,
+      frameId: null,
+      iconId: null,
+      alt: '',
+      aspect: 16 / 9,
+      sectionIndex: slot + 1,
+      role: 'gallery' as const,
+    })),
+    job.$id,
+  )
+  return starters[index]?.src ?? null
 }
 
 /**
@@ -203,6 +269,7 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
   const generate = deps.generate ?? generateAiBlogPost
   const writeCollection = deps.writeCollection ?? writeContentCollection
   const writeEntry = deps.writeEntry ?? writeContentEntryDraft
+  const coverFor = deps.cover ?? aiSitePostCover
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore, signal } = context
     const model = context.modelFor?.(AI_BLOG_POST_STEP) ?? aiModelForStep(AI_BLOG_POST_STEP)
@@ -237,19 +304,14 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
     if (generation.status === 'refused') return { ...spent, refused: true }
     if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
     const post = generation.value
-    // A starter photo as its cover, turned by the job so blogs differ.
-    const covers = aiLayoutStarterPhotos(
-      Array.from({ length: input.total }, (_, slot) => ({
-        imageId: `cover${slot}`,
-        frameId: null,
-        iconId: null,
-        alt: '',
-        aspect: 16 / 9,
-        sectionIndex: slot + 1,
-        role: 'gallery' as const,
-      })),
-      job.$id,
-    )
+    // A stock photo of its title as its cover, else a starter (AGL-3676).
+    const cover = await coverFor({
+      job,
+      title: post.title,
+      index,
+      total: input.total,
+      ...(signal ? { signal } : {}),
+    }).catch(() => null)
     const byline = input.byline || site.name
     const written = await writeEntry(firestore, {
       hostId: job.hostId,
@@ -261,7 +323,7 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
         excerpt: post.excerpt,
         body: post.body,
         seoDescription: post.seoDescription,
-        coverImage: covers[index]?.src,
+        ...(cover ? { coverImage: cover, coverImageAlt: post.title } : {}),
         ...(byline ? { authorName: byline } : {}),
       },
       now: context.now,
@@ -380,8 +442,8 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         now: context.now,
         id: aiSiteProductId(job.$id, index),
         name: product.name,
-        // No price: the owner sets it, and until then the store lists it as
-        // "Price coming soon" and sells it nowhere (AGL-3676). Its photo
+        // No price stated: the writer gives it the store's default price
+        // for the owner to change (AGL-3676). Listed at once. Its photo
         // slot holds a stock or starter photo for the owner to replace.
         content: {
           name: product.name,
@@ -577,11 +639,11 @@ export function aiSiteProductDescriptionWithoutGaps(description: string): string
 
 /** What each product a start wrote says on the job's page (AGL-3676). */
 export const AI_SITE_PRODUCT_NOTE =
-  'On your store as “Price coming soon”. Set its price — and your own photo — in Products to start selling it.'
+  'On your store at a starting price. Set its real price — and your own photo — in Products.'
 
 /** The note a store's products row carries once they are written (AGL-3676): the step left before it sells. */
 export const AI_SITE_PRODUCTS_PRICE_NOTE =
-  'Your products are on your store marked “Price coming soon”. Set their prices in Products to start selling.'
+  'Your products are on your store at a starting price. Set their real prices in Products.'
 
 /** What a page of a blog or a store is told about the posts or products built before it. */
 export function aiSiteContentBriefLines(outputs: readonly AiJobOutput[]): string[] {

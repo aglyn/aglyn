@@ -36,7 +36,8 @@
  *
  *  - `products` — the commerce plugin's Product grid (`product-grid`), over
  *    the site's whole active catalog: a photo, the name, the price (or
- *    "Price coming soon"), each card linking its product's page.
+ *    "Price coming soon" where the owner cleared it), each card linking its
+ *    product's page.
  *  - `posts` — the content plugin's Collection Entries (`collectionEntries`)
  *    over the blog's collection, its card a cover, the date and byline, the
  *    title and the excerpt, linking each post.

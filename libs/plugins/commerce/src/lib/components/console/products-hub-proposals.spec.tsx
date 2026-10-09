@@ -129,6 +129,13 @@ jest.mock('firebase/firestore', () => ({
   runTransaction: jest.fn(),
 }))
 
+// The site-wide write (a batch with the site's cache drop) is its own spec's;
+// here it is the call the hub makes.
+const mockSiteWideChange = jest.fn().mockResolvedValue(undefined)
+jest.mock('@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change', () => ({
+  writeSiteWideChange: (options: unknown) => mockSiteWideChange(options),
+}))
+
 const enqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
@@ -234,16 +241,19 @@ describe('a product nobody has priced yet, in the products hub (AGL-2916)', () =
     ])
   })
 
-  it('will not activate it, and says what it needs', async () => {
+  it('activates it all the same, and says what visitors will see (AGL-3676)', async () => {
     mount()
     fireEvent.click(await screen.findByText('Activate'))
     await waitFor(() =>
       expect(enqueueSnackbar).toHaveBeenCalledWith(
-        'Set a price for every variant of Wild mint soy candle before activating it.',
+        'Wild mint soy candle has no price yet: visitors will see “Price coming soon” and can’t buy it.',
         expect.objectContaining({ variant: 'info' }),
       ),
     )
-    expect(updateDoc).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockSiteWideChange).toHaveBeenCalledTimes(1))
+    const update = jest.fn()
+    mockSiteWideChange.mock.calls[0][0].write({ update })
+    expect(update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: 'active' }))
   })
 })
 

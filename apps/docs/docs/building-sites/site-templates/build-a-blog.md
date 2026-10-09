@@ -587,7 +587,12 @@ When no template page is set, the built-in list and article render **inside your
 theme and default shared layout** (the home page's layout), so blog pages never look
 detached from the rest of the site. The built-in article includes the entry meta line
 under the title, the cover image (or the [featured video](#video-collection) in its place),
-the body, related posts, and a share bar. The built-in list is **paginated** (see below).
+the body, related posts, and a share bar. The built-in list is a grid of cards — one column
+on a phone, two on a tablet, three on a desktop — each led by the post's cover image at
+one shape (3:2), loaded as the reader scrolls to it and linking the post, then its date,
+title, excerpt and **Read more**. The cover's alt text is the post's title. A post with no
+cover keeps a plain tile of the same shape, so the grid stays even. The built-in list is
+**paginated** (see below).
 
 ### Paginated page sets
 
