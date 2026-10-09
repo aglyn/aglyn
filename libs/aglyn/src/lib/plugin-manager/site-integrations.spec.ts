@@ -36,7 +36,8 @@ const declared: SiteIntegrationDeclaration[] = [
 ]
 
 const on = { enabledPlugins: ['translator'] }
-const business = { plan: 'business' } as never
+// The site opt-in sits on top of the workspace's list, so the workspace has it on.
+const business = { plan: 'business', enabledPlugins: ['translator'] } as never
 
 describe('siteIntegrationHosts', () => {
   it('admits the declared hosts for a switched-on, entitled, enabled site', async () => {
@@ -52,9 +53,17 @@ describe('siteIntegrationHosts', () => {
 
   it('admits nothing, and reads nothing, for a site that did not switch it on', async () => {
     const readConfig = jest.fn(async () => ({ enabled: true }))
-    for (const host of [{}, null, { ...on, disabledPlugins: ['translator'] }]) {
+    // Off for the workspace (whatever the site says), or switched off here.
+    const offForWorkspace = { plan: 'business' } as never
+    const cases = [
+      { org: offForWorkspace, host: {} },
+      { org: offForWorkspace, host: null },
+      { org: offForWorkspace, host: on },
+      { org: business, host: { ...on, disabledPlugins: ['translator'] } },
+    ]
+    for (const { org, host } of cases) {
       await expect(
-        siteIntegrationHosts({ org: business, host, readConfig }, declared),
+        siteIntegrationHosts({ org, host, readConfig }, declared),
       ).resolves.toEqual({ connectHosts: [], imageHosts: [] })
     }
     expect(readConfig).not.toHaveBeenCalled()
@@ -64,7 +73,11 @@ describe('siteIntegrationHosts', () => {
     const readConfig = jest.fn(async () => ({ enabled: true }))
     await expect(
       siteIntegrationHosts(
-        { org: { plan: 'pro' } as never, host: on, readConfig },
+        {
+          org: { plan: 'pro', enabledPlugins: ['translator'] } as never,
+          host: on,
+          readConfig,
+        },
         declared,
       ),
     ).resolves.toEqual({ connectHosts: [], imageHosts: [] })

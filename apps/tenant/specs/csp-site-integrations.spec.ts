@@ -1,4 +1,9 @@
 /**
+ * @jest-environment node
+ *
+ * Pragma must stay in the FIRST block comment — `NextRequest` needs real web
+ * globals, and behind the license header it is silently ignored.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
