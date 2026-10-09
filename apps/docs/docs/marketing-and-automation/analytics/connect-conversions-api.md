@@ -30,15 +30,31 @@ Aglyn's.
 
 ## Connect an account {#conversions-api}
 
-**Site → Setup → Ad conversions.** Connect the **Meta Conversions API**, the
-**TikTok Events API** or the **Pinterest Conversions API** with an access token
-from your own account:
+**Site → Setup → Ad conversions.** Each vendor has its own card there. Connect
+it with an access token from your own account.
 
-| | Access token | Also needed |
-| --- | --- | --- |
-| Meta | Events Manager → your pixel → Settings → Conversions API → Generate access token | The Meta pixel ID on Tracking |
-| TikTok | Ads Manager → Assets → Events → your pixel → Settings → Events API → Generate access token | The TikTok pixel ID on Tracking |
-| Pinterest | Pinterest Ads → Conversions → Conversions API → Generate new token | Your ad account ID |
+### Meta Conversions API {#meta-conversions-api}
+
+Send purchases and leads to your Meta pixel from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.
+
+- **Access token:** Events Manager → your pixel → Settings → Conversions API → Generate access token.
+- **Also needed:** the Meta pixel ID on the Tracking tab.
+
+### TikTok Events API {#tiktok-events-api}
+
+Send purchases and leads to your TikTok pixel from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.
+
+- **Access token:** Ads Manager → Assets → Events → your pixel → Settings → Events API → Generate access token.
+- **Also needed:** the TikTok pixel ID on the Tracking tab.
+
+### Pinterest Conversions API {#pinterest-conversions-api}
+
+Send purchases and leads to your Pinterest ad account from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.
+
+- **Access token:** Pinterest Ads → Conversions → Conversions API → Generate new token.
+- **Also needed:** your ad account ID.
+
+### How it works {#how-it-works}
 
 The token is stored encrypted and is never shown again; to change it, use
 **Replace token**.

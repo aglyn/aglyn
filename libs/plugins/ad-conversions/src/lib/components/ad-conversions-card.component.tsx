@@ -47,10 +47,28 @@ const STATUS: Readonly<Record<AdConnectionStatus, { label: string; tone: StatusT
 
 const formatTime = (ms: number | null): string => (ms ? new Date(ms).toLocaleString() : 'Not yet')
 
-const help = (excerpt: string, anchor: '#conversions-api' | '#consent' | '#test-events') =>
-  anchor === '#consent'
-    ? pluginDocsHelp('adTracking', { anchor, excerpt })
-    : pluginDocsHelp('adConversions', { anchor, excerpt })
+/** Each vendor's card opens its own section of the guide (AGL-3694); the excerpt is that section's opening sentence. */
+const PROVIDER_HELP: Readonly<
+  Record<AdProviderId, { anchor: '#meta-conversions-api' | '#tiktok-events-api' | '#pinterest-conversions-api'; excerpt: string }>
+> = {
+  meta: {
+    anchor: '#meta-conversions-api',
+    excerpt:
+      'Send purchases and leads to your Meta pixel from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.',
+  },
+  tiktok: {
+    anchor: '#tiktok-events-api',
+    excerpt:
+      'Send purchases and leads to your TikTok pixel from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.',
+  },
+  pinterest: {
+    anchor: '#pinterest-conversions-api',
+    excerpt:
+      'Send purchases and leads to your Pinterest ad account from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.',
+  },
+}
+
+const help = (provider: AdProviderId) => pluginDocsHelp('adConversions', PROVIDER_HELP[provider])
 
 /**
  * AD CONVERSIONS (AGL-3694): a site's Conversions API connections to the
@@ -230,10 +248,7 @@ function ProviderCard(props: {
       variant="outlined"
       header={`${info.label} ${info.api}`}
       subheader={`Server-side purchases and leads, paired with your ${info.tag} so each is counted once.`}
-      help={help(
-        `Send purchases and leads to ${info.label} from the server, for visitors who allowed advertising, so ad blockers and closed tabs do not lose them.`,
-        '#conversions-api',
-      )}
+      help={help(provider)}
       contentGutterX
       contentGutterY
       HeaderProps={{ action: actions }}
