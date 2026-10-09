@@ -223,6 +223,11 @@ export function OrgOverlaysCard(props: OrgOverlaysCardProps) {
       subheader="Every site in this organization"
       help={pluginDocsHelp('marketingOverlays', {
         anchor: '#across-your-sites',
+        title: 'Every site’s overlays',
+        excerpt:
+          "Every site's bars and popups, grouped by site in the order each " +
+          'shows them. Switch one on or off here; creating and editing happen ' +
+          'on the site, because an overlay is written against its pages.',
       })}
       contentGutterX
       contentGutterY

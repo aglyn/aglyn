@@ -22,6 +22,7 @@
 //   node tools/scripts/generate-docs-help.mjs
 import {
   PLUGIN_DOCS,
+  PLUGIN_DOCS_SECTIONS,
   type PluginDocsAnchor,
   type PluginDocsKey,
   type PluginDocsTopic,
@@ -30,6 +31,7 @@ import {
 export {
   PLUGIN_DOCS,
   PLUGIN_DOCS_ANCHORS,
+  PLUGIN_DOCS_SECTIONS,
   type PluginDocsAnchor,
   type PluginDocsKey,
   type PluginDocsTopic,
@@ -60,10 +62,12 @@ export interface PluginDocsHelpOverrides<
    * they are in the right place.
    */
   anchor?: PluginDocsAnchor<K>
-  /** Override the tooltip title (defaults to the topic's docs page title). */
+  /** Override the tooltip title (defaults to the anchor's heading, else the
+   * topic's docs page title). */
   title?: string
   /**
-   * Override the tooltip excerpt.
+   * Override the tooltip excerpt (defaults to the anchor's section, else the
+   * page's description).
    *
    * Worth doing whenever the card is one subject on a page that covers
    * several: the page's own description is written for the page, and a card's
@@ -82,9 +86,20 @@ export function pluginDocsHelp<K extends PluginDocsKey>(
   overrides: PluginDocsHelpOverrides<K> = {},
 ): { title: string; excerpt: string; href: string } {
   const { path, title, excerpt }: PluginDocsTopic = PLUGIN_DOCS[topic]
+  const { anchor } = overrides
+  // An anchored tip shows its heading and that section's opening sentence,
+  // not the page's (AGL-3707): twenty cards deep-linking twenty sections of
+  // one page used to print one blurb between them.
+  const section = anchor
+    ? (
+        PLUGIN_DOCS_SECTIONS[topic] as
+          | Readonly<Record<string, { title: string; excerpt: string }>>
+          | undefined
+      )?.[anchor]
+    : undefined
   return {
-    title: overrides.title ?? title,
-    excerpt: overrides.excerpt ?? excerpt,
-    href: `${DOCS_BASE_URL}${path}${overrides.anchor ?? ''}`,
+    title: overrides.title ?? section?.title ?? title,
+    excerpt: overrides.excerpt ?? section?.excerpt ?? excerpt,
+    href: `${DOCS_BASE_URL}${path}${anchor ?? ''}`,
   }
 }

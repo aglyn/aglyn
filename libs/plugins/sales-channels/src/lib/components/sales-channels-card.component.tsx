@@ -122,7 +122,7 @@ export function SalesChannelsCard(props: SalesChannelsCardProps) {
   return (
     <CardDisplay
       header="Sales channels"
-      help={pluginDocsHelp('salesChannels', { anchor: '#turn-on-a-channel' })}
+      help={pluginDocsHelp('salesChannels')}
       subheader="List your products on Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping. Each channel reads its own product feed on a schedule, so changes reach it without another upload."
       HeaderProps={{
         action: (

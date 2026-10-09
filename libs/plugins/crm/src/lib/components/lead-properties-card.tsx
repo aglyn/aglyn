@@ -650,7 +650,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       */}
       <CardDisplay
         header={'Details'}
-        help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
+        help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#what-a-lead-holds' })}
         contentGutterX
         contentGutterY
         HeaderProps={{

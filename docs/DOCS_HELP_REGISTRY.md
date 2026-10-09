@@ -46,6 +46,16 @@ that passes `{ excerpt: '…' }` short-circuits the fetch entirely.
 
 - **Excerpt** = the docs page's frontmatter `description`, verbatim.
 - **Title** = the docs page's frontmatter `title`.
+- **Section title + excerpt** = for a call that passes an `anchor` and no
+  copy of its own, the heading it links and that section's opening sentence
+  (AGL-3707). Before this an anchor moved only the link, so every card on one
+  page printed that page's blurb. The generator emits these only for the
+  `(topic, '#anchor')` pairs a source file names together — all 2,400
+  headings would be ~260 KB, and the plugin subset loads synchronously — so a
+  commit that adds an anchor regenerates (the pre-commit hook checks it). An
+  anchor it did not carry falls back to the page's text.
+  `apps/console/specs/help-tooltips-are-unique.spec.ts` fails when two
+  surfaces in different files resolve to the same tooltip.
 - **Anchors** = every `##`/`###`/`####` heading on the page, slugified the same
   way Docusaurus does (lowercase, strip punctuation, every space → `-`, so
   `## A & B` → `#a--b`).

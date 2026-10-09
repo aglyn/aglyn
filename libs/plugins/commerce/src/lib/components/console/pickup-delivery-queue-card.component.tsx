@@ -125,7 +125,13 @@ export function PickupDeliveryQueueCard(props: PickupDeliveryQueueCardProps) {
   return (
     <CardDisplay
       header={'Pickup & delivery'}
-      help={pluginDocsHelp('commerce', { anchor: '#pickup-and-local-delivery' })}
+      help={pluginDocsHelp('commerce', {
+        anchor: '#pickup-and-local-delivery',
+        title: 'Pickup & delivery queue',
+        excerpt:
+          'The orders waiting to be picked up or driven out, oldest first — ' +
+          'mark each one ready, collected or delivered as it happens.',
+      })}
       HeaderProps={{
         action:
           locations.length > 1 ? (

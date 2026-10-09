@@ -94,7 +94,14 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
   return (
     <CardDisplay
       header={'Properties'}
-      help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
+      help={pluginDocsHelp('deals', {
+        anchor: '#a-deals-page',
+        title: 'Properties',
+        excerpt:
+          'The amount and its weighted value, the probability beside its ' +
+          "stage's, the forecast category, the expected close, the owner and " +
+          'every custom deal field. Edit carries a control for each.',
+      })}
       contentGutterX
       contentGutterY
     >

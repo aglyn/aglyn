@@ -813,7 +813,14 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
       <CardDisplay
         header="Activity"
         subheader="Newest first"
-        help={pluginDocsHelp('sequences', { anchor: '#person-history' })}
+        help={pluginDocsHelp('sequences', {
+          anchor: '#person-history',
+          title: 'Activity',
+          excerpt:
+            'Everything that happened to this person, newest first: each ' +
+            'email as sent, each link followed, opens, scanner visits, ' +
+            'replies, bounces, and who paused, resumed or stopped them.',
+        })}
         contentGutterX
         contentGutterY
         HeaderProps={
@@ -865,7 +872,14 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
 
       <CardDisplay
         header="Details"
-        help={pluginDocsHelp('sequences', { anchor: '#person-history' })}
+        help={pluginDocsHelp('sequences', {
+          anchor: '#person-history',
+          title: 'Details',
+          excerpt:
+            'The personal line, the attestations, the mailbox, the ' +
+            'campaigns, what your mail has met at their domain, each curated ' +
+            'email in full and the Gmail threads.',
+        })}
         contentGutterX
         HeaderProps={{
           action: (

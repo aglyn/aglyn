@@ -847,7 +847,15 @@ function AdminMediaQuarantine() {
             {lookup ? (
               <CardDisplay
                 header={'Disable or release'}
-                help={docsHelp('lockdown', { anchor: '#disabled-files-page' })}
+                help={docsHelp('lockdown', {
+                  anchor: '#disabled-files-page',
+                  title: 'Disable or release',
+                  excerpt:
+                    'Pick the reason, an optional customer-facing message, ' +
+                    'an internal note and an end time, then disable the ' +
+                    'file — or lift a key that is already set. Super staff ' +
+                    'only.',
+                })}
                 contentGutterX
                 contentGutterY
               >

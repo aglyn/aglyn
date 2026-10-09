@@ -290,7 +290,7 @@ export function ListDetailCard(props: ListDetailCardProps) {
     return (
       <CardDisplay
         header={'Audience'}
-        help={pluginDocsHelp('emailCampaigns', { anchor: '#email-lists' })}
+        help={pluginDocsHelp('emailCampaigns', { anchor: '#list-members' })}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: headerActions }}

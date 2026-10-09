@@ -151,7 +151,13 @@ export function EntryAnalyticsCard(props: {
     return (
       <CardDisplay
         header={'Entry traffic'}
-        help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
+        help={docsHelp('analytics', {
+          anchor: '#per-screen-traffic',
+          title: 'Entry traffic',
+          excerpt:
+            "This entry's own pageviews over the last 14 days, broken down " +
+            'by referrer and device — the per-page panel, for one post.',
+        })}
         contentGutterX
         contentGutterY
       >
@@ -166,7 +172,13 @@ export function EntryAnalyticsCard(props: {
     return (
       <CardDisplay
         header={'Entry traffic'}
-        help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
+        help={docsHelp('analytics', {
+          anchor: '#per-screen-traffic',
+          title: 'Entry traffic',
+          excerpt:
+            "This entry's own pageviews over the last 14 days, broken down " +
+            'by referrer and device — the per-page panel, for one post.',
+        })}
         contentGutterX
         contentGutterY
       >

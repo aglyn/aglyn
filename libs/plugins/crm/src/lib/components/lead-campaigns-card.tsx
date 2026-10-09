@@ -174,7 +174,14 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
   return (
     <CardDisplay
       header={'Campaigns'}
-      help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
+      help={pluginDocsHelp('crmLeads', {
+        anchor: '#a-leads-page',
+        title: 'Campaigns',
+        excerpt:
+          'Your own filing for this lead. It never adds anyone to a send — a ' +
+          'campaign mails its lists — and it is the same picker the contact ' +
+          'it becomes carries.',
+      })}
       contentGutterX
       contentGutterY
       HeaderProps={{

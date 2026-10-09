@@ -172,7 +172,9 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
   return (
     <CardDisplay
       header={'Store settings'}
-      help={pluginDocsHelp('commerce')}
+      help={pluginDocsHelp('commerceEndToEnd', {
+        anchor: '#the-product-page-template',
+      })}
       contentGutterX
       contentGutterY
     >

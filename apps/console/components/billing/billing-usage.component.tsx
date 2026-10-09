@@ -1217,7 +1217,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
             label="Campaign emails (this hour, organization)"
             used={sendCeiling.hourUsed}
             limit={sendCeiling.hourLimit}
-            help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
+            help={docsHelp('emailCampaigns', {
+              anchor: '#monthly-send-cap',
+              title: 'Hourly sending pace',
+              excerpt:
+                'Campaigns are paced: a workspace sends a set number an hour, ' +
+                'so a very large send is spread out rather than refused. ' +
+                'Transactional mail is never paced by it.',
+            })}
           />
           <Typography
             variant="caption"

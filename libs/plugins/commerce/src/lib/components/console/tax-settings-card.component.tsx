@@ -170,7 +170,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
       // AGL-3693), restating this id rather than importing this package.
       id="commerce-store-taxes"
       header={'Taxes'}
-      help={pluginDocsHelp('commerce', { anchor: '#shipping--taxes' })}
+      help={pluginDocsHelp('commerce', { anchor: '#storefront-sales-tax' })}
       contentGutterX
       contentGutterY
     >

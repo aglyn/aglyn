@@ -98,7 +98,17 @@ const relevant = (path) =>
   GENERATORS.includes(path) ||
   OUTPUTS.includes(path)
 
-if (!staged.some(relevant)) process.exit(0)
+// The help registry also carries the opening sentence of every docs heading a
+// help call links to (AGL-3707), found by reading the call sites — so a commit
+// that adds or drops an `anchor: '#…'` changes the output with no docs edit.
+// ANCHOR_PATTERN must match generate-docs-help.mjs's ANCHOR_LITERAL.
+const SOURCE_DIRS = ['apps/console', 'libs']
+const ANCHOR_PATTERN = '[\'"`]#[a-z0-9]'
+const anchorTouched = new RegExp(`^[-+].*${ANCHOR_PATTERN}`, 'm').test(
+  git(['diff', '--cached', '-U0', '--', ...SOURCE_DIRS.map((dir) => `${dir}/*.ts*`)]),
+)
+
+if (!staged.some(relevant) && !anchorTouched) process.exit(0)
 
 const snapshot = mkdtempSync(join(tmpdir(), 'aglyn-docs-registries-'))
 const failures = []
@@ -106,10 +116,20 @@ try {
   // `git ls-files` reads the index, so a staged deletion is already absent and
   // an unstaged working-tree edit is present only in its committed form.
   const indexed = git(['ls-files', '-z', '--', DOCS_DIR, ...GENERATORS, ...OUTPUTS])
+  // The call sites the help generator reads, always — a scratch tree without
+  // them would emit empty section maps and call every commit stale.
+  const callSites = (() => {
+    try {
+      return git(['grep', '--cached', '-l', '-z', '-E', ANCHOR_PATTERN, '--', ...SOURCE_DIRS])
+    } catch {
+      return '' // git grep exits 1 when nothing matches.
+    }
+  })()
   execFileSync(
     'git',
     ['checkout-index', `--prefix=${snapshot}/`, '-z', '--stdin'],
-    { input: indexed },
+    // A registry matches both lists; checkout-index refuses a path twice.
+    { input: [...new Set(nulSeparated(indexed + callSites))].join('\0') },
   )
 
   for (const generator of GENERATORS) {
