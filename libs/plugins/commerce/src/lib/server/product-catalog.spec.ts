@@ -233,6 +233,8 @@ describe('productOffers', () => {
     ['a deleted product', { deletedAt: 123 }],
     ['a product with no slug', { slug: '' }],
     ['a product with no name', { name: '  ' }],
+    // Listed as "Price coming soon" (AGL-3676): in no feed or marketplace at $0.
+    ['a product listed before it has a price', { variants: [{ id: 'default' }] }],
   ])('offers nothing for %s', (_label, overrides) => {
     expect(productOffers('prod-1', product(overrides), context)).toEqual([])
   })

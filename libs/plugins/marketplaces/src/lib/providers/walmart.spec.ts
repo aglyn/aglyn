@@ -649,6 +649,18 @@ describe('Walmart marketplace (AGL-3638)', () => {
       })
     })
 
+    it('sends no shipping cost: Walmart’s shipping update has no field for one (AGL-3693)', async () => {
+      const routes = [{ method: 'POST', match: '/v3/orders/1796277083022/shipping', body: { order: {} } }]
+      const without = mockHttp(routes)
+      const withCost = mockHttp(routes)
+      await createWalmartProvider({ http: without.http }).confirmShipment(APP, CREDENTIAL, CONFIRMATION)
+      await createWalmartProvider({ http: withCost.http }).confirmShipment(APP, CREDENTIAL, {
+        ...CONFIRMATION,
+        shippingCostMinor: 845,
+      })
+      expect(sentJson(withCost.calls[0])).toEqual(sentJson(without.calls[0]))
+    })
+
     it('answers already for lines Walmart has shipped, and rethrows anything else', async () => {
       const { http } = mockHttp([
         {

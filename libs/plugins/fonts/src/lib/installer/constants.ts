@@ -26,6 +26,9 @@ import type { FontEmbedding } from '../font-file/read-font-file'
 /** The console route that checks, converts and subsets one font file. */
 export const FONTS_PREPARE_ROUTE = 'fonts/prepare'
 
+/** The console route that installs, lists and removes a site's own fonts for an app (AGL-3668). */
+export const FONTS_THEME_ROUTE = 'fonts/theme'
+
 /**
  * The largest font file the route takes. The bytes travel as the request
  * body, and the platform refuses a body over 4.5 MB before any handler runs,

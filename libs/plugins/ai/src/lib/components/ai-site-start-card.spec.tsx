@@ -77,6 +77,7 @@ import {
   aiSiteCreditEstimate,
 } from '../model/ai-site-job'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+import { resetAiModelOptionReadsForTests } from './use-ai-model-choice'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -429,6 +430,125 @@ describe('leaving the full screen dialog', () => {
     // And the questions ARE in it, so the assertion above is about placement
     // rather than about a body that holds nothing.
     expect(body?.contains(screen.getByLabelText(/What kind of site are you creating\?/))).toBe(true)
+  })
+})
+
+/**
+ * Escape is the menu's before it is the dialog's, and a brief is never traded
+ * for the starter by a dismissal (AGL-3660, 2026-10-08).
+ *
+ * In production a person filled in the brief, opened the model menu, pressed
+ * Escape to close it — and the whole guided start closed through
+ * `startBlank`, so the site was silently given the starter and the brief was
+ * gone. Escape and the close control are dismissals, not a choice: with a
+ * brief typed they ask first, and "Keep editing" is the answer they default
+ * to. Skip is still the starter, at once, because it says so.
+ */
+describe('a dismissal never trades a typed brief for the starter', () => {
+  const MODELS = {
+    kind: 'job.page',
+    auto: { id: 'auto', label: 'Auto', tier: 'balanced', creditsPerRequest: 10, multiplier: 1, model: 'm' },
+    options: [{ id: 'fast-model', label: 'Fast model', tier: 'fast', creditsPerRequest: 4, multiplier: 0.4 }],
+    measured: true,
+  }
+  const escapeOn = (element: Element) => fireEvent.keyDown(element, { key: 'Escape', code: 'Escape' })
+  const briefField = () => screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement
+  const LEAVE_QUESTION = 'Leave without your answers?'
+
+  afterEach(() => {
+    localStorage.clear()
+    // The options read is shared by every mount; the next case reads afresh.
+    resetAiModelOptionReadsForTests()
+  })
+
+  it('closes only the model menu on Escape, and keeps the dialog and the brief', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(kindCard(1))
+    mockFetch.mockResolvedValueOnce(json(MODELS))
+    fireEvent.click(screen.getByRole('button', { name: 'AI model: Auto' }))
+    await screen.findByText('Fast model')
+    escapeOn(screen.getByRole('menu'))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
+    expect(screen.getByText('Tell us about your site')).toBeTruthy()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+    expect(kindCard(1).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('closes only an open select’s list on Escape', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    escapeOn(await screen.findByRole('listbox'))
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+  })
+
+  it.each([
+    ['Escape', () => escapeOn(screen.getByRole('dialog', { name: 'Start your site' }))],
+    [
+      'the close control',
+      () => fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' })),
+    ],
+  ])('asks before %s leaves a typed brief, and Keep editing keeps it', async (_how, dismiss) => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    dismiss()
+    await screen.findByRole('dialog', { name: LEAVE_QUESTION })
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+  })
+
+  it('takes a second Escape as Keep editing, never as the starter', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    escapeOn(screen.getByRole('dialog', { name: 'Start your site' }))
+    escapeOn(await screen.findByRole('dialog', { name: LEAVE_QUESTION }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+  })
+
+  it('focuses Keep editing, so Enter on the question keeps the brief too', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    await screen.findByRole('dialog', { name: LEAVE_QUESTION })
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' })),
+    )
+  })
+
+  it('leaves for the starter only when the person says so in the question', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Skip a deliberate starter, with no question, brief or none', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
+  })
+
+  it('opens no model menu from a style card', async () => {
+    await openCard()
+    for (const index of [0, 1, 2]) fireEvent.click(kindCard(index))
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'AI model: Auto' }).getAttribute('aria-expanded'),
+    ).toBe('false')
   })
 })
 

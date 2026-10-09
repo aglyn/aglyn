@@ -22,7 +22,10 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useRef } from 'react'
 import { editorHintCookieDomain } from './editor-hint-cookie.component'
 import { emailGateWouldRefuse } from '../utils/email-verification-gate'
-import { useSignUpLandingHeld } from '../utils/sign-up-landing-hold'
+import {
+  isSignUpLandingHeld,
+  useSignUpLandingHeld,
+} from '../utils/sign-up-landing-hold'
 
 /**
  * The `*.aglyn.app` half of the editor-presence hint (AGL-1842).
@@ -179,6 +182,19 @@ export default function EditHintBounce({
           `${EDIT_HINT_BOUNCE_ORIGIN}/api/edit-hint/set` +
           `?sig=${encodeURIComponent(payload.blob)}` +
           `&return=${encodeURIComponent(window.location.href)}`
+        // Re-read at the last moment (AGL-3690). The check at the top ran
+        // before two awaits, and the console home may have started
+        // provisioning a sign-up's workspace since. Leaving now would strand
+        // that account with no workspace. Skip this one and unstamp, so the
+        // next console load plants the hint instead.
+        if (isSignUpLandingHeld()) {
+          try {
+            window.localStorage.removeItem(EDIT_HINT_BOUNCE_STAMP_KEY)
+          } catch {
+            // A stamp that cannot be cleared costs one missed day, no more.
+          }
+          return
+        }
         const go = navigate ?? ((target: string) => window.location.assign(target))
         go(url)
       } catch {

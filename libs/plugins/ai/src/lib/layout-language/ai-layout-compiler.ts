@@ -48,6 +48,14 @@ import {
   type AiLayoutGroupVariant,
 } from './ai-layout-design'
 import {
+  AI_LAYOUT_FEATURED_RECORDS,
+  AI_LAYOUT_LISTING_ELEMENTS,
+  aiLayoutListingAt,
+  type AiLayoutListing,
+  type AiLayoutListingRole,
+} from './ai-layout-listings'
+import {
+  aiLayoutRenamedLabel,
   aiLayoutResolveLink,
   type AiLayoutDestination,
   type AiLayoutLinkScope,
@@ -128,6 +136,16 @@ export interface AiLayoutCompileOptions {
   design?: AiLayoutDesign
 }
 
+/**
+ * What a section is called to a screen reader: its plan name, with any note
+ * the plan left in brackets taken out. A live blog plan (2026-10-09) named a
+ * section "reader notes and kind words [to be added by owner]"; carried into
+ * the label it read as a gap, and the page's gap pass took the section out.
+ */
+function sectionLabel(name: string, index: number): string {
+  return aiLayoutFitText(name.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim(), 'note') || `Section ${index + 1}`
+}
+
 /** A section root's id where the caller gives none. */
 function sectionIdOf(index: number): string {
   return `section-${index + 1}`
@@ -147,6 +165,8 @@ export interface AiLayoutCompiledPage {
    * anything later takes words out.
    */
   itemIds: string[][]
+  /** Plan sections whose only items were quotes, which a published page leaves out (AGL-3676). */
+  quotesOnly: number[]
 }
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
@@ -184,6 +204,8 @@ export interface PageScope {
   features: number
   /** The last section whose heading the design set beside its items: never two in a row. */
   splitAt: number
+  /** Sections whose only items were quotes, left out (AGL-3676). */
+  quotesOnly: number[]
 }
 
 /** Everything one section's compile shares. */
@@ -270,6 +292,7 @@ export function aiCompileLayoutPage(
     pictures: 0,
     features: 0,
     splitAt: -2,
+    quotesOnly: [],
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
@@ -289,6 +312,7 @@ export function aiCompileLayoutPage(
     scrollTo: page.scrollTo,
     settled: page.settled,
     itemIds: page.itemIds,
+    quotesOnly: page.quotesOnly,
   }
 }
 
@@ -342,6 +366,15 @@ function compileSection(
     page.settled.push({ at, what: 'a quotes group left out: a published page shows no customer words the brief did not give' })
     return false
   })
+  // A section whose only items were those quotes has none left to show, and is
+  // not asked for them again: no answer can give words the brief did not (AGL-3676).
+  if (raw.blocks.some((block) => block.kind === 'quotes') && !blocks.some((block) => AI_LAYOUT_GROUP_KINDS.has(block.kind) || block.kind === 'component')) {
+    page.quotesOnly.push(index)
+  }
+  // A section the site's records fill — its catalog, its blog — shows them
+  // through the element that keeps them, around the words the design gave it (AGL-3676).
+  const listed = aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
+  if (listed) return listingSection(scope, blocks, listed)
   // The site's design draws the sections it has an arrangement for (AGL-3660).
   if (page.design) {
     const designed = designSection(scope, raw, blocks)
@@ -518,7 +551,7 @@ function compileSection(
     'section',
     {
       element: 'section',
-      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
+      ariaLabel: sectionLabel(name, index),
       ...(band === 'dark' ? { colorScheme: 'dark' } : {}),
     },
     bandSx(band),
@@ -1004,21 +1037,24 @@ function compileButton(
   scope: SectionScope,
   block: AiLayoutBlock,
 ): string | null {
-  const label = aiLayoutFitText(block.text, 'label')
-  if (!label) return null
+  const asked = aiLayoutFitText(block.text, 'label')
+  if (!asked) return null
   const destination = aiLayoutResolveLink(
     block.to,
-    label,
+    asked,
     scope.link,
     scope.page.targets,
   )
   if (!destination) {
     scope.page.settled.push({
       at: scope.at,
-      what: `the button "${label}" has nowhere to go; left out`,
+      what: `the button "${asked}" has nowhere to go; left out`,
     })
     return null
   }
+  // A button to a page merged into the blog names the blog (AGL-3676).
+  const label = aiLayoutRenamedLabel(asked, destination)
+  if (label !== asked) scope.page.settled.push({ at: scope.at, what: `the button "${asked}" named for the blog: "${label}"` })
   const style = block.style ?? 'primary'
   // Over a photo, a quiet or outlined button takes the words' own color, as on a brand band.
   const onBrand = scope.band === 'brand' || (!!scope.overPhoto && style !== 'primary')
@@ -1889,7 +1925,7 @@ function designedRoot(
     'section',
     {
       element: 'section',
-      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
+      ariaLabel: sectionLabel(name, index),
       ...(dark ? { colorScheme: 'dark' } : {}),
       // A photo cover that opens the page runs up under the header, which sits over it.
       ...(index === 0 && scope.overPhoto ? { underHeader: true } : {}),
@@ -2355,6 +2391,210 @@ function designedGroup(
     { alignItems: 'flex-start' },
     cells.map((cell) => tree.add('muiGrid', { size: cell.size }, null, [cell.id], 'cell')),
     variant,
+  )
+}
+
+// ── A section the site's records fill (AGL-3676) ──────────────────────────
+//
+// The section's words — its eyebrow, heading and lede — are the design's;
+// what it lists is the site's: its products through the commerce plugin's
+// Product grid, its posts through the content plugin's Collection Entries.
+// Any group the design drew for those records (cards naming products, a list
+// of post titles) stands in for them, and is left out.
+
+/** The block kinds a listing stands in for: the records the design described in words. */
+const LISTING_REPLACES: ReadonlySet<AiLayoutBlock['kind']> = new Set([
+  'cards',
+  'steps',
+  'stats',
+  'quotes',
+  'list',
+  'image',
+  'component',
+])
+
+/** The tokens a post's card binds, filled per post when the page renders. */
+export const AI_LAYOUT_POST_CARD_TOKENS = [
+  '{{entry.title}}',
+  '{{entry.excerpt}}',
+  '{{entry.date}}',
+  '{{entry.author}}',
+  '{{entry.url}}',
+  '{{entry.coverImage}}',
+] as const
+
+/** The tokens a post's card puts in a link or a picture, which the page's store admits whole. */
+export const AI_LAYOUT_POST_ADDRESS_TOKENS: readonly string[] = ['{{entry.url}}', '{{entry.coverImage}}']
+
+/** The button under a featured band that opens the whole list, where the site has one and the design gave none. */
+function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBlock | null {
+  if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
+  const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
+  return index ? { kind: 'button', text: 'Shop all', to: `page:${index.screenId}`, style: 'secondary' } : null
+}
+
+function listingSection(
+  scope: SectionScope,
+  blocks: readonly AiLayoutBlock[],
+  placed: { listing: AiLayoutListing; role: AiLayoutListingRole },
+): string {
+  const { page, index, at } = scope
+  const { listing, role } = placed
+  const left = blocks.filter((block) => LISTING_REPLACES.has(block.kind))
+  if (left.length) {
+    page.settled.push({
+      at,
+      what: `${left.map((block) => block.kind).join(', ')} left out: the section lists the site's own ${listing.kind}`,
+    })
+  }
+  const kept = blocks.filter((block) => !LISTING_REPLACES.has(block.kind)).map(({ col: _col, ...block }) => block)
+  const words = kept.filter((block) => block.kind !== 'button' && block.kind !== 'form')
+  let actions = kept.filter((block) => block.kind === 'button')
+  if (!actions.length && role === 'featured') {
+    const all = listingAllButton(page, listing)
+    if (all) actions = [all]
+  }
+  if (!words.some((block) => speaksHeading(scope, block))) {
+    // Every band of records is headed: the plan's name for it, or on a first section the page's title.
+    words.unshift({ kind: 'heading', text: index === 0 ? page.plan.title : page.plan.sections[index]?.name || page.plan.title })
+  }
+  page.settled.push({ at, what: `lists the site's ${listing.kind} (${role})` })
+  const tree = page.tree
+  const centered = scope.centered
+  const head = compileFlow(scope, words, centered ? 'full' : 'half')
+  const link = compileFlow(scope, actions, 'half')
+  // An editorial band's head: the words on the left, the way to the whole list on the right.
+  const top =
+    head && link && !centered
+      ? designRow(
+          scope,
+          [
+            { id: head, size: 'xs:12 md:8' },
+            { id: link, size: 'xs:12 md:4', sx: { display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } } },
+          ],
+          '3',
+          'flex-end',
+        )
+      : head
+  const records = listingElement(scope, listing, role)
+  const parts = [
+    top ? (centered ? tree.add('muiContainer', { maxWidth: 'md', disableGutters: true }, null, [top], 'measure') : top) : null,
+    records,
+    centered || !head ? link : null,
+  ].filter((id): id is string => !!id)
+  const content = tree.add('muiStack', { spacing: '6', useFlexGap: true, ...(centered ? { alignItems: 'center' } : {}) }, null, parts, 'content')
+  const container = tree.add(
+    'muiContainer',
+    { maxWidth: 'lg' },
+    { py: index === 0 ? { ...HERO_PADDING } : { ...SECTION_PADDING } },
+    [content],
+    'container',
+  )
+  const name = page.plan.sections[index]?.name?.trim() || `Section ${index + 1}`
+  return tree.add(
+    'section',
+    {
+      element: 'section',
+      ariaLabel: sectionLabel(name, index),
+      ...(scope.band === 'dark' ? { colorScheme: 'dark' } : {}),
+    },
+    bandSx(scope.band),
+    [container],
+    'section',
+    page.options.sectionIds?.[index] ?? sectionIdOf(index),
+  )
+}
+
+/**
+ * The element that lists the records, bound to them: the Product grid over
+ * the site's catalog, or Collection Entries over its blog with one post's
+ * card as the template it repeats. Its records count as the section's items.
+ */
+function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiLayoutListingRole): string {
+  const { page } = scope
+  const tree = page.tree
+  const featured = role === 'featured'
+  const shown = featured ? AI_LAYOUT_FEATURED_RECORDS[listing.kind] : 12
+  const element = AI_LAYOUT_LISTING_ELEMENTS[listing.kind]
+  let id: string
+  if (listing.kind === 'products') {
+    id = tree.add(
+      element,
+      {
+        source: 'all',
+        sort: 'newest',
+        columns: String(featured ? Math.min(AI_LAYOUT_FEATURED_RECORDS.products, Math.max(3, listing.records.length)) : 3),
+        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown) }),
+        cardStyle: 'photo',
+        emptyText: 'New products are on their way.',
+      },
+      null,
+      null,
+      'products',
+    )
+  } else {
+    id = postsElement(scope, listing, featured ? shown : COLLECTION_INDEX_POSTS)
+  }
+  // What a visitor sees here is the site's records, however many it keeps:
+  // the section shows its planned items when it has any to show.
+  noted(scope, Array.from({ length: Math.max(2, Math.min(shown, listing.records.length)) }, () => id))
+  return id
+}
+
+/** The most posts a page of the site lists where it is the writing's own page. */
+const COLLECTION_INDEX_POSTS = 9
+
+/** The blog's posts as the site's design lists them: a grid of covers, or a ruled list with the dates. */
+function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: number): string {
+  const { page } = scope
+  const tree = page.tree
+  const ruled = page.design?.choices.writing === 'ruled'
+  const titleElement = itemElement(scope)
+  const cover = (sx: Record<string, unknown>) =>
+    tree.add(
+      'image',
+      { src: '{{entry.coverImage}}', alt: '{{entry.title}}', href: '{{entry.url}}', objectFit: 'cover', width: '100%', loading: 'lazy' },
+      sx,
+      null,
+      'postCover',
+    )
+  const meta = tree.add('muiTypography', { children: '{{entry.date}} · {{entry.author}}', variant: 'caption', component: 'p' }, muted(scope), null, 'postMeta')
+  const title = tree.add('muiTypography', { children: '{{entry.title}}', variant: ruled ? 'h5' : 'h6', component: titleElement }, null, null, 'postTitle')
+  const excerpt = tree.add('muiTypography', { children: '{{entry.excerpt}}', variant: 'body2' }, muted(scope), null, 'postExcerpt')
+  const more = tree.add(
+    'muiScreenLink',
+    { children: 'Read the post', href: '{{entry.url}}', renderAs: 'link', color: 'inherit' },
+    { alignSelf: 'flex-start' },
+    null,
+    'postLink',
+  )
+  page.settled.push({ at: scope.at, what: `posts listed as ${ruled ? 'a ruled list' : 'a grid of covers'}` })
+  const card = ruled
+    ? tree.add(
+        'muiBox',
+        null,
+        { borderTop: 1, pt: 3 },
+        [
+          tree.add(
+            'muiStack',
+            { direction: 'row', spacing: '3', alignItems: 'flex-start' },
+            null,
+            [
+              tree.add('muiStack', { spacing: '1' }, { flex: '1 1 auto', minWidth: 0 }, [meta, title, excerpt, more], 'postWords'),
+              tree.add('muiBox', null, { flex: '0 0 auto', width: { xs: '30%', md: '24%' } }, [cover({ aspectRatio: '4 / 3', borderRadius: 2 })], 'postThumb'),
+            ],
+            'postRow',
+          ),
+        ],
+        'post',
+      )
+    : tree.add('muiStack', { spacing: '1.5' }, null, [cover({ aspectRatio: '3 / 2', borderRadius: 2 }), meta, title, excerpt, more], 'post')
+  return tree.add(
+    AI_LAYOUT_LISTING_ELEMENTS.posts,
+    { collectionSlug: listing.collectionSlug, entriesLimit: String(limit), spacing: ruled ? '3' : '0' },
+    ruled ? null : { display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 5 },
+    [card],
+    'posts',
   )
 }
 

@@ -62,6 +62,7 @@ const SAMPLE_SUPPORT_URL: string =
 import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
+import { retentionSystemEmailTemplates } from './retention-emails'
 
 /**
  * Who actually puts the message on the wire.
@@ -1597,7 +1598,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
 export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
   // The risk notices (AGL-3368) are generated from their own catalog, one key
   // per kind, so they live in `risk-notice-emails.ts` beside it.
-  [...BASE_SYSTEM_EMAIL_TEMPLATES, ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES].map((entry) => ({
+  // The getting-started emails (AGL-3692) likewise live beside their own
+  // notes on which preference governs them, in `retention-emails.ts`.
+  [
+    ...BASE_SYSTEM_EMAIL_TEMPLATES,
+    ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES,
+    ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
+  ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],
   }))

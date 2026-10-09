@@ -20,7 +20,7 @@ import {
   SITE_JOURNEY_EMAIL_KEYS,
   SITE_JOURNEY_KEY_MAX,
   type SiteJourneyStepType,
-} from '@aglyn/aglyn/app-utils/site-journey'
+} from '@aglyn/aglyn/app-utils/site-journey-steps'
 import {
   FUNNEL_LABEL_MAX,
   FUNNEL_MAX_STEPS,

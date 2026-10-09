@@ -9,6 +9,130 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.235 — 2026-10-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.234...v1.0.0-beta.235)
+
+### Added
+
+- a store or blog start lists its real products and posts (AGL-3676) (#1283) ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **email:** getting-started emails, sent once per crossing by an hourly sweep (AGL-3692) (#1269) ([AGL-3692](https://linear.app/aglyn/issue/AGL-3692), [AGL-3691](https://linear.app/aglyn/issue/AGL-3691), [AGL-3690](https://linear.app/aglyn/issue/AGL-3690), [AGL-1131](https://linear.app/aglyn/issue/AGL-1131), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122), [AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-1993](https://linear.app/aglyn/issue/AGL-1993))
+- **native:** install a site's own fonts on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the customer texts switch is native on Apple and Kotlin ([AGL-3669](https://linear.app/aglyn/issue/AGL-3669))
+- **native:** built-in themes and a searchable font browser on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the Plugins screens switch workspace and site plugins natively ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** spec writes go through FirestoreWriter; domain names the badge ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+
+### Fixed
+
+- **native:** the Kotlin contract values split into parts under the JVM's 255-slot limit ([AGL-3703](https://linear.app/aglyn/issue/AGL-3703))
+- **commerce:** declare firebase for the tax card, regenerate native contracts ([AGL-3693](https://linear.app/aglyn/issue/AGL-3693), [AGL-3702](https://linear.app/aglyn/issue/AGL-3702))
+- **commerce:** tax card says when Stripe Tax leaves it unused; Faire gets label cost ([AGL-3693](https://linear.app/aglyn/issue/AGL-3693), [AGL-3631](https://linear.app/aglyn/issue/AGL-3631), [AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **native:** the AI plugin's spec opens in Xcode; Kotlin knows the power icons ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+
+<details>
+<summary>Also in this release: 2 test, 1 chore</summary>
+
+- **console:** the community sweep knows the native Support screens' forum link ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** the list-plan tests read every declared query ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** regenerate contracts for the inventory-sync plugin ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.0.0-beta.234 — 2026-10-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.233...v1.0.0-beta.234)
+
+### Added
+
+- **uptime:** the probe tells Slack when a red target recovers ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **native:** content collections and entries on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **staff:** send any system email, or a written follow-up, from an account's staff page (AGL-3691) (#1265) ([AGL-3691](https://linear.app/aglyn/issue/AGL-3691), [AGL-3690](https://linear.app/aglyn/issue/AGL-3690), [AGL-1131](https://linear.app/aglyn/issue/AGL-1131))
+- **stock-photos:** Pixabay stock photos for AI pages, via core seams (AGL-3660) (#1267) ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-3497](https://linear.app/aglyn/issue/AGL-3497), [AGL-3676](https://linear.app/aglyn/issue/AGL-3676), [AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **native:** site setup (details, SEO, tracking, theme, emails) on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **ai:** designer layouts, full Free homes, budget-not-ceiling sections (AGL-3660) (#1264) ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-3497](https://linear.app/aglyn/issue/AGL-3497), [AGL-3676](https://linear.app/aglyn/issue/AGL-3676), [AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **loyalty:** a store connects its own Smile.io or Yotpo Loyalty account for rewards ([AGL-3677](https://linear.app/aglyn/issue/AGL-3677))
+- **commerce:** a self-service kiosk orders and pays at the register ([AGL-3623](https://linear.app/aglyn/issue/AGL-3623))
+- **console:** an account's audit tables sort by every column ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **commerce:** the pickup and delivery queue pages, and the console sweeps know its cards ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624))
+- **commerce:** pickup and local delivery on a product's Buy button ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624))
+- **commerce:** buy online, pick up in store, and local delivery ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624), [AGL-3610](https://linear.app/aglyn/issue/AGL-3610))
+- **commerce:** store credit and rewards are off at the register while offline ([AGL-3625](https://linear.app/aglyn/issue/AGL-3625), [AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **commerce:** the offline sync record is declared outside the media scan ([AGL-3625](https://linear.app/aglyn/issue/AGL-3625))
+- **commerce:** the register keeps selling cash offline and syncs each sale once ([AGL-3625](https://linear.app/aglyn/issue/AGL-3625))
+- **native:** CRM, Inbox, Emails, Marketing and Sequences are native on Apple and Kotlin (AGL-3669) (#1236) ([AGL-3669](https://linear.app/aglyn/issue/AGL-3669), [AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **commerce:** orders, products, stock movements and shift history sort by every column (AGL-3680) (#1247) ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **loyalty:** built-in points, referrals and store credit for online and POS sales ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640), [AGL-3677](https://linear.app/aglyn/issue/AGL-3677))
+- **commerce:** store credit from other plugins at checkout and at the register ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **aglyn:** a checkout-credits seam for store credit another plugin keeps ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **console:** activity, notification and invoice tables sort by every column (AGL-3680) (#1243) ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **native:** bookings, events calendar, analytics, automation, notifications and their settings (AGL-3670) (#1241) ([AGL-3670](https://linear.app/aglyn/issue/AGL-3670))
+- **ai:** alert staff, Cloud Monitoring and Slack when Aglyn AI fails (AGL-3683) (#1246) ([AGL-3683](https://linear.app/aglyn/issue/AGL-3683))
+- **console:** marketing, outreach, workflows and licence tables sort by every column (AGL-3680) (#1252) ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **crm:** every CRM table sorts by its column headers (AGL-3680) (#1248) ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **console:** members tables sort by every column (AGL-3680) (#1242) ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **native:** a site's forms and submissions on iPhone, iPad and Mac (AGL-3668) (#1239) ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **crm:** a record says when its address belongs to a banned or locked account ([AGL-3686](https://linear.app/aglyn/issue/AGL-3686), [AGL-3420](https://linear.app/aglyn/issue/AGL-3420))
+- **console:** staff tables sort by every column ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **staff:** every writer stores the fields the staff tables sort by ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **console:** email, inbox, forms, data and authors tables sort by every column ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **console:** site artifact tables sort by every column ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+
+### Fixed
+
+- **ai:** Juniper Clay follow-ups — works over forms, counted galleries, starters, button tints (AGL-3660) (#1273) ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-3497](https://linear.app/aglyn/issue/AGL-3497), [AGL-3676](https://linear.app/aglyn/issue/AGL-3676), [AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **commerce:** an offline register asks the console again ([AGL-3651](https://linear.app/aglyn/issue/AGL-3651), [AGL-3652](https://linear.app/aglyn/issue/AGL-3652))
+- **canary:** the editor-hint hop rides the probe bypass ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **canary:** continue past "Email verified" the way a person does, not by reloading ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **ai:** a Free site start checks credits left; a job out of credits pauses with Resume ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **canary:** a sign-up without a workspace fails the canary ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **canary:** each leg logs the host it signed up on ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **canary:** the sign-up canary walks a phone as well as a desktop ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **console:** the import round-trip expects a layout written live, null stored ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **console:** the layouts list leaves tombstones out on the query, so every page is full ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **loyalty:** connecting a rewards account parks built-in points and disconnecting restores them ([AGL-3677](https://linear.app/aglyn/issue/AGL-3677))
+- **loyalty:** the Rewards account card and vendor notes read without the product name ([AGL-3677](https://linear.app/aglyn/issue/AGL-3677))
+- **auth:** a phone password sign-up verifies on the auth host instead of looping ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690), [AGL-479](https://linear.app/aglyn/issue/AGL-479))
+- **renderer:** a Stack's divider draws between its children ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-1237](https://linear.app/aglyn/issue/AGL-1237))
+- **commerce:** keep the ledger join first on the location decrements ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624))
+- **commerce:** a buy-now order records the shipping address it was charged for ([AGL-3688](https://linear.app/aglyn/issue/AGL-3688))
+- **loyalty:** the native contracts carry the Rewards email catalog ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **loyalty:** each Rewards document id scheme lives in one named key function ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **loyalty:** the org Plugins page shows the always-on Rewards switch on ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **loyalty:** the Rewards package versions ride beta.232 like every other lib ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **loyalty:** the org switchboard save carries the always-on Rewards plugin ([AGL-3640](https://linear.app/aglyn/issue/AGL-3640))
+- **console:** the audit-write sweep names the staff backfill as patching existing rows ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+- **search:** name tokens walk by codepoint, so an emoji name can be saved ([AGL-3689](https://linear.app/aglyn/issue/AGL-3689), [AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **workflows:** webhooks list hides a URL's credential; no stale trigger promise ([AGL-3684](https://linear.app/aglyn/issue/AGL-3684))
+- **crm:** the account-lock chip names the configured brand ([AGL-3686](https://linear.app/aglyn/issue/AGL-3686))
+- **workflows:** an outbound webhook's body carries a `text` summary, so Slack accepts it ([AGL-3684](https://linear.app/aglyn/issue/AGL-3684))
+
+### Documentation
+
+- **agents:** a production promotion is merged by hand, auto-merge is turned off ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **agents:** a fix for a sign-up or access blocker ships to production the same hour ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+
+<details>
+<summary>Also in this release: 5 test, 4 chore, 2 ci</summary>
+
+- **ai:** a live plan eval with the site's business profile (AGL-3661) (#1266) ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **tools:** the Linear ceiling read off the workspace, AGL-3692 ([AGL-3692](https://linear.app/aglyn/issue/AGL-3692), [AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **auto-merge:** a green hotfix promotion merges itself into production ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **marketing:** the persona assertions read the greeting, not the random unsubscribe id ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **release:** v1.0.0-beta.233 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **commerce:** read the index file from disk in the pickup queue spec ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624))
+- **tools:** the Linear ceiling read off the workspace, AGL-3689 ([AGL-3689](https://linear.app/aglyn/issue/AGL-3689), [AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **commerce:** drop an unused binding from the pickup webhook spec ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624))
+- **commerce:** specs for pickup and local delivery ([AGL-3624](https://linear.app/aglyn/issue/AGL-3624))
+- green PRs into main merge themselves; production PRs never auto-merge (AGL-3685) (#1253) ([AGL-3685](https://linear.app/aglyn/issue/AGL-3685))
+- **native:** regenerate the contracts for the email lane's sorts ([AGL-3680](https://linear.app/aglyn/issue/AGL-3680))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.233 — 2026-10-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.232...v1.0.0-beta.233)

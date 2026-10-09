@@ -122,10 +122,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           tokens: {
             'product.name': product.name,
             'product.description': product.description ?? '',
-            'product.price':
-              minPrice === maxPrice
-                ? `$${minPrice}`
-                : `From $${minPrice}`,
+            'product.price': productPriceText(product, minPrice, maxPrice),
             'product.image':
               product.mediaUrls?.[0] ?? product.imageUrl ?? '',
             'product.slug': product.slug,
@@ -201,6 +198,19 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           }
         }
       }
+    }
+    // No product template designated, or none that renders: the store's
+    // built-in product page (AGL-3676), in the site's own header and footer,
+    // rather than a 404 behind every card the product grid links. A store a
+    // guided start built has no template of its own, and its grid links each
+    // product here.
+    if (productRaw && !productRaw.deletedAt && productRaw.status === 'active') {
+      return composeBuiltInProductPage(
+        hostId,
+        host,
+        productSnapshot.docs[0].id,
+        CommerceModel.liftLegacyProduct(productRaw),
+      )
     }
   }
   // Commerce collection routes (AGL-298): /collections/{slug} renders
@@ -296,6 +306,121 @@ export const commerceSitePageResolver: SitePageResolver = async ({
     }
   }
   return undefined
+}
+
+/**
+ * What `{{product.price}}` says: the price, "From" the lowest where variants
+ * differ, or "Price coming soon" for a product listed before any variant has
+ * one (AGL-3676) — never "$0".
+ */
+export function productPriceText(
+  product: Pick<CommerceModel.HostProduct, 'variants'>,
+  minPrice: number,
+  maxPrice: number,
+): string {
+  if (!(product.variants ?? []).some((variant) => CommerceModel.variantHasPrice(variant))) {
+    return 'Price coming soon'
+  }
+  return minPrice === maxPrice ? `$${minPrice}` : `From $${minPrice}`
+}
+
+const PRODUCT_PAGE_NODE = 'pdp__detail'
+const PRODUCT_PAGE_RELATED_NODE = 'pdp__related'
+
+/**
+ * The store's built-in product page (AGL-3676), root first, for the layout's
+ * slot: the product block for the routed slug and the related products under
+ * it — the two blocks a product template is made of.
+ */
+export function buildProductPageNodes(slug: string): Record<string, Aglyn.AglynNodeSchema> {
+  return {
+    [Aglyn.NODE_ROOT_ID]: {
+      $id: Aglyn.NODE_ROOT_ID,
+      componentId: 'div',
+      nodes: ['pdp__container'],
+    } as Aglyn.AglynNodeSchema,
+    pdp__container: {
+      $id: 'pdp__container',
+      parentId: Aglyn.NODE_ROOT_ID,
+      componentId: 'muiContainer',
+      pluginId: 'mui',
+      props: { maxWidth: 'lg', sx: { paddingTop: 6, paddingBottom: 10 } },
+      nodes: [PRODUCT_PAGE_NODE, PRODUCT_PAGE_RELATED_NODE],
+    } as Aglyn.AglynNodeSchema,
+    [PRODUCT_PAGE_NODE]: {
+      $id: PRODUCT_PAGE_NODE,
+      parentId: 'pdp__container',
+      componentId: 'product-detail',
+      pluginId: 'commerce',
+      props: { slug },
+    } as Aglyn.AglynNodeSchema,
+    [PRODUCT_PAGE_RELATED_NODE]: {
+      $id: PRODUCT_PAGE_RELATED_NODE,
+      parentId: 'pdp__container',
+      componentId: 'related-products',
+      pluginId: 'commerce',
+      props: { heading: 'You may also like', maxItems: 4, sx: { marginTop: 8 } },
+    } as Aglyn.AglynNodeSchema,
+  }
+}
+
+async function composeBuiltInProductPage(
+  hostId: string,
+  host: unknown,
+  productId: string,
+  product: ReturnType<typeof CommerceModel.liftLegacyProduct>,
+) {
+  try {
+    const layoutId = await resolveBuiltInPageLayoutId({ hostId, host: host as never })
+    const productReviews = await readProductReviews(hostId, productId).catch((error) => {
+      console.error('product review aggregate failed', error)
+      return { reviews: [], aggregate: { count: 0, average: 0 } }
+    })
+    const card = collectSocialImageFacts([
+      product.mediaUrls?.[0] ?? product.imageUrl,
+      (host as { seo?: { image?: string } } | null)?.seo?.image,
+    ])
+    const nodes = await composeNodesWithChrome({
+      hostId,
+      layoutId,
+      screenNodes: buildProductPageNodes(product.slug),
+      socialImages: card.socialImages,
+      host: host as Aglyn.HostTokenSource,
+    })
+    if (!nodes) return undefined
+    return {
+      props: JSON.parse(
+        JSON.stringify({
+          // Seeded, so the product renders server-side and the head writes
+          // its Product structured data, as on a template page (AGL-659).
+          pageData: {
+            commerce: {
+              product: toPublicProductDetail(productId, product),
+              ...(productReviews.aggregate.count ? { reviews: productReviews } : {}),
+            },
+          },
+          data: {
+            host,
+            screen: {
+              data: {
+                displayName: product.name,
+                seo: {
+                  title: product.seo?.title ?? undefined,
+                  description: product.seo?.description ?? product.description ?? undefined,
+                },
+              },
+            },
+          },
+          nodes,
+          ...card.collected(),
+        }),
+      ),
+      revalidate: 60,
+    }
+  } catch (error) {
+    console.error('built-in product page composition failed', error)
+    return undefined
+  }
 }
 
 const ORDER_STATUS_NODE = 'order-status__block'

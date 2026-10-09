@@ -27,29 +27,16 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
+import { formatDuration, formatShare } from '../model/funnel-format'
 import type { FunnelResult } from '../model/funnels.types'
+
+export { formatDuration, formatShare }
 
 /**
  * A funnel's result (AGL-3605): one bar per step with its visitors and share,
  * the drop-off before it and the median time from the step before, then the
  * same entered/completed split by where visits came from.
  */
-
-export function formatShare(value: number | null): string {
-  return value === null ? '—' : `${Math.round(value * 1000) / 10}%`
-}
-
-/** A duration as a person reads it: `45s`, `3m 05s`, `2h 10m`, `3d 4h`. */
-export function formatDuration(ms: number | null): string {
-  if (ms === null) return '—'
-  const seconds = Math.round(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 48) return `${hours}h ${minutes % 60}m`
-  return `${Math.floor(hours / 24)}d ${hours % 24}h`
-}
 
 export interface FunnelResultsProps {
   result: FunnelResult

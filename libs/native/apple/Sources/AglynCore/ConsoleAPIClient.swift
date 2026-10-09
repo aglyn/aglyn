@@ -138,7 +138,8 @@ public final class ConsoleAPIClient: Sendable {
     query: [(String, String?)] = [],
     body: JSONValue? = nil,
     idempotencyKey: String? = nil,
-    anonymous: Bool = false
+    anonymous: Bool = false,
+    rawBody: (data: Data, contentType: String)? = nil
   ) async throws -> JSONValue? {
     let retryable = method == .get || idempotencyKey != nil
     var forceRefresh = false
@@ -158,6 +159,10 @@ public final class ConsoleAPIClient: Sendable {
       if let body {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try body.encoded()
+      } else if let rawBody {
+        // A route that takes the file itself as the body (`/api/fonts/prepare`).
+        request.setValue(rawBody.contentType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = rawBody.data
       }
       if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
 

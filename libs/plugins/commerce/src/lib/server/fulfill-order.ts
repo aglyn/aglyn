@@ -60,6 +60,8 @@ export interface RecordShipmentRequest {
   labelUrl?: string
   /** That plugin's id for the label (AGL-3612), kept on the fulfillment. */
   labelRef?: string
+  /** What that label cost, in integer cents of the order's currency (AGL-3693). */
+  labelCostCents?: number
   /** Whether the buyer is to be told; recorded on the fulfillment. Default on. */
   notify?: boolean
   /**
@@ -298,6 +300,9 @@ export async function recordOrderShipment(
         ...trackingFields(carrier, trackingNumber, explicitUrl),
         ...(labelUrl ? { labelUrl } : {}),
         ...(request.labelRef ? { labelRef: String(request.labelRef).slice(0, 80) } : {}),
+        ...(Number.isSafeInteger(request.labelCostCents) && Number(request.labelCostCents) > 0
+          ? { labelCostCents: Number(request.labelCostCents) }
+          : {}),
         status: 'active',
         notify: request.notify !== false,
         atMs,

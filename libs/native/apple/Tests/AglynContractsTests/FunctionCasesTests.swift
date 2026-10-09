@@ -61,7 +61,7 @@ final class FunctionCasesTests: XCTestCase {
     for name in [
       "formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel",
       "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents",
-      "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents",
+      "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions",
     ] {
       XCTAssertNotNil(functions[name], name)
     }
@@ -166,5 +166,35 @@ final class FunctionCasesTests: XCTestCase {
   func testBundledContractValuesDecode() {
     XCTAssertEqual(ContractValues.shared.orderChannelLabels["online"], "Online")
     XCTAssertFalse(ContractValues.shared.orderListQuery.fields.isEmpty)
+  }
+
+  private func options(_ value: Any?) throws -> [ProductOption] {
+    let data = try JSONSerialization.data(withJSONObject: value as? [Any] ?? [])
+    return try JSONDecoder().decode([ProductOption].self, from: data)
+  }
+
+  private func variants(_ value: Any?) throws -> [ProductVariant] {
+    let data = try JSONSerialization.data(withJSONObject: value as? [Any] ?? [])
+    return try JSONDecoder().decode([ProductVariant].self, from: data)
+  }
+
+  func testTheVariantMatrixIsTheConsoles() throws {
+    for item in cases("expandVariantMatrix") {
+      let expected = item.result as! [[String: String]]
+      let given = item.args[0] is NSNull ? nil : try options(item.args[0])
+      XCTAssertEqual(expandVariantMatrix(given), expected, item.label)
+    }
+  }
+
+  func testRenamingAnOptionIsTheConsoles() throws {
+    for item in cases("renameProductOptions") {
+      let product = item.args[0] as! [String: Any]
+      let names = (item.args[1] as! [Any]).map { $0 as? String }
+      let answer = renameProductOptions(
+        options: try options(product["options"]), variants: try variants(product["variants"]), names: names)
+      let expected = item.result as! [String: Any]
+      XCTAssertEqual(answer.options, try options(expected["options"]), item.label)
+      XCTAssertEqual(answer.variants, try variants(expected["variants"]), item.label)
+    }
   }
 }

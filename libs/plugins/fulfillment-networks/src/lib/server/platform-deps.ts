@@ -35,6 +35,7 @@ import { createAmazonMcfProvider } from '../providers/amazon-mcf'
 import { defaultProviderHttp, type ProviderHttp } from '../providers/http'
 import type { FulfillmentNetworkProvider } from '../providers/provider'
 import { createShipbobProvider } from '../providers/shipbob'
+import { createShipmonkProvider } from '../providers/shipmonk'
 import { offeredNetworks, readFulfillmentNetworksConfig } from './config'
 import { createCredentialOpener } from './credentials'
 import { createEngine, type EngineDeps } from './engine'
@@ -67,6 +68,7 @@ export const platformNetworkStore = (): NetworkStore => (store ??= createFiresto
 
 export function platformProvider(id: NetworkProviderId): FulfillmentNetworkProvider {
   const config = readFulfillmentNetworksConfig()
+  if (id === 'shipmonk') return createShipmonkProvider({ http: http(), sandbox: config.shipmonk?.sandbox === true })
   return id === 'shipbob'
     ? createShipbobProvider({ http: http(), sandbox: config.shipbob?.sandbox === true })
     : createAmazonMcfProvider({

@@ -1,0 +1,2630 @@
+{
+  "$comment": "Staff (AGL-3667): the console's /admin area, shown only when the ID token carries `staff: true`; a trigger that needs the super role is offered only to `staffRole: super`, and every route enforces both again server-side. Reasons go where the console asks for them. Routes: /api/admin/* and /api/support/tickets. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.staff.overview",
+      "title": "Overview",
+      "subtitle": "Workspaces, revenue and anomalies",
+      "icon": "gauge.with.dots.needle.33percent|speed",
+      "scope": "staff",
+      "group": "staff",
+      "order": 1,
+      "requires": "staff.is",
+      "links": [
+        "/admin",
+        "/admin/overview"
+      ],
+      "load": {
+        "overview": "/api/admin/overview"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Now",
+          "object": "data.overview.metrics",
+          "rows": [
+            {
+              "label": "Workspaces",
+              "value": "{item.orgs:number}"
+            },
+            {
+              "label": "New in 30 days",
+              "value": "{item.signups30d:number}"
+            },
+            {
+              "label": "Paying workspaces",
+              "value": "{item.payingOrgs:number}"
+            },
+            {
+              "label": "Comped workspaces",
+              "value": "{item.compedOrgs:number}"
+            },
+            {
+              "label": "Sites",
+              "value": "{item.hosts:number}"
+            },
+            {
+              "label": "Monthly recurring revenue",
+              "value": "{item.mrrUsd:dollars}"
+            },
+            {
+              "label": "Usage month",
+              "value": "{item.rollupMonth}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Plans",
+          "items": "data.overview.metrics.planCounts",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "—"
+        },
+        {
+          "type": "list",
+          "title": "Anomalies",
+          "items": "data.overview.anomalies",
+          "primary": "{item.title|item.kind:title}",
+          "secondary": "{item.detail|item.message}",
+          "icon": "exclamationmark.triangle|warning",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            },
+            "when": "item.orgId"
+          },
+          "empty": "Nothing unusual."
+        },
+        {
+          "type": "list",
+          "title": "Newest workspaces",
+          "items": "data.overview.newestOrgs",
+          "primary": "{item.name|item.$id}",
+          "secondary": "{item.plan|'Free':title} · {item.createdAt:date}",
+          "icon": "building.2|business",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.$id|item.id}"
+            }
+          },
+          "count": false
+        },
+        {
+          "type": "actions",
+          "title": "Broadcast",
+          "when": "staff.super",
+          "items": [
+            {
+              "id": "broadcast",
+              "label": "Send a notice to every workspace",
+              "icon": "megaphone|campaign",
+              "url": "/api/admin/broadcast",
+              "prompt": [
+                {
+                  "key": "title",
+                  "label": "Title",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "body",
+                  "label": "Message",
+                  "kind": "multiline",
+                  "required": true
+                },
+                {
+                  "key": "level",
+                  "label": "Level",
+                  "kind": "select",
+                  "initial": "info",
+                  "options": [
+                    "info",
+                    "warning",
+                    "critical"
+                  ]
+                }
+              ],
+              "confirm": "Every workspace owner gets this in the console.",
+              "reason": true,
+              "body": {
+                "title": "{form.title}",
+                "body": "{form.body}",
+                "level": "{form.level}",
+                "reason": "{form.reason}"
+              },
+              "success": "Sent to {response.orgs} workspaces"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "title": "Staff",
+          "items": [
+            {
+              "title": "Workspaces",
+              "icon": "building.2|business",
+              "screen": "core.staff.orgs"
+            },
+            {
+              "title": "Sites",
+              "icon": "globe|public",
+              "screen": "core.staff.sites"
+            },
+            {
+              "title": "People",
+              "icon": "person.2|group",
+              "screen": "core.staff.users"
+            },
+            {
+              "title": "Support tickets",
+              "icon": "lifepreserver|support",
+              "screen": "core.staff.support"
+            },
+            {
+              "title": "Abuse reports",
+              "icon": "exclamationmark.shield|report",
+              "screen": "core.staff.abuse"
+            },
+            {
+              "title": "Locks",
+              "icon": "lock|lock",
+              "screen": "core.staff.lockdown"
+            },
+            {
+              "title": "Media quarantine",
+              "icon": "photo.badge.exclamationmark|image_not_supported",
+              "screen": "core.staff.quarantine"
+            },
+            {
+              "title": "Coupons",
+              "icon": "tag|local_offer",
+              "screen": "core.staff.coupons"
+            },
+            {
+              "title": "Revenue",
+              "icon": "dollarsign.circle|savings",
+              "screen": "core.staff.revenue"
+            },
+            {
+              "title": "Margin and utilization",
+              "icon": "chart.line.uptrend.xyaxis|trending_up",
+              "screen": "core.staff.margin"
+            },
+            {
+              "title": "System emails",
+              "icon": "envelope|mail",
+              "screen": "core.staff.emails"
+            },
+            {
+              "title": "Contact suppressions",
+              "icon": "nosign|block",
+              "screen": "core.staff.suppressions"
+            },
+            {
+              "title": "Feature flags",
+              "icon": "flag|flag",
+              "screen": "core.staff.flags"
+            },
+            {
+              "title": "Health",
+              "icon": "waveform.path.ecg|monitor_heart",
+              "screen": "core.staff.health"
+            },
+            {
+              "title": "Operator alerts",
+              "icon": "bell.badge|notifications",
+              "screen": "core.staff.alerts"
+            },
+            {
+              "title": "Audit archive",
+              "icon": "archivebox|inventory_2",
+              "screen": "core.staff.audit"
+            },
+            {
+              "title": "Tax return",
+              "icon": "doc.text.magnifyingglass|request_quote",
+              "screen": "core.staff.tax"
+            },
+            {
+              "title": "Platform settings",
+              "icon": "gearshape|settings",
+              "screen": "core.staff.settings"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "name": "staffPage",
+          "title": "Plugin staff pages"
+        }
+      ]
+    },
+    {
+      "id": "core.staff.orgs",
+      "title": "Workspaces",
+      "icon": "building.2|business",
+      "scope": "staff",
+      "group": "staff",
+      "order": 2,
+      "requires": "staff.is",
+      "links": [
+        "/admin/orgs"
+      ],
+      "load": {
+        "orgs": {
+          "url": "/api/admin/orgs?pageSize=50",
+          "cursor": "nextCursor",
+          "items": "orgs"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "orgs",
+          "search": true,
+          "split": true,
+          "items": "data.orgs.orgs",
+          "primary": "{item.name|item.$id}",
+          "secondary": "{item.slug} · {item.plan|'Free':title}",
+          "tertiary": "Created {item.createdAt:date}",
+          "icon": "building.2|business",
+          "badges": [
+            {
+              "text": "Suspended",
+              "when": "item.suspended",
+              "tone": "error"
+            },
+            {
+              "text": "{item.subscription.status:title}",
+              "tones": {
+                "Active": "success",
+                "Past due": "error",
+                "*": "neutral"
+              }
+            }
+          ],
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.$id}"
+            }
+          },
+          "empty": "No workspaces match."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.org",
+      "title": "{data.detail.org.name|'Workspace'}",
+      "label": "Workspace",
+      "icon": "building.2|business",
+      "scope": "staff",
+      "requires": "staff.is",
+      "links": [
+        "/admin/orgs/:orgId"
+      ],
+      "load": {
+        "detail": "/api/admin/org-detail?orgId={params.orgId}",
+        "billing": {
+          "url": "/api/admin/org-billing?orgId={params.orgId}",
+          "optional": true
+        },
+        "usage": {
+          "url": "/api/admin/org-usage?orgId={params.orgId}",
+          "optional": true
+        },
+        "hosts": {
+          "url": "/api/admin/hosts?orgId={params.orgId}",
+          "optional": true
+        },
+        "notes": {
+          "url": "/api/admin/org-notes?orgId={params.orgId}",
+          "optional": true
+        },
+        "manager": {
+          "url": "/api/admin/org-success-manager?orgId={params.orgId}",
+          "optional": true
+        },
+        "deliveries": {
+          "url": "/api/admin/email-deliveries?orgId={params.orgId}&pageSize=20",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "when": "data.detail.org.suspended",
+          "text": "Suspended: {data.detail.org.suspendedReason|data.detail.org.suspendedReasonCode}"
+        },
+        {
+          "type": "fields",
+          "object": "data.detail.org",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{item.name}"
+            },
+            {
+              "label": "URL name",
+              "value": "{item.slug}"
+            },
+            {
+              "label": "Workspace ID",
+              "value": "{item.$id}"
+            },
+            {
+              "label": "Plan",
+              "value": "{item.plan|'Free':title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Subscription",
+              "value": "{item.subscription.status:title}"
+            },
+            {
+              "label": "Renews",
+              "value": "{item.subscription.currentPeriodEnd:date}"
+            },
+            {
+              "label": "Owner",
+              "value": "{item.ownerEmail|item.ownerUid}"
+            },
+            {
+              "label": "Created",
+              "value": "{item.createdAt:date}"
+            },
+            {
+              "label": "Success manager",
+              "value": "{data.manager.manager.name|data.manager.manager.email}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Sites",
+          "items": "data.hosts.hosts",
+          "primary": "{item.displayName|item.subdomain|item.$id}",
+          "secondary": "{item.subdomain} · {item.cname}",
+          "icon": "globe|public",
+          "open": {
+            "screen": "core.staff.site",
+            "params": {
+              "hostId": "{item.$id}"
+            }
+          },
+          "empty": "No sites."
+        },
+        {
+          "type": "list",
+          "title": "People",
+          "items": "data.detail.people",
+          "primary": "{item.displayName|item.email}",
+          "secondary": "{item.email}",
+          "icon": "person.crop.circle|account_circle",
+          "open": {
+            "screen": "core.staff.user",
+            "params": {
+              "uid": "{item.uid}"
+            }
+          },
+          "count": false
+        },
+        {
+          "type": "list",
+          "title": "Invoices",
+          "items": "data.billing.invoices",
+          "primary": "{item.number|item.id}",
+          "secondary": "{item.periodStart:date}",
+          "trailing": "{item.amountDueCents:cents/item.currency}",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Paid": "success",
+                "Open": "warning",
+                "*": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "view",
+              "label": "View on Stripe",
+              "icon": "doc.richtext|description",
+              "when": "item.hostedInvoiceUrl",
+              "link": "{item.hostedInvoiceUrl}"
+            }
+          ],
+          "empty": "No invoices."
+        },
+        {
+          "type": "list",
+          "title": "Usage by month",
+          "items": "data.usage.months",
+          "primary": "{item.month}",
+          "secondary": "{item.pageViews:number} views · {item.storageBytes:bytes}",
+          "count": false,
+          "empty": "No usage recorded."
+        },
+        {
+          "type": "list",
+          "title": "Notes",
+          "items": "data.notes.notes",
+          "primary": "{item.text}",
+          "secondary": "{item.actorEmail} · {item.createdAt:datetime}",
+          "icon": "note.text|description",
+          "count": false,
+          "empty": "No notes."
+        },
+        {
+          "type": "list",
+          "title": "Recent changes",
+          "items": "data.detail.audit",
+          "primary": "{item.action:title}",
+          "secondary": "{item.actorEmail|item.actorUid} · {item.at|item.createdAt:datetime}",
+          "count": false,
+          "empty": "—"
+        },
+        {
+          "type": "list",
+          "title": "Recent emails",
+          "items": "data.deliveries.rows",
+          "primary": "{item.subject|item.template}",
+          "secondary": "{item.to} · {item.status:title}",
+          "tertiary": "{item.createdAt|item.sentAt:datetime}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "zone",
+          "name": "staffOrg",
+          "title": "Plugins",
+          "params": {
+            "orgId": "{params.orgId}"
+          }
+        },
+        {
+          "type": "actions",
+          "title": "Staff actions",
+          "items": [
+            {
+              "id": "note",
+              "label": "Add a note",
+              "icon": "square.and.pencil|edit",
+              "url": "/api/admin/org-notes",
+              "prompt": [
+                {
+                  "key": "text",
+                  "label": "Note",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "orgId": "{params.orgId}",
+                "text": "{form.text}"
+              },
+              "success": "Noted"
+            },
+            {
+              "id": "manager",
+              "label": "Set the success manager",
+              "icon": "person.badge.key|manage_accounts",
+              "url": "/api/admin/org-success-manager",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "email",
+                  "label": "Email",
+                  "kind": "email",
+                  "required": true
+                }
+              ],
+              "body": {
+                "orgId": "{params.orgId}",
+                "name": "{form.name}",
+                "email": "{form.email}"
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "portal",
+              "label": "Open their Stripe portal",
+              "icon": "creditcard|credit_card",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "portal"
+              },
+              "open": "url",
+              "reload": false
+            },
+            {
+              "id": "lock",
+              "label": "Lock this workspace",
+              "icon": "lock|lock",
+              "destructive": true,
+              "when": "staff.super && !data.detail.org.suspended",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "kind": "select",
+                  "initial": "full",
+                  "options": [
+                    {
+                      "value": "full",
+                      "label": "Full lock"
+                    },
+                    {
+                      "value": "read-only",
+                      "label": "Read only"
+                    }
+                  ]
+                },
+                {
+                  "key": "message",
+                  "label": "Message to the owner",
+                  "kind": "multiline"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "action": "lock",
+                "scope": "org",
+                "targetId": "{params.orgId}",
+                "mode": "{form.mode}",
+                "message": "{form.message}",
+                "reason": "{form.reason}",
+                "confirm": true
+              },
+              "success": "Locked"
+            },
+            {
+              "id": "unlock",
+              "label": "Unlock this workspace",
+              "icon": "lock.open|lock_open",
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "reason": true,
+              "body": {
+                "action": "unlock",
+                "scope": "org",
+                "targetId": "{params.orgId}",
+                "reason": "{form.reason}"
+              },
+              "success": "Unlocked"
+            },
+            {
+              "id": "discount",
+              "label": "Apply a discount",
+              "icon": "tag|local_offer",
+              "url": "/api/admin/org-discount",
+              "prompt": [
+                {
+                  "key": "couponId",
+                  "label": "Coupon ID",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "reason": true,
+              "body": {
+                "orgId": "{params.orgId}",
+                "couponId": "{form.couponId}",
+                "reason": "{form.reason}"
+              },
+              "success": "Discount applied"
+            },
+            {
+              "id": "removeDiscount",
+              "label": "Remove the discount",
+              "icon": "tag.slash|money_off",
+              "destructive": true,
+              "when": "data.detail.org.discount",
+              "url": "/api/admin/org-discount",
+              "reason": true,
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "remove",
+                "reason": "{form.reason}"
+              },
+              "success": "Removed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.sites",
+      "title": "Sites",
+      "icon": "globe|public",
+      "scope": "staff",
+      "group": "staff",
+      "order": 3,
+      "requires": "staff.is",
+      "links": [
+        "/admin/sites"
+      ],
+      "load": {
+        "sites": {
+          "url": "/api/admin/sites?pageSize=50",
+          "cursor": "nextCursor",
+          "items": "sites"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "sites",
+          "search": true,
+          "split": true,
+          "items": "data.sites.sites",
+          "primary": "{item.displayName|item.subdomain|item.$id}",
+          "secondary": "{item.cname|item.subdomain}",
+          "tertiary": "{item.org.name|item.orgId} · {item.publishedPages|'0'} published pages",
+          "icon": "globe|public",
+          "badges": [
+            {
+              "text": "Suspended",
+              "when": "item.suspended",
+              "tone": "error"
+            },
+            {
+              "text": "Maintenance",
+              "when": "item.maintenance",
+              "tone": "warning"
+            },
+            {
+              "text": "Domain pending",
+              "when": "item.cnameAttachmentPending",
+              "tone": "warning"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.site",
+            "params": {
+              "hostId": "{item.$id}"
+            }
+          },
+          "empty": "No sites match."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.site",
+      "title": "{data.site.sites.0.displayName|data.site.sites.0.subdomain|'Site'}",
+      "label": "Site",
+      "icon": "globe|public",
+      "scope": "staff",
+      "requires": "staff.is",
+      "links": [
+        "/admin/sites/:hostId",
+        "/admin/orgs/:orgId/host/:hostId"
+      ],
+      "load": {
+        "site": "/api/admin/sites?hostId={params.hostId}",
+        "transfer": {
+          "url": "/api/admin/site-transfer?hostId={params.hostId}",
+          "optional": true,
+          "when": "staff.super"
+        },
+        "deliveries": {
+          "url": "/api/admin/email-deliveries?hostId={params.hostId}&pageSize=20",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.site.sites[$id=params.hostId]",
+          "rows": [
+            {
+              "label": "Site",
+              "value": "{item.displayName}"
+            },
+            {
+              "label": "Site ID",
+              "value": "{params.hostId}"
+            },
+            {
+              "label": "Address",
+              "value": "{item.subdomain}"
+            },
+            {
+              "label": "Domain",
+              "value": "{item.cname}"
+            },
+            {
+              "label": "Workspace",
+              "value": "{item.org.name|item.orgId}"
+            },
+            {
+              "label": "Owner",
+              "value": "{item.owner.email|item.owner}"
+            },
+            {
+              "label": "Published pages",
+              "value": "{item.publishedPages}"
+            },
+            {
+              "label": "Created",
+              "value": "{item.createdAt:date}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Recent emails",
+          "items": "data.deliveries.rows",
+          "primary": "{item.subject|item.template}",
+          "secondary": "{item.to} · {item.status:title}",
+          "tertiary": "{item.createdAt|item.sentAt:datetime}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "zone",
+          "name": "staffSite",
+          "title": "Plugins",
+          "params": {
+            "hostId": "{params.hostId}",
+            "orgId": "{data.site.sites.0.orgId}"
+          }
+        },
+        {
+          "type": "actions",
+          "title": "Staff actions",
+          "items": [
+            {
+              "id": "org",
+              "label": "Open the workspace",
+              "icon": "building.2|business",
+              "navigate": {
+                "screen": "core.staff.org",
+                "params": {
+                  "orgId": "{data.site.sites.0.orgId}"
+                }
+              }
+            },
+            {
+              "id": "reattach",
+              "label": "Reattach the domain",
+              "icon": "link|link",
+              "when": "staff.super && data.site.sites.0.cname",
+              "url": "/api/admin/host",
+              "reason": true,
+              "body": {
+                "action": "reattach-domain",
+                "hostId": "{params.hostId}",
+                "reason": "{form.reason}"
+              },
+              "success": "Reattached"
+            },
+            {
+              "id": "transfer",
+              "label": "Move to another workspace",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "destructive": true,
+              "when": "staff.super",
+              "url": "/api/admin/site-transfer",
+              "prompt": [
+                {
+                  "key": "toOrgId",
+                  "label": "Destination workspace ID",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "override",
+                  "label": "Allow over the destination's site limit",
+                  "kind": "toggle"
+                }
+              ],
+              "reason": true,
+              "confirm": "The site, its pages, media and entries move with it.",
+              "body": {
+                "hostId": "{params.hostId}",
+                "toOrgId": "{form.toOrgId}",
+                "overrideSiteLimit": "{form.override}",
+                "reason": "{form.reason}"
+              },
+              "success": "Moved"
+            },
+            {
+              "id": "lock",
+              "label": "Lock this site",
+              "icon": "lock|lock",
+              "destructive": true,
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "prompt": [
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "kind": "select",
+                  "initial": "full",
+                  "options": [
+                    {
+                      "value": "full",
+                      "label": "Full lock"
+                    },
+                    {
+                      "value": "read-only",
+                      "label": "Read only"
+                    }
+                  ]
+                },
+                {
+                  "key": "message",
+                  "label": "Message to the owner",
+                  "kind": "multiline"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "action": "lock",
+                "scope": "host",
+                "targetId": "{params.hostId}",
+                "mode": "{form.mode}",
+                "message": "{form.message}",
+                "reason": "{form.reason}",
+                "confirm": true
+              },
+              "success": "Locked"
+            },
+            {
+              "id": "unlock",
+              "label": "Unlock this site",
+              "icon": "lock.open|lock_open",
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "reason": true,
+              "body": {
+                "action": "unlock",
+                "scope": "host",
+                "targetId": "{params.hostId}",
+                "reason": "{form.reason}"
+              },
+              "success": "Unlocked"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.users",
+      "title": "People",
+      "icon": "person.2|group",
+      "scope": "staff",
+      "group": "staff",
+      "order": 4,
+      "requires": "staff.is",
+      "links": [
+        "/admin/users"
+      ],
+      "load": {
+        "users": {
+          "url": "/api/admin/users?pageSize=50",
+          "cursor": "nextPageToken",
+          "cursorParam": "nextPageToken",
+          "items": "users"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "users",
+          "search": true,
+          "split": true,
+          "items": "data.users.users",
+          "primary": "{item.displayName|item.email|item.uid}",
+          "secondary": "{item.email}",
+          "tertiary": "Last signed in {item.lastSignInAt|'never':date}",
+          "icon": "person.crop.circle|account_circle",
+          "badges": [
+            {
+              "text": "Staff · {item.staffRole|'support'}",
+              "when": "item.staff",
+              "tone": "info"
+            },
+            {
+              "text": "Disabled",
+              "when": "item.disabled",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.user",
+            "params": {
+              "uid": "{item.uid}"
+            }
+          },
+          "empty": "Search by email or name."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.user",
+      "title": "{data.detail.user.displayName|data.detail.user.email|'Person'}",
+      "label": "Person",
+      "icon": "person.crop.circle|account_circle",
+      "scope": "staff",
+      "requires": "staff.is",
+      "links": [
+        "/admin/users/:uid"
+      ],
+      "load": {
+        "detail": "/api/admin/users/detail?uid={params.uid}",
+        "activity": {
+          "url": "/api/admin/user-activity?uid={params.uid}&pageSize=25",
+          "cursor": "nextCursor",
+          "items": "entries",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.detail.user",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{item.displayName}"
+            },
+            {
+              "label": "Email",
+              "value": "{item.email}"
+            },
+            {
+              "label": "Account ID",
+              "value": "{item.uid}"
+            },
+            {
+              "label": "Sign-in methods",
+              "value": "{item.providers}"
+            },
+            {
+              "label": "Staff",
+              "value": "{item.staffRole|'—'}",
+              "when": "item.staff"
+            },
+            {
+              "label": "Disabled",
+              "value": "{item.disabled:yesno}"
+            },
+            {
+              "label": "Created",
+              "value": "{item.createdAt:date}"
+            },
+            {
+              "label": "Last signed in",
+              "value": "{item.lastSignInAt:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Workspaces",
+          "items": "data.detail.user.memberships",
+          "primary": "{item.orgName|item.orgId}",
+          "secondary": "{item.role:title}",
+          "icon": "building.2|business",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            }
+          },
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Devices",
+          "items": "data.detail.user.devices",
+          "primary": "{item.deviceName|item.userAgent|'Unknown device'}",
+          "secondary": "{item.location} · last used {item.lastSeenMs:datetime}",
+          "actions": [
+            {
+              "id": "signOut",
+              "label": "Sign out everywhere",
+              "icon": "rectangle.portrait.and.arrow.right|logout",
+              "destructive": true,
+              "when": "staff.super",
+              "confirm": "Sign this person out of every device?",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "signOutDevice",
+                "uid": "{params.uid}",
+                "deviceId": "{item.id}"
+              },
+              "success": "Signed out"
+            }
+          ],
+          "empty": "None recorded."
+        },
+        {
+          "type": "list",
+          "title": "Activity",
+          "load": "activity",
+          "items": "data.activity.entries",
+          "primary": "{item.action:title}",
+          "secondary": "{item.scopePath}",
+          "tertiary": "{item.createdAt:datetime}",
+          "count": false,
+          "empty": "Nothing yet."
+        },
+        {
+          "type": "zone",
+          "name": "staffUser",
+          "title": "Plugins",
+          "params": {
+            "uid": "{params.uid}"
+          }
+        },
+        {
+          "type": "actions",
+          "title": "Staff actions",
+          "when": "staff.super",
+          "items": [
+            {
+              "id": "profile",
+              "label": "Edit profile",
+              "icon": "square.and.pencil|edit",
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "displayName",
+                  "label": "Name",
+                  "kind": "text",
+                  "initial": "{data.detail.user.displayName}"
+                },
+                {
+                  "key": "email",
+                  "label": "Email",
+                  "kind": "email",
+                  "initial": "{data.detail.user.email}"
+                },
+                {
+                  "key": "photoUrl",
+                  "label": "Photo URL",
+                  "kind": "url",
+                  "initial": "{data.detail.user.photoUrl}"
+                }
+              ],
+              "body": {
+                "action": "updateProfile",
+                "uid": "{params.uid}",
+                "displayName": "{form.displayName}",
+                "email": "{form.email}",
+                "photoUrl": "{form.photoUrl}"
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "reset",
+              "label": "Send a password reset",
+              "icon": "key|password",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "sendPasswordReset",
+                "uid": "{params.uid}"
+              },
+              "success": "Sent"
+            },
+            {
+              "id": "impersonate",
+              "label": "Sign in as this person",
+              "icon": "person.fill.questionmark|person_search",
+              "url": "/api/admin/impersonate",
+              "reason": true,
+              "body": {
+                "uid": "{params.uid}",
+                "reason": "{form.reason}"
+              },
+              "reveal": "token",
+              "success": "Impersonation token issued; use it in the console within the hour."
+            },
+            {
+              "id": "grantStaff",
+              "label": "Make staff",
+              "icon": "person.badge.shield.checkmark|admin_panel_settings",
+              "when": "!data.detail.user.staff",
+              "confirm": "Give this person the staff role?",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "grantStaff",
+                "uid": "{params.uid}"
+              },
+              "success": "Staff now"
+            },
+            {
+              "id": "setRole",
+              "label": "Set staff role",
+              "icon": "person.badge.key|manage_accounts",
+              "when": "data.detail.user.staff",
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "role",
+                  "label": "Role",
+                  "kind": "select",
+                  "initial": "{data.detail.user.staffRole|'support'}",
+                  "options": [
+                    {
+                      "value": "support",
+                      "label": "Support"
+                    },
+                    {
+                      "value": "super",
+                      "label": "Super"
+                    }
+                  ]
+                }
+              ],
+              "body": {
+                "action": "setRole",
+                "uid": "{params.uid}",
+                "role": "{form.role}"
+              },
+              "success": "Role set"
+            },
+            {
+              "id": "revokeStaff",
+              "label": "Remove staff role",
+              "icon": "person.badge.minus|person_remove",
+              "destructive": true,
+              "when": "data.detail.user.staff",
+              "confirm": "Remove the staff role?",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "revokeStaff",
+                "uid": "{params.uid}"
+              },
+              "success": "Removed"
+            },
+            {
+              "id": "disable",
+              "label": "Disable the account",
+              "icon": "nosign|block",
+              "destructive": true,
+              "when": "!data.detail.user.disabled",
+              "confirm": "They can no longer sign in.",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "disable",
+                "uid": "{params.uid}"
+              },
+              "success": "Disabled"
+            },
+            {
+              "id": "enable",
+              "label": "Enable the account",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.detail.user.disabled",
+              "url": "/api/admin/users/manage",
+              "body": {
+                "action": "enable",
+                "uid": "{params.uid}"
+              },
+              "success": "Enabled"
+            },
+            {
+              "id": "erase",
+              "label": "Erase the account",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "url": "/api/admin/users/manage",
+              "prompt": [
+                {
+                  "key": "typed",
+                  "label": "Type the email to confirm",
+                  "kind": "text",
+                  "required": true,
+                  "mustMatch": "{data.detail.user.email}"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "action": "erase",
+                "uid": "{params.uid}",
+                "reason": "{form.reason}"
+              },
+              "success": "Erased",
+              "back": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.support",
+      "title": "Support tickets",
+      "icon": "lifepreserver|support",
+      "scope": "staff",
+      "group": "staff",
+      "order": 5,
+      "requires": "staff.is",
+      "links": [
+        "/admin/support"
+      ],
+      "load": {
+        "tickets": "/api/support/tickets"
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.tickets.tickets",
+          "split": true,
+          "primary": "{item.subject}",
+          "secondary": "{item.orgName|item.orgId} · {item.createdByEmail|item.email}",
+          "tertiary": "Due {item.responseDueAt:datetime}",
+          "icon": "lifepreserver|support",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Open": "warning",
+                "*": "neutral"
+              }
+            }
+          ],
+          "open": {
+            "screen": "core.staff.ticket",
+            "params": {
+              "ticketId": "{item.$id}",
+              "orgId": "{item.orgId}"
+            }
+          },
+          "empty": "No tickets."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.ticket",
+      "title": "{data.ticket.ticket.subject|'Ticket'}",
+      "label": "Ticket",
+      "icon": "lifepreserver|support",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "ticket": "/api/support/tickets?orgId={params.orgId}&ticketId={params.ticketId}"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.ticket.ticket",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{item.status:title}",
+              "chip": true
+            },
+            {
+              "label": "From",
+              "value": "{item.createdByEmail|item.email}"
+            },
+            {
+              "label": "Workspace",
+              "value": "{item.orgName|params.orgId}"
+            },
+            {
+              "label": "Opened",
+              "value": "{item.createdAt:datetime}"
+            },
+            {
+              "label": "Reply due",
+              "value": "{item.responseDueAt:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Conversation",
+          "items": "data.ticket.messages",
+          "primary": "{item.body}",
+          "secondary": "{item.authorEmail|item.from:title} · {item.createdAt:datetime}",
+          "count": false
+        },
+        {
+          "type": "form",
+          "id": "reply",
+          "fields": [
+            {
+              "key": "body",
+              "label": "Reply as staff",
+              "kind": "multiline",
+              "required": true
+            }
+          ],
+          "submit": {
+            "label": "Send reply",
+            "method": "PATCH",
+            "url": "/api/support/tickets",
+            "body": {
+              "orgId": "{params.orgId}",
+              "ticketId": "{params.ticketId}",
+              "body": "{form.body}"
+            },
+            "success": "Sent"
+          }
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "close",
+              "label": "Close ticket",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.ticket.ticket.status == open",
+              "method": "PATCH",
+              "url": "/api/support/tickets",
+              "body": {
+                "orgId": "{params.orgId}",
+                "ticketId": "{params.ticketId}",
+                "status": "closed"
+              },
+              "success": "Closed"
+            },
+            {
+              "id": "reopen",
+              "label": "Reopen",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "data.ticket.ticket.status == closed",
+              "method": "PATCH",
+              "url": "/api/support/tickets",
+              "body": {
+                "orgId": "{params.orgId}",
+                "ticketId": "{params.ticketId}",
+                "status": "open"
+              },
+              "success": "Reopened"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.abuse",
+      "title": "Abuse reports",
+      "icon": "exclamationmark.shield|report",
+      "scope": "staff",
+      "group": "staff",
+      "order": 6,
+      "requires": "staff.is",
+      "links": [
+        "/admin/abuse-reports"
+      ],
+      "load": {
+        "reports": {
+          "url": "/api/admin/abuse-reports?pageSize=50",
+          "cursor": "nextCursor",
+          "items": "reports"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "reports",
+          "items": "data.reports.reports",
+          "primary": "{item.reportedHostname|item.hostId}",
+          "secondary": "{item.categoryLabel|item.category:title} · {item.reference}",
+          "tertiary": "{item.createdAtMs:datetime} · {item.reportCount|'1'} reports",
+          "icon": "exclamationmark.shield|report",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Open": "error",
+                "Reviewing": "warning",
+                "Actioned": "success",
+                "Dismissed": "neutral"
+              }
+            },
+            {
+              "text": "DMCA",
+              "when": "item.dmca",
+              "tone": "info"
+            }
+          ],
+          "actions": [
+            {
+              "id": "site",
+              "label": "Open the site",
+              "icon": "globe|public",
+              "when": "item.hostId",
+              "navigate": {
+                "screen": "core.staff.site",
+                "params": {
+                  "hostId": "{item.hostId}"
+                }
+              }
+            },
+            {
+              "id": "review",
+              "label": "Mark reviewing",
+              "icon": "eye|visibility",
+              "when": "item.status == open",
+              "url": "/api/admin/abuse-reports",
+              "body": {
+                "id": "{item.id}",
+                "status": "reviewing"
+              },
+              "success": "Reviewing"
+            },
+            {
+              "id": "action",
+              "label": "Resolve: actioned",
+              "icon": "checkmark.shield|verified",
+              "url": "/api/admin/abuse-reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "What you did",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "id": "{item.id}",
+                "status": "actioned",
+                "resolution": "{form.resolution}"
+              },
+              "success": "Actioned"
+            },
+            {
+              "id": "dismiss",
+              "label": "Resolve: dismissed",
+              "icon": "xmark.circle|cancel",
+              "url": "/api/admin/abuse-reports",
+              "prompt": [
+                {
+                  "key": "resolution",
+                  "label": "Why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "id": "{item.id}",
+                "status": "dismissed",
+                "resolution": "{form.resolution}"
+              },
+              "success": "Dismissed"
+            }
+          ],
+          "empty": "No reports."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.lockdown",
+      "title": "Locks",
+      "icon": "lock|lock",
+      "scope": "staff",
+      "group": "staff",
+      "order": 7,
+      "requires": "staff.is",
+      "links": [
+        "/admin/lockdown"
+      ],
+      "load": {
+        "locks": "/api/admin/lockdown"
+      },
+      "actions": [
+        {
+          "id": "lock",
+          "label": "Place a lock",
+          "icon": "lock|lock",
+          "when": "staff.super",
+          "url": "/api/admin/lockdown",
+          "prompt": [
+            {
+              "key": "scope",
+              "label": "Scope",
+              "kind": "select",
+              "initial": "org",
+              "options": [
+                {
+                  "value": "org",
+                  "label": "Workspace"
+                },
+                {
+                  "value": "host",
+                  "label": "Site"
+                },
+                {
+                  "value": "user",
+                  "label": "Person"
+                },
+                {
+                  "value": "domain",
+                  "label": "Domain"
+                },
+                {
+                  "value": "feature",
+                  "label": "Feature"
+                },
+                {
+                  "value": "platform",
+                  "label": "Whole platform"
+                }
+              ]
+            },
+            {
+              "key": "targetId",
+              "label": "Target ID",
+              "kind": "text",
+              "help": "Workspace, site or account ID, domain or feature key. Empty for the platform."
+            },
+            {
+              "key": "mode",
+              "label": "Mode",
+              "kind": "select",
+              "initial": "full",
+              "options": [
+                {
+                  "value": "full",
+                  "label": "Full lock"
+                },
+                {
+                  "value": "read-only",
+                  "label": "Read only"
+                }
+              ]
+            },
+            {
+              "key": "message",
+              "label": "Message shown",
+              "kind": "multiline"
+            }
+          ],
+          "reason": true,
+          "confirm": "Locks take effect at once.",
+          "body": {
+            "action": "lock",
+            "scope": "{form.scope}",
+            "targetId": "{form.targetId}",
+            "mode": "{form.mode}",
+            "message": "{form.message}",
+            "reason": "{form.reason}",
+            "confirm": true
+          },
+          "success": "Locked"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Sign-ups",
+          "rows": [
+            {
+              "label": "Account creation trigger",
+              "value": "{data.locks.signupsCreationTrigger.status:title}",
+              "chip": true,
+              "tones": {
+                "Ok": "success",
+                "Unknown": "warning",
+                "*": "neutral"
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Standing locks",
+          "items": "data.locks.records",
+          "primary": "{item.scope:title} · {item.targetId|item.id}",
+          "secondary": "{item.reason}",
+          "tertiary": "{item.actorEmail} · {item.atMs:datetime}",
+          "icon": "lock|lock",
+          "badges": [
+            {
+              "text": "{item.mode:title}",
+              "tones": {
+                "Full": "error",
+                "Read only": "warning"
+              }
+            },
+            {
+              "text": "Until {item.untilMs:date}",
+              "when": "item.untilMs",
+              "tone": "info"
+            }
+          ],
+          "actions": [
+            {
+              "id": "unlock",
+              "label": "Lift the lock",
+              "icon": "lock.open|lock_open",
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "reason": true,
+              "body": {
+                "action": "unlock",
+                "scope": "{item.scope}",
+                "targetId": "{item.targetId}",
+                "reason": "{form.reason}"
+              },
+              "success": "Lifted"
+            },
+            {
+              "id": "resend",
+              "label": "Resend the owner notice",
+              "icon": "paperplane|send",
+              "when": "staff.super",
+              "url": "/api/admin/lockdown",
+              "body": {
+                "action": "resend-notice",
+                "targets": [
+                  {
+                    "scope": "{item.scope}",
+                    "targetId": "{item.targetId}"
+                  }
+                ]
+              },
+              "success": "Notice sent"
+            }
+          ],
+          "empty": "Nothing is locked."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.quarantine",
+      "title": "Media quarantine",
+      "icon": "photo.badge.exclamationmark|image_not_supported",
+      "scope": "staff",
+      "group": "staff",
+      "order": 8,
+      "requires": "staff.is",
+      "links": [
+        "/admin/media-quarantine"
+      ],
+      "load": {
+        "q": "/api/admin/media-quarantine"
+      },
+      "actions": [
+        {
+          "id": "quarantine",
+          "label": "Quarantine media",
+          "icon": "photo.badge.exclamationmark|image_not_supported",
+          "when": "staff.super",
+          "url": "/api/admin/media-quarantine",
+          "prompt": [
+            {
+              "key": "mediaId",
+              "label": "Media ID or URL",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "hostId",
+              "label": "Site ID",
+              "kind": "text"
+            },
+            {
+              "key": "message",
+              "label": "Message to the owner",
+              "kind": "multiline"
+            },
+            {
+              "key": "revoke",
+              "label": "Revoke its raw URL",
+              "kind": "toggle"
+            }
+          ],
+          "reason": true,
+          "body": {
+            "action": "quarantine",
+            "mediaId": "{form.mediaId}",
+            "hostId": "{form.hostId}",
+            "message": "{form.message}",
+            "revokeRawUrl": "{form.revoke}",
+            "reason": "{form.reason}"
+          },
+          "success": "Quarantined"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.q.records",
+          "primary": "{item.key|item.mediaId}",
+          "secondary": "{item.reason}",
+          "tertiary": "{item.hostId} · {item.atMs:datetime}",
+          "icon": "photo|photo_library",
+          "badges": [
+            {
+              "text": "{item.state:title}",
+              "tones": {
+                "Quarantined": "error",
+                "Released": "success",
+                "*": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "release",
+              "label": "Release",
+              "icon": "checkmark.circle|check_circle",
+              "when": "staff.super && item.state != released",
+              "url": "/api/admin/media-quarantine",
+              "reason": true,
+              "body": {
+                "action": "release",
+                "key": "{item.key}",
+                "mediaId": "{item.mediaId}",
+                "reason": "{form.reason}"
+              },
+              "success": "Released"
+            }
+          ],
+          "empty": "Nothing quarantined."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.coupons",
+      "title": "Coupons",
+      "icon": "tag|local_offer",
+      "scope": "staff",
+      "group": "staff",
+      "order": 9,
+      "requires": "staff.is",
+      "links": [
+        "/admin/coupons"
+      ],
+      "load": {
+        "coupons": "/api/admin/coupons"
+      },
+      "actions": [
+        {
+          "id": "create",
+          "label": "New coupon",
+          "icon": "plus|add",
+          "url": "/api/admin/coupons",
+          "prompt": [
+            {
+              "key": "name",
+              "label": "Name",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "code",
+              "label": "Promotion code",
+              "kind": "text",
+              "placeholder": "Optional, customers type it"
+            },
+            {
+              "key": "percentOff",
+              "label": "Percent off",
+              "kind": "number"
+            },
+            {
+              "key": "amountOffUsd",
+              "label": "Or US dollars off",
+              "kind": "number"
+            },
+            {
+              "key": "duration",
+              "label": "Applies",
+              "kind": "select",
+              "initial": "once",
+              "options": [
+                {
+                  "value": "once",
+                  "label": "Once"
+                },
+                {
+                  "value": "repeating",
+                  "label": "For some months"
+                },
+                {
+                  "value": "forever",
+                  "label": "Forever"
+                }
+              ]
+            },
+            {
+              "key": "durationInMonths",
+              "label": "Months",
+              "kind": "number",
+              "when": "form.duration == repeating"
+            },
+            {
+              "key": "maxRedemptions",
+              "label": "Most redemptions",
+              "kind": "number"
+            },
+            {
+              "key": "confirmHigh",
+              "label": "I confirm a discount under cost",
+              "kind": "toggle"
+            }
+          ],
+          "body": {
+            "action": "create",
+            "name": "{form.name}",
+            "code": "{form.code}",
+            "percentOff": "{form.percentOff}",
+            "amountOffUsd": "{form.amountOffUsd}",
+            "duration": "{form.duration}",
+            "durationInMonths": "{form.durationInMonths}",
+            "maxRedemptions": "{form.maxRedemptions}",
+            "confirmHighDiscount": "{form.confirmHigh}"
+          },
+          "success": "Created {form.name}"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.coupons.coupons",
+          "primary": "{item.name|item.id}",
+          "secondary": "{item.duration:title} · {item.percentOff|item.amountOffUsd} off",
+          "tertiary": "Codes: {item.codes|item.code|'none'} · used {item.timesRedeemed|'0'}",
+          "icon": "tag|local_offer",
+          "badges": [
+            {
+              "text": "Active",
+              "when": "item.active || item.valid",
+              "tone": "success"
+            },
+            {
+              "text": "Inactive",
+              "when": "!item.active && !item.valid",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "deactivate",
+              "label": "Deactivate code",
+              "icon": "pause.circle|pause",
+              "when": "item.promotionCodeId && item.active",
+              "url": "/api/admin/coupons",
+              "body": {
+                "action": "deactivate",
+                "promotionCodeId": "{item.promotionCodeId}"
+              },
+              "success": "Deactivated"
+            },
+            {
+              "id": "activate",
+              "label": "Activate code",
+              "icon": "play.circle|check_circle",
+              "when": "item.promotionCodeId && !item.active",
+              "url": "/api/admin/coupons",
+              "body": {
+                "action": "activate",
+                "promotionCodeId": "{item.promotionCodeId}"
+              },
+              "success": "Activated"
+            }
+          ],
+          "empty": "No coupons."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.revenue",
+      "title": "Revenue",
+      "icon": "dollarsign.circle|savings",
+      "scope": "staff",
+      "group": "staff",
+      "order": 10,
+      "requires": "staff.is",
+      "links": [
+        "/admin/revenue"
+      ],
+      "load": {
+        "revenue": "/api/admin/revenue?period={params.period|now.month}"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.revenue",
+          "rows": [
+            {
+              "label": "Recurring revenue",
+              "value": "{item.mrrUsd|item.totals.mrrUsd:dollars}"
+            },
+            {
+              "label": "Collected this period",
+              "value": "{item.collectedUsd|item.totals.collectedUsd:dollars}"
+            },
+            {
+              "label": "Refunded",
+              "value": "{item.refundedUsd|item.totals.refundedUsd:dollars}"
+            },
+            {
+              "label": "Metered, not yet billed",
+              "value": "{item.unbilledMeteredUsd:dollars}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "By plan",
+          "items": "data.revenue.byPlan",
+          "primary": "{item.plan:title}",
+          "trailing": "{item.mrrUsd:dollars}",
+          "count": false,
+          "empty": "—"
+        },
+        {
+          "type": "list",
+          "title": "Subscriptions",
+          "items": "data.revenue.subscriptions",
+          "primary": "{item.orgName|item.orgId}",
+          "secondary": "{item.plan:title} · {item.interval}",
+          "trailing": "{item.amountUsd:dollars}",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            },
+            "when": "item.orgId"
+          },
+          "empty": "—"
+        }
+      ]
+    },
+    {
+      "id": "core.staff.margin",
+      "title": "Margin and utilization",
+      "icon": "chart.line.uptrend.xyaxis|trending_up",
+      "scope": "staff",
+      "group": "staff",
+      "order": 11,
+      "requires": "staff.is",
+      "links": [
+        "/admin/margin-utilization"
+      ],
+      "load": {
+        "rows": {
+          "url": "/api/admin/margin-utilization?pageSize=50",
+          "cursor": "nextCursor",
+          "items": "rows"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "rows",
+          "items": "data.rows.rows",
+          "primary": "{item.name|item.orgId}",
+          "secondary": "{item.plan:title} · {item.bands.hosts.used} of {item.bands.hosts.included} sites",
+          "tertiary": "Storage {item.bands.storageGb.used:number} of {item.bands.storageGb.included:number} GB · page views {item.bands.pageViews.used:number}",
+          "icon": "chart.bar|bar_chart",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            }
+          },
+          "empty": "No rows."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.emails",
+      "title": "System emails",
+      "icon": "envelope|mail",
+      "scope": "staff",
+      "group": "staff",
+      "order": 12,
+      "requires": "staff.is",
+      "links": [
+        "/admin/emails"
+      ],
+      "load": {
+        "templates": {
+          "query": {
+            "collection": "systemEmailTemplates",
+            "limit": 200
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "A template with no custom version sends the built-in copy. Editing opens the Besigner."
+        },
+        {
+          "type": "list",
+          "items": "data.templates.items",
+          "primary": "{item.name|item.$id:title}",
+          "secondary": "{item.$id}",
+          "tertiary": "Custom version {item.versionId|'none'}",
+          "icon": "envelope|mail",
+          "badges": [
+            {
+              "text": "Custom",
+              "when": "item.versionId",
+              "tone": "info"
+            }
+          ],
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit in the Besigner",
+              "icon": "paintbrush|edit",
+              "when": "item.versionId",
+              "besigner": "/admin/emails/{item.$id}/versions/{item.versionId}/besigner"
+            },
+            {
+              "id": "reset",
+              "label": "Back to the default copy",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "item.versionId",
+              "confirm": "Send the built-in copy again?",
+              "write": {
+                "doc": "systemEmailTemplates/{item.$id}",
+                "fields": {
+                  "versionId": null
+                }
+              },
+              "success": "Reset"
+            }
+          ],
+          "empty": "No template has a custom version."
+        }
+      ],
+      "subtitle": "The platform's own email templates"
+    },
+    {
+      "id": "core.staff.suppressions",
+      "title": "Contact suppressions",
+      "icon": "nosign|block",
+      "scope": "staff",
+      "group": "staff",
+      "order": 13,
+      "requires": "staff.is",
+      "links": [
+        "/admin/contact-suppressions"
+      ],
+      "load": {
+        "rows": {
+          "url": "/api/admin/contact-suppressions?pageSize=50",
+          "cursor": "nextCursor",
+          "items": "rows"
+        }
+      },
+      "actions": [
+        {
+          "id": "add",
+          "label": "Suppress a number",
+          "icon": "nosign|block",
+          "url": "/api/admin/contact-suppressions",
+          "prompt": [
+            {
+              "key": "phoneNumber",
+              "label": "Phone number",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "note",
+              "label": "Note",
+              "kind": "multiline"
+            }
+          ],
+          "body": {
+            "phoneNumber": "{form.phoneNumber}",
+            "note": "{form.note}",
+            "source": "staff"
+          },
+          "success": "Suppressed"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "load": "rows",
+          "items": "data.rows.rows",
+          "primary": "{item.phoneNumber|item.$id}",
+          "secondary": "{item.source:title} · {item.note}",
+          "tertiary": "{item.createdAt:datetime}",
+          "icon": "phone.down|block",
+          "actions": [
+            {
+              "id": "release",
+              "label": "Release",
+              "icon": "checkmark.circle|check_circle",
+              "url": "/api/admin/contact-suppressions",
+              "prompt": [
+                {
+                  "key": "note",
+                  "label": "Why",
+                  "kind": "multiline",
+                  "required": true
+                }
+              ],
+              "body": {
+                "action": "release",
+                "phoneNumber": "{item.phoneNumber|item.$id}",
+                "note": "{form.note}"
+              },
+              "success": "Released"
+            }
+          ],
+          "empty": "None."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.flags",
+      "title": "Feature flags",
+      "icon": "flag|flag",
+      "scope": "staff",
+      "group": "staff",
+      "order": 14,
+      "requires": "staff.is",
+      "links": [
+        "/admin/flags"
+      ],
+      "load": {
+        "flags": "/api/admin/flags"
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.flags.flags",
+          "primary": "{item.key}",
+          "secondary": "{item.note}",
+          "tertiary": "Rollout {item.rolloutPercent|'0'}% · plans {item.plans|'all'}",
+          "icon": "flag|flag",
+          "badges": [
+            {
+              "text": "On",
+              "when": "item.enabled",
+              "tone": "success"
+            },
+            {
+              "text": "Off",
+              "when": "!item.enabled",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Change",
+              "icon": "slider.horizontal.3|tune",
+              "when": "staff.super",
+              "method": "PATCH",
+              "url": "/api/admin/flags",
+              "prompt": [
+                {
+                  "key": "enabled",
+                  "label": "On",
+                  "kind": "toggle",
+                  "initial": "{item.enabled}"
+                },
+                {
+                  "key": "rollout",
+                  "label": "Rollout percent",
+                  "kind": "number",
+                  "initial": "{item.rolloutPercent}"
+                },
+                {
+                  "key": "note",
+                  "label": "Note",
+                  "kind": "text",
+                  "initial": "{item.note}"
+                }
+              ],
+              "body": {
+                "key": "{item.key}",
+                "enabled": "{form.enabled}",
+                "rolloutPercent": "{form.rollout}",
+                "note": "{form.note}",
+                "etag": "{data.flags.etag}"
+              },
+              "success": "Saved {item.key}"
+            }
+          ],
+          "empty": "No flags."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.health",
+      "title": "Health",
+      "icon": "waveform.path.ecg|monitor_heart",
+      "scope": "staff",
+      "group": "staff",
+      "order": 15,
+      "requires": "staff.is",
+      "links": [
+        "/admin/health",
+        "/admin/maintenance"
+      ],
+      "load": {
+        "crons": {
+          "url": "/api/health/crons",
+          "optional": true
+        },
+        "csp": {
+          "url": "/api/admin/csp-reports?days=7",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Scheduled jobs",
+          "items": "data.crons.crons",
+          "primary": "{item.name|item.id}",
+          "secondary": "Last run {item.lastRunAt|item.lastRunMs|'never':datetime}",
+          "icon": "clock|schedule",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Ok": "success",
+                "Healthy": "success",
+                "Late": "warning",
+                "Failing": "error",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "—"
+        },
+        {
+          "type": "list",
+          "title": "Content-security reports, last 7 days",
+          "items": "data.csp.reports",
+          "primary": "{item.blockedUri|item.directive}",
+          "secondary": "{item.documentUri} · {item.count|'1'}×",
+          "count": false,
+          "empty": "None."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.alerts",
+      "title": "Operator alerts",
+      "icon": "bell.badge|notifications",
+      "scope": "staff",
+      "group": "staff",
+      "order": 16,
+      "requires": "staff.is",
+      "links": [
+        "/admin/operator-alerts"
+      ],
+      "load": {
+        "alerts": "/api/admin/operator-alerts"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.alerts",
+          "rows": [
+            {
+              "label": "Digest hour (UTC)",
+              "value": "{item.digestHourUtc}"
+            },
+            {
+              "label": "Webhook",
+              "value": "{item.webhookConfigured:yesno}"
+            },
+            {
+              "label": "Recipients",
+              "value": "{item.recipients}"
+            },
+            {
+              "label": "Updated by",
+              "value": "{item.updatedByEmail} · {item.updatedAtMs:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Alert types",
+          "items": "data.alerts.alerts",
+          "primary": "{item.label|item.type}",
+          "secondary": "{item.description}",
+          "badges": [
+            {
+              "text": "On",
+              "when": "item.effective.enabled",
+              "tone": "success"
+            },
+            {
+              "text": "{item.effective.delivery:title}",
+              "when": "item.effective.enabled"
+            }
+          ],
+          "count": false
+        },
+        {
+          "type": "actions",
+          "when": "staff.super",
+          "items": [
+            {
+              "id": "digest",
+              "label": "Change the digest hour",
+              "icon": "clock|schedule",
+              "url": "/api/admin/operator-alerts",
+              "prompt": [
+                {
+                  "key": "hour",
+                  "label": "Hour (0–23, UTC)",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{data.alerts.digestHourUtc}"
+                }
+              ],
+              "body": {
+                "digestHourUtc": "{form.hour}"
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "test",
+              "label": "Send a test alert",
+              "icon": "paperplane|send",
+              "url": "/api/admin/operator-alerts",
+              "body": {
+                "action": "test"
+              },
+              "success": "Sent"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.audit",
+      "title": "Audit archive · {params.month|now.month}",
+      "icon": "archivebox|inventory_2",
+      "scope": "staff",
+      "group": "staff",
+      "order": 17,
+      "requires": "staff.is",
+      "links": [
+        "/admin/audit"
+      ],
+      "load": {
+        "archive": "/api/admin/audit-archive/browse?month={params.month|now.month}"
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.archive.files",
+          "primary": "{item.name|item}",
+          "secondary": "{item.size:bytes}",
+          "icon": "doc.zipper|description",
+          "open": {
+            "screen": "core.staff.auditFile",
+            "params": {
+              "file": "{item.name|item}",
+              "month": "{params.month|now.month}"
+            }
+          },
+          "empty": "Nothing archived for this month."
+        }
+      ],
+      "label": "Audit archive",
+      "actions": [
+        {
+          "id": "month",
+          "label": "Another month",
+          "icon": "calendar|event",
+          "prompt": [
+            {
+              "key": "month",
+              "label": "Month (YYYY-MM)",
+              "kind": "text",
+              "required": true,
+              "initial": "{params.month|now.month}"
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.audit",
+            "params": {
+              "month": "{form.month}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.staff.auditFile",
+      "title": "{params.file}",
+      "label": "Archive",
+      "icon": "archivebox|inventory_2",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "file": "/api/admin/audit-archive/browse?month={params.month}&file={params.file}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.file.truncated",
+          "text": "Showing the first rows of {data.file.total}."
+        },
+        {
+          "type": "list",
+          "items": "data.file.rows",
+          "primary": "{item.action:title}",
+          "secondary": "{item.actorEmail|item.actorUid} · {item.scopePath|item.path|item.target.type}",
+          "tertiary": "{item.at|item.createdAt:datetime}",
+          "count": false,
+          "empty": "Empty."
+        }
+      ]
+    },
+    {
+      "id": "core.staff.tax",
+      "title": "Tax return",
+      "icon": "doc.text.magnifyingglass|request_quote",
+      "scope": "staff",
+      "group": "staff",
+      "order": 18,
+      "requires": "staff.is",
+      "links": [
+        "/admin/tax-return"
+      ],
+      "load": {
+        "ret": {
+          "url": "/api/admin/tax-return?period={params.period|now.quarter}",
+          "optional": true
+        },
+        "filing": {
+          "url": "/api/admin/tax-filing",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Filing setup",
+          "object": "data.filing.config",
+          "rows": [
+            {
+              "label": "Jurisdiction",
+              "value": "{item.jurisdictionLabel|item.jurisdiction}"
+            },
+            {
+              "label": "First taxable period",
+              "value": "{item.firstTaxablePeriod}"
+            },
+            {
+              "label": "Registration",
+              "value": "{item.registration.configured:yesno}"
+            },
+            {
+              "label": "Filing",
+              "value": "{item.filing.configured:yesno}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Periods",
+          "items": "data.ret.periods",
+          "primary": "{item.period|item.label}",
+          "secondary": "Taxable {item.taxableUsd:dollars} · tax {item.taxUsd:dollars}",
+          "count": false,
+          "empty": "—"
+        },
+        {
+          "type": "actions",
+          "when": "staff.super",
+          "items": [
+            {
+              "id": "setup",
+              "label": "Set up the filing",
+              "icon": "square.and.pencil|edit",
+              "method": "PUT",
+              "url": "/api/admin/tax-filing",
+              "prompt": [
+                {
+                  "key": "jurisdiction",
+                  "label": "Jurisdiction",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.filing.config.jurisdiction}"
+                },
+                {
+                  "key": "first",
+                  "label": "First taxable period (YYYY-MM)",
+                  "kind": "text",
+                  "initial": "{data.filing.config.firstTaxablePeriod}"
+                },
+                {
+                  "key": "note",
+                  "label": "Note",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "jurisdiction": "{form.jurisdiction}",
+                "firstTaxablePeriod": "{form.first}",
+                "note": "{form.note}"
+              },
+              "success": "Saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.settings",
+      "title": "Platform settings",
+      "icon": "gearshape|settings",
+      "scope": "staff",
+      "group": "staff",
+      "order": 19,
+      "requires": "staff.is",
+      "links": [
+        "/admin/settings"
+      ],
+      "load": {
+        "cap": "/api/admin/free-workspace-cap"
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "title": "Free workspaces per person",
+          "id": "cap",
+          "object": "data.cap.config",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Limit free workspaces",
+              "kind": "toggle",
+              "initial": "{item.enabled}"
+            },
+            {
+              "key": "limit",
+              "label": "Limit",
+              "kind": "number",
+              "initial": "{item.limit}"
+            },
+            {
+              "key": "note",
+              "label": "Note",
+              "kind": "text",
+              "initial": "{item.note}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "when": "staff.super",
+            "method": "PUT",
+            "url": "/api/admin/free-workspace-cap",
+            "body": {
+              "enabled": "{form.enabled}",
+              "limit": "{form.limit}",
+              "note": "{form.note}"
+            },
+            "success": "Saved"
+          }
+        }
+      ]
+    }
+  ]
+}

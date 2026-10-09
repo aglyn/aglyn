@@ -29,10 +29,12 @@ import type { AmazonRegion } from '../providers/amazon-mcf'
 /**
  * What this deployment can connect (AGL-3634), read from env on the console.
  *
- * Both networks need an app registration Aglyn applies for: a ShipBob
+ * ShipBob and Amazon need an app registration Aglyn applies for: a ShipBob
  * developer app, and an Amazon selling-partner app (with its Login with
- * Amazon client). A network is offered only when its app's variables AND the
- * token key are set; with neither network configured the plugin draws
+ * Amazon client). ShipMonk needs none — each merchant pastes their own API
+ * key (AGL-3697) — so it is offered only when the deployment opts in with
+ * `SHIPMONK_ENABLED=true`. A network is offered only when its variables AND
+ * the token key are set; with no network configured the plugin draws
  * nothing, page or docs, and every route answers as though it did not exist.
  *
  * Read in the bracket form, so a bundler never inlines a value.
@@ -54,10 +56,16 @@ export interface AmazonApp {
   draft: boolean
 }
 
+/** ShipMonk: nothing to register; only whether it is offered and where it points. */
+export interface ShipmonkSetting {
+  sandbox: boolean
+}
+
 export interface FulfillmentNetworksConfig {
   keyring: SecretBoxKeyring | null
   shipbob: ShipbobApp | null
   amazon: AmazonApp | null
+  shipmonk: ShipmonkSetting | null
 }
 
 const read = (env: Record<string, string | undefined>, name: string) => String(env[name] ?? '').trim()
@@ -101,21 +109,33 @@ export function readFulfillmentNetworksConfig(
             draft: read(env, FULFILLMENT_NETWORKS_ENV.amazonDraftApp).toLowerCase() === 'true',
           }
         : null,
+    shipmonk:
+      read(env, FULFILLMENT_NETWORKS_ENV.shipmonkEnabled).toLowerCase() === 'true'
+        ? { sandbox: read(env, FULFILLMENT_NETWORKS_ENV.shipmonkEnvironment).toLowerCase() === 'sandbox' }
+        : null,
   }
+}
+
+/** The deployment's setting for one network, or `null` when it is not configured. */
+function networkSetting(config: FulfillmentNetworksConfig, provider: NetworkProviderId): { sandbox: boolean } | null {
+  if (provider === 'shipbob') return config.shipbob
+  if (provider === 'amazon-mcf') return config.amazon
+  return config.shipmonk
 }
 
 /** The networks a merchant may connect here. Empty means the plugin shows nothing. */
 export function offeredNetworks(config: FulfillmentNetworksConfig): NetworkProviderId[] {
   if (!config.keyring) return []
-  return NETWORK_PROVIDER_IDS.filter((id) => (id === 'shipbob' ? config.shipbob : config.amazon) !== null)
+  return NETWORK_PROVIDER_IDS.filter((id) => networkSetting(config, id) !== null)
 }
 
 /** Whether the network's sandbox is where this deployment's connections go. */
 export function networkSandbox(config: FulfillmentNetworksConfig, provider: NetworkProviderId): boolean {
-  return provider === 'shipbob' ? config.shipbob?.sandbox === true : config.amazon?.sandbox === true
+  return networkSetting(config, provider)?.sandbox === true
 }
 
-export type SealPurpose = 'access' | 'refresh'
+/** `webhook` — ShipMonk's webhook signing secret, kept to verify each delivery. */
+export type SealPurpose = 'access' | 'refresh' | 'webhook'
 
 /** The context a grant is sealed under: bound to its connection and its purpose. */
 export const grantSealContext = (connectionId: string, purpose: SealPurpose) =>

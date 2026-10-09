@@ -31,13 +31,16 @@ enum SiteSymbols {
 
 /// The picked site's areas, as its overview lists them, in the console's order.
 public enum SiteAreas: CaseIterable, Sendable {
-  case pages, media, content, setup
+  case pages, media, content, components, layouts, templates, setup
 
   public var screen: String {
     switch self {
     case .pages: sitePagesScreen
     case .media: siteMediaScreen
     case .content: siteContentScreen
+    case .components: ArtifactKind.component.screen
+    case .layouts: ArtifactKind.layout.screen
+    case .templates: ArtifactKind.template.screen
     case .setup: siteSetupScreen
     }
   }
@@ -47,6 +50,9 @@ public enum SiteAreas: CaseIterable, Sendable {
     case .pages: "Pages"
     case .media: "Media"
     case .content: "Content"
+    case .components: ArtifactKind.component.title
+    case .layouts: ArtifactKind.layout.title
+    case .templates: ArtifactKind.template.title
     case .setup: "Setup"
     }
   }
@@ -56,6 +62,9 @@ public enum SiteAreas: CaseIterable, Sendable {
     case .pages: "Publish, organize and open pages in the Besigner"
     case .media: "Photos, videos and documents for your pages"
     case .content: "Blog posts and articles, by collection"
+    case .components: ArtifactKind.component.supporting
+    case .layouts: ArtifactKind.layout.supporting
+    case .templates: ArtifactKind.template.supporting
     case .setup: "Details, SEO, tracking, theme and emails"
     }
   }
@@ -65,6 +74,9 @@ public enum SiteAreas: CaseIterable, Sendable {
     case .pages: SiteSymbols.page
     case .media: SiteSymbols.media
     case .content: SiteSymbols.content
+    case .components: ArtifactKind.component.systemImage
+    case .layouts: ArtifactKind.layout.systemImage
+    case .templates: ArtifactKind.template.systemImage
     case .setup: SiteSymbols.setup
     }
   }
@@ -72,12 +84,13 @@ public enum SiteAreas: CaseIterable, Sendable {
 
 /// Every id this registration adds, by kind, the way a plugin's `mobile.contributes` declares them.
 public let sitePlatformContributes: [String: [String]] = [
-  "screens": [siteSitesScreen, siteSiteScreen, sitePagesScreen, siteMediaScreen, siteSetupScreen, siteThemeScreen, siteContentScreen],
+  "screens": [siteSitesScreen, siteSiteScreen, sitePagesScreen, siteMediaScreen, siteSetupScreen, siteThemeScreen, siteContentScreen]
+    + ArtifactKind.allCases.map(\.screen),
   "quickActions": ["site.sites-open", "site.pages-open", "site.media-open"],
   "deepLinks": ["site.sites-page", "site.pages-page", "site.page-view", "site.page-besigner-list", "site.media-page",
     "site.setup-page", "site.setup-section-page", "site.theme-page",
-    "site.content-page", "site.collection-page", "site.entry-page",
-  ],
+    "site.content-page", "site.collection-page", "site.entry-page", "site.layouts-list-page",
+  ] + ArtifactKind.allCases.flatMap { ["site.\($0.collection)-page", "site.\($0.singular)-page"] },
 ]
 
 /// The platform's own content screens (AGL-3668): Sites, Pages and the media
@@ -110,6 +123,16 @@ public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.screen(siteContentScreen, title: "Content", requiresSite: true, icon: SiteSymbols.content) { context, params in
     ContentScreen(context: context, initialCollection: params["collectionSlug"], initialEntry: params["entryId"])
   }
+  // Components, layouts and templates: the lists and each one's details page;
+  // their `/versions/…/besigner` and `/preview` pages stay the Besigner's.
+  for kind in ArtifactKind.allCases {
+    r.screen(kind.screen, title: kind.title, requiresSite: true, icon: kind.systemImage) { context, params in
+      ArtifactsScreen(context: context, kind: kind, initialID: params["id"])
+    }
+    r.deepLink("site.\(kind.collection)-page", path: "/\(kind.collection)", screen: kind.screen)
+    r.deepLink("site.\(kind.singular)-page", path: "/\(kind.collection)/:id", screen: kind.screen)
+  }
+  r.deepLink("site.layouts-list-page", path: "/layouts/list", screen: ArtifactKind.layout.screen)
   r.quickAction("site.media-open", title: "Media", icon: SiteSymbols.media, order: 20, screen: siteMediaScreen)
   r.quickAction(
     "site.pages-open", title: "Pages", icon: SiteSymbols.page, order: 10, screen: sitePagesScreen, requiresSite: true)

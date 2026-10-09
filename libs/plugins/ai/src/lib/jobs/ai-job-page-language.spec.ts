@@ -168,3 +168,49 @@ describe('a section planned with items shows them (AGL-3660)', () => {
     expect(result.violations).toEqual([])
   })
 })
+
+/*
+ * A live blog plan (2026-10-09) named a section "reader notes and kind words
+ * [to be added by owner]". Its label read as a gap and the gap pass took the
+ * whole section out; and a section whose only items were customer quotes has
+ * none any answer may give (AGL-3676).
+ */
+describe('a section the plan named with a note, or planned as customer words', () => {
+  const screen = {
+    title: 'Home',
+    slug: '/',
+    template: null,
+    sections: [
+      { name: 'Hero', uses: [], items: 0 },
+      { name: 'reader notes and kind words [to be added by owner]', uses: [], items: 3 },
+    ],
+  }
+  const sectionIds = ['sec-0', 'sec-1']
+  const page = (blocks: unknown[]) => ({
+    sections: [
+      { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Clay Notes')] },
+      { band: 'soft', align: 'start', cols: [], blocks },
+    ],
+  })
+  const run = () =>
+    aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds,
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'Clay Notes' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, scrollTargetIds: sectionIds, reusableComponents: false },
+      reusableComponents: false,
+    })
+  const item = (title: string) => ({ title, text: `${title}, in a line.`, to: '', icon: '' })
+
+  it('keeps the section, labelled without the note', () => {
+    const result = run()(page([block('heading', 'Write in'), { ...block('cards', ''), items: [item('Ask'), item('Suggest'), item('Share')] }]))
+    expect(result.violations).toEqual([])
+    const label = (result.value?.nodes as unknown as Record<string, { props?: Record<string, unknown> }>)['sec-1']?.props?.['ariaLabel']
+    expect(label).toBe('reader notes and kind words')
+  })
+
+  it('asks no items of a section whose only items were customer quotes', () => {
+    const result = run()(page([block('heading', 'Kind words'), block('lede', 'Readers write in.'), { ...block('quotes', ''), items: [item('A reader'), item('Another')] }]))
+    expect(result.violations.map((violation) => violation.code)).not.toContain('layout-section-no-items')
+  })
+})

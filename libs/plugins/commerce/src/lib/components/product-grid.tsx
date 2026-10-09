@@ -82,6 +82,13 @@ export interface ProductGridProps {
   maxItems?: number
   /** Empty-state copy when nothing matches. */
   emptyText?: string
+  /**
+   * How each product is drawn (AGL-3676): `outlined`, the default, a card
+   * with a short photo strip; `photo`, the photo first and tall, with the
+   * name and price under it and no card around it — the way a storefront
+   * leads with what it sells.
+   */
+  cardStyle?: 'outlined' | 'photo'
 }
 
 interface CatalogItem {
@@ -94,7 +101,12 @@ interface CatalogItem {
   imageUrl?: string
   soldOut: boolean
   tags?: string[]
+  /** Listed before it has a price (AGL-3676): no price to print yet. */
+  priceComingSoon?: boolean
 }
+
+/** What a card says where a product listed before it has a price would show one (AGL-3676). */
+const PRICE_COMING_SOON_LABEL = 'Price coming soon'
 
 interface CatalogCategory {
   id: string
@@ -170,6 +182,7 @@ function collectionSlugFromLocation(): string {
 }
 
 function priceLabel(item: CatalogItem): string {
+  if (item.priceComingSoon) return PRICE_COMING_SOON_LABEL
   return item.priceUsd === item.maxPriceUsd
     ? `$${item.priceUsd}`
     : `From $${item.priceUsd}`
@@ -210,8 +223,10 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       showTypeFilter,
       showPriceFilter,
       pageSize,
+      cardStyle,
       ...rest
     } = props
+    const photoCards = cardStyle === 'photo'
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -396,7 +411,9 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       display: 'grid',
       gap: 2,
       gridTemplateColumns: {
-        xs: 'repeat(1, 1fr)',
+        // Photo cards pair up on a phone, as a shop's catalog does; an
+        // outlined card with its photo strip takes the row.
+        xs: photoCards ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)',
         sm: 'repeat(2, 1fr)',
         md: `repeat(${desktopColumns}, 1fr)`,
       },
@@ -675,17 +692,27 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
           // than an `<img>` with no `src`.
           const imageUrl = Aglyn.siteRelativeMediaSrc(item.imageUrl, { hostId })
           return (
-          <Card key={item.id} variant="outlined">
+          <Card
+            key={item.id}
+            variant={photoCards ? 'elevation' : 'outlined'}
+            elevation={0}
+            sx={photoCards ? { bgcolor: 'transparent', overflow: 'visible' } : undefined}
+          >
             <CardActionArea
               href={hostId ? `/products/${item.slug}` : undefined}
               disabled={!hostId}
+              sx={photoCards ? { borderRadius: 2 } : undefined}
             >
               {imageUrl ? (
                 <CardMedia
                   component="img"
                   image={imageUrl}
                   alt={item.name}
-                  sx={{ height: 160, objectFit: 'cover' }}
+                  sx={
+                    photoCards
+                      ? { aspectRatio: '4 / 5', objectFit: 'cover', borderRadius: 2 }
+                      : { height: 160, objectFit: 'cover' }
+                  }
                   // Deferred (AGL-2486), and this is the worst offender of
                   // the set: a grid renders one image PER PRODUCT, all of
                   // them previously unhinted, so a storefront section below
@@ -694,10 +721,16 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                 />
               ) : (
-                <Box sx={{ height: 160, bgcolor: 'action.hover' }} />
+                <Box
+                  sx={
+                    photoCards
+                      ? { aspectRatio: '4 / 5', bgcolor: 'action.hover', borderRadius: 2 }
+                      : { height: 160, bgcolor: 'action.hover' }
+                  }
+                />
               )}
-              <CardContent>
-                <Typography variant="subtitle2" noWrap>
+              <CardContent sx={photoCards ? { px: 0.5, pt: 1.5, pb: 1 } : undefined}>
+                <Typography variant={photoCards ? 'subtitle1' : 'subtitle2'} noWrap>
                   {item.name}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -958,6 +991,16 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
         '(capped by Max items).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
+    },
+    {
+      name: 'cardStyle',
+      label: 'Card style',
+      description: 'Outlined cards, or tall photos with the name and price under them.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { label: 'Outlined', value: 'outlined' },
+        { label: 'Photo', value: 'photo' },
+      ],
     },
   ],
 }
