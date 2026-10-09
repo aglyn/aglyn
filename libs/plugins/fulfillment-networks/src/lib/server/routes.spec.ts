@@ -18,9 +18,10 @@
  * limitations under the License.
  */
 
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
 import { FULFILLMENT_NETWORKS_ENV } from '../constants'
 import { networkConnectionId, networkOrderId } from '../model/networks'
+import { ProviderError } from '../providers/http'
 import type { FulfillmentNetworkProvider } from '../providers/provider'
 import { createMemoryNetworkStore } from '../testing/memory-store'
 import { mockHttp } from '../testing/mock-http'
@@ -59,14 +60,21 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
     },
   ])
   const webhookTargets: Array<{ prefix: string; url: string | null }> = []
-  const provider = (id: 'shipbob' | 'amazon-mcf'): FulfillmentNetworkProvider =>
+  const accountCalls: unknown[] = []
+  const provider = (id: 'shipbob' | 'amazon-mcf' | 'shipmonk'): FulfillmentNetworkProvider =>
     ({
       id,
-      account: jest.fn(async () =>
-        id === 'shipbob'
+      account: jest.fn(async (credential: { accessToken: string; storeId?: string | null }) => {
+        accountCalls.push(credential)
+        if (id === 'shipmonk') {
+          if (credential.accessToken === 'sm-refused') throw new ProviderError('auth', 'ShipMonk refused the connection: Invalid API key')
+          if (credential.accessToken === 'sm-down-key') throw new ProviderError('transient', 'ShipMonk could not be reached')
+          return { accountName: `Store ${credential.storeId}` }
+        }
+        return id === 'shipbob'
           ? { accountName: 'Aglyn channel', channelId: 'ch-5' }
-          : { accountName: 'Candles', marketplaces: [{ id: 'ATVPDKIKX0DER', name: 'Amazon.com', countryCode: 'US' }] },
-      ),
+          : { accountName: 'Candles', marketplaces: [{ id: 'ATVPDKIKX0DER', name: 'Amazon.com', countryCode: 'US' }] }
+      }),
       ...(id === 'shipbob'
         ? {
             syncWebhooks: jest.fn(async (_credential: unknown, target: { prefix: string; url: string | null }) => {
@@ -80,7 +88,13 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
     runDue: jest.fn(),
     runInventory: jest.fn(async () => 'counted'),
     applyShipbobEvent: jest.fn(async () => 'applied'),
-  } as unknown as Engine & { runRouting: jest.Mock; runInventory: jest.Mock; applyShipbobEvent: jest.Mock }
+    applyOrderWebhook: jest.fn(async () => 'applied'),
+  } as unknown as Engine & {
+    runRouting: jest.Mock
+    runInventory: jest.Mock
+    applyShipbobEvent: jest.Mock
+    applyOrderWebhook: jest.Mock
+  }
   let gateRole: NetworkRole = options.role ?? 'admin'
   const activity: unknown[] = []
   const routes = createNetworkRoutes({
@@ -107,6 +121,8 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
     engine,
     webhookTargets,
     activity,
+    accountCalls,
+    env,
     setRole: (role: NetworkRole) => {
       gateRole = role
     },
@@ -355,5 +371,143 @@ describe('ShipBob’s webhook (AGL-3634)', () => {
     const answer = await hook({ connection: id, token, topic: 'shipment_delivered' }, { id: 77, order_id: 9001 })
     expect(answer.status).toBe(200)
     expect(h.engine.applyShipbobEvent).toHaveBeenCalledWith(id, 'shipment_delivered', { orderId: '9001', shipmentId: '77' })
+  })
+})
+
+const SHIPMONK_ENV = { ...ENV, [FULFILLMENT_NETWORKS_ENV.shipmonkEnabled]: 'true' }
+
+const connectShipmonk = (h: ReturnType<typeof harness>, body: Record<string, unknown> = {}) =>
+  h.routes.connectKey(post('fulfillment-networks/connect-key', { provider: 'shipmonk', apiKey: 'sm-live-key-1234', storeId: '11364', ...body }))
+
+const shipmonkHook = (h: ReturnType<typeof harness>, connection: string, raw: string, signature: string | null) =>
+  h.routes.webhookShipmonk(
+    new Request(`${CONSOLE}/api/fulfillment-networks/webhooks/shipmonk?${new URLSearchParams({ connection })}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(signature ? { 'X-Sm-Signature': signature } : {}) },
+      body: raw,
+    }),
+  )
+
+describe('ShipMonk: connecting with the merchant’s own API key (AGL-3697)', () => {
+  it('is offered only where the deployment opts in, and never by sign-in', async () => {
+    const off = harness()
+    expect((await connectShipmonk(off)).status).toBe(404)
+    const h = harness({ env: SHIPMONK_ENV })
+    const answer = await (await h.routes.list(get('fulfillment-networks/connections'))).json()
+    expect(answer.offered).toContainEqual({ id: 'shipmonk', sandbox: false })
+    expect((await h.routes.connect(post('fulfillment-networks/connect', { provider: 'shipmonk' }))).status).toBe(400)
+    expect((await h.routes.connectKey(post('fulfillment-networks/connect-key', { provider: 'shipbob', apiKey: 'x'.repeat(20) }))).status).toBe(400)
+    const sandbox = harness({ env: { ...SHIPMONK_ENV, [FULFILLMENT_NETWORKS_ENV.shipmonkEnvironment]: 'sandbox' } })
+    const offered = (await (await sandbox.routes.list(get('fulfillment-networks/connections'))).json()).offered
+    expect(offered).toContainEqual({ id: 'shipmonk', sandbox: true })
+  })
+
+  it('only an admin connects, with a key and a store id that read right', async () => {
+    const h = harness({ env: SHIPMONK_ENV, role: 'editor' })
+    expect((await connectShipmonk(h)).status).toBe(403)
+    h.setRole('admin')
+    expect((await connectShipmonk(h, { apiKey: 'short' })).status).toBe(400)
+    const badStore = await connectShipmonk(h, { storeId: 'abc' })
+    expect(badStore.status).toBe(400)
+    expect((await badStore.json()).error).toMatch(/store id/)
+    expect(h.accountCalls).toHaveLength(0)
+  })
+
+  it('tries the key first, seals it, mints a webhook secret shown once, and answers no credential', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    const response = await connectShipmonk(h)
+    expect(response.status).toBe(200)
+    const answer = await response.json()
+    const id = networkConnectionId(HOST, 'shipmonk')
+    expect(h.accountCalls).toEqual([{ accessToken: 'sm-live-key-1234', storeId: '11364' }])
+    expect(answer.connection).toMatchObject({ provider: 'shipmonk', status: 'active', storeId: '11364', accountName: 'Store 11364', webhookSecretSet: true })
+    expect(answer.webhook.url).toBe(`${CONSOLE}/api/fulfillment-networks/webhooks/shipmonk?connection=${id}`)
+    expect(answer.webhook.secret).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(JSON.stringify(answer)).not.toContain('sm-live-key-1234')
+    const stored = h.store.connections.get(id)
+    expect(JSON.stringify(stored)).not.toContain('sm-live-key-1234')
+    expect(JSON.stringify(stored)).not.toContain(answer.webhook.secret)
+    const keyring = readFulfillmentNetworksConfig(h.env).keyring as NonNullable<ReturnType<typeof readFulfillmentNetworksConfig>['keyring']>
+    expect(openGrant(stored?.sealedAccessToken as string, id, 'access', keyring).value).toBe('sm-live-key-1234')
+    expect(openGrant(stored?.sealedWebhookSecret as string, id, 'webhook', keyring).value).toBe(answer.webhook.secret)
+    expect(stored).toMatchObject({ sealedRefreshToken: null, accessTokenExpiresAtMs: null, inventoryDueAtMs: 1_000_000 })
+    expect(h.activity).toEqual([expect.objectContaining({ action: 'connected', provider: 'shipmonk' })])
+  })
+
+  it('refuses a key ShipMonk refuses, keeping nothing, and says when ShipMonk is unreachable', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    const refused = await connectShipmonk(h, { apiKey: 'sm-refused' })
+    expect(refused.status).toBe(400)
+    expect((await refused.json()).error).toBe('ShipMonk refused that API key. Check it and the store id.')
+    expect((await connectShipmonk(h, { apiKey: 'sm-down-key' })).status).toBe(502)
+    expect(h.store.connections.get(networkConnectionId(HOST, 'shipmonk'))).toBeUndefined()
+  })
+
+  it('connects again with a new key, keeping the webhook secret and the settings', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    const first = await (await connectShipmonk(h)).json()
+    const id = networkConnectionId(HOST, 'shipmonk')
+    await h.store.patchConnection(id, { status: 'reconnect', routing: 'manual', stock: { MUG: 3 } })
+    const again = await (await connectShipmonk(h, { apiKey: 'sm-new-key-5678', storeId: '22' })).json()
+    expect(again.webhook).toBeNull()
+    expect(again.connection).toMatchObject({ status: 'active', routing: 'manual', storeId: '22' })
+    const stored = h.store.connections.get(id)
+    expect(stored?.stock).toEqual({})
+    const keyring = readFulfillmentNetworksConfig(h.env).keyring as NonNullable<ReturnType<typeof readFulfillmentNetworksConfig>['keyring']>
+    expect(openGrant(stored?.sealedWebhookSecret as string, id, 'webhook', keyring).value).toBe(first.webhook.secret)
+    expect(openGrant(stored?.sealedAccessToken as string, id, 'access', keyring).value).toBe('sm-new-key-5678')
+  })
+
+  it('mints a new webhook secret for an admin only, ending the old one', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    const first = await (await connectShipmonk(h)).json()
+    h.setRole('editor')
+    expect((await h.routes.webhookSecret(post('fulfillment-networks/webhook-secret', { provider: 'shipmonk' }))).status).toBe(403)
+    h.setRole('admin')
+    expect((await h.routes.webhookSecret(post('fulfillment-networks/webhook-secret', { provider: 'shipbob' }))).status).toBe(400)
+    const rotated = await (await h.routes.webhookSecret(post('fulfillment-networks/webhook-secret', { provider: 'shipmonk' }))).json()
+    expect(rotated.webhook.secret).not.toBe(first.webhook.secret)
+    const id = networkConnectionId(HOST, 'shipmonk')
+    const raw = JSON.stringify({ order_key: 'agabc' })
+    const signed = (secret: string) => createHmac('sha512', secret).update(raw).digest('hex')
+    expect((await shipmonkHook(h, id, raw, signed(first.webhook.secret))).status).toBe(401)
+    expect((await shipmonkHook(h, id, raw, signed(rotated.webhook.secret))).status).toBe(200)
+  })
+
+  it('disconnects, deleting the sealed key and secret', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    await connectShipmonk(h)
+    const response = await h.routes.connection(post('fulfillment-networks/connection', { provider: 'shipmonk' }, 'DELETE'))
+    expect(response.status).toBe(200)
+    expect(h.store.connections.get(networkConnectionId(HOST, 'shipmonk'))).toBeUndefined()
+  })
+})
+
+describe('ShipMonk’s webhook (AGL-3697)', () => {
+  it('acts only on a body signed with the connection’s own secret, read back by the order it names', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    const { webhook } = await (await connectShipmonk(h)).json()
+    const id = networkConnectionId(HOST, 'shipmonk')
+    const raw = JSON.stringify({ order_key: 'agabc-part', parent_order_key: 'agabc', processing_status: 'en_route' })
+    const signature = createHmac('sha512', webhook.secret).update(raw).digest('hex')
+    expect((await shipmonkHook(h, id, raw, null)).status).toBe(401)
+    expect((await shipmonkHook(h, id, raw, createHmac('sha512', 'guess').update(raw).digest('hex'))).status).toBe(401)
+    expect((await shipmonkHook(h, id, `${raw} `, signature)).status).toBe(401)
+    expect((await shipmonkHook(h, 'host-2_shipmonk', raw, signature)).status).toBe(401)
+    expect((await shipmonkHook(h, networkConnectionId(HOST, 'shipbob'), raw, signature)).status).toBe(401)
+    expect(h.engine.applyOrderWebhook).not.toHaveBeenCalled()
+    const answer = await shipmonkHook(h, id, raw, createHmac('sha512', webhook.secret).update(raw).digest('base64'))
+    expect(answer.status).toBe(200)
+    expect(h.engine.applyOrderWebhook).toHaveBeenCalledWith(id, 'agabc')
+    const plain = JSON.stringify({ order_key: 'agabc' })
+    await shipmonkHook(h, id, plain, createHmac('sha512', webhook.secret).update(plain).digest('hex'))
+    expect(h.engine.applyOrderWebhook).toHaveBeenLastCalledWith(id, 'agabc')
+  })
+
+  it('refuses a body too large to be ShipMonk’s before reading it', async () => {
+    const h = harness({ env: SHIPMONK_ENV })
+    await connectShipmonk(h)
+    const huge = 'x'.repeat(1_000_001)
+    expect((await shipmonkHook(h, networkConnectionId(HOST, 'shipmonk'), huge, 'sig')).status).toBe(413)
   })
 })

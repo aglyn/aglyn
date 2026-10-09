@@ -30,7 +30,7 @@ export function registerFulfillmentNetworksConsoleServerDeclarations(): void {
       id: FULFILLMENT_NETWORKS_JOB_ID,
       label: 'Fulfillment networks',
       drives:
-        'Sends paid orders to ShipBob or Amazon Multi-Channel Fulfillment, writes the shipments and tracking they report back onto the orders, cancels what a merchant canceled, and keeps stock counts in step. If it stops, orders wait unsent and customers get no shipping emails for them.',
+        'Sends paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, writes the shipments and tracking they report back onto the orders, cancels what a merchant canceled, and keeps stock counts in step. If it stops, orders wait unsent and customers get no shipping emails for them.',
       run: async (context) => {
         const [{ runNetworksTick }, { createEngine }, deps, { offeredNetworks, readFulfillmentNetworksConfig }] =
           await Promise.all([

@@ -60,6 +60,13 @@ export interface StoredConnection {
   /** Amazon: the marketplaces the seller takes part in, and the one that ships. */
   marketplaces: NetworkMarketplace[]
   marketplaceId: string | null
+  /** ShipMonk: the merchant's API store the key belongs to (AGL-3697). */
+  storeId?: string | null
+  /**
+   * ShipMonk: the webhook signing secret, sealed (`webhook` purpose). Its
+   * name carries `secret`, which the data export redacts by.
+   */
+  sealedWebhookSecret?: string | null
   routing: NetworkRoutingMode
   shippingMethod: string
   shippingSpeed: AmazonShippingSpeed
@@ -159,6 +166,8 @@ export function emptyConnection(input: {
     channelId: null,
     marketplaces: [],
     marketplaceId: null,
+    storeId: null,
+    sealedWebhookSecret: null,
     routing: 'automatic',
     shippingMethod: 'Standard',
     shippingSpeed: 'Standard',
@@ -195,6 +204,8 @@ export function connectionView(id: string, stored: StoredConnection): NetworkCon
     shippingSpeed: stored.shippingSpeed || 'Standard',
     marketplaceId: stored.marketplaceId ?? null,
     marketplaces: Array.isArray(stored.marketplaces) ? stored.marketplaces : [],
+    storeId: stored.storeId ?? null,
+    webhookSecretSet: Boolean(stored.sealedWebhookSecret),
     syncInventory: stored.syncInventory === true,
     inventory: { ...EMPTY_INVENTORY, ...(stored.inventory ?? {}) },
     lastError: stored.lastError ?? null,

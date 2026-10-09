@@ -45,6 +45,12 @@ export const FULFILLMENT_NETWORKS_API_ROUTES = {
   orderCancel: `${FULFILLMENT_NETWORKS_API_PREFIX}/order/cancel`,
   /** `POST` — ShipBob's webhook; verified by the token its address carries. */
   webhookShipbob: `${FULFILLMENT_NETWORKS_API_PREFIX}/webhooks/shipbob`,
+  /** `POST` — connect a network that takes the merchant's own API key (ShipMonk). */
+  connectKey: `${FULFILLMENT_NETWORKS_API_PREFIX}/connect-key`,
+  /** `POST` — mint a new webhook signing secret for an API-key network, shown once. */
+  webhookSecret: `${FULFILLMENT_NETWORKS_API_PREFIX}/webhook-secret`,
+  /** `POST` — ShipMonk's webhook; verified by its `X-Sm-Signature` HMAC. */
+  webhookShipmonk: `${FULFILLMENT_NETWORKS_API_PREFIX}/webhooks/shipmonk`,
 } as const
 
 /**
@@ -57,6 +63,9 @@ export const FULFILLMENT_NETWORKS_API_ROUTES = {
  *   point everything at ShipBob's sandbox.
  * - Amazon — the selling-partner app's id and its Login with Amazon client,
  *   the region its sellers are in, and `sandbox` for Amazon's sandbox.
+ * - ShipMonk (AGL-3697) — no app: each merchant pastes their own store's API
+ *   key. `SHIPMONK_ENABLED=true` offers it (with the token key), and
+ *   `sandbox` points everything at ShipMonk's sandbox.
  */
 export const FULFILLMENT_NETWORKS_ENV = {
   tokenKey: 'FULFILLMENT_NETWORKS_TOKEN_KEY',
@@ -69,6 +78,8 @@ export const FULFILLMENT_NETWORKS_ENV = {
   amazonRegion: 'AMAZON_SP_API_REGION',
   amazonEnvironment: 'AMAZON_SP_API_ENVIRONMENT',
   amazonDraftApp: 'AMAZON_SP_API_DRAFT_APP',
+  shipmonkEnabled: 'SHIPMONK_ENABLED',
+  shipmonkEnvironment: 'SHIPMONK_ENVIRONMENT',
 } as const
 
 /**
