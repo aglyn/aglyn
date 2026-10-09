@@ -340,7 +340,7 @@ export function AiSeoFieldsCard(props: ConsoleSeoFieldsZoneProps) {
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             {'Write with AI'}
           </Typography>
-          <Link href={help.href} target="_blank" rel="noopener" variant="caption" title={help.excerpt}>
+          <Link href={help.href} target="_blank" rel="noopener" variant="caption" title={help.excerptText}>
             {'How it works'}
           </Link>
         </Stack>

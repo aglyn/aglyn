@@ -35,7 +35,7 @@ import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/fires
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { usePagedCollection } from '@aglyn/tenant-feature-instance'
-import { PLATFORM_BRAND_NAME, pluginDocsHelp } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
 import { COMMERCE_COUPONS_TRANSFER } from '../../transfer/transfer-keys'
 
@@ -152,12 +152,7 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
       HeaderProps={{
         action: <TransferHeaderActions resource={COMMERCE_COUPONS_TRANSFER} hostId={hostId} />,
       }}
-      help={pluginDocsHelp('commerceEndToEnd', {
-        anchor: '#4-what-checkout-does',
-        excerpt:
-          'Coupons redeemable at your storefront checkout, separate from ' +
-          `any coupon ${PLATFORM_BRAND_NAME} applies to your own subscription.`,
-      })}
+      help={pluginDocsHelp('commerce', { anchor: '#coupons' })}
       contentGutterX
       contentGutterY
     >

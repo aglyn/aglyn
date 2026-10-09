@@ -454,7 +454,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
       // The topic AND the heading. A bare topic key opens the same docs
       // destination as the staff overview page, which makes two help icons
       // interchangeable and lands the reader at the top of a long page.
-      help={{ topic: 'staffConsole', anchor: '#billing-insight' }}
+      help={{ topic: 'staffConsole', anchor: '#margin-utilization' }}
       header={{
         children: 'Margin & utilization',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -465,11 +465,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
           <Stack spacing={3}>
             <CardDisplay
               header="Scan"
-              help={docsHelp('staffConsole', {
-                anchor: '#billing-insight',
-                excerpt:
-                  'Reads each organization’s newest usage rollup and prices it through the shared cost model. Four Firestore reads per organization, so it runs when asked rather than on load.',
-              })}
+              help={docsHelp('staffConsole', { anchor: '#margin-scan' })}
               contentGutterX
               contentGutterY
             >
@@ -547,9 +543,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                 <CardDisplay
                   header="Utilization across the fleet"
                   help={docsHelp('staffConsole', {
-                    anchor: '#billing-insight',
-                    excerpt:
-                      'The median and spread of each included band, measured against the band the organization’s own plan sells. Uncapped and zero bands are excluded rather than counted as 0%.',
+                    anchor: '#margin-fleet-utilization',
                   })}
                   contentGutterX
                   contentGutterY
@@ -650,9 +644,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                 <CardDisplay
                   header="Margin"
                   help={docsHelp('staffConsole', {
-                    anchor: '#billing-insight',
-                    excerpt:
-                      'Net revenue less infrastructure COGS, on the same arithmetic the discount guardrail underwrites against. A contribution margin, not a profit.',
+                    anchor: '#margin-fleet-margin',
                   })}
                   contentGutterX
                   contentGutterY
@@ -706,9 +698,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                 <CardDisplay
                   header="By organization, worst margin first"
                   help={docsHelp('staffConsole', {
-                    anchor: '#organizations-admin',
-                    excerpt:
-                      'One row per organization scanned, ordered so the thinnest margin surfaces first. Select a row to open that organization.',
+                    anchor: '#margin-by-organization',
                   })}
                   contentGutterX
                   contentGutterY

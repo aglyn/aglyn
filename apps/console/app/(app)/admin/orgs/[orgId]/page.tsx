@@ -1148,7 +1148,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: org?.name ?? orgId,
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
-      help={{ topic: 'staffConsole', anchor: '#entitlement-editor' }}
+      help={{ topic: 'staffConsole', anchor: '#organization-detail' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
@@ -1174,10 +1174,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 visible before staff act on it. */}
             <CardDisplay
               header={'Staff actions'}
-              help={docsHelp('billing', {
-                anchor: '#tiers--entitlements',
-                excerpt:
-                  'Audited staff controls for this organization — override the plan and entitlements, suspend its sites, or flag GDPR erasure.',
+              help={docsHelp('staffConsole', {
+                anchor: '#org-staff-actions',
               })}
               contentGutterX
               contentGutterY
@@ -1244,10 +1242,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // Direct editing (AGL-358).
                     <CardDisplay
                       header={'Edit organization'}
-                      help={docsHelp('team', {
-                        anchor: '#organizations',
-                        excerpt:
-                          'Rename the organization, update its logo and contact details, or transfer ownership to another member — audited to the org activity log.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-edit',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1385,10 +1381,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={`Sites (${(hostDocs ?? []).length})`}
-                      help={docsHelp('architectureMultiTenancy', {
-                        anchor: '#data-model',
-                        excerpt:
-                          'Every site (host) this organization owns — open one for its staff detail page with usage and subdomain controls.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-sites',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1475,10 +1469,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={`Members (${(memberDocs ?? []).length})`}
-                      help={docsHelp('architectureMultiTenancy', {
-                        anchor: '#membership-lifecycle',
-                        excerpt:
-                          "The organization's member roster with each person's role and whether they can reach all sites.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-members',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1549,10 +1541,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Effective entitlements'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          'Resolved limits after plan defaults and per-org overrides, with current usage against each cap. Overrides are edited on the Organizations page.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-effective-entitlements',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1653,10 +1643,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // to see.
                     <CardDisplay
                       header={'Metered usage'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          "The organization's monthly usage rollups — page views, storage, form submissions and cost — with month-over-month deltas.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#org-metered-usage',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1689,10 +1677,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Billing history & payment method'}
-                      help={docsHelp('billing', {
-                        anchor: '#payments',
-                        excerpt:
-                          "The organization's Stripe invoice history and default payment method, including delinquency — read-only.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#billing-insight',
                       })}
                       contentGutterX
                       contentGutterY
@@ -1851,10 +1837,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // Per-org discount (AGL-1105).
                     <CardDisplay
                       header={'Subscription discount'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          "Apply a Stripe coupon to this organization's subscription — the net-margin rating warns before a deal drops below the floor. Audited.",
+                      help={docsHelp('staffConsole', {
+                        anchor: '#discount-floors',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2040,10 +2024,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // Enterprise custom billing (AGL-1110).
                     <CardDisplay
                       header={'Enterprise custom billing'}
-                      help={docsHelp('billing', {
-                        anchor: '#tiers--entitlements',
-                        excerpt:
-                          'Provision a negotiated custom price for this organization — a Stripe subscription (net-30 invoice) or a Checkout link — without leaving Aglyn. Audited.',
+                      help={docsHelp('staffConsole', {
+                        anchor: '#enterprise-custom-billing',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2235,9 +2217,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'Recent admin actions on this organization'}
                       help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
+                        anchor: '#org-recent-admin-actions',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2353,9 +2333,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'Success manager'}
                       help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'The named human an Enterprise org is promised. Set here by staff; the customer sees their name and they are copied by email on every ticket.',
+                        anchor: '#success-manager',
                       })}
                       contentGutterX
                       contentGutterY
@@ -2441,9 +2419,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'Staff notes'}
                       help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'Support and billing context on this organization, visible to staff only — never written into tenant-readable data. Audited.',
+                        anchor: '#staff-notes',
                       })}
                       contentGutterX
                       contentGutterY

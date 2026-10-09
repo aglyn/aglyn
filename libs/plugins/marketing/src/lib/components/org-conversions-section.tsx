@@ -16,11 +16,10 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
-import CampaignConversionsCard from './campaign-conversions-card'
+import CampaignConversionsCard, { conversionsDocsHelp } from './campaign-conversions-card'
 import { useMarketingOrgMount } from './marketing-org-mount'
 
 /**
@@ -99,7 +98,7 @@ export function OrgConversionsSection(props: OrgConversionsSectionProps) {
     return (
       <CardDisplay
         header="Conversions"
-        help={pluginDocsHelp('emailCampaigns', { anchor: '#the-campaign-report' })}
+        help={conversionsDocsHelp}
         contentGutterX
         contentGutterY
       >

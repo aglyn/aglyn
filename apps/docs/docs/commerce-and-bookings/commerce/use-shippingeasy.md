@@ -29,8 +29,11 @@ In ShippingEasy:
 
 ## Connect ShippingEasy {#connect}
 
-1. In Aglyn, open your site's **Products** hub, choose the **Settings** tab and
-   find the **ShippingEasy** card.
+The **ShippingEasy** card, in the store's settings, sends each paid order to
+your ShippingEasy account and takes each label back, using the API keys from
+[Before you start](#before-you-start). You need to be a site admin.
+
+1. In Aglyn, open the store's settings and find the **ShippingEasy** card.
 2. Select **Connect ShippingEasy** and paste the API key, API secret and store
    API key. Aglyn checks them with ShippingEasy before it saves them, and keeps
    the secret encrypted. Nobody can see the secret in Aglyn again, including you.

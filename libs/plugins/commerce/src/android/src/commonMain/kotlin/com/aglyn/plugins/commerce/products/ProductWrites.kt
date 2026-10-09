@@ -39,6 +39,9 @@ import kotlin.uuid.Uuid
 const val PRODUCT_SAVE_ROUTE = "/api/commerce/products/save"
 const val PRODUCT_STOCK_ROUTE = "/api/commerce/products/stock"
 
+/** The console's price ceiling, `COMMERCE_MAX_PRICE_USD`, in cents. */
+const val MAX_PRICE_CENTS = 10_000_00L
+
 /** The reasons Adjust stock offers, as the console's dialog names them. */
 val STOCK_REASONS = listOf("restock" to "Restock", "correction" to "Correction", "damage" to "Damaged", "refund" to "Refund return")
 
@@ -66,8 +69,12 @@ data class VariantDraft(
   val compareAt: String = "",
   val sku: String = "",
   val barcode: String = "",
-  /** Starting stock; a new product only (an edit adjusts stock separately). */
+  /** Starting stock; a new product, or a variant new to the matrix (an edit adjusts stock separately). */
   val stock: String = "",
+  /** The option picks that make this variant, by option name; empty for the default variant. */
+  val selections: Map<String, String> = emptyMap(),
+  /** Added to the matrix in this edit, so its stock and picks are written with the save. */
+  val fresh: Boolean = false,
 )
 
 /** What the editor edits. */
@@ -78,6 +85,7 @@ data class ProductDraft(
   val description: String = "",
   val status: ProductStatus = ProductStatus.DRAFT,
   val type: ProductType = ProductType.PHYSICAL,
+  val options: List<OptionDraft> = emptyList(),
   val variants: List<VariantDraft> = listOf(VariantDraft("default", "Default", "")),
 )
 
@@ -95,6 +103,7 @@ fun productDraftOf(productId: String, data: Map<String, Any?>): ProductDraft {
     description = product.description.orEmpty(),
     status = product.status ?: ProductStatus.ACTIVE,
     type = product.type ?: ProductType.PHYSICAL,
+    options = product.options.orEmpty().map { OptionDraft(it.name, it.values.joinToString(", ")) },
     variants = product.variants.orEmpty().map { variant ->
       VariantDraft(
         id = variant.id.orEmpty(),
@@ -103,6 +112,8 @@ fun productDraftOf(productId: String, data: Map<String, Any?>): ProductDraft {
         compareAt = money(variant.compareAtPriceUsd),
         sku = variant.sku.orEmpty(),
         barcode = variant.barcode.orEmpty(),
+        stock = variant.inventory?.toLong()?.toString().orEmpty(),
+        selections = variant.options.orEmpty(),
       )
     },
   )
@@ -111,10 +122,17 @@ fun productDraftOf(productId: String, data: Map<String, Any?>): ProductDraft {
 /** Why the draft cannot be sent, or null. The route validates again. */
 fun checkProductDraft(draft: ProductDraft): String? {
   if (draft.name.isBlank()) return "Product name is required"
+  checkOptions(draft.options)?.let { return it }
+  val skus = mutableSetOf<String>()
   for (variant in draft.variants) {
-    if (parseMoneyCents(variant.price) == null) return "Enter a price for ${variant.label}"
-    if (variant.compareAt.isNotBlank() && parseMoneyCents(variant.compareAt) == null) return "Enter a compare-at price for ${variant.label}, or leave it empty"
-    if (draft.create && variant.stock.isNotBlank() && variant.stock.trim().toLongOrNull()?.takeIf { it >= 0 } == null) return "Enter a whole number of units, or leave stock empty"
+    val price = parseMoneyCents(variant.price) ?: return "Enter a price for ${variant.label}"
+    if (price > MAX_PRICE_CENTS) return "Prices are capped at $${MAX_PRICE_CENTS / 100}"
+    if (variant.compareAt.isNotBlank()) {
+      val compareAt = parseMoneyCents(variant.compareAt) ?: return "Enter a compare-at price for ${variant.label}, or leave it empty"
+      if (compareAt <= price) return "Compare-at price must exceed the price"
+    }
+    if (variant.sku.isNotBlank() && !skus.add(variant.sku.trim())) return "Variant SKUs must be unique"
+    if ((draft.create || variant.fresh) && variant.stock.isNotBlank() && variant.stock.trim().toLongOrNull()?.takeIf { it >= 0 } == null) return "Enter a whole number of units, or leave stock empty"
   }
   return null
 }
@@ -140,7 +158,8 @@ fun productSaveJson(draft: ProductDraft, stored: Map<String, Any?>?): JsonObject
     if (edit.compareAt.isBlank()) fields.remove("compareAtPriceUsd") else fields["compareAtPriceUsd"] = dollars(edit.compareAt)
     if (edit.sku.isBlank()) fields.remove("sku") else fields["sku"] = JsonPrimitive(edit.sku.trim())
     if (edit.barcode.isBlank()) fields.remove("barcode") else fields["barcode"] = JsonPrimitive(edit.barcode.trim())
-    if (draft.create) {
+    if (edit.selections.isNotEmpty()) fields["options"] = JsonObject(edit.selections.mapValues { JsonPrimitive(it.value) })
+    if (draft.create || edit.fresh) {
       edit.stock.trim().toLongOrNull()?.let { fields["inventory"] = JsonPrimitive(it) } ?: fields.put("inventory", JsonNull)
     }
     JsonObject(fields)
@@ -149,6 +168,7 @@ fun productSaveJson(draft: ProductDraft, stored: Map<String, Any?>?): JsonObject
   base["description"] = JsonPrimitive(draft.description)
   base["status"] = JsonPrimitive(draft.status.raw)
   base["type"] = JsonPrimitive(draft.type.raw)
+  if (draft.options.isNotEmpty() || "options" in base) base["options"] = JsonArray(draft.options.map { JsonObject(mapOf("name" to JsonPrimitive(it.name.trim()), "values" to JsonArray(it.values.map(::JsonPrimitive)))) })
   base["variants"] = JsonArray(variants)
   if (draft.create) base["slug"] = JsonPrimitive(commerceSlug(draft.name))
   return JsonObject(base)

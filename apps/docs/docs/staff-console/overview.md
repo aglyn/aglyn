@@ -51,6 +51,42 @@ nothing never inflates the headline. "Comped" counts organizations holding a
 does not count a canceled subscription whose stored plan still names a paid tier:
 that is churn, and the organization resolves as Free.
 
+The tiles across the top of the overview, one heading each:
+
+#### Organizations {#staff-overview-organizations}
+
+The total number of organizations on the platform — one per customer workspace,
+whatever its plan. Open **Organizations** to list and manage them.
+
+#### Signups (30d) {#staff-overview-signups}
+
+How many organizations were created in the last 30 days. It counts workspaces, not
+people: one account that opens two workspaces counts twice.
+
+#### Sites {#staff-overview-sites}
+
+Every site across every organization, published and draft alike. Open **Sites** to
+list them and reach a site's staff page.
+
+#### Users {#staff-overview-users}
+
+The total number of user accounts across every sign-in pool — the same directory the
+**Users** page lists, one per person. A **+** after the figure means the count
+stopped before the end of the directory.
+
+#### MRR estimate {#staff-overview-mrr}
+
+Monthly recurring revenue from organizations with a live Stripe subscription; use
+**Break this down** to open [Revenue](revenue.md), which sets it beside settled cash.
+Staff plan overrides, comped and canceled organizations contribute $0, annual plans
+count at their per-month equivalent, and the caption says how many organizations are
+billing and how many are comped.
+
+#### Newest organizations {#staff-overview-newest-orgs}
+
+The most recently created organizations, newest first, each with its plan and the
+day it was created. Open **Organizations** to find one and manage it.
+
 ### [Support queue](support-queue.md) {#support-queue}
 
 Every organization's support tickets in one
@@ -471,6 +507,12 @@ organization, its automations and on how many sites each is paused. Automations
 have no rendering, so a row opens a read-only view of the trigger and the steps.
 Nothing here runs, pauses or edits an automation.
 
+#### Organization automations {#staff-org-automations}
+
+The **Organization automations** card on an organization's staff page lists that
+organization's automations, whether each is on, and on how many of its sites each is
+paused. It is read-only: click a row to read its trigger and steps.
+
 #### Emails sent {#emails-sent}
 
 **Emails sent** — on a site's staff page, and on an organization's for all of
@@ -495,6 +537,13 @@ Aglyn once and then search their email again.
 Each account opens a **detail page** showing identity/auth state, staff role, every
 organization membership with roles and per-site access, and its recent audit trail.
 
+#### Accounts {#users-accounts}
+
+The **Accounts** list holds every account in every sign-in pool: type a whole email
+to look one up, or filter the directory, then **View** an account for its detail page.
+From a row's menu, **super** staff **Grant staff** or **Revoke staff** and **Disable**
+or **Enable** the account, each audited.
+
 The list's **Filters** look past the loaded page into every pool: **User** (the
 email), **Display name**, **UID**, **SSO pool** and **Sign-in providers** as typed
 text, matched anywhere in it; **Created** and **Last sign-in** as dates; **Suspended**
@@ -515,6 +564,32 @@ read), every filter and the search are shown as not applied, with the reason, an
 list is the unfiltered directory until you look an account up by its exact email or
 uid. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
+#### The account page {#user-detail}
+
+An account's staff page shows its identity, staff role, organizations and audit
+trail, with the support tools beside them: password help, sign-in history and email
+delivery.
+
+#### Identity {#user-identity}
+
+The **Identity** card shows whether the account is **Active** or **Disabled**, its
+staff role, its sign-in providers, when it was created and last signed in, and its
+phone number with any do-not-contact record against it. Correct the **Display name**,
+**Email** or **Photo URL** and **Save identity** to fix the account for its holder;
+the edit is audited. **Impersonate** opens the console as this account, replacing
+your session; see [Impersonation](#impersonation).
+
+A phone number with **No opt-out recorded** is not consent to market to it — check
+before calling or texting.
+
+#### Organizations {#user-organizations}
+
+Every organization this account belongs to, each with its type, the account's role
+in it, and the sites it can reach — **All sites**, or each site with its own role.
+Open an organization for its [staff page](#organization-detail).
+
+#### Recent audit trail {#user-audit-trail}
+
 On the detail page, **Recent audit trail** (what was done by or to the account) and
 **Data access by staff** (who only looked at its data) each page through the account's
 whole audit trail, newest first. Their **Filters** take **Action** (typed as it is
@@ -524,11 +599,25 @@ address or uid, its target, scope, reason or note. Filters and search apply to t
 trail rather than the page on screen, and each filter in force shows as a chip above
 the table. Anything the table cannot apply is named in a note above it and left out
 rather than applied to some entries (see [Filter and search a list](../getting-started/console-tour.md#filter-and-search)).
+
+#### Data access by staff {#user-data-access}
+
+**Data access by staff** lists each time a staff member opened this account's private
+data without changing it — reading a sent email, for one. It is kept apart from the
+audit trail so a burst of views cannot bury an impersonation, and it filters and
+searches the same way.
+
+#### Activity by this account {#user-activity}
+
+The console actions this account took itself, across every organization and site,
+newest first — as distinct from the staff actions taken on it.
 **Activity by this account** filters by
 action or date through its Filters panel, and its search finds entries by the start of a
 word of the address or API key that made them or of the name of what changed — all on the
 query that reads the account's activity across every site and organization, newest first.
 The action group chips above it are shortcuts for the actions a plugin names.
+
+#### Legal acceptances {#legal-acceptances}
 
 A **Legal acceptances** card on the same page answers the two questions a terms
 dispute asks: which version of the Terms and Privacy Policy this person accepted and
@@ -692,6 +781,110 @@ it loads.
 The record is ours, not the sending service's. It survives that vendor's own retention
 window, and it survives replacing the vendor.
 
+### Organization page cards {#organization-page-cards}
+
+What each card on an organization's staff page is for, top to bottom. The page
+itself is described under [Organization detail](#organization-detail).
+
+#### Staff actions {#org-staff-actions}
+
+The **Staff actions** card holds the audited controls for the whole organization:
+**Override** its plan and limits, **Suspend** it, flag it for GDPR **Erasure**, or
+**Pause AI**.
+
+**Override** opens the [entitlement editor](#entitlement-editor), **Suspend** takes
+every one of its sites down, and **Pause AI** stops its AI. Chips beside them say when it is suspended, flagged for erasure or has
+AI paused.
+
+**Override** needs the **billing** or **super** staff role; Suspend and Pause AI need
+**super**, and each button is the same one the Organizations list offers. See
+[Lockdown](lockdown.md) for what a suspension does and [Pausing AI for one
+workspace](lockdown.md#ai-pause) for the AI pause.
+
+#### Edit organization {#org-edit}
+
+Correct the organization's **Name**, logos, **Contact email**, **Phone** and
+**Website** for the customer, then **Save organization**; the change is written to the
+organization's activity log.
+
+The card also shows the **Platform billing address** — what Aglyn invoices the
+organization at — read-only: the customer edits it in Billing → Settings. Transferring
+ownership, handing the organization off and asking it to upgrade are here too; see
+[Organization detail](#organization-detail).
+
+#### Sites {#org-sites}
+
+Every site the organization owns, each with the same row menu as the Sites list:
+open a site for its [staff page](#site-detail), visit it live, or open its preview. A
+list that could not be read in full says so, because the count also feeds the
+organization's site usage against its plan.
+
+#### Members {#org-members}
+
+The organization's roster: each member's role, **all sites** for a member who can
+reach every site, and **staff · no seat** for a staff member, who takes none of the
+organization's seats. Seats themselves are counted in **Effective entitlements**.
+
+#### Effective entitlements {#org-effective-entitlements}
+
+Every limit as it resolves for this organization — **Effective** beside its **Plan
+default** and how much is **Used** — with an **override** chip where staff changed
+it and the AI add-on marked where it adds to a band. To change one, use **Override**
+on the [Staff actions](#org-staff-actions) card.
+
+#### Metered usage {#org-metered-usage}
+
+The organization's monthly usage rollups — page views, storage, form submissions and
+their cost — with the change from the month before. A warning that the rollups could
+not be read means a failed read, not zero usage.
+
+#### Enterprise custom billing {#enterprise-custom-billing}
+
+Provision a negotiated price for an organization: enter the **Custom price** per
+month, how it is **Billed**, the **Base plan** it rides on, and whether to **Invoice
+now** (net-30, no card) or **Send a Checkout link**, then provision it.
+
+As you type, the card checks the price against the organization's measured cost and
+its full-use floor, and provisioning is refused below the floor; see [Applying a
+coupon and quoting a custom price](#discount-floors). An organization already on a
+custom price shows it at the top of the card.
+
+#### Recent admin actions on this organization {#org-recent-admin-actions}
+
+The staff audit entries that reference this organization, from the latest 200 in the
+log: each shows the action, who did it, when, and the reason they gave. The full,
+filterable record is on the [Audit log](#audit-log).
+
+#### Success manager {#success-manager}
+
+Name the success manager an organization is promised: enter their **Name** and
+**Email** and **Save**. They are copied by email on every support ticket and reply,
+and on a plan that includes one, the customer sees their name.
+
+On a plan that promises a manager, the card warns while nobody is assigned, because
+the customer is told one is on the way. Clearing the email un-assigns the manager. On a
+plan that does not include one, setting a manager still copies them, but the customer
+is not told.
+
+### Site page cards {#site-page-cards}
+
+Cards on a site's staff page that the [Site detail](#site-detail) list does not
+describe on their own.
+
+#### Usage {#site-usage}
+
+Live counts for this site — published pages, all pages, the organization's media
+files, site members and storage in MB — the figures its organization's plan limits are
+measured against. To change a limit, override it on the organization's [Staff
+actions](#org-staff-actions) card.
+
+#### Settings snapshot {#site-settings-snapshot}
+
+A read-only look at the site's settings that support questions turn on: its
+**Locales**, its Google Analytics **measurement id**, whether it is **password
+protected**, and which pages are its store's product and collection templates. Change
+them from the site's own settings, as a member or by impersonating its owner.
+
 ### Staff notes {#staff-notes}
 
 Free-text support/billing context on each organization's detail
@@ -702,6 +895,13 @@ page, visible to staff only (never in tenant-readable data) and audited.
 Push a product announcement or maintenance notice as
 an in-app notification to every organization's owner/admins (optionally one plan
 tier), respecting each recipient's mute preferences; audited.
+
+The **Broadcast announcement** card is at the foot of the staff overview. Give it a
+**Title**, pick the **Audience** (*Every org*, or only *Starter*, *Pro* or *Business*
+organizations), add an optional **Body**, and type a **Reason** of at least eight
+characters, which is recorded on the audit trail. A broadcast reaches every
+organization in the audience and cannot be recalled, so read it twice before you
+send it.
 
 ### Billing insight {#billing-insight}
 
@@ -719,6 +919,44 @@ filters, and the worst-first order is the order of the organizations read so far
 filter the scan cannot answer is named above the table as not applied, with its
 reason — Organization *contains* together with a search, for one, since both read the
 same name words. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+
+### Margin & utilization {#margin-utilization}
+
+**Staff → Margin** measures how much of its plan's included bands each organization
+uses and what margin the plan leaves after infrastructure cost: press **Scan
+organizations**, then read the fleet figures and the table, worst margin first.
+
+#### Scan {#margin-scan}
+
+Press **Scan organizations** to read the figures: nothing is read until you do,
+because each organization costs four Firestore reads. The scan reads each organization's newest usage rollup
+and prices it through the shared cost model, a page of organizations at a time:
+**Scan the next page** reads more, and **Rescan from the start** begins again. Until
+every organization has been read, a warning above the figures says they describe only
+the organizations read so far.
+
+#### Utilization across the fleet {#margin-fleet-utilization}
+
+The median and spread of each included band across the organizations scanned, each
+measured against the band its **own** plan sells. A band that is uncapped, or that
+the plan does not include, is left out rather than counted as 0%, and a dash means no
+organization in the scan has a percentage on that band.
+
+#### Margin {#margin-fleet-margin}
+
+The median margin of the organizations scanned, how many are under the margin floor
+and how many are underwater (below zero), and total cost against net revenue, with
+the AI add-on's share of that revenue. It is a contribution margin — net revenue less
+infrastructure COGS, on the same arithmetic the discount guardrail uses — not a
+profit.
+
+#### By organization, worst margin first {#margin-by-organization}
+
+One row per organization scanned, thinnest margin first; select a row to open that
+organization's staff page. The table shows the 200 worst and says so when there are
+more, while every figure above it still covers all of them. Its **Filters** and
+**Search** choose which organizations the scan reads, as described under
+[Billing insight](#billing-insight).
 
 ### [Refunds](refunds.md) {#refunds}
 
@@ -781,6 +1019,16 @@ carries Aglyn's header or footer: it gets the organization's own email logo, or 
 product name, and a footer with the reason and the organization's support link, if it
 set one. On the marketing site, a block's **Used by** lists the system emails that place
 it.
+
+#### Edit a system email {#edit-a-system-email}
+
+The **System emails** card lists every email Aglyn sends, each marked **Using default**
+or **Customized**: press **Design** (or **Edit**) to replace a row's built-in copy with
+a template from the besigner, **Send test** to see it in an inbox, and **Reset to
+default** to put the built-in copy back.
+
+A row the console cannot change links out instead: Stripe's billing emails open the
+Stripe Dashboard, and a row Firebase sends opens the Firebase console.
 
 #### Platform send rate {#platform-send-rate}
 
@@ -846,6 +1094,18 @@ Every combination the panel offers is one query, so none is refused; a
 filter the list ever could not apply would be named in a note above the list
 and left off entirely, never applied to some rows and not others. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
+### Platform settings {#platform-settings}
+
+**Staff → Platform settings** holds the settings that describe the platform rather
+than one organization, each changed without a deploy and audited with the reason you
+give:
+
+- the [free workspace limit](#free-workspace-limit) — how many free workspaces one
+  account may hold;
+- where this deployment files sales tax — see [Sales tax
+  return](sales-tax-return.md#where-this-deployment-files);
+- the [first-party hosts](#first-party-hosts) the platform serves itself.
+
 ### [Feature flags](feature-flags.md) {#feature-flags}
 
 Release-gate console features via Remote
@@ -858,9 +1118,12 @@ membership, security rules, subdomains, and billing attribution fit together.
 
 ### Audit archival {#audit-archival}
 
-A nightly cron moves audit entries past the 90-day retention
-window into a Storage compliance trail (JSON lines, month-partitioned) and reminds
-staff of GDPR erasure requests past their 7-day hold.
+Audit entries older than 90 days move nightly into a compliance trail in Storage
+and are kept a further 365 days: on the Audit log's **Archive** card, pick the month
+an entry was written to read it back.
+
+The nightly cron writes the trail as JSON lines, partitioned by month, and also
+reminds staff of GDPR erasure requests past their 7-day hold.
 
 ### [Organization suspension](lockdown.md) {#organization-suspension}
 
@@ -893,6 +1156,12 @@ fully read, and export the working papers for the Webfile session.
 A record of staff actions, newest first. Click an entry to read its reason, note and
 before/after below the list.
 
+#### Admin actions {#audit-admin-actions}
+
+The **Admin actions** table lists every staff change, newest first: filter or search
+it to find an entry, click the entry to read its reason, note and before/after, and
+use **Export CSV** to keep what the filters match.
+
 The list filters through its table's toolbar, across the whole log rather than the page on
 screen:
 
@@ -924,6 +1193,11 @@ Discount codes for **Aglyn's own subscriptions**. They live in Stripe — the co
 creates them there and reads them back, so a coupon made in the Stripe Dashboard shows
 up here and vice versa. Nothing on this page touches the discount codes a *customer*
 creates for their own storefront; those belong to the commerce plugin on their site.
+
+#### Create a coupon {#create-a-coupon}
+
+Make a discount code for Aglyn's own subscriptions here: give it a name, a type and a
+duration, read the cost warnings the form shows, then create it.
 
 **Create a coupon** takes a name (the text that appears on the customer's invoice), a
 type — **Percent off** or **Fixed amount off** — a **Duration** of *Once*, *Repeating*
@@ -1034,8 +1308,11 @@ Aglyn sends no marketing calls or texts today, and the page says so: there is no
 record behind them yet. The list exists so that an outbound program has something to
 check the day one starts, and so that an opt-out we receive *now* is not lost.
 
+#### Record a request {#record-a-dnc-request}
+
 **Record a request** is for an opt-out that arrived outside the product — by email to
-privacy@aglyn.com, or spoken on a call. Give the number, how the request arrived (*Email*, *Said
+the privacy address, or spoken on a call. (On aglyn.com that address is
+privacy@aglyn.com.) Give the number, how the request arrived (*Email*, *Said
 on a call* or *Other / staff*), the channels it covers (**Calls**, **Texts** or both), and a
 note. Replying STOP to a text will be handled automatically once texting exists; this
 form is for everything that does not arrive that way.
@@ -1048,6 +1325,8 @@ with SSO blocked from re-asserting it on the next sign-in.
 A suppression **outlives the contact record**, and it can be undone: a number the person
 later opts back in for is marked **Opted back in** rather than removed, so the history of
 what was asked and when survives.
+
+#### Suppressed numbers {#suppressed-numbers}
 
 **Suppressed numbers** lists every record, most recently changed first, a page at a
 time, and its heading counts every number currently suppressed across the whole list,

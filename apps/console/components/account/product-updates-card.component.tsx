@@ -194,12 +194,7 @@ export function ProductUpdatesCard() {
   return (
     <CardDisplay
       header="Product updates"
-      help={docsHelp('account', {
-        excerpt:
-          `Whether ${PLATFORM_BRAND_NAME} may email you about product ` +
-          'updates. Your choice is recorded with the date and the wording ' +
-          'you agreed to, and you can change it here at any time.',
-      })}
+      help={docsHelp('manageAccount', { anchor: '#product-updates' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

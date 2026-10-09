@@ -286,13 +286,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   return (
     <CardDisplay
       header={'All notifications'}
-      help={docsHelp('consoleTour', {
-        anchor: '#workspace-settings--notifications',
-        excerpt:
-          'Every console notification, newest first. What arrives here, ' +
-          'and what also reaches your inbox, is set in Notification ' +
-          'settings.',
-      })}
+      help={docsHelp('consoleTour', { anchor: '#all-notifications' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

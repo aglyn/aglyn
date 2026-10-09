@@ -54,6 +54,10 @@ const BESIGNER_OUT = join(
   'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
 )
 const PLUGIN_OUT = join(ROOT, 'libs/aglyn/src/lib/app-utils/docs-help.generated.ts')
+const PLUGIN_SECTIONS_OUT = join(
+  ROOT,
+  'libs/aglyn/src/lib/app-utils/docs-help-sections.generated.ts',
+)
 
 // Docs pages that are not feature topics (chrome / internal-only routes).
 const EXCLUDE = [/^operations\//, /^intro$/, /^whats-new$/]
@@ -173,6 +177,8 @@ const PLUGIN_TOPICS = {
   shipStation: '/commerce-and-bookings/commerce/use-shipstation',
   // The ShippingEasy card under the store's Settings (AGL-3633).
   shippingEasy: '/commerce-and-bookings/commerce/use-shippingeasy',
+  // The Local delivery card under the store's Settings (AGL-3707).
+  pickupAndDelivery: '/commerce-and-bookings/commerce/pickup-and-local-delivery',
   companies: '/content-and-data/crm/companies',
   consoleTour: '/getting-started/console-tour',
   contactActivities: '/content-and-data/crm/activities',
@@ -830,12 +836,8 @@ function emitPlugins(pages, linked) {
     )
     .join('\n')
 
-  const sections = emitSectionMap(
-    linked,
-    new Map(entries),
-    pages,
-    (section) =>
-      `{ title: ${tsString(section.title)}, excerpt: ${tsString(section.excerpt)} }`,
+  const sectionTitles = emitSectionMap(linked, new Map(entries), pages, (section) =>
+    tsString(section.title),
   )
 
   return `${LICENSE}
@@ -865,17 +867,15 @@ ${anchors}
 } as const satisfies Partial<Record<PluginDocsKey, readonly \`#\${string}\`[]>>
 
 /**
- * The heading and its opening sentence for each anchor a plugin links — the
- * tooltip when a call names an anchor and nothing of its own (AGL-3707). Only
- * the linked anchors: this module is imported synchronously by every plugin
- * console.
+ * The heading each linked anchor opens on — the tooltip's title when a call
+ * names an anchor and no title of its own (AGL-3707). Synchronous because it
+ * is the help button's accessible name; the section's prose is in
+ * \`docs-help-sections.generated.ts\`, fetched when a tooltip opens.
  */
-export const PLUGIN_DOCS_SECTIONS: {
-  readonly [K in PluginDocsKey]?: {
-    readonly [anchor: \`#\${string}\`]: { readonly title: string; readonly excerpt: string }
-  }
+export const PLUGIN_DOCS_SECTION_TITLES: {
+  readonly [K in PluginDocsKey]?: { readonly [anchor: \`#\${string}\`]: string }
 } = {
-${sections}
+${sectionTitles}
 }
 
 type PluginAnchorMap = typeof PLUGIN_DOCS_ANCHORS
@@ -883,6 +883,35 @@ type PluginAnchorMap = typeof PLUGIN_DOCS_ANCHORS
 /** Valid heading anchors for a plugin docs page (\`never\` when none). */
 export type PluginDocsAnchor<K extends PluginDocsKey> =
   K extends keyof PluginAnchorMap ? PluginAnchorMap[K][number] : never
+`
+}
+
+function emitPluginSectionExcerpts(pages, linked) {
+  const excerpts = emitSectionMap(
+    linked,
+    new Map(Object.entries(PLUGIN_TOPICS)),
+    pages,
+    (section) => tsString(section.excerpt),
+  )
+  return `${LICENSE}
+${GENERATED_NOTE}
+
+import type { PluginDocsKey } from './docs-help.generated'
+
+/**
+ * The opening sentence under each heading a plugin card links — that card's
+ * tooltip prose (AGL-3707).
+ *
+ * A module of its own because the plugin help subset is imported by every
+ * plugin console up front, and four hundred sections of prose are ~30 KB
+ * gzipped that no page needs until someone opens a tooltip.
+ * \`PluginDocsSectionExcerpt\` fetches this module when one does.
+ */
+export const PLUGIN_DOCS_SECTION_EXCERPTS: {
+  readonly [K in PluginDocsKey]?: { readonly [anchor: \`#\${string}\`]: string }
+} = {
+${excerpts}
+}
 `
 }
 
@@ -901,6 +930,7 @@ const outputs = [
   [CONSOLE_EXCERPTS_OUT, emitConsoleExcerpts(pages, pathToKey, consoleLinked)],
   [BESIGNER_OUT, emitBesigner(pages)],
   [PLUGIN_OUT, emitPlugins(allPages, pluginLinked)],
+  [PLUGIN_SECTIONS_OUT, emitPluginSectionExcerpts(allPages, pluginLinked)],
 ]
 
 const check = process.argv.includes('--check')

@@ -80,7 +80,8 @@ export function FaviconCard(props: FaviconCardProps) {
     <MediaFieldSection
       embedded={embedded}
       header={'Favicon'}
-      help={docsHelp('media', {
+      help={docsHelp('seo', {
+        anchor: '#favicon',
         excerpt:
           'The small icon browsers show in tabs and bookmarks — pick one ' +
           'image from your media library and every size is generated for ' +

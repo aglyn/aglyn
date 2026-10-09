@@ -164,7 +164,7 @@ export default function StaffEmailSendRateCard() {
     <CardDisplay
       header={'Platform send rate'}
       help={docsHelp('staffConsole', {
-        anchor: '#system-emails',
+        anchor: '#platform-send-rate',
         excerpt:
           'The hourly ceiling on outbound mail across the whole platform. ' +
           'It can defer campaigns and scheduled bulk sweeps; it never ' +

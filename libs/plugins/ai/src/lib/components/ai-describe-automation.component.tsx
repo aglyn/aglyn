@@ -140,7 +140,7 @@ export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
             />
             <Typography variant="body2" color="text.secondary">
               {copy.next}{' '}
-              <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+              <Link href={help.href} target="_blank" rel="noopener" title={help.excerptText}>
                 {'How it works'}
               </Link>
             </Typography>

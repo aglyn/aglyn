@@ -75,7 +75,7 @@ export function accountingDocsHelp(
   provider: AccountingProviderId | null | undefined,
   anchor: AccountingDocsAnchor,
   excerpt: string,
-): { title: string; excerpt: string; href: string } {
+): ReturnType<typeof pluginDocsHelp> {
   return provider === 'xero'
     ? pluginDocsHelp('connectXero', { anchor, excerpt })
     : pluginDocsHelp('connectQuickbooksOnline', { anchor, excerpt })
@@ -370,13 +370,11 @@ function TenantPicker(props: { connection: AccountingConnectionView; api: Accoun
   return (
     <CardDisplay
       header={codat ? 'Choose your books' : 'Choose a Xero organization'}
-      help={accountingDocsHelp(
-        props.connection.provider,
-        '#connect',
+      help={
         codat
-          ? 'More than one set of books was linked. Choose the one this workspace posts to.'
-          : 'Your Xero login reaches more than one organization. Choose the one this workspace posts to.',
-      )}
+          ? pluginDocsHelp('connectQuickbooksOnline', { anchor: '#choose-your-books' })
+          : pluginDocsHelp('connectXero', { anchor: '#choose-an-organization' })
+      }
       contentGutterX
       contentGutterY
       HeaderProps={{

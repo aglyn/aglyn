@@ -204,11 +204,7 @@ export function ShippingEasyCard(props: ShippingEasyCardProps) {
   return (
     <CardDisplay
       header={'ShippingEasy'}
-      help={pluginDocsHelp('shippingEasy', {
-        excerpt:
-          `${PLATFORM_BRAND_NAME} sends your paid orders to your ShippingEasy account, and each label you buy there ` +
-          'marks the order shipped and emails your customer the tracking link.',
-      })}
+      help={pluginDocsHelp('shippingEasy', { anchor: '#connect' })}
       HeaderProps={{ action: actions }}
       contentGutterX
       contentGutterY

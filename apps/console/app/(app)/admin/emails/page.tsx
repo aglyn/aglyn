@@ -204,12 +204,7 @@ function AdminEmails() {
             <CardDisplay
               header={'System emails'}
               help={docsHelp('staffConsole', {
-                anchor: '#system-emails',
-                title: 'Replace the built-in copy',
-                excerpt:
-                  'Each email ships with built-in copy and can be replaced ' +
-                  'with a designed template, email-safe blocks only. Reset to ' +
-                  'default puts the built-in copy back.',
+                anchor: '#edit-a-system-email',
               })}
               subheader={
                 'The mail Aglyn itself sends. Design a template to replace ' +

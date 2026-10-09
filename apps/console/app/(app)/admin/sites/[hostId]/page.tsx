@@ -481,10 +481,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 children: (
                   <CardDisplay
                     header={'Usage'}
-                    help={docsHelp('billing', {
-                      anchor: '#usage-meters',
-                      excerpt:
-                        "Live counts for this site — published and total pages, media, members, and storage — the figures metered against the org's entitlements.",
+                    help={docsHelp('staffConsole', {
+                      anchor: '#site-usage',
                     })}
                     contentGutterX
                     contentGutterY
@@ -541,9 +539,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header={'Settings snapshot'}
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        "A read-only snapshot of the site's locales, analytics id, password protection, and store template pages.",
+                      anchor: '#site-settings-snapshot',
                     })}
                     contentGutterX
                     contentGutterY

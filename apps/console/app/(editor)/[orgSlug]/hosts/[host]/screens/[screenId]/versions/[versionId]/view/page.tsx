@@ -1378,7 +1378,8 @@ function ScreenDetails() {
           },
         ]}
         help={{
-          topic: 'versionsAndPublishing',
+          topic: 'screens',
+          anchor: '#page-detail',
         }}
         header={{
           children: displayName,
@@ -1492,7 +1493,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Basic Details'}
-                    help={docsHelp('screens', { anchor: '#screens--routing', excerpt: 'A page\u2019s name, slug, and where it sits in your site\u2019s routing hierarchy.' })}
+                    help={docsHelp('screens', { anchor: '#basic-details-card' })}
                     contentGutterY
                     contentBordered="all"
                   >
@@ -2134,7 +2135,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Raw JSON'}
-                    help={docsHelp('screens', { excerpt: 'The page document as stored \u2014 a read-only developer view of its structure.' })}
+                    help={docsHelp('screens', { anchor: '#raw-json' })}
                     // Gutters and the content border belong to the CONTENT, so
                     // they come off with it. Left on, a closed card draws an
                     // empty bordered strip under its header \u2014 42px of nothing

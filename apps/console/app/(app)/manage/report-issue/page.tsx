@@ -66,7 +66,7 @@ const ReportIssuePage: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Report an issue',
         icon: { path: mdiBugOutline.path },
       }}
-      help={{ topic: 'reportAnIssue' }}
+      help={{ topic: 'reportAnIssue', anchor: '#direct-link' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay

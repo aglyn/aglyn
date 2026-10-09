@@ -272,12 +272,8 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
               opt-in list a default-off plugin needs. */}
           <CardDisplay
             header={'Where it runs'}
-            help={docsHelp('plugins', {
-              anchor: '#how-plugins-run',
-              excerpt:
-                'A site narrows what the workspace enables. It can switch a ' +
-                'plugin off for itself, and can never switch on one the ' +
-                'workspace has switched off.',
+            help={docsHelp('installYourFirstPlugin', {
+              anchor: '#plugin-on-one-site',
             })}
             contentGutterX
             contentGutterY

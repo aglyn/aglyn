@@ -743,9 +743,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Accounts'}
             help={docsHelp('staffConsole', {
-              anchor: '#whats-there',
-              excerpt:
-                'Grant or revoke staff roles and disable accounts — audited, with search and column filters that reach every pool, not just the loaded page.',
+              anchor: '#users-accounts',
             })}
             contentGutterX
             contentGutterY

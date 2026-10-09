@@ -240,10 +240,7 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
             <CardDisplay
               header="Record a request"
               help={docsHelp('staffConsole', {
-                anchor: '#whats-there',
-                excerpt:
-                  'Record an opt-out we received outside the product, so nothing we ' +
-                  'send reaches that number again.',
+                anchor: '#record-a-dnc-request',
               })}
               contentGutterX
               contentGutterY
@@ -342,12 +339,7 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
                   ? `Suppressed numbers · ${activeCount}`
                   : 'Suppressed numbers'
               }
-              help={docsHelp('staffConsole', {
-                anchor: '#whats-there',
-                excerpt:
-                  'Numbers currently suppressed. A suppression outlives the contact ' +
-                  'record it came from, on purpose.',
-              })}
+              help={docsHelp('staffConsole', { anchor: '#suppressed-numbers' })}
               contentGutterX
               contentGutterY
             >

@@ -66,7 +66,7 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.HOST_MEDIA, { orgSlug,  host }),
         },
       ]}
-      help="media"
+      help={{ topic: 'media', anchor: '#two-libraries' }}
       header={{
         children: 'Media',
         icon: { path: mdiImageMultipleOutline.path },
@@ -75,12 +75,7 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay
           header={'Library'}
-          help={docsHelp('media', {
-            excerpt:
-              "This site's private library — organize uploads into " +
-              'folders and serve them fast over the CDN. The Organization ' +
-              'tab holds the workspace assets this site is allowed to use.',
-          })}
+          help={docsHelp('media', { anchor: '#site-library' })}
           contentGutterX
           contentGutterY
           contentBordered="all"

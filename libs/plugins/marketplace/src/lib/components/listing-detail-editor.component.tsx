@@ -241,12 +241,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
   return (
     <CardDisplay
       header={'Edit listing'}
-      help={pluginDocsHelp('publisherHandbook', {
-        anchor: '#authoring-your-listing',
-        excerpt:
-          'What buyers see on the public listing page — name, summary, ' +
-          'rich-text body, and media.',
-      })}
+      help={pluginDocsHelp('publisherHandbook', { anchor: '#edit-listing' })}
       contentGutterX
       contentGutterY
     >
