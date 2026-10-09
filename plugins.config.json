@@ -3148,6 +3148,56 @@
       }
     },
     {
+      "id": "ad-conversions",
+      "package": "@aglyn/plugins-ad-conversions",
+      "register": {
+        "console": "registerAdConversionsConsole",
+        "consoleApi": "registerAdConversionsConsoleApi",
+        "serverDeclarations": "registerAdConversionsServerDeclarations",
+        "consoleServerDeclarations": "registerAdConversionsConsoleServerDeclarations",
+        "subprocessors": "adConversionsSubprocessors"
+      },
+      "apiPrefixes": [
+        "ad-conversions"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's Conversions API connection to the merchant's OWN Meta, TikTok or Pinterest ad account, the access token sealed (AGL-3694). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "adConversionConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "A checkout's advertising consent, recorded only where the visitor granted advertising on a site with a connection, kept until its order is paid or it expires (AGL-3694).",
+          "name": "adConversionConsents",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Purchases and leads owed to one connection, hashed at intake and delivered by the console job; a sent event is a tombstone without personal data until it expires (AGL-3694).",
+          "name": "adConversionEvents",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 151,
+        "$comment": "Server-side conversion events for a site owner's OWN ad accounts (AGL-3694): the Meta Conversions API, the TikTok Events API and the Pinterest Conversions API, by the merchant's own access token sealed under AD_CONVERSIONS_TOKEN_KEY. It hears commerce's order.paid only through the domain-event outbox and the doors' consent only through core's plugin-advertising-conversions contract; it imports neither commerce nor forms. Every event is consent-gated by the visitor's own advertising grant and de-duplicated against the browser tags core mounts. No plan entitlement, like the Tracking settings it pairs with. On for every workspace, off for a site only when that site says so: the card draws nothing until the console sets AD_CONVERSIONS_TOKEN_KEY.",
+        "label": "Ad conversions",
+        "alwaysOnForWorkspace": true,
+        "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
+        "siteOff": {
+          "stops": "Switching Ad conversions off for this site stops its purchases and leads being sent to the Meta, TikTok and Pinterest accounts it connected.",
+          "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
       "id": "zapier",
       "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
       "package": "@aglyn/plugins-zapier",

@@ -30,6 +30,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import { ADVERTISING_CONSENT_FIELD } from '@aglyn/aglyn/app-utils/advertising-consent'
+import {
+  advertisingRequestFacts,
+  reportAdvertisingLead,
+} from '@aglyn/aglyn/plugin-manager/plugin-advertising-conversions'
 // By path: the server-only contract a door credits its outcome through.
 import {
   CONVERSION_TOUCH_DETAIL,
@@ -300,6 +305,15 @@ function readDeclaredMarketingConsent(
  * wall means the customer's allowance is spent, the ceiling means the site is
  * being flooded. Only the ceiling refusal carries `code`.
  */
+/** The first of `keys` the visitor filled in, trimmed, or null. */
+function textField(fields: Record<string, unknown>, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = fields[key]
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 200)
+  }
+  return null
+}
+
 export async function POST(request: Request): Promise<Response> {
   // The dispatcher serves every method at its catch-all; this door takes a
   // POST alone, as the route it replaced did.
@@ -1009,6 +1023,27 @@ export async function POST(request: Request): Promise<Response> {
         ...conversionDescriptionSentences(await describing),
       ].join(' '),
       ...submissionsLink(hostId, submissionRef.id),
+    })
+    /*
+     * THE LEAD, FOR THE SITE OWNER'S OWN AD ACCOUNTS (AGL-3694). Handed to
+     * whichever plugin sends Conversions API events, with the consent the
+     * visitor's browser carried; that plugin reports it only where the
+     * visitor granted advertising and the site connected a vendor, hashes
+     * what it keeps, and sends it under the id the browser's pixel used. No
+     * wire (no grant), or a GPC header, and nothing is handed over at all.
+     */
+    await reportAdvertisingLead({
+      hostId,
+      wire: payload[ADVERTISING_CONSENT_FIELD],
+      ...advertisingRequestFacts(request.headers),
+      person: {
+        email: contactEmail,
+        phone: textField(sanitizedFields, ['phone', 'phoneNumber', 'tel', 'mobile']),
+        name: textField(sanitizedFields, ['name', 'fullName']),
+        firstName: textField(sanitizedFields, ['firstName', 'first_name', 'givenName']),
+        lastName: textField(sanitizedFields, ['lastName', 'last_name', 'familyName']),
+      },
+      formName: resolvedFormName,
     })
     const submittedEmail =
       typeof sanitizedFields['email'] === 'string' ? sanitizedFields['email'] : ''

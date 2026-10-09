@@ -13969,6 +13969,52 @@ describe('email platform connections are the server’s alone (AGL-3639)', () =>
   })
 })
 
+describe('ad conversions are the server’s alone (AGL-3694)', () => {
+  // A connection holds the merchant's sealed Meta, TikTok or Pinterest access
+  // token; a consent is what lets a purchase be reported at all; an owed
+  // event is a conversion about to reach the merchant's ad account. All
+  // written and read by the ad-conversions plugin through the Admin SDK.
+  const DOCS = [
+    ['adConversionConnections', `${HOST}_meta`],
+    ['adConversionConsents', `${HOST}_cs_live_1`],
+    ['adConversionEvents', `${HOST}_meta_purchase.cs_live_1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('ShipStation credentials are server-only (AGL-3613)', () => {
   const connection = (db) => doc(db, 'commerceShipStationConnections', HOST)
 

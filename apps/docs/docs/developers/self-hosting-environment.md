@@ -897,6 +897,20 @@ orders are fulfilled and their events handled in both.
 | --- | --- | --- | --- |
 | `REVIEW_PLATFORMS_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored Trustpilot API key and secret and Yotpo secret key with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens. **Losing the key loses every API connection**: each merchant pastes their keys again. |
 
+### Ad conversions: Meta, TikTok and Pinterest {#ad-conversions}
+
+A site can send its purchases and leads to the merchant's **own** Meta,
+TikTok and Pinterest ad accounts from the server, beside the browser tags set
+on its Tracking tab. Each merchant connects with their own access token, so
+the deployment needs no vendor account: only the key those tokens are sealed
+under. Leave it unset and no Ad conversions card appears and no server-side
+event is sent; the browser tags work either way. Set it on the **console
+only**: delivery runs there, and the tenant runtime never opens a token.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `AD_CONVERSIONS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored access token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again. |
+
 ### Email platforms: Mailchimp, Klaviyo, Omnisend and Attentive {#marketing-platforms}
 
 A site can keep its contacts and their unsubscribes in step with the merchant's

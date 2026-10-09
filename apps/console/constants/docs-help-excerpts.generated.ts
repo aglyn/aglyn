@@ -43,6 +43,7 @@ export const DOCS_HELP_EXCERPTS = {
   addALocale: 'Create a language variant of your site and translate its pages.',
   addOns: 'Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.',
   addSearch: 'Drop the Search Box element onto a page and publish — the built-in search page does the rest.',
+  adTracking: 'Run your own Meta, TikTok, Pinterest, Google Ads and LinkedIn tags on your site — only for visitors who allow advertising.',
   agencySites: 'Run one brief across many client sites: each is its own build job with its own plan and drafts, per-site allotments keep spend separate, and nothing reaches a client\'s live site until your team publishes it.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits.',
@@ -275,6 +276,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#assigning-collaborator-seats': 'F every purchased seat is already assigned and a site needs another register, either move a seat off a site that isn\'t using it, or buy another seat under Plan add-ons.',
     '#assigning-register-seats': 'Ata/events/overview.md).',
     '#what-you-can-add': 'M on Billing → Add-ons (requires the billing.manage permission and an active plan subscription — add-ons ride your plan\'s subscription, so Free workspaces pick a plan first).',
+  },
+  adTracking: {
+    '#browser-tags': 'And LinkedIn. Everything here uses your own accounts: the IDs are yours, and what the tags send goes to your ad accounts, not to Aglyn\'s.',
   },
   aglynAssist: {
     '#what-it-can-do': 'E, connect a domain, set up shipping, invite a teammate — and it answers from this documentation, linking the exact docs section and the console page where you do it.',

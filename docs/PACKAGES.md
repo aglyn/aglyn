@@ -115,6 +115,7 @@ changes, because every rule is by tag.
 | project | npm name | root | tags | consumer | entry points |
 | -- | -- | -- | -- | -- | -- |
 | `plugins-accounting` | `@aglyn/plugins-accounting` | `libs/plugins/accounting` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-accounting --publish`, then `trust:packages --set`); QuickBooks Online and Xero sync of commerce sales, refunds, fees and payouts | `.`, `./*` |
+| `plugins-ad-conversions` | `@aglyn/plugins-ad-conversions` | `libs/plugins/ad-conversions` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-ad-conversions --publish`, then `trust:packages --set`); server-side conversion events to a merchant's own Meta, TikTok and Pinterest ad accounts, through core's advertising-conversions contract and commerce's domain events | `.`, `./*` |
 | `plugins-ai` | `@aglyn/plugins-ai` | `libs/plugins/ai` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-bookings` | `@aglyn/plugins-bookings` | `libs/plugins/bookings` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-calculator` | `@aglyn/plugins-calculator` | `libs/plugins/calculator` | `scope:plugin` `type:feature` | no — the source of the Calculators marketplace bundle, installed from the marketplace | `.`, `./*` |

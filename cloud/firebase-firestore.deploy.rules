@@ -2531,6 +2531,26 @@ allow read, write: if false;
 
 
 
+
+match /adConversionConnections/{connectionId} {
+allow read, write: if false;
+}
+match /adConversionConsents/{consentId} {
+allow read, write: if false;
+}
+match /adConversionEvents/{eventId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
 match /zapierHooks/{hookId} {
 allow read, write: if false;
 }

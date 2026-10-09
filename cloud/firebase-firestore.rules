@@ -2522,6 +2522,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Ad conversions (AGL-3694): a site's Conversions API connection to the
+    // merchant's OWN Meta, TikTok or Pinterest ad account — its access token
+    // sealed — the advertising consent a checkout carried, and the purchases
+    // and leads owed to a connection. Written and read by the ad-conversions
+    // plugin's server half through the Admin SDK only. Deny ALL client
+    // access, staff and the owner included: a client that could read a
+    // connection could carry off a sealed token, one that could write a
+    // consent could report a purchase its shopper never allowed, and one that
+    // could write an owed event could send a fabricated conversion to the
+    // merchant's ad account. Org erasure destroys all three by `orgId`.
+    match /adConversionConnections/{connectionId} {
+      allow read, write: if false;
+    }
+    match /adConversionConsents/{consentId} {
+      allow read, write: if false;
+    }
+    match /adConversionEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     // Zapier (AGL-3643): a site's REST hooks — the URL Zapier minted for each
     // Zap, the events it takes and the API key that subscribed it — and the
     // markers saying an event already reached a hook. Written and read by the

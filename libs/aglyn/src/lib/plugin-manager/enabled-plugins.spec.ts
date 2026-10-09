@@ -204,6 +204,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // program is off until its merchant turns it on. Couriers (AGL-3695):
     // sold with commerce, hidden until the deployment can seal a merchant's
     // own DoorDash Drive keys.
+    // Ad conversions (AGL-3694): a site connects its own ad account, or nothing.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -221,6 +222,8 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'delivery-apps',
       'loyalty',
       'couriers',
+      'review-platforms',
+      'ad-conversions',
     ])
   })
 

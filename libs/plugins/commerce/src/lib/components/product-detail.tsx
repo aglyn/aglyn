@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { advertisingConsentField } from '@aglyn/aglyn/app-utils/advertising-consent'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   buildAddToCartParams,
@@ -392,6 +393,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // legacy coupons second, and refuses a code it cannot apply with a
             // reason — never a silent full-price charge.
             ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
+            // The visitor's advertising consent and the vendors' browser ids, only
+            // where that consent grants advertising (AGL-3694); absent otherwise.
+            ...advertisingConsentField(hostId),
           }),
         })
         const payload = await response.json().catch(() => ({}))

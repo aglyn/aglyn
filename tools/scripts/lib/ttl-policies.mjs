@@ -225,4 +225,19 @@ export const TTL_POLICIES = Object.freeze([
     // also refused by age on read. No workspace's data.
     why: 'stock photo search answers, 24 hours',
   },
+  {
+    collection: 'adConversionConsents',
+    field: 'expiresAt',
+    // AGL-3694 — top level: a checkout's advertising consent, written only
+    // where the shopper granted it on a site with an Ad conversions
+    // connection (`CONSENT_TTL_MS`); deleted earlier when its order is sent.
+    why: 'checkout advertising consents for ad conversions, 14 days',
+  },
+  {
+    collection: 'adConversionEvents',
+    field: 'expiresAt',
+    // AGL-3694 — top level: a purchase or lead owed to one Ad conversions
+    // connection, hashed user data while pending (`EVENT_TTL_MS`).
+    why: 'ad conversion events owed to a merchant ad account, 14 days',
+  },
 ])

@@ -44,6 +44,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   actionsBuilder: {
     '#create-an-action': 'Metered runs. You build both in the same place; steps that need a higher plan are labeled in the editor.',
   },
+  adTracking: {
+    '#browser-tags': 'And LinkedIn. Everything here uses your own accounts: the IDs are yours, and what the tags send goes to your ad accounts, not to Aglyn\'s.',
+  },
   aglynAssist: {
     '#what-it-can-do': 'E, connect a domain, set up shipping, invite a teammate — and it answers from this documentation, linking the exact docs section and the console page where you do it.',
   },

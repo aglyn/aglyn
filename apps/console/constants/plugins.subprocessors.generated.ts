@@ -436,6 +436,31 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'ad-conversions',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "business-api.tiktok.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Events API of the TikTok ad account a site's owner or admin connects on the site's setup page, reached only from the ad-conversions plugin's adapter (`libs/plugins/ad-conversions/src/lib/providers/tiktok.ts`) with the merchant's own access token, to report the site's purchases and leads server-side alongside the site's own TikTok browser tag.",
+        dataReceived: "For a site visitor who allowed advertising on that site, and only then: a purchase (its order id, value excluding tax, currency, and each item's product id, name, quantity and price) or a submitted form (no field values), each with the event's id and time and the page it happened on. The visitor's details are sent as SHA-256 hashes of the normalized values — email address, phone number, first and last name, city, state, postal code and country, whichever the order or form holds — together, unhashed as each vendor requires, the visitor's IP address and browser user agent and the vendor's own first-party browser ids (Meta's _fbp and _fbc, TikTok's _ttp and ttclid, Pinterest's _epik). No payment details. Also the merchant's own access token, which authenticates each call.",
+      },
+      {
+        host: "api.pinterest.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Conversions API of the Pinterest ad account a site's owner or admin connects on the site's setup page, reached only from the ad-conversions plugin's adapter (`libs/plugins/ad-conversions/src/lib/providers/pinterest.ts`) with the merchant's own access token, to report the site's purchases and leads server-side alongside the site's own Pinterest browser tag.",
+        dataReceived: "For a site visitor who allowed advertising on that site, and only then: a purchase (its order id, value excluding tax, currency, and each item's product id, name, quantity and price) or a submitted form (no field values), each with the event's id and time and the page it happened on. The visitor's details are sent as SHA-256 hashes of the normalized values — email address, phone number, first and last name, city, state, postal code and country, whichever the order or form holds — together, unhashed as each vendor requires, the visitor's IP address and browser user agent and the vendor's own first-party browser ids (Meta's _fbp and _fbc, TikTok's _ttp and ttclid, Pinterest's _epik). No payment details. Also the merchant's own access token, which authenticates each call.",
+      },
+    ],
+    uses: [
+      {
+        host: "graph.facebook.com",
+        reason: "Customer-chosen destination. The Conversions API of the Meta ad account a site's owner or admin connects on the site's setup page, reached only from the ad-conversions plugin's adapter (`libs/plugins/ad-conversions/src/lib/providers/meta.ts`) with the merchant's own access token, to report the site's purchases and leads server-side alongside the site's own Meta browser tag.",
+        dataReceived: "For a site visitor who allowed advertising on that site, and only then: a purchase (its order id, value excluding tax, currency, and each item's product id, name, quantity and price) or a submitted form (no field values), each with the event's id and time and the page it happened on. The visitor's details are sent as SHA-256 hashes of the normalized values — email address, phone number, first and last name, city, state, postal code and country, whichever the order or form holds — together, unhashed as each vendor requires, the visitor's IP address and browser user agent and the vendor's own first-party browser ids (Meta's _fbp and _fbc, TikTok's _ttp and ttclid, Pinterest's _epik). No payment details. Also the merchant's own access token, which authenticates each call.",
+      },
+    ],
+  },
+  {
     pluginId: 'zapier',
     subprocessors: [],
     hosts: [
