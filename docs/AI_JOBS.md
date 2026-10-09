@@ -224,6 +224,10 @@ band and its owner's allowance across every Free workspace they hold
 (`aiFreeSiteCreditEstimate`) and disables the start below it, and the site
 kind's admission refuses the create with a 429 on the same figure, so a stale
 dialog cannot start a job that would pause between its form and its first page.
+The figure is the whole worst case (`aiFreeSiteWorstCaseCredits`): the plan,
+the look, the layout and form, each page and its listing, the sections the
+plan is held to and the room for one retried page — 282 credits for two pages,
+236 for one — never a nominal count that leaves any of them out.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
