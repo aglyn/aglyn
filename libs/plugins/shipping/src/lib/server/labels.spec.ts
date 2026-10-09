@@ -287,6 +287,8 @@ describe('buying a label', () => {
         carrier: 'USPS',
         trackingNumber: 'TRK_rate_cheap',
         labelRef: first.label.labelId,
+        // What the label cost, in the order's currency (AGL-3693).
+        labelCostCents: 625,
         lines: [
           { lineIndex: 0, quantity: 2 },
           { lineIndex: 1, quantity: 1 },

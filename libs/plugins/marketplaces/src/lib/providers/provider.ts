@@ -236,6 +236,13 @@ export interface ShipmentConfirmation {
   carrier: string | null
   trackingNumber: string
   trackingUrl: string | null
+  /**
+   * What the seller paid to ship the parcel, in integer minor units of the
+   * order's currency (AGL-3693); `null` when not known. Sent only where the
+   * marketplace takes it (Faire's `maker_cost_cents`); Amazon, eBay, Etsy,
+   * TikTok Shop and Walmart have no field for it on a shipment.
+   */
+  shippingCostMinor?: number | null
   shippedAtMs: number
   /** Ours, stable per shipment: what an adapter dedupes on where the marketplace takes one. */
   reference: string

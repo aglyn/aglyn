@@ -18,11 +18,16 @@
  */
 
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
+import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import type { TaxEnginesRoute } from '../constants/api-routes'
 import { TAX_ENGINES_API_ROUTES } from '../constants/api-routes'
-import type { TaxEngineConnectionView, TaxEngineProviderId } from '../model/tax-engines'
+import type {
+  StoreTaxSettingsView,
+  TaxEngineConnectionView,
+  TaxEngineProviderId,
+} from '../model/tax-engines'
 
 /**
  * The console half's one way to the routes (AGL-3631): the member's own
@@ -102,4 +107,20 @@ export function useTaxEngineConnection(hostId: string | undefined): TaxEngineCon
     [],
   )
   return { ...state, refresh, replace }
+}
+
+/**
+ * The store's Taxes setting, live (AGL-3693), so the Tax service card says
+ * at once whether checkout asks the service: the merchant changes it on the
+ * Taxes card above, on the same page. `undefined` until it is read.
+ */
+export function useStoreTaxSettings(hostId: string | undefined): StoreTaxSettingsView | null | undefined {
+  const firestore = useFirestore()
+  const { data, status } = useFirestoreDoc<{ tax?: StoreTaxSettingsView }>(
+    () => (hostId ? doc(firestore, 'hosts', hostId, 'settings', 'store') : null),
+    [firestore, hostId],
+  )
+  // Unknown until the server answers: a refused read says nothing about the setting.
+  if (status !== 'success') return undefined
+  return data?.tax ?? null
 }

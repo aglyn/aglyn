@@ -1634,6 +1634,7 @@ public struct OrderFulfillment: Codable, Hashable, Sendable {
   public var carrier: String?
   public var handover: OrderFulfillmentHandover?
   public var id: String
+  public var labelCostCents: Double?
   public var labelRef: String?
   public var labelUrl: String?
   public var lineItemIds: [Double]
@@ -1646,12 +1647,13 @@ public struct OrderFulfillment: Codable, Hashable, Sendable {
   public var trackingUrl: String?
   public var updatedAtMs: Double?
 
-  public init(atMs: Double, cancelledAtMs: Double? = nil, carrier: String? = nil, handover: OrderFulfillmentHandover? = nil, id: String, labelRef: String? = nil, labelUrl: String? = nil, lineItemIds: [Double], lines: [OrderFulfillmentLinesItem]? = nil, notify: Bool? = nil, status: OrderFulfillmentStatus? = nil, trackingNumber: String? = nil, trackingStatus: String? = nil, trackingStatusAtMs: Double? = nil, trackingUrl: String? = nil, updatedAtMs: Double? = nil) {
+  public init(atMs: Double, cancelledAtMs: Double? = nil, carrier: String? = nil, handover: OrderFulfillmentHandover? = nil, id: String, labelCostCents: Double? = nil, labelRef: String? = nil, labelUrl: String? = nil, lineItemIds: [Double], lines: [OrderFulfillmentLinesItem]? = nil, notify: Bool? = nil, status: OrderFulfillmentStatus? = nil, trackingNumber: String? = nil, trackingStatus: String? = nil, trackingStatusAtMs: Double? = nil, trackingUrl: String? = nil, updatedAtMs: Double? = nil) {
     self.atMs = atMs
     self.cancelledAtMs = cancelledAtMs
     self.carrier = carrier
     self.handover = handover
     self.id = id
+    self.labelCostCents = labelCostCents
     self.labelRef = labelRef
     self.labelUrl = labelUrl
     self.lineItemIds = lineItemIds

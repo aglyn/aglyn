@@ -454,6 +454,22 @@ describe('TikTok Shop shipments (AGL-3638)', () => {
     calls.forEach(expectSigned)
   })
 
+  it('sends no shipping cost: TikTok Shop’s package shipment has no field for one (AGL-3693)', async () => {
+    const routes = [
+      { method: 'GET', match: '/order/202309/orders?', body: ok({ orders: [ORDER] }) },
+      { method: 'GET', match: '/logistics/202309/delivery_options/do-1/shipping_providers', body: PROVIDERS },
+      { method: 'POST', match: `/fulfillment/202309/orders/${ORDER.id}/packages`, body: ok({}) },
+    ]
+    const without = mockHttp(routes)
+    const withCost = mockHttp(routes)
+    await createTiktokProvider({ http: without.http, now: () => NOW }).confirmShipment(APP, CREDENTIAL, CONFIRMATION)
+    await createTiktokProvider({ http: withCost.http, now: () => NOW }).confirmShipment(APP, CREDENTIAL, {
+      ...CONFIRMATION,
+      shippingCostMinor: 845,
+    })
+    expect(sentJson(withCost.calls[2])).toEqual(sentJson(without.calls[2]))
+  })
+
   it('ships part of a grouped line by its first untracked units', async () => {
     const order = {
       ...ORDER,
