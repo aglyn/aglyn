@@ -164,9 +164,11 @@ export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   welcomeEmail: true,
 }
 
-/** The kind of site the answers pick, else the one what the site is for suggests. */
-export function aiSiteStartKind(answers: Pick<AiSiteStartAnswers, 'kind' | 'siteType'>): AiSiteKind {
-  return aiSiteKind(answers.kind) ?? aiSiteKindFor(answers.siteType)
+/** The kind of site the answers pick, else the one what the site is and who it is for suggest. */
+export function aiSiteStartKind(
+  answers: Pick<AiSiteStartAnswers, 'kind' | 'siteType'> & Partial<Pick<AiSiteStartAnswers, 'audience'>>,
+): AiSiteKind {
+  return aiSiteKind(answers.kind) ?? aiSiteKindFor(answers.siteType, answers.audience ?? '')
 }
 
 /** The example an answer names, or `null` when it names none this list knows. */
