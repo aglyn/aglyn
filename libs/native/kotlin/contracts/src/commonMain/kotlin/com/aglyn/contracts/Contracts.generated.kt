@@ -2173,11 +2173,11 @@ internal data class ContractValuesPart3(
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
-    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
     @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
@@ -2336,6 +2336,7 @@ class ContractValues internal constructor(
     val openDisputeClause: ListFilterClause get() = part3.openDisputeClause
     val orderChannelLabels: Map<String, String> get() = part3.orderChannelLabels
     val orderChannelOptions: List<ListFilterOption> get() = part3.orderChannelOptions
+    val orderCourierStateLabels: Map<String, String> get() = part3.orderCourierStateLabels
     val orderDisputeOptions: List<ListFilterOption> get() = part3.orderDisputeOptions
     val orderFulfillmentMethodLabels: Map<String, String> get() = part3.orderFulfillmentMethodLabels
     val orderListHeaders: Map<String, String> get() = part3.orderListHeaders
@@ -2370,7 +2371,7 @@ class ContractValues internal constructor(
     val posKioskUnlockMaxAttempts: Long get() = part3.posKioskUnlockMaxAttempts
     val posKioskUnlockTtlMs: Double get() = part3.posKioskUnlockTtlMs
     val posOfflineClockSkewMs: Double get() = part3.posOfflineClockSkewMs
-    val posOfflineDisabledTenders: Map<String, String> get() = part3.posOfflineDisabledTenders
+    val posOfflineDisabledTenders: Map<String, String> get() = part4.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part4.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part4.posOfflineLateSyncMs
     val posOfflineMaxAgeMs: Double get() = part4.posOfflineMaxAgeMs
