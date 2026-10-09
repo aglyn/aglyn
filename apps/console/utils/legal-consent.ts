@@ -36,6 +36,7 @@ import {
 } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { getAdditionalUserInfo, type UserCredential } from 'firebase/auth'
+import { firstTouchField } from './account-acquisition'
 import { hardNavigate } from './hard-navigate'
 
 const MARKER_KEY = 'aglyn:legal-consent-at'
@@ -183,7 +184,10 @@ export async function postLegalAcceptance(
     const response = await authorizedFetch(user, '/api/auth/legal-acceptance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version, context }),
+      // The first touch rides along so the server can record where the
+      // account came from in this same request: the acceptance is the write
+      // every sign-up door makes first, before anything can navigate.
+      body: JSON.stringify({ version, context, ...firstTouchField() }),
     })
     if (!response.ok) {
       // A non-2xx resolves rather than throws, so this needs checking
