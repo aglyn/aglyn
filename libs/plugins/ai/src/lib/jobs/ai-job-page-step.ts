@@ -612,7 +612,11 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         recordTokens: aiPageRecordTokens(record),
         linkablePages,
       }),
-      ...(language ? { codeBuilt: true } : {}),
+      // The last pass holds a compiled page to what its own check did: the
+      // design's picture cards are the compiler's, not a block rule 1 asks a
+      // component of (AGL-3660). Without it, a Pro store's Shop page passed
+      // its check and was refused at the last pass (live run, 2026-10-09).
+      ...(language ? { codeBuilt: true, repeatsCompiled: true } : {}),
     }
 
     // ── The last pass: the whole page, its listing, and the draft reported ──

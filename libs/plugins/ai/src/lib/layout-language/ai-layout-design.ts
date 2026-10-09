@@ -187,7 +187,10 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
 const WORK = /\b(work|works|project|projects|portfolio|gallery|galleries|case|cases|studies|selected|commission|commissions|illustration|illustrations|photo|photos|series|book|books|editorial|brand|collection|collections|wedding|weddings|portrait|portraits|session|sessions|shoot|shoots)\b/i
 const WRITING = /\b(article|articles|post|posts|writing|writings|latest|featured|journey|journeys|recipe|recipes|story|stories|essay|essays|guide|guides|issue|issues|episode|episodes)\b/i
 const DISHES = /\b(menu|menus|dish|dishes|breakfast|brunch|lunch|dinner|pastry|pastries|coffee|drink|drinks|cocktail|cocktails|wine|wines|highlight|highlights|favorite|favorites|favourites|special|specials|plate|plates|bake|bakes|bread|cake|cakes)\b/i
-const PRODUCTS = /\b(bestseller|bestsellers|best sellers|collection|collections|product|products|shop|range|candle|candles|gift|gifts|set|sets|new arrivals|arrivals)\b/i
+// A store's own products are listed by its Product grid (AGL-3676), never drawn
+// from words: what a store shows as pictures is how its range is grouped — its
+// collections, gift sets, occasions and scents. "Candle care and burn notes" is no band of pictures.
+const CATEGORIES = /\b(collection|collections|range|ranges|categor(?:y|ies)|gift|gifts|gift sets?|sets|occasion|occasions|scent|scents|edit|edits)\b/i
 
 /**
  * How a section's group of cards is drawn, from what the section is about:
@@ -204,6 +207,6 @@ export function aiLayoutGroupVariant(
   if (family === 'gallery' && (WORK.test(words) || design.kind === 'photography')) return 'pictures'
   if (family === 'editorial' && WRITING.test(words)) return 'articles'
   if (family === 'hospitality' && DISHES.test(words)) return 'menu'
-  if (family === 'retail' && PRODUCTS.test(words)) return 'pictures'
+  if (family === 'retail' && CATEGORIES.test(words)) return 'pictures'
   return choices.group
 }
