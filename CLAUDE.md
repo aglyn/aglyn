@@ -32,10 +32,13 @@ being live.
 Zach, 2026-10-09, standing: a PR description lists every change it carries and
 every commit in it, especially a promotion PR. For a promotion, that is each
 merged PR (number, title, one line on what it does) and each direct commit
-(short sha, subject) in `origin/production..HEAD`, grouped by area. When you
-push more onto an open PR (a CI fix, a `git merge origin/main`), update the
-body in the same push with what was added. A body that says "plus a few fixes",
-or lists only the headline PRs, is incomplete.
+(short sha, subject) in `origin/production..HEAD`, grouped by area.
+
+⛔ The body is ALWAYS kept current. EVERY time anything new lands on an open
+PR (a CI fix, a `git merge origin/main`, another PR riding the promotion, a
+single commit), `gh pr edit <n> --body-file …` goes out in the same step as the
+push, before you do anything else. A body that lags the branch by even one commit,
+says "plus a few fixes", or lists only the headline PRs, is incomplete.
 
 ## Verify in the cheapest tier that can see the mistake
 
