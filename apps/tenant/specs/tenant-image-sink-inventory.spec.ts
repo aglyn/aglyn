@@ -487,6 +487,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'media-ref',
     why: "The server-rendered Event JSON-LD reads coverImage off the document and hands it to resolveSocialImage, which absolutizes a media: reference and passes any other string through. A crawler fetches this one, so no browser policy applies.",
   },
+  'libs/plugins/music/src/lib/components/music-player.tsx': {
+    markers: 1,
+    guard: 'scheme-guard',
+    why: "The Music player's cover art (AGL-3716), only ever musicCoverSrc's answer: a library reference resolved through resolveMediaSrc, or an https: address the owner typed; any other scheme renders no image.",
+  },
+  'libs/plugins/music/src/lib/components/music-sources.ts': {
+    markers: 1,
+    guard: 'scheme-guard',
+    why: 'musicCoverSrc (AGL-3716): media refs and CDN paths through resolveMediaSrc; anything else must be https: or is dropped. Host still open, by AGL-1725.',
+  },
   'libs/plugins/marketing/src/lib/components/site-runtime.tsx': {
     markers: 1,
     guard: 'scheme-guard',
