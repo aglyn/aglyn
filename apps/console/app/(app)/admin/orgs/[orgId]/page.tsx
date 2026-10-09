@@ -1632,6 +1632,20 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </CardDisplay>
                   ),
                 },
+                // Plugin cards among the staff cards (AGL-2940), where a
+                // plugin's own staff view of the org sits beside the
+                // platform's. No column at all when nothing registered.
+                // Short until opened: the AI requests list draws nothing
+                // until staff ask for it (AGL-3660).
+                ...(staffOrgWidgets.length
+                  ? [
+                      {
+                        children: (
+                          <PluginWidgetSlot slot="staffOrg" orgId={orgId} />
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   children: (
                     // Metered usage (AGL-939): consumption alongside the
@@ -2385,12 +2399,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
               ]}
             />
             {/*
-              FULL WIDTH BELOW THE COLUMNS (AGL-3660): the wide tables and the
-              plugins' cards. Multicol cannot break a card, so one card much
-              taller than its share of the flow — a table of activity, the AI
-              plugin's list of requests — took a column to itself and ended
-              the other one early over a screen of empty space. Each of these
-              is a table a reader scans across, and full width is its shape.
+              FULL WIDTH BELOW THE COLUMNS (AGL-3660): the wide tables.
+              Multicol cannot break a card, so one card much taller than its
+              share of the flow — the organization's activity, a page of it,
+              at the end of the run — took a column to itself and ended the
+              other one early over a screen of empty space. Each of these is a
+              table a reader scans across, and full width is its shape.
             */}
             <Stack spacing={3} sx={{ mt: 3 }}>
               <StaffOrgAdminActionsCard
@@ -2420,11 +2434,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 orgWide
                 staff
               />
-              {/* Plugin cards (AGL-2940): a plugin's own staff view of the
-                  org. Nothing is drawn when nothing registered. */}
-              {staffOrgWidgets.length ? (
-                <PluginWidgetSlot slot="staffOrg" orgId={orgId} />
-              ) : null}
               <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
             </Stack>
           </>
