@@ -300,6 +300,21 @@
           "url": "/api/orgs/members/password?orgId={org.id}&uid={params.uid}",
           "when": "org.manager",
           "optional": true
+        },
+        "hosts": {
+          "query": {
+            "collection": "hosts",
+            "where": [
+              [
+                "orgId",
+                "==",
+                "{org.id}"
+              ]
+            ],
+            "limit": 100
+          },
+          "when": "org.manager",
+          "optional": true
         }
       },
       "blocks": [
@@ -407,10 +422,71 @@
               "role": "{form.role|item.role}",
               "roleId": "{form.roleId}",
               "title": "{form.title}",
-              "allHosts": "{form.allHosts}"
+              "allHosts": "{form.allHosts}",
+              "hostAccess": "{item.hostAccess}"
             },
             "success": "Saved"
           }
+        },
+        {
+          "type": "list",
+          "title": "Sites this person can open",
+          "when": "org.manager && data.list.members[$id=params.uid].role == editor,viewer && !data.list.members[$id=params.uid].allHosts",
+          "footer": "Editors and viewers see only the sites they are given. Admins and anyone with All sites on see every site.",
+          "items": "data.hosts.items",
+          "primary": "{item.displayName|item.$id}",
+          "secondary": "{data.list.members[$id=params.uid].hostAccess[@item.$id]|'No access':title}",
+          "icon": "globe|language",
+          "count": false,
+          "actions": [
+            {
+              "id": "access",
+              "label": "Set access",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "access",
+                  "label": "Access to this site",
+                  "kind": "select",
+                  "initial": "{data.list.members[$id=params.uid].hostAccess[@item.$id]}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "No access"
+                    },
+                    {
+                      "value": "viewer",
+                      "label": "Viewer"
+                    },
+                    {
+                      "value": "editor",
+                      "label": "Editor"
+                    }
+                  ]
+                }
+              ],
+              "url": "/api/orgs/members",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "upsert",
+                "uid": "{params.uid}",
+                "role": "{data.list.members[$id=params.uid].role}",
+                "roleId": "{data.list.members[$id=params.uid].roleId}",
+                "title": "{data.list.members[$id=params.uid].title}",
+                "allHosts": false,
+                "hostAccess": {
+                  "$put": {
+                    "map": "{data.list.members[$id=params.uid].hostAccess}",
+                    "key": "{item.$id}",
+                    "value": "{form.access}"
+                  }
+                }
+              },
+              "success": "Access updated",
+              "reload": true
+            }
+          ],
+          "empty": "No sites."
         },
         {
           "type": "actions",

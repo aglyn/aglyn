@@ -35,7 +35,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | AI | `ai` (credits, jobs, settings) | AGL-3671 | [ ] | [ ] |
 | Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [ ] | [ ] |
 | Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [ ] | [ ] |
-| Team and roles | `[orgSlug]/team/*` | AGL-3671 | [ ] | [ ] |
+| Team and roles | `[orgSlug]/team/*` | AGL-3671 | [x] | [x] |
 | Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [ ] | [ ] |
 | Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [ ] | [ ] |
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [ ] | [ ] |
