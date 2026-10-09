@@ -253,6 +253,28 @@
     },
     {
       "body": {
+        "pcts": {
+          "$split": "{'50, 80.5, x'}"
+        },
+        "words": {
+          "$split": "{'a, b,,c'}"
+        }
+      },
+      "expect": {
+        "pcts": [
+          50,
+          80.5,
+          "x"
+        ],
+        "words": [
+          "a",
+          "b",
+          "c"
+        ]
+      }
+    },
+    {
+      "body": {
         "clear": null,
         "gone": "{data.missing}"
       },
