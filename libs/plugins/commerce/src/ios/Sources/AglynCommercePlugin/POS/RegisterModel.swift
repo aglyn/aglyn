@@ -61,19 +61,35 @@ final class RegisterModel {
   @ObservationIgnored private var openAttempt = AttemptKeys()
   @ObservationIgnored private var listeners: [String: FirestoreListening] = [:]
   @ObservationIgnored private var reconnecting: Task<Void, Never>?
+  @ObservationIgnored private var keepingTheTill: Task<Void, Never>?
   /// How long an offline register waits between tries to reach the console.
   @ObservationIgnored var reconnectInterval: Duration = .seconds(10)
+  /// The shift and staff PIN routes.
+  @ObservationIgnored let opsAPI: PosOpsAPI
+  @ObservationIgnored private var tillCashier: PosCashier!
+  @ObservationIgnored private var tillShift: PosShiftModel!
+  /// Who is ringing: the cashier a PIN switched in, and the idle lock.
+  var cashier: PosCashier { tillCashier }
+  /// The register's shift and its drawer.
+  var shift: PosShiftModel { tillShift }
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
-    defaults: UserDefaults = .standard
+    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
-    self.api = ConsolePosSaleAPI(api: api, hostID: hostID)
+    let sale = ConsolePosSaleAPI(api: api, hostID: hostID)
+    self.api = sale
+    self.opsAPI = opsAPI ?? ConsolePosOpsAPI(api: api, hostID: hostID)
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
     store = RegisterStore(defaults: defaults, hostID: hostID)
+    let ops = self.opsAPI
+    let cashier = PosCashier(api: ops, registerID: { [weak self] in self?.register?.id }, autoLockMinutes: { [weak self] in self?.context?.ops.autoLockMinutes ?? 0 })
+    cashier.assertionSink = { sale.cashier.assertion = $0 }
+    tillCashier = cashier
+    tillShift = PosShiftModel(api: ops, registerID: { [weak self] in self?.register?.id }, assertion: { [weak cashier] in cashier?.assertion })
   }
 
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }
@@ -109,6 +125,8 @@ final class RegisterModel {
     Task { await loadContext() }
     reconnecting?.cancel()
     reconnecting = Task { [weak self] in await self?.reconnectWhileOffline() }
+    keepingTheTill?.cancel()
+    keepingTheTill = Task { [weak self] in await self?.keepTheTill() }
   }
 
   func stop() {
@@ -116,6 +134,17 @@ final class RegisterModel {
     listeners = [:]
     reconnecting?.cancel()
     reconnecting = nil
+    keepingTheTill?.cancel()
+    keepingTheTill = nil
+  }
+
+  /// The idle lock and the cashier's assertion renewal, on the clock's beat.
+  private func keepTheTill() async {
+    while !Task.isCancelled {
+      try? await Task.sleep(for: cashierTick)
+      if Task.isCancelled { return }
+      await cashier.tick()
+    }
   }
 
   /// The register's one read of the console (readers, tax, receipts) happens
@@ -151,10 +180,12 @@ final class RegisterModel {
   }
 
   func selectRegister(_ next: PosRegister) {
+    if register?.id != next.id { cashier.reset() }
     register = next
     store.registerID = next.id
     cart = store.cart(next.id)
     resumePendingSale(next)
+    Task { await shift.refresh() }
   }
 
   func loadContext() async {

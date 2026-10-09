@@ -1270,7 +1270,7 @@
       "releaseFlag": "release_workflows"
     },
     {
-      "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+      "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
       "id": "accounting",
       "label": "Accounting",
       "releaseFlag": "release_accounting"
@@ -1389,6 +1389,17 @@
       "siteOff": {
         "keeps": "Members keep their points and store credit.",
         "stops": "Stops new points, rewards at checkout and at the register, and referral credit."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "defaultOffPerSite": true,
+      "description": "Chat with visitors through your own Tidio or LiveChat account.",
+      "id": "live-chat",
+      "label": "Live chat",
+      "siteOff": {
+        "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account.",
+        "stops": "Switching Live chat off for this site removes the chat from its pages."
       }
     }
   ],
@@ -4001,6 +4012,12 @@
   "OUTREACH_SEQUENCE_NAME_MAX": 120,
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "POS_CASH_EVENT_LABELS": {
+    "drop": "Safe drop",
+    "paid_in": "Paid in",
+    "paid_out": "Paid out",
+    "refund": "Cash refund"
+  },
   "POS_KIOSK_CATALOG_LIMIT": 200,
   "POS_KIOSK_DONE_SECONDS": 15,
   "POS_KIOSK_IDLE_SECONDS_DEFAULT": 90,
@@ -4042,6 +4059,15 @@
   "POS_OFFLINE_SALE_MAX_LINES": 100,
   "POS_OFFLINE_SYNC_BATCH_MAX": 25,
   "POS_OFFLINE_SYNC_ROUTE": "/api/commerce/pos-offline-sync",
+  "POS_TENDER_LABELS": {
+    "card_keyed": "Card (keyed)",
+    "card_link": "Card (payment link)",
+    "card_present": "Card",
+    "cash": "Cash",
+    "credit": "Store credit",
+    "folio": "Room charge",
+    "gift_card": "Gift card"
+  },
   "PRICE_RANGE_MAX_LENGTH": 100,
   "PRODUCT_LIST_BASE": [
     {

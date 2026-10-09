@@ -1654,6 +1654,30 @@ data class PickupLocationSettings(
     val readyWithinMinutes: Double? = null,
 )
 
+@Serializable
+data class PosCashEvent(
+    val amountCents: Double,
+    val atMs: Double,
+    val by: String,
+    val id: String,
+    val orderId: String? = null,
+    val reason: String,
+    val type: PosCashEventType,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosCashEventTypeSerializer::class)
+enum class PosCashEventType(val raw: String) {
+    DROP("drop"),
+    PAID_IN("paid_in"),
+    PAID_OUT("paid_out"),
+    REFUND("refund"),
+    UNKNOWN(""),
+}
+
+internal object PosCashEventTypeSerializer :
+    RawEnumSerializer<PosCashEventType>("com.aglyn.contracts.PosCashEventType", PosCashEventType.entries, PosCashEventType.UNKNOWN, { it.raw })
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosDeviceModeSerializer::class)
 enum class PosDeviceMode(val raw: String) {
@@ -1982,6 +2006,76 @@ enum class PosReceiptChannel(val raw: String) {
 
 internal object PosReceiptChannelSerializer :
     RawEnumSerializer<PosReceiptChannel>("com.aglyn.contracts.PosReceiptChannel", PosReceiptChannel.entries, PosReceiptChannel.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosShift(
+    val cashEvents: List<PosCashEvent>,
+    val closedAtMs: Double? = null,
+    val closedBy: String? = null,
+    val closedByName: String? = null,
+    val closingNote: String? = null,
+    val countedCashCents: Double? = null,
+    val expectedCashCents: Double? = null,
+    val hostId: String,
+    val netSalesCents: Double? = null,
+    val openedAtMs: Double,
+    val openedBy: String,
+    val openedByName: String? = null,
+    val openingFloatCents: Double,
+    val registerId: String,
+    val report: PosShiftReport? = null,
+    val status: PosShiftStatus,
+    val varianceCents: Double? = null,
+)
+
+@Serializable
+data class PosShiftReport(
+    val cashRefundsCents: Double,
+    val cashSalesCents: Double,
+    val discountsCents: Double,
+    val dropsCents: Double,
+    val expectedCashCents: Double,
+    val grossSalesCents: Double,
+    val netSalesCents: Double,
+    val openingFloatCents: Double,
+    val orderCount: Double,
+    val paidInCents: Double,
+    val paidOutCents: Double,
+    val refundCount: Double,
+    val refundsByTender: Map<String, Double>,
+    val refundsCents: Double,
+    val salesByTender: Map<String, Double>,
+    val taxCents: Double,
+    val tipsCents: Double,
+    val truncated: Boolean? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosShiftStatusSerializer::class)
+enum class PosShiftStatus(val raw: String) {
+    CLOSED("closed"),
+    OPEN("open"),
+    UNKNOWN(""),
+}
+
+internal object PosShiftStatusSerializer :
+    RawEnumSerializer<PosShiftStatus>("com.aglyn.contracts.PosShiftStatus", PosShiftStatus.entries, PosShiftStatus.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosTenderMethodSerializer::class)
+enum class PosTenderMethod(val raw: String) {
+    CARD_KEYED("card_keyed"),
+    CARD_LINK("card_link"),
+    CARD_PRESENT("card_present"),
+    CASH("cash"),
+    CREDIT("credit"),
+    FOLIO("folio"),
+    GIFT_CARD("gift_card"),
+    UNKNOWN(""),
+}
+
+internal object PosTenderMethodSerializer :
+    RawEnumSerializer<PosTenderMethod>("com.aglyn.contracts.PosTenderMethod", PosTenderMethod.entries, PosTenderMethod.UNKNOWN, { it.raw })
 
 @Serializable
 data class ProductChannelFacts(
@@ -2345,11 +2439,12 @@ internal data class ContractValuesPart3(
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
-    @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
+    @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
     @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_MAX") val posKioskIdleSecondsMax: Long,
@@ -2368,6 +2463,7 @@ internal data class ContractValuesPart4(
     @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
+    @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
@@ -2396,6 +2492,10 @@ internal data class ContractValuesPart4(
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
+)
+
+@Serializable
+internal data class ContractValuesPart5(
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )
@@ -2410,6 +2510,7 @@ class ContractValues internal constructor(
     private val part2: ContractValuesPart2,
     private val part3: ContractValuesPart3,
     private val part4: ContractValuesPart4,
+    private val part5: ContractValuesPart5,
 ) {
     val areaServedMax: Long get() = part1.areaServedMax
     val artifactTypeLabels: Map<String, String> get() = part1.artifactTypeLabels
@@ -2554,7 +2655,8 @@ class ContractValues internal constructor(
     val outreachSequenceNameMax: Long get() = part3.outreachSequenceNameMax
     val outreachTaskTitleMax: Long get() = part3.outreachTaskTitleMax
     val paymentAcceptedMaxLength: Long get() = part3.paymentAcceptedMaxLength
-    val posKioskCatalogLimit: Long get() = part3.posKioskCatalogLimit
+    val posCashEventLabels: Map<String, String> get() = part3.posCashEventLabels
+    val posKioskCatalogLimit: Long get() = part4.posKioskCatalogLimit
     val posKioskDoneSeconds: Long get() = part4.posKioskDoneSeconds
     val posKioskIdleSecondsDefault: Long get() = part4.posKioskIdleSecondsDefault
     val posKioskIdleSecondsMax: Long get() = part4.posKioskIdleSecondsMax
@@ -2573,6 +2675,7 @@ class ContractValues internal constructor(
     val posOfflineSaleMaxLines: Long get() = part4.posOfflineSaleMaxLines
     val posOfflineSyncBatchMax: Long get() = part4.posOfflineSyncBatchMax
     val posOfflineSyncRoute: String get() = part4.posOfflineSyncRoute
+    val posTenderLabels: Map<String, String> get() = part4.posTenderLabels
     val priceRangeMaxLength: Long get() = part4.priceRangeMaxLength
     val productListBase: List<ListQueryFilter> get() = part4.productListBase
     val productListHeaders: Map<String, String> get() = part4.productListHeaders
@@ -2601,12 +2704,12 @@ class ContractValues internal constructor(
     val templateListBase: List<ListQueryFilter> get() = part4.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part4.templateListQuery
     val tenantEmailCollection: String get() = part4.tenantEmailCollection
-    val tenantEmails: List<TenantEmailEntry> get() = part4.tenantEmails
-    val workflowMaxSteps: Long get() = part4.workflowMaxSteps
+    val tenantEmails: List<TenantEmailEntry> get() = part5.tenantEmails
+    val workflowMaxSteps: Long get() = part5.workflowMaxSteps
 
-    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4)
+    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5)
 
-    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4).hashCode()
+    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5).hashCode()
 
     companion object {
         /** Decodes every part from one JSON text; the format must ignore unknown keys. */
@@ -2617,6 +2720,7 @@ class ContractValues internal constructor(
                 json.decodeFromJsonElement(ContractValuesPart2.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart3.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart4.serializer(), tree),
+                json.decodeFromJsonElement(ContractValuesPart5.serializer(), tree),
             )
         }
     }
