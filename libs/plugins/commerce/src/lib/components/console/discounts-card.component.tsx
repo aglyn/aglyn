@@ -225,12 +225,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
       HeaderProps={{
         action: <TransferHeaderActions resource={COMMERCE_DISCOUNTS_TRANSFER} hostId={hostId} />,
       }}
-      help={pluginDocsHelp('commerceEndToEnd', {
-        anchor: '#4-what-checkout-does',
-        excerpt:
-          'Discount codes your customers type at your own checkout — not ' +
-          `the coupons ${Aglyn.PLATFORM_BRAND_NAME} issues against your subscription.`,
-      })}
+      help={pluginDocsHelp('commerce', { anchor: '#discounts' })}
       contentGutterX
       contentGutterY
     >

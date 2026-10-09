@@ -507,12 +507,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     <Stack spacing={3}>
       <CardDisplay
         header={'Services'}
-        help={pluginDocsHelp('bookings', {
-        anchor: '#set-up-bookings',
-        excerpt:
-          'The bookable services this site offers — how long each takes, ' +
-          'what it costs, and the hours it can be booked in.',
-      })}
+        help={pluginDocsHelp('bookings', { anchor: '#set-up-bookings' })}
         contentGutterX
         contentGutterY
       >
@@ -602,12 +597,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
 
       <CardDisplay
         header={bookerFilter ? `Bookings for ${bookerFilter}` : 'Upcoming bookings'}
-        help={pluginDocsHelp('bookings', {
-        anchor: '#manage',
-        excerpt:
-          'Bookings taken on this site, with the customer and the slot each ' +
-          'one holds.',
-      })}
+        help={pluginDocsHelp('bookings', { anchor: '#manage' })}
         contentGutterX
         contentGutterY
         HeaderProps={{

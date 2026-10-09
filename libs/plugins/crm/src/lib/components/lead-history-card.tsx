@@ -117,7 +117,7 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
   return (
     <CardDisplay
       header={'Captured history'}
-      help={pluginDocsHelp('crmLeads', { anchor: '#lead-source-filled-in' })}
+      help={pluginDocsHelp('crmLeads', { anchor: '#captured-history' })}
       contentGutterX
       contentGutterY
     >

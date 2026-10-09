@@ -81,6 +81,7 @@ const OUTPUTS = [
   'libs/aglyn/src/lib/app-utils/docs-index.generated.ts',
   'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
   'libs/aglyn/src/lib/app-utils/docs-help.generated.ts',
+  'libs/aglyn/src/lib/app-utils/docs-help-sections.generated.ts',
 ]
 
 const git = (args, options) =>

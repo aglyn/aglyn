@@ -17,7 +17,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PLUGIN_DOCS, PLUGIN_DOCS_SECTIONS } from '@aglyn/aglyn'
+import { PLUGIN_DOCS, PLUGIN_DOCS_SECTION_TITLES } from '@aglyn/aglyn'
 import {
   DOCS_HELP_EXCERPTS,
   DOCS_HELP_SECTION_EXCERPTS,
@@ -57,15 +57,47 @@ const REPO_ROOT = join(__dirname, '../../..')
 const SAME_SURFACE: Record<string, string> = {
   'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx + apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx':
     'The Outstanding card is drawn on the Billing overview and again on Invoices on purpose, so an unpaid invoice is settled wherever the owner looks.',
-  'libs/plugins/crm/src/lib/components/company-detail-page.tsx + libs/plugins/crm/src/lib/components/company-properties-card.tsx':
-    "The detail page draws the record header while the company loads; the properties card draws the same header once it has.",
+}
+
+/**
+ * Shared links whose fix belongs to another lane, each naming that lane. Not
+ * a parking lot: an entry fails the moment its link is no longer shared, so
+ * it leaves with the fix that makes it stale.
+ */
+const HANDED_OFF: Record<string, string> = {
+  'plugin:aiProducts':
+    'AI tooltips and their setup guides are the docs/ai-feature-guides lane (AI-sites session, 10/8).',
+  'plugin:billing#ai-allotments':
+    'AI tooltips and their setup guides are the docs/ai-feature-guides lane (AI-sites session, 10/8).',
+  'plugin:shipping#carrier-accounts':
+    'Your shipping accounts renders only on a deployment that offers Easyship, Sendcloud or ShipperHQ, so its docs wait for that release; the commerce v3 lane holds the draft (from-tooltip-session.md).',
 }
 
 interface Tooltip {
   file: string
   line: number
-  title: string
-  excerpt: string
+  /** Null when the call computes its own excerpt, which a scan cannot read. */
+  title: string | null
+  excerpt: string | null
+  /** Where "Open documentation" lands: registry, topic and heading. */
+  link: string
+  /** The card's own heading, read from the nearest `header=`/`label=`. */
+  surface: string | null
+}
+
+/**
+ * The heading of the card a help call sits on: the last `header=`, `label=`
+ * or `title=` literal in the few hundred characters before it. Two calls in
+ * one file with the same surface are one card drawn in different states.
+ */
+function surfaceBefore(source: string, offset: number): string | null {
+  const window = source.slice(Math.max(0, offset - 500), offset)
+  const named = [
+    ...window.matchAll(
+      /\b(?:header|label|title)=\{?\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`|\{\s*children:\s*'([^']*)')/g,
+    ),
+  ].pop()
+  return named ? (named[1] ?? named[2] ?? named[3] ?? named[4] ?? null) : null
 }
 
 type Sections = Readonly<Record<string, string>>
@@ -97,15 +129,20 @@ function pluginTooltip(
     PLUGIN_DOCS as Record<string, { title: string; excerpt: string }>
   )[topic]
   if (!page) return null
-  const section = anchor
+  const sectionTitle = anchor
     ? (
-        PLUGIN_DOCS_SECTIONS as Record<
+        PLUGIN_DOCS_SECTION_TITLES as Record<
           string,
-          Readonly<Record<string, { title: string; excerpt: string }>>
+          Readonly<Record<string, string>>
         >
       )[topic]?.[anchor]
     : undefined
-  return [title ?? section?.title ?? page.title, section?.excerpt ?? page.excerpt]
+  // A section's prose is fetched with the tooltip, not importable here; it is
+  // one sentence per (topic, anchor), so the pair stands in for it.
+  return [
+    title ?? sectionTitle ?? page.title,
+    sectionTitle ? `section ${topic}${anchor}` : page.excerpt,
+  ]
 }
 
 /** Comments blanked to spaces, so offsets — and line numbers — survive. */
@@ -161,15 +198,19 @@ function scan(file: string): Tooltip[] {
     offset: number,
   ) => {
     const { title, anchor, excerpt } = overrides(body)
-    // A computed excerpt is the call's own, and nothing here can read it.
-    if (excerpt === undefined) return
+    // An anchor read from a variable is a table's (the notification
+    // sections'), and each row of it is its own heading.
+    if (!anchor && /(?:^|[\s,{])anchor[:=]/.test(body)) return
     const resolved = resolve(topic, anchor, title)
     if (!resolved) return
     found.push({
       file,
       line: lineOf(offset),
-      title: resolved[0],
-      excerpt: excerpt ?? resolved[1],
+      // A computed excerpt is the call's own, and nothing here can read it.
+      title: excerpt === undefined ? null : resolved[0],
+      excerpt: excerpt === undefined ? null : (excerpt ?? resolved[1]),
+      link: `${resolve === pluginTooltip ? 'plugin' : 'console'}:${topic}${anchor ?? ''}`,
+      surface: surfaceBefore(source, offset),
     })
   }
 
@@ -240,6 +281,7 @@ describe('every help tooltip says something of its own (AGL-3707)', () => {
   it('no two surfaces share a tooltip', () => {
     const byText = new Map<string, Tooltip[]>()
     for (const tip of tooltips) {
+      if (tip.title === null) continue
       const key = `${tip.title}\n${tip.excerpt}`
       byText.set(key, [...(byText.get(key) ?? []), tip])
     }
@@ -260,6 +302,54 @@ describe('every help tooltip says something of its own (AGL-3707)', () => {
           'tooltip), or give it a title and excerpt of its own:\n  ' +
           shared.join('\n  '),
       )
+    }
+  })
+
+  it('every card opens a docs section of its own', () => {
+    // Zach, 10/8: POS registers and POS devices, Shipping and Taxes, each
+    // with "their own description and unique link to get more info on how to
+    // set it up properly". A link two cards share lands one of them on
+    // somebody else's instructions — and a page-level link (no anchor) lands
+    // it at the top of a page about everything.
+    const byLink = new Map<string, Tooltip[]>()
+    for (const tip of tooltips) {
+      byLink.set(tip.link, [...(byLink.get(tip.link) ?? []), tip])
+    }
+    const shared: string[] = []
+    for (const [link, tips] of byLink) {
+      // One card drawn in its loading, empty and loaded branches is one
+      // surface: same file, same heading.
+      const surfaces = new Set(
+        tips.map((tip) => `${tip.file}\n${tip.surface ?? `line ${tip.line}`}`),
+      )
+      if (surfaces.size < 2) continue
+      const owners = [...new Set(tips.map((tip) => tip.file))].sort()
+      if (owners.length > 1 && owners.join(' + ') in SAME_SURFACE) continue
+      if (link in HANDED_OFF) continue
+      shared.push(
+        `${link} — ${tips.map((tip) => `${tip.file}:${tip.line} «${tip.surface ?? '?'}»`).join(', ')}`,
+      )
+    }
+    if (shared.length) {
+      throw new Error(
+        'These help links are shared by different cards, so "Open documentation" cannot ' +
+          'explain how to set up each one. Give each card a docs heading of its own ' +
+          "(add a `### Card {#id}` section to apps/docs whose first sentence says what it is " +
+          "and how to set it up), regenerate, and pass anchor: '#id':\n  " +
+          shared.join('\n  '),
+      )
+    }
+  })
+
+  it('every HANDED_OFF link is still shared', () => {
+    for (const [link, reason] of Object.entries(HANDED_OFF)) {
+      expect(reason.length).toBeGreaterThan(20)
+      const surfaces = new Set(
+        tooltips
+          .filter((tip) => tip.link === link)
+          .map((tip) => `${tip.file}\n${tip.surface ?? `line ${tip.line}`}`),
+      )
+      expect([link, surfaces.size > 1]).toEqual([link, true])
     }
   })
 

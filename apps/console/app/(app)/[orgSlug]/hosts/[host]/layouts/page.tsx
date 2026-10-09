@@ -640,7 +640,7 @@ function Layouts(props) {
             href: buildRoute(Route.HOST_LAYOUTS, { orgSlug,  host }),
           },
         ]}
-        help="layouts"
+        help={{ topic: 'layouts', anchor: '#find-a-layout' }}
         header={{
           children: 'Layouts',
           icon: { path: mdiPageLayoutBody.path },

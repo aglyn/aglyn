@@ -916,6 +916,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
         {state.id ? 'Edit interaction' : 'New interaction'}
         <HelpTip
           {...docsHelp('interactions', {
+            anchor: '#fluent-interactions',
             excerpt:
               'Interactions run steps (show, hide, toggle, navigate…) when a trigger fires — on click, hover, load, and more. Pick a target by clicking it on the canvas.',
           })}

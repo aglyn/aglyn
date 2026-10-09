@@ -155,7 +155,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Overview', href: buildRoute(Route.ADMIN_OVERVIEW) },
       ]}
-      help="staffConsole"
+      help={{ topic: 'staffConsole', anchor: '#staff-overview' }}
       header={{
         children: 'Platform Overview',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -238,8 +238,19 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header={metric.label}
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt: metric.help,
+                      // One section per tile, keyed on its label (AGL-3707).
+                      anchor:
+                        metric.label === 'Organizations'
+                          ? '#staff-overview-organizations'
+                          : metric.label === 'Signups (30d)'
+                            ? '#staff-overview-signups'
+                            : metric.label === 'Users'
+                              ? '#staff-overview-users'
+                              : metric.label === 'Sites'
+                                ? '#staff-overview-sites'
+                                : metric.label === 'MRR estimate'
+                                  ? '#staff-overview-mrr'
+                                  : '#staff-overview',
                     })}
                     contentGutterX
                     contentGutterY
@@ -275,9 +286,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header={'Newest organizations'}
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'The most recently created organizations with their plan — open the Organizations page to manage one.',
+                      anchor: '#staff-overview-newest-orgs',
                     })}
                     contentGutterX
                     contentGutterY
@@ -383,9 +392,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header={'Broadcast announcement'}
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Send an in-app announcement to every organization owner and admin, optionally one plan tier. Audited, and mute preferences are respected.',
+                      anchor: '#broadcast-announcements',
                     })}
                     contentGutterX
                     contentGutterY

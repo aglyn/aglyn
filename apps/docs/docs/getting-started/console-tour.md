@@ -185,6 +185,13 @@ a site's status can change with no save at all (a timed suspension ends on its o
 a site doesn't store its plan, owner or template. See
 [Filter and search a list](#filter-and-search).
 
+### A site card {#a-site-card}
+
+Each card on **All Sites** is one site: **Visit** opens the live site in a new tab, and
+**Manage** opens its dashboard in the console, where its pages, media, users and settings
+are. The title is the site's display name, the line under it the address visitors reach
+it at, and the pill says whether it is live.
+
 ### The status pill {#the-status-pill}
 
 | Pill | Hover tells you |
@@ -260,6 +267,13 @@ A brand-new site shows the same cards with empty states — "No pageviews record
 Two things people expect here and won't find: **role management** lives under **Users**,
 and the **announcement bar** and **promotional popup** live under **Marketing**.
 
+### Recent activity {#recent-activity}
+
+The **Recent Activity** card on a site's dashboard lists the latest changes made to the
+site, newest first — who made each one and what it touched, linked straight to it.
+**View all activity** opens the full log under **Admin → Activity**; a brand-new site
+shows *No activity yet* until its first change in the console.
+
 **Visit site**, in the dashboard header, opens the published site in a new tab with the
 [admin bar](../building-sites/besigner/edit-from-the-live-site.md) armed — the route
 from a site's own dashboard to the site itself, without going back out to the Sites list
@@ -279,7 +293,24 @@ Single sign-on, Privacy, Ownership and Delete. Turning plugins on and off for th
 workspace is its own section, **Organization → Plugins** — **Marketplace** is
 for finding and installing new ones, not for administering what you already run:
 
+### Organization settings {#organization-settings}
+
+**Organization → Settings** is where you run the workspace itself: its name and
+workspace URL under **General**, then — for owners and admins — **Profile**, **Plugins**,
+**API keys**, **Branding**, **Single sign-on**, **Privacy**, **Holds & reviews** and
+**Import & export**, each a section in the rail on the left. **Ownership** and **Delete**
+appear to the workspace owner only.
+
 ![The Organization Settings page: a Navigation card listing General, Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Ownership and Delete, beside the General card with the organization name and workspace URL](/img/getting-started/org-settings-page.png)
+
+#### General {#organization-general}
+
+The **General** card renames the organization, changes its workspace URL and sets the
+time zone its sites inherit — "workspace" is the console's word for your organization's
+home.
+
+Changing the workspace URL changes the address teammates use to reach the workspace, so
+share the new one after you save.
 
 ### The notifications feed
 
@@ -294,6 +325,13 @@ remove the chip to drop it. The filters apply to the whole feed, not just the
 page on screen, and the pager then turns through the matches; see
 [Filter and search a list](#filter-and-search). There is no search box, because a
 notification's words are not indexed:
+
+#### All notifications {#all-notifications}
+
+The **All notifications** card is your whole feed, newest first, across every workspace
+you belong to: **Mark all read** clears it, and **Filters** narrows it by type or status.
+What arrives here, and what also reaches your email, is set on the **Settings** section
+beside it.
 
 #### How urgent each notification is {#notification-levels}
 

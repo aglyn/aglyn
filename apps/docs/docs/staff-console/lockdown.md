@@ -12,6 +12,12 @@ staff claim; locking or lifting anything requires the **super** staff role. Ever
 action — lock and unlock — writes an audit row.
 :::
 
+## The lockdown page {#lockdown-page}
+
+**Staff → Lockdown** locks and lifts the platform, one feature, a workspace, a site,
+a custom domain or one account: pick the scope and target, give a reason, then read
+back the verdict the page shows before you walk away.
+
 Lockdown is the control you reach for when something has gone wrong: a compromised
 site, an account being abused, a billing suspension that has run its course, or a
 maintenance window that needs the doors closed. One mechanism, five scopes:
@@ -851,6 +857,23 @@ Two things it does that the curl cannot, and they are the reason to prefer it:
   lift that failed. The page reports `NOT CONFIRMED` unless *no* key can still
   refuse the file, and logs every action that reached the server.
 
+#### Disable or release {#disable-or-release}
+
+Once a file is looked up, the **Disable or release** card sets or lifts its
+quarantine: pick the **Reason**, an optional **Until** time, an optional
+customer-facing message and an optional internal note, then **Disable this file** —
+or press **Release** to lift every key that is refusing it.
+
+Setting and lifting needs the **super** staff role. The internal note is never part
+of the notice the owning workspace sees.
+
+#### Actions taken in this session {#quarantine-session-log}
+
+The **Actions taken in this session** card lists every disable and release that
+reached the server since the page loaded, with the time: if you clicked and no line
+appeared, the click did not register. It starts empty on every page load; the audit
+log keeps the permanent record.
+
 **Disable only this copy** is the same deliberate narrowing as `by: "asset"`:
 use it when the same bytes are legitimate elsewhere and only this workspace's
 copy is the subject of the report. The key that is about to be written, and
@@ -1478,6 +1501,26 @@ So the page never claims a state it has not read back:
   register — check the state and click again.
 - A write that returns but whose re-read disagrees is reported as
   `NOT CONFIRMED`, loudly. Treat it as an unresolved incident, not a success.
+
+### Actions taken in this session {#lockdown-session-log}
+
+The **Actions taken in this session** card lists every lock and lift that reached the
+server since the page loaded, with the time it landed and a **verified** or **NOT
+CONFIRMED** chip: read it back before you leave the page.
+
+If you clicked and no line appeared, the click did not register. The list lives in the
+page, so reloading it starts a new, empty session; the audit log keeps the permanent
+record.
+
+### Active lockdowns {#active-lockdowns}
+
+The **Active platform, feature & account lockdowns** card lists every platform,
+feature and account lock in force, with its reason: check it before you tell a customer
+why they are refused.
+
+It is a snapshot taken when the page read it — the time is shown, and **Refresh** reads
+it again. Workspace and site locks are not on it, because they live on the workspace's
+and site's own records: check one with **Check state**, or open its staff page.
 
 ### What a caller is told
 

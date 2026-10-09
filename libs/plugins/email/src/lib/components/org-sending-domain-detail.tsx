@@ -284,7 +284,7 @@ function OrgSendingDomainPage(
   const card = (
     <CardDisplay
       header={'Sending domain'}
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#senders' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#org-sending-domain' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

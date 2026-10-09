@@ -138,13 +138,8 @@ const ID_CHUNK = PLUGIN_RECORD_LIST_IDS_MAX
 /** A credited form conversion's `refId` names a submission of this kind. */
 const SUBMISSION_RECORD_KIND = CAMPAIGN_CONVERSION_RECORD_KINDS.form
 
-const conversionsDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'A conversion is credited to the last campaign whose link the visitor ' +
-    'followed. The four kinds count different things about the same visits ' +
-    'and are never added together.',
-})
+/** One Conversions card — the organization's no-sites branch carries it too. */
+export const conversionsDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#conversions' })
 
 /** The stored record plus the document name the reader listed it under. */
 type ConversionRow = CampaignConversionRecord & { $id: string }

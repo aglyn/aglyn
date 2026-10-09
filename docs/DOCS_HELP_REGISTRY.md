@@ -16,6 +16,7 @@ deep links from drifting away from the docs themselves (AGL-599..602).
 | `apps/console/components/docs-help-excerpt.component.tsx` | Hand-written. The `next/dynamic` boundary that fetches the excerpts when a tooltip mounts. |
 | `apps/console/constants/docs-links.ts` | Hand-written. `DOCS_BASE_URL`, `buildDocsUrl`, and the `docsHelp(topic, { anchor })` resolver. Re-exports the generated types. |
 | `libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts` | **Generated.** The besigner subset (`BESIGNER_DOCS` + anchors) — the designer lib can't import console constants. |
+| `libs/aglyn/src/lib/app-utils/docs-help.generated.ts` + `docs-help-sections.generated.ts` | **Generated.** The plugin subset (`PLUGIN_DOCS`, anchors, section titles), and its section prose in a file of its own that `PluginDocsSectionExcerpt` fetches when a tooltip opens (AGL-3707). |
 | `libs/besigner/feature/designer/src/lib/utils/docs-help.ts` | Hand-written. The `besignerDocsUrl(page, anchor)` builder. |
 | `apps/console/constants/docs-links.spec.ts` | The freshness gate + structural checks (runs the generator with `--check`). |
 

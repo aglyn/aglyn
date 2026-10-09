@@ -76,12 +76,7 @@ import { templateReport, type TemplateCampaign } from '../model/template-report'
  */
 export const TEMPLATE_CAMPAIGN_CEILING = 100
 
-const reportDocsHelp = pluginDocsHelp('designedEmails', {
-  anchor: '#send-it',
-  excerpt:
-    'Every message sent from this template, and what those messages did — ' +
-    'each rate over the population it was measured against.',
-})
+const reportDocsHelp = pluginDocsHelp('designedEmails', { anchor: '#template-report' })
 
 /** What the Email plugin's template page hands its report zone. */
 export interface EmailTemplateReportCardProps {

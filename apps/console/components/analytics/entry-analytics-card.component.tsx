@@ -36,6 +36,13 @@ import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { readAnalyticsDays, recentDayIds } from '../../utils/analytics-day-cache'
 
+/**
+ * One help for the card in every state it draws (AGL-3707) — the loading and
+ * upsell branches used to say the breakdown was per entry, which only the
+ * site-wide Analytics page has.
+ */
+const ENTRY_TRAFFIC_HELP = docsHelp('buildABlog', { anchor: '#entry-traffic' })
+
 const DAYS = 14
 
 interface DayStat {
@@ -151,13 +158,7 @@ export function EntryAnalyticsCard(props: {
     return (
       <CardDisplay
         header={'Entry traffic'}
-        help={docsHelp('analytics', {
-          anchor: '#per-screen-traffic',
-          title: 'Entry traffic',
-          excerpt:
-            "This entry's own pageviews over the last 14 days, broken down " +
-            'by referrer and device — the per-page panel, for one post.',
-        })}
+        help={ENTRY_TRAFFIC_HELP}
         contentGutterX
         contentGutterY
       >
@@ -172,13 +173,7 @@ export function EntryAnalyticsCard(props: {
     return (
       <CardDisplay
         header={'Entry traffic'}
-        help={docsHelp('analytics', {
-          anchor: '#per-screen-traffic',
-          title: 'Entry traffic',
-          excerpt:
-            "This entry's own pageviews over the last 14 days, broken down " +
-            'by referrer and device — the per-page panel, for one post.',
-        })}
+        help={ENTRY_TRAFFIC_HELP}
         contentGutterX
         contentGutterY
       >
@@ -218,13 +213,7 @@ export function EntryAnalyticsCard(props: {
   return (
     <CardDisplay
       header={'Entry traffic (14 days)'}
-      help={docsHelp('analytics', {
-        anchor: '#traffic-card',
-        excerpt:
-          "This entry's page views over the last 14 days, counted against " +
-          'its public path. The device and referrer breakdown is measured ' +
-          'for the whole site rather than per page — it lives on Analytics.',
-      })}
+      help={ENTRY_TRAFFIC_HELP}
       contentGutterX
       contentGutterY
     >

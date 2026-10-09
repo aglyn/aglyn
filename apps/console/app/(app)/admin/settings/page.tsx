@@ -59,7 +59,7 @@ const AdminSettings: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Platform settings', href: buildRoute(Route.ADMIN_SETTINGS) },
       ]}
-      help={{ topic: 'staffConsole', anchor: '#free-workspace-limit' }}
+      help={{ topic: 'staffConsole', anchor: '#platform-settings' }}
       header={{
         children: 'Platform Settings',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
