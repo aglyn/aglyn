@@ -137,6 +137,10 @@ jest.mock('@aglyn/aglyn', () => ({
     jest.requireActual('@aglyn/aglyn').GOOGLE_ADS_ID_PATTERN,
   LINKEDIN_PARTNER_ID_PATTERN:
     jest.requireActual('@aglyn/aglyn').LINKEDIN_PARTNER_ID_PATTERN,
+  TIKTOK_PIXEL_ID_PATTERN:
+    jest.requireActual('@aglyn/aglyn').TIKTOK_PIXEL_ID_PATTERN,
+  PINTEREST_TAG_ID_PATTERN:
+    jest.requireActual('@aglyn/aglyn').PINTEREST_TAG_ID_PATTERN,
   GTM_CONTAINER_ID_PATTERN:
     jest.requireActual('@aglyn/aglyn').GTM_CONTAINER_ID_PATTERN,
   /*

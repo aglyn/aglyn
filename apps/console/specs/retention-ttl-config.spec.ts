@@ -260,6 +260,18 @@ const POLICIES: Array<{
     writers: ['libs/plugins/zapier/src/lib/server/store.ts'],
     stamp: 'expiresAt: deliveryMarkerExpiry(input.nowMs)',
   },
+  // AGL-3694: a checkout's advertising consent and the conversions owed to
+  // an Ad conversions connection, both stamped by the plugin's intake.
+  {
+    collectionGroup: 'adConversionConsents',
+    writers: ['libs/plugins/ad-conversions/src/lib/server/intake.ts'],
+    stamp: 'expiresAt: new Date(nowMs + CONSENT_TTL_MS)',
+  },
+  {
+    collectionGroup: 'adConversionEvents',
+    writers: ['libs/plugins/ad-conversions/src/lib/server/intake.ts'],
+    stamp: 'expiresAt: new Date(nowMs + EVENT_TTL_MS)',
+  },
   // AGL-3660: a stock photo library's search answers, kept 24 hours.
   {
     collectionGroup: 'stockPhotoSearches',

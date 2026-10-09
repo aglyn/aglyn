@@ -195,6 +195,7 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
       'Toggle Inventory sync',
       'Toggle Delivery apps',
       'Toggle Rewards',
+      'Toggle Ad conversions',
     ])
   })
 
