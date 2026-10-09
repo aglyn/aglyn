@@ -14079,6 +14079,9 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
     ['fulfillmentNetworkConnections', `${HOST}_shipbob`],
     ['fulfillmentNetworkConnections', `${HOST}_shipbob`, 'log', 'entry-1'],
     ['fulfillmentNetworkOrders', `${HOST}_order-1_shipbob`],
+    // ShipMonk (AGL-3697): the same collections, holding a sealed API key and webhook secret.
+    ['fulfillmentNetworkConnections', `${HOST}_shipmonk`],
+    ['fulfillmentNetworkOrders', `${HOST}_order-1_shipmonk`],
   ]
   const PRINCIPALS = [
     ['owner', () => authed(OWNER)],
