@@ -89,7 +89,7 @@ describe('siteIntegrationHosts', () => {
       async () => ({ enabled: false }),
       async () => ({ enabled: 'true' }),
       async () => null,
-      async () => {
+      async (): Promise<never> => {
         throw new Error('unavailable')
       },
     ]) {
