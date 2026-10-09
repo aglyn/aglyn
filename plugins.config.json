@@ -1585,6 +1585,7 @@
       },
       "mobile": {
         "$comment": "AGL-3668: the workspace's datasets in the Aglyn app: the list a member can see, create (and a join collection), each dataset's records count, fields, sharing and references, its records with the quick search and filters as one query, record create, edit and delete (reference integrity through /api/orgs/datasets), export, the schema editor (names, sharing, fields, reorder) and delete; list and detail side by side on tablets and desktop.",
+        "ios": { "module": "AglynDataPlugin", "register": "registerDataNative" },
         "android": { "package": "com.aglyn.plugins.data", "register": "registerDataNative" },
         "contributes": {
           "screens": ["data.datasets", "data.records", "data.schema"],

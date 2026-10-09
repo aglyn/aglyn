@@ -114,6 +114,25 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     guard (200..<300).contains(status) else { throw Self.failure(status: status, body: body) }
   }
 
+  private func isServerTimestamp(_ value: Any) -> Bool {
+    (value as? FirestoreSentinel) == .serverTimestamp
+  }
+
+  public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
+    let name = "\(databasePath)/\(path.joined(separator: "/"))"
+    var transforms: [[String: Any]] = []
+    let encoded = Self.encodeFields(fields, prefix: [], transforms: &transforms)
+    // The mask names each top-level field, so a map value replaces the stored map whole.
+    var write: [String: Any] = [
+      "update": ["name": name, "fields": encoded],
+      "updateMask": ["fieldPaths": fields.filter { !isServerTimestamp($0.value) }.keys.sorted().map(Self.quote)],
+      "currentDocument": ["exists": true],
+    ]
+    if !transforms.isEmpty { write["updateTransforms"] = transforms }
+    let (status, body) = try await send(url: "\(root):commit", method: "POST", body: ["writes": [write]])
+    guard (200..<300).contains(status) else { throw Self.failure(status: status, body: body) }
+  }
+
   public func deleteDocument(_ path: [String]) async throws {
     let (status, body) = try await send(url: "\(root)/\(Self.encodePath(path))", method: "DELETE", body: nil)
     guard (200..<300).contains(status) || status == 404 else { throw Self.failure(status: status, body: body) }

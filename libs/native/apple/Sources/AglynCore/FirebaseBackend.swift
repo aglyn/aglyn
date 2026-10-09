@@ -139,4 +139,8 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   public func deleteDocument(_ path: [String]) async throws {
     try await db.document(path.joined(separator: "/")).delete()
   }
+
+  public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
+    try await db.document(path.joined(separator: "/")).updateData(fields.mapValues(Self.writable))
+  }
 }
