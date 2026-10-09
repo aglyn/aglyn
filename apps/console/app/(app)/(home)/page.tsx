@@ -64,6 +64,7 @@ import {
 } from '../../../utils/signup-workspace'
 import {
   holdSignUpLanding,
+  isLeavingConsole,
   releaseSignUpLanding,
 } from '../../../utils/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
@@ -246,6 +247,10 @@ function OrgJump() {
     // read once and destructively — starting before it answers would drop it.
     if (storedIntent === undefined) return
     if (provisionedForRef.current === uid) return
+    // The editor-hint bounce is already leaving (AGL-3690). The claim clears
+    // the held name, so starting it now would lose the name with the page.
+    // The page this bounce returns to provisions instead.
+    if (isLeavingConsole()) return
     provisionedForRef.current = uid
     let active = true
     /**

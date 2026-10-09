@@ -24,6 +24,7 @@ import { editorHintCookieDomain } from './editor-hint-cookie.component'
 import { emailGateWouldRefuse } from '../utils/email-verification-gate'
 import {
   isSignUpLandingHeld,
+  markLeavingConsole,
   useSignUpLandingHeld,
 } from '../utils/sign-up-landing-hold'
 
@@ -195,6 +196,9 @@ export default function EditHintBounce({
           }
           return
         }
+        // Marked in the same tick as the check above, so a provisioning that
+        // has not claimed yet sees this and waits for the return (AGL-3690).
+        markLeavingConsole()
         const go = navigate ?? ((target: string) => window.location.assign(target))
         go(url)
       } catch {
