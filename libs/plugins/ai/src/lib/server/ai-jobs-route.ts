@@ -47,6 +47,32 @@ import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
 import { withoutErasedSites } from './ai-jobs-live-sites'
 import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
+import { reportServerError } from '@aglyn/tenant-data-admin/server/client-error-report'
+
+/**
+ * A caught fault on this door, reported as well as logged (AGL-1921).
+ *
+ * `onRequestError` sees only an UNCAUGHT throw, and the Vercel log drain
+ * forwards the status line but not a `console.error`, so the three 500s
+ * this route answered on 2026-10-06 at 17:41–17:47Z reached the alert as
+ * START/END/REPORT with no reason anywhere. Never throws.
+ */
+async function reportJobFault(what: string, error: unknown): Promise<void> {
+  try {
+    await reportServerError(
+      {
+        message: `${what}: ${error instanceof Error ? error.message : String(error)}`,
+        stack: error instanceof Error ? error.stack : undefined,
+        route: '/api/ai/jobs',
+        routeType: 'route',
+        method: 'POST',
+      },
+      { service: 'console-web' },
+    )
+  } catch {
+    // The console line beside each call is the record of last resort.
+  }
+}
 
 /**
  * AI generation jobs: create and list (AGL-2904).
@@ -214,6 +240,7 @@ export async function POST(request: Request): Promise<Response> {
       () => undefined,
     )
     console.error('ai job admission failed', { orgId: gate.orgId, kind: parsed.kind, error })
+    await reportJobFault('ai job admission failed', error)
     return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
   }
   if (refusal) {
@@ -252,6 +279,7 @@ export async function POST(request: Request): Promise<Response> {
       () => undefined,
     )
     console.error('ai job create failed', { orgId: gate.orgId, error })
+    await reportJobFault('ai job create failed', error)
     return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
   }
   const jobId = created.$id
@@ -295,6 +323,7 @@ export async function POST(request: Request): Promise<Response> {
       () => undefined,
     )
     console.error('ai job first step not claimable', { orgId: gate.orgId, jobId })
+    await reportJobFault('ai job first step not claimable', new Error(`job ${jobId}`))
     return Response.json({ error: 'The AI job could not be started' }, { status: 500 })
   }
   return Response.json(

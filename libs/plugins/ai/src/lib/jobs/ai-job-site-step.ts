@@ -66,6 +66,7 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
+import { AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -615,6 +616,14 @@ export function aiSiteUnitJob(
   // The job the member started travels with every unit, so what the unit
   // writes names it (AGL-3596).
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
+  // A page is told the pages built before it, whose photos it does not place
+  // again (AGL-3660): the maker's portrait in About is never a vase in Work.
+  if (unit.screen) {
+    const pages = (job.outputs ?? [])
+      .filter((output) => output.resource === 'screen' && output.hostId === job.hostId && output.id)
+      .map((output) => output.id)
+    if (pages.length) unitInputs[AI_STOCK_PHOTO_PAGES_INPUT] = pages
+  }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
   // A page is told them too, so its buttons may go to a page built after it.

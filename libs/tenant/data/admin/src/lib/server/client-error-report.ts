@@ -148,6 +148,19 @@ export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
  * drops it. Both shapes are built here so every accepted beacon event is
  * representable.
  */
+/**
+ * The stack, headed by the message when the stack does not already carry it.
+ *
+ * V8 opens a stack with `Name: message`; JavaScriptCore and SpiderMonkey do
+ * not, so a Safari or Firefox report used to arrive as bare frames with no
+ * message at all — the 2026-10-09 01:23Z `host-activity-write` page could not
+ * say what had failed.
+ */
+function stackWithMessage(stack: string, message: string | undefined): string {
+  if (!message || stack.includes(message)) return stack
+  return `Error: ${message}\n${stack}`
+}
+
 function toReportedEvent(
   event: ClientErrorEvent,
   service: string,
@@ -158,7 +171,9 @@ function toReportedEvent(
     '@type':
       'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
     serviceContext: { service, version },
-    message: hasStack ? event.stack : `${event.kind}: ${event.message}`,
+    message: hasStack
+      ? stackWithMessage(event.stack as string, event.message)
+      : `${event.kind}: ${event.message}`,
     // Outside `serviceContext` so Error Reporting ignores it while a log-match
     // policy can still filter on it — the same placement, for the same reason,
     // that the server half gives `route`/`method`/`digest`.

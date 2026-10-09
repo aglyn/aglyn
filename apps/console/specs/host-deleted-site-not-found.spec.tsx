@@ -254,8 +254,9 @@ describe('a deleted site renders as gone, with nothing beneath it (AGL-3596)', (
     await settle()
 
     expect(screen.getByText('site page host-1')).toBeTruthy()
-    // One re-resolution (one projection read), not a loop.
-    expect(mockGetDocsFromServer.mock.calls.length - readsBefore).toBe(1)
+    // One re-resolution, not a loop: one pass is the projection and the
+    // authoritative query, started together since AGL-3718.
+    expect(mockGetDocsFromServer.mock.calls.length - readsBefore).toBe(2)
   })
 
   it('CONTROL — a live site mounts its pages with its server-confirmed id', async () => {

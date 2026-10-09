@@ -682,6 +682,35 @@ describe('reportClientErrors (AGL-1925) — a laptop is not a deployment', () =>
     expect(payload.message).toContain('at rJ')
   })
 
+  it('heads a Safari or Firefox stack with its message, which those engines leave out', async () => {
+    process.env['VERCEL'] = '1'
+    const fetchMock = okFetch()
+    const mod = await load()
+    await mod.reportClientErrors(
+      [
+        {
+          kind: 'host-activity-write',
+          message: 'Missing or insufficient permissions.',
+          stack: 'z@https://app.aglyn.com/_next/static/a.js:1:6044\ntv@https://app.aglyn.com/_next/static/a.js:1:91833',
+        },
+        {
+          kind: 'error',
+          message: 'boom',
+          stack: 'Error: boom\n  at fn (https://app.aglyn.com/_next/static/a.js:1:2)',
+        },
+      ],
+      { service: 'console-web' },
+    )
+    const entries = JSON.parse(fetchMock.mock.calls[0][1].body).entries
+    expect(entries[0].jsonPayload.message).toBe(
+      'Error: Missing or insufficient permissions.\nz@https://app.aglyn.com/_next/static/a.js:1:6044\ntv@https://app.aglyn.com/_next/static/a.js:1:91833',
+    )
+    // A V8 stack already opens with it, and is left alone.
+    expect(entries[1].jsonPayload.message).toBe(
+      'Error: boom\n  at fn (https://app.aglyn.com/_next/static/a.js:1:2)',
+    )
+  })
+
   it('defaults a missing kind rather than writing an unfilterable entry', async () => {
     process.env['VERCEL'] = '1'
     const fetchMock = okFetch()

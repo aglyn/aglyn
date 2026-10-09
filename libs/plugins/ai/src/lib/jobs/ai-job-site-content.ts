@@ -39,6 +39,7 @@ import {
   type AiLayoutPicturePhoto,
   type AiLayoutPictureSlot,
 } from '../layout-language/ai-layout-pictures'
+import { aiOriginJobId } from './ai-job-draft-ids'
 import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
 import {
   aiLayoutListingId,
@@ -228,6 +229,7 @@ export async function aiSitePostCover(input: {
         seed: `${job.$id}:posts:${index}`,
         business: aiSiteWords(job.inputs).about || job.brief,
         sectionNames: ['Blog'],
+        jobId: aiOriginJobId(job),
         ...(input.signal ? { signal: input.signal } : {}),
       })
       const [found] = source
@@ -390,6 +392,7 @@ export async function aiSiteProductPhotos(input: {
       seed,
       business: aiSiteWords(input.job.inputs).about || input.job.brief,
       sectionNames: ['Products'],
+      jobId: aiOriginJobId(input.job),
       ...(input.signal ? { signal: input.signal } : {}),
     })
     if (source) found = await source(slots)
