@@ -928,6 +928,10 @@ jobs:
       - run: npm run test:brand-literals
       - run: npm run check:brand-literals
 
+      # The SSO Auth-record identity backfill's planner (AGL-3721): it may
+      # fill a blank name or photo and must never overwrite one.
+      - run: npm run test:sso-auth-identity-backfill
+
       # A plugin's domain stays in its plugin (AGL-3080, from AGL-2939): a
       # domain-named file or route directory, a vendor literal, a first-party
       # plugin id or a static plugin import in any tree that is not a plugin
