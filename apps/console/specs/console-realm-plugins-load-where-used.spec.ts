@@ -74,6 +74,7 @@ jest.mock('../utils/realm-plugin-host.client', () => ({
 
 import {
   loadOrgRealmPlugins,
+  prefetchOrgRealmInstalls,
   resetOrgRealmInstallsForTests,
 } from '../utils/realm-plugins.client'
 
@@ -234,6 +235,37 @@ describe('the Besigner loads the installs that draw on a site (AGL-3391)', () =>
     const loaded = await loadOrgRealmPlugins(MOCK_ORG_ID, MOCK_USER, { at: 'editor' })
 
     expect(loaded).toEqual([])
+    expect(mockFetches).toBe(0)
+  })
+})
+
+describe('the shell prefetches the install list (AGL-3660)', () => {
+  it('is the same request the shell load then uses, not a second one', async () => {
+    mockInstalls = [UNDECLARED_INSTALL]
+
+    prefetchOrgRealmInstalls(MOCK_ORG_ID, MOCK_USER)
+    expect(mockFetches).toBe(1)
+    await load({ at: 'shell' })
+
+    expect(mockUrls).toEqual(['/api/orgs/realm-plugins?orgId=org-1'])
+    expect(mockLoaded).toEqual([['office-hours']])
+  })
+
+  it('loads and composes nothing by itself', async () => {
+    mockInstalls = [UNDECLARED_INSTALL]
+
+    prefetchOrgRealmInstalls(MOCK_ORG_ID, MOCK_USER)
+    await Promise.resolve()
+
+    expect(mockLoaded).toEqual([])
+    expect(mockComposed).toBe(0)
+  })
+
+  it('fetches nothing when no artifacts origin is configured', () => {
+    delete process.env['NEXT_PUBLIC_PLUGIN_ORIGIN']
+
+    prefetchOrgRealmInstalls(MOCK_ORG_ID, MOCK_USER)
+
     expect(mockFetches).toBe(0)
   })
 })

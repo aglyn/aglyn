@@ -22,7 +22,7 @@ import {
   mdiBullhornOutline,
   mdiContentCopy,
   mdiDeleteOutline,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPaletteOutline,
 } from '@aglyn/shared-data-mdi'
 import {
@@ -428,7 +428,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
       {
         key: 'details',
         label: 'Open report',
-        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
         href: emailHref(email),
       },
       {

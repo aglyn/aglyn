@@ -44,6 +44,8 @@ import {
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { reportServerError } from '../../../../utils/report-server-error'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
+import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   announceNewSite,
@@ -98,6 +100,28 @@ async function handler(request: Request): Promise<Response> {
     // auto-creating a personal org for brand-new accounts. Creating hosts
     // is an org admin/owner power.
     const requestedOrgId = String(body?.orgId ?? '') || null
+    /*
+     * The same acquisition backstop `/api/orgs/create` runs (AGL-3674, AGL-3706), for
+     * the door a brand-new account most often takes: "Create your first site"
+     * provisions the workspace right here, through `ensureOrgForUser`, and
+     * the workspace copies its creator's record at birth. Without this, a
+     * sign-up whose page never sent its record left a workspace stamped
+     * `unknown` for good. Only when no workspace was named — a named one
+     * already exists — and never for an impersonated session. The writer
+     * refuses anything but a brand-new self-serve account, so for every other
+     * caller this writes nothing. Best-effort.
+     */
+    if (!requestedOrgId && !isImpersonationSession(decoded)) {
+      await recordSignUpAcquisition({
+        uid: decoded.uid,
+        provider: String(decoded.firebase?.sign_in_provider ?? '') || null,
+        email: decoded.email ?? null,
+        touch: body?.touch ?? readFirstTouchCookie(headers.cookie ?? null),
+        headers: request.headers,
+      }).catch((error) => {
+        console.error('[hosts/create] acquisition backstop failed', error)
+      })
+    }
     const orgMembership = requestedOrgId
       ? await resolveOrgMembership(decoded.uid, requestedOrgId)
       : await ensureOrgForUser(decoded.uid, {

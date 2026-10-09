@@ -20,6 +20,7 @@ import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   FirebaseServicesProvider,
+  prebootFirebaseServices,
   setAnalyticsConsentGate,
   setFirestoreSessionReporters,
   setStaleSessionCheck,
@@ -200,6 +201,29 @@ setAnalyticsConsentGate(platformAnalyticsAllowed)
  * pageview and fire-and-forget.
  */
 primePlatformConsent()
+
+/**
+ * Start Firebase before React renders anything (AGL-3660).
+ *
+ * The provider below sits inside `NoSsr`, so it first renders only after every
+ * chunk of the route has executed, hydration has committed the boot splash,
+ * and `NoSsr` has rendered a second time. Auth's persisted-user read and its
+ * `accounts:lookup`, and App Check's reCAPTCHA chain that Auth and Firestore
+ * requests wait on whenever the cached App Check token has expired, used to
+ * start only then. Starting them here overlaps them with hydration; the
+ * provider adopts exactly these instances (same app name, same persistence
+ * class) and nothing is initialized twice.
+ *
+ * Last in module scope: after the session reporters, the stale-session check,
+ * the heal watcher and the consent hydration above, so nothing booted here can
+ * run ahead of a seam it reports through. Browser only (the module also runs
+ * during the server render, where the provider never mounts).
+ */
+prebootFirebaseServices({
+  firebaseConfig: fbClientAppOptions,
+  appName: FIREBASE_CLIENT_APP_NAME,
+  authPersistence: currentOriginPersistenceClass(),
+})
 
 function AnalyticsGlobalEvents({ children }) {
   // Cross-subdomain session cookie sync (AGL-236). NOT analytics, and it must

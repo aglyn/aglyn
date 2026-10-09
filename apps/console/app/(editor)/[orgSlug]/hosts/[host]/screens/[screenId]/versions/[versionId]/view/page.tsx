@@ -1407,8 +1407,7 @@ function ScreenDetails() {
                 size="small"
                 variant="outlined"
                 href={liveUrl}
-                target="_blank"
-                rel="noreferrer"
+                newTab
               >
                 {'View'}
               </AppLink>
@@ -2058,6 +2057,7 @@ function ScreenDetails() {
                                     screenId,
                                     versionId: version.$id,
                                   })}
+                                  newTab
                                 >
                                   {'Preview'}
                                 </AppLink>

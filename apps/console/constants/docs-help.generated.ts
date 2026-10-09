@@ -445,6 +445,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/content-and-data/crm/leads',
     title: 'Leads',
   },
+  liveChat: {
+    path: '/building-sites/live-chat',
+    title: 'Live chat',
+  },
   liveCoEditing: {
     path: '/building-sites/besigner/live-co-editing',
     title: 'Live co-editing & unsaved work',
@@ -954,6 +958,7 @@ export const DOCS_HELP_ANCHORS = {
   languageSwitcher: ['#steps', '#tips', '#related'],
   layouts: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
   leads: ['#what-makes-a-lead', '#what-a-lead-holds', '#lead-source-filled-in', '#adding-a-lead-by-hand', '#the-leads-list', '#lead-statuses', '#filter-the-leads', '#working-a-lead-from-the-row', '#several-leads-at-once', '#import-from-csv', '#who-owns-a-lead', '#a-leads-page', '#lead-details', '#lead-campaigns', '#captured-history', '#email-state', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
+  liveChat: ['#set-up-live-chat', '#which-pages-show-the-chat', '#how-the-chat-loads', '#privacy-and-cookies'],
   liveCoEditing: ['#whos-here', '#presence-colors', '#per-version-rooms', '#presence-in-lists', '#not-a-lock', '#editing-together', '#saving-together', '#when-a-save-is-refused', '#local-draft-recovery', '#the-save-button-always-answers', '#related'],
   lockdown: ['#lockdown-page', '#what-a-lockdown-does', '#reasons-and-the-notice', '#read-only-mode', '#what-reads-keep-working-does-and-does-not-cover', '#read-only-timing', '#read-only-evidence', '#read-only-revocation-evidence', '#a-gentler-lock-never-softens-a-stricter-one', '#enforcement', '#maintenance-windows-and-expiry', '#who-keeps-access-the-un-panic-invariant', '#feature-scope', '#ai-pause', '#signups-also-refuses-account-creation--if-the-valve-is-armed', '#domain-scope', '#device-scope', '#asset-quarantine--one-file-not-the-site-that-serves-it', '#which-digest', '#quarantine-keys', '#quarantine-audiences', '#disabled-files-page', '#disable-or-release', '#quarantine-session-log', '#deny-list', '#quarantine-curl', '#quarantine-history', '#tenant-api-coverage', '#analytics-beacon', '#owner-notices', '#no-other-mail', '#ban-mail', '#appeals', '#email-the-owners', '#resend-owner-notice', '#cancel-billing', '#cancel-billing-defaults', '#what-a-cancellation-does-and-what-it-never-does', '#a-cancel-that-fails-does-not-undo-the-lock', '#pause-site-money', '#pause-renewals', '#pause-payouts', '#lock-listings', '#pause-site-money-lift', '#reading-the-result', '#operating-it', '#never-take-a-lock-or-a-lift-on-trust', '#lockdown-session-log', '#active-lockdowns', '#what-a-caller-is-told', '#drill-provenance', '#production-drill-blocked', '#verifying-a-lockdown-on-the-wire', '#what-the-audit-row-records', '#the-live-dunning-schedule-has-not-been-read-agl-2430', '#what-the-live-dashboard-did-say-once-someone-opened-it-agl-2430', '#-include-a-link-for-customers-to-manage-their-subscriptions-stays-off', '#the-billing-recovery-path-must-survive-a-billing-lock'],
   logicWithAi: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
@@ -1194,6 +1199,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#entry-details': 'What is recorded',
     '#entry-featured-video': 'Featured video',
     '#entry-seo': 'Search and social text',
+    '#entry-tokens': 'Entry tokens',
     '#entry-traffic': 'Entry traffic',
     '#scheduling': 'Scheduling',
     '#visual-editor': 'Visual editor',
@@ -1358,6 +1364,9 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#two-ways-to-get-a-domain': 'The two ways to get a domain of this site\'s own',
     '#what-belongs-to-a-campaign': 'What belongs to a campaign',
   },
+  errorScreens: {
+    '#the-error-screens': 'The error pages',
+  },
   events: {
     '#manage-events': 'Manage events',
   },
@@ -1428,6 +1437,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   leads: {
     '#lead-campaigns': 'Campaigns',
+  },
+  liveChat: {
+    '#set-up-live-chat': 'Set up live chat',
   },
   liveCoEditing: {
     '#whos-here': 'Who\'s here',
@@ -1532,6 +1544,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#pending-erasures': 'Pending erasures',
     '#resolved-server-config': 'Resolved server config',
     '#sharing-scope-drift': 'Sharing-scope drift',
+    '#the-probes': 'The probes',
   },
   plugins: {
     '#a-dependency-that-is-off-for-one-site': 'A dependency that is off for one site',
@@ -1712,6 +1725,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   siteSearch: {
     '#the-layout-built-in-pages-use': 'The layout built-in pages use',
   },
+  sso: {
+    '#setting-it-up': 'Setting it up',
+  },
   staffConsole: {
     '#access': 'Access',
     '#acquisition': 'Acquisition',
@@ -1785,6 +1801,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#user-organizations': 'Organizations',
     '#users-accounts': 'Accounts',
     '#users-admin': 'Users admin',
+    '#whats-there': 'What\'s there',
   },
   supportAndCommunity: {
     '#community-forum': 'Community forum',
@@ -1794,7 +1811,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#your-tickets': 'Your tickets',
   },
   supportQueue: {
-    '#support-queue-page': 'The queue page',
     '#triage': 'Triage',
   },
   tasks: {

@@ -26,6 +26,8 @@ import {
   LEGAL_DOCUMENTS,
 } from '../../../../constants/legal-documents'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
+import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — records the caller's own ToS acceptance during sign-in; pre-org,
@@ -85,10 +87,14 @@ async function handler(request: Request): Promise<Response> {
 
   let uid: string
   let staff: boolean
+  let provider: string | null
+  let email: string | null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     uid = decoded.uid
     staff = decoded['staff'] === true
+    provider = String(decoded.firebase?.sign_in_provider ?? '') || null
+    email = decoded.email ?? null
   } catch (error) {
     // A refused credential is a 401 (AGL-1993). A check that could not run is
     // ours, so it is a 500 rather than a request to sign in again.
@@ -119,6 +125,30 @@ async function handler(request: Request): Promise<Response> {
       // somebody accepted the agreement.
       ipAddress: readClientIp(request.headers),
       userAgent: request.headers.get('user-agent'),
+    })
+    /*
+     * Where the account came from, in the same request (AGL-3706).
+     *
+     * Every sign-up door posts this acceptance first, and it is the one write
+     * that reliably arrives: on auth.aglyn.com a Google sign-up's page was
+     * reloaded seconds after it, before its own `/api/auth/acquisition` call
+     * went out, and the account was left with no record for its workspace to
+     * copy. Recording here takes the page out of the race. The writer refuses
+     * anything but a brand-new self-serve account and never restates a
+     * record, so the page's later call and the workspace backstop write
+     * nothing after this one. The first touch is the page's, else the
+     * registrable-domain cookie every aglyn.com host reads. Best-effort:
+     * attribution must never stand between a person and their acceptance.
+     */
+    await recordSignUpAcquisition({
+      uid,
+      provider,
+      email,
+      touch: body?.touch ?? readFirstTouchCookie(request.headers.get('cookie')),
+      doorHint: context,
+      headers: request.headers,
+    }).catch((error) => {
+      console.error('[auth/legal-acceptance] acquisition record failed', error)
     })
     return Response.json(
       { ok: true, version: result.version, recorded: result.recorded },

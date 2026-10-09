@@ -693,12 +693,16 @@ export function registerAiConsole(): void {
       // media in the media library, and in its empty state. Gated as the
       // other generative widgets are, by the shell alone: it asks nothing of
       // a server until someone creates a picture, and the door decides then.
+      // Like every Create with AI entry it is mounted without the add-on too
+      // and opens its own upsell there (AGL-3601).
       {
         slot: 'mediaLibrary',
         widgetId: 'ai-media-create',
         title: 'Create images with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiMediaCreateButton,
       },
       {

@@ -287,6 +287,8 @@ const PLUGIN_TOPICS = {
   salesChannels: '/commerce-and-bookings/commerce/sales-channels',
   sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
+  // The Live chat card on a site's setup page (AGL-3698).
+  liveChat: '/building-sites/live-chat',
   // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
   // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
   zapier: '/marketing-and-automation/workflows-and-actions/zapier',
@@ -349,6 +351,9 @@ function stripQuotes(value) {
 }
 
 /** Read one markdown file → { title, excerpt, anchors[] } or null. */
+/** An HTML comment: Docusaurus renders nothing of it. */
+const HTML_COMMENT = /<!--[\s\S]*?-->/g
+
 function readDocPage(absPath) {
   const source = readFileSync(absPath, 'utf8')
   const fm = source.match(/^---\n([\s\S]*?)\n---/)
@@ -364,7 +369,10 @@ function readDocPage(absPath) {
   const anchors = []
   const sections = new Map()
   const seen = new Set()
-  for (const match of source.matchAll(/^#{2,4}\s+(.+?)\s*$/gm)) {
+  // A heading inside an HTML comment is not published: a section held back
+  // until its feature is configured (AGL-3696) must not become a help link.
+  const body = source.slice(fm[0].length).replace(HTML_COMMENT, '')
+  for (const match of body.matchAll(/^#{2,4}\s+(.+?)\s*$/gm)) {
     const explicit = match[1].match(/\{#([^}]+)\}\s*$/)
     const slug = explicit
       ? explicit[1]

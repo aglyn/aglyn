@@ -688,6 +688,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           quick={{
             icon: mdiOpenInNew.path,
             label: 'View',
+            newTab: true,
             to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
           }}
           items={[

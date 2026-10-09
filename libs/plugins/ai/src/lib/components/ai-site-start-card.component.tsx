@@ -197,13 +197,13 @@ import { publishAiJob } from './ai-jobs-store'
  * the reader's `ai.generate` first. A lockdown is the start door's to say,
  * here, in its own words.
  *
- * ── It asks, it does not build ───────────────────────────────────────────
+ * ── It builds and publishes for you ──────────────────────────────────────
  *
  * "Plan my site" starts a `site` job, which PLANS first: the pages, their
- * addresses, the navigation, the layout, the contact form and a palette, with
- * an estimated cost beside the button that confirms it. Nothing is built
- * until the person confirms that plan, and everything it then builds is an
- * unpublished draft.
+ * addresses, the navigation, the layout, the contact form and a palette. The
+ * guided start confirms its own plan (AGL-3594), so the build follows with no
+ * approval to make, and the site is published, indexable, when it is done.
+ * The person edits or unpublishes it afterwards.
  *
  * ── It stays with the job (AGL-3593) ─────────────────────────────────────
  *
@@ -718,8 +718,8 @@ export function AiSiteStartCard({
                   orgSlug={orgSlug}
                   user={user}
                   intro={
-                    'Your site is being planned. Review the plan here or in AI jobs, and confirm ' +
-                    'it to build — nothing is built, and nothing is published, until you do.'
+                    'Your site is being planned. It is then built and published for you, with ' +
+                    'nothing to approve. You can edit or unpublish it afterwards.'
                   }
                   // Full screen: AI jobs opens in the panel this dialog covers.
                   onOpenJobs={exit}

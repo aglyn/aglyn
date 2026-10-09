@@ -118,6 +118,10 @@
       "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "why": "The staff role gate the native staff section replays (AGL-3667): a pure verdict over a role string and a role list."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
     },
@@ -180,6 +184,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
