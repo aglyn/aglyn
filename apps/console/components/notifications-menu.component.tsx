@@ -32,6 +32,7 @@ import {
   Badge,
   Box,
   Button,
+  CircularProgress,
   Divider,
   IconButton,
   Popover,
@@ -41,16 +42,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-} from 'firebase/firestore'
+import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -65,6 +57,11 @@ import {
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostIndexEntries from '../hooks/use-host-index-entries'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
+import {
+  markAllNotificationsReadFor,
+  markNotificationRead,
+  useNotificationFeed,
+} from '../hooks/use-notification-feed'
 import useOrgHosts from '../hooks/use-org-hosts'
 import { useInviteReview, usePendingInvites } from '../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
@@ -78,11 +75,13 @@ import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
 } from '../utils/notification-links'
+import { isNearScrollEnd, isNotificationRead } from '../utils/notification-feed'
 
 /**
- * App-bar notifications dropdown (AGL-260): unread badge over the 10 most
- * recent notifications, mark-read on click / mark-all, and a "view all"
- * link to the paginated page.
+ * App-bar notifications dropdown (AGL-260): unread badge, an Inbox (unread)
+ * and Archive (read) that page on a Firestore cursor as the list scrolls
+ * (AGL-3720), mark-read on click / mark-all, and a "view all" link to the
+ * paginated page.
  */
 export function NotificationsMenu() {
   const { data: user } = useUser()
@@ -95,6 +94,22 @@ export function NotificationsMenu() {
   // Inbox = unread, Archive = already read (AGL-874) — a click marks-read,
   // moving a notification from Inbox to Archive.
   const [tab, setTab] = useState<'inbox' | 'archive'>('inbox')
+  /*
+   * The list the popover shows (AGL-3720). It used to be the ten newest
+   * notifications filtered for unread on the client, so 27 unread showed the
+   * few among those ten and, once they were read, "No new notifications"
+   * under a badge of 16 — nothing ever read the rest. Now it is the same
+   * `read == false` query the badge counts, newest first, on a cursor: it
+   * reads the next page as the list scrolls and refills when rows are read.
+   * Read only while the popover is open.
+   */
+  const feed = useNotificationFeed({
+    firestore,
+    uid,
+    read: tab === 'archive',
+    enabled: Boolean(anchor),
+  })
+  const [markingAll, setMarkingAll] = useState(false)
   // Stored links predate the org-slug/subdomain routes (AGL-644), so they are
   // normalized when followed. Resolving a host's subdomain needs the current
   // org's sites; a notification for another org simply won't resolve and the
@@ -184,7 +199,10 @@ export function NotificationsMenu() {
   // the rewrite no longer keys the org half off the open workspace
   // (AGL-1773).
   const indexedHosts = useHostIndexEntries(
-    useMemo(() => (recent ?? []).map((item) => item.hostId), [recent]),
+    useMemo(
+      () => [...(recent ?? []), ...feed.items].map((item) => item.hostId),
+      [recent, feed.items],
+    ),
   )
 
   const resolveLink = useCallback(
@@ -315,31 +333,41 @@ export function NotificationsMenu() {
 
   if (!uid) return null
 
-  const markRead = (notification: AglynNotification & { $id: string }) => {
-    void updateDoc(
-      doc(firestore, 'users', uid, 'notifications', notification.$id),
-      { read: true, readAt: serverTimestamp() },
-    ).catch(console.error)
-  }
-
   const handleOpenItem = (
     notification: AglynNotification & { $id: string },
   ) => {
-    if (!notification.readAt) markRead(notification)
+    if (!isNotificationRead(notification)) {
+      void markNotificationRead(firestore, uid, notification.$id).catch(
+        console.error,
+      )
+      // Out of the inbox now; the feed refills behind it from the cursor.
+      if (tab === 'inbox') feed.remove([notification.$id])
+    }
     setAnchor(null)
     followNotification(notification)
   }
 
-  const handleMarkAll = () => {
-    for (const notification of recent ?? []) {
-      if (!notification.readAt) markRead(notification)
+  /*
+   * EVERY unread notification, not the ones loaded (AGL-3720): the unread
+   * query walked in batches of 500. The loaded rows leave at once; the feed
+   * then reads its first page again, which the local writes already answer.
+   */
+  const handleMarkAll = async () => {
+    if (markingAll) return
+    setMarkingAll(true)
+    if (tab === 'inbox') feed.remove(feed.items.map((item) => item.$id))
+    try {
+      await markAllNotificationsReadFor(firestore, uid)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setMarkingAll(false)
+      feed.reset()
     }
   }
 
-  const list = (recent ?? []) as Array<AglynNotification & { $id: string }>
-  const inbox = list.filter((item) => !item.readAt)
-  const archive = list.filter((item) => Boolean(item.readAt))
-  const shown = tab === 'inbox' ? inbox : archive
+  const shown = feed.items as Array<AglynNotification & { $id: string }>
+  const showMarkAll = tab === 'inbox' && (shown.length > 0 || unreadCount > 0)
   const close = () => setAnchor(null)
   const goto = (href: string) => {
     close()
@@ -419,8 +447,19 @@ export function NotificationsMenu() {
         </Stack>
         <Divider />
 
-        <Box sx={{ maxHeight: 380, overflowY: 'auto' }}>
-          {shown.length === 0 ? (
+        <Box
+          sx={{ maxHeight: 380, overflowY: 'auto' }}
+          data-testid="notifications-menu-list"
+          // Infinite scroll (AGL-3720): near the end, read the next page.
+          onScroll={(event) => {
+            if (isNearScrollEnd(event.currentTarget)) feed.loadMore()
+          }}
+        >
+          {shown.length === 0 && feed.loading ? (
+            <Stack sx={{ alignItems: 'center', py: 6 }}>
+              <CircularProgress size={24} aria-label="Loading notifications" />
+            </Stack>
+          ) : shown.length === 0 ? (
             <Stack
               sx={{
                 alignItems: 'center',
@@ -479,7 +518,9 @@ export function NotificationsMenu() {
                   <Stack sx={{ minWidth: 0, flex: 1 }}>
                     <Typography
                       variant="body2"
-                      sx={{ fontWeight: notification.readAt ? 400 : 600 }}
+                      sx={{
+                        fontWeight: isNotificationRead(notification) ? 400 : 600,
+                      }}
                     >
                       {notification.title}
                     </Typography>
@@ -513,7 +554,7 @@ export function NotificationsMenu() {
                       {notification.createdAt?.toDate?.().toLocaleString() ?? ''}
                     </Typography>
                   </Stack>
-                  {notification.readAt ? null : (
+                  {isNotificationRead(notification) ? null : (
                     <Box
                       sx={{
                         width: 8,
@@ -529,19 +570,25 @@ export function NotificationsMenu() {
               )
             })
           )}
+          {shown.length > 0 && feed.loading ? (
+            <Stack sx={{ alignItems: 'center', py: 1.5 }}>
+              <CircularProgress size={20} aria-label="Loading more notifications" />
+            </Stack>
+          ) : null}
         </Box>
 
         <Divider />
         <Stack direction="row" sx={{ alignItems: 'center', p: 1, gap: 1 }}>
-          {tab === 'inbox' && inbox.length > 0 ? (
+          {showMarkAll ? (
             <Button
               size="small"
               startIcon={
                 <MdiIcon path={mdiCheckAll.path} sx={{ fontSize: '1rem' }} />
               }
-              onClick={handleMarkAll}
+              disabled={markingAll}
+              onClick={() => void handleMarkAll()}
             >
-              {'Mark all read'}
+              {markingAll ? 'Marking…' : 'Mark all read'}
             </Button>
           ) : null}
           <Box sx={{ flex: 1 }} />
