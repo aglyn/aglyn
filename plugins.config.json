@@ -3138,7 +3138,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, its grant sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "fulfillmentNetworkConnections",
           "orgField": "orgId"
         },

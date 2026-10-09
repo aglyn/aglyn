@@ -20,6 +20,7 @@
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { CopyField } from '@aglyn/shared-ui-jsx/components/copy-field.component'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { StatusChip, type StatusTone } from '@aglyn/shared-ui-jsx/components/status-chip.component'
@@ -49,7 +50,12 @@ import {
   type NetworkLogEntry,
   type NetworkProviderId,
 } from '../model/networks'
-import { useFulfillmentNetworksApi, type FulfillmentNetworksApi, type NetworkOffer } from './fulfillment-networks-api'
+import {
+  useFulfillmentNetworksApi,
+  type FulfillmentNetworksApi,
+  type NetworkOffer,
+  type NetworkWebhookSetup,
+} from './fulfillment-networks-api'
 
 /** What the `commerceSettings` zone hands a widget. */
 export interface FulfillmentNetworksCardProps {
@@ -89,8 +95,8 @@ type HelpAnchor = '#connect-a-network' | '#settings' | '#stock-counts' | '#activ
 const help = (excerpt: string, anchor: HelpAnchor) => pluginDocsHelp('fulfillmentNetworks', { anchor, excerpt })
 
 /**
- * FULFILLMENT NETWORKS (AGL-3634): a store's connections to ShipBob and
- * Amazon Multi-Channel Fulfillment — one card per network the deployment
+ * FULFILLMENT NETWORKS (AGL-3634): a store's connections to ShipBob,
+ * ShipMonk (AGL-3697) and Amazon Multi-Channel Fulfillment — one card per network the deployment
  * offers, its state and actions in its header, its settings in its body, and
  * its activity under it. Draws nothing where the deployment offers no
  * network, or the member cannot read the store's settings.
@@ -178,6 +184,9 @@ function NetworkCard(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [logKey, setLogKey] = useState(0)
+  const apiKeyNetwork = info.auth === 'api-key'
+  const [keyFormOpen, setKeyFormOpen] = useState(false)
+  const [webhook, setWebhook] = useState<NetworkWebhookSetup | null>(null)
 
   const run = async (work: () => Promise<string | null>) => {
     setBusy(true)
@@ -191,6 +200,32 @@ function NetworkCard(props: {
       setBusy(false)
       setLogKey((key) => key + 1)
     }
+  }
+
+  const connectKey = (input: { apiKey: string; storeId: string }) =>
+    run(async () => {
+      const answer = await api.connectKey(provider, input)
+      onChange(answer.connection)
+      setKeyFormOpen(false)
+      if (answer.webhook) setWebhook(answer.webhook)
+      return `Connected to ${info.label}. Paid orders go to it from now on.`
+    })
+
+  const rotateWebhookSecret = async () => {
+    const accepted = await confirm({
+      title: `New ${info.label} webhook secret?`,
+      description: `The current secret stops working at once. Put the new one in ${info.label}'s webhook settings, or its updates are refused until you do; orders are still read back every 15 minutes.`,
+      confirmationText: 'Make a new secret',
+    }).then(
+      () => true,
+      () => false,
+    )
+    if (!accepted) return
+    await run(async () => {
+      setWebhook(await api.rotateWebhookSecret(provider))
+      onChange(connection ? { ...connection, webhookSecretSet: true } : null)
+      return null
+    })
   }
 
   const connect = () =>
@@ -245,12 +280,22 @@ function NetworkCard(props: {
           Sync now
         </Button>
       ) : null}
+      {apiKeyNetwork && connection.status !== 'reconnect' ? (
+        <Button size="small" disabled={busy} onClick={() => void rotateWebhookSecret()}>
+          {connection.webhookSecretSet ? 'New webhook secret' : 'Set up webhooks'}
+        </Button>
+      ) : null}
       {connection.status !== 'reconnect' ? (
         <Button size="small" disabled={busy} onClick={() => update({ paused: connection.status === 'active' })}>
           {connection.status === 'active' ? 'Pause' : 'Resume'}
         </Button>
       ) : offer ? (
-        <Button size="small" variant="contained" disabled={busy} onClick={() => void connect()}>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={busy}
+          onClick={() => (apiKeyNetwork ? setKeyFormOpen(true) : void connect())}
+        >
           Connect again
         </Button>
       ) : null}
@@ -259,7 +304,12 @@ function NetworkCard(props: {
       </Button>
     </Stack>
   ) : offer ? (
-    <Button size="small" variant="contained" disabled={busy} onClick={() => void connect()}>
+    <Button
+      size="small"
+      variant="contained"
+      disabled={busy || keyFormOpen}
+      onClick={() => (apiKeyNetwork ? setKeyFormOpen(true) : void connect())}
+    >
       {`Connect ${info.shortLabel}`}
     </Button>
   ) : null
@@ -281,13 +331,25 @@ function NetworkCard(props: {
               {error}
             </Alert>
           ) : null}
+          {webhook ? <WebhookSetup provider={provider} webhook={webhook} onDone={() => setWebhook(null)} /> : null}
+          {apiKeyNetwork && keyFormOpen ? (
+            <ApiKeyForm
+              provider={provider}
+              busy={busy}
+              storeId={connection?.storeId ?? ''}
+              onSubmit={(input) => void connectKey(input)}
+              onCancel={() => setKeyFormOpen(false)}
+            />
+          ) : null}
           {connection ? (
             <ConnectionDetails connection={connection} busy={busy} onUpdate={update} />
-          ) : (
+          ) : keyFormOpen ? null : (
             <Typography variant="body2" color="text.secondary">
-              {`Not connected. Sign in to your own ${info.label} account to connect it; ${PLATFORM_BRAND_NAME} never sees your password.${
-                offer?.sandbox ? ` This deployment connects to the ${info.label} sandbox, which takes test orders only.` : ''
-              }`}
+              {`${
+                apiKeyNetwork
+                  ? `Not connected. Connect with the API key of your own ${info.label} API store; ${PLATFORM_BRAND_NAME} keeps it encrypted and never shows it again.`
+                  : `Not connected. Sign in to your own ${info.label} account to connect it; ${PLATFORM_BRAND_NAME} never sees your password.`
+              }${offer?.sandbox ? ` This deployment connects to the ${info.label} sandbox, which takes test orders only.` : ''}`}
             </Typography>
           )}
         </Stack>
@@ -342,15 +404,19 @@ function ConnectionDetails(props: {
           <MenuItem value="automatic">Automatic</MenuItem>
           <MenuItem value="manual">Manual</MenuItem>
         </TextField>
-        {connection.provider === 'shipbob' ? (
+        {connection.provider === 'shipbob' || connection.provider === 'shipmonk' ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
             <TextField
               size="small"
-              label="Ship option"
+              label={connection.provider === 'shipmonk' ? 'Shipping service' : 'Ship option'}
               value={method}
               disabled={locked}
               onChange={(event) => setMethod(event.target.value)}
-              helperText="As named in your ShipBob account."
+              helperText={
+                connection.provider === 'shipmonk'
+                  ? 'Must match a shipping mapping in your ShipMonk account.'
+                  : 'As named in your ShipBob account.'
+              }
               sx={{ minWidth: 220 }}
             />
             {method.trim() && method !== connection.shippingMethod ? (
@@ -399,6 +465,13 @@ function ConnectionDetails(props: {
           </>
         )}
       </Stack>
+      {connection.provider === 'shipmonk' ? (
+        <Typography variant="body2" color="text.secondary">
+          {connection.webhookSecretSet
+            ? 'ShipMonk webhooks are verified with your signing secret; orders are also read back every 15 minutes.'
+            : 'Orders are read back from ShipMonk every 15 minutes. Set up webhooks to hear about shipments sooner.'}
+        </Typography>
+      ) : null}
       <FormControlLabel
         control={
           <Switch
@@ -429,6 +502,90 @@ function ConnectionDetails(props: {
           : `Stock at ${info.shortLabel} has not been counted yet.`}
       </Typography>
     </Stack>
+  )
+}
+
+/**
+ * The key form of a network that takes the merchant's own API key (ShipMonk,
+ * AGL-3697): the key and the API store it belongs to. The key is sent once and
+ * never shown again; the field is a password field so it is not left on screen.
+ */
+function ApiKeyForm(props: {
+  provider: NetworkProviderId
+  busy: boolean
+  storeId: string
+  onSubmit: (input: { apiKey: string; storeId: string }) => void
+  onCancel: () => void
+}) {
+  const { provider, busy, onSubmit, onCancel } = props
+  const info = NETWORK_PROVIDERS[provider]
+  const [apiKey, setApiKey] = useState('')
+  const [storeId, setStoreId] = useState(props.storeId)
+  const ready = apiKey.trim().length >= 8 && /^[1-9][0-9]{0,11}$/.test(storeId.trim())
+  return (
+    <Stack
+      component="form"
+      spacing={1.5}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (ready) onSubmit({ apiKey: apiKey.trim(), storeId: storeId.trim() })
+      }}
+    >
+      <Typography variant="body2" color="text.secondary">
+        {`In ${info.label}, open Account Settings, then Integration API Keys. Create a key for your API store and copy it with the store's id.`}
+      </Typography>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+        <TextField
+          size="small"
+          type="password"
+          label="API key"
+          autoComplete="off"
+          value={apiKey}
+          disabled={busy}
+          onChange={(event) => setApiKey(event.target.value)}
+          sx={{ minWidth: 260 }}
+        />
+        <TextField
+          size="small"
+          label="Store id"
+          value={storeId}
+          disabled={busy}
+          onChange={(event) => setStoreId(event.target.value)}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          sx={{ minWidth: 160 }}
+        />
+      </Stack>
+      <Stack direction="row" spacing={1}>
+        <Button type="submit" size="small" variant="contained" disabled={busy || !ready}>
+          Connect
+        </Button>
+        <Button size="small" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+      </Stack>
+    </Stack>
+  )
+}
+
+/**
+ * Where ShipMonk sends its webhooks and the secret it signs them with, shown
+ * ONCE after a connect or a new secret: the merchant gives both to ShipMonk
+ * (its webhook integration settings, or ShipMonk support).
+ */
+function WebhookSetup(props: { provider: NetworkProviderId; webhook: NetworkWebhookSetup; onDone: () => void }) {
+  const info = NETWORK_PROVIDERS[props.provider]
+  const { enqueueSnackbar } = useSnackbar()
+  const copied = () => enqueueSnackbar('Copied.', { variant: 'success', persist: false })
+  return (
+    <Alert severity="info" onClose={props.onDone}>
+      <Stack spacing={1.5}>
+        <Typography variant="body2">
+          {`To hear about shipments as soon as they leave, add a webhook in ${info.label} with this address and signing secret. The secret is shown only now.`}
+        </Typography>
+        {props.webhook.url ? <CopyField label="Webhook address" value={props.webhook.url} onCopied={copied} /> : null}
+        <CopyField label="Signing secret" value={props.webhook.secret} onCopied={copied} />
+      </Stack>
+    </Alert>
   )
 }
 
