@@ -459,7 +459,11 @@ must not hand-copy them. `tools/scripts/generate-native-contracts.mjs`
   The `contracts` module needs `kotlinx-serialization-json`.
 - `ContractValues` (both platforms) decodes `contracts.generated.json`. Each
   value is a property named after its export in camel case
-  (`ORDER_LIST_QUERY` → `orderListQuery`).
+  (`ORDER_LIST_QUERY` → `orderListQuery`). In Kotlin it is a facade over
+  `@Serializable` part classes of 48 values each, every part decoded from
+  the same JSON (`ContractValues.decode`), because one class of every value
+  passes the JVM's 255-slot constructor limit (AGL-3703). The generator
+  refuses a part over 128 slots.
 - `list-query-cases.generated.json` holds `timeZone` (`UTC`), the planner's
   `normalizers` replayed over sample words (`key`, `token`, `reversed`,
   `tokens`), and one case per field operator, sort, search and refusal
