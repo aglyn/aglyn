@@ -48,7 +48,12 @@
         "x",
         "y"
       ],
-      "big": 1234567.891
+      "big": 1234567.891,
+      "access": {
+        "h1": "editor",
+        "h2": "viewer"
+      },
+      "hostKey": "h2"
     }
   },
   "render": [
@@ -143,6 +148,10 @@
     {
       "template": "{{literal}}",
       "expect": "{literal}}"
+    },
+    {
+      "template": "{data.access[@data.hostKey]}",
+      "expect": "viewer"
     }
   ],
   "url": [
@@ -249,6 +258,34 @@
         "d": [
           "q"
         ]
+      }
+    },
+    {
+      "body": {
+        "set": {
+          "$put": {
+            "map": "{data.access}",
+            "key": "{params.uid}",
+            "value": "viewer"
+          }
+        },
+        "removed": {
+          "$put": {
+            "map": "{data.access}",
+            "key": "h1",
+            "value": ""
+          }
+        }
+      },
+      "expect": {
+        "set": {
+          "h1": "editor",
+          "h2": "viewer",
+          "u2": "viewer"
+        },
+        "removed": {
+          "h2": "viewer"
+        }
       }
     },
     {

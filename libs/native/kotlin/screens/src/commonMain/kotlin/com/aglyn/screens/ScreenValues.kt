@@ -36,6 +36,9 @@ object ScreenValues {
           val wanted = text(lookup(inner.substring(equals + 1), context))
           val field = inner.substring(0, equals)
           current = (current as? JsonArray)?.firstOrNull { text(lookup(field, it)) == wanted }
+        } else if (inner.startsWith("@")) {
+          // `map[@path]`: the key is the text at path.
+          current = step(current, text(lookup(inner.substring(1), context)))
         } else {
           current = step(current, inner)
         }
@@ -179,6 +182,14 @@ object ScreenValues {
         list.removeAll { it == item }
       }
       JsonArray(list)
+    } else if (body.size == 1 && body["\$put"] is JsonObject) {
+      // `{"$put": {"map": "{a}", "key": "{b}", "value": "{c}"}}`: the map with the key set, or removed when the value is empty.
+      val spec = body["\$put"] as JsonObject
+      val map = ((spec["map"]?.let { resolveBody(it, context) }) as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+      val key = text(spec["key"]?.let { resolveBody(it, context) })
+      val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
+      if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
+      JsonObject(map)
     } else if (body.size == 1 && body["\$split"] != null) {
       // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
       val parts = text(resolveBody(body.getValue("\$split"), context)).split(',').map { it.trim() }.filter { it.isNotEmpty() }
