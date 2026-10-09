@@ -24,9 +24,11 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   listUsersAcrossPools,
+  resolveUserRecordIdentities,
   scanUsersAcrossPools,
   type PooledUserRecord,
 } from '@aglyn/tenant-data-admin'
+import type { ResolvedAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   type ListFilterRequest,
@@ -149,21 +151,25 @@ async function handler(request: Request): Promise<Response> {
     // way to reach the account at all. `tenantId` rides each row so the UI can
     // say which pool a user is in; it is also what a mutation needs, since
     // custom claims are per-pool.
-    const serialize = ({
-      record,
-      tenantId,
-      uidAlsoInPools,
-    }: PooledUserRecord) => ({
+    const serialize = (
+      { record, tenantId, uidAlsoInPools }: PooledUserRecord,
+      identity?: ResolvedAccountIdentity,
+    ) => ({
       uid: record.uid,
       email: record.email ?? null,
-      displayName: record.displayName ?? null,
-      // The profile photo for the list's avatar (AGL-3660): the record's,
-      // else a provider's — Google's lives on providerData when the
-      // top-level field was never mirrored.
-      photoUrl:
-        record.photoURL ??
-        record.providerData.find((provider) => provider.photoURL)?.photoURL ??
-        null,
+      // The name and photo through the one account-identity resolver
+      // (AGL-3721): the Auth record, then `users/{uid}`, then a provider
+      // entry. An SSO account's Auth record holds neither — GCIP keeps the
+      // SAML attributes on the token — so reading the record alone drew a
+      // grey initial for the same person the account menu shows by name and
+      // face. Without a resolved identity (a row not yet enriched) it is the
+      // record's own fields, then a provider's photo, as before (AGL-3660).
+      displayName: identity ? identity.displayName : (record.displayName ?? null),
+      photoUrl: identity
+        ? identity.photoUrl
+        : (record.photoURL ??
+          record.providerData.find((provider) => provider.photoURL)?.photoURL ??
+          null),
       disabled: record.disabled,
       staff: Boolean(record.customClaims?.['staff']),
       staffRole: record.customClaims?.['staffRole'] ?? null,
@@ -183,12 +189,18 @@ async function handler(request: Request): Promise<Response> {
        */
       uidAlsoInPools: uidAlsoInPools ?? null,
     })
+    // Rows with their identity resolved: one `getAll` of `users/{uid}` for
+    // just the rows whose Auth record leaves the name or photo blank.
+    const withIdentity = async (pooled: PooledUserRecord[]) => {
+      const identities = await resolveUserRecordIdentities(pooled)
+      return pooled.map((entry) => serialize(entry, identities.get(entry.record.uid)))
+    }
     // Exact-email lookup (AGL-270): listUsers can't search, this can.
     const email = typeof query.email === 'string' ? query.email : ''
     if (email) {
       const found = await findUserByEmailAcrossPools(email)
       return Response.json({
-        users: found ? [serialize(found)] : [],
+        users: found ? await withIdentity([found]) : [],
         nextPageToken: null,
       }, { status: 200 })
     }
@@ -263,7 +275,7 @@ async function handler(request: Request): Promise<Response> {
         ? await findUserByEmailAcrossPools(address)
         : null
     if (exact || looked) {
-      const rows = looked ? [serialize(looked)] : []
+      const rows = looked ? await withIdentity([looked]) : []
       return Response.json({
         users: exact ? rows.filter(matches) : rows.filter((row) =>
           served.every((clause) => matchListFilter(row, USER_LIST_FILTER_FIELDS, clause)),
@@ -275,15 +287,33 @@ async function handler(request: Request): Promise<Response> {
     }
     const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
     if (!scan.truncated && !scan.tenantTruncated.length) {
-      const matched = sortRows(
-        collapseCrossPoolUidRows(scan.users).map(serialize).filter(matches),
-      )
+      const collapsed = collapseCrossPoolUidRows(scan.users)
+      // A search or a display-name clause matches on the NAME, so every row
+      // needs its resolved one first — an SSO account's name lives only in
+      // `users/{uid}`. Otherwise only the page returned is resolved, so an
+      // unfiltered mount reads at most one page of profiles.
+      const matchesOnName =
+        Boolean(term) || served.some((clause) => clause.field === 'displayName')
+      const rows = matchesOnName
+        ? await withIdentity(collapsed)
+        : collapsed.map((entry) => serialize(entry))
+      const matched = sortRows(rows.filter(matches))
       const offset = token?.startsWith(MATCH_CURSOR)
         ? Math.max(0, Math.floor(Number(token.slice(MATCH_CURSOR.length))) || 0)
         : 0
       const next = offset + FILTER_PAGE
+      const pageRows = matched.slice(offset, next)
+      let users = pageRows
+      if (!matchesOnName) {
+        const byUid = new Map(collapsed.map((entry) => [entry.record.uid, entry]))
+        users = await withIdentity(
+          pageRows
+            .map((row) => byUid.get(row.uid))
+            .filter((entry): entry is PooledUserRecord => Boolean(entry)),
+        )
+      }
       return Response.json({
-        users: matched.slice(offset, next),
+        users,
         nextPageToken: next < matched.length ? `${MATCH_CURSOR}${next}` : null,
         tenantsIncluded: true,
         tenantTruncated: [],
@@ -321,7 +351,7 @@ async function handler(request: Request): Promise<Response> {
     // the identified record, never the emailless twin.
     const rows = collapseCrossPoolUidRows(page.users)
     return Response.json({
-      users: sortRows(rows.map(serialize)),
+      users: sortRows(await withIdentity(rows)),
       nextPageToken: page.nextPageToken,
       tenantsIncluded: page.tenantsIncluded,
       // Never silently truncate: a tenant whose pool outgrew the cap is named

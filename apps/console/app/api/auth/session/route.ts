@@ -37,6 +37,7 @@ import {
   notifyStaff,
   resolveConsoleDomain,
   seedUserProfile,
+  syncAuthIdentityFromIdp,
   ssoDomainRefusal,
 } from '@aglyn/tenant-data-admin'
 // From the LEAF: the barrel reaches the admin SDK and route specs mock it
@@ -518,6 +519,37 @@ async function handler(request: Request): Promise<Response> {
             await seedUserProfile(uid, seed)
           } catch (error) {
             console.error('[auth/session] profile seed failed', error)
+          }
+          /*
+           * THE AUTH RECORD, FILLED FROM THE IdP AT SSO SIGN-IN (AGL-3721).
+           *
+           * A SAML (or OIDC) sign-in leaves the Auth record's `displayName`
+           * and `photoURL` empty — GCIP keeps the assertion's attributes on
+           * the token — and the Auth record is what every Admin-SDK surface
+           * reads: the staff Users list and user page showed a grey initial
+           * and "—" for a person whose own account menu shows their name and
+           * face from `users/{uid}`. The seed above stores the IdP's copy in
+           * the profile; this puts it on the record too.
+           *
+           * Absent-only (`syncAuthIdentityFromIdp`): a name or photo the
+           * person or staff set is never overwritten, and a removed avatar
+           * (`photoUrlErasedAt`) is never put back. SSO providers only — a
+           * Google record already carries both, and a password sign-in sends
+           * nothing to fill from. Inside `after()` and its own `catch`, like
+           * its neighbours: an avatar must not be able to fail a sign-in.
+           */
+          try {
+            const provider = String(decoded.firebase?.sign_in_provider ?? '')
+            if (pooled && (provider.startsWith('saml.') || provider.startsWith('oidc.'))) {
+              await syncAuthIdentityFromIdp({
+                uid,
+                tenantId: pooled.tenantId,
+                record: pooled.record,
+                idp: { displayName: seed.displayName, photoUrl: seed.photoUrl },
+              })
+            }
+          } catch (error) {
+            console.error('[auth/session] auth record identity sync failed', error)
           }
           /*
            * A NEW ACCOUNT, told to staff (AGL-3225).
