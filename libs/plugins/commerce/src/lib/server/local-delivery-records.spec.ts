@@ -104,7 +104,7 @@ const ORDER = 'order-1'
 const ORDER_PATH = `hosts/${HOST}/orders/${ORDER}`
 
 function seed(overrides: Record<string, any> = {}, delivery: Record<string, any> = {}): void {
-  docs.set(`hosts/${HOST}`, { businessName: 'Northwind Bakery' })
+  docs.set(`hosts/${HOST}`, { displayName: 'Northwind Bakery' })
   docs.set(`hosts/${HOST}/settings/store`, { currency: 'USD', localDelivery: { enabled: true, locationId: 'main' } })
   docs.set(`hosts/${HOST}/locations/main`, {
     name: 'Main Street',

@@ -361,7 +361,12 @@ export function createEngine(deps: EngineDeps) {
     options: { eventKey?: string; pendingResolved?: boolean } = {},
   ): Promise<'applied' | 'unchanged' | 'duplicate' | 'stale'> {
     const nowMs = deps.now()
-    const outcome = await deps.store.updateDelivery(hostId, orderId, (current) => {
+    type Applied =
+      | { kind: 'stale' }
+      | { kind: 'duplicate' }
+      | { kind: 'unchanged' }
+      | { kind: 'applied'; before: CourierState; run: StoredRun }
+    const outcome = await deps.store.updateDelivery<Applied>(hostId, orderId, (current) => {
       const run = current?.run
       if (!current || !run || run.deliveryRef !== snapshot.deliveryRef) return { result: { kind: 'stale' as const } }
       if (options.eventKey && current.seenEvents.includes(options.eventKey)) return { result: { kind: 'duplicate' as const } }
@@ -568,7 +573,14 @@ export function createEngine(deps: EngineDeps) {
       const record = await recordsOrThrow().read(hostId, orderId)
       if (!record) throw new CourierRefusal(404, 'That order is not a local delivery.')
       const nowMs = deps.now()
-      const claim = await deps.store.updateDelivery(hostId, orderId, (current) => {
+      type Claim =
+        | { kind: 'existing'; delivery: StoredDelivery }
+        | { kind: 'busy' }
+        | { kind: 'no_quote' }
+        | { kind: 'expired' }
+        | { kind: 'not_dispatchable' }
+        | { kind: 'claimed'; delivery: StoredDelivery; run: StoredRun }
+      const claim = await deps.store.updateDelivery<Claim>(hostId, orderId, (current) => {
         if (current?.run && !courierStateIsFinal(current.run.state)) {
           return {
             result:

@@ -136,14 +136,14 @@ describe('CouriersCard (AGL-3695)', () => {
     const fake = api({ connection: jest.fn(async () => ({ available: false, providers: [], connection: null })) })
     const { container } = render(<CouriersCard hostId="h" api={fake} />)
     await waitFor(() => expect(fake.connection).toHaveBeenCalled())
-    expect(container).toBeEmptyDOMElement()
+    expect(container.innerHTML).toBe('')
   })
 
   it('connects the keys entered and shows the webhook token once', async () => {
     const fake = api({ connection: jest.fn(async () => ({ available: true, providers: PROVIDERS, connection: null })) })
     render(<CouriersCard hostId="h" api={fake} />)
     const connect = await screen.findByRole('button', { name: 'Connect DoorDash' })
-    expect(connect).toBeDisabled()
+    expect((connect as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getAllByText(/doesn’t charge, collect or mark up/)).toHaveLength(1)
     fireEvent.change(screen.getAllByLabelText('Developer ID')[0], { target: { value: 'dev-1' } })
     fireEvent.change(screen.getAllByLabelText('Key ID')[0], { target: { value: 'key-1' } })
@@ -154,8 +154,8 @@ describe('CouriersCard (AGL-3695)', () => {
         live: { developerId: 'dev-1', keyId: 'key-1', signingSecret: 'secret-secret-secret' },
       }),
     )
-    expect(await screen.findByDisplayValue('tok-once')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('https://console.example/api/couriers/webhooks/doordash?site=h')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('tok-once')).toBeTruthy()
+    expect(screen.getByDisplayValue('https://console.example/api/couriers/webhooks/doordash?site=h')).toBeTruthy()
   })
 })
 
@@ -165,7 +165,7 @@ describe('OrderCourierWidget (AGL-3695)', () => {
     const { container } = render(
       <OrderCourierWidget hostId="h" order={deliveryOrder({ fulfillmentMethod: 'shipping', localDelivery: null })} api={fake} />,
     )
-    expect(container).toBeEmptyDOMElement()
+    expect(container.innerHTML).toBe('')
     expect(fake.connection).not.toHaveBeenCalled()
   })
 
@@ -173,11 +173,11 @@ describe('OrderCourierWidget (AGL-3695)', () => {
     const fake = api()
     render(<OrderCourierWidget hostId="h" order={deliveryOrder()} api={fake} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Get a DoorDash quote' }))
-    expect(await screen.findByText(/\$9\.75, charged to your DoorDash account/)).toBeInTheDocument()
+    expect(await screen.findByText(/\$9\.75, charged to your DoorDash account/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Send courier' }))
     await waitFor(() => expect(fake.dispatch).toHaveBeenCalledWith('o', expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/)))
-    expect(await screen.findByText('Courier requested')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Track the courier' })).toHaveAttribute('href', 'https://doordash.com/t/1')
+    expect(await screen.findByText('Courier requested')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Track the courier' }).getAttribute('href')).toBe('https://doordash.com/t/1')
   })
 
   it('keeps the attempt key after a lost answer, so a retry finds the same booking', async () => {
@@ -189,7 +189,7 @@ describe('OrderCourierWidget (AGL-3695)', () => {
     render(<OrderCourierWidget hostId="h" order={deliveryOrder()} api={fake} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Get a DoorDash quote' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Send courier' }))
-    expect(await screen.findByText('DoorDash did not answer')).toBeInTheDocument()
+    expect(await screen.findByText('DoorDash did not answer')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Send courier' }))
     await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
     expect(dispatch.mock.calls[0][1]).toBe(dispatch.mock.calls[1][1])
@@ -206,8 +206,8 @@ describe('OrderCourierWidget (AGL-3695)', () => {
   it('says a test-mode order needs the test key', async () => {
     const fake = api()
     render(<OrderCourierWidget hostId="h" order={deliveryOrder({ testMode: true })} api={fake} />)
-    expect(await screen.findByText(/Add your DoorDash test keys/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Get a DoorDash quote' })).not.toBeInTheDocument()
+    expect(await screen.findByText(/Add your DoorDash test keys/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Get a DoorDash quote' })).toBeNull()
   })
 })
 
@@ -216,8 +216,8 @@ describe('QueueCourierButton (AGL-3695)', () => {
     const fake = api()
     render(<QueueCourierButton hostId="h" order={deliveryOrder()} api={fake} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Send a courier' }))
-    expect(await screen.findByText('Courier for #1042')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Get a DoorDash quote' })).toBeInTheDocument()
+    expect(await screen.findByText('Courier for #1042')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Get a DoorDash quote' })).toBeTruthy()
   })
 
   it('links the courier’s tracking while one is on it', async () => {
@@ -234,7 +234,7 @@ describe('QueueCourierButton (AGL-3695)', () => {
         api={fake}
       />,
     )
-    expect(await screen.findByRole('link', { name: 'Track DoorDash' })).toHaveAttribute('href', 'https://doordash.com/t/1')
+    expect((await screen.findByRole('link', { name: 'Track DoorDash' })).getAttribute('href')).toBe('https://doordash.com/t/1')
   })
 
   it('draws nothing on a delivered order', async () => {
@@ -243,6 +243,6 @@ describe('QueueCourierButton (AGL-3695)', () => {
       <QueueCourierButton hostId="h" order={deliveryOrder({ localDelivery: { status: 'delivered', courier: null } })} api={fake} />,
     )
     await waitFor(() => expect(fake.connection).toHaveBeenCalled())
-    expect(container).toBeEmptyDOMElement()
+    expect(container.innerHTML).toBe('')
   })
 })
