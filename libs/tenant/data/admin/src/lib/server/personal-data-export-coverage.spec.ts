@@ -103,11 +103,17 @@ const PLUMBING = new Set(['users', 'orgs', 'hosts', 'adminAudit'])
  * somebody else's user document, not a source the org may read back, and the
  * authoritative roster it would duplicate is already exported as
  * `orgs/{orgId}/members`.
+ *
+ * `notifications` (AGL-3719) is the same shape: `users/{uid}/notifications`,
+ * walked by `readSubtree` for the person (the `users` note names it). A site
+ * erasure reaches it by `collectionGroup` to take that site's notices out of
+ * every member's inbox — the site removing its own rows, not a new source.
  */
 const REACHED_UNDER: Record<string, string> = {
   members: 'orgs',
   messages: 'supportTickets',
   hostMemberships: 'users',
+  notifications: 'users',
 }
 
 /**
