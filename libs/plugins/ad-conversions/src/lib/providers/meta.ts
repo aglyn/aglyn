@@ -36,6 +36,9 @@ import { amount, compact, seconds } from './shape'
 
 export const META_GRAPH_VERSION = 'v23.0'
 
+/** The pixel's Graph API edge conversions are posted to — a Meta API path, not the Events calendar's console page. */
+const META_EVENTS_EDGE = 'events'
+
 const EVENT_NAMES: Readonly<Record<ConversionEvent['name'], string>> = {
   purchase: 'Purchase',
   lead: 'Lead',
@@ -94,7 +97,7 @@ export async function sendMetaEvent(http: ProviderHttp, target: ConversionTarget
   const answer = await providerRequest(http, {
     provider: 'Meta',
     method: 'POST',
-    url: `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(target.pixelId)}/events`,
+    url: `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(target.pixelId)}/${META_EVENTS_EDGE}`,
     headers: { 'Content-Type': 'application/json' },
     body: metaEventBody(target, event),
   })
