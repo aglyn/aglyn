@@ -150,6 +150,8 @@ describe('the settings card', () => {
     expect(WEGLOT_CONFIG_SCHEMA.notice).toMatch(/may not rank in other languages/)
     expect(WEGLOT_CONFIG_SCHEMA.notice).toMatch(/Business/)
     expect(WEGLOT_CONFIG_SCHEMA.affectsPublishedPages).toBe(true)
+    // Its `?` links its own docs heading, not the generic settings section.
+    expect(WEGLOT_CONFIG_SCHEMA.help).toEqual({ topic: 'weglot', anchor: '#settings' })
   })
 
   it('starts switched off', () => {

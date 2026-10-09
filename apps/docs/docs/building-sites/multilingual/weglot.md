@@ -61,6 +61,11 @@ up the same language both ways.
    - **Switcher position**: bottom right or bottom left.
 4. Press **Save site settings**. Your published pages update right away.
 
+## Weglot translation settings {#settings}
+
+The settings card holds your Weglot API key, your site's language, the languages to
+translate into, and which switcher visitors see and where.
+
 To give every site in a workspace the same settings, set them on the plugin's
 workspace page under **Plugins**. Each site follows those settings unless you change
 a field on that site's page. Each site still has to switch the plugin on. A

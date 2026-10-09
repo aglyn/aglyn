@@ -80,6 +80,7 @@ export const WEGLOT_CONFIG_SCHEMA: PluginConfigSchema = {
   pluginId: WEGLOT_PLUGIN_ID,
   notice: WEGLOT_SETTINGS_NOTICE,
   affectsPublishedPages: true,
+  help: { topic: 'weglot', anchor: '#settings' },
   fields: [
     {
       key: 'enabled',

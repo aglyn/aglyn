@@ -73,7 +73,10 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('../constants/docs-links', () => ({
   __esModule: true,
-  docsHelp: () => undefined,
+  // Echoes the topic and anchor, so a spec can read which heading a card links.
+  docsHelp: (topic: string, overrides?: { anchor?: string }) => ({
+    href: `/${topic}${overrides?.anchor ?? ''}`,
+  }),
 }))
 
 const mockRevalidate = jest.fn(async () => null)
@@ -146,5 +149,21 @@ describe('a schema that does not say so', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     await edit('Save site settings')
     expect(mockRevalidate).not.toHaveBeenCalled()
+  })
+})
+
+describe("a schema's own settings heading", () => {
+  // Every card's `?` names its own docs section (AGL-3700): the Weglot
+  // settings card links Weglot's settings heading, not the generic one.
+  it('links the heading the schema names, when the docs have it', () => {
+    const { pluginSettingsHelp } = jest.requireActual<
+      typeof import('../components/plugin-config-card.component')
+    >('../components/plugin-config-card.component')
+    expect(
+      pluginSettingsHelp({ topic: 'weglot', anchor: '#settings' })?.href,
+    ).toBe('/weglot#settings')
+    expect(pluginSettingsHelp({ topic: 'weglot', anchor: '#gone' })).toBeNull()
+    expect(pluginSettingsHelp({ topic: 'no-such-topic', anchor: '#settings' })).toBeNull()
+    expect(pluginSettingsHelp(undefined)).toBeNull()
   })
 })

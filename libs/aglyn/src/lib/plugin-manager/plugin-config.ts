@@ -62,6 +62,14 @@ export interface PluginConfigSchema {
    * rather than within the page cache's window.
    */
   affectsPublishedPages?: boolean
+  /**
+   * The settings card's own docs heading (AGL-3700): a docs help topic key and
+   * one of that page's anchors. Each card's `?` names its own section, so a
+   * plugin that documents its settings points here; without it the card links
+   * the generic plugin-settings section. Names only — the console resolves
+   * them against its registry, so no docs prose rides a site bundle.
+   */
+  help?: { topic: string; anchor: `#${string}` }
   /** Cross-field validation; returns an error message or null. */
   validate?: (values: Record<string, unknown>) => string | null
 }
