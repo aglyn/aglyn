@@ -141,6 +141,31 @@ describe('EditHintBounce (AGL-1842)', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
   })
 
+  it('stays put when a workspace is being provisioned by the time the blob arrives (AGL-3690)', async () => {
+    // The home page claims the sign-up's held name, which clears it, and only
+    // then creates the workspace. Leaving between the two stranded a phone
+    // sign-up with "0 workspaces". The hold is taken while the blob mint is
+    // in flight, after the check at the top has already passed.
+    global.fetch = jest.fn(async () => {
+      act(() => holdSignUpLanding('spec'))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ blob: 'signed-bounce-blob' }),
+      }
+    }) as unknown as typeof fetch
+    mockUser = signedInUser
+    render(<EditHintBounce navigate={navigate} />)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(navigate).not.toHaveBeenCalled()
+    // Unstamped, so the next console load plants the hint instead of a day
+    // later.
+    expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBeNull()
+  })
+
   it('does nothing within the throttle window', async () => {
     window.localStorage.setItem(EDIT_HINT_BOUNCE_STAMP_KEY, String(Date.now()))
     mockUser = signedInUser
