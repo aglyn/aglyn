@@ -49,6 +49,7 @@ import type { AiJobSummary } from '../model/ai-jobs.types'
 import type { LazyWidget } from '../lazy-widget'
 import { registerAiConsole } from '../plugin'
 import { AiJobsPage } from './ai-jobs-page.component'
+import { aiJobKindLabels } from './ai-jobs-list-page.component'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -154,7 +155,12 @@ describe('a site’s AI jobs', () => {
     mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
     openList()
     expect(await screen.findByRole('heading', { name: 'No AI jobs on this site yet' })).toBeTruthy()
-    expect(screen.getByText(/choose Create with AI on this site’s Pages, Templates, Layouts, Forms or Components page/)).toBeTruthy()
+    expect(screen.getByText(/choose Create with AI on any list that offers it/)).toBeTruthy()
+    // Every kind the registry names, not a hand-kept five.
+    const kinds = screen.getByText(/Each job is one of these kinds:/).textContent ?? ''
+    expect(aiJobKindLabels().length).toBeGreaterThan(5)
+    for (const label of aiJobKindLabels()) expect(kinds).toContain(label)
+    expect(kinds).toMatch(/Site, .* and \w+\./)
     expect(screen.queryByLabelText('Loading AI jobs')).toBeNull()
   })
 
