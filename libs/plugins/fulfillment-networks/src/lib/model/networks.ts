@@ -22,9 +22,9 @@
  * holds or names a credential.
  */
 
-export type NetworkProviderId = 'shipbob' | 'amazon-mcf'
+export type NetworkProviderId = 'shipbob' | 'amazon-mcf' | 'shipmonk'
 
-export const NETWORK_PROVIDER_IDS: readonly NetworkProviderId[] = ['shipbob', 'amazon-mcf']
+export const NETWORK_PROVIDER_IDS: readonly NetworkProviderId[] = ['shipbob', 'amazon-mcf', 'shipmonk']
 
 /** Amazon's shipping speeds a Multi-Channel Fulfillment order may ask for. */
 export type AmazonShippingSpeed = 'Standard' | 'Expedited' | 'Priority'
@@ -41,6 +41,11 @@ export interface NetworkProviderInfo {
   summary: string
   /** Whether the network tells us about a parcel by webhook, beside what we read back. */
   webhooks: boolean
+  /**
+   * How a merchant connects it: `oauth` — signs in at the network and grants
+   * the deployment's app; `api-key` — pastes their own key (AGL-3697).
+   */
+  auth: 'oauth' | 'api-key'
 }
 
 export const NETWORK_PROVIDERS: Readonly<Record<NetworkProviderId, NetworkProviderInfo>> = {
@@ -50,6 +55,7 @@ export const NETWORK_PROVIDERS: Readonly<Record<NetworkProviderId, NetworkProvid
     shortLabel: 'ShipBob',
     summary: 'Paid orders go to ShipBob’s warehouses to pick, pack and ship; shipments and tracking come back to the order.',
     webhooks: true,
+    auth: 'oauth',
   },
   'amazon-mcf': {
     id: 'amazon-mcf',
@@ -57,11 +63,20 @@ export const NETWORK_PROVIDERS: Readonly<Record<NetworkProviderId, NetworkProvid
     shortLabel: 'Amazon',
     summary: 'Paid orders ship from your FBA inventory in Amazon’s warehouses; shipments and tracking come back to the order.',
     webhooks: false,
+    auth: 'oauth',
+  },
+  shipmonk: {
+    id: 'shipmonk',
+    label: 'ShipMonk',
+    shortLabel: 'ShipMonk',
+    summary: 'Paid orders go to ShipMonk’s warehouses to pick, pack and ship; shipments and tracking come back to the order.',
+    webhooks: true,
+    auth: 'api-key',
   },
 }
 
 export function isNetworkProviderId(value: unknown): value is NetworkProviderId {
-  return value === 'shipbob' || value === 'amazon-mcf'
+  return value === 'shipbob' || value === 'amazon-mcf' || value === 'shipmonk'
 }
 
 /** One site's connection to one network, as the document id spells it. */
@@ -85,7 +100,11 @@ export type NetworkRoutingMode = 'automatic' | 'manual'
 
 export interface NetworkConnectionSettings {
   routing?: NetworkRoutingMode
-  /** ShipBob: the ship option orders ask for, as named in the merchant's ShipBob account. */
+  /**
+   * ShipBob: the ship option orders ask for, as named in the merchant's
+   * ShipBob account. ShipMonk: the requested shipping service, which must
+   * match a shipping mapping in the merchant's ShipMonk account.
+   */
   shippingMethod?: string
   /** Amazon: the shipping speed orders ask for. */
   shippingSpeed?: AmazonShippingSpeed
@@ -129,6 +148,10 @@ export interface NetworkConnectionView {
   shippingSpeed: AmazonShippingSpeed
   marketplaceId: string | null
   marketplaces: NetworkMarketplace[]
+  /** ShipMonk: the merchant's API store the key belongs to (AGL-3697). */
+  storeId: string | null
+  /** ShipMonk: whether a webhook signing secret is set, so ShipMonk's webhooks are taken. */
+  webhookSecretSet: boolean
   syncInventory: boolean
   inventory: NetworkInventorySummary
   lastError: string | null
@@ -210,7 +233,7 @@ export function readConnectionSettings(
   }
   if (body['shippingMethod'] !== undefined) {
     const method = String(body['shippingMethod'] ?? '').trim()
-    if (!method || method.length > 80) return { ok: false, error: 'Name the ShipBob ship option, up to 80 characters' }
+    if (!method || method.length > 80) return { ok: false, error: 'Name the ship option, up to 80 characters' }
     settings.shippingMethod = method
   }
   if (body['shippingSpeed'] !== undefined) {
@@ -230,4 +253,26 @@ export function readConnectionSettings(
     settings[key] = body[key] as boolean
   }
   return { ok: true, settings }
+}
+
+/** A ShipMonk API store id: digits only, as ShipMonk's Integration API Keys page shows it. */
+export const SHIPMONK_STORE_ID = /^[1-9][0-9]{0,11}$/
+
+/**
+ * What a connect with the merchant's own API key reads from the request
+ * (AGL-3697): the key, and for ShipMonk the API store it belongs to. The key
+ * is never echoed back; a refusal names the field, never its value.
+ */
+export function readApiKeyConnect(
+  provider: NetworkProviderId,
+  body: Record<string, unknown>,
+): { ok: true; apiKey: string; storeId: string | null } | { ok: false; error: string } {
+  const apiKey = typeof body['apiKey'] === 'string' ? body['apiKey'].trim() : ''
+  if (apiKey.length < 8 || apiKey.length > 512 || /\s/.test(apiKey)) {
+    return { ok: false, error: `Paste the ${NETWORK_PROVIDERS[provider].label} API key` }
+  }
+  if (provider !== 'shipmonk') return { ok: true, apiKey, storeId: null }
+  const storeId = String(body['storeId'] ?? '').trim()
+  if (!SHIPMONK_STORE_ID.test(storeId)) return { ok: false, error: 'Enter the ShipMonk store id: the number next to the API key' }
+  return { ok: true, apiKey, storeId }
 }

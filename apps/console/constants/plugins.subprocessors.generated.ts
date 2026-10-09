@@ -505,6 +505,18 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         reason: "Amazon Seller Central's app consent page, built by `networkAuthorizeUrl` in `libs/plugins/fulfillment-networks/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
       },
+      {
+        host: "api.shipmonk.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipMonk API of the store whose own API key a site's admin pastes in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts` with that key, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox.shipmonk.dev",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`. Used only by a deployment pointed at the sandbox (`SHIPMONK_ENVIRONMENT=sandbox`), where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
     ],
   },
   {
