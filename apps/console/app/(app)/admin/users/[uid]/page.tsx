@@ -51,6 +51,7 @@ import StaffAcquisitionCard from '../../../../../components/staff-acquisition-ca
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
+import AccountAvatar from '../../../../../components/account-avatar.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import StaffUserDeviceSessionsCard, {
@@ -366,7 +367,23 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       ]}
       header={{
         children: accountLabel ?? 'User',
-        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+        // The account's photo, or its initials, once it has loaded
+        // (AGL-3660); the staff glyph until then.
+        icon: detail ? (
+          <Stack
+            component="span"
+            sx={{ mr: { xs: 1.25, sm: 1.75 }, flexShrink: 0, display: 'inline-flex' }}
+          >
+            <AccountAvatar
+              photoUrl={(detail.user as { photoUrl?: string | null }).photoUrl}
+              name={detail.user.displayName}
+              email={detail.user.email}
+              size={40}
+            />
+          </Stack>
+        ) : (
+          { path: ICON_VARIANT_SYMBOL_SECURE.path }
+        ),
       }}
       help={{ topic: 'staffConsole', anchor: '#user-detail' }}
     >
@@ -772,30 +789,6 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ),
                       },
                       {
-                        key: 'device-sessions',
-                        children: (
-                          /*
-                           * AGL-1513 part 2. The registry has recorded every sign-in
-                           * since AGL-665 and AGL-1959 gave the OWNER a list and a
-                           * sign-out; staff had neither, so "someone stole my laptop"
-                           * was answered by disabling the whole account. This is the
-                           * same write behind the same audit trail as every other
-                           * action on this page.
-                           */
-                          <StaffUserDeviceSessionsCard
-                            subjectLabel={detail.user.email ?? detail.user.uid}
-                            rows={detail.devices?.rows ?? []}
-                            // A missing `devices` key is a read that did not happen,
-                            // which is the same thing to a reader as a read that
-                            // failed — and the opposite of "no other devices".
-                            lookupFailed={detail.devices?.lookupFailed ?? true}
-                            onSignOut={async (deviceId) =>
-                              callManage({ action: 'signOutDevice', deviceId })
-                            }
-                          />
-                        ),
-                      },
-                      {
                         key: 'send-email',
                         // AGL-3691. Any system email, or a written follow-up,
                         // to this account — the tool a stranded sign-up's
@@ -821,6 +814,33 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ),
                       },
                     ]}
+                  />
+                ),
+              },
+              {
+                // Full width (AGL-3660): a sign-in history is a table, and in
+                // the balanced columns it was the card that outgrew its
+                // column's share and left the other one ending early.
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * AGL-1513 part 2. The registry has recorded every sign-in
+                   * since AGL-665 and AGL-1959 gave the OWNER a list and a
+                   * sign-out; staff had neither, so "someone stole my laptop"
+                   * was answered by disabling the whole account. This is the
+                   * same write behind the same audit trail as every other
+                   * action on this page.
+                   */
+                  <StaffUserDeviceSessionsCard
+                    subjectLabel={detail.user.email ?? detail.user.uid}
+                    rows={detail.devices?.rows ?? []}
+                    // A missing `devices` key is a read that did not happen,
+                    // which is the same thing to a reader as a read that
+                    // failed — and the opposite of "no other devices".
+                    lookupFailed={detail.devices?.lookupFailed ?? true}
+                    onSignOut={async (deviceId) =>
+                      callManage({ action: 'signOutDevice', deviceId })
+                    }
                   />
                 ),
               },
@@ -1042,6 +1062,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <ActorActivityTable
                     endpoint={`/api/admin/user-activity?uid=${encodeURIComponent(uid)}`}
                     header="Activity by this account"
+                    staff
                     help={docsHelp('staffConsole', {
                       anchor: '#user-activity',
                     })}

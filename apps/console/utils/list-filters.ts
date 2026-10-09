@@ -175,6 +175,32 @@ export const USER_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
   { path: 'lastSignInAt', direction: 'asc', column: 'lastSignInAt', label: 'Last sign-in' },
 ]
 
+/**
+ * The account list's order before anyone picks one (AGL-3660): newest
+ * account first, answered by the route over the whole directory like any
+ * header sort — never a sort of the page the browser happens to hold.
+ */
+export const USER_LIST_DEFAULT_SORT: ListQuerySort = USER_LIST_COLUMN_SORTS.find(
+  (sort) => sort.path === 'createdAt' && sort.direction === 'desc',
+) as ListQuerySort
+
+/**
+ * The sort a request is answered in: the one it asked for when the list
+ * offers it, else the default. A request that asks for nothing — the
+ * page's first read, an older client — is the newest-first directory.
+ */
+export function userListSort(
+  asked: { path: string; direction: string } | null | undefined,
+): ListQuerySort {
+  return (
+    (asked
+      ? USER_LIST_COLUMN_SORTS.find(
+          (entry) => entry.path === asked.path && entry.direction === asked.direction,
+        )
+      : undefined) ?? USER_LIST_DEFAULT_SORT
+  )
+}
+
 /** An account row as the route serializes it, for what the sorts read. */
 interface UserSortRow {
   email: string | null

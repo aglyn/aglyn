@@ -104,6 +104,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     tenantsIncluded: true,
     tenantTruncated: [],
   }),
+  // The plain listing reads the whole directory to sort it newest first
+  // (AGL-3660); it is the same records, through the same collapse.
+  scanUsersAcrossPools: async () => ({
+    users: mockListed,
+    truncated: false,
+    tenantTruncated: [],
+  }),
   // Recorded rather than reimplemented. A double that re-derives the merge
   // would prove only that the double works — the algorithm has its own specs
   // against the real function, and what is unproven here is the WIRING.
