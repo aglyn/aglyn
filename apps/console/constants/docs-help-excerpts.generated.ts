@@ -159,6 +159,7 @@ export const DOCS_HELP_EXCERPTS = {
   modelBuilder: 'Define a dataset model with typed fields and edit records in the typed editor.',
   multilingual: 'Offer your site in multiple languages with locale variants, hreflang, and a language switcher.',
   multiSelect: 'Select several elements at once and move the whole selection together.',
+  musicPlayer: 'The Music player element — play your own tracks from the media library, one or a playlist, the rights confirmation every audio upload needs, and how copyright takedowns work.',
   onboardingDeepLinks: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
   operatorAlerts: 'Every event an install operator must hear about: which alerts exist, where they go (email and an optional webhook), how staff switch them or batch them daily, and how health checks alert on their own.',
   orderNotifications: 'The emails your customers get about their orders, the private order status page they link to, and how to resend a receipt.',

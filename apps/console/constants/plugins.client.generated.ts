@@ -287,4 +287,10 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     contributes: {},
     load: () => import('@aglyn/plugins-weglot/site'),
   },
+  {
+    id: 'music',
+    register: {"site":"registerMusicPlugin"},
+    contributes: {},
+    load: () => import('@aglyn/plugins-music/site'),
+  },
 ]

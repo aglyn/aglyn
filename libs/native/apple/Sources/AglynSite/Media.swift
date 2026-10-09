@@ -180,6 +180,7 @@ public func mediaKindSymbol(_ kind: String) -> String {
   switch kind {
   case "image": "photo"
   case "video": "film"
+  case "audio": "music.note"
   case "pdf": "doc.richtext"
   default: "doc"
   }

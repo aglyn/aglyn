@@ -45,7 +45,7 @@ import {
  * (`mediaFilterKeys` in `@aglyn/aglyn/app-utils/media-metadata`) and by the
  * backfill for the documents written before (`backfill-media-filter-keys`):
  *
- *   type         `kind`, the family (image, video, pdf, document)
+ *   type         `kind`, the family (image, video, audio, pdf, document)
  *   tags         `tags`, lower-cased by every writer, matched whole
  *   uploaded     `createdAt`
  *   size         `sizeBytes`, asked in megabytes
@@ -70,6 +70,7 @@ import {
 export const MEDIA_TYPE_OPTIONS: readonly ListFilterOption[] = [
   { value: 'image', label: 'Images' },
   { value: 'video', label: 'Video' },
+  { value: 'audio', label: 'Audio' },
   { value: 'pdf', label: 'PDF' },
   { value: 'document', label: 'Other documents' },
 ]

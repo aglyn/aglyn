@@ -661,6 +661,12 @@ export function aiSiteListings(input: {
    * six cards naming kinds of candle. An empty catalog says so in the grid.
    */
   store?: boolean
+  /**
+   * The site is a music site (`siteKind: 'music'`, AGL-3716): its Music page,
+   * or its home, places an empty Music player for the artist's own tracks.
+   * Nothing is sourced: the owner uploads the recordings.
+   */
+  music?: boolean
 }): AiLayoutListing[] {
   const listings: AiLayoutListing[] = []
   const products = input.outputs.filter((output) => output.resource === 'product' && !output.proposal)
@@ -690,6 +696,12 @@ export function aiSiteListings(input: {
       collectionSlug: slug,
       placements: aiLayoutListingPlacements('posts', input.screens),
     })
+  }
+  if (input.music) {
+    const placements = aiLayoutListingPlacements('tracks', input.screens)
+    if (placements.length) {
+      listings.push({ id: aiLayoutListingId('tracks'), kind: 'tracks', name: 'the music', records: [], placements })
+    }
   }
   return listings
 }

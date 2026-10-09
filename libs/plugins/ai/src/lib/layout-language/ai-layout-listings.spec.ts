@@ -21,6 +21,7 @@ import { COLLECTION_ENTRIES_COMPONENT_ID } from '@aglyn/aglyn/app-utils/collecti
 import { AI_PALETTE, AI_SURFACES } from '../runtime/ai-palette.generated'
 import { aiLayoutListingContext, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
 import { aiLayoutFrameCheck } from '../jobs/ai-job-layout-language'
+import { aiSiteListings } from '../jobs/ai-job-site-content'
 import { AI_LAYOUT_POST_CARD_TOKENS, AI_LAYOUT_STORE_EMPTY, aiCompileLayoutPage } from './ai-layout-compiler'
 import {
   AI_LAYOUT_CART_ELEMENT,
@@ -457,5 +458,126 @@ describe('a selling site’s header carries the cart (AGL-3676)', () => {
 
   it('carries no cart for a store that lists its catalog but cannot sell yet', () => {
     expect(nodesOf(frame([{ ...PRODUCTS, records: [], cart: false }]).value?.nodes).some((node) => node.componentId === 'cart')).toBe(false)
+  })
+})
+
+/*
+ * A music site's player (AGL-3716). A user asked Assist for "playable musics
+ * like daniel Caesar" on a music site and could only be offered a Video. A
+ * music site now places the Music player itself, EMPTY — its "add your
+ * tracks" state — for the artist to fill with their own uploads. No job
+ * sources a recording.
+ */
+const MUSIC_SCREENS = [
+  {
+    id: 'home',
+    title: 'Home',
+    slug: '/',
+    sections: [
+      { name: 'Hero', items: 0 },
+      { name: 'Latest release', items: 0 },
+      { name: 'Upcoming shows', items: 3 },
+    ],
+  },
+  {
+    id: 'music',
+    title: 'Music',
+    slug: '/music',
+    sections: [
+      { name: 'Music intro', items: 0 },
+      { name: 'Listen to the tracks', items: 0 },
+    ],
+  },
+  { id: 'booking', title: 'Booking', slug: '/booking', sections: [{ name: 'Book the band', items: 0 }] },
+]
+
+describe('a music site places an empty player for the artist’s own tracks (AGL-3716)', () => {
+  const [tracks] = aiSiteListings({ outputs: [], screens: MUSIC_SCREENS, music: true })
+
+  it('places it on the Music page, in the section about the recordings, and on a home section named for them', () => {
+    expect(tracks).toMatchObject({ id: 'listing:tracks', kind: 'tracks', records: [] })
+    expect(tracks.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'music', section: 1, role: 'index' },
+    ])
+  })
+
+  it('falls back to the home, after the opening, on a site with no music page or section', () => {
+    const [only] = aiSiteListings({
+      outputs: [],
+      screens: [{ id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'About the band', items: 0 }] }],
+      music: true,
+    })
+    expect(only.placements).toEqual([{ screenId: 'home', section: 1, role: 'featured' }])
+  })
+
+  it('is placed only on a music site', () => {
+    expect(aiSiteListings({ outputs: [], screens: MUSIC_SCREENS }).some((listing) => listing.kind === 'tracks')).toBe(false)
+  })
+
+  it('round-trips with no records, whatever a unit input claims', () => {
+    const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...tracks, records: ['Get You — Daniel Caesar'] }] })
+    expect(read.kind).toBe('tracks')
+    expect(read.records).toEqual([])
+  })
+
+  it('names the Music player by the id the music plugin persists, and offers it to a model', () => {
+    const source = readFileSync(join(__dirname, '../../../../music/src/lib/components/music-player.tsx'), 'utf8')
+    expect(source).toContain(`export const MUSIC_PLAYER_ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.tracks}'`)
+    expect(AI_PALETTE['musicPlayer']?.pluginId).toBe('music')
+    expect(AI_SURFACES.screen.allow).toEqual(expect.arrayContaining(['musicPlayer', 'musicTrack']))
+    // The rights confirmation is the owner's answer: never offered to a model.
+    expect(AI_PALETTE['musicPlayer']?.propsSchema.properties['rightsConfirmed']).toBeUndefined()
+    expect(AI_PALETTE['musicTrack']?.propsSchema.properties['rightsConfirmed']).toBeUndefined()
+  })
+
+  it('compiles the section to an empty player — no source — under the words the design gave it', () => {
+    const compiled = aiCompileLayoutPage(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our music' }] },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Listen' },
+            { kind: 'cards', items: [{ title: 'Get You', text: 'Daniel Caesar' }] },
+          ],
+        },
+      ],
+      { title: 'Music', sections: MUSIC_SCREENS[1].sections.map((section) => ({ ...section, uses: [] })) },
+      targets('music', [tracks]),
+      { reusableComponents: false },
+    )
+    const nodes = nodesOf(compiled.tree.nodes)
+    const player = nodes.find((node) => node.componentId === 'musicPlayer')
+    expect(player).toBeTruthy()
+    expect(player?.props?.['src']).toBeUndefined()
+    // The cards naming another artist's song are gone.
+    expect(JSON.stringify(compiled.tree.nodes)).not.toContain('Daniel Caesar')
+    expect(JSON.stringify(compiled.tree.nodes)).toContain('Listen')
+  })
+
+  it('stores the player through the same validator every generated page passes', () => {
+    const result = homeCheck([tracks])(HOME_ANSWER)
+    expect(result.violations).toEqual([])
+    const player = nodesOf(result.value?.nodes).find((node) => node.componentId === 'musicPlayer')
+    expect(player).toBeTruthy()
+    expect(player?.props?.['src']).toBeUndefined()
+  })
+
+  it('tells the model the platform places the player, so it names no songs', () => {
+    const screen = {
+      ...HOME_SCREEN,
+      id: 'music',
+      title: 'Music',
+      slug: '/music',
+      sections: MUSIC_SCREENS[1].sections.map((section) => ({ ...section, uses: [] })),
+    }
+    const prompt = aiLayoutPagePrompt({
+      job: { $id: 'job-1', brief: 'A band site', inputs: {} },
+      plan: { reuse: [], create: [], screens: [screen] } as never,
+      screen: screen as never,
+      targets: targets('music', [tracks]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain('2. "Listen to the tracks"; the platform places a music player here for the artist\'s own tracks')
   })
 })

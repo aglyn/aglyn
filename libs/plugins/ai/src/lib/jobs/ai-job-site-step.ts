@@ -650,6 +650,8 @@ export function aiSiteUnitJob(
       // A store lists its catalog on its Shop page even when its first
       // products could not be written, or on the Free taste (AGL-3676).
       store: aiSiteKindOfInputs(job.inputs)?.id === 'store',
+      // A music site places an empty player for the artist's own tracks (AGL-3716).
+      music: aiSiteKindOfInputs(job.inputs)?.id === 'music',
     })
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }

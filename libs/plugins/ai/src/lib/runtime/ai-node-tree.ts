@@ -599,6 +599,33 @@ function withNodeCapabilities(entry: AiPaletteEntry): AiPaletteEntry {
   return merged
 }
 
+/**
+ * Plugins whose elements play audio (AGL-3716): the Music player. A model
+ * never sources a recording and never vouches for one, so on their elements
+ * `rightsConfirmed` is always dropped and `src` is kept only as a reference
+ * to a file in the site's own library (which the asset check grounds) or a
+ * binding. Named by plugin id, as the listings name their elements: a plugin
+ * never imports another.
+ */
+export const AI_OWNER_AUDIO_PLUGIN_IDS: ReadonlySet<string> = new Set(['music'])
+
+/** Why an audio element's prop a model wrote is dropped, or null to keep it. */
+export function aiOwnerAudioRefusal(
+  pluginId: string | undefined,
+  name: string,
+  value: unknown,
+  bindingTokens: ReadonlySet<string> | null = null,
+): string | null {
+  if (!pluginId || !AI_OWNER_AUDIO_PLUGIN_IDS.has(pluginId)) return null
+  if (name === 'rightsConfirmed') {
+    return 'only the site owner can confirm they hold the rights to a recording'
+  }
+  if (name !== 'src') return null
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text || parseMediaRef(text) || bindingTokens?.has(text)) return null
+  return 'a player plays only audio from the owner’s own media library, never a recording from elsewhere'
+}
+
 function sanitizeProps(
   nodeId: string,
   paletteEntry: AiPaletteEntry,
@@ -616,6 +643,12 @@ function sanitizeProps(
     // `sx` is read off the node instead; a model that put it here meant the
     // same thing, and the caller has already moved it.
     if (name === 'sx' || value === undefined || value === null) continue
+    // Audio is the owner's own, always (AGL-3716).
+    const audioRefusal = aiOwnerAudioRefusal(entry.pluginId, name, value, bindingTokens)
+    if (audioRefusal) {
+      repairs.push(`${nodeId}.${name}: ${audioRefusal}; dropped`)
+      continue
+    }
     const schema = declared[name]
     if (!schema) {
       repairs.push(

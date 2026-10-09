@@ -1435,6 +1435,16 @@
     },
     {
       "alwaysOnForWorkspace": true,
+      "description": "Play your own tracks from the media library on your site.",
+      "id": "music",
+      "label": "Music player",
+      "siteOff": {
+        "keeps": "The audio in your media library is kept, and players keep working on the workspace's other sites.",
+        "stops": "Switching the Music player off for this site stops its players rendering on its published pages."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
       "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
       "id": "ad-conversions",
       "label": "Ad conversions",
@@ -2818,6 +2828,7 @@
   "MEDIA_KINDS": [
     "image",
     "video",
+    "audio",
     "pdf",
     "document"
   ],
@@ -2980,6 +2991,10 @@
     {
       "label": "Video",
       "value": "video"
+    },
+    {
+      "label": "Audio",
+      "value": "audio"
     },
     {
       "label": "PDF",

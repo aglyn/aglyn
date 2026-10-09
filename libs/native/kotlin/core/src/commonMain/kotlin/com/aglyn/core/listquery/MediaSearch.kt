@@ -20,6 +20,7 @@ fun mediaKindOf(contentType: String?): String {
   return when {
     type.startsWith("image/") -> "image"
     type.startsWith("video/") -> "video"
+    type.startsWith("audio/") -> "audio"
     type == "application/pdf" -> "pdf"
     else -> "document"
   }

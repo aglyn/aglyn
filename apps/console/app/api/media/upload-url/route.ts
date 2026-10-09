@@ -70,6 +70,11 @@ import {
   SIGNED_UPLOAD_TYPES_MESSAGE,
   storageContentHash,
 } from '../../../../utils/media-upload-limits'
+import {
+  AUDIO_RIGHTS_FIELD,
+  audioRightsRefusal,
+  audioRightsVerdict,
+} from '../../../../utils/media-audio-rights'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
@@ -165,6 +170,17 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({
           error: SIGNED_UPLOAD_TYPES_MESSAGE,
         }, { status: 415 })
+      }
+      // An audio file's rights confirmation (AGL-3716), asked at the mint so
+      // a file sent without one never reaches the bucket. Finalize asks again
+      // and is the request that stores it.
+      {
+        const rights = audioRightsVerdict({
+          contentType,
+          confirmed: body?.[AUDIO_RIGHTS_FIELD],
+          uid: decoded.uid,
+        })
+        if (rights.refusal) return audioRightsRefusal(rights.refusal)
       }
       // Video ingress is behind a release flag (AGL-2830). Refused before a
       // URL exists, so no bytes can reach the bucket.
@@ -290,6 +306,18 @@ async function handler(request: Request): Promise<Response> {
     if (!maxBytes || declaredBytes > maxBytes) {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })
+    }
+    // The rights confirmation again, at finalize (AGL-3716): this is the
+    // request that writes the document, so it is the one whose answer is
+    // stored. A refusal deletes the object like every finalize refusal.
+    const rights = audioRightsVerdict({
+      contentType,
+      confirmed: body?.[AUDIO_RIGHTS_FIELD],
+      uid: decoded.uid,
+    })
+    if (rights.refusal) {
+      await file.delete().catch(() => undefined)
+      return audioRightsRefusal(rights.refusal)
     }
     // The video flag again, at finalize (AGL-2830). A URL minted before the
     // flag closed stays valid for its whole TTL, and by now the object is in
@@ -733,6 +761,8 @@ async function handler(request: Request): Promise<Response> {
       // being absent is a fact a query can use rather than a null to test.
       ...videoFields,
       uploadedBy: decoded.uid,
+      // Who confirmed an audio file's rights, and when (AGL-3716).
+      ...rights.fields,
       // `variants`, their encoder generation and the display copy
       // (AGL-3486), as the direct route writes them.
       ...(variantOutcome

@@ -25,6 +25,7 @@ public func mediaKindOf(_ contentType: String?) -> String {
   let type = (contentType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
   if type.hasPrefix("image/") { return "image" }
   if type.hasPrefix("video/") { return "video" }
+  if type.hasPrefix("audio/") { return "audio" }
   if type == "application/pdf" { return "pdf" }
   return "document"
 }
