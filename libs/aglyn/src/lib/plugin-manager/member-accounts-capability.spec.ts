@@ -62,13 +62,18 @@ describe('user accounts is a per-site capability (AGL-2486)', () => {
     expect([...DEFAULT_OFF_PER_SITE_PLUGIN_IDS]).toContain(ACCOUNTS_PLUGIN_ID)
   })
 
-  it('no OTHER first-party plugin is default-off per site', () => {
-    // Guards the blast radius: this inversion exists for one capability, and
-    // a second one arriving silently would change what every existing site
-    // serves. Adding one is a decision, so make it a failing test first.
+  it('no OTHER first-party plugin is default-off per site, but the ones decided here', () => {
+    // Guards the blast radius: this inversion exists for few capabilities, and
+    // one arriving silently would change what every existing site serves.
+    // Adding one is a decision, so make it a failing test first.
+    //
+    // Live chat (AGL-3698) is the second: a NEW plugin, so being off until a
+    // site turns it on takes nothing away from any site — and it is what keeps
+    // its page enricher and the lockdown verdict from reading a settings
+    // document for every site on the platform.
+    const DECIDED = new Set([ACCOUNTS_PLUGIN_ID, 'live-chat'])
     for (const plugin of FIRST_PARTY_PLUGINS) {
-      if (plugin.id === ACCOUNTS_PLUGIN_ID) continue
-      expect(isDefaultOffPerSite(plugin.id)).toBe(false)
+      expect([plugin.id, isDefaultOffPerSite(plugin.id)]).toEqual([plugin.id, DECIDED.has(plugin.id)])
     }
   })
 

@@ -153,6 +153,33 @@ function isEmptyContribution(value: unknown): boolean {
   return false
 }
 
+/**
+ * The page prop an enricher names the vendors it loads on the ANALYTICS
+ * grant with (AGL-3698): a feature that loads a third party with the page
+ * only for a visitor whose recorded consent grants analytics — a live chat
+ * set to load with the page — names it here, so the consent banner the
+ * visitor answers names it too. A list of display names, `['Tidio chat']`.
+ *
+ * The one key enrichers SHARE rather than own: every contribution is joined,
+ * not overwritten, so two plugins each naming a vendor both reach the banner.
+ */
+export const CONSENT_ANALYTICS_VENDORS_PROP = 'consentAnalyticsVendors'
+
+/** The vendor names a page's props carry under {@link CONSENT_ANALYTICS_VENDORS_PROP}. */
+export function consentAnalyticsVendorsOf(props: unknown): string[] {
+  const value = (props as Record<string, unknown> | null | undefined)?.[
+    CONSENT_ANALYTICS_VENDORS_PROP
+  ]
+  if (!Array.isArray(value)) return []
+  const out: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const name = entry.trim().slice(0, 60)
+    if (name && !out.includes(name)) out.push(name)
+  }
+  return out
+}
+
 export interface SitePageEnrichment {
   /** The merged contributions, spread into the page props as before. */
   props: Record<string, unknown>
@@ -198,7 +225,17 @@ export async function runSitePageEnrichers(
     try {
       if (outcome.status === 'rejected') throw outcome.reason
       const result = outcome.value
+      const vendors = [
+        ...consentAnalyticsVendorsOf(merged),
+        ...consentAnalyticsVendorsOf(result),
+      ]
       Object.assign(merged, result)
+      // Joined, not overwritten — see CONSENT_ANALYTICS_VENDORS_PROP.
+      if (vendors.length) {
+        merged[CONSENT_ANALYTICS_VENDORS_PROP] = consentAnalyticsVendorsOf({
+          [CONSENT_ANALYTICS_VENDORS_PROP]: vendors,
+        })
+      }
       // "Contributed" means produced something with content, not merely
       // returned a key. Every marketing enricher returns its full key set on
       // every page — `announcementBar: null`, `experiments: []` — so keying

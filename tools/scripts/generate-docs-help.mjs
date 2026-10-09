@@ -269,6 +269,8 @@ const PLUGIN_TOPICS = {
   salesChannels: '/commerce-and-bookings/commerce/sales-channels',
   sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
+  // The Live chat card on a site's setup page (AGL-3698).
+  liveChat: '/building-sites/live-chat',
   // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
   // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
   zapier: '/marketing-and-automation/workflows-and-actions/zapier',

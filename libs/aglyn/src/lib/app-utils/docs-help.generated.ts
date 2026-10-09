@@ -282,6 +282,11 @@ export const PLUGIN_DOCS = {
     title: 'Invite teammates',
     excerpt: 'Add people to your site and understand how team members act within your organization.',
   },
+  liveChat: {
+    path: '/building-sites/live-chat',
+    title: 'Live chat',
+    excerpt: 'Chat with your site\'s visitors through your own Tidio or LiveChat account. The chat loads only when a visitor asks for it, so it never slows your pages.',
+  },
   loyalty: {
     path: '/commerce-and-bookings/commerce/rewards-and-referrals',
     title: 'Rewards, referrals and store credit',
@@ -482,6 +487,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#manage-plugins', '#find-plugins', '#built-in-plugins', '#a-plugins-page', '#where-a-plugin-runs', '#permissions-and-data', '#site-plugins', '#plugin-on-one-site', '#what-to-do-next', '#related'],
   inventorySync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#member-page', '#member-access', '#member-activity', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#site-activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
+  liveChat: ['#set-up-live-chat', '#which-pages-show-the-chat', '#how-the-chat-loads', '#privacy-and-cookies'],
   loyalty: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   loyaltyConnectors: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#review-queue', '#verification-requests', '#listed-plugins', '#submission-status', '#review-overview', '#review-checklist', '#review-verdict', '#review-versions', '#take-down', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
@@ -724,6 +730,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   crmSettings: {
     '#assignment-rules': 'Assignment rules',
+    '#companies': 'Companies',
     '#default-owner': 'Default owner',
     '#email-capture': 'Email capture',
     '#recipes': 'Recipes',
@@ -843,6 +850,9 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#member-activity': 'One member\'s activity',
     '#member-page': 'A member\'s page',
     '#site-activity-log': 'A site\'s activity log',
+  },
+  liveChat: {
+    '#set-up-live-chat': 'Set up live chat',
   },
   loyalty: {
     '#members-and-store-credit': 'Members and store credit',
@@ -1060,6 +1070,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#user-organizations': 'Organizations',
     '#users-accounts': 'Accounts',
     '#users-admin': 'Users admin',
+    '#whats-there': 'What\'s there',
   },
   taxServices: {
     '#connect': 'Connect',
