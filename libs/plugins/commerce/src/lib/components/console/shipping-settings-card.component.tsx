@@ -242,7 +242,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   return (
     <CardDisplay
       header={'Shipping'}
-      help={pluginDocsHelp('commerce', { anchor: '#shipping--taxes' })}
+      help={pluginDocsHelp('shipping', { anchor: '#zones-and-rates' })}
       contentGutterX
       contentGutterY
     >

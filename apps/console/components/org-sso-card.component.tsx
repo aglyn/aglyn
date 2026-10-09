@@ -184,7 +184,12 @@ function SsoCardShell({ children }: { children: ReactNode }) {
   return (
     <CardDisplay
       header="Single sign-on"
-      help={docsHelp('sso')}
+      help={docsHelp('sso', {
+        anchor: '#setting-it-up',
+        excerpt:
+          'Verify your email domain, connect your identity provider, then ' +
+          'turn single sign-on on — three steps, all on this card.',
+      })}
       contentGutterX
       contentGutterY
     >

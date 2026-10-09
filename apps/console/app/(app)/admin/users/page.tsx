@@ -703,6 +703,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           quick={{
             icon: mdiOpenInNew.path,
             label: 'View',
+            newTab: true,
             to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
           }}
           items={[
@@ -758,9 +759,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Accounts'}
             help={docsHelp('staffConsole', {
-              anchor: '#whats-there',
-              excerpt:
-                'Grant or revoke staff roles and disable accounts — audited, with search and column filters that reach every pool, not just the loaded page.',
+              anchor: '#users-accounts',
             })}
             contentGutterX
             contentGutterY

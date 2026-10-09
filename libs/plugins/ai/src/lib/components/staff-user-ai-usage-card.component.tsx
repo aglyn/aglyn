@@ -104,7 +104,7 @@ const COLUMNS: GridColDef<StaffUserAiUsageRow>[] = [
   listActionsColumn((row: StaffUserAiUsageRow) => (
     <ListRowActions
       label={row.orgName ?? row.orgId}
-      quick={{ icon: mdiOpenInNew.path, label: 'View organization', to: orgHref(row.orgId) }}
+      quick={{ icon: mdiOpenInNew.path, label: 'View organization', to: orgHref(row.orgId), newTab: true }}
       items={[]}
     />
   )),

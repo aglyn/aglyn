@@ -1030,6 +1030,15 @@
         "serverDeclarations": "registerMarketplaceServerDeclarations",
         "planEntitlements": "marketplacePlanEntitlements"
       },
+      "mobile": {
+        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app: browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
+        "contributes": {
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"],
+          "quickActions": ["marketplace.open"],
+          "deepLinks": ["marketplace.listing-page", "marketplace.page"]
+        }
+      },
       "consoleRedirects": [
         {
           "$comment": "The address the marketplace had under Manage before it became an organization section (AGL-236). A checkout with no site to return to still lands here, so it keeps resolving.",
@@ -1541,14 +1550,14 @@
       ],
       "catalog": {
         "order": 19,
-        "$comment": "AGL-3614. Posts commerce sales, refunds, fees and payouts to QuickBooks Online or Xero. Sold with commerce: the extension's entitlement is `features.commerce`, so no plan and no add-on of its own.",
+        "$comment": "AGL-3614. Posts commerce sales, refunds, fees and payouts to QuickBooks Online or Xero, or through Codat (AGL-3636) to QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books, Wave and the rest Codat reaches. Sold with commerce: the extension's entitlement is `features.commerce`, so no plan and no add-on of its own.",
         "label": "Accounting",
-        "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+        "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
         "releaseFlag": "release_accounting",
         "releaseFlagDefinition": {
-          "$comment": "OFF by default and the release gate for an env-gated feature: switch it on only for a deployment whose console has an Intuit or Xero app's credentials and the accounting token key (the variables are named in libs/plugins/accounting/README.md). The docs guard holds the Connect QuickBooks Online and Connect Xero guides unclaimed while it is off.",
+          "$comment": "OFF by default and the release gate for an env-gated feature: switch it on only for a deployment whose console has an Intuit or Xero app's credentials or a Codat API key, and the accounting token key (the variables are named in libs/plugins/accounting/README.md). The docs guard holds the Connect QuickBooks Online and Connect Xero guides unclaimed while it is off.",
           "label": "Accounting",
-          "description": "QuickBooks Online and Xero sync for commerce: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614). OFF by default; needs the deployment's Intuit or Xero app credentials and the accounting token key on the console.",
+          "description": "QuickBooks Online and Xero sync for commerce, and through Codat QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614, AGL-3636). OFF by default; needs the deployment's Intuit or Xero app credentials or Codat API key, and the accounting token key, on the console.",
           "defaultEnabled": false,
           "navTabId": "nav-tab-org-accounting"
         },
@@ -1573,6 +1582,15 @@
         "serverDeclarations": "registerDataServerDeclarations",
         "consoleServerDeclarations": "registerDataConsoleServerDeclarations",
         "usageAxes": "dataUsageAxes"
+      },
+      "mobile": {
+        "$comment": "AGL-3668: the workspace's datasets in the Aglyn app: the list a member can see, create (and a join collection), each dataset's records count, fields, sharing and references, its records with the quick search and filters as one query, record create, edit and delete (reference integrity through /api/orgs/datasets), export, the schema editor (names, sharing, fields, reorder) and delete; list and detail side by side on tablets and desktop.",
+        "android": { "package": "com.aglyn.plugins.data", "register": "registerDataNative" },
+        "contributes": {
+          "screens": ["data.datasets", "data.records", "data.schema"],
+          "quickActions": ["data.open"],
+          "deepLinks": ["data.page"]
+        }
       },
       "modules": {
         "tenantApi": "tenant-api"
@@ -2044,6 +2062,15 @@
         "console": "registerLogicConsole",
         "serverDeclarations": "registerLogicServerDeclarations",
         "consoleServerDeclarations": "registerLogicConsoleServerDeclarations"
+      },
+      "mobile": {
+        "$comment": "AGL-3668: a site's Functions & Variables in the Aglyn app: variables (type, value, the workflow that fills one) and no-code functions (parameters with what a visitor sees, variables, if/then/otherwise operations, the return value), where each is used (the console's scan, a page's Besigner from it), create through the resources route, edit and delete with the site's cache drop.",
+        "android": { "package": "com.aglyn.plugins.logic", "register": "registerLogicNative" },
+        "contributes": {
+          "screens": ["logic.function", "logic.page"],
+          "quickActions": ["logic.open"],
+          "deepLinks": ["logic.page"]
+        }
       },
       "catalog": {
         "order": 15,
@@ -3486,6 +3513,108 @@
         "console": {
           "slots": [
             "hostAnalytics"
+          ]
+        }
+      }
+    },
+    {
+      "id": "live-chat",
+      "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",
+      "package": "@aglyn/plugins-live-chat",
+      "register": {
+        "site": "registerLiveChatSite",
+        "console": "registerLiveChatConsole",
+        "tenantApi": "registerLiveChatApi",
+        "consoleApi": "registerLiveChatConsoleApi",
+        "subprocessors": "liveChatSubprocessors"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "apiPrefixes": [
+        "live-chat"
+      ],
+      "catalog": {
+        "order": 36,
+        "label": "Live chat",
+        "alwaysOnForWorkspace": true,
+        "defaultOffPerSite": true,
+        "description": "Chat with visitors through your own Tidio or LiveChat account.",
+        "siteOff": {
+          "stops": "Switching Live chat off for this site removes the chat from its pages.",
+          "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account."
+        },
+        "publishedSiteImpact": "elements"
+      },
+      "siteCsp": {
+        "$comment": "The vendors' own published CSP host lists (Tidio's Widget SDK security policy; LiveChat's per-host CSP2 list), narrowed to the directives the tenant enforces. Must equal LIVE_CHAT_PROVIDERS' cspHosts (providers.spec.ts).",
+        "switchField": "enabled",
+        "variantField": "provider",
+        "requiredField": "publicKey",
+        "variants": {
+          "tidio": {
+            "connect": [
+              "socket.tidio.co",
+              "api-v2.tidio.co",
+              "uploads.tidio.com",
+              "sentry-new.tidio.co",
+              "widget-v4.tidiochat.com"
+            ],
+            "img": [
+              "code.tidio.co",
+              "avatars.tidiochat.com",
+              "tidio-images-messenger.s3.us-east-1.amazonaws.com",
+              "cdnjs.cloudflare.com",
+              "unpkg.com"
+            ],
+            "media": [
+              "code.tidio.co",
+              "widget-v4.tidiochat.com"
+            ],
+            "font": [
+              "code.tidio.co"
+            ]
+          },
+          "livechat": {
+            "connect": [
+              "api.livechatinc.com",
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com",
+              "api.text.com"
+            ],
+            "frame": [
+              "api.livechatinc.com",
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com"
+            ],
+            "img": [
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com",
+              "cdn.livechat-static.com",
+              "cdn.livechat-files.com",
+              "cdn.files-text.com"
+            ],
+            "media": [
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com",
+              "cdn.livechat-static.com"
+            ],
+            "font": [
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com"
+            ]
+          }
+        }
+      },
+      "contributes": {
+        "site": {
+          "features": [
+            "live-chat-launcher"
+          ]
+        },
+        "console": {
+          "slots": [
+            "hostSettings"
           ]
         }
       }

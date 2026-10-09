@@ -149,10 +149,38 @@ exact error, as [Support & community](../support-and-community.md#what-to-includ
 describes, since you will be relaying rather than reproducing. Someone invited to the
 whole organization keeps Support unchanged.
 
+## A member's page {#member-page}
+
+Open anyone from the **Team** page to see their own page: their role and site access, a
+**Password** card for helping them back in, what has been changed about them, everything
+they have done in the organization, and their AI usage and allotment.
+
+### Role and site access {#member-access}
+
+The **Member** card sets this person's organization role and job title and, for an
+editor or viewer, which sites they can reach. Roles are **Admin**, **Editor** and
+**Viewer**. Admins reach every site; for an editor or viewer, turn off
+**Access to all sites** and choose **Editor**, **Viewer** or **No access** on each site,
+so they see only those. **Save** applies the change; **Remove from organization** takes
+them off the team and frees their seat.
+
+Editing a member needs the admin role. The owner's role is not edited here — ownership
+moves under **Settings → Transfer ownership**.
+
+### One member's activity {#member-activity}
+
+**Activity by this member** lists everything this person has done in the organization —
+on its sites as well as at organization level — newest first. Above it, **Changes to this
+member** lists what others changed about them, such as role and access edits. Both need
+the **Activity & audit log** permission, the same as the organization's
+[activity log](#activity-log).
+
 ## Help a teammate who is locked out
 
-Open the member from the **Team** page and use the **Password** card. It has two
-options, and the first is almost always the right one.
+When a teammate cannot sign in, open them from the **Team** page and use the
+**Password** card to email them a reset link — or, when their account belongs to your
+organization alone, to set a password for them. The first is almost always the right
+one.
 
 ![The Password card on a team member's page, with the reset-email button above a
 divider reading "Or set a password directly" and a new-password field with a Generate
@@ -237,7 +265,12 @@ applied, and a notice above the table names it.
 Changing a filter or the search starts the log again at its first page. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
-A site's own activity log, under the site's **Admin → Activity**, filters and searches
+### A site's activity log {#site-activity-log}
+
+A site's **Admin → Activity** lists every change made to that site in the console —
+who did what, and when, newest first — with each entry linking to the thing it changed.
+
+The site's log filters and searches
 through its table's toolbar, across the whole log rather than the page on screen:
 **Filters** narrows it by **Action** — **equals** one, or **is any of** several, typed as
 the action is recorded, since the panel offers no list of them — and by **When** (**is**,

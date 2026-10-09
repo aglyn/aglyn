@@ -60,10 +60,14 @@ export interface AglynAppBarProps extends AppBarProps {
  * published page and every page of a layout share one class, and a page
  * without such a band is untouched.
  */
-const overHeroSx: SxProps<Theme> = (theme) => ({
+export const overHeroSx = (theme: Theme) => ({
   [`body:has([${UNDER_HEADER_ATTRIBUTE}]) &`]: {
     position: 'absolute',
-    top: 0,
+    // Below the owner's admin bar when one is up (the tenant publishes its
+    // live height on `<html>`), at the very top for everyone else. Absolute
+    // to the initial containing block, the bar's `<html>` margin never
+    // moves this header — the variable is what does (AGL-3660).
+    top: 'var(--aglyn-admin-bar-height, 0px)',
     left: 0,
     right: 0,
     backgroundColor: 'transparent',

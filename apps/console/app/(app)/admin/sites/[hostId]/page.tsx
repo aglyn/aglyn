@@ -20,6 +20,7 @@ import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
+import { newTabLinkProps, withNewTabHint } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import { RowActionsMenu } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -53,6 +54,7 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
+import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
@@ -227,8 +229,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             size="small"
             variant="outlined"
             href={liveUrl ?? undefined}
-            target="_blank"
-            rel="noreferrer"
+            {...newTabLinkProps}
+            aria-label={withNewTabHint('Visit live site')}
             disabled={!liveUrl}
           >
             {'Visit live site'}
@@ -237,8 +239,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             size="small"
             variant="outlined"
             href={homeId ? staffSitePreviewHref(hostId, 'screen', homeId) : undefined}
-            target="_blank"
-            rel="noreferrer"
+            {...newTabLinkProps}
+            aria-label={withNewTabHint('Open preview')}
             disabled={!homeId}
             title={homeId ? undefined : 'No home page is published — preview a page from Content'}
           >
@@ -491,10 +493,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                         children: (
                           <CardDisplay
                             header={'Usage'}
-                            help={docsHelp('billing', {
-                              anchor: '#usage-meters',
-                              excerpt:
-                                "Live counts for this site — published and total pages, media, members, and storage — the figures metered against the org's entitlements.",
+                            help={docsHelp('staffConsole', {
+                              anchor: '#site-usage',
                             })}
                             contentGutterX
                             contentGutterY
@@ -532,6 +532,11 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: <StaffEmailDeliveriesCard hostId={hostId} />,
               },
+              {
+                size: { xs: 12 },
+                // The site's own media library, read-only and audited.
+                children: <StaffMediaLibraryCard hostId={hostId} />,
+              },
               // What a plugin holds for this site — its automations, its
               // sends — shown by the plugin that owns it (AGL-3379).
               ...(staffSiteWidgets.length
@@ -555,9 +560,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header={'Settings snapshot'}
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        "A read-only snapshot of the site's locales, analytics id, password protection, and store template pages.",
+                      anchor: '#site-settings-snapshot',
                     })}
                     contentGutterX
                     contentGutterY

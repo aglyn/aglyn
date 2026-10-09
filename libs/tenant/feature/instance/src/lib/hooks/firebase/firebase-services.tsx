@@ -389,136 +389,228 @@ export interface FirebaseServicesProviderProps {
   children?: ReactNode
 }
 
+/** The services every surface boots, before the per-document analytics verdict. */
+interface FirebaseCoreServices {
+  app: FirebaseApp
+  firestore: Firestore
+  auth: Auth
+  remoteConfig: RemoteConfig
+}
+
+/**
+ * Create (or adopt) the app, Auth, Firestore, App Check and Remote Config for
+ * one Firebase app: everything the provider used to build in its first render
+ * except Analytics, whose consent verdict belongs to the render that reads it.
+ */
+function bootFirebaseCore(
+  firebaseConfig: FirebaseOptions,
+  appName: string,
+  authPersistence: AuthPersistenceClass,
+): FirebaseCoreServices {
+  const app =
+    getApps().find((existing) => existing.name === appName) ??
+    initializeApp(firebaseConfig, appName)
+  // `durable` resolves to the same `getAuth(app)` this always called.
+  const auth = createAuthInstance(app, authPersistence)
+
+  // The origin's class, unless this tab fell back to the memory cache
+  // because another tab locked the shared one (AGL-3428). Firestore only:
+  // `auth` above keeps the origin's class.
+  const firestoreCacheClass = firestoreCacheClassFor(authPersistence)
+  if (!firestoreInitialized.has(appName)) {
+    try {
+      // Under the emulator (dev/e2e only): force long-polling and skip
+      // the persistent multi-tab cache. The emulator's WebChannel
+      // streaming misbehaves in automated Chrome — listeners serve the
+      // initial empty from-cache snapshot and the server sync never
+      // arrives, which looks like "empty pages with zero errors"
+      // (the AGL-217 mystery). Real traffic keeps the default transport
+      // and persistent cache — except a WebDriver-controlled Chrome
+      // against a real backend, which forces long-polling for the same
+      // reason without giving up the cache (see `isAutomatedChromeSession`
+      // below).
+      //
+      // ⚠️ CONSEQUENCE, and it will cost you hours if you do not know it
+      // (AGL-1066): every stale-session/stale-cache fault is UNREPRODUCIBLE
+      // locally through the app, because the cache that causes them is off
+      // in exactly the configuration you would reach for to reproduce one.
+      // A listener that keeps serving arbitrarily-old data while the server
+      // refuses it, a `noDocument` tombstone that 404s a live host, the
+      // retry budget that never spends because a cached emission resets it
+      // — none of them can happen here. Test that behaviour with the unit
+      // seams instead (`use-firestore-collection-cached-retry.spec.ts`
+      // drives cached emissions and denials directly), or against a
+      // deployed environment. Do NOT "fix" it by turning the cache on for
+      // the emulator: the AGL-217 empty-pages-with-zero-errors mystery is
+      // what that produces.
+      initializeFirestore(
+        app,
+        FIREBASE_FIRESTORE_EMULATOR_ENABLED
+          ? { experimentalForceLongPolling: true }
+          : {
+              // NOT unconditional (AGL-1456). `persistentLocalCache` writes
+              // document bodies to this origin's IndexedDB, so on a custom
+              // console domain it is the same exposure D6 removed from the
+              // refresh token — see `firestore-cache.ts` for why one
+              // declaration governs both.
+              localCache: localCacheFor(firestoreCacheClass),
+              // The real-backend half of the AGL-217 mitigation above: force
+              // long-polling for a WebDriver-controlled Chrome even when it
+              // is NOT talking to the emulator, because the WebChannel wedge
+              // is a property of automated Chrome, not of which backend it
+              // is automating against. Never true for a real visitor, so
+              // production traffic keeps the SDK's own auto-detected
+              // transport untouched.
+              ...(isAutomatedChromeSession()
+                ? { experimentalForceLongPolling: true }
+                : {}),
+            },
+      )
+      if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
+        // Where the server was told the emulator is, rather than a default
+        // port another session's stack may hold (AGL-2834).
+        const emulator = firestoreEmulatorHost()
+        connectFirestoreEmulator(
+          getFirestore(app),
+          emulator.host,
+          emulator.port,
+        )
+      } else {
+        // The SDK never sweeps the multi-tab records the durable cache
+        // strands in localStorage, and a full localStorage fails the whole
+        // Firestore client — see `firestore-shared-client-state.ts`.
+        void pruneSharedClientStateFor(firestoreCacheClass, app)
+        // Only the durable multi-tab cache can be locked by another tab,
+        // so only it gets the lease check after a stalled recovery.
+        if (firestoreCacheClass === 'durable' && app.options?.projectId) {
+          markMultiTabFirestore(
+            getFirestore(app),
+            `${firestorePersistencePrefix(app.name, app.options.projectId)}main`,
+          )
+        }
+      }
+    } catch {
+      // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
+    } finally {
+      firestoreInitialized.add(appName)
+    }
+  }
+  const firestore = getFirestore(app)
+
+  if (!connectedAuth) {
+    try {
+      if (FIREBASE_AUTH_EMULATOR_ENABLED) {
+        // The emulator the server was started with (AGL-2834).
+        connectAuthEmulator(auth, authEmulatorUrl())
+      }
+      connectedAuth = true
+    } catch (error) {
+      console.error(error)
+    }
+  }
+  // App Check must be skipped under the emulators: there is no App
+  // Check emulator, so ReCaptcha would hit the real backend and its
+  // 403s break emulator auth (the AGL-216 emulator sessions hit this).
+  if (
+    !FIREBASE_AUTH_EMULATOR_ENABLED &&
+    !FIREBASE_FIRESTORE_EMULATOR_ENABLED
+  ) {
+    // No site key means no provider (AGL-2049). Registering one built on
+    // `undefined` does not throw — it fails asynchronously inside the SDK,
+    // where the catch below cannot see it — so this has to be a pre-check.
+    const siteKey = appCheckSiteKey()
+    if (!siteKey) {
+      console.warn(APP_CHECK_KEY_MISSING_MESSAGE)
+    } else {
+      try {
+        initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(siteKey),
+          isTokenAutoRefreshEnabled: true,
+        })
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }
+  // Remote Config (AGL-228): release-flag delivery. Browser-only like
+  // analytics; consumers set defaultConfig before their first getValue so
+  // gating never blocks on the network.
+  let remoteConfig: RemoteConfig
+  try {
+    remoteConfig = getRemoteConfigInstance(app)
+    remoteConfig.settings.minimumFetchIntervalMillis =
+      process.env.NODE_ENV === 'production' ? 3_600_000 : 60_000
+  } catch (error) {
+    console.error(error)
+  }
+
+  return { app, firestore, auth, remoteConfig }
+}
+
+/**
+ * Services booted before React rendered anything, waiting for the provider to
+ * adopt them (AGL-3660).
+ *
+ * The provider builds its services in its first render, and on the console
+ * that render comes late: after every chunk of the route has executed, after
+ * hydration, and after the `NoSsr` boundary above it has committed its
+ * fallback and rendered again. Auth's persistence read and `accounts:lookup`,
+ * and App Check's reCAPTCHA chain (script, script, iframe, token exchange),
+ * which Auth AND Firestore requests both wait on whenever the cached App Check
+ * token has expired, only started then. None of it depends on React, so a
+ * surface that knows its config at module scope can start it there.
+ *
+ * Taken once, by the first provider that renders with the same app name and
+ * persistence class; any later mount boots exactly as it always did. A
+ * mismatched key is never adopted, so a preboot cannot hand a provider a
+ * different persistence class than the one it was given.
+ */
+const prebooted = new Map<string, FirebaseCoreServices>()
+const prebootKey = (appName: string, authPersistence: AuthPersistenceClass) =>
+  `${appName}|${authPersistence}`
+
+/**
+ * Start Firebase for this document now rather than at the provider's first
+ * render. Browser only, once per app name and persistence class, and it never
+ * throws: a failure here leaves the provider to boot as it always did.
+ *
+ * The Analytics consent gate is NOT read here (the provider reads it), so the
+ * gate's module-scope registration does not have to precede this call.
+ */
+export function prebootFirebaseServices(options: {
+  firebaseConfig: FirebaseOptions
+  appName: string
+  authPersistence?: AuthPersistenceClass
+}): void {
+  if (typeof window === 'undefined') return
+  const { firebaseConfig, appName, authPersistence = 'durable' } = options
+  const key = prebootKey(appName, authPersistence)
+  if (prebooted.has(key)) return
+  try {
+    prebooted.set(key, bootFirebaseCore(firebaseConfig, appName, authPersistence))
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+function takePrebootedFirebaseCore(
+  appName: string,
+  authPersistence: AuthPersistenceClass,
+): FirebaseCoreServices | undefined {
+  const key = prebootKey(appName, authPersistence)
+  const core = prebooted.get(key)
+  if (core) prebooted.delete(key)
+  return core
+}
+
 export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
   const { firebaseConfig, appName, authPersistence = 'durable', children } = props
   const servicesRef = useRef<FirebaseServices | undefined>(undefined)
 
   if (!servicesRef.current) {
-    const app =
-      getApps().find((existing) => existing.name === appName) ??
-      initializeApp(firebaseConfig, appName)
-    // `durable` resolves to the same `getAuth(app)` this always called.
-    const auth = createAuthInstance(app, authPersistence)
-
-    // The origin's class, unless this tab fell back to the memory cache
-    // because another tab locked the shared one (AGL-3428). Firestore only:
-    // `auth` above keeps the origin's class.
-    const firestoreCacheClass = firestoreCacheClassFor(authPersistence)
-    if (!firestoreInitialized.has(appName)) {
-      try {
-        // Under the emulator (dev/e2e only): force long-polling and skip
-        // the persistent multi-tab cache. The emulator's WebChannel
-        // streaming misbehaves in automated Chrome — listeners serve the
-        // initial empty from-cache snapshot and the server sync never
-        // arrives, which looks like "empty pages with zero errors"
-        // (the AGL-217 mystery). Real traffic keeps the default transport
-        // and persistent cache — except a WebDriver-controlled Chrome
-        // against a real backend, which forces long-polling for the same
-        // reason without giving up the cache (see `isAutomatedChromeSession`
-        // below).
-        //
-        // ⚠️ CONSEQUENCE, and it will cost you hours if you do not know it
-        // (AGL-1066): every stale-session/stale-cache fault is UNREPRODUCIBLE
-        // locally through the app, because the cache that causes them is off
-        // in exactly the configuration you would reach for to reproduce one.
-        // A listener that keeps serving arbitrarily-old data while the server
-        // refuses it, a `noDocument` tombstone that 404s a live host, the
-        // retry budget that never spends because a cached emission resets it
-        // — none of them can happen here. Test that behaviour with the unit
-        // seams instead (`use-firestore-collection-cached-retry.spec.ts`
-        // drives cached emissions and denials directly), or against a
-        // deployed environment. Do NOT "fix" it by turning the cache on for
-        // the emulator: the AGL-217 empty-pages-with-zero-errors mystery is
-        // what that produces.
-        initializeFirestore(
-          app,
-          FIREBASE_FIRESTORE_EMULATOR_ENABLED
-            ? { experimentalForceLongPolling: true }
-            : {
-                // NOT unconditional (AGL-1456). `persistentLocalCache` writes
-                // document bodies to this origin's IndexedDB, so on a custom
-                // console domain it is the same exposure D6 removed from the
-                // refresh token — see `firestore-cache.ts` for why one
-                // declaration governs both.
-                localCache: localCacheFor(firestoreCacheClass),
-                // The real-backend half of the AGL-217 mitigation above: force
-                // long-polling for a WebDriver-controlled Chrome even when it
-                // is NOT talking to the emulator, because the WebChannel wedge
-                // is a property of automated Chrome, not of which backend it
-                // is automating against. Never true for a real visitor, so
-                // production traffic keeps the SDK's own auto-detected
-                // transport untouched.
-                ...(isAutomatedChromeSession()
-                  ? { experimentalForceLongPolling: true }
-                  : {}),
-              },
-        )
-        if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
-          // Where the server was told the emulator is, rather than a default
-          // port another session's stack may hold (AGL-2834).
-          const emulator = firestoreEmulatorHost()
-          connectFirestoreEmulator(
-            getFirestore(app),
-            emulator.host,
-            emulator.port,
-          )
-        } else {
-          // The SDK never sweeps the multi-tab records the durable cache
-          // strands in localStorage, and a full localStorage fails the whole
-          // Firestore client — see `firestore-shared-client-state.ts`.
-          void pruneSharedClientStateFor(firestoreCacheClass, app)
-          // Only the durable multi-tab cache can be locked by another tab,
-          // so only it gets the lease check after a stalled recovery.
-          if (firestoreCacheClass === 'durable' && app.options?.projectId) {
-            markMultiTabFirestore(
-              getFirestore(app),
-              `${firestorePersistencePrefix(app.name, app.options.projectId)}main`,
-            )
-          }
-        }
-      } catch {
-        // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
-      } finally {
-        firestoreInitialized.add(appName)
-      }
-    }
-    const firestore = getFirestore(app)
-
-    if (!connectedAuth) {
-      try {
-        if (FIREBASE_AUTH_EMULATOR_ENABLED) {
-          // The emulator the server was started with (AGL-2834).
-          connectAuthEmulator(auth, authEmulatorUrl())
-        }
-        connectedAuth = true
-      } catch (error) {
-        console.error(error)
-      }
-    }
-    // App Check must be skipped under the emulators: there is no App
-    // Check emulator, so ReCaptcha would hit the real backend and its
-    // 403s break emulator auth (the AGL-216 emulator sessions hit this).
-    if (
-      !FIREBASE_AUTH_EMULATOR_ENABLED &&
-      !FIREBASE_FIRESTORE_EMULATOR_ENABLED
-    ) {
-      // No site key means no provider (AGL-2049). Registering one built on
-      // `undefined` does not throw — it fails asynchronously inside the SDK,
-      // where the catch below cannot see it — so this has to be a pre-check.
-      const siteKey = appCheckSiteKey()
-      if (!siteKey) {
-        console.warn(APP_CHECK_KEY_MISSING_MESSAGE)
-      } else {
-        try {
-          initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(siteKey),
-            isTokenAutoRefreshEnabled: true,
-          })
-        } catch (error) {
-          console.error(error)
-        }
-      }
-    }
+    const core =
+      takePrebootedFirebaseCore(appName, authPersistence) ??
+      bootFirebaseCore(firebaseConfig, appName, authPersistence)
     // `initializeAnalytics`, not `getAnalytics`, for exactly one reason: it is
     // the only form that can pass `config`, and `send_page_view: false` is the
     // only way to stop the SDK's own startup `page_view` (AGL-1643).
@@ -612,25 +704,11 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // builds its tag in `site-analytics.tsx` and never passes through here).
     // Customer sites keep the AGL-1498 gate and the host's own
     // `consent.mode`; nothing here reaches them.
-    const initialAnalytics = analyticsForConsentState(app)
-    // Remote Config (AGL-228): release-flag delivery. Browser-only like
-    // analytics; consumers set defaultConfig before their first getValue so
-    // gating never blocks on the network.
-    let remoteConfig: RemoteConfig
-    try {
-      remoteConfig = getRemoteConfigInstance(app)
-      remoteConfig.settings.minimumFetchIntervalMillis =
-        process.env.NODE_ENV === 'production' ? 3_600_000 : 60_000
-    } catch (error) {
-      console.error(error)
-    }
+    const initialAnalytics = analyticsForConsentState(core.app)
 
     servicesRef.current = {
-      app,
-      firestore,
-      auth,
+      ...core,
       analytics: initialAnalytics,
-      remoteConfig,
       authPersistence,
     }
   }

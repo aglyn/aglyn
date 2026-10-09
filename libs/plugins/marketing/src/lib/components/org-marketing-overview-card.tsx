@@ -178,9 +178,7 @@ export function OrgMarketingOverviewCard(props: OrgMarketingOverviewCardProps) {
     <CardDisplay
       header={'At a glance'}
       subheader={'Every site in this organization'}
-      help={pluginDocsHelp('marketingOverlays', {
-        anchor: '#across-your-sites',
-      })}
+      help={pluginDocsHelp('marketingOverlays', { anchor: '#org-marketing-overview' })}
       contentGutterX
       contentGutterY
     >

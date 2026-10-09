@@ -269,6 +269,18 @@ added to particular sites is refused here, with a note pointing at the sites
 they hold, because this is the one surface that reads across every site; they
 open the CRM from a site they have access to instead.
 
+### Known by {#known-by}
+
+The **Known by** card, on a contact's page in the organization's CRM, lists every site
+that has captured the person, each with their marketing consent *for that site* and a
+link that opens the person in that site's hub.
+
+Consent is shown one site at a time — opted in, opted out, or no record — because a
+person agrees to hear from a particular site, never from the organization as a whole.
+The card shows only which sites know the person: notes, tags, activity and figures stay
+each site's own. Under a site the card is not shown, because a site's hub is that
+site's view of the person.
+
 ## Who can open the CRM
 
 Opening the CRM takes the workspace's **manage data** permission — owners,

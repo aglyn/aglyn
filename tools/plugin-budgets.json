@@ -142,5 +142,9 @@
   "loyalty": {
     "baseline": 9161,
     "budget": 12288
+  },
+  "live-chat": {
+    "baseline": 7342,
+    "budget": 9216
   }
 }

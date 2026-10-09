@@ -55,6 +55,7 @@ import {
   aiSiteContentPart,
   aiSiteContentRefusal,
   aiSiteListings,
+  aiSitePostCover,
   aiSiteProductDescriptionWithoutGaps,
   aiSiteProductPhotos,
   aiSiteProductsBriefLine,
@@ -153,6 +154,16 @@ describe('the first posts, one a pass', () => {
     expect(outcome.usage).toEqual(SPEND.usage)
   })
 
+  it('covers a post with the photo its cover source picked, its title as the alt text (AGL-3676)', async () => {
+    const cover = jest.fn(async () => '/media/host-1/stock-clay.jpg')
+    await createAiSitePostsRunner({ generate, writeCollection, writeEntry, cover })(context(unitJob()))
+    expect(cover).toHaveBeenCalledWith(expect.objectContaining({ title: POST.title, index: 0, total: 3 }))
+    expect(writeEntry.mock.calls[0][1].content).toMatchObject({
+      coverImage: '/media/host-1/stock-clay.jpg',
+      coverImageAlt: POST.title,
+    })
+  })
+
   it('tells a later post what was written, and stops asking after the last', async () => {
     const written = [{ id: 'job-site-posts-0', title: 'One' }, { id: 'job-site-posts-1', title: 'Two' }]
     const outcome = await run(context(unitJob({ written })))
@@ -223,7 +234,7 @@ describe('the first products, from the catalog', () => {
     room = Infinity
   })
 
-  it('asks the catalog for the store’s first products and writes at most six, unpriced, listed as coming soon, each with a photo', async () => {
+  it('asks the catalog for the store’s first products and writes at most six, at the writer’s default price, listed, each with a photo', async () => {
     const catalog = jest.fn(async (_context: AiJobStepContext) => spent([catalogOutput(8)]))
     const photos = jest.fn(async ({ names }: { names: readonly string[] }) => names.map((_name, index) => (index === 1 ? null : `/media/mug-${index}.jpg`)))
     const run = createAiSiteProductsRunner({ catalog, writerFor, photos })
@@ -235,7 +246,7 @@ describe('the first products, from the catalog', () => {
     // A photo for each product's own words, asked once for all of them.
     expect(photos.mock.calls[0][0].names).toEqual(proposed(6).map((product) => product.name))
     for (const write of writes) {
-      // No price is invented: the store lists it as "Price coming soon" until the owner sets one.
+      // No price is stated, so the writer's default applies (AGL-3676); never `null`, which asks for none.
       expect(write['content']).not.toHaveProperty('priceUsd')
       expect(write['content']).toMatchObject({ comingSoon: true })
       expect(write['content']).not.toHaveProperty('photo')
@@ -354,6 +365,33 @@ describe('the records the pages list, and their photos (AGL-3676)', () => {
     // No stock library on this deployment: every slot takes a starter.
     const starters = await aiSiteProductPhotos({ job, names: ['A'], stockPhotos: (() => null) as never })
     expect(starters[0]).toMatch(/^\/_static\/starter\//)
+  })
+
+  it('covers a post with a stock photo of its title, else its starter, which a failed search falls back to', async () => {
+    const job = { $id: 'job-b', hostId: 'host-1', createdBy: 'uid-1', inputs: { businessType: 'pottery studio' }, brief: '' }
+    const asked: unknown[] = []
+    const stockPhotos = jest.fn(() => async (slots: readonly unknown[]) => {
+      asked.push(...slots)
+      return [{ src: '/media/stock-wheel.jpg', width: 1200, height: 800 }]
+    })
+    const cover = await aiSitePostCover({ job, title: 'Centering clay', index: 1, total: 3, stockPhotos: stockPhotos as never })
+    expect(cover).toBe('/media/stock-wheel.jpg')
+    // Searched for the post's own words, at the blog card's shape.
+    expect(asked).toEqual([expect.objectContaining({ alt: 'Centering clay', aspect: 3 / 2 })])
+    expect(stockPhotos.mock.calls[0]).toEqual([expect.objectContaining({ seed: 'job-b:posts:1', sectionNames: ['Blog'] })])
+
+    const starter = await aiSitePostCover({ job, title: 'Centering clay', index: 1, total: 3, stockPhotos: (() => null) as never })
+    expect(starter).toMatch(/^\/_static\/starter\//)
+    const failed = await aiSitePostCover({
+      job,
+      title: 'Centering clay',
+      index: 1,
+      total: 3,
+      stockPhotos: (() => async () => {
+        throw new Error('down')
+      }) as never,
+    })
+    expect(failed).toBe(starter)
   })
 })
 

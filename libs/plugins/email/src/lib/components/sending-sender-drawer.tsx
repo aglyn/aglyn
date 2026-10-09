@@ -517,14 +517,7 @@ export function SendingSenderDrawer(props: SendingSenderDrawerProps) {
             standing in this drawer with a disabled Mailbox field has.
            */}
           <HelpTip
-            {...pluginDocsHelp('emailCampaigns', {
-              anchor: '#senders',
-              title: 'Senders',
-              excerpt:
-                'A mailbox this site may send as, with the name and reply ' +
-                'address that go out in front of it. A campaign picks one of ' +
-                'them rather than typing an address.',
-            })}
+            {...pluginDocsHelp('emailCampaigns', { anchor: '#add-a-sender' })}
           />
         </>
       }

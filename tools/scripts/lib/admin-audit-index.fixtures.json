@@ -31,6 +31,8 @@
   ],
   "accessActions": [
     "email.message-viewed",
+    "media.library-viewed",
+    "media.asset-viewed",
     "user.acquisition-viewed",
     "org.acquisition-viewed"
   ],

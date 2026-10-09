@@ -37,7 +37,7 @@ export const ACCOUNTING_PERMISSIONS: readonly PluginPermission[] = [
     pluginId: ACCOUNTING_PLUGIN_ID,
     label: 'Manage accounting',
     description:
-      'Connect QuickBooks Online or Xero, choose the accounts sales are posted to, and retry a sync.',
+      'Connect QuickBooks Online, Xero or other accounting software through Codat, choose the accounts sales are posted to, and retry a sync.',
     defaults: { admin: true, editor: false, viewer: false },
   },
 ]

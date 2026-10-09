@@ -27,8 +27,12 @@ public enum ScreenValues {
         if let equals = inner.firstIndex(of: "=") {
           selector = (String(inner[..<equals]), String(inner[inner.index(after: equals)...]))
         } else {
-          // `map[some.key]`: a key that itself holds dots.
-          current = step(current, String(inner))
+          // `map[some.key]`: a key that itself holds dots; `map[@path]`: the key is the text at path.
+          if inner.hasPrefix("@") {
+            current = step(current, text(lookup(String(inner.dropFirst()), in: context)))
+          } else {
+            current = step(current, String(inner))
+          }
         }
       } else if !segment.isEmpty {
         current = step(current, segment)
@@ -122,6 +126,23 @@ public enum ScreenValues {
       format = String(body[body.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
       body = String(body[..<colon])
     }
+    // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
+    if body.contains("??") {
+      var found: JSONValue?
+      for alternative in body.components(separatedBy: "??") {
+        let part = alternative.trimmingCharacters(in: .whitespaces)
+        if part.count >= 2, part.hasPrefix("'"), part.hasSuffix("'") {
+          found = .string(String(part.dropFirst().dropLast()))
+          break
+        }
+        if let value = lookup(part, in: context), value != .null {
+          found = value
+          break
+        }
+      }
+      guard let format, !format.isEmpty else { return found }
+      return .string(formatted(found, as: format, in: context))
+    }
     // A truthy alternative or a quoted literal wins where it stands; failing
     // both, the first value that was there at all (0, false, "").
     var picked: JSONValue?
@@ -193,6 +214,25 @@ public enum ScreenValues {
       // `{"$pick": {"a": "{form.x}", "b": "{form.y}"}}`: the keys whose values are truthy, as a list.
       guard case .object(let options)? = record["$pick"] else { return .array([]) }
       return .array(options.keys.sorted().filter { truthy(resolveBody(options[$0]!, in: context)) }.map(JSONValue.string))
+    case .object(let record) where record.count == 1 && record["$put"] != nil:
+      // `{"$put": {"map": "{a}", "key": "{b}", "value": "{c}"}}`: the map with the key set, or removed when the value is empty.
+      let spec = record["$put"] ?? .null
+      var map: [String: JSONValue] = [:]
+      if case .object(let current) = resolveBody(spec["map"] ?? .null, in: context) { map = current }
+      let key = Self.text(resolveBody(spec["key"] ?? .null, in: context))
+      let value = resolveBody(spec["value"] ?? .null, in: context)
+      if !key.isEmpty {
+        if truthy(value) { map[key] = value } else { map[key] = nil }
+      }
+      return .object(map)
+    case .object(let record) where record.count == 1 && record["$split"] != nil:
+      // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
+      let joined = Self.text(resolveBody(record["$split"] ?? .null, in: context))
+      return .array(
+        joined.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map { part in
+          if let number = Double(part) { return .number(number) }
+          return .string(part)
+        })
     case .object(let record) where record.count == 1 && (record["$append"] != nil || record["$without"] != nil):
       // `{"$append": {"list": "{a}", "item": "{b}"}}` / `$without`: the list with the item added (once) or removed.
       let adding = record["$append"] != nil

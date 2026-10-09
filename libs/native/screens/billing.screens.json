@@ -163,6 +163,13 @@
               "screen": "core.billing.invoices"
             },
             {
+              "title": "Seats by site",
+              "subtitle": "Move purchased collaborator and register seats between sites",
+              "icon": "person.2|group",
+              "screen": "core.billing.seats",
+              "when": "org.manager"
+            },
+            {
               "title": "Billing details",
               "subtitle": "Email, address, tax IDs, cards",
               "icon": "building.columns|account_balance",
@@ -351,6 +358,10 @@
             "action": "get"
           },
           "optional": true
+        },
+        "ceiling": {
+          "url": "/api/billing/email-ceiling?orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -371,6 +382,32 @@
               "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
             }
           ]
+        },
+        {
+          "type": "fields",
+          "title": "Campaign emails",
+          "when": "data.ceiling.hourLimit",
+          "footer": "The most a campaign can send in one hour, and the most the plan can deliver in a month.",
+          "rows": [
+            {
+              "label": "This hour",
+              "value": "{data.ceiling.hourUsed:number} of {data.ceiling.hourLimit:number}"
+            },
+            {
+              "label": "Deliverable this month",
+              "value": "{data.ceiling.deliverableMonthly:number}"
+            },
+            {
+              "label": "Per send",
+              "value": "{data.ceiling.perSend:number}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.budget.lastAlert.threshold",
+          "text": "You passed {data.budget.lastAlert.threshold}% of the limit this month."
         },
         {
           "type": "list",
@@ -395,6 +432,14 @@
               "kind": "number",
               "initial": "{data.budget.amountUsd}",
               "placeholder": "No limit"
+            },
+            {
+              "key": "thresholds",
+              "label": "Alert me at (%)",
+              "kind": "text",
+              "initial": "{data.budget.thresholdPcts|data.budget.defaultThresholdPcts}",
+              "placeholder": "50, 80, 100",
+              "help": "Percentages of the limit, separated by commas."
             }
           ],
           "submit": {
@@ -404,10 +449,33 @@
             "body": {
               "orgId": "{org.id}",
               "action": "setBudget",
-              "amountUsd": "{form.amountUsd}"
+              "amountUsd": "{form.amountUsd}",
+              "thresholdPcts": {
+                "$split": "{form.thresholds}"
+              }
             },
             "success": "Saved"
           }
+        },
+        {
+          "type": "actions",
+          "when": "org.manager && data.budget.budgetSet",
+          "items": [
+            {
+              "id": "clearBudget",
+              "label": "Remove the limit",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove the monthly spend limit?",
+              "url": "/api/billing/usage-budget",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "clearBudget"
+              },
+              "success": "Limit removed",
+              "reload": true
+            }
+          ]
         },
         {
           "type": "fields",
@@ -723,6 +791,161 @@
               "success": "Added"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "core.billing.seats",
+      "title": "Seats by site",
+      "subtitle": "Collaborator and register seats",
+      "icon": "person.2|group",
+      "scope": "org",
+      "requires": "org.manager",
+      "load": {
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "regs": {
+          "url": "/api/billing/register-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Seats are bought under Add-ons. Here you choose which site uses them."
+        },
+        {
+          "type": "fields",
+          "title": "Collaborator seats",
+          "rows": [
+            {
+              "label": "Purchased",
+              "value": "{data.collab.pool.purchased:number}"
+            },
+            {
+              "label": "Assigned",
+              "value": "{data.collab.pool.allocated:number}"
+            },
+            {
+              "label": "Unassigned",
+              "value": "{data.collab.pool.available:number}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Sites",
+          "items": "data.collab.sites",
+          "primary": "{item.displayName|item.hostId}",
+          "secondary": "{item.collaborators:number} collaborators in use · {item.allocatedSeats:number} extra assigned · limit {item.cap:number}",
+          "icon": "globe|language",
+          "badges": [
+            {
+              "text": "Unlimited",
+              "when": "item.capUnlimited",
+              "tone": "info"
+            }
+          ],
+          "actions": [
+            {
+              "id": "set",
+              "label": "Set seats",
+              "icon": "slider.horizontal.3|tune",
+              "when": "org.manager",
+              "prompt": [
+                {
+                  "key": "seats",
+                  "label": "Extra seats for this site",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{item.allocatedSeats}"
+                }
+              ],
+              "url": "/api/billing/collaborator-allocations",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set",
+                "hostId": "{item.hostId}",
+                "seats": "{form.seats}"
+              },
+              "success": "Seats updated",
+              "reload": true
+            }
+          ],
+          "empty": "No sites yet."
+        },
+        {
+          "type": "fields",
+          "title": "Register seats",
+          "rows": [
+            {
+              "label": "Purchased",
+              "value": "{data.regs.pool.purchased:number}"
+            },
+            {
+              "label": "Assigned",
+              "value": "{data.regs.pool.allocated:number}"
+            },
+            {
+              "label": "Unassigned",
+              "value": "{data.regs.pool.available:number}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Sites",
+          "items": "data.regs.sites",
+          "primary": "{item.displayName|item.hostId}",
+          "secondary": "{item.registers:number} registers in use · {item.allocatedSeats:number} extra assigned · limit {item.cap:number}",
+          "icon": "globe|language",
+          "badges": [
+            {
+              "text": "Unlimited",
+              "when": "item.capUnlimited",
+              "tone": "info"
+            }
+          ],
+          "actions": [
+            {
+              "id": "set",
+              "label": "Set seats",
+              "icon": "slider.horizontal.3|tune",
+              "when": "org.manager",
+              "prompt": [
+                {
+                  "key": "seats",
+                  "label": "Extra seats for this site",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{item.allocatedSeats}"
+                }
+              ],
+              "url": "/api/billing/register-allocations",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set",
+                "hostId": "{item.hostId}",
+                "seats": "{form.seats}"
+              },
+              "success": "Seats updated",
+              "reload": true
+            }
+          ],
+          "empty": "No sites yet."
         }
       ]
     }

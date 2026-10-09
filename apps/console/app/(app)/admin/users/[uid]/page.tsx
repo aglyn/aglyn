@@ -385,7 +385,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
           { path: ICON_VARIANT_SYMBOL_SECURE.path }
         ),
       }}
-      help={{ topic: 'staffConsole', anchor: '#password-help' }}
+      help={{ topic: 'staffConsole', anchor: '#user-detail' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* The detail fetch is staff-gated server-side, so a non-staff
@@ -433,9 +433,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <CardDisplay
                             header="Identity"
                             help={docsHelp('staffConsole', {
-                              anchor: '#whats-there',
-                              excerpt:
-                                "The account's auth state and staff role, with audited identity edits. Impersonation replaces your session with this account.",
+                              anchor: '#user-identity',
                             })}
                             contentGutterX
                             contentGutterY
@@ -659,10 +657,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         children: (
                           <CardDisplay
                             header="Organizations"
-                            help={docsHelp('architectureMultiTenancy', {
-                              anchor: '#membership-lifecycle',
-                              excerpt:
-                                'Every organization this account belongs to, with its role and per-site access.',
+                            help={docsHelp('staffConsole', {
+                              anchor: '#user-organizations',
                             })}
                             contentGutterX
                             contentGutterY
@@ -769,9 +765,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <CardDisplay
                             header="Password"
                             help={docsHelp('staffConsole', {
-                              anchor: '#whats-there',
-                              excerpt:
-                                'Email this account a reset link, or set a password directly when they cannot receive mail. Both are audited.',
+                              anchor: '#password-help',
                             })}
                             contentGutterX
                             contentGutterY
@@ -898,9 +892,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header="Legal acceptances"
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Which version of the Terms and Privacy Policy this account accepted, when, and whether the 30-day arbitration opt-out window is still open.',
+                      anchor: '#legal-acceptances',
                     })}
                     contentGutterX
                     contentGutterY
@@ -1072,9 +1064,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     header="Activity by this account"
                     staff
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Console actions logged for this account, across every organization and site — as distinct from the staff actions taken against it.',
+                      anchor: '#user-activity',
                     })}
                     description={
                       'Console actions logged for this account, across every ' +
@@ -1094,9 +1084,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     kind="change"
                     header="Recent audit trail"
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Audited staff actions performed by or on this account, newest first, filtered and searched across the whole trail.',
+                      anchor: '#user-audit-trail',
                     })}
                     description={
                       'Audited staff actions performed BY or ON this ' +
@@ -1132,9 +1120,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     kind="access"
                     header="Data access by staff"
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Audited staff READS of this account’s private data — kept apart from the actions above so a burst of views cannot bury an impersonation.',
+                      anchor: '#user-data-access',
                     })}
                     description={
                       'Times a staff member opened this account’s ' +

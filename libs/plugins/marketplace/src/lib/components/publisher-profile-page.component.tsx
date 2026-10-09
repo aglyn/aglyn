@@ -180,10 +180,8 @@ export function PublisherProfilePage(props: {
       <PageHeaderHelp topic="publishAPlugin" anchor="#your-publisher-profile" />
         <Stack spacing={2}>
           <CardDisplay header={title}
-            help={pluginDocsHelp('publisherHandbook', {
-              excerpt:
-                'The public face of a publisher — the profile customers read before ' +
-                'deciding to trust a listing.',
+            help={pluginDocsHelp('publishAPlugin', {
+              anchor: '#profile-card',
             })} contentGutterX contentGutterY>
             <Stack direction="row" spacing={2}>
               {/* Logo (AGL-1009) — only a first-party image is ever emitted

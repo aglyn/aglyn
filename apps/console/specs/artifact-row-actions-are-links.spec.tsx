@@ -32,7 +32,7 @@
  */
 
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
+import { mdiEyeOutline, mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { fireEvent, render, screen } from '@testing-library/react'
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/' }))
@@ -95,40 +95,77 @@ describe('artifact row actions are real links (AGL-2501)', () => {
     // MUI's IconButton keeps `role="button"` when its root is an anchor, so
     // the element is asked for by its accessible name and checked for the
     // thing that matters: it is an `<a>` with a real destination.
-    const icon = screen.getByRole('button', { name: 'Open live page — Home' })
+    // AGL-3660: the accessible name says where the click goes.
+    const icon = screen.getByRole('button', {
+      name: 'Open live page — Home (opens in a new tab)',
+    })
     expect(icon.tagName).toBe('A')
     expect(icon.getAttribute('href')).toBe('https://acme.example/')
     expect(icon.getAttribute('target')).toBe('_blank')
+    expect(icon.getAttribute('rel')).toBe('noopener noreferrer')
 
     openMenu()
-    const item = screen.getByRole('menuitem', { name: 'Open live page' })
+    const item = screen.getByRole('menuitem', {
+      name: 'Open live page (opens in a new tab)',
+    })
     expect(item.tagName).toBe('A')
     expect(item.getAttribute('href')).toBe('https://acme.example/')
     expect(item.getAttribute('target')).toBe('_blank')
+    expect(item.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('keeps an in-app quick action a same-tab link in both surfaces', () => {
+  it('opens an in-app PREVIEW in a new tab in both surfaces (AGL-3660)', () => {
     render(
       <ListRowActions
         label="Header"
         quick={{
-          icon: mdiOpenInNew.path,
+          icon: mdiEyeOutline.path,
           label: 'Preview',
+          newTab: true,
           to: '/acme/layouts/1/preview',
         }}
         items={[{ key: 'delete', label: 'Delete', onClick: jest.fn() }]}
       />,
     )
 
-    const icon = screen.getByRole('button', { name: 'Preview — Header' })
+    const icon = screen.getByRole('button', {
+      name: 'Preview — Header (opens in a new tab)',
+    })
     expect(icon.tagName).toBe('A')
     expect(icon.getAttribute('href')).toBe('/acme/layouts/1/preview')
+    expect(icon.getAttribute('target')).toBe('_blank')
+    expect(icon.getAttribute('rel')).toBe('noopener noreferrer')
+
+    openMenu()
+    const item = screen.getByRole('menuitem', {
+      name: 'Preview (opens in a new tab)',
+    })
+    expect(item.tagName).toBe('A')
+    expect(item.getAttribute('href')).toBe('/acme/layouts/1/preview')
+    expect(item.getAttribute('target')).toBe('_blank')
+  })
+
+  it('keeps an in-app quick action without newTab a same-tab link', () => {
+    render(
+      <ListRowActions
+        label="Header"
+        quick={{
+          icon: mdiOpenInNew.path,
+          label: 'Usage',
+          to: '/acme/usage',
+        }}
+        items={[{ key: 'delete', label: 'Delete', onClick: jest.fn() }]}
+      />,
+    )
+
+    const icon = screen.getByRole('button', { name: 'Usage — Header' })
+    expect(icon.tagName).toBe('A')
+    expect(icon.getAttribute('href')).toBe('/acme/usage')
     expect(icon.getAttribute('target')).toBeNull()
 
     openMenu()
-    const item = screen.getByRole('menuitem', { name: 'Preview' })
+    const item = screen.getByRole('menuitem', { name: 'Usage' })
     expect(item.tagName).toBe('A')
-    expect(item.getAttribute('href')).toBe('/acme/layouts/1/preview')
     expect(item.getAttribute('target')).toBeNull()
   })
 

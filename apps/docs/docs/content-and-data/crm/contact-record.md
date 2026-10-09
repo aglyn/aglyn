@@ -82,20 +82,8 @@ of the record:
 - **Sharing** — the site that holds the person and every other site the
   record is shared with, and why, with **Share with sites…** in the card's
   header — see [Share records across sites](./sharing.md#what-a-shared-record-looks-like).
-- **Properties** — the editable profile, grouped the way Salesforce groups a
-  contact's details — see [The standard fields](#the-standard-fields) — then an
-  **About** box for your team's notes, then under **More fields** one control per
-  [custom field](./custom-fields.md) your organization has defined. One
-  **Save**, in the card's header, writes everything at once, and **Discard
-  changes** beside it puts back what you had not saved. The email is shown
-  but cannot be edited here, because it is the shared identity. The
-  **Company** field is the same picker the New contact drawer has: search
-  the companies your site may see, create one by typing its name, or clear
-  the field to unlink the person. A record that carries a company name with
-  no link — an import, or a save from before the picker — shows the name as
-  a note beneath the field, with one click to link the company of that name
-  or create it. Changing the company here moves the count on the
-  [companies list](./companies.md#the-companies-list) with it.
+- **Properties** — the editable profile; see
+  [The Properties card](#contact-properties).
 - **Relationship** — the **sources** that created the record (a form, a
   checkout, a booking, an import, or by hand), the **campaign attribution**
   recorded from the link the person followed, the **marketing email** basis
@@ -122,6 +110,26 @@ of the record:
   [Tasks & follow-ups](./tasks.md).
 - **Likely duplicates** — other records that may be the same person, found
   when you ask; see [Merging two records](#merging-two-records).
+
+### The Properties card {#contact-properties}
+
+The **Properties** card is the person's editable profile: change any field,
+then **Save** in the card's header writes everything at once, and **Discard
+changes** beside it puts back what you had not saved.
+
+The fields are grouped the way Salesforce groups a contact's details — see
+[The standard fields](#the-standard-fields) — then an **About** box for your
+team's notes, then under **More fields** one control per
+[custom field](./custom-fields.md) your organization has defined. The email is
+shown but cannot be edited here, because it is the shared identity.
+
+The **Company** field is the same picker the New contact drawer has: search
+the companies your site may see, create one by typing its name, or clear
+the field to unlink the person. A record that carries a company name with
+no link — an import, or a save from before the picker — shows the name as
+a note beneath the field, with one click to link the company of that name
+or create it. Changing the company here moves the count on the
+[companies list](./companies.md#the-companies-list) with it.
 
 ### The standard fields {#the-standard-fields}
 

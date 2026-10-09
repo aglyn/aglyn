@@ -28,6 +28,7 @@ import type { ArtifactTypeDeclaration } from './plugin-artifact-types'
 import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { ResolvedVideoEmbedProvider } from './video-embed-provider'
+import type { PluginSiteCspDeclaration } from './plugin-site-csp'
 import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
 import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { ServerStepDeclaration } from './plugin-server-steps'
@@ -177,7 +178,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     "id": "accounting",
     "label": "Accounting",
-    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+    "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
     "releaseFlag": "release_accounting"
   },
   {
@@ -296,6 +297,17 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "Members keep their points and store credit."
     }
   },
+  {
+    "id": "live-chat",
+    "label": "Live chat",
+    "alwaysOnForWorkspace": true,
+    "defaultOffPerSite": true,
+    "description": "Chat with visitors through your own Tidio or LiveChat account.",
+    "siteOff": {
+      "stops": "Switching Live chat off for this site removes the chat from its pages.",
+      "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -331,6 +343,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "inventory-sync": "console-only",
   "delivery-apps": "console-only",
   "loyalty": "console-only",
+  "live-chat": "elements",
 }
 
 /**
@@ -2764,6 +2777,74 @@ export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDecl
  * it, declared by that element's plugin (AGL-3393). Core names no element.
  */
 export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {}
+
+/**
+ * What each plugin's site feature needs the published page's policy to
+ * admit, by the value of one of its site settings (AGL-3698). Core names no
+ * vendor; see `plugin-site-csp.ts`.
+ */
+export const PLUGIN_SITE_CSP_DECLARED: readonly PluginSiteCspDeclaration[] = [
+  {
+    "pluginId": "live-chat",
+    "switchField": "enabled",
+    "variantField": "provider",
+    "requiredField": "publicKey",
+    "variants": {
+      "tidio": {
+        "connect": [
+          "socket.tidio.co",
+          "api-v2.tidio.co",
+          "uploads.tidio.com",
+          "sentry-new.tidio.co",
+          "widget-v4.tidiochat.com"
+        ],
+        "img": [
+          "code.tidio.co",
+          "avatars.tidiochat.com",
+          "tidio-images-messenger.s3.us-east-1.amazonaws.com",
+          "cdnjs.cloudflare.com",
+          "unpkg.com"
+        ],
+        "media": [
+          "code.tidio.co",
+          "widget-v4.tidiochat.com"
+        ],
+        "font": [
+          "code.tidio.co"
+        ]
+      },
+      "livechat": {
+        "connect": [
+          "api.livechatinc.com",
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com",
+          "api.text.com"
+        ],
+        "frame": [
+          "api.livechatinc.com",
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com"
+        ],
+        "img": [
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com",
+          "cdn.livechat-static.com",
+          "cdn.livechat-files.com",
+          "cdn.files-text.com"
+        ],
+        "media": [
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com",
+          "cdn.livechat-static.com"
+        ],
+        "font": [
+          "cdn.livechatinc.com",
+          "secure.livechatinc.com"
+        ]
+      }
+    }
+  },
+]
 
 /**
  * Every video host whose own player the Video element frames, declared by

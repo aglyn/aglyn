@@ -164,11 +164,7 @@ function ArchiveCard() {
   return (
     <CardDisplay
       header={'Archive (90–365 days)'}
-      help={docsHelp('staffConsole', {
-        anchor: '#audit-archival',
-        excerpt:
-          'A nightly cron moves audit entries past the 90-day retention window into a Storage compliance trail (JSON lines, month-partitioned), kept a further 365 days.',
-      })}
+      help={docsHelp('staffConsole', { anchor: '#audit-archival' })}
       contentGutterX
       contentGutterY
     >
@@ -772,11 +768,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
           <Stack spacing={3}>
           <CardDisplay
             header={'Admin actions'}
-            help={docsHelp('staffConsole', {
-              anchor: '#audit-log',
-              excerpt:
-                'Append-only record of every staff mutation with before/after diffs. Filter by action, action group, who, target, target type, site, scope or date, search it, and export the slice as CSV.',
-            })}
+            help={docsHelp('staffConsole', { anchor: '#audit-admin-actions' })}
             contentGutterX
             contentGutterY
           >

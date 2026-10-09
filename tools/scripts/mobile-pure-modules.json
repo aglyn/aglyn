@@ -10,6 +10,10 @@
       "why": "The components, layouts and templates lists' query declarations; the native site screens plan the same Firestore queries (AGL-3668); type-only imports beside LIST_QUERY_ID_PATH."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/binding-tokens.ts",
+      "why": "Reached by variables: the binding token grammar."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/collection-entry-date.ts",
       "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
     },
@@ -118,12 +122,24 @@
       "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "why": "The staff role gate the native staff section replays (AGL-3667): a pure verdict over a role string and a role list."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts",
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",
       "why": "Reached by host-naming: the tenant apex domain constants."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "why": "A site variable's types, labels, name rule and how its value reads; the native Logic screens list and edit variables from it (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/where-used-summary.ts",
+      "why": "The where-used scan's answer and its one-line summary; the native Logic screens word a delete's warning from it (AGL-3668). No imports."
     },
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
@@ -180,6 +196,10 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
@@ -250,6 +270,14 @@
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
+      "path": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
+      "why": "The records table query a dataset model plans (`planDatasetRecordQuery`): the native records list asks the same Firestore query for a filter or a search (AGL-3668); type-only imports beside the pure planner and dataset-model-core."
+    },
+    {
+      "path": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "why": "The dataset model and field types, a stored value as the records table shows it and as its input reads, the field-id rules and the records filter grammar; the native Data screens read, show and filter records from it (AGL-3668). No imports."
+    },
+    {
       "path": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
       "why": "The one rule for what an event stores, shared by the Events page, the events import and the native editors (AGL-3670)."
     },
@@ -284,6 +312,18 @@
     {
       "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
       "why": "The submissions list query declarations; the native submissions screens plan the same query (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
+      "why": "The marketplace browse and licenses list declarations and their audience base; the native marketplace screens plan the same Firestore queries (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
+      "why": "Whether a listing is browsable and its artifact type, read by the native marketplace screens (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
     {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",

@@ -352,7 +352,15 @@ function OrgJump() {
       // The one page in the console with no help affordance (AGL-2486), and
       // the first page a new member sees: it is where "what IS a workspace,
       // and why am I picking one" is asked.
-      help={{ topic: 'consoleTour', anchor: '#workspace-settings--notifications' }}
+      help={{
+        topic: 'consoleTour',
+        anchor: '#the-app-bar',
+        title: 'Workspaces',
+        excerpt:
+          'A workspace is your organization: its sites, team, billing and ' +
+          'plan live together. Open one to see its sites; the switcher in ' +
+          'the app bar moves between them later.',
+      }}
       // The primary action belongs in the header, like every other list page
       // (sites, screens, layouts) — at the foot of the list it sat below the
       // fold once you had more than a couple of workspaces. The zero-org

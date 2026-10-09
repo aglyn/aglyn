@@ -141,7 +141,7 @@ const StaffOrgSummaryCard = ({
     <CardDisplay
       header={'Summary'}
       help={docsHelp('staffConsole', {
-        anchor: '#whats-there',
+        anchor: '#organization-page-cards',
         excerpt:
           'Plan, subscription, and suspension state at a glance. Impersonating the owner replaces your session and is audited.',
       })}

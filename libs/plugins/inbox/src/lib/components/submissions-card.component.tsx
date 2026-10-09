@@ -713,7 +713,11 @@ export function SubmissionsCard({
         header={scoped ? 'Submissions to this form' : 'Form Submissions'}
         help={pluginDocsHelp(
           'forms',
-          hostId == null
+          // Scoped to one form, this is the form page's own "Submissions to
+          // this form" card, opened in place — the same card, the same link.
+          scoped
+            ? { anchor: '#form-submissions' }
+            : hostId == null
             ? {
                 anchor: '#every-sites-inbox-at-once',
                 excerpt:

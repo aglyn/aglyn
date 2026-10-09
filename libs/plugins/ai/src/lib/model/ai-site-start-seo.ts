@@ -179,21 +179,111 @@ function phraseForms(text: string): string[] {
  * its trailing clauses; what the site is alone; then what the site is, cut
  * back the same way. Only when not even the subject fits is it clipped at a
  * word, never on a dangling one.
+ *
+ * It reads as one sentence (AGL-3660). The answers are set into it as
+ * phrases, not pasted as the person typed them: a real job published
+ * "Eastside Book Circle is A neighborhood book club: monthly meetups, the
+ * current read, past picks, and a way to join, for Neighbors on the east
+ * side." So what the site is stops at a colon (`aiSiteSeoNounPhrase`), each
+ * answer set inside the sentence starts in lower case where the person only
+ * capitalized it because it began their answer (`aiSiteSeoEmbedded`), and
+ * one thing takes an article ("is a neighborhood book club"). A plain noun
+ * phrase runs straight on into who it is for; one with clauses of its own
+ * keeps the comma, so "for" is not read as part of its last clause.
  */
-export function aiSiteSeoDescription(input: { name: string; subject: string; about: string; audience: string }): string {
+export function aiSiteSeoDescription(input: {
+  name: string
+  subject: string
+  about: string
+  audience: string
+  /** The city the person gave, never lowered where an answer starts with it. */
+  city?: string
+}): string {
   const max = AI_SITE_SEO_LIMITS.description
-  const lead = (what: string) => (input.name ? `${input.name} is ${what}` : asSubject(what))
-  const abouts = phraseForms(withoutDangling(input.about.replace(/[.!?]+$/, '')))
-  const audiences = input.audience ? phraseForms(withoutDangling(input.audience.replace(/[.!?]+$/, ''))) : []
+  const keep = input.city ? [input.city] : []
+  const lead = (what: string) =>
+    input.name ? `${input.name} is ${withArticle(aiSiteSeoEmbedded(what, keep))}` : asSubject(what)
+  const abouts = phraseForms(withoutDangling(aiSiteSeoNounPhrase(input.about).replace(/[.!?]+$/, '')))
+  const audience = withoutDangling(input.audience.replace(/[.!?]+$/, '').replace(/^for\s+/i, ''))
+  const audiences = audience ? phraseForms(audience).map((form) => aiSiteSeoEmbedded(form, keep)) : []
   for (const about of abouts) {
-    for (const audience of audiences) {
-      const text = sentence(`${lead(about)}, for ${audience}`)
+    const joint = /[,;(—–]|\s-\s/.test(about) || about.search(PHRASE_BOUNDARY_ONE) > 0 ? ', for ' : ' for '
+    for (const who of audiences) {
+      const text = sentence(`${lead(about)}${joint}${who}`)
       if (text.length <= max) return text
     }
     const text = sentence(lead(about))
     if (text.length <= max) return text
   }
   return clip(sentence(lead(abouts[abouts.length - 1] || input.subject)), max)
+}
+
+/** {@link PHRASE_BOUNDARY} without the global flag, for a one-off search. */
+const PHRASE_BOUNDARY_ONE = new RegExp(PHRASE_BOUNDARY.source, 'i')
+
+/**
+ * What kind of site it is, as a short noun phrase (AGL-3660): the answer up
+ * to a colon, since what follows one is a list of what the site will hold
+ * ("A neighborhood book club: monthly meetups, the current read, …"), which
+ * is the pages' to say, not the listing's. An answer that is nothing but its
+ * list is kept whole.
+ */
+export function aiSiteSeoNounPhrase(about: string): string {
+  const text = about.replace(/\s+/g, ' ').trim()
+  const colon = text.indexOf(':')
+  const head = colon > 0 ? withoutDangling(text.slice(0, colon).trim()) : ''
+  return head || text
+}
+
+/**
+ * Words an answer opens with that are lowered when it is set inside a
+ * sentence: articles and determiners, and the words a "who is it for" answer
+ * most often opens with. A word not listed is lowered too where the answer
+ * reads in sentence case — its next word in lower case — since that capital
+ * only began the person's answer.
+ */
+const LOWERED_LEADS = new Set([
+  'a', 'an', 'the', 'our', 'my', 'your', 'their', 'this', 'any', 'all', 'every', 'some', 'one',
+  'anyone', 'everyone', 'people', 'folks', 'neighbors', 'neighbours', 'families', 'parents', 'kids',
+  'children', 'adults', 'teens', 'students', 'seniors', 'couples', 'women', 'men', 'locals', 'residents',
+  'homeowners', 'owners', 'members', 'readers', 'customers', 'clients', 'businesses', 'professionals',
+  'local', 'small', 'busy', 'new', 'young', 'independent', 'family', 'neighborhood', 'neighbourhood',
+])
+
+/**
+ * An answer as a phrase inside a sentence (AGL-3660): its first word in lower
+ * case where the person capitalized it only because it began their answer —
+ * "Neighbors on the east side" is "neighbors on the east side", "A
+ * neighborhood book club" is "a neighborhood book club". A word typed with
+ * capitals of its own ("McKinney", "NYC"), a city the person gave, and a
+ * capitalized word followed by another ("Eastside Book Club") are left alone.
+ */
+export function aiSiteSeoEmbedded(phrase: string, keep: readonly string[] = []): string {
+  const text = phrase.replace(/\s+/g, ' ').trim()
+  const [first = '', second = ''] = text.split(' ')
+  if (!/^[A-Z][a-z'’]*$/.test(first)) return text
+  if (keep.some((word) => word && text.toLowerCase().startsWith(word.toLowerCase()))) return text
+  const listed = LOWERED_LEADS.has(first.toLowerCase())
+  const sentenceCase = !second || /^[a-z0-9]/.test(second)
+  if (!listed && !sentenceCase) return text
+  return first.toLowerCase() + text.slice(first.length)
+}
+
+/** Determiners an embedded noun phrase may already open with. */
+const DETERMINERS = /^(?:a|an|the|our|my|your|their|this|one|any|every|each)\b/i
+
+/**
+ * A noun phrase behind "is" (AGL-3660): "is a neighborhood book club", never
+ * "is neighborhood book club". A phrase that opens with its own determiner is
+ * kept, and one whose head is plural ("yoga classes and workshops") takes
+ * none.
+ */
+function withArticle(phrase: string): string {
+  if (!phrase || DETERMINERS.test(phrase)) return phrase
+  const boundary = phrase.search(PHRASE_BOUNDARY_ONE)
+  const head = (boundary > 0 ? phrase.slice(0, boundary) : phrase).split(/[\s,]+/).filter(Boolean).pop() ?? ''
+  if (/[^su]s$/i.test(head) && !/ics$/i.test(head)) return phrase
+  return `${/^(?:[aeio]|u(?!ni|s[eu]))/i.test(phrase) ? 'an' : 'a'} ${phrase}`
 }
 
 /**
@@ -234,13 +324,15 @@ export interface AiSiteSeoInput extends Partial<AiSiteWords> {
  * propose, and an empty proposal is worse than none.
  */
 export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | null {
-  const subject = asSubject(input.about ?? '')
+  // What the site is, up to a colon (AGL-3660): the list after one belongs to neither value.
+  const about = aiSiteSeoNounPhrase(input.about ?? '')
+  const subject = asSubject(about)
   if (!subject) return null
   const name = (input.siteName ?? '').replace(/\s+/g, ' ').trim()
   const audience = (input.audience ?? '').replace(/\s+/g, ' ').trim()
-  const title = aiSiteSeoTitle({ name, subject, city: input.city })
-  const about = (input.about ?? '').replace(/\s+/g, ' ').trim()
-  const description = aiSiteSeoDescription({ name, subject, about, audience })
+  const city = (input.city ?? '').replace(/\s+/g, ' ').trim()
+  const title = aiSiteSeoTitle({ name, subject, city })
+  const description = aiSiteSeoDescription({ name, subject, about, audience, ...(city ? { city } : {}) })
   return {
     kind: AI_SITE_SEO_PROPOSAL_KIND,
     values: {

@@ -94,7 +94,7 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
   return (
     <CardDisplay
       header={'Properties'}
-      help={pluginDocsHelp('deals', { anchor: '#a-deals-page' })}
+      help={pluginDocsHelp('deals', { anchor: '#deal-properties' })}
       contentGutterX
       contentGutterY
     >

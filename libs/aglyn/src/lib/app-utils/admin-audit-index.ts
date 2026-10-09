@@ -113,8 +113,23 @@ export type AdminAuditKind = 'access' | 'change'
  * high-consequence act even though it mutates nothing, and it belongs beside
  * the impersonations rather than beside the record views.
  */
+/**
+ * Staff opened a workspace's or a site's media library — one row per page
+ * read — on the staff organization or site page. The target is the library
+ * (`orgs/{id}/media`, `hosts/{id}/media`).
+ */
+export const ADMIN_AUDIT_MEDIA_LIBRARY_VIEWED = 'media.library-viewed'
+
+/**
+ * Staff opened one asset of a media library — its preview, storage path,
+ * owner and usage. The target is the asset (`orgs/{id}/media/{mediaId}`).
+ */
+export const ADMIN_AUDIT_MEDIA_ASSET_VIEWED = 'media.asset-viewed'
+
 export const ADMIN_AUDIT_ACCESS_ACTIONS: readonly string[] = [
   'email.message-viewed',
+  ADMIN_AUDIT_MEDIA_LIBRARY_VIEWED,
+  ADMIN_AUDIT_MEDIA_ASSET_VIEWED,
   // The acquisition card (AGL-3289). No longer written; the rows already in
   // the log still classify as reads.
   'user.acquisition-viewed',

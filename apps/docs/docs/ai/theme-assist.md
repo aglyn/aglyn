@@ -12,7 +12,7 @@ want and it proposes values for the editor's own controls — the same colors, f
 corner radius, spacing, navigation heights, dark scheme and component overrides you can
 set by hand. Nothing changes on your site until you save.
 
-## Change what you describe, or design a new theme
+## Change what you describe, or design a new theme {#describe-a-change}
 
 - **Change what I describe** makes a targeted change. "Make it feel warmer" proposes new
   colors and leaves your font, corners and spacing alone; "bigger headings on mobile"

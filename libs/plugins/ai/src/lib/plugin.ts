@@ -399,7 +399,7 @@ export function registerAiConsole(): void {
         label: 'AI jobs',
         href: '/ai-jobs',
         recordTitle: 'Building your site',
-        header: { title: 'AI jobs', docsTopic: 'howAglynAiBuilds', docsAnchor: '#finding-your-ai-jobs' },
+        header: { title: 'AI jobs', docsTopic: 'aiJobsAndActivity', docsAnchor: '#the-ai-jobs-page' },
         unlisted: true,
         ownsSubtree: true,
         permission: 'ai.generate',
@@ -701,12 +701,16 @@ export function registerAiConsole(): void {
       // media in the media library, and in its empty state. Gated as the
       // other generative widgets are, by the shell alone: it asks nothing of
       // a server until someone creates a picture, and the door decides then.
+      // Like every Create with AI entry it is mounted without the add-on too
+      // and opens its own upsell there (AGL-3601).
       {
         slot: 'mediaLibrary',
         widgetId: 'ai-media-create',
         title: 'Create images with AI',
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
+        showWhenNotEntitled: true,
+        releaseFlag: 'release_ai_generative',
         Component: AiMediaCreateButton,
       },
       {
