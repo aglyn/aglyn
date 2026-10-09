@@ -115,12 +115,13 @@ async function main(): Promise<void> {
   const inventoryMod = await load('libs/plugins/ai/src/lib/model/ai-site-inventory.ts')
   // Absent from a compiler that lists no records (before AGL-3676): its pages compile as they did.
   const listingsMod = await load('libs/plugins/ai/src/lib/layout-language/ai-layout-listings.ts').catch(() => null)
+  const siteJob = await load('libs/plugins/ai/src/lib/model/ai-site-job.ts')
 
   const FORM_ID = 'form-contact'
   const LAYOUT_ID = 'layout-main'
 
   /** One site's pages compiled, written as shot inputs. */
-  const compileSite = async (site: {
+  const compileSite = async (given: {
     key: string
     name: string
     kind: Dict
@@ -132,6 +133,7 @@ async function main(): Promise<void> {
     form?: { rootId: string; nodes: Dict } | null
     records?: Dict | null
   }) => {
+    let site = given
     const inventory = {
       ...inventoryMod.emptyAiSiteInventory('host-recorded'),
       layouts: [{ id: LAYOUT_ID, name: 'Main Layout', parentId: null }],
@@ -141,12 +143,19 @@ async function main(): Promise<void> {
     const records = listingsMod ? (site.records ?? null) : null
     const posts = records?.['posts'] as { slug: string; entries: Dict[] } | undefined
     const products = records?.['products'] as Dict[] | undefined
+    // A page standing in for the blog is merged into it where the site writes posts (AGL-3676).
+    const standIns = posts && siteJob?.aiSiteIsBlogStandIn ? site.pages.filter((page) => siteJob.aiSiteIsBlogStandIn(page)) : []
+    if (standIns.length) {
+      console.log(`MERGED    ${site.key}: ${standIns.map((page) => page.title).join(', ')} into the blog`)
+      site = { ...site, pages: site.pages.filter((page) => !standIns.includes(page)) }
+    }
     const sitePages = [
       ...site.pages.filter((page) => page.slug === '/').map((page) => ({ id: page.id, label: page.title, slug: page.slug })),
       // A blog's posts are linked by the header, second after Home, as a guided start links them.
       ...(posts ? [{ id: 'aiSiteBlog', label: 'Blog', slug: `/${posts.slug}`, href: `/${posts.slug}` }] : []),
       ...site.pages.filter((page) => page.slug !== '/').map((page) => ({ id: page.id, label: page.title, slug: page.slug })),
     ]
+    const siteAliases = standIns.map((page) => ({ id: page.id, label: 'Blog', slug: `/${posts?.slug}`, href: `/${posts?.slug}`, standsInFor: page.title }))
     // The site's listings, as a guided start hands them to its units (AGL-3676).
     const screens = site.pages.map((page) => ({ id: page.id, title: page.title, slug: page.slug, sections: page.sections }))
     const listings = [
@@ -177,6 +186,7 @@ async function main(): Promise<void> {
         [language.AI_LAYOUT_LANGUAGE_INPUT]: true,
         [language.AI_LAYOUT_FORM_PAGE_INPUT]: null,
         ...(listings.length && listingsMod ? { [listingsMod.AI_LAYOUT_LISTINGS_INPUT]: listings } : {}),
+        ...(siteAliases.length ? { siteAliases } : {}),
       },
     })
     let layoutNodes = site.layoutNodes ?? null

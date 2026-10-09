@@ -323,6 +323,33 @@ export function aiSiteBlogNavPage(screens: ReadonlyArray<{ slug: string }>): {
   return { id: AI_SITE_BLOG_NAV_ID, label: AI_SITE_BLOG_NAME, slug: `/${slug}`, href: `/${slug}` }
 }
 
+/**
+ * Whether a planned page stands in for the blog a start writes (AGL-3660):
+ * its address is one of the blog's, or its name says it lists posts. The
+ * home page never does.
+ */
+export function aiSiteIsBlogStandIn(screen: { slug: string; title: string }): boolean {
+  if (aiSitePlanIsHome(screen)) return false
+  return (AI_SITE_BLOG_SLUGS as readonly string[]).includes(firstSegment(screen.slug)) || BLOG_PAGE_WORDS.test(screen.title)
+}
+
+/**
+ * A start that writes posts, with its plan's stand-in pages taken out
+ * (AGL-3676): the plan step asks once for a plan without one and keeps a
+ * second answer that still has one, so the scaffold merges it into the blog
+ * instead — the page is not built, its links go to the blog, and the blog
+ * takes the address it left free. The kept screens hold their plan index,
+ * which a page unit's slot is named by.
+ */
+export function aiSitePlanWithoutBlogStandIns<T extends { slug: string; title: string }>(
+  screens: readonly T[],
+): { screens: T[]; standIns: T[] } {
+  return {
+    screens: screens.filter((screen) => !aiSiteIsBlogStandIn(screen)),
+    standIns: screens.filter((screen) => aiSiteIsBlogStandIn(screen)),
+  }
+}
+
 /** The code a planned page that stands in for the written blog is re-asked under. */
 export const AI_SITE_BLOG_PAGE_CODE = 'plan-blog-page-duplicate'
 
@@ -339,12 +366,7 @@ const BLOG_PAGE_WORDS = /\b(blog|posts?|articles?|journal|writing|stories|news)\
 export function aiSiteBlogStandInViolations(
   plan: Pick<AiBuildPlan, 'screens'>,
 ): Array<{ rule: null; code: string; message: string; paths: string[] }> {
-  const blogSlugs = new Set<string>(AI_SITE_BLOG_SLUGS)
-  const standIns = plan.screens.flatMap((screen, index) => {
-    if (aiSitePlanIsHome(screen)) return []
-    const segment = firstSegment(screen.slug)
-    return blogSlugs.has(segment) || BLOG_PAGE_WORDS.test(screen.title) ? [{ screen, index }] : []
-  })
+  const standIns = plan.screens.flatMap((screen, index) => (aiSiteIsBlogStandIn(screen) ? [{ screen, index }] : []))
   if (!standIns.length) return []
   const names = standIns.map(({ screen }) => `"${screen.title}" at ${screen.slug}`).join(', ')
   return [

@@ -61,7 +61,7 @@ import { aiOriginJobId } from './ai-job-draft-ids'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
-import { aiLayoutIsHomeSlug, aiLayoutSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutIsHomeSlug, aiLayoutSiteAliases, aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
 
 /**
@@ -206,6 +206,8 @@ export function aiLayoutPageTargets(input: {
   const planned = aiLayoutSitePages(job.inputs)
   const pages: AiLayoutPage[] = [
     ...planned,
+    // Planned pages merged into the blog (AGL-3676): a link to one goes to the blog.
+    ...aiLayoutSiteAliases(job.inputs).filter((alias) => !planned.some((page) => page.id === alias.id)),
     ...(inventory?.screens ?? [])
       .filter(
         (row) => !row.template && !planned.some((page) => page.id === row.id),
@@ -275,7 +277,8 @@ export function aiLayoutPagePrompt(input: {
     const items = section.items ? `; shows ${section.items} items` : ''
     return `${index + 1}. "${section.name}"${places}${items}`
   })
-  const pages = targets.pages.map((page) => `${page.label} (page:${page.id})`)
+  // A page merged into the blog is not offered: the blog is, by its own entry.
+  const pages = targets.pages.filter((page) => !page.standsInFor).map((page) => `${page.label} (page:${page.id})`)
   const components = targets.components.map(
     (component) =>
       `${component.name} (${component.id}; props ${Object.keys(component.props).join(', ') || 'none'})`,

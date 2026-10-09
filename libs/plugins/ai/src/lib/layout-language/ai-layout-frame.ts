@@ -35,6 +35,7 @@ import {
   type AiLayoutSettlement,
 } from './ai-layout-language'
 import {
+  aiLayoutRenamedLabel,
   aiLayoutResolveLink,
   type AiLayoutPage,
   type AiLayoutTargets,
@@ -276,7 +277,7 @@ export function aiCompileLayoutFrame(
     })
   const ctaProps = ctaTo
     ? {
-        children: ctaLabel,
+        children: aiLayoutRenamedLabel(ctaLabel, ctaTo),
         variant: 'contained',
         color: scope.band === 'brand' ? 'secondary' : 'primary',
         ...destinationProps(ctaTo),

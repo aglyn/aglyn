@@ -55,6 +55,7 @@ import {
   type AiLayoutListingRole,
 } from './ai-layout-listings'
 import {
+  aiLayoutRenamedLabel,
   aiLayoutResolveLink,
   type AiLayoutDestination,
   type AiLayoutLinkScope,
@@ -1015,21 +1016,24 @@ function compileButton(
   scope: SectionScope,
   block: AiLayoutBlock,
 ): string | null {
-  const label = aiLayoutFitText(block.text, 'label')
-  if (!label) return null
+  const asked = aiLayoutFitText(block.text, 'label')
+  if (!asked) return null
   const destination = aiLayoutResolveLink(
     block.to,
-    label,
+    asked,
     scope.link,
     scope.page.targets,
   )
   if (!destination) {
     scope.page.settled.push({
       at: scope.at,
-      what: `the button "${label}" has nowhere to go; left out`,
+      what: `the button "${asked}" has nowhere to go; left out`,
     })
     return null
   }
+  // A button to a page merged into the blog names the blog (AGL-3676).
+  const label = aiLayoutRenamedLabel(asked, destination)
+  if (label !== asked) scope.page.settled.push({ at: scope.at, what: `the button "${asked}" named for the blog: "${label}"` })
   const style = block.style ?? 'primary'
   // Over a photo, a quiet or outlined button takes the words' own color, as on a brand band.
   const onBrand = scope.band === 'brand' || (!!scope.overPhoto && style !== 'primary')
