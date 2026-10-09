@@ -81,6 +81,9 @@ import {
 import { listMembersResourceKey } from '../transfer/email-transfer-catalog'
 import ListMembersPanel, { type ListMembersFilter } from './list-members-panel'
 
+/** One Audience card — its loading and missing branch carries the same link. */
+const AUDIENCE_DOCS_HELP = pluginDocsHelp('emailCampaigns', { anchor: '#list-members' })
+
 export interface ListDetailCardProps {
   /** The site, or `null` on the organization's Emails page. */
   hostId: string | null
@@ -290,7 +293,7 @@ export function ListDetailCard(props: ListDetailCardProps) {
     return (
       <CardDisplay
         header={'Audience'}
-        help={pluginDocsHelp('emailCampaigns', { anchor: '#email-lists' })}
+        help={AUDIENCE_DOCS_HELP}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: headerActions }}
@@ -322,7 +325,7 @@ export function ListDetailCard(props: ListDetailCardProps) {
   const card = (
     <CardDisplay
       header={'Audience'}
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#list-members' })}
+      help={AUDIENCE_DOCS_HELP}
       contentGutterX
       contentGutterY
       contentBordered="all"

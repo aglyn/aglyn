@@ -52,6 +52,7 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
+import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
@@ -481,10 +482,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 children: (
                   <CardDisplay
                     header={'Usage'}
-                    help={docsHelp('billing', {
-                      anchor: '#usage-meters',
-                      excerpt:
-                        "Live counts for this site — published and total pages, media, members, and storage — the figures metered against the org's entitlements.",
+                    help={docsHelp('staffConsole', {
+                      anchor: '#site-usage',
                     })}
                     contentGutterX
                     contentGutterY
@@ -518,6 +517,11 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: <StaffEmailDeliveriesCard hostId={hostId} />,
               },
+              {
+                size: { xs: 12 },
+                // The site's own media library, read-only and audited.
+                children: <StaffMediaLibraryCard hostId={hostId} />,
+              },
               // What a plugin holds for this site — its automations, its
               // sends — shown by the plugin that owns it (AGL-3379).
               ...(staffSiteWidgets.length
@@ -541,9 +545,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header={'Settings snapshot'}
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        "A read-only snapshot of the site's locales, analytics id, password protection, and store template pages.",
+                      anchor: '#site-settings-snapshot',
                     })}
                     contentGutterX
                     contentGutterY

@@ -196,10 +196,7 @@ export function MarketplaceReportsPage() {
             <CardDisplay
               header={'Reported listings and reviews'}
               help={pluginDocsHelp('abuseReports', {
-                excerpt:
-                  'Reports users filed against a marketplace listing or a ' +
-                  'review, with the reason each one gave. Closing one needs ' +
-                  'a note, and every change is audited.',
+                anchor: '#reported-listings',
               })}
               contentGutterX
               contentGutterY

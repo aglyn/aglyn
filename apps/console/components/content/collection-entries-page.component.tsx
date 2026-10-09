@@ -1485,7 +1485,7 @@ export function CollectionEntriesPage() {
               ]
             : []),
         ]}
-        help="content"
+        help={{ topic: 'content', anchor: '#content-collections--blog' }}
         header={{
           children: 'Content',
           icon: { path: mdiFileDocumentMultipleOutline.path },
@@ -1529,7 +1529,9 @@ export function CollectionEntriesPage() {
                 content: (
                   <CardDisplay
                     header={'Collections & Entries'}
-                    help={docsHelp('buildABlog')}
+                    help={docsHelp('buildABlog', {
+                      anchor: '#1-create-a-collection',
+                    })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"

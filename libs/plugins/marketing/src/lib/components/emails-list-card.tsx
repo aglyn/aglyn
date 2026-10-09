@@ -163,12 +163,7 @@ const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
   createdAtMs: 'Created',
 }
 
-const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#opens--clicks',
-  excerpt:
-    'Every message this site has sent or has scheduled, each with its own ' +
-    'report: what was delivered, who opened it, and which links they followed.',
-})
+const emailsDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#messages-list' })
 
 export interface EmailsListCardProps {
   /** The site, or `null` on the organization's Emails page. */

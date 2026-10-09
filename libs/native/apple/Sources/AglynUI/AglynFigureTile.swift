@@ -61,8 +61,22 @@ public struct AglynWrapRow: Layout {
   public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     let width = proposal.width ?? .infinity
     let rows = lines(width, subviews)
-    let height = rows.map { $0.map(\.1.height).max() ?? 0 }.reduce(0, +) + lineSpacing * CGFloat(max(0, rows.count - 1))
-    let used = rows.map { row in row.map(\.1.width).reduce(0, +) + spacing * CGFloat(max(0, row.count - 1)) }.max() ?? 0
+    // Plain loops: the chained map/reduce form took Xcode 26's type checker
+    // past its time limit on GitHub's macOS image (AGL-3709).
+    var height: CGFloat = 0
+    var used: CGFloat = 0
+    for row in rows {
+      var rowHeight: CGFloat = 0
+      var rowWidth: CGFloat = 0
+      for (_, size) in row {
+        rowHeight = max(rowHeight, size.height)
+        rowWidth += size.width
+      }
+      if row.count > 1 { rowWidth += spacing * CGFloat(row.count - 1) }
+      height += rowHeight
+      used = max(used, rowWidth)
+    }
+    if rows.count > 1 { height += lineSpacing * CGFloat(rows.count - 1) }
     return CGSize(width: proposal.width ?? used, height: height)
   }
 

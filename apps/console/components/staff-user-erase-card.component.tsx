@@ -188,7 +188,8 @@ export function StaffUserEraseCard({
         // state that explains itself least is the one a reader reaches
         // BECAUSE they do not have what it takes.
         help={docsHelp('staffConsole', {
-          anchor: '#whats-there',
+          anchor: '#access',
+          title: 'Erase account',
           excerpt:
             'Erasing an account is super-staff only. The page explains who ' +
             'holds the role and what the account holder can do themselves.',
@@ -213,7 +214,8 @@ export function StaffUserEraseCard({
       contentGutterX
       contentGutterY
       help={docsHelp('staffConsole', {
-        anchor: '#whats-there',
+        anchor: '#access',
+        title: 'Erase account',
         excerpt:
           'Permanently erase a person’s account when self-serve cannot reach ' +
           'them. Immediate, super-staff only, and audited with the reason.',

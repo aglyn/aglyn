@@ -98,7 +98,7 @@ export function CustomerNotificationsCard(props: CustomerNotificationsCardProps)
   return (
     <CardDisplay
       header={'Customer notifications'}
-      help={pluginDocsHelp('commerce')}
+      help={pluginDocsHelp('orderNotifications', { anchor: '#customer-emails' })}
       contentGutterX
       contentGutterY
     >

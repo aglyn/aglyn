@@ -1109,3 +1109,83 @@ describe('order events ride the shipment write (AGL-3611)', () => {
     expect(outbox()[0].payload.order.status).toBe('delivered')
   })
 })
+
+describe('a hand-entered shipping cost (AGL-3705)', () => {
+  const outbox = () =>
+    [...docs.entries()]
+      .filter(([path]) => path.startsWith('pluginEventOutbox/'))
+      .map(([, value]) => value)
+
+  it('is saved on the shipment in the label-cost field and rides order.fulfilled', async () => {
+    seedHost()
+    seedOrder()
+    const result = await post({ carrier: 'UPS', trackingNumber: '1Z', shippingCostCents: 845 })
+    expect(result.status).toBe(200)
+    expect(storedOrder().fulfillments[0].labelCostCents).toBe(845)
+    expect(result.body.fulfillment.labelCostCents).toBe(845)
+    // What the marketplaces plugin reads for Faire's maker_cost_cents.
+    expect(outbox()[0].payload.fulfillment.labelCostCents).toBe(845)
+  })
+
+  it('keeps zero as free shipping, and stores nothing for an empty cost', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }], shippingCostCents: 0 })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }], shippingCostCents: null })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }], shippingCostCents: '' })
+    await post({ lineItems: [{ lineItemId: 1, quantity: 1 }] })
+    const [free, nulled, blank, absent] = storedOrder().fulfillments
+    expect(free.labelCostCents).toBe(0)
+    for (const entry of [nulled, blank, absent]) expect(entry).not.toHaveProperty('labelCostCents')
+    expect(outbox().map((event) => event.payload.fulfillment.labelCostCents)).toEqual([0, null, null, null])
+  })
+
+  it('refuses a cost that is not whole, non-negative cents with a 400, and writes nothing', async () => {
+    seedHost()
+    seedOrder()
+    for (const shippingCostCents of [-1, 8.45, '845', 1_000_001, true]) {
+      const result = await post({ shippingCostCents })
+      expect(result.status).toBe(400)
+    }
+    expect((await post({ shippingCostCents: -1 })).body.error).toBe('Shipping cost cannot be negative')
+    expect(storedOrder().fulfillments).toBeUndefined()
+    expect(storedOrder().status).toBe('paid')
+    expect(outbox()).toHaveLength(0)
+  })
+
+  it('a cost per shipment on a partial fulfillment, and a keyed retry writes it once', async () => {
+    seedHost()
+    seedOrder()
+    await post({ lineItems: [{ lineItemId: 0, quantity: 2 }], shippingCostCents: 500 }, { 'idempotency-key': 'a' })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 2 }], shippingCostCents: 500 }, { 'idempotency-key': 'a' })
+    await post({ lineItems: [{ lineItemId: 0, quantity: 1 }], shippingCostCents: 725 }, { 'idempotency-key': 'b' })
+    expect(storedOrder().fulfillments.map((entry: { labelCostCents?: number }) => entry.labelCostCents)).toEqual([500, 725])
+    expect(outbox()).toHaveLength(2)
+  })
+
+  it('a label-bought shipment keeps its label cost', async () => {
+    seedOrder()
+    await recordOrderShipment({
+      hostId: HOST,
+      orderId: ORDER,
+      to: 'fulfilled',
+      trackingNumber: '9400',
+      labelRef: 'lbl_1',
+      labelCostCents: 1190,
+      shippingCostCents: 300,
+    })
+    expect(storedOrder().fulfillments[0]).toMatchObject({ labelRef: 'lbl_1', labelCostCents: 1190 })
+  })
+
+  it('the label path is unchanged: no cost given, none stored', async () => {
+    seedOrder()
+    await recordOrderShipment({ hostId: HOST, orderId: ORDER, to: 'fulfilled', trackingNumber: '9401', labelRef: 'lbl_2' })
+    expect(storedOrder().fulfillments[0]).not.toHaveProperty('labelCostCents')
+  })
+
+  it('ignores a cost on mark delivered', async () => {
+    seedHost()
+    seedOrder({ status: 'fulfilled' })
+    expect((await post({ to: 'delivered', shippingCostCents: -5 })).status).toBe(200)
+  })
+})

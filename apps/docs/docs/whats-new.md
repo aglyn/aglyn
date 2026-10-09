@@ -36,6 +36,13 @@ for the how-to.
   visitor presses the button, so it never slows your pages; you can also have it load
   with the page for visitors who allowed analytics. Included on every plan.
 
+## October 2026 — shipping cost on a hand-entered shipment
+
+- **[Shipping cost](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  the Fulfill items panel takes an optional shipping cost for a shipment you enter by
+  hand, in your store's currency, one per shipment. A Faire order sends it to Faire as
+  the shipping you paid, the same way a label bought in Aglyn already does.
+
 ## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —

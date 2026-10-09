@@ -202,6 +202,74 @@ or template you installed and then **edited** is now *your* copy. Uninstalling t
 listing doesn't reach into your pages and remove it, and updating shows you field by
 field what the publisher's new version would overwrite before it touches your edits.
 
+## Manage your plugins {#manage-plugins}
+
+**Plugins**, in the organization navigation, is where you switch plugins on and off for
+the whole workspace — the ones you installed from the Marketplace, listed first, and
+Aglyn's own built-in plugins below them. Open any plugin to see where it runs and change
+its settings.
+
+### Find the Plugins section {#find-plugins}
+
+Plugins is its own section in the **organization** navigation, next to **Marketplace**.
+**Organization → Settings → Plugins** used to hold the switches; it now only points you
+to the section, where enabling, configuring and managing marketplace installs all live.
+
+### Built-in plugins {#built-in-plugins}
+
+The **Built in** card lists the plugins that ship with Aglyn, each with its own switch.
+Switching one **off** removes it from every site in the workspace — its navigation, the
+editor, published pages and the API — and switching it back on restores it.
+
+- Only workspace **owners and admins** can flip a switch.
+- A few cannot be switched off at all, because sites are built out of them.
+- **AI** and **Forms** have no workspace switch: they stay on for the workspace, and a
+  site switches them off for itself — see [A plugin on one site](#plugin-on-one-site).
+- Switching off a plugin that another one depends on asks first, and names what else
+  will go with it.
+
+### A plugin's page {#a-plugins-page}
+
+Open a plugin from the Plugins section to manage it for the workspace. Its page shows
+**Where it runs**, the plugin's own **settings** — saved once for the workspace and
+followed by every site — its **Dependencies**, and, for a marketplace plugin, the version
+you are pinned to and what it is allowed to reach. **View listing** opens a marketplace
+plugin's listing.
+
+### Where a plugin runs {#where-a-plugin-runs}
+
+The **Where it runs** card on a plugin's page answers which of your sites have it. A
+built-in plugin has a single switch: on, it runs on every site in the workspace; off, on
+none. A marketplace plugin runs on the sites it was [installed to](#step-4-targeting) —
+**All sites**, including ones you add later, or the sites you picked.
+
+### Permissions & data {#permissions-and-data}
+
+The **Permissions & data** card shows what a marketplace plugin declared it can reach,
+so you can check it before you rely on it. **Capabilities** lists the parts of your
+workspace data it may use — none declared means it cannot reach your data directly —
+and **Network allowlist** names the outside sites it may call; with none listed, its
+sandbox blocks every outbound request. Built-in plugins have no card, because they are
+not sandboxed.
+
+### Plugins on one site {#site-plugins}
+
+A site can run fewer plugins than the workspace enables. **Site Admin → Plugins** lists
+the workspace-enabled plugins in two groups, **Built in** and **Installed from the
+marketplace**; turn a switch off and press **Save site plugins** to switch it off for that site
+alone. It disappears from that site's navigation, editor, published pages and API, and
+other sites are unaffected. A site can never switch on a plugin the workspace has
+switched off.
+
+### A plugin on one site {#plugin-on-one-site}
+
+Open a plugin from **Site Admin → Plugins** to see whether it **runs on this site**, and
+why: the workspace switch, and this site's own choice. Where switching it off for the
+site stops some things and keeps others — AI keeps the workspace's add-on and billing,
+Forms keeps its saved submissions — the card says which before you flip it. The plugin's
+settings can be answered differently for this site field by field; see
+[Settings for one site](../developers/plugins/overview.md#configure-site).
+
 ## What to do next
 
 - **Running several client sites?** [Run an agency workspace](./run-an-agency-workspace.md)

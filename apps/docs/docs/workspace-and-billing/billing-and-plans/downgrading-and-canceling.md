@@ -98,6 +98,10 @@ exports a backup from **Admin → Backup & template** ([site backup and packages
 
 ## Canceling your subscription
 
+Canceling keeps your plan until the end of the period you have already paid for, then
+moves the organization to the Free plan — nothing is deleted, and you can resume any time
+before the period ends.
+
 - **Cancel any time.** Your subscription runs to the **end of the paid period** —
   a chip on the Billing page shows the end date, and you can **resume** before it
   hits.
@@ -203,6 +207,14 @@ erasure was carried out, which is itself kept for a limited period. Export
 anything you need during the hold. Contact support if you need an erasure
 completed outside the self-serve flow.
 :::
+
+### Confirming the deletion {#confirm-deletion}
+
+The last step of **Delete organization** starts the deletion of the organization and
+everything in it; nothing is erased yet, and you can cancel the request at any time during
+the hold period that follows. It is the same short dialog
+[canceling opens](#the-cancel-dialog), so it asks why you are leaving first, and
+**Keep my plan** on the last step closes it with nothing changed.
 
 ## Related
 

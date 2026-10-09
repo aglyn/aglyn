@@ -577,7 +577,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
   return (
     <CardDisplay
       header={'Templates'}
-      help={pluginDocsHelp('designedEmails', { anchor: '#find-a-template' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#organization-emails-page' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

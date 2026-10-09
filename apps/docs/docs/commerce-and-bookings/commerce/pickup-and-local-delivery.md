@@ -22,8 +22,9 @@ are covered by [Delivery apps](./delivery-apps.md), which work separately.
 
 ## Set up pickup {#set-up-pickup}
 
-Pickup is set per location under **Products → Settings → Inventory locations**.
-On a location's row, choose **Pickup**, then:
+Pickup is turned on per location, on the **Inventory locations** card in the
+store's settings, so buyers can collect orders there at the hours you set. On a
+location's row, choose **Pickup**, then:
 
 1. Turn on **Buyers can pick up orders here**.
 2. Enter the **Pickup hours**, one line per set of days, like `Mo-Fr 09:00-17:00`
@@ -48,8 +49,9 @@ locations instead.
 
 ## Set up local delivery {#set-up-local-delivery}
 
-Local delivery is set up on the **Local delivery** card under **Products →
-Settings**:
+The **Local delivery** card, in the store's settings, lets your own driver
+deliver orders: buyers enter their postal code at the cart, pay your fee and
+book a delivery time. To set it up:
 
 1. Turn on **Deliver orders yourself** and enter the two-letter **Country** you
    deliver in.

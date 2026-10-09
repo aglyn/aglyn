@@ -139,12 +139,7 @@ import { useCampaignTopicOptions } from './use-campaign-topic-options'
 /** How many of a campaign's emails the detail page enumerates. */
 const CAMPAIGN_EMAIL_CEILING = 50
 
-const detailDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'A campaign groups the emails sent to its lists. The figures here are ' +
-    'the sum across those emails, and each one keeps its own report.',
-})
+const detailDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#campaign-page' })
 
 /**
  * A rolled-up figure, in the shared `Figure`'s shape.

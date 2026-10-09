@@ -688,7 +688,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   return (
     <CardDisplay
       header={'Functions'}
-      help={pluginDocsHelp('bindings', { anchor: '#no-code-functions' })}
+      help={pluginDocsHelp('bindings', { anchor: '#functions-card' })}
       // Another way to start a function (AGL-3603), in the card's header.
       actions={
         ExtensionZone ? (

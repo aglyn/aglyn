@@ -212,7 +212,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Feature flags', href: buildRoute(Route.ADMIN_FLAGS) },
       ]}
-      help="featureFlags"
+      help={{ topic: 'featureFlags', anchor: '#what-a-release-flag-is' }}
       header={{
         children: 'Feature Flags',
         icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },

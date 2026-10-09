@@ -1391,11 +1391,7 @@ export function EntryDetailPage() {
                   <CardDisplay
                     header={'Entry'}
                     help={docsHelp('buildABlog', {
-                      anchor: '#2-write-entries',
-                      title: 'Title, address and byline',
-                      excerpt:
-                        'What the entry is called, where it publishes, and ' +
-                        'who it is published under.',
+                      anchor: '#entry-basics',
                     })}
                     contentGutterX
                     contentGutterY
@@ -1660,12 +1656,7 @@ export function EntryDetailPage() {
                   <CardDisplay
                     header={'Details'}
                     help={docsHelp('buildABlog', {
-                      anchor: '#2-write-entries',
-                      title: 'What is recorded',
-                      excerpt:
-                        'The entry id, its public address, and every date ' +
-                        'stored against it — created, updated, published and ' +
-                        'scheduled.',
+                      anchor: '#entry-details',
                     })}
                     contentGutterY
                     contentBordered="all"
@@ -1964,14 +1955,8 @@ export function EntryDetailPage() {
                 children: (
                   <CardDisplay
                     header={'Cover image'}
-                    help={docsHelp('seo', {
-                      anchor: '#social-cards',
-                      title: 'The share card image',
-                      excerpt:
-                        'The picture shown at the top of the entry and on its ' +
-                        'share card, with the description screen readers ' +
-                        'announce. Previewed at the 1200×630 crop social ' +
-                        'readers apply.',
+                    help={docsHelp('buildABlog', {
+                      anchor: '#entry-cover-image',
                     })}
                     contentGutterX
                     contentGutterY
@@ -2005,13 +1990,7 @@ export function EntryDetailPage() {
                   <CardDisplay
                     header={'Featured video'}
                     help={docsHelp('buildABlog', {
-                      anchor: '#2-write-entries',
-                      title: 'The featured video',
-                      excerpt:
-                        'The film an entry is about, played in place of the ' +
-                        'cover image at the top of the entry. Choose one from ' +
-                        'the media library or paste a link to a video file ' +
-                        'or to a video host.',
+                      anchor: '#entry-featured-video',
                     })}
                     contentGutterX
                     contentGutterY
@@ -2044,13 +2023,8 @@ export function EntryDetailPage() {
                 children: (
                   <CardDisplay
                     header={'SEO'}
-                    help={docsHelp('seo', {
-                      anchor: '#per-screen-seo',
-                      title: 'Search and social text',
-                      excerpt:
-                        'The title and description search engines and social ' +
-                        'readers show. Both fall back to the entry’s own ' +
-                        'title and excerpt when left blank.',
+                    help={docsHelp('buildABlog', {
+                      anchor: '#entry-seo',
                     })}
                     contentGutterX
                     contentGutterY

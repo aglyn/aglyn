@@ -20,8 +20,11 @@
 // libs/plugins/* and cannot import the console's constants, so they read this
 // subset instead. Regenerate with:
 //   node tools/scripts/generate-docs-help.mjs
+import { createElement, type ReactNode } from 'react'
+import PluginDocsSectionExcerpt from './docs-help-section-excerpt'
 import {
   PLUGIN_DOCS,
+  PLUGIN_DOCS_SECTION_TITLES,
   type PluginDocsAnchor,
   type PluginDocsKey,
   type PluginDocsTopic,
@@ -30,6 +33,7 @@ import {
 export {
   PLUGIN_DOCS,
   PLUGIN_DOCS_ANCHORS,
+  PLUGIN_DOCS_SECTION_TITLES,
   type PluginDocsAnchor,
   type PluginDocsKey,
   type PluginDocsTopic,
@@ -60,10 +64,12 @@ export interface PluginDocsHelpOverrides<
    * they are in the right place.
    */
   anchor?: PluginDocsAnchor<K>
-  /** Override the tooltip title (defaults to the topic's docs page title). */
+  /** Override the tooltip title (defaults to the anchor's heading, else the
+   * topic's docs page title). */
   title?: string
   /**
-   * Override the tooltip excerpt.
+   * Override the tooltip excerpt (defaults to the anchor's section, else the
+   * page's description).
    *
    * Worth doing whenever the card is one subject on a page that covers
    * several: the page's own description is written for the page, and a card's
@@ -76,15 +82,48 @@ export interface PluginDocsHelpOverrides<
  * Resolve a plugin docs topic into the `HelpTipContent` shape the shared UI
  * help affordances accept — the `libs/plugins` counterpart of the console's
  * `docsHelp()` (AGL-2213).
+ *
+ * The title and href are strings, resolved here: they are the help button's
+ * accessible name and destination. An anchored excerpt is a node that fetches
+ * its section's prose when the tooltip opens (`PluginDocsSectionExcerpt`),
+ * because the prose of every linked section is more than every plugin console
+ * should carry for a hover most visits never make.
  */
 export function pluginDocsHelp<K extends PluginDocsKey>(
   topic: K,
   overrides: PluginDocsHelpOverrides<K> = {},
-): { title: string; excerpt: string; href: string } {
+): {
+  title: string
+  excerpt: ReactNode
+  /** The excerpt as text for an attribute (`title=`): the override, else the
+   * page's description — a section's prose arrives only with a tooltip. */
+  excerptText: string
+  href: string
+} {
   const { path, title, excerpt }: PluginDocsTopic = PLUGIN_DOCS[topic]
+  const { anchor } = overrides
+  // An anchored tip shows its heading and that section's opening sentence,
+  // not the page's (AGL-3707): twenty cards deep-linking twenty sections of
+  // one page used to print one blurb between them.
+  const sectionTitle = anchor
+    ? (
+        PLUGIN_DOCS_SECTION_TITLES[topic] as
+          | Readonly<Record<string, string>>
+          | undefined
+      )?.[anchor]
+    : undefined
   return {
-    title: overrides.title ?? title,
-    excerpt: overrides.excerpt ?? excerpt,
-    href: `${DOCS_BASE_URL}${path}${overrides.anchor ?? ''}`,
+    title: overrides.title ?? sectionTitle ?? title,
+    excerpt:
+      overrides.excerpt ??
+      (anchor && sectionTitle
+        ? createElement(PluginDocsSectionExcerpt, {
+            topic,
+            anchor,
+            fallback: excerpt,
+          })
+        : excerpt),
+    excerptText: overrides.excerpt ?? excerpt,
+    href: `${DOCS_BASE_URL}${path}${anchor ?? ''}`,
   }
 }

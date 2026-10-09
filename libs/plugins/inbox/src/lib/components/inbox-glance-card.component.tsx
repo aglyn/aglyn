@@ -148,12 +148,7 @@ export function InboxGlanceCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Inbox'}
-      help={pluginDocsHelp('forms', {
-        anchor: '#the-inbox',
-        excerpt:
-          'The newest form submissions on this site — the Inbox has the ' +
-          'full list, the reader, and the routing each one took.',
-      })}
+      help={pluginDocsHelp('forms', { anchor: '#inbox-card' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

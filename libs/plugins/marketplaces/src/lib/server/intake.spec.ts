@@ -107,6 +107,18 @@ describe('order events (AGL-3638)', () => {
     expect(d.store.orders.get(other)!.shipments['ful1'].shippingCostCents).toBeNull()
   })
 
+  it('keeps a hand-entered shipping cost, free shipping included, for Faire (AGL-3705)', async () => {
+    // The console's fulfill dialog stores what the merchant typed in the same
+    // field a label's cost goes in, so it arrives here the same way.
+    const d = deps()
+    const id = marketplaceOrderDocId(HOST, 'faire', 'bo_3')
+    await d.store.createOrder(id, record({ marketplace: 'faire', externalOrderId: 'bo_3', recordId: 'rec-3' }))
+    const free = fulfilled('marketplace', 'rec-3')
+    ;(free.payload.fulfillment as Record<string, unknown>).labelCostCents = 0
+    expect(await onOrderFulfilled(d, free)).toBe('queued')
+    expect(d.store.orders.get(id)!.shipments['ful1'].shippingCostCents).toBe(0)
+  })
+
   it('ignores an order no marketplace sold', async () => {
     const d = deps()
     expect(await onOrderFulfilled(d, fulfilled('online'))).toBe('ignored')
