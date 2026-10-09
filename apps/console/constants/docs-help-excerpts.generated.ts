@@ -279,7 +279,8 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#what-you-can-add': 'M on Billing → Add-ons (requires the billing.manage permission and an active plan subscription — add-ons ride your plan\'s subscription, so Free workspaces pick a plan first).',
   },
   adTracking: {
-    '#browser-tags': 'And LinkedIn. Everything here uses your own accounts: the IDs are yours, and what the tags send goes to your ad accounts, not to Aglyn\'s.',
+    '#pinterest-tag': 'The same advertising consent as your other tags. With an access token on the Ad conversions card, the same events are also sent from the server.',
+    '#tiktok-pixel': 'Mmerce).',
   },
   aglynAssist: {
     '#what-it-can-do': 'E, connect a domain, set up shipping, invite a teammate — and it answers from this documentation, linking the exact docs section and the console page where you do it.',

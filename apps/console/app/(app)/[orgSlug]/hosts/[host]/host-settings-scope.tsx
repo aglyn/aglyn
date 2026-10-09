@@ -460,12 +460,7 @@ const trackingSchema: FormSchema = {
       helperText:
         'Optional — the pixel code from TikTok Ads Manager → Events, like ' +
         'C4ABCDEFGH1234567890. Consent works the same way as the pixel above.',
-      help: docsHelp('adTracking', {
-        anchor: '#browser-tags',
-        excerpt:
-          'Run your TikTok pixel on your site, under the same advertising ' +
-          'consent as the other advertising tags.',
-      }),
+      help: docsHelp('adTracking', { anchor: '#tiktok-pixel' }),
       type: 'text',
       validate: [
         {
@@ -483,12 +478,7 @@ const trackingSchema: FormSchema = {
       helperText:
         'Optional — the numeric tag ID from Pinterest Ads → Conversions. ' +
         'Consent works the same way as the pixel above.',
-      help: docsHelp('adTracking', {
-        anchor: '#browser-tags',
-        excerpt:
-          'Run your Pinterest tag on your site, under the same advertising ' +
-          'consent as the other advertising tags.',
-      }),
+      help: docsHelp('adTracking', { anchor: '#pinterest-tag' }),
       type: 'text',
       validate: [
         {

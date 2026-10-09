@@ -46,6 +46,14 @@ A purchase's value excludes tax, as it does in [Google Analytics](./google-analy
 Tags only load on your published site, never in Preview or the editor.
 :::
 
+### TikTok pixel {#tiktok-pixel}
+
+Paste the pixel code from TikTok Ads Manager → Events (16–24 capital letters and digits, like `C4ABCDEFGH1234567890`) to run your TikTok pixel on your site, under the same advertising consent as your other tags. With an access token on the Ad conversions card, the same events are also sent from the server.
+
+### Pinterest tag {#pinterest-tag}
+
+Paste the numeric tag ID from Pinterest Ads → Conversions (10–16 digits) to run your Pinterest tag on your site, under the same advertising consent as your other tags. With an access token on the Ad conversions card, the same events are also sent from the server.
+
 ## Consent {#consent}
 
 **No advertising tag loads unless the visitor allowed advertising.** Advertising is its own question in your
