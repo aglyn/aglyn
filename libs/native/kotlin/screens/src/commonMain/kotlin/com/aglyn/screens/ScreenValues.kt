@@ -179,6 +179,10 @@ object ScreenValues {
         list.removeAll { it == item }
       }
       JsonArray(list)
+    } else if (body.size == 1 && body["\$split"] != null) {
+      // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
+      val parts = text(resolveBody(body.getValue("\$split"), context)).split(',').map { it.trim() }.filter { it.isNotEmpty() }
+      JsonArray(parts.map { part -> part.toLongOrNull()?.let { JsonPrimitive(it) } ?: part.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(part) })
     } else if (body.size == 1 && body["\$pick"] is JsonObject) {
       // `{"$pick": {"a": "{form.x}"}}`: the keys whose values are truthy, as a list.
       val options = body["\$pick"] as JsonObject
