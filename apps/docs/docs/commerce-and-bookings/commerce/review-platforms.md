@@ -31,6 +31,9 @@ however many emails it sends.
 
 ## Trustpilot {#trustpilot}
 
+Invite customers to review your store on Trustpilot after their order ships or
+arrives, by copying one order email to your Trustpilot invitation address.
+
 Go to **Commerce → Settings** and find the **Trustpilot** card. Under **How
 Trustpilot hears about orders**, choose one way, and under **When to invite**,
 choose:
@@ -80,6 +83,9 @@ instead:
 Invitations sent this way ask for a review of your store, not of each product.
 
 ## Yotpo Reviews {#yotpo-reviews}
+
+Send each shipped order to your Yotpo Reviews account, so Yotpo asks the customer
+for a review.
 
 :::caution Rolling out
 Yotpo Reviews is **not yet available** on aglyn.com-hosted workspaces. Until it is,

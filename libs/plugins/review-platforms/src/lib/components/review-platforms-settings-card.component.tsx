@@ -152,7 +152,7 @@ function TrustpilotCard(props: { hostId: string; settings: ReviewPlatformsSettin
       help={pluginDocsHelp('reviewPlatforms', {
         anchor: '#trustpilot',
         title: 'Trustpilot',
-        excerpt: 'Copy one order email to your Trustpilot invitation address, or connect your Trustpilot API key.',
+        excerpt: 'Invite customers to review your store on Trustpilot after their order ships or arrives, by copying one order email to your Trustpilot invitation address.',
       })}
       HeaderProps={{
         action: (
@@ -273,7 +273,7 @@ function YotpoCard(props: { hostId: string; settings: ReviewPlatformsSettingsVie
       help={pluginDocsHelp('reviewPlatforms', {
         anchor: '#yotpo-reviews',
         title: 'Yotpo Reviews',
-        excerpt: 'Connect the app key and secret key from your Yotpo Reviews settings.',
+        excerpt: 'Send each shipped order to your Yotpo Reviews account, so Yotpo asks the customer for a review.',
       })}
       HeaderProps={{
         action: (
