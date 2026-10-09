@@ -319,6 +319,33 @@ data class EventWriteInput(
 )
 
 @Serializable
+data class FirstPartyPlugin(
+    val alwaysOn: Boolean? = null,
+    val alwaysOnForWorkspace: Boolean? = null,
+    val defaultOffPerSite: Boolean? = null,
+    val description: String? = null,
+    val id: String,
+    val label: String,
+    val releaseFlag: String? = null,
+    val requires: List<String>? = null,
+    val siteOff: FirstPartyPluginSiteOff? = null,
+)
+
+@Serializable
+data class FirstPartyPluginSiteOff(
+    val confirm: Boolean? = null,
+    val keeps: String,
+    val pages: FirstPartyPluginSiteOffPages? = null,
+    val stops: String,
+)
+
+@Serializable
+data class FirstPartyPluginSiteOffPages(
+    val heading: String,
+    val none: String,
+)
+
+@Serializable
 data class FormLeadRoutingOptionsItem(
     val label: String,
     val value: String,
@@ -2006,6 +2033,7 @@ internal data class ContractValuesPart1(
     @SerialName("EVENT_ORGANIZER_MAX_LENGTH") val eventOrganizerMaxLength: Long,
     @SerialName("EVENT_TITLE_MAX_LENGTH") val eventTitleMaxLength: Long,
     @SerialName("EXPERIMENT_LIST_QUERY") val experimentListQuery: ListQueryDeclaration,
+    @SerialName("FIRST_PARTY_PLUGINS") val firstPartyPlugins: List<FirstPartyPlugin>,
     @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
     @SerialName("FORM_LEAD_ROUTING_OPTIONS") val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem>,
 )

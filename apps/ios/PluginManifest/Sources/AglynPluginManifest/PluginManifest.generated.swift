@@ -4,6 +4,7 @@
 // block in plugins.config.json.
 
 import AglynPluginHost
+import AglynAiPlugin
 import AglynBookingsPlugin
 import AglynCommercePlugin
 import AglynCrmPlugin
@@ -20,6 +21,11 @@ import AglynWorkflowsPlugin
 
 public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
+    NativePluginManifestEntry(
+      id: "ai",
+      contributes: ["screens": ["ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
+      register: AglynAiPlugin.registerAINative
+    ),
     NativePluginManifestEntry(
       id: "bookings",
       contributes: ["screens": ["bookings.booking", "bookings.calendar", "bookings.counter", "bookings.services"], "widgets": ["bookings.today"], "quickActions": ["bookings.open"], "deepLinks": ["bookings.page"]],

@@ -452,6 +452,54 @@ public struct EventWriteInput: Codable, Hashable, Sendable {
   }
 }
 
+public struct FirstPartyPlugin: Codable, Hashable, Sendable {
+  public var alwaysOn: Bool?
+  public var alwaysOnForWorkspace: Bool?
+  public var defaultOffPerSite: Bool?
+  public var description: String?
+  public var id: String
+  public var label: String
+  public var releaseFlag: String?
+  public var requires: [String]?
+  public var siteOff: FirstPartyPluginSiteOff?
+
+  public init(alwaysOn: Bool? = nil, alwaysOnForWorkspace: Bool? = nil, defaultOffPerSite: Bool? = nil, description: String? = nil, id: String, label: String, releaseFlag: String? = nil, requires: [String]? = nil, siteOff: FirstPartyPluginSiteOff? = nil) {
+    self.alwaysOn = alwaysOn
+    self.alwaysOnForWorkspace = alwaysOnForWorkspace
+    self.defaultOffPerSite = defaultOffPerSite
+    self.description = description
+    self.id = id
+    self.label = label
+    self.releaseFlag = releaseFlag
+    self.requires = requires
+    self.siteOff = siteOff
+  }
+}
+
+public struct FirstPartyPluginSiteOff: Codable, Hashable, Sendable {
+  public var confirm: Bool?
+  public var keeps: String
+  public var pages: FirstPartyPluginSiteOffPages?
+  public var stops: String
+
+  public init(confirm: Bool? = nil, keeps: String, pages: FirstPartyPluginSiteOffPages? = nil, stops: String) {
+    self.confirm = confirm
+    self.keeps = keeps
+    self.pages = pages
+    self.stops = stops
+  }
+}
+
+public struct FirstPartyPluginSiteOffPages: Codable, Hashable, Sendable {
+  public var heading: String
+  public var none: String
+
+  public init(heading: String, none: String) {
+    self.heading = heading
+    self.none = none
+  }
+}
+
 public struct FormLeadRoutingOptionsItem: Codable, Hashable, Sendable {
   public var label: String
   public var value: String
@@ -3025,6 +3073,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let eventOrganizerMaxLength: Int
   public let eventTitleMaxLength: Int
   public let experimentListQuery: ListQueryDeclaration
+  public let firstPartyPlugins: [FirstPartyPlugin]
   public let formInUse: ListQueryFilter
   public let formLeadRoutingOptions: [FormLeadRoutingOptionsItem]
   public let formListFilterHeaders: [String: String]
@@ -3207,6 +3256,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case eventOrganizerMaxLength = "EVENT_ORGANIZER_MAX_LENGTH"
     case eventTitleMaxLength = "EVENT_TITLE_MAX_LENGTH"
     case experimentListQuery = "EXPERIMENT_LIST_QUERY"
+    case firstPartyPlugins = "FIRST_PARTY_PLUGINS"
     case formInUse = "FORM_IN_USE"
     case formLeadRoutingOptions = "FORM_LEAD_ROUTING_OPTIONS"
     case formListFilterHeaders = "FORM_LIST_FILTER_HEADERS"

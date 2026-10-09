@@ -1,0 +1,1265 @@
+{
+  "$comment": "Site admin: the console's hosts/[host]/admin sections (general, domain, security, error pages, activity, danger) and hosts/[host]/users. Routes: /api/hosts/validate-name, /api/hosts/rename, /api/hosts/sync-memberships, /api/domains/status, /api/domains/attach, /api/domains/detach, /api/domains/verify, /api/hosts/screens, /api/hosts/members, /api/hosts/delete; the host document is written under its rules where the console writes it directly (display name, time zone, approved hosts). Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.site.general",
+      "title": "General",
+      "subtitle": "Name, address and time zone",
+      "icon": "slider.horizontal.3|tune",
+      "scope": "site",
+      "group": "site",
+      "order": 10,
+      "links": [
+        "/admin",
+        "/admin/general"
+      ],
+      "load": {
+        "site": {
+          "doc": "hosts/{site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "details",
+          "object": "data.site",
+          "fields": [
+            {
+              "key": "displayName",
+              "label": "Display name",
+              "kind": "text",
+              "required": true,
+              "initial": "{item.displayName|item.name}"
+            },
+            {
+              "key": "timeZone",
+              "label": "Time zone",
+              "kind": "text",
+              "initial": "{item.timeZone}",
+              "placeholder": "America/Chicago",
+              "help": "An IANA zone name. Bookings and reports use it."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/validate-name",
+            "body": {
+              "hostId": "{site.id}",
+              "displayName": "{form.displayName}"
+            },
+            "then": {
+              "label": "Write",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "displayName": "{form.displayName}",
+                  "timeZone": "{form.timeZone}"
+                }
+              },
+              "then": {
+                "label": "Sync",
+                "url": "/api/hosts/sync-memberships",
+                "body": {
+                  "hostId": "{site.id}"
+                }
+              }
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
+          "title": "Site address",
+          "id": "subdomain",
+          "object": "data.site",
+          "footer": "The free address the site is always reachable at. Links to the old one stop working.",
+          "fields": [
+            {
+              "key": "subdomain",
+              "label": "Subdomain",
+              "kind": "url",
+              "required": true,
+              "initial": "{item.subdomain}"
+            }
+          ],
+          "submit": {
+            "label": "Change address",
+            "confirm": "Change the site address to {form.subdomain}?",
+            "url": "/api/hosts/rename",
+            "body": {
+              "hostId": "{site.id}",
+              "subdomain": "{form.subdomain}"
+            },
+            "success": "The site address is now {form.subdomain}"
+          }
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Domain",
+              "subtitle": "Connect your own domain",
+              "icon": "globe|language",
+              "screen": "core.site.domain"
+            },
+            {
+              "title": "Team on this site",
+              "subtitle": "Collaborators and site accounts",
+              "icon": "person.2|group",
+              "screen": "core.site.users"
+            },
+            {
+              "title": "Security",
+              "subtitle": "Approved media, font, form and embed hosts",
+              "icon": "lock.shield|security",
+              "screen": "core.site.security"
+            },
+            {
+              "title": "Error pages",
+              "subtitle": "404, members-only and maintenance pages",
+              "icon": "exclamationmark.triangle|error_outline",
+              "screen": "core.site.errorPages"
+            },
+            {
+              "title": "Activity",
+              "subtitle": "Everything changed on this site",
+              "icon": "clock.arrow.circlepath|history",
+              "screen": "core.site.activity"
+            },
+            {
+              "title": "Delete site",
+              "subtitle": "Take it offline for good",
+              "icon": "trash|delete_forever",
+              "screen": "core.site.delete",
+              "when": "org.manager"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.domain",
+      "title": "Domain",
+      "subtitle": "Connect, check DNS, verify",
+      "icon": "globe|language",
+      "scope": "site",
+      "group": "site",
+      "order": 20,
+      "links": [
+        "/admin/domain"
+      ],
+      "load": {
+        "status": "/api/domains/status?hostId={site.id}",
+        "site": {
+          "doc": "hosts/{site.id}"
+        },
+        "org": {
+          "doc": "orgs/{org.id}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Your domain",
+          "when": "data.status.domain",
+          "rows": [
+            {
+              "label": "Domain",
+              "value": "{data.status.domain}"
+            },
+            {
+              "label": "Status",
+              "value": "{data.status.state:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Verified": "success",
+                "Ownership pending": "warning",
+                "Pending": "warning",
+                "Misconfigured": "error",
+                "Conflict": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Attaching",
+              "value": "Still in progress",
+              "when": "data.status.attachmentPending"
+            },
+            {
+              "label": "Free address",
+              "value": "{data.site.subdomain}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "DNS records to add",
+          "when": "data.status.verification",
+          "items": "data.status.verification",
+          "primary": "{item.type} {item.domain}",
+          "secondary": "{item.value}",
+          "icon": "server.rack|dns",
+          "actions": [
+            {
+              "id": "copyName",
+              "label": "Copy name",
+              "icon": "doc.on.doc|content_copy",
+              "copy": "{item.domain}"
+            },
+            {
+              "id": "copyValue",
+              "label": "Copy value",
+              "icon": "doc.on.doc|content_copy",
+              "copy": "{item.value}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Conflicting records",
+          "when": "data.status.conflicts",
+          "items": "data.status.conflicts",
+          "primary": "{item.type} {item.name|item.domain}",
+          "secondary": "Remove: {item.value}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect a domain",
+              "icon": "link|link",
+              "when": "!data.status.domain",
+              "url": "/api/domains/attach",
+              "prompt": [
+                {
+                  "key": "domain",
+                  "label": "Domain",
+                  "kind": "url",
+                  "required": true,
+                  "placeholder": "www.yourbusiness.com",
+                  "help": "Add the CNAME record your DNS provider shows next, then check it here."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "domain": "{form.domain}"
+              },
+              "success": "Connected {form.domain}. Add the DNS records below."
+            },
+            {
+              "id": "check",
+              "label": "Check DNS now",
+              "icon": "checkmark.seal|verified",
+              "when": "data.status.domain",
+              "method": "GET",
+              "url": "/api/domains/verify?domain={data.status.domain}",
+              "success": "Checked {data.status.domain}"
+            },
+            {
+              "id": "retry",
+              "label": "Finish attaching",
+              "icon": "arrow.clockwise|refresh",
+              "when": "data.status.attachmentPending",
+              "url": "/api/domains/attach",
+              "body": {
+                "hostId": "{site.id}",
+                "domain": "{data.status.domain}"
+              },
+              "success": "Attached"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect domain",
+              "icon": "link.badge.plus|link_off",
+              "destructive": true,
+              "when": "data.status.domain",
+              "confirm": "Disconnect {data.status.domain}? The site stays on its free address.",
+              "url": "/api/domains/detach",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "Disconnected"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.org.plan || data.org.plan == free",
+          "text": "Published sites on the Free plan carry a small “Made with Aglyn” badge; paid plans drop it."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.org.plan && data.org.plan != free",
+          "text": "Your published pages do not show the “Made with Aglyn” badge."
+        }
+      ]
+    },
+    {
+      "id": "core.site.users",
+      "title": "Team on this site",
+      "subtitle": "Collaborators and site accounts",
+      "icon": "person.2|group",
+      "scope": "site",
+      "group": "site",
+      "order": 30,
+      "links": [
+        "/users"
+      ],
+      "load": {
+        "members": {
+          "query": {
+            "collection": "hosts/{site.id}/members",
+            "limit": 200
+          }
+        },
+        "accounts": {
+          "query": {
+            "collection": "hosts/{site.id}/siteMembers",
+            "orderBy": "createdAt desc",
+            "limit": 100
+          },
+          "optional": true
+        }
+      },
+      "actions": [
+        {
+          "id": "add",
+          "label": "Add a collaborator",
+          "icon": "person.badge.plus|person_add",
+          "when": "org.manager",
+          "url": "/api/hosts/members",
+          "prompt": [
+            {
+              "key": "email",
+              "label": "Email",
+              "kind": "email",
+              "required": true
+            },
+            {
+              "key": "role",
+              "label": "Role",
+              "kind": "select",
+              "initial": "editor",
+              "options": [
+                {
+                  "value": "admin",
+                  "label": "Admin"
+                },
+                {
+                  "value": "editor",
+                  "label": "Editor"
+                },
+                {
+                  "value": "author",
+                  "label": "Author"
+                },
+                {
+                  "value": "viewer",
+                  "label": "Viewer"
+                }
+              ]
+            }
+          ],
+          "body": {
+            "hostId": "{site.id}",
+            "email": "{form.email}",
+            "role": "{form.role}"
+          },
+          "success": "Added {form.email}"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Collaborators",
+          "items": "data.members.items",
+          "primary": "{item.displayName|item.email}",
+          "secondary": "{item.email}",
+          "icon": "person.crop.circle|account_circle",
+          "badges": [
+            {
+              "text": "{item.role:title}"
+            },
+            {
+              "text": "Owner",
+              "when": "item.owner",
+              "tone": "info"
+            },
+            {
+              "text": "{item.status:title}",
+              "when": "item.status != active",
+              "tone": "warning"
+            }
+          ],
+          "actions": [
+            {
+              "id": "role",
+              "label": "Change role",
+              "icon": "person.badge.key|manage_accounts",
+              "when": "org.manager && !item.owner",
+              "method": "PATCH",
+              "url": "/api/hosts/members",
+              "prompt": [
+                {
+                  "key": "role",
+                  "label": "Role",
+                  "kind": "select",
+                  "initial": "{item.role}",
+                  "options": [
+                    {
+                      "value": "admin",
+                      "label": "Admin"
+                    },
+                    {
+                      "value": "editor",
+                      "label": "Editor"
+                    },
+                    {
+                      "value": "author",
+                      "label": "Author"
+                    },
+                    {
+                      "value": "viewer",
+                      "label": "Viewer"
+                    }
+                  ]
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{item.$id}",
+                "role": "{form.role}"
+              },
+              "success": "Role changed"
+            },
+            {
+              "id": "remove",
+              "label": "Remove from site",
+              "icon": "person.badge.minus|person_remove",
+              "destructive": true,
+              "when": "org.manager && !item.owner",
+              "confirm": "Remove {item.displayName|item.email} from this site?",
+              "method": "DELETE",
+              "url": "/api/hosts/members",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{item.$id}"
+              },
+              "success": "Removed"
+            }
+          ],
+          "empty": "Only the workspace team."
+        },
+        {
+          "type": "list",
+          "title": "Site accounts",
+          "footer": "People who signed up on the published site.",
+          "items": "data.accounts.items",
+          "primary": "{item.displayName|item.name|item.email|item.$id}",
+          "secondary": "{item.email}",
+          "tertiary": "Joined {item.createdAt:date}",
+          "icon": "person|person",
+          "badges": [
+            {
+              "text": "Suspended",
+              "when": "item.suspended",
+              "tone": "error"
+            }
+          ],
+          "empty": "No one has signed up on the site yet."
+        }
+      ]
+    },
+    {
+      "id": "core.site.security",
+      "title": "Security",
+      "subtitle": "Approved hosts for media, fonts, forms and embeds",
+      "icon": "lock.shield|security",
+      "scope": "site",
+      "group": "site",
+      "order": 40,
+      "links": [
+        "/admin/security"
+      ],
+      "load": {
+        "site": {
+          "doc": "hosts/{site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "The published site only loads from hosts listed here. Every host listed can see the address of anyone who visits."
+        },
+        {
+          "type": "list",
+          "title": "Media hosts",
+          "items": "data.site.approvedMediaHosts",
+          "primary": "{item}",
+          "icon": "photo|photo_library",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "org.manager",
+              "confirm": "Remove {item}?",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedMediaHosts": {
+                    "$without": {
+                      "list": "{data.site.approvedMediaHosts}",
+                      "item": "{item}"
+                    }
+                  }
+                }
+              },
+              "success": "Removed",
+              "reload": true
+            }
+          ],
+          "empty": "None"
+        },
+        {
+          "type": "list",
+          "title": "Font hosts",
+          "items": "data.site.approvedFontHosts",
+          "primary": "{item}",
+          "icon": "textformat|text_fields",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "org.manager",
+              "confirm": "Remove {item}?",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedFontHosts": {
+                    "$without": {
+                      "list": "{data.site.approvedFontHosts}",
+                      "item": "{item}"
+                    }
+                  }
+                }
+              },
+              "success": "Removed",
+              "reload": true
+            }
+          ],
+          "empty": "None"
+        },
+        {
+          "type": "list",
+          "title": "Form destinations",
+          "items": "data.site.approvedFormActions",
+          "primary": "{item}",
+          "icon": "paperplane|send",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "org.manager",
+              "confirm": "Remove {item}?",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedFormActions": {
+                    "$without": {
+                      "list": "{data.site.approvedFormActions}",
+                      "item": "{item}"
+                    }
+                  }
+                }
+              },
+              "success": "Removed",
+              "reload": true
+            }
+          ],
+          "empty": "None"
+        },
+        {
+          "type": "list",
+          "title": "Embedded frames",
+          "items": "data.site.approvedFrameHosts",
+          "primary": "{item}",
+          "icon": "rectangle.on.rectangle|web",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "org.manager",
+              "confirm": "Remove {item}?",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedFrameHosts": {
+                    "$without": {
+                      "list": "{data.site.approvedFrameHosts}",
+                      "item": "{item}"
+                    }
+                  }
+                }
+              },
+              "success": "Removed",
+              "reload": true
+            }
+          ],
+          "empty": "None"
+        },
+        {
+          "type": "list",
+          "title": "Connections",
+          "items": "data.site.approvedConnectHosts",
+          "primary": "{item}",
+          "icon": "network|hub",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "org.manager",
+              "confirm": "Remove {item}?",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedConnectHosts": {
+                    "$without": {
+                      "list": "{data.site.approvedConnectHosts}",
+                      "item": "{item}"
+                    }
+                  }
+                }
+              },
+              "success": "Removed",
+              "reload": true
+            }
+          ],
+          "empty": "None"
+        },
+        {
+          "type": "actions",
+          "when": "org.manager",
+          "items": [
+            {
+              "id": "addMedia",
+              "label": "Approve a media host",
+              "icon": "photo|photo_library",
+              "prompt": [
+                {
+                  "key": "value",
+                  "label": "Host",
+                  "kind": "url",
+                  "required": true,
+                  "placeholder": "images.example.com"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedMediaHosts": {
+                    "$append": {
+                      "list": "{data.site.approvedMediaHosts}",
+                      "item": "{form.value}"
+                    }
+                  }
+                }
+              },
+              "success": "Approved {form.value}",
+              "reload": true
+            },
+            {
+              "id": "addFont",
+              "label": "Approve a font host",
+              "icon": "textformat|text_fields",
+              "prompt": [
+                {
+                  "key": "value",
+                  "label": "Host",
+                  "kind": "url",
+                  "required": true
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedFontHosts": {
+                    "$append": {
+                      "list": "{data.site.approvedFontHosts}",
+                      "item": "{form.value}"
+                    }
+                  }
+                }
+              },
+              "success": "Approved {form.value}",
+              "reload": true
+            },
+            {
+              "id": "addForm",
+              "label": "Approve a form destination",
+              "icon": "paperplane|send",
+              "prompt": [
+                {
+                  "key": "value",
+                  "label": "URL or host",
+                  "kind": "url",
+                  "required": true
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedFormActions": {
+                    "$append": {
+                      "list": "{data.site.approvedFormActions}",
+                      "item": "{form.value}"
+                    }
+                  }
+                }
+              },
+              "success": "Approved {form.value}",
+              "reload": true
+            },
+            {
+              "id": "addFrame",
+              "label": "Approve an embed host",
+              "icon": "rectangle.on.rectangle|web",
+              "prompt": [
+                {
+                  "key": "value",
+                  "label": "Host",
+                  "kind": "url",
+                  "required": true
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedFrameHosts": {
+                    "$append": {
+                      "list": "{data.site.approvedFrameHosts}",
+                      "item": "{form.value}"
+                    }
+                  }
+                }
+              },
+              "success": "Approved {form.value}",
+              "reload": true
+            },
+            {
+              "id": "addConnect",
+              "label": "Approve a connection",
+              "icon": "network|hub",
+              "prompt": [
+                {
+                  "key": "value",
+                  "label": "Host",
+                  "kind": "url",
+                  "required": true
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedConnectHosts": {
+                    "$append": {
+                      "list": "{data.site.approvedConnectHosts}",
+                      "item": "{form.value}"
+                    }
+                  }
+                }
+              },
+              "success": "Approved {form.value}",
+              "reload": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.errorPages",
+      "title": "Error pages",
+      "subtitle": "404, members-only and maintenance",
+      "icon": "exclamationmark.triangle|error_outline",
+      "scope": "site",
+      "group": "site",
+      "order": 50,
+      "links": [
+        "/admin/error-pages"
+      ],
+      "load": {
+        "site": {
+          "doc": "hosts/{site.id}"
+        },
+        "screens": {
+          "query": {
+            "collection": "hosts/{site.id}/screens",
+            "limit": 200
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "notFound",
+          "title": "404 · Not found",
+          "footer": "Shown for missing addresses.",
+          "when": "org.manager",
+          "fields": [
+            {
+              "key": "id",
+              "label": "Page",
+              "kind": "select",
+              "initial": "{data.site.errorScreens.notFound|''}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "The built-in page"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.screens.items",
+                "value": "{item.$id}",
+                "label": "{item.name|item.title|item.slug|item.$id}"
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/screens",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "error-screen",
+              "slot": "notFound",
+              "id": "{form.id}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "unauthorized",
+          "title": "401 · Members only",
+          "footer": "Shown on members-only pages when signed out.",
+          "when": "org.manager",
+          "fields": [
+            {
+              "key": "id",
+              "label": "Page",
+              "kind": "select",
+              "initial": "{data.site.errorScreens.unauthorized|''}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "The built-in page"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.screens.items",
+                "value": "{item.$id}",
+                "label": "{item.name|item.title|item.slug|item.$id}"
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/screens",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "error-screen",
+              "slot": "unauthorized",
+              "id": "{form.id}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "forbidden",
+          "title": "403 · Forbidden",
+          "footer": "Reserved for future access rules.",
+          "when": "org.manager",
+          "fields": [
+            {
+              "key": "id",
+              "label": "Page",
+              "kind": "select",
+              "initial": "{data.site.errorScreens.forbidden|''}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "The built-in page"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.screens.items",
+                "value": "{item.$id}",
+                "label": "{item.name|item.title|item.slug|item.$id}"
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/screens",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "error-screen",
+              "slot": "forbidden",
+              "id": "{form.id}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
+          "id": "unavailable",
+          "title": "503 · Maintenance",
+          "footer": "Shown everywhere while maintenance mode is on.",
+          "when": "org.manager",
+          "fields": [
+            {
+              "key": "id",
+              "label": "Page",
+              "kind": "select",
+              "initial": "{data.site.errorScreens.unavailable|''}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "The built-in page"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.screens.items",
+                "value": "{item.$id}",
+                "label": "{item.name|item.title|item.slug|item.$id}"
+              }
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/hosts/screens",
+            "body": {
+              "hostId": "{site.id}",
+              "action": "error-screen",
+              "slot": "unavailable",
+              "id": "{form.id}"
+            },
+            "success": "Saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.site.activity",
+      "title": "Site activity",
+      "label": "Activity",
+      "icon": "clock.arrow.circlepath|history",
+      "scope": "site",
+      "group": "site",
+      "order": 60,
+      "links": [
+        "/admin/activity"
+      ],
+      "load": {
+        "activity": {
+          "query": {
+            "collection": "hosts/{site.id}/activity",
+            "orderBy": "createdAt desc",
+            "limit": 100
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.activity.items",
+          "primary": "{item.action:title}",
+          "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
+          "tertiary": "{item.actorEmail|item.apiKeyName|'System'} · {item.createdAt:datetime}",
+          "icon": "clock|schedule",
+          "empty": "No activity yet."
+        }
+      ]
+    },
+    {
+      "id": "core.site.delete",
+      "title": "Delete site",
+      "icon": "trash|delete_forever",
+      "scope": "site",
+      "requires": "org.manager",
+      "links": [
+        "/admin/danger"
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Deleting {site.name} takes it offline, disconnects its domain and erases its pages, media and entries. It cannot be undone."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "delete",
+              "label": "Delete this site",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "url": "/api/hosts/delete",
+              "prompt": [
+                {
+                  "key": "typed",
+                  "label": "Type the site name to confirm",
+                  "kind": "text",
+                  "required": true,
+                  "mustMatch": "{site.name}",
+                  "help": "{site.name}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "Deleted {site.name}",
+              "back": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.site.plugins",
+      "title": "Plugins",
+      "subtitle": "What runs on this site",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "site",
+      "group": "site",
+      "order": 45,
+      "links": ["/admin/plugins"],
+      "load": { "plugins": { "switchboard": "site" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!org.manager",
+          "text": "Only site admins can switch plugins for this site. You can see what runs here."
+        },
+        {
+          "type": "list",
+          "id": "site",
+          "title": "On this site",
+          "items": "data.plugins.rows",
+          "primary": "{item.label}",
+          "secondary": "{const.states[state=item.state].label}",
+          "footer": "A site narrows what the workspace enables. It can switch a plugin off for itself, and can never switch on one the workspace has switched off.",
+          "badges": [
+            { "when": "item.state == off-for-workspace", "text": "Off for the workspace", "tone": "warning" },
+            { "when": "item.state == awaiting-opt-in", "text": "Opt in", "tone": "info" }
+          ],
+          "open": { "screen": "core.site.plugin", "params": { "pluginId": "{item.id}" } },
+          "toggle": {
+            "value": "{item.on}",
+            "disabled": "item.locked || !item.workspaceOn || !org.manager",
+            "label": "{item.label} on this site",
+            "on": {
+              "id": "on",
+              "label": "Turn on for this site",
+              "icon": "power|power_settings_new",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": { "disabledPlugins": "{item.turnOn.disabledPlugins}", "enabledPlugins": "{item.turnOn.enabledPlugins}" }
+              },
+              "success": "Site plugins saved",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off for this site",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turn {item.label} off for this site? {item.stops|''}",
+              "confirmWhen": "item.confirmOff",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": { "disabledPlugins": "{item.turnOff.disabledPlugins}", "enabledPlugins": "{item.turnOff.enabledPlugins}" }
+              },
+              "success": "Site plugins saved",
+              "reload": true
+            }
+          }
+        }
+      ],
+      "constants": {
+        "states": [
+          {
+            "state": "always-on",
+            "label": "Always on",
+            "text": "Always on. It is what sites are built out of, so it cannot be turned off for one site any more than for the workspace."
+          },
+          {
+            "state": "runs-here",
+            "label": "Runs on this site",
+            "text": "The workspace enables this plugin and this site has not turned it off, so it runs here."
+          },
+          {
+            "state": "awaiting-opt-in",
+            "label": "Not turned on for this site",
+            "text": "The workspace enables this plugin, but it stays off for a site until that site opts in — and this one has not."
+          },
+          {
+            "state": "off-for-site",
+            "label": "Off for this site",
+            "text": "The workspace enables this plugin, but this site has turned it off: it is gone from this site’s navigation, editor, published pages and API."
+          },
+          {
+            "state": "off-for-workspace",
+            "label": "Off for the workspace",
+            "text": "The workspace has this plugin switched off, so it runs on none of its sites. A site can never turn on what the workspace has turned off."
+          }
+        ]
+      }
+    },
+    {
+      "id": "core.site.plugin",
+      "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
+      "label": "Plugin",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "site",
+      "links": ["/admin/plugins/:pluginId"],
+      "load": { "plugins": { "switchboard": "site" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!org.manager",
+          "text": "Only site admins can change a plugin for this site. You can read what is set here."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.plugins.rows[id=params.pluginId].state == always-on",
+          "text": "Always on. Always on. It is what sites are built out of, so it cannot be turned off for one site any more than for the workspace."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.plugins.rows[id=params.pluginId].state == runs-here",
+          "text": "Runs on this site. The workspace enables this plugin and this site has not turned it off, so it runs here."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.plugins.rows[id=params.pluginId].state == awaiting-opt-in",
+          "text": "Not turned on for this site. The workspace enables this plugin, but it stays off for a site until that site opts in — and this one has not."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.plugins.rows[id=params.pluginId].state == off-for-site",
+          "text": "Off for this site. The workspace enables this plugin, but this site has turned it off: it is gone from this site’s navigation, editor, published pages and API."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.plugins.rows[id=params.pluginId].state == off-for-workspace",
+          "text": "Off for the workspace. The workspace has this plugin switched off, so it runs on none of its sites. A site can never turn on what the workspace has turned off."
+        },
+        { "type": "fields", "rows": [{ "label": "Enabled for the workspace", "value": "{data.plugins.rows[id=params.pluginId].workspaceOn:yesno}" }] },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.plugins.rows[id=params.pluginId].description",
+          "text": "{data.plugins.rows[id=params.pluginId].description}"
+        },
+        {
+          "type": "fields",
+          "title": "Switching it off for this site",
+          "when": "data.plugins.rows[id=params.pluginId].stops && !data.plugins.rows[id=params.pluginId].locked",
+          "rows": [
+            { "label": "Stops", "value": "{data.plugins.rows[id=params.pluginId].stops}" },
+            { "label": "Keeps", "value": "{data.plugins.rows[id=params.pluginId].keeps}" }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Depends on",
+          "rows": [
+            { "label": "Needs", "value": "{data.plugins.rows[id=params.pluginId].requires|'Nothing else'}" },
+            { "label": "Needed by", "value": "{data.plugins.rows[id=params.pluginId].dependents|'Nothing else'}" }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "org.manager && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
+          "text": "Turning it off here also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
+        },
+        {
+          "type": "actions",
+          "when": "org.manager && !data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].workspaceOn",
+          "items": [
+            {
+              "id": "on",
+              "label": "Turn on for this site",
+              "icon": "power|power_settings_new",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "disabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOn.disabledPlugins}",
+                  "enabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOn.enabledPlugins}"
+                }
+              },
+              "success": "Site plugins saved",
+              "reload": true,
+              "when": "!data.plugins.rows[id=params.pluginId].on"
+            },
+            {
+              "id": "off",
+              "label": "Turn off for this site",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turn {data.plugins.rows[id=params.pluginId].label} off for this site? {data.plugins.rows[id=params.pluginId].stops|''}",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "disabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOff.disabledPlugins}",
+                  "enabledPlugins": "{data.plugins.rows[id=params.pluginId].turnOff.enabledPlugins}"
+                }
+              },
+              "success": "Site plugins saved",
+              "reload": true,
+              "when": "data.plugins.rows[id=params.pluginId].on"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Workspace settings",
+              "subtitle": "The value every site follows",
+              "icon": "gearshape.2|settings",
+              "screen": "core.plugin",
+              "params": { "pluginId": "{params.pluginId}" }
+            }
+          ]
+        },
+        { "type": "zone", "name": "sitePluginSettings", "title": "Settings for this site", "params": { "pluginId": "{params.pluginId}" } }
+      ]
+    }
+  ]
+}
