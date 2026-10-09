@@ -9583,7 +9583,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers"
           ]
         },
         {
@@ -9622,7 +9623,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers"
           ]
         },
         {
@@ -9648,7 +9650,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers"
           ]
         },
         {
@@ -9679,6 +9682,7 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "crm",
             "commerce"
           ]
@@ -9711,6 +9715,7 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "accounts",
             "commerce",
             "bookings"
@@ -9757,7 +9762,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers"
           ]
         },
         {
@@ -9789,6 +9795,7 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "commerce",
             "crm"
           ]
@@ -9826,6 +9833,7 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "commerce",
             "accounts",
             "crm"
@@ -9868,6 +9876,7 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "commerce",
             "accounts"
           ]
@@ -9915,7 +9924,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers"
           ]
         }
       ]

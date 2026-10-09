@@ -26,13 +26,13 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.233",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.233",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.233",
-    "@aglyn/shared-util-http": "1.0.0-beta.233",
-    "@aglyn/shared-util-tools": "1.0.0-beta.233",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.233",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.233",
+    "@aglyn/aglyn": "1.0.0-beta.234",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.234",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.234",
+    "@aglyn/shared-util-http": "1.0.0-beta.234",
+    "@aglyn/shared-util-tools": "1.0.0-beta.234",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.234",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.234",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

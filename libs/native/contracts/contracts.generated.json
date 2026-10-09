@@ -1327,6 +1327,16 @@
         "keeps": "Members keep their points and store credit.",
         "stops": "Stops new points, rewards at checkout and at the register, and referral credit."
       }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Send a DoorDash courier for your own local deliveries, from your own DoorDash Drive account, with its tracking on the order.",
+      "id": "couriers",
+      "label": "Couriers",
+      "siteOff": {
+        "keeps": "The connection is kept, and a courier already on its way still finishes, with its progress on the order.",
+        "stops": "Switching Couriers off for this site stops members sending DoorDash couriers for its local deliveries."
+      }
     }
   ],
   "FORM_IN_USE": {
