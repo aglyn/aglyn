@@ -487,11 +487,12 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
 
   const handleStatus = useCallback(
     (product: ProductRow, status: CommerceModel.ProductStatus) => async () => {
-      // A product with a variant nobody has priced (AGL-2916) stays off the
-      // storefront until the editor has a price for each.
+      // A product with a variant nobody has priced may go live (AGL-3676):
+      // the storefront says "Price coming soon" and sells it nowhere until
+      // the editor has a price for each. The owner is told, not stopped.
       if (status === 'active' && CommerceModel.productPriceMissing(product)) {
-        return void enqueueSnackbar(
-          `Set a price for every variant of ${product.name} before activating it.`,
+        enqueueSnackbar(
+          `${product.name} has no price yet: visitors will see “Price coming soon” and can’t buy it.`,
           { variant: 'info', persist: false },
         )
       }

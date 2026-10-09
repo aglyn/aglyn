@@ -238,7 +238,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           </AppLink>
         )
       }
-      help={{ topic: 'plugins', anchor: '#configure' }}
+      help={{ topic: 'installYourFirstPlugin', anchor: '#a-plugins-page' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
@@ -269,11 +269,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Where it runs'}
             help={docsHelp('installYourFirstPlugin', {
-              anchor: '#step-4-targeting',
-              excerpt:
-                'A marketplace install is a set of per-site pins. A ' +
-                'first-party plugin has no pins — it is on or off for the ' +
-                'whole workspace.',
+              anchor: '#where-a-plugin-runs',
             })}
             contentGutterX
             contentGutterY
@@ -402,10 +398,8 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           {firstParty ? null : (
           <CardDisplay
             header={'Permissions & data'}
-            help={docsHelp('sandboxSecurity', {
-              excerpt:
-                'What this plugin declared it can reach, and what the ' +
-                'sandbox enforces regardless of what it declared.',
+            help={docsHelp('installYourFirstPlugin', {
+              anchor: '#permissions-and-data',
             })}
             contentGutterX
             contentGutterY

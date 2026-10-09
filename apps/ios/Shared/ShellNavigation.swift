@@ -13,6 +13,8 @@ enum Route: Hashable {
   case besigner(String)
   /// A console page the app has no native screen for yet.
   case unavailable(String)
+  /// Settings, pushed from More where the tab bar has no room for its own tab.
+  case settings
   /// The person's notification settings (`/manage/notifications/settings`).
   case notificationSettings
   /// The site's Analytics page.

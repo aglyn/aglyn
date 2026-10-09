@@ -385,11 +385,7 @@ export function ThemeLibraryCard(props: {
     <>
       <CardDisplay
         header={'Theme'}
-        help={docsHelp('themeBuilder', {
-          excerpt:
-            'Pick the theme this site runs. Your edits sit on top of it, so ' +
-            'the theme itself is never changed and can always be restored.',
-        })}
+        help={docsHelp('editYourTheme', { anchor: '#choose-a-theme' })}
         contentGutterX
         contentGutterY
       >

@@ -1207,7 +1207,7 @@
       "releaseFlag": "release_workflows"
     },
     {
-      "description": "Sales, refunds, fees and payouts posted to QuickBooks Online or Xero.",
+      "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
       "id": "accounting",
       "label": "Accounting",
       "releaseFlag": "release_accounting"
@@ -1326,6 +1326,17 @@
       "siteOff": {
         "keeps": "Members keep their points and store credit.",
         "stops": "Stops new points, rewards at checkout and at the register, and referral credit."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "defaultOffPerSite": true,
+      "description": "Chat with visitors through your own Tidio or LiveChat account.",
+      "id": "live-chat",
+      "label": "Live chat",
+      "siteOff": {
+        "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account.",
+        "stops": "Switching Live chat off for this site removes the chat from its pages."
       }
     }
   ],

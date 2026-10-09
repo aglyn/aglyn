@@ -47,6 +47,20 @@ final class IdentityToolkitAuthTests: XCTestCase {
     IdentityToolkitAuth(apiKey: "key", emulatorHost: "127.0.0.1:9399", transport: transport, store: store, now: { clock.now })
   }
 
+  func testTheKeychainItemIsNamedPerBuild() {
+    XCTAssertEqual(
+      restAuthKeychainService(bundleID: "com.aglyn.pos", buildHash: "0123456789abcdef0123456789abcdef01234567"),
+      "com.aglyn.pos.rest-auth.0123456789abcdef")
+    XCTAssertEqual(restAuthKeychainService(bundleID: "com.aglyn.app", buildHash: nil), "com.aglyn.app.rest-auth")
+    XCTAssertEqual(restAuthKeychainService(bundleID: "com.aglyn.app", buildHash: ""), "com.aglyn.app.rest-auth")
+  }
+
+  #if os(macOS)
+    func testThisBuildHasACodeHash() {
+      XCTAssertNotNil(CodeSignature.currentUniqueHash())
+    }
+  #endif
+
   func testSignsInWithPasswordAndKeepsTheRefreshToken() async throws {
     let transport = RecordingTransport([(200, signedIn)])
     let store = MemoryCredentialStore()

@@ -327,12 +327,19 @@ export interface SiteAnalyticsProps {
    * element below is covered, with no second retrofit of this file.
    */
   nonce?: string
+  /**
+   * Vendors this page loads on the analytics grant besides Google Analytics
+   * (AGL-3698), from the enrichers' shared `consentAnalyticsVendors` prop — a
+   * live chat set to load with the page. The banner names them.
+   */
+  analyticsVendors?: readonly string[]
 }
 
 export default function SiteAnalytics({
   host,
   screenId,
   nonce,
+  analyticsVendors,
 }: SiteAnalyticsProps): ReactElement {
   const hostId = host?.$id
   // Whether the site configures a tag any declared provider mounts — read from
@@ -610,6 +617,7 @@ export default function SiteAnalytics({
           posture={consent.posture}
           country={consent.country}
           advertising={hostAsksAboutAdvertising(host)}
+          analyticsVendors={analyticsVendors}
         />
       ) : null}
     </>

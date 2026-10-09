@@ -14,8 +14,8 @@ import SwiftUI
  *
  * The orders since the start of the seventh day back, newest first (the
  * orders page's own `createdAtMs` order, so its index serves it), up to a
- * ceiling; an order counts once it is paid and counts what it kept
- * (`orderNetCents`, refunds out). Days are the device's local days.
+ * ceiling, added up by the console's own `orderWindowFigures` (a sale is
+ * paid and live; it counts what it kept). Days are the device's local days.
  */
 
 let salesWindowCeiling = 500
@@ -37,22 +37,19 @@ struct SalesSummary: Equatable {
   var weekOrders: Int { days.reduce(0) { $0 + $1.orders } }
 }
 
-private let countedStatuses: Set<OrderStatus> = [.paid, .partiallyFulfilled, .fulfilled, .delivered, .refunded]
-
-/// Seven local days ending today, each with what its paid orders kept.
-func summarizeSales(_ orders: [HostOrder], now: Date = Date(), calendar: Calendar = .current, capped: Bool = false)
+/// Seven local days ending today, each with the console's own figures for
+/// it (`orderWindowFigures`: sales only, tests and unpaid left out, what each
+/// order kept after refunds).
+func summarizeSales(_ orders: [FigureOrder], now: Date = Date(), calendar: Calendar = .current, capped: Bool = false)
   -> SalesSummary
 {
   let today = calendar.startOfDay(for: now)
-  var days = (0..<7).reversed().compactMap { back in
-    calendar.date(byAdding: .day, value: -back, to: today).map { SalesDay(start: $0, cents: 0, orders: 0) }
-  }
-  for order in orders {
-    guard let status = order.status, countedStatuses.contains(status), let ms = order.createdAtMs else { continue }
-    let day = calendar.startOfDay(for: Date(timeIntervalSince1970: ms / 1000))
-    guard let index = days.firstIndex(where: { $0.start == day }) else { continue }
-    days[index].cents += orderNetCents(order)
-    days[index].orders += 1
+  let starts = (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+  let days = starts.map { start -> SalesDay in
+    let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
+    let figures = orderWindowFigures(
+      orders, startMs: start.timeIntervalSince1970 * 1000, endMs: end.timeIntervalSince1970 * 1000)
+    return SalesDay(start: start, cents: figures.revenueCents, orders: figures.orders)
   }
   return SalesSummary(days: days, capped: capped)
 }
@@ -84,7 +81,9 @@ final class SalesModel {
       switch result {
       case .success(let docs):
         self.summary = summarizeSales(
-          docs.prefix(salesWindowCeiling).map(decodeOrder), capped: docs.count > salesWindowCeiling)
+          docs.prefix(salesWindowCeiling).map {
+            FigureOrder(id: $0.id, livemode: $0.bool("livemode"), order: decodeOrder($0))
+          }, capped: docs.count > salesWindowCeiling)
       case .failure:
         self.failed = true
       }

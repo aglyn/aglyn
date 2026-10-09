@@ -127,7 +127,7 @@ export function RecordSharingCard(props: RecordSharingCardProps) {
   return (
     <CardDisplay
       header={'Sharing'}
-      help={pluginDocsHelp('crmSharing')}
+      help={pluginDocsHelp('crmSharing', { anchor: '#sharing-card' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

@@ -124,16 +124,23 @@ const PRODUCT_SEO_LISTING_FIELDS: readonly Extract<SeoListingFieldKey, 'title' |
   'description',
 ]
 
-/** A product nobody has saved yet, as the editor starts one. */
+/**
+ * A product nobody has saved yet, as the editor starts one: at the default
+ * price (AGL-3676), for the owner to change or clear.
+ */
 function blankProduct(): CommerceModel.HostProduct {
   return {
     name: '',
     slug: '',
     type: 'physical',
     status: 'draft',
-    variants: [{ id: 'default', priceUsd: 0 }],
+    variants: [{ id: 'default', priceUsd: CommerceModel.COMMERCE_DEFAULT_PRICE_USD }],
   }
 }
+
+/** What the editor says while a variant has no price (AGL-3676): savable, not sellable. */
+export const PRODUCT_PRICE_EMPTY_NOTICE =
+  'Visitors will see “Price coming soon” and can’t buy this yet. Set a price to start selling it.'
 
 /** Stable key for matching variants across matrix regenerations. */
 function comboKey(options: Record<string, string> | undefined): string {
@@ -631,9 +638,11 @@ const ProductVariantRow = memo(function ProductVariantRow(props: {
           onChange={set.priceUsd}
           size="small"
           sx={PRICE_CELL}
-          // An empty price is marked (AGL-2916): a proposed
-          // product arrives with none, and Save waits for one.
-          error={!CommerceModel.variantHasPrice(variant)}
+          // An empty price is marked (AGL-2916), gently (AGL-3676): the
+          // product saves without one, and the storefront says "Price
+          // coming soon" and sells it nowhere.
+          color={CommerceModel.variantHasPrice(variant) ? undefined : 'warning'}
+          focused={CommerceModel.variantHasPrice(variant) ? undefined : true}
           placeholder="Set"
           slotProps={DECIMAL_INPUT}
         />
@@ -1524,12 +1533,21 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           (combo, comboIndex) => {
             const existing = previous.get(comboKey(combo))
             return (
-              existing ?? {
+              existing ??
+              // An unpriced variant is stored with no `priceUsd` (AGL-3676),
+              // as a proposed product's are; the type names the priced shape.
+              ({
                 id: `v${Date.now().toString(36)}${comboIndex}`,
                 options: combo,
-                priceUsd: fallback?.priceUsd ?? 0,
+                // The first variant's price, or none where it has none;
+                // the default only on a product with no variant yet.
+                ...(fallback
+                  ? CommerceModel.variantHasPrice(fallback)
+                    ? { priceUsd: fallback.priceUsd }
+                    : {}
+                  : { priceUsd: CommerceModel.COMMERCE_DEFAULT_PRICE_USD }),
                 inventory: fallback?.inventory ?? null,
-              }
+              } as CommerceModel.ProductVariant)
             )
           },
         )
@@ -1561,9 +1579,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                 : Number(raw)
               : raw
         variants[index] = { ...variants[index], [field]: value }
+        // A cleared price is no price (AGL-3676), never an `undefined` the
+        // client-direct `setDoc` refuses.
         if (
           value === undefined &&
-          (field === 'compareAtPriceUsd' || field === 'weightGrams')
+          (field === 'priceUsd' ||
+            field === 'compareAtPriceUsd' ||
+            field === 'weightGrams')
         ) {
           delete (variants[index] as any)[field]
         }
@@ -1781,6 +1803,9 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           stockApplies={stockApplies}
           onField={handleVariantField}
         />
+        {CommerceModel.productPriceMissing(current) ? (
+          <Alert severity="warning">{PRODUCT_PRICE_EMPTY_NOTICE}</Alert>
+        ) : null}
         <Typography variant="caption" color="text.secondary">
           {stockApplies
             ? 'Blank stock = untracked; 0 shows sold out. The first variant’s ' +

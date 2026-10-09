@@ -138,6 +138,8 @@ final class ProductsModel {
 @Observable
 final class ProductModel {
   private(set) var row: ProductRow?
+  /// The stored document, which an edit sends back whole.
+  private(set) var doc: FirestoreDocument?
   private(set) var ready = false
   private(set) var failed = false
   @ObservationIgnored private var listener: FirestoreListening?
@@ -152,7 +154,9 @@ final class ProductModel {
     listener = reader.listenDocument(productsPath(hostID) + [productID]) { [weak self] result in
       guard let self else { return }
       switch result {
-      case .success(let doc): self.row = doc.map(ProductRow.init)
+      case .success(let doc):
+        self.doc = doc
+        self.row = doc.map(ProductRow.init)
       case .failure: self.failed = true
       }
       self.ready = true

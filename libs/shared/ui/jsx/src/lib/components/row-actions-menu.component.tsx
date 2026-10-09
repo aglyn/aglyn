@@ -18,7 +18,8 @@
 
 import { AppLink, type AppLinkNakedLinkProps } from './app-link'
 import { MdiIcon } from './mdi-icon/mdi-icon'
-import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
+import { mdiDotsVertical, mdiOpenInNew } from '@aglyn/shared-data-mdi'
+import { newTabLinkProps, withNewTabHint } from '../utils/new-tab'
 import {
   IconButton,
   ListItemIcon,
@@ -46,7 +47,12 @@ export interface RowActionsMenuItem {
    * cannot offer however faithfully it calls `router.push`.
    */
   href?: string
-  /** `href` leaves the console, so it opens in a new tab. */
+  /**
+   * Open `href` in a new tab: a page off the console, or a preview / view of
+   * something the reader is glancing at beside this list (AGL-3660). The item
+   * gains `noopener noreferrer`, an "(opens in a new tab)" accessible name,
+   * and a small open-in-new mark after its label.
+   */
   external?: boolean
   /** For items that open a dialog rather than navigate. */
   onClick?: () => void
@@ -133,7 +139,10 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
                   component: MenuItemLinkComponent,
                   href: item.href,
                   ...(item.external
-                    ? { target: '_blank', rel: 'noreferrer' }
+                    ? {
+                        ...newTabLinkProps,
+                        'aria-label': withNewTabHint(item.label),
+                      }
                     : {}),
                 }
               : {}
@@ -163,6 +172,13 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
               >
                 {item.label}
               </ListItemText>
+              {item.external && item.href ? (
+                <MdiIcon
+                  path={mdiOpenInNew.path}
+                  aria-hidden
+                  sx={{ fontSize: '0.875rem', ml: 1, color: 'text.secondary' }}
+                />
+              ) : null}
             </MenuItem>
           )
           // span: a disabled item takes no pointer events, so the tooltip

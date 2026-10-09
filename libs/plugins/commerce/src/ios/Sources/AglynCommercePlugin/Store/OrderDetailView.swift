@@ -18,6 +18,12 @@ struct OrderDetailView: View {
   @State private var busy: OrderAction?
   @State private var confirming: OrderAction?
   @State private var problem: String?
+  @State private var done: String?
+  @State private var confirmingRefund = false
+  @State private var refunding = false
+  @State private var refundKey: String?
+  @State private var receiptTo = ""
+  @State private var sendingReceipt = false
 
   var body: some View {
     Group {
@@ -55,9 +61,20 @@ struct OrderDetailView: View {
           StatusChip(row.statusLabel, tone: orderStatusTone(row.status).tone)
         }
         if let problem { AglynNotice(problem, tone: .error) { self.problem = nil } }
+        if let done { AglynNotice(done, tone: .success) { self.done = nil } }
         let actions = OrderAction.available(for: row.status)
         if !actions.isEmpty {
-          HStack {
+          // One row when the labels fit whole, otherwise one button per line:
+          // a phone never breaks "Refund" into "Ref / und".
+          let buttons = Group {
+            if orderCanRefund(order) {
+              Button(role: .destructive) { confirmingRefund = true } label: {
+                if refunding { ProgressView() } else { Label("Refund", systemImage: "arrow.uturn.backward") }
+              }
+              .buttonStyle(.bordered)
+              .disabled(busy != nil || refunding)
+              .accessibilityIdentifier("order-action-refund")
+            }
             ForEach(actions) { action in
               Button(role: action == .cancel ? .destructive : nil) {
                 if action == .cancel { confirming = action } else { Task { await run(action) } }
@@ -68,6 +85,12 @@ struct OrderDetailView: View {
               .disabled(busy != nil)
               .accessibilityIdentifier("order-action-\(action.rawValue)")
             }
+          }
+          .lineLimit(1)
+          .fixedSize(horizontal: true, vertical: false)
+          ViewThatFits(in: .horizontal) {
+            HStack { buttons }
+            VStack(alignment: .leading) { buttons }
           }
         }
       }
@@ -116,6 +139,31 @@ struct OrderDetailView: View {
         if let note = order.note, !note.isEmpty { LabeledContent("Note", value: note) }
       }
 
+      if row.status != .pending {
+        Section {
+          HStack {
+            TextField("Email", text: $receiptTo)
+              .autocorrectionDisabled()
+              #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.emailAddress)
+              #endif
+              .accessibilityIdentifier("order-receipt-to")
+            Button {
+              Task { await sendReceipt() }
+            } label: {
+              if sendingReceipt { ProgressView() } else { Text("Send") }
+            }
+            .disabled(sendingReceipt || !receiptTo.contains("@"))
+          }
+        } header: {
+          Text("Receipt")
+        } footer: {
+          Text("Sends the receipt again by email.")
+        }
+        .onAppear { if receiptTo.isEmpty { receiptTo = order.customerEmail ?? "" } }
+      }
+
       if let payments = order.payments, !payments.isEmpty {
         Section("Payments") {
           ForEach(payments, id: \.id) { payment in
@@ -141,6 +189,11 @@ struct OrderDetailView: View {
     } message: {
       Text("The buyer is not refunded automatically. Refund first if they paid.")
     }
+    .confirmationDialog("Refund this order?", isPresented: $confirmingRefund, titleVisibility: .visible) {
+      Button("Refund \(formatOrderMoney(orderRefundableCents(order)))", role: .destructive) { Task { await refund() } }
+    } message: {
+      Text("Refunds \(formatOrderMoney(orderRefundableCents(order))) to the buyer through Stripe.")
+    }
   }
 
   private func run(_ action: OrderAction) async {
@@ -156,6 +209,42 @@ struct OrderDetailView: View {
       problem = "It is not known whether that went through. The order updates here when it does; trying again is safe."
     } catch {
       problem = error.localizedDescription
+    }
+  }
+
+  private func refund() async {
+    guard let hostID = context.hostID else { return }
+    let key = refundKey ?? UUID().uuidString
+    refundKey = key
+    refunding = true
+    problem = nil
+    defer { refunding = false }
+    do {
+      try await refundOrder(api: context.api, hostID: hostID, orderID: orderID, attemptKey: key)
+      refundKey = nil
+      done = "Refund issued."
+    } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
+      // A definitive refusal: the next press is a new refund.
+      refundKey = nil
+      problem = error.message
+    } catch {
+      // Not known whether it went through: the same key dedupes the next press.
+      problem = "It is not known whether the refund went through. Trying again is safe; it will not refund twice."
+    }
+  }
+
+  private func sendReceipt() async {
+    guard let hostID = context.hostID else { return }
+    sendingReceipt = true
+    problem = nil
+    defer { sendingReceipt = false }
+    do {
+      try await resendOrderReceipt(api: context.api, hostID: hostID, orderID: orderID, to: receiptTo)
+      done = "Receipt sent."
+    } catch let error as ConsoleAPIError where error.status > 0 && error.status < 500 {
+      problem = error.message
+    } catch {
+      problem = "It is not known whether the receipt went. Check the order's history before sending again."
     }
   }
 

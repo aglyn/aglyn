@@ -343,11 +343,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
       <CardDisplay
         header={'Outstanding'}
         subheader={'Anything unpaid, and the button that settles it.'}
-        help={docsHelp('billing', {
-          anchor: '#outstanding',
-          excerpt:
-            'Paying an invoice that failed, including when the subscription has already been cancelled.',
-        })}
+        help={docsHelp('billing', { anchor: '#outstanding' })}
         contentGutterX
         contentGutterY
       >
@@ -367,10 +363,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
       <CardDisplay
                           header={'Billing history'}
                           help={docsHelp('billing', {
-                            anchor: '#payments',
-                            excerpt:
-                              'Invoices from Stripe with status and amounts, plus ' +
-                              'links to the hosted invoice, PDF, and receipt.',
+                            anchor: '#billing-history',
                           })}
                           contentGutterX
                           contentGutterY

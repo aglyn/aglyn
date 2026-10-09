@@ -69,9 +69,7 @@ export function StaffMarketplaceOverview() {
       <CardDisplay
         header={'Marketplace purchases'}
         help={pluginDocsHelp('publisherHandbook', {
-          anchor: '#getting-paid',
-          excerpt:
-            'Recent paid plugin purchases with the platform fee taken from each sale.',
+          anchor: '#purchases-and-fees',
         })}
         contentGutterX
         contentGutterY

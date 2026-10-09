@@ -17,6 +17,49 @@ Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, **Scale**, 
 and **Agency** unlock progressively more, and **Enterprise** sits above them all.
 :::
 
+## The Billing page {#billing-page}
+
+**Organization → Billing** is where your workspace's plan, usage, invoices and billing
+details live, in four tabs: **Plan**, **Usage**, **Invoices** and **Settings**. Members
+whose role carries **View billing** can read every tab; changing anything — the plan,
+add-ons, caps, cards, the billing address — needs **Manage billing**. Owners and admins
+have both.
+
+### Current plan {#current-plan}
+
+The **Current plan** card at the top of the **Plan** tab names your plan, the state of
+its subscription and its price, with the plan's headline limits — sites, team seats and
+campaign emails a month — beside it. Your full usage against every limit is on the
+**Usage** tab.
+
+With **Manage billing** the card also carries the plan's controls:
+
+- **Update payment method**, in the card's header, replaces the card your subscription
+  is charged to in one step, through Stripe's own form. It turns solid while a payment
+  is failing, when it is the one thing on the page that matters.
+- **Manage payment methods** opens the **Settings** tab, where every card on file is
+  listed — see [Payment methods](#payment-methods).
+- **Cancel subscription** opens a short dialog before anything changes — see
+  [What the Cancel button actually opens](downgrading-and-canceling.md#the-cancel-dialog).
+  Once a cancel is scheduled the same button reads **Resume subscription**.
+- When a move to a lower plan is scheduled, a chip says which plan and on what date, and
+  **Keep my current plan** undoes it — see
+  [Changing your mind](downgrading-and-canceling.md#keep-my-current-plan).
+
+A sentence under the limits says when the current period renews or ends, and any
+[add-ons](add-ons.md) you hold are listed at the bottom.
+
+### Billing links in emails {#billing-link}
+
+A billing link in an email from Aglyn — a failed-payment notice, say — opens the
+Billing page of your workspace, asking you to sign in first if you need to. Because
+the link cannot know which workspace it is about, an account that belongs to one
+workspace goes straight to its Billing page, and an account in several is asked to
+**Choose a workspace** first.
+
+If the account you signed in with belongs to no workspace, the page says so: the
+invoice was most likely sent to a different email address than the one you used.
+
 ## Tiers & entitlements
 
 :::tip Prices live on one page
@@ -54,6 +97,12 @@ and [reusable components](../../building-sites/besigner/reusable-components.md):
 each on Free, more on every paid plan (components are unlimited from Starter up). The
 limit applies when you create one, never to what a site already holds, so a site that
 moves to a smaller plan keeps everything it built.
+
+### The "Made with Aglyn" badge {#made-with-badge}
+
+Published pages on the Free plan show a small **Made with Aglyn** badge; plans that
+include badge removal drop it automatically, with nothing to switch on. Your site's
+**Admin → Custom Domain** page says which your site shows, and which plan removes it.
 
 ### Links on a new Free site {#leaving-notice}
 
@@ -175,6 +224,45 @@ Nothing here guarantees that a price or feature set will remain the same.
   up as an overage on the usage rollup rather than as mail your customers never receive.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
+### The Usage card {#usage-card}
+
+The **Usage** card on **Billing → Usage** shows every quota on your plan as a meter —
+sites, team seats, storage, bandwidth, CRM records, campaign emails and the rest — with
+what you have used against what the plan includes. A meter near its limit is the cue to
+tidy up, buy an [add-on](add-ons.md) or move to a larger plan; on a paid plan, storage
+and bandwidth past the included amount are billed rather than refused, as the sections
+below explain.
+
+### Metered usage estimate {#metered-usage-estimate}
+
+The **Metered usage estimate** card prices this month's usage so far, using the same
+arithmetic as the invoice: only what goes past your plan's included amount is charged,
+at our cost plus 30% after card fees. Each metered line shows what you used, what your
+plan includes, and what the excess comes to; while you are inside the included amounts
+it says no metered charges apply.
+
+Metered charges settle on the same invoice as a monthly subscription. On an annual
+subscription they accrue across the year and settle on the renewal invoice. On a plan
+whose limits are included caps rather than meters, the card says there are no usage
+charges.
+
+### Usage history {#usage-history}
+
+The **Usage history** card charts the last twelve months of your workspace's usage, one
+bar per month, so you can tell whether this month is unusual. Switch between
+**Metered charges**, **Page views**, **Form submissions**, **Storage** and **Contacts**
+above the chart. The month in progress is drawn outlined, because it is still
+accruing; the chart appears once there are two months to compare.
+
+### Campaign sending pace {#campaign-sending-pace}
+
+**Campaign emails (this hour, organization)** shows how many campaign emails your
+workspace has sent this hour against the most it may send in an hour, so a very large
+send is spread out rather than refused. It sits under the monthly
+[campaign email allowance](../../marketing-and-automation/email-campaigns/overview.md#monthly-send-cap)
+on the Usage card, with the time the hour resets and the most addresses one send can
+reach. Transactional mail — receipts, invites, password resets — is never paced by it.
+
 ### Who is generating what {#who-is-generating-what}
 
 Beneath the meters on **Billing → Usage**, a table lists each member's AI credits for
@@ -225,9 +313,10 @@ same total. On a paid plan, going past it is **not** a wall:
 
 ### If you would rather uploads stopped
 
-Set a **monthly storage cap** in **Billing → Storage cap**. This is optional and off
-unless you choose it. Once a month's storage overage would pass the amount you set,
-new uploads are refused and you are never billed above that number.
+Set a **monthly storage cap** on the **Storage cap** card under **Billing → Usage** when
+you would rather new uploads stopped than pay for extra storage past a figure you choose.
+This is optional and off unless you choose it. Once a month's storage overage would pass
+the amount you set, new uploads are refused and you are never billed above that number.
 
 You can change or remove the cap at any time, including while you are over your included
 allowance. Nothing is ever deleted — a cap only affects *new* uploads, and removing one
@@ -488,8 +577,8 @@ your tax ID and vice versa.
 
 ### Paying an outstanding invoice {#outstanding}
 
-If a payment fails, the invoice stays **open** and the Billing page shows it with a
-**Pay now** button.
+If a payment fails, the invoice stays **open** and the **Outstanding** card — on both the
+**Plan** and **Invoices** tabs of the Billing page — shows it with a **Pay now** button.
 
 - **It works even if the subscription has already been canceled.** Dunning cancels
   subscriptions after enough failed retries; the invoice is still owed and still
@@ -515,6 +604,20 @@ included, taken from Stripe's own invoice preview rather than worked out here.
   registered as tax-exempt; or nothing is charged in your location.
 - **Promotion codes are applied here.** An invalid or expired code is refused
   immediately, with the reason — not at the moment you are charged.
+
+#### What you will pay {#what-you-will-pay}
+
+The **What you will pay** card appears on the **Plan** tab once you pick a plan to move
+to, and quotes that plan's total for the billing interval you chose, tax included,
+straight from Stripe. With **Manage billing** you can enter a promotion code on the card
+and see it applied before you confirm.
+
+### Billing history {#billing-history}
+
+The **Billing history** table on the **Invoices** tab lists every invoice Stripe has
+issued your workspace — its number, date, status and amount — with links to view it,
+download the PDF and open the receipt. Stripe lists invoices newest first; **Load older
+invoices** reaches further back, and the filters above the table narrow what is shown.
 
 ### Billing email {#billing-email}
 
@@ -561,6 +664,13 @@ subscription is calculated from.
   tax calculated at all, so clearing the form is refused rather than obeyed; an
   addressless invoice in front of a tax authority is a worse outcome than a stale one.
 - Changing it affects your **next** invoice. Invoices already issued are never re-rated.
+
+#### On your workspace profile {#billing-address-on-profile}
+
+**Settings → Profile** shows your billing address read-only, beside the workspace's
+other details; change it on **Billing → Settings**. If the address your invoices are
+issued from ever differs from the one shown, the card warns you, and saving the address
+again on the billing page brings the two back in step.
 
 ### Tax IDs {#tax-ids}
 

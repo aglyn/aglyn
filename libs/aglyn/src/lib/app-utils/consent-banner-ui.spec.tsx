@@ -48,6 +48,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import ConsentBannerUi, {
   CONSENT_OPT_OUT_TITLE,
+  consentCopyForAnalyticsVendors,
   type ConsentCopy,
 } from './consent-banner-ui'
 import {
@@ -168,5 +169,33 @@ describe('who owns what a decision does', () => {
     expect(
       window.localStorage.getItem(visitorConsentStorageKey(HOST)),
     ).toBeNull()
+  })
+})
+
+describe('a page that loads a vendor on the analytics grant names it (AGL-3698)', () => {
+  it('names the vendor in the ask and in the panel’s analytics line', () => {
+    render(
+      <ConsentBannerUi
+        hostId={HOST}
+        stored={null}
+        posture="opt-in"
+        analyticsVendors={['Tidio chat']}
+      />,
+    )
+    expect(
+      screen.getByText(/would like to use analytics \(Google Analytics and Tidio chat\)/),
+    ).toBeTruthy()
+  })
+
+  it('leaves the default wording untouched with no vendor', () => {
+    expect(consentCopyForAnalyticsVendors([])).toBeUndefined()
+    expect(consentCopyForAnalyticsVendors(undefined)).toBeUndefined()
+    const two = consentCopyForAnalyticsVendors(['Tidio chat', 'Other chat'])
+    expect(two?.bannerAnalyticsOnly).toContain(
+      'analytics (Google Analytics, Tidio chat and Other chat)',
+    )
+    expect(two?.analyticsDetail).toBe(
+      'Google Analytics — how the site is used. Also loads Tidio chat, Other chat with the page.',
+    )
   })
 })
