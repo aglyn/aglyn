@@ -190,6 +190,10 @@
       "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "why": "The register's shifts, cash drawer and returns (AGL-3609): the shift and report shapes the native register reads, and the drawer's expected-cash formula; imports commerce-pos, commerce-printers (type only), commerce-receipt."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
     },

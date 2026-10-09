@@ -1349,6 +1349,30 @@ data class PickupLocationSettings(
     val readyWithinMinutes: Double? = null,
 )
 
+@Serializable
+data class PosCashEvent(
+    val amountCents: Double,
+    val atMs: Double,
+    val by: String,
+    val id: String,
+    val orderId: String? = null,
+    val reason: String,
+    val type: PosCashEventType,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosCashEventTypeSerializer::class)
+enum class PosCashEventType(val raw: String) {
+    DROP("drop"),
+    PAID_IN("paid_in"),
+    PAID_OUT("paid_out"),
+    REFUND("refund"),
+    UNKNOWN(""),
+}
+
+internal object PosCashEventTypeSerializer :
+    RawEnumSerializer<PosCashEventType>("com.aglyn.contracts.PosCashEventType", PosCashEventType.entries, PosCashEventType.UNKNOWN, { it.raw })
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosDeviceModeSerializer::class)
 enum class PosDeviceMode(val raw: String) {
@@ -1679,6 +1703,76 @@ internal object PosReceiptChannelSerializer :
     RawEnumSerializer<PosReceiptChannel>("com.aglyn.contracts.PosReceiptChannel", PosReceiptChannel.entries, PosReceiptChannel.UNKNOWN, { it.raw })
 
 @Serializable
+data class PosShift(
+    val cashEvents: List<PosCashEvent>,
+    val closedAtMs: Double? = null,
+    val closedBy: String? = null,
+    val closedByName: String? = null,
+    val closingNote: String? = null,
+    val countedCashCents: Double? = null,
+    val expectedCashCents: Double? = null,
+    val hostId: String,
+    val netSalesCents: Double? = null,
+    val openedAtMs: Double,
+    val openedBy: String,
+    val openedByName: String? = null,
+    val openingFloatCents: Double,
+    val registerId: String,
+    val report: PosShiftReport? = null,
+    val status: PosShiftStatus,
+    val varianceCents: Double? = null,
+)
+
+@Serializable
+data class PosShiftReport(
+    val cashRefundsCents: Double,
+    val cashSalesCents: Double,
+    val discountsCents: Double,
+    val dropsCents: Double,
+    val expectedCashCents: Double,
+    val grossSalesCents: Double,
+    val netSalesCents: Double,
+    val openingFloatCents: Double,
+    val orderCount: Double,
+    val paidInCents: Double,
+    val paidOutCents: Double,
+    val refundCount: Double,
+    val refundsByTender: Map<String, Double>,
+    val refundsCents: Double,
+    val salesByTender: Map<String, Double>,
+    val taxCents: Double,
+    val tipsCents: Double,
+    val truncated: Boolean? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosShiftStatusSerializer::class)
+enum class PosShiftStatus(val raw: String) {
+    CLOSED("closed"),
+    OPEN("open"),
+    UNKNOWN(""),
+}
+
+internal object PosShiftStatusSerializer :
+    RawEnumSerializer<PosShiftStatus>("com.aglyn.contracts.PosShiftStatus", PosShiftStatus.entries, PosShiftStatus.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PosTenderMethodSerializer::class)
+enum class PosTenderMethod(val raw: String) {
+    CARD_KEYED("card_keyed"),
+    CARD_LINK("card_link"),
+    CARD_PRESENT("card_present"),
+    CASH("cash"),
+    CREDIT("credit"),
+    FOLIO("folio"),
+    GIFT_CARD("gift_card"),
+    UNKNOWN(""),
+}
+
+internal object PosTenderMethodSerializer :
+    RawEnumSerializer<PosTenderMethod>("com.aglyn.contracts.PosTenderMethod", PosTenderMethod.entries, PosTenderMethod.UNKNOWN, { it.raw })
+
+@Serializable
 data class ProductChannelFacts(
     val brand: String? = null,
     val condition: ProductChannelFactsCondition? = null,
@@ -1976,6 +2070,7 @@ data class ContractValues(
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
+    @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
     @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
     @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
@@ -1995,6 +2090,7 @@ data class ContractValues(
     @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
+    @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,

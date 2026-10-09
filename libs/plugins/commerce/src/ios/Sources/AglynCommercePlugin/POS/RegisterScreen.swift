@@ -15,6 +15,7 @@ struct RegisterScreen: View {
   @State private var showBasket = false
   @State private var showDiscount = false
   @State private var scanCode = ""
+  @State private var showOps = false
   let context: NativePluginContext
 
   init(context: NativePluginContext) {
@@ -73,6 +74,11 @@ struct RegisterScreen: View {
     .onSubmit(of: .search) { model.search(query) }
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
+    .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .overlay { if model.cashier.locked { LockedRegister(model: model) } }
+    // Any touch is the register in use: it keeps the idle lock away.
+    .simultaneousGesture(TapGesture().onEnded { model.cashier.touch() })
+    .onChange(of: query) { _, _ in model.cashier.touch() }
     .sheet(isPresented: Binding(get: { model.checkout != nil }, set: { if !$0 { closeCheckout() } })) {
       if let checkout = model.checkout {
         CheckoutView(model: model, checkout: checkout)
@@ -112,6 +118,8 @@ struct RegisterScreen: View {
             ForEach(registers) { Text($0.name).tag(Optional($0)) }
           }
         }
+        Button("Cashier and shift", systemImage: "person.badge.clock") { showOps = true }
+          .accessibilityIdentifier("pos-ops-open")
         Button("Card readers", systemImage: "creditcard") { context.navigate(commerceCardReadersScreen) }
         Button("Clear basket", systemImage: "xmark.bin", role: .destructive) { model.clearCart() }
           .disabled(model.cart.isEmpty)

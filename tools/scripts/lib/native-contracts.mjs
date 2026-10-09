@@ -136,6 +136,10 @@ export function buildContractModel({ ts, program, root, config, pure }) {
     // Aliases first: Record and Readonly are structural once resolved.
     const alias = type.aliasSymbol?.name
     if (alias === 'Readonly' && type.aliasTypeArguments?.length === 1) return ref(type.aliasTypeArguments[0], hint, where)
+    // A `Partial<Record<K, V>>` is the same map: a key a payload lacks is just absent.
+    if (alias === 'Partial' && type.aliasTypeArguments?.[0]?.aliasSymbol?.name === 'Record') {
+      return ref(type.aliasTypeArguments[0], hint, where)
+    }
     if (alias === 'Record' && type.aliasTypeArguments?.length === 2) {
       const [keyType, valueType] = type.aliasTypeArguments
       const keyOk =

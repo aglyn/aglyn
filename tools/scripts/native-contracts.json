@@ -514,6 +514,19 @@
         "POS_KIOSK_UNLOCK_LOCKOUT_MS",
         "POS_KIOSK_UNLOCK_TTL_MS"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts": {
+      "types": [
+        "PosShift",
+        "PosShiftReport",
+        "PosCashEvent",
+        "PosCashEventType",
+        "PosTenderMethod"
+      ],
+      "values": [
+        "POS_CASH_EVENT_LABELS",
+        "POS_TENDER_LABELS"
+      ]
     }
   },
   "ints": [
@@ -7841,6 +7854,78 @@
             "flaggedAtMs": 1000
           },
           {}
+        ]
+      ]
+    },
+    "posPinProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "args": [
+        [
+          "4821"
+        ],
+        [
+          "1234"
+        ],
+        [
+          "4321"
+        ],
+        [
+          "1111"
+        ],
+        [
+          "123"
+        ],
+        [
+          "1234567"
+        ],
+        [
+          "12a4"
+        ],
+        [
+          ""
+        ],
+        [
+          "735190"
+        ],
+        [
+          "9876"
+        ],
+        [
+          "246810"
+        ],
+        [
+          "0000"
+        ],
+        [
+          "abcd"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "posCashVarianceCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "args": [
+        [
+          21240,
+          21240
+        ],
+        [
+          20000,
+          21240
+        ],
+        [
+          22000,
+          21240
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          100.4,
+          200.6
         ]
       ]
     }

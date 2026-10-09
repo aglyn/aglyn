@@ -7893,6 +7893,46 @@
         }
       ]
     },
+    "posCashVarianceCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "cases": [
+        {
+          "args": [
+            21240,
+            21240
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            20000,
+            21240
+          ],
+          "result": -1240
+        },
+        {
+          "args": [
+            22000,
+            21240
+          ],
+          "result": 760
+        },
+        {
+          "args": [
+            0,
+            0
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            100.4,
+            200.6
+          ],
+          "result": -101
+        }
+      ]
+    },
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -8124,6 +8164,95 @@
             "adjusted": true,
             "atMs": 1800000000000
           }
+        }
+      ]
+    },
+    "posPinProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "cases": [
+        {
+          "args": [
+            "4821"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1234"
+          ],
+          "result": "Pick a PIN that is not a straight run like 1234."
+        },
+        {
+          "args": [
+            "4321"
+          ],
+          "result": "Pick a PIN that is not a straight run like 1234."
+        },
+        {
+          "args": [
+            "1111"
+          ],
+          "result": "Pick a PIN that is not one digit repeated."
+        },
+        {
+          "args": [
+            "123"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            "1234567"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            "12a4"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            "735190"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "9876"
+          ],
+          "result": "Pick a PIN that is not a straight run like 1234."
+        },
+        {
+          "args": [
+            "246810"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "0000"
+          ],
+          "result": "Pick a PIN that is not one digit repeated."
+        },
+        {
+          "args": [
+            "abcd"
+          ],
+          "result": "A PIN is 4 to 6 digits."
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "A PIN is 4 to 6 digits."
         }
       ]
     },

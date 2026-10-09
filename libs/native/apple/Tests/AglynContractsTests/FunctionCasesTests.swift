@@ -61,7 +61,7 @@ final class FunctionCasesTests: XCTestCase {
     for name in [
       "formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel",
       "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents",
-      "apportionCents", "describeRestockCheck",
+      "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents",
     ] {
       XCTAssertNotNil(functions[name], name)
     }
@@ -72,6 +72,20 @@ final class FunctionCasesTests: XCTestCase {
       let data = try JSONSerialization.data(withJSONObject: item.args[0])
       let check = try JSONDecoder().decode(OrderRestockCheck.self, from: data)
       XCTAssertEqual(describeRestockCheck(check, order: try order(item.args[1])), item.result as? String, item.label)
+    }
+  }
+
+  func testPinsAreJudgedAsTheConsoleJudgesThem() {
+    for item in cases("posPinProblem") {
+      XCTAssertEqual(posPinProblem(string(item.args[0])), item.result as? String, item.label)
+    }
+  }
+
+  func testTheDrawerVarianceIsCountedMinusExpected() {
+    for item in cases("posCashVarianceCents") {
+      let counted = (item.args[0] as? NSNumber)?.doubleValue ?? 0
+      let expected = (item.args[1] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(posCashVarianceCents(counted: counted, expected: expected), int(item.result), item.label)
     }
   }
 
