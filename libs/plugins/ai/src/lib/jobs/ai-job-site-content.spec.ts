@@ -55,6 +55,7 @@ import {
   aiSiteContentPart,
   aiSiteContentRefusal,
   aiSiteListings,
+  aiSiteProductDescriptionWithoutGaps,
   aiSiteProductPhotos,
   aiSiteProductsBriefLine,
   createAiSitePostsRunner,
@@ -333,6 +334,15 @@ describe('the records the pages list, and their photos (AGL-3676)', () => {
       { id: 'listing:products', kind: 'products', name: 'the shop', records: [], placements: [] },
     ])
     expect(aiSiteListings({ outputs: [], screens })).toEqual([])
+  })
+
+  it('lists no product with a gap for the owner in its description', () => {
+    expect(
+      aiSiteProductDescriptionWithoutGaps(
+        'Let them choose. A gift card sent by email. Delivery details: [how and when the card is sent]. Terms: [gift card terms].',
+      ),
+    ).toBe('Let them choose. A gift card sent by email.')
+    expect(aiSiteProductDescriptionWithoutGaps('One line.\n\nAnother.')).toBe('One line.\n\nAnother.')
   })
 
   it('fills each product’s photo slot from the stock library, else a starter photo', async () => {

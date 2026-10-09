@@ -386,7 +386,9 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         content: {
           name: product.name,
           type: product.type,
-          description: product.description,
+          // Listed at once, so no "[gift card terms]" gap reaches a shopper:
+          // a sentence that leaves a fact for the owner is left out.
+          description: aiSiteProductDescriptionWithoutGaps(product.description),
           tags: product.tags,
           options: product.options,
           seoTitle: product.seoTitle,
@@ -550,6 +552,27 @@ export function aiSiteListings(input: {
     })
   }
   return listings
+}
+
+/**
+ * A proposed product's description with each sentence that leaves a gap for
+ * the owner ("Delivery details: [how and when the card is sent].") taken
+ * out (AGL-3676): a start's products are listed as soon as they are written,
+ * and a live run's gift card showed its gaps on the product page. A line
+ * break is kept; nothing else is changed.
+ */
+export function aiSiteProductDescriptionWithoutGaps(description: string): string {
+  return description
+    .split('\n')
+    .map((line) =>
+      line
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => !/\[[^\]]+\]/.test(sentence))
+        .join(' '),
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 /** What each product a start wrote says on the job's page (AGL-3676). */
