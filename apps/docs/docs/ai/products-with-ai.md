@@ -64,7 +64,7 @@ a search listing and a sentence saying what its photo should show.
 Review the table, untick any you do not want, and press **Create drafts**. Each product
 is created as a **draft**:
 
-- **It starts at a default price of $25** on every variant, for you to change in the
+- **It starts at a placeholder price** on every variant, for you to change in the
   product editor. You may clear a price on purpose: the product still saves, the table
   marks it **Set a price**, and your storefront shows **Price coming soon** with no way to
   buy it until it has one again.
