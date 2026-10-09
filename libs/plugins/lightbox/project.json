@@ -1,0 +1,30 @@
+{
+  "name": "plugins-lightbox",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/lightbox/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/lightbox",
+        "main": "libs/plugins/lightbox/src/index.ts",
+        "tsConfig": "libs/plugins/lightbox/tsconfig.lib.json",
+        "assets": ["libs/plugins/lightbox/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/lightbox"],
+      "options": {
+        "jestConfig": "libs/plugins/lightbox/jest.config.ts"
+      }
+    }
+  }
+}

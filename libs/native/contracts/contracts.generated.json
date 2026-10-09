@@ -1402,6 +1402,12 @@
       }
     },
     {
+      "alwaysOn": true,
+      "description": "A lightbox you fill with any elements and open from any button, link or picture.",
+      "id": "lightbox",
+      "label": "Lightbox"
+    },
+    {
       "alwaysOnForWorkspace": true,
       "defaultOffPerSite": true,
       "description": "Chat with visitors through your own Tidio or LiveChat account.",

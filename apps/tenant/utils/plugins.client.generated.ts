@@ -18,6 +18,12 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-mui/plugin'),
   },
   {
+    id: 'lightbox',
+    alwaysOn: true,
+    register: {"site":"registerLightboxPlugin"},
+    load: () => import('@aglyn/plugins-lightbox/site'),
+  },
+  {
     id: 'forms',
     apiPrefixes: ["forms"],
     register: {"site":"registerFormsPlugin"},

@@ -18,13 +18,51 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiImage } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import {
+  type LightboxAppearanceProps,
+  splitLightboxAppearanceProps,
+} from '@aglyn/shared-ui-jsx/components/lightbox/lightbox-appearance'
 import Box from '@mui/material/Box'
 import { type SxProps, type Theme, useTheme } from '@mui/material/styles'
 import useForkRef from '@mui/utils/useForkRef'
-import { forwardRef, type ReactNode, useEffect, useState } from 'react'
+import {
+  forwardRef,
+  type KeyboardEvent,
+  lazy,
+  type MouseEvent,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { imageSizes, layoutBandWidths } from '../utils/image-sizes'
+import {
+  lightboxAppearanceAttributes,
+  WHEN_LIGHTBOX_ON,
+} from '../utils/lightbox-attributes'
+import {
+  imageGalleryOf,
+  ImageLightboxGalleryContext,
+  LIGHTBOX_ATTRIBUTE,
+  LIGHTBOX_CAPTION_ATTRIBUTE,
+  type LightboxGallery,
+} from './image-lightbox-items'
+
+/**
+ * The picture lightbox, behind a lazy boundary (AGL-3717) for the reason the
+ * Video's is (AGL-2744): it names MUI's Dialog, and this module is on every
+ * page that shows a picture. It is fetched the first time a visitor points at
+ * or focuses a picture that opens, and mounted when they press it.
+ */
+const ImageLightbox = lazy(() =>
+  import('./image-lightbox').then((module) => ({
+    default: module.ImageLightbox,
+  })),
+)
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'image'
@@ -177,7 +215,7 @@ function useRenderedWidthRecorder(
   return setElement
 }
 
-export interface ImageProps {
+export interface ImageProps extends LightboxAppearanceProps {
   /**
    * Where the image comes from (AGL-72). Either a **media reference** —
    * `media:{scope}/{mediaId}`, what "Browse media" now stores (AGL-1215) —
@@ -252,6 +290,21 @@ export interface ImageProps {
   intrinsicHeight?: number
   /** Border radius in px. */
   radius?: number
+  /**
+   * Opens the picture full size in a lightbox when pressed (AGL-3717). A
+   * linked image follows its link instead; an Image inside an Image List
+   * whose lightbox is on opens the list's gallery whatever this says.
+   */
+  lightbox?: boolean | string
+  /** A caption under the picture in the lightbox. */
+  lightboxCaption?: string
+  /**
+   * A gallery name: every Image on the page with the same name opens as one
+   * gallery, with previous and next. Empty opens this picture alone.
+   */
+  lightboxGallery?: string
+  /** A strip of thumbnails under a gallery's picture. */
+  lightboxThumbnails?: boolean | string
   /** Target screen id — resolved rename-safe like Screen Link (AGL-339). */
   screenId?: string
   /** External URL, used only when no `screenId` is set. */
@@ -275,7 +328,10 @@ export interface ImageProps {
  * controls; an empty src shows a labeled placeholder so the element stays
  * visible and selectable in the editor.
  */
-const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
+const Image = forwardRef<HTMLElement, ImageProps>((allProps, ref) => {
+  // The lightbox's look rides its own props, never the `<img>` (AGL-3717).
+  const { appearance: lightboxAppearance, rest: props } =
+    splitLightboxAppearanceProps(allProps)
   const {
     src: storedSrc,
     alt,
@@ -293,6 +349,10 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     radius,
     screenId,
     href: externalHref,
+    lightbox,
+    lightboxCaption,
+    lightboxGallery,
+    lightboxThumbnails,
     // Never forward children to the <img> below — React throws on ANY
     // children value reaching a void element, which 500'd whole pages
     // when a renderer passed empty JSX children through (AGL-579).
@@ -359,6 +419,83 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     hostId,
     version: mediaVersion,
   })
+  /**
+   * The lightbox (AGL-3717). A picture opens when its own switch is on, or
+   * when it sits in an Image List whose lightbox is on — then the list's
+   * gallery is what opens. A linked picture follows its link: one press
+   * cannot both navigate and open a dialog.
+   *
+   * Nothing of the dialog is fetched until a visitor points at or focuses
+   * the picture (`armed`), and nothing renders in it until they press.
+   */
+  const listGallery = useContext(ImageLightboxGalleryContext)
+  const linked = Boolean(linkHref && !suppressNavigation)
+  const opens =
+    !linked &&
+    (Boolean(listGallery) || Aglyn.readYesNoValue(lightbox) === true)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [armed, setArmed] = useState(false)
+  const [gallery, setGallery] = useState<LightboxGallery>({
+    pictures: [],
+    index: 0,
+  })
+  const arm = useCallback(() => {
+    if (!listGallery) setArmed(true)
+  }, [listGallery])
+  const closeLightbox = useCallback(() => setLightboxOpen(false), [])
+  const openFrom = (trigger: HTMLElement) => {
+    // The canvas is inert (AGL-830): a press there selects the node.
+    if (editorInert) return
+    if (listGallery) {
+      listGallery.open(trigger)
+      return
+    }
+    const next = imageGalleryOf(trigger)
+    if (!next.pictures.length) return
+    setGallery(next)
+    setArmed(true)
+    setLightboxOpen(true)
+  }
+  const lightboxTriggerProps = opens
+    ? {
+        [LIGHTBOX_ATTRIBUTE]: listGallery ? '' : (lightboxGallery ?? '').trim(),
+        ...(lightboxCaption?.trim()
+          ? { [LIGHTBOX_CAPTION_ATTRIBUTE]: lightboxCaption.trim() }
+          : {}),
+        role: 'button',
+        tabIndex: 0,
+        'aria-haspopup': 'dialog' as const,
+        // A decorative picture has no alt, and a button needs a name.
+        ...(decorative || !alt ? { 'aria-label': 'Open picture' } : {}),
+        onPointerEnter: arm,
+        onFocus: arm,
+        onClick: (event: MouseEvent<HTMLElement>) => openFrom(event.currentTarget),
+        onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          openFrom(event.currentTarget)
+        },
+      }
+    : {}
+  const withLightbox = (element: JSX.Element) =>
+    opens && armed && !listGallery ? (
+      <>
+        {element}
+        {/* `fallback={null}`: the picture is on screen underneath. */}
+        <Suspense fallback={null}>
+          <ImageLightbox
+            open={lightboxOpen}
+            onClose={closeLightbox}
+            gallery={gallery}
+            appearance={lightboxAppearance}
+            thumbnails={Aglyn.readYesNoValue(lightboxThumbnails) === true}
+            label={lightboxGallery?.trim() || undefined}
+          />
+        </Suspense>
+      </>
+    ) : (
+      element
+    )
   const wrapLink = (element: JSX.Element) =>
     linkHref && !suppressNavigation ? (
       <AppLink
@@ -465,7 +602,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       ? { width: intrinsicWidth, height: intrinsicHeight }
       : undefined
   const sizes = srcSet ? resolvedSizes.sizes : undefined
-  return wrapLink(
+  return withLightbox(wrapLink(
     <Box
       ref={imageRef}
       component="img"
@@ -573,6 +710,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // layer — so both forward to the `<img>` rather than becoming CSS.
       {...intrinsicAttributes}
       {...rest}
+      {...lightboxTriggerProps}
       sx={[
         {
           display: 'block',
@@ -581,10 +719,11 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
           objectFit: objectFit || 'cover',
           borderRadius: radius != null ? `${radius}px` : undefined,
         },
+        ...(opens ? [{ cursor: 'zoom-in' }] : []),
         ...nodeSx,
       ]}
     />,
-  )
+  ))
 })
 Image.displayName = 'Image'
 
@@ -710,6 +849,38 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
         { value: 'eager', label: 'Eager' },
       ],
     },
+    {
+      name: 'lightbox',
+      description:
+        'Opens the picture full size in a lightbox when a visitor clicks ' +
+        'it. A linked image follows its link instead.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Open in a lightbox',
+    },
+    {
+      name: 'lightboxCaption',
+      description: 'A caption shown with the picture in the lightbox.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Lightbox caption',
+      condition: WHEN_LIGHTBOX_ON,
+    },
+    {
+      name: 'lightboxGallery',
+      description:
+        'Give pictures the same gallery name and they open as one gallery, ' +
+        'with previous and next. Leave empty to open this picture alone.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Gallery name',
+      condition: WHEN_LIGHTBOX_ON,
+    },
+    {
+      name: 'lightboxThumbnails',
+      description: 'Shows a strip of thumbnails under a gallery picture.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Gallery thumbnails',
+      condition: WHEN_LIGHTBOX_ON,
+    },
+    ...lightboxAppearanceAttributes(WHEN_LIGHTBOX_ON),
     {
       name: 'screenId',
       description:

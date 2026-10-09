@@ -105,6 +105,7 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
   ['commerce', 'libs/plugins/commerce/src/lib/plugin.ts'],
   ['bookings', 'libs/plugins/bookings/src/lib/plugin.ts'],
   ['events-calendar', 'libs/plugins/events-calendar/src/lib/plugin.ts'],
+  ['lightbox', 'libs/plugins/lightbox/src/lib/site.ts'],
 ]
 
 /**
@@ -447,6 +448,13 @@ function holdsLine(entry: Dict): string {
 const CATALOG_PROPS: Readonly<Record<string, readonly string[]>> = {
   video: ['src', 'poster'],
   videoEmbed: ['url'],
+  // The lightbox (AGL-3717): the switch is what a model chooses; the dozen
+  // settings of its look stay at their defaults unless an owner sets them.
+  // An Image's `loading` left the line with it: the element decides which
+  // picture loads first itself (AGL-2486), and a model guessing only undoes it.
+  image: ['src', 'objectFit', 'screenId', 'href', 'lightbox'],
+  muiImageList: ['variant', 'cols', 'gap', 'rowHeight', 'lightbox'],
+  lightbox: ['label', 'lightboxTransition'],
 }
 
 /**

@@ -253,7 +253,7 @@ export const AI_LAYOUT_LANGUAGE_TEXT = [
   'Block kinds:',
   "- eyebrow: a short label above a heading. heading: a heading; the first heading of the page's first section is the page's title, and the first heading of every other section is that section's heading. lede: the larger sentence under a heading. text: a paragraph. note: small print.",
   '- button: text is the label and to says where it goes; style primary, secondary or quiet. Two buttons in a row read as a pair.',
-  '- image: text describes the picture to place, which becomes its alt text; the owner adds the picture. icon names a drawing to show until then.',
+  '- image: text describes the picture to place, which becomes its alt text; the owner adds the picture. icon names a drawing to show until then. to lightbox opens it large when pressed.',
   '- list: items are the lines (title only; text may be empty).',
   "- cards, steps, stats, faq: items, each with a title and a text. cards are features or services; steps are numbered; stats are a figure (title) with its label (text), only for figures the brief gives; faq items are a question (title) and its answer (text). Use no quotes block: the site has no customer's words to show.",
   "- form: places a saved form by its id in to. component: places a reusable component by its id in to; its items fill the component's props, title the prop name and text the value.",
