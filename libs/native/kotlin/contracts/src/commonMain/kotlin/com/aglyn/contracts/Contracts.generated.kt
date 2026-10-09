@@ -1002,6 +1002,7 @@ data class OrderFulfillment(
     val carrier: String? = null,
     val handover: OrderFulfillmentHandover? = null,
     val id: String,
+    val labelCostCents: Double? = null,
     val labelRef: String? = null,
     val labelUrl: String? = null,
     val lineItemIds: List<Double>,
