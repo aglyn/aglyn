@@ -33,6 +33,7 @@
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true, firebaseAdmin: {} }))
 
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
@@ -347,6 +348,27 @@ describe('the check', () => {
     expect(checkProductDraftContent({ ...CONTENT, comingSoon: true, priceUsd: null })).toMatchObject({
       ok: true,
       facts: { status: 'active', priceMissing: true },
+    })
+  })
+
+  it('takes the photo forms the platform stores for a product, and not a page’s `media:` reference (AGL-3676)', () => {
+    // What the console's picker writes for a library photo, the host's and an
+    // org library's qualified for the site, and a starter: what an AI store
+    // start hands it.
+    for (const photo of [
+      resolveMediaSrc('media:host-1/med1', { hostId: 'host-1' }),
+      resolveMediaSrc('media:org:org-1/med1', { hostId: 'host-1' }),
+      '/_static/starter/gallery-craft.jpg',
+    ]) {
+      expect(problemsOf({ mediaUrls: [photo] })).toEqual([])
+    }
+    // The `media:` reference itself is a page's form; no product door
+    // stores it, and job FYNasg1h0S (2026-10-09) was refused for it.
+    expect(problemsOf({ mediaUrls: ['media:host-1/med1'] })).toEqual(['A photo is an https address or a path on this site'])
+    // The default price stands with a listed product: priced, so sold.
+    expect(checkProductDraftContent({ ...CONTENT, priceUsd: undefined, comingSoon: true })).toMatchObject({
+      ok: true,
+      facts: { status: 'active', priceMissing: false },
     })
   })
 
