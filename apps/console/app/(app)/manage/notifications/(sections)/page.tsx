@@ -26,15 +26,11 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, Stack } from '@mui/material'
 import {
   collection,
-  doc,
   limit,
   orderBy,
   query,
-  serverTimestamp,
   startAfter,
-  updateDoc,
   where,
-  writeBatch,
   type QueryDocumentSnapshot,
   type QuerySnapshot,
 } from 'firebase/firestore'
@@ -46,6 +42,11 @@ import NotificationsTable from '../../../../../components/notifications-table.co
 import { docsHelp } from '../../../../../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../../../../constants/shared'
 import useHostIndexEntries from '../../../../../hooks/use-host-index-entries'
+import {
+  markAllNotificationsReadFor,
+  markNotificationRead,
+} from '../../../../../hooks/use-notification-feed'
+import { isNotificationRead } from '../../../../../utils/notification-feed'
 import useOrgHosts from '../../../../../hooks/use-org-hosts'
 import { useInviteReview } from '../../../../../hooks/use-pending-invites'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -136,7 +137,17 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
        */
       const apply = (snapshot: QuerySnapshot) => {
         const docs = snapshot.docs.slice(0, pageSize)
-        setRows(docs.map((entry) => ({ $id: entry.id, ...entry.data() })))
+        /*
+         * `estimate` (AGL-3720): a row this client just marked read carries a
+         * readAt at once, where a pending server timestamp reads as null and
+         * left the row "New" until the write was acknowledged.
+         */
+        setRows(
+          docs.map((entry) => ({
+            $id: entry.id,
+            ...entry.data({ serverTimestamps: 'estimate' }),
+          })),
+        )
         setHasMore(snapshot.docs.length > pageSize)
         setPage(targetPage)
         setCursors((previous) => {
@@ -181,35 +192,32 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     void loadPage(0)
   }, [loadPage])
 
-  // Mark ALL unread read (AGL-267): the latest 200, batched.
+  /*
+   * A row read here reads as read AT ONCE (AGL-3720). Mark read needed two
+   * presses: the first wrote `readAt: serverTimestamp()` without waiting and
+   * re-read the page, where the pending timestamp reads back as null — so the
+   * row stayed "New" until the second press found the first one landed. The
+   * row now flips locally and the table reads `read` before `readAt`.
+   */
+  const markRowsRead = useCallback((ids: ReadonlySet<string> | 'all') => {
+    setRows((current) =>
+      current.map((row) =>
+        (ids === 'all' || ids.has(row.$id)) && !isNotificationRead(row)
+          ? { ...row, read: true, readAt: row.readAt ?? { toDate: () => new Date() } }
+          : row,
+      ),
+    )
+  }, [])
+
+  // Mark EVERY unread read (AGL-267, AGL-3720): the whole `read == false`
+  // query in batches of 500, not the newest 200.
   const [markingAll, setMarkingAll] = useState(false)
   const handleMarkAllRead = async () => {
     if (!uid || markingAll) return
     setMarkingAll(true)
+    markRowsRead('all')
     try {
-      // Bounded like the feed (AGL-3373), so a stalled client cannot hold
-      // the button on "Marking…".
-      const { snapshot } = await getDocsBounded(
-        query(
-          collection(firestore, 'users', uid, 'notifications'),
-          orderBy('createdAt', 'desc'),
-          limit(200),
-        ),
-      )
-      const batch = writeBatch(firestore)
-      let count = 0
-      snapshot.forEach((entry) => {
-        if (!entry.get('readAt')) {
-          batch.update(entry.ref, { read: true, readAt: serverTimestamp() })
-          count += 1
-        }
-      })
-      /*
-       * Not awaited: `commit` resolves on the server's acknowledgment, which
-       * a stalled client never delivers (AGL-3373). The writes apply to the
-       * local cache at once and stay queued until the server takes them.
-       */
-      if (count > 0) void batch.commit().catch(console.error)
+      await markAllNotificationsReadFor(firestore, uid)
       await loadPage(page, cursors[page - 1])
     } catch (error) {
       console.error(error)
@@ -245,11 +253,11 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
 
   const handleOpen = (notification: any) => {
     if (!uid) return
-    if (!notification.readAt) {
-      void updateDoc(
-        doc(firestore, 'users', uid, 'notifications', notification.$id),
-        { read: true, readAt: serverTimestamp() },
-      ).catch(console.error)
+    if (!isNotificationRead(notification)) {
+      markRowsRead(new Set([notification.$id]))
+      void markNotificationRead(firestore, uid, notification.$id).catch(
+        console.error,
+      )
     }
     // The invitee's own invitation opens the accept/decline dialog
     // (AGL-3402), as it does from the bell.

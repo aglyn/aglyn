@@ -29,6 +29,7 @@ import { Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import { isNotificationRead } from '../utils/notification-feed'
 import {
   NOTIFICATION_DEFAULT_SORT,
   NOTIFICATION_FILTER_FIELDS,
@@ -81,7 +82,9 @@ const notificationColumns = (
           <Typography
             variant="body2"
             noWrap
-            sx={{ fontWeight: row.readAt ? 'fontWeightRegular' : 'fontWeightMedium' }}
+            sx={{
+              fontWeight: isNotificationRead(row) ? 'fontWeightRegular' : 'fontWeightMedium',
+            }}
           >
             {row.title}
           </Typography>
@@ -172,9 +175,10 @@ const notificationColumns = (
     width: 100,
     align: 'right',
     headerAlign: 'right',
-    valueGetter: (_value, row) => (row.readAt ? 'Read' : 'New'),
+    // `read` before `readAt` (AGL-3720): see `isNotificationRead`.
+    valueGetter: (_value, row) => (isNotificationRead(row) ? 'Read' : 'New'),
     renderCell: ({ row }) =>
-      row.readAt ? (
+      isNotificationRead(row) ? (
         <Typography variant="body2" color="text.disabled">
           Read
         </Typography>
