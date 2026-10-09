@@ -81,7 +81,7 @@ function HostDashboard() {
               variant="contained"
               color="primary"
               href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}
-              target="_blank"
+              newTab
               rel="nofollow"
             >
               {'Visit site'}

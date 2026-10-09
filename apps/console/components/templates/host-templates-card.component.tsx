@@ -739,6 +739,7 @@ export function HostTemplatesCard({
           quick={{
             icon: mdiEyeOutline.path,
             label: 'Preview',
+            newTab: true,
             to: buildRoute(Route.TEMPLATE_PREVIEW, {
               orgSlug,
               host,

@@ -19,6 +19,7 @@
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { newTabLinkProps, withNewTabHint } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import { RowActionsMenu } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -226,8 +227,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             size="small"
             variant="outlined"
             href={liveUrl ?? undefined}
-            target="_blank"
-            rel="noreferrer"
+            {...newTabLinkProps}
+            aria-label={withNewTabHint('Visit live site')}
             disabled={!liveUrl}
           >
             {'Visit live site'}
@@ -236,8 +237,8 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             size="small"
             variant="outlined"
             href={homeId ? staffSitePreviewHref(hostId, 'screen', homeId) : undefined}
-            target="_blank"
-            rel="noreferrer"
+            {...newTabLinkProps}
+            aria-label={withNewTabHint('Open preview')}
             disabled={!homeId}
             title={homeId ? undefined : 'No home page is published — preview a page from Content'}
           >

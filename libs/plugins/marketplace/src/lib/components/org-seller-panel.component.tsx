@@ -825,7 +825,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                     columns jump between rows — the action count varies by
                     artifact type — while putting Unpublish at the end of the
                     row, the easiest place to hit by mistake. */}
-                <AppLink href={listingHref(listing)}>
+                <AppLink
+                  href={listingHref(listing)}
+                  newTab
+                  aria-label={`View ${listing.displayName}`}
+                >
                   <Button size="small" color="primary" component="span">
                     {'View'}
                   </Button>

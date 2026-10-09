@@ -19,6 +19,7 @@
 import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { mdiEyeOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { openInNewTab } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { Stack, Tab, Tabs } from '@mui/material'
@@ -97,10 +98,6 @@ const PAGE_SORT_HEADERS: Record<ContentTab, Record<string, string>> = {
   components: {},
   templates: { displayName: 'Template' },
   forms: { status: 'Status' },
-}
-
-const openInNewTab = (href: string) => {
-  window.open(href, '_blank', 'noopener,noreferrer')
 }
 
 export interface StaffSiteContentCardProps {

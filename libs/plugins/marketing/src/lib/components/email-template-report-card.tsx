@@ -19,7 +19,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
-import { mdiBullhornOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
+import { mdiBullhornOutline, mdiPageNextOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Figure,
@@ -240,7 +240,7 @@ export function EmailTemplateReportCard(props: EmailTemplateReportCardProps) {
     {
       key: 'details',
       label: 'Open report',
-      icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+      icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
       href: messageHref(message),
     },
     {

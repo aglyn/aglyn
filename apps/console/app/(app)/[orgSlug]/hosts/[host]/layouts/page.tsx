@@ -526,6 +526,7 @@ function Layouts(props) {
           quick={{
             icon: mdiEyeOutline.path,
             label: 'Preview',
+            newTab: true,
             ...(versionId
               ? {
                   to: buildRoute(Route.LAYOUT_PREVIEW, {

@@ -53,6 +53,7 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import { openPendingTab, withNewTabHint } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -988,12 +989,17 @@ export function EntryDetailPage() {
    * on the far side of a network round trip has lost the user gesture that
    * authorizes it, and Safari blocks it outright — the tab opens blank here
    * and gets its address a moment later.
+   *
+   * `openPendingTab`, not `window.open('', '_blank', 'noopener')`: with
+   * `noopener` the browser hands back `null`, so the blank tab could never be
+   * navigated and the fallback sent the CONSOLE tab to the preview instead
+   * (AGL-3660). Previews always open beside the console, never over it.
    */
   const [previewBusy, setPreviewBusy] = useState(false)
   const handlePreviewOnSite = useCallback(async () => {
     if (previewBusy || !selected?.slug || !stored?.slug || !hostId) return
     setPreviewBusy(true)
-    const tab = window.open('', '_blank', 'noopener,noreferrer')
+    const tab = openPendingTab()
     try {
       const response = await authorizedFetch(user, '/api/content/preview-link', {
         method: 'POST',
@@ -1010,21 +1016,20 @@ export function EntryDetailPage() {
       const payload = await response.json()
       const locked = parseLockdownRefusal(response.status, payload)
       if (locked) {
-        tab?.close()
+        tab.close()
         return void enqueueSnackbar(lockdownRefusalText(locked), {
           variant: 'warning',
           persist: true,
         })
       }
       if (!response.ok || !payload?.url) {
-        tab?.close()
+        tab.close()
         return void enqueueSnackbar(
           payload?.error ?? 'Could not create a preview link',
           { variant: 'error', allowDuplicate: true },
         )
       }
-      if (tab) tab.location.href = payload.url
-      else window.location.href = payload.url
+      tab.navigate(payload.url)
       // Best effort, and never the thing the feature depends on: the clipboard
       // is unavailable over plain http and behind a denied permission, and the
       // link is in the new tab's address bar either way.
@@ -1039,7 +1044,7 @@ export function EntryDetailPage() {
       })
     } catch (error) {
       console.error(error)
-      tab?.close()
+      tab.close()
       enqueueSnackbar('An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
@@ -1312,8 +1317,7 @@ export function EntryDetailPage() {
                 size="small"
                 variant="outlined"
                 href={entryLiveUrl}
-                target="_blank"
-                rel="noreferrer"
+                newTab
                 startIcon={<MdiIcon path={mdiOpenInNew.path} size={0.8} />}
               >
                 {'View'}
@@ -1331,6 +1335,7 @@ export function EntryDetailPage() {
                 variant="outlined"
                 disabled={previewBusy}
                 startIcon={<MdiIcon path={mdiEyeOutline.path} size={0.8} />}
+                aria-label={withNewTabHint('Preview on site')}
                 onClick={() => void handlePreviewOnSite()}
               >
                 {'Preview on site'}

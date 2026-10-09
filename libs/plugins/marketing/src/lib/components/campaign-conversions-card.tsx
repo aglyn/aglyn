@@ -23,7 +23,7 @@ import {
   pluginRecordListByIdsQuery,
   pluginRecordsFromRows,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
-import { mdiEyeOutline, mdiMapMarkerOutline } from '@aglyn/shared-data-mdi'
+import { mdiPageNextOutline, mdiMapMarkerOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   ListRowActions,
@@ -540,7 +540,7 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
             {
               key: 'campaign',
               label: 'Open campaign',
-              icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+              icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
               href: campaignHref(row),
               disabled: !campaignHref(row),
               /*
