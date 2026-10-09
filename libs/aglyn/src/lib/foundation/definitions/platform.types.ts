@@ -981,9 +981,43 @@ export interface AglynHostMedia {
    * site", which is what `visibleTo` is for.
    */
   private?: boolean
+  /**
+   * Where a photo copied from a stock library came from (AGL-3660), written
+   * by the server ingest that copied it (`core.media-ingest`). `key` is what
+   * a site's library is searched by before a photo is copied again, so one
+   * photo is stored once per site.
+   */
+  stockPhoto?: AglynHostMediaStockSource
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
   deletedAt?: ITimestamp
+}
+
+/**
+ * The credit an asset copied from a stock photo library keeps (AGL-3660):
+ * the library, the photo's page there, its contributor and its license.
+ * Recorded whether or not the license requires a credit shown.
+ */
+export interface AglynHostMediaStockSource {
+  /** `{provider}:{id}`: the key a site's library reuses the asset by. */
+  key: string
+  /** The provider's id, `pixabay`. */
+  provider: string
+  /** The library's name, `Pixabay`. */
+  providerLabel: string
+  /** The library's own id for the photo. */
+  id: string
+  /** The photo's page at the library. */
+  pageUrl: string
+  photographer: string
+  photographerUrl?: string
+  license: string
+  licenseUrl: string
+  /** Whether the license requires the credit shown wherever the photo is. */
+  attributionRequired: boolean
+  /** The search words that found it. */
+  query?: string
+  importedAt?: ITimestamp
 }
 
 /**

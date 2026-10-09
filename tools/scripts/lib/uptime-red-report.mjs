@@ -63,6 +63,33 @@ export function shouldReport(results) {
 }
 
 /**
+ * THE OTHER HALF OF THE ALERT: WHAT CAME BACK (AGL-3690).
+ *
+ * This reporter only ever spoke on a red. When the 2026-10-08 journey alert
+ * cleared a few minutes later, nobody was told, and the channel's last word
+ * was still "creating or publishing may be refused for every customer".
+ * Leaving an alert standing after it clears is as misleading as never raising
+ * it.
+ *
+ * Graded per target, against the PREVIOUS run's own results rather than a
+ * workflow conclusion. A run can recover one target while another stays down,
+ * and "everything is fine" would then be false. A target counts as recovered
+ * only when the last run had it down and this run has it up. A target that is
+ * missing from this run, or now pending, makes no claim.
+ */
+export function recoveredTargets(previous, results) {
+  const wasDown = new Set(downTargets(previous).map((row) => row.name))
+  return (results ?? []).filter(
+    (row) => row && row.ok && !row.pending && wasDown.has(row.name),
+  )
+}
+
+/** Is there a recovery to announce? */
+export function shouldReportRecovery(previous, results) {
+  return recoveredTargets(previous, results).length > 0
+}
+
+/**
  * The endpoints whose failure is a REVENUE or ACCESS failure rather than a
  * component one, and the sentence that says so.
  *
@@ -125,6 +152,32 @@ export function slackPayload({ results, runUrl }) {
       : 'Open the endpoint and read which check failed. A subsystem 404 while ' +
         'the root is up is a pending promotion and is not reported here. ' +
         'Runbook: docs/UPTIME_AND_SLA.md.',
+  ].join('\n')
+  return {
+    text: headline,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: detail } }],
+  }
+}
+
+/**
+ * The recovery message: what is back, and what is still down if anything is,
+ * so one message never reads as "all clear" while a red stands.
+ */
+export function recoveryPayload({ previous, results, runUrl }) {
+  const back = recoveredTargets(previous, results)
+  const still = downTargets(results)
+  const names = back.map((row) => row.name)
+  const headline = `Uptime probe: RECOVERED (${names.join(', ')})`
+  const detail = [
+    `*<${runUrl || 'https://github.com/aglyn/aglyn/actions'}|✅ ${headline}>*`,
+    ...back.map(
+      (row) =>
+        `• \`${row.name}\` — back up${row.detail ? ` · ${row.detail}` : ''}\n  ${row.url}`,
+    ),
+    still.length
+      ? `Still down: ${still.map((row) => `\`${row.name}\``).join(', ')}. ` +
+        'Its own alert is posted alongside this one.'
+      : 'Nothing else on the probe is down.',
   ].join('\n')
   return {
     text: headline,

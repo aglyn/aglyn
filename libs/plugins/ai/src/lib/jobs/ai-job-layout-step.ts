@@ -86,7 +86,7 @@ import {
   aiLayoutSiteName,
   type AiLayoutFrameBuilt,
 } from './ai-job-layout-language'
-import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage } from './ai-job-page-language'
+import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage, aiLayoutDesignOf } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -417,6 +417,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
           pages,
           targets,
           extend: aiLayoutChecks(inventory, plan, job.brief),
+          design: aiLayoutDesignOf(job, '/'),
         }),
         ...(signal ? { signal } : {}),
       })

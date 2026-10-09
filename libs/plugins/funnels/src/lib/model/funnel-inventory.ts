@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { SiteJourneyStepType } from '@aglyn/aglyn/app-utils/site-journey'
+import type { SiteJourneyStepType } from '@aglyn/aglyn/app-utils/site-journey-steps'
 import { funnelStepTitle } from './funnel-definition'
 import type { FunnelStep } from './funnels.types'
 

@@ -62,7 +62,17 @@ import {
   claimPendingSignUpWorkspace,
   createSignUpWorkspace,
 } from '../../../utils/signup-workspace'
+import {
+  holdSignUpLanding,
+  releaseSignUpLanding,
+} from '../../../utils/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
+
+
+/** The landing hold the workspace provisioning takes (AGL-3690). */
+const PROVISION_HOLD_KEY = 'home:provision-sign-up-workspace'
+/** Longer than a slow create: the hold's own timer is only the backstop. */
+const PROVISION_HOLD_MAX_MS = 60_000
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -238,13 +248,25 @@ function OrgJump() {
     if (provisionedForRef.current === uid) return
     provisionedForRef.current = uid
     let active = true
+    /**
+     * Held from the claim to the create (AGL-3690). The claim CLEARS the held
+     * name, so a top-level navigation between the two leaves the account
+     * with no name and no workspace, and the chooser then reads "0
+     * workspaces" for good. `EditHintBounce` is exactly such a navigation,
+     * and a fresh verified page is exactly when it fires. It re-reads this
+     * hold before it leaves. A success keeps the hold, because the page is
+     * leaving anyway.
+     */
+    holdSignUpLanding(PROVISION_HOLD_KEY, PROVISION_HOLD_MAX_MS)
     void (async () => {
       const pending = await claimPendingSignUpWorkspace(firestore, user)
       if (!pending) {
+        releaseSignUpLanding(PROVISION_HOLD_KEY)
         if (active) setProvisionSettled(true)
         return
       }
       const { slug, error } = await createSignUpWorkspace(user, pending.name)
+      if (!slug) releaseSignUpLanding(PROVISION_HOLD_KEY)
       if (slug) {
         // Activation (AGL-1561), counted where the workspace is actually
         // created. A refused create falls through to this page uncounted,

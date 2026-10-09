@@ -29,7 +29,10 @@ import { describe, it } from 'node:test'
 import {
   downTargets,
   JOURNEY_MEANING,
+  recoveredTargets,
+  recoveryPayload,
   shouldReport,
+  shouldReportRecovery,
   slackPayload,
 } from './uptime-red-report.mjs'
 
@@ -167,5 +170,51 @@ describe('the message', () => {
       slackPayload({ results: [DOWN, JOURNEY_DOWN], runUrl: 'https://run' }),
     )
     assert.doesNotMatch(serialized, /password|secret|token|Bearer|sk_/i)
+  })
+})
+
+describe('telling a recovery (AGL-3690)', () => {
+  const JOURNEY_BACK = { ...JOURNEY_DOWN, ok: true, detail: 'healthy' }
+  const CRONS_BACK = { ...DOWN, ok: true, detail: 'healthy' }
+
+  it('announces a target that was down last run and is up now', () => {
+    assert.equal(shouldReportRecovery([UP, JOURNEY_DOWN], [UP, JOURNEY_BACK]), true)
+    assert.deepEqual(
+      recoveredTargets([UP, JOURNEY_DOWN], [UP, JOURNEY_BACK]).map((r) => r.name),
+      ['tenant/funnel'],
+    )
+  })
+
+  it('says nothing when nothing was down, or it is still down', () => {
+    assert.equal(shouldReportRecovery([UP], [UP]), false)
+    assert.equal(shouldReportRecovery([JOURNEY_DOWN], [JOURNEY_DOWN]), false)
+  })
+
+  it('makes no claim without a previous run, or for a target now pending', () => {
+    assert.equal(shouldReportRecovery(undefined, [JOURNEY_BACK]), false)
+    assert.equal(shouldReportRecovery([], [JOURNEY_BACK]), false)
+    const nowPending = { ...JOURNEY_DOWN, ok: true, pending: true }
+    assert.equal(shouldReportRecovery([JOURNEY_DOWN], [nowPending]), false)
+  })
+
+  it('never reads as all-clear while another target stays down', () => {
+    const payload = recoveryPayload({
+      previous: [DOWN, JOURNEY_DOWN],
+      results: [CRONS_BACK, JOURNEY_DOWN],
+      runUrl: 'https://run',
+    })
+    assert.match(payload.text, /RECOVERED \(console\/crons\)/)
+    const body = payload.blocks[0].text.text
+    assert.match(body, /Still down: `tenant\/funnel`/)
+    assert.doesNotMatch(body, /Nothing else on the probe is down/)
+  })
+
+  it('says so when everything is back', () => {
+    const body = recoveryPayload({
+      previous: [JOURNEY_DOWN],
+      results: [JOURNEY_BACK],
+      runUrl: 'https://run',
+    }).blocks[0].text.text
+    assert.match(body, /Nothing else on the probe is down/)
   })
 })

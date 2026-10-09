@@ -60,6 +60,9 @@ final class RegisterModel {
   @ObservationIgnored private let store: RegisterStore
   @ObservationIgnored private var openAttempt = AttemptKeys()
   @ObservationIgnored private var listeners: [String: FirestoreListening] = [:]
+  @ObservationIgnored private var reconnecting: Task<Void, Never>?
+  /// How long an offline register waits between tries to reach the console.
+  @ObservationIgnored var reconnectInterval: Duration = .seconds(10)
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
@@ -104,11 +107,34 @@ final class RegisterModel {
     }
     loadGrid()
     Task { await loadContext() }
+    reconnecting?.cancel()
+    reconnecting = Task { [weak self] in await self?.reconnectWhileOffline() }
   }
 
   func stop() {
     listeners.values.forEach { $0.remove() }
     listeners = [:]
+    reconnecting?.cancel()
+    reconnecting = nil
+  }
+
+  /// The register's one read of the console (readers, tax, receipts) happens
+  /// at launch. Were it lost then, the register would stay "offline" for the
+  /// whole shift: no smart readers, no emailed receipts, even after the
+  /// console answered again (a cold dev server and a flaky link both lose
+  /// that first call). So while it is out of reach the register asks again
+  /// on a steady beat, and `reconnect()` asks at once.
+  private func reconnectWhileOffline() async {
+    while !Task.isCancelled {
+      try? await Task.sleep(for: reconnectInterval)
+      if Task.isCancelled { return }
+      if !online { await loadContext() }
+    }
+  }
+
+  /// Asks the console again now, as the banner's Retry does.
+  func reconnect() {
+    Task { await loadContext() }
   }
 
   private func listen(

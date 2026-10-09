@@ -12,6 +12,7 @@ import com.aglyn.plugins.crm.registerCrmNative
 import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
+import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.outreach.registerOutreachNative
@@ -49,6 +50,11 @@ object NativePluginManifest {
             id = "forms",
             contributes = mapOf("screens" to listOf("forms.form", "forms.list"), "quickActions" to listOf("forms.open"), "deepLinks" to listOf("forms.page", "forms.record")),
             register = ::registerFormsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "funnels",
+            contributes = mapOf("screens" to listOf("funnels.list"), "quickActions" to listOf("funnels.open"), "deepLinks" to listOf("funnels.page")),
+            register = ::registerFunnelsNative,
         ),
         NativePluginManifestEntry(
             id = "inbox",

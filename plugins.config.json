@@ -3374,6 +3374,16 @@
       "contributes": {}
     },
     {
+      "id": "stock-photos",
+      "$comment": "AGL-3660: stock photo libraries behind core's `core.stock-photos` contract, Pixabay the first. consoleServerDeclarations registers the provider at the console's boot only: the AI site build, which runs on the console, asks the contract for photos for a page's picture slots and copies the chosen one into the site's own media library through core's `core.media-ingest`; it never names Pixabay. The tenant runtime never loads it. Searches are cached 24 hours in the top-level `stockPhotoSearches` collection (no workspace's data; TTL on `expiresAt`). Nothing runs until the console holds PIXABAY_API_KEY; until then the provider answers as absent and pages keep the starter photos. No catalog row: there is nothing for a workspace or a site to switch.",
+      "package": "@aglyn/plugins-stock-photos",
+      "register": {
+        "consoleServerDeclarations": "registerStockPhotosConsoleServerDeclarations",
+        "subprocessors": "stockPhotosSubprocessors"
+      },
+      "contributes": {}
+    },
+    {
       "id": "funnels",
       "package": "@aglyn/plugins-funnels",
       "register": {
@@ -3385,6 +3395,16 @@
       "apiPrefixes": [
         "funnels"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: Funnels natively — the site's funnels with their results over a range, the editor with the site's own pages and records, Create with AI, Activate for a draft and Act on this drop-off; the funnels screen opening natively from a link.",
+        "ios": { "module": "AglynFunnelsPlugin", "register": "registerFunnelsNative" },
+        "android": { "package": "com.aglyn.plugins.funnels", "register": "registerFunnelsNative" },
+        "contributes": {
+          "screens": ["funnels.list"],
+          "quickActions": ["funnels.open"],
+          "deepLinks": ["funnels.page"]
+        }
+      },
       "catalog": {
         "order": 4,
         "$comment": "On for every workspace, off for a site only when that site says so (AGL-3605): funnels are a way of reading the paid analytics tier, so the card needs no switch of its own to be sold, and it records nothing until a site saves its first funnel.",

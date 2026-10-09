@@ -106,6 +106,19 @@ describe('the look row (AGL-3660)', () => {
     assert.equal(result.lookCreditsKept, true)
   })
 
+  it('passes a look that went straight to done between snapshots, its credits run into its label (AGL-3660)', () => {
+    // The live Juniper Clay run: the look took four credits and three seconds,
+    // and the page read its row as "Designing your look4 credits".
+    const result = analyzeProgress([
+      snap(0, 'queued', [row('Planning your pages', 'active'), look('waiting'), row('Writing page 1', 'waiting')]),
+      snap(1, 'running', [row('Planning your pages', 'done'), look('done', 'Designing your look4 credits'), row('Writing page 1', 'active')]),
+      snap(2, 'done', [row('Planning your pages', 'done'), look('done', 'Designing your look4 credits'), row('Writing page 1', 'done')]),
+    ])
+    assert.equal(result.lookRowFirst, true)
+    assert.equal(result.lookCreditsKept, true)
+    assert.equal(result.lookRowActive, true)
+  })
+
   it('fails a look row that loses its credits or comes after another', () => {
     const result = analyzeProgress([
       snap(0, 'running', [row('Planning your pages', 'done'), row('Header', 'active'), look('waiting')]),

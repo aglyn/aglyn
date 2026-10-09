@@ -13,10 +13,12 @@ The session that fixes it owns the whole path, in the same turn:
    cut `release/v…` with `npm run release:prepare -- --write`, adding
    `--hotfix` and the `hotfix` label when the day's cap is reached, and push
    the same head to `main`.
-3. Merge the promotion yourself (`gh pr merge <n> --merge`) the moment it is
-   green. This class is the exception to "never merge a promotion". GitHub
-   auto-merge does not work here, because a bot turns it off on every PR into
-   `production` (AGL-3685). A red check gets fixed, never overridden.
+3. Label the promotion `hotfix`. `auto-merge-green.yml` merges a `hotfix`
+   promotion the moment every check is green, which is the one exception to
+   "a promotion is merged by a person". If you are still there when it turns
+   green, `gh pr merge <n> --merge` is equally fine. GitHub's own auto-merge
+   button is turned off on PRs into `production`, so don't use it. A red check
+   gets fixed, never overridden.
 4. Do the tail in the same hour: aliases serve the merge, the owed rules and
    indexes are deployed (`check-promotion-deploys --list`), `release:tag`,
    then reproduce the broken flow in production and confirm it works.

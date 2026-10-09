@@ -17,9 +17,9 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Redirects | `redirects` | leads | [x] | [x] |
 | Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `sales-channels` | next lane | [ ] | [ ] |
 | Sites, pages and their versions | `hosts/[host]/screens/*` (opening a page = Besigner) | AGL-3668 | [x] | [ ] |
-| Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [ ] | [ ] |
-| Site setup | `hosts/[host]/setup/{details,emails,seo,theme,tracking}`, `theme` | AGL-3668 | [ ] | [ ] |
-| Content collections | `hosts/[host]/content/*` | AGL-3668 | [ ] | [ ] |
+| Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [x] | [ ] |
+| Site setup | `hosts/[host]/setup/{details,emails,seo,theme,tracking}`, `theme` | AGL-3668 | [x] | [ ] |
+| Content collections | `hosts/[host]/content/*` | AGL-3668 | [x] | [ ] |
 | Media | `hosts/[host]/media`, `[orgSlug]/media`, `video-delivery` | AGL-3668 | [x] | [ ] |
 | Forms and submissions | `forms` | AGL-3668 | [x] | [ ] |
 | Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [ ] | [ ] |

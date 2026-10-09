@@ -51,10 +51,15 @@ import type {
   AiJobPlan,
 } from '../model/ai-jobs.types'
 import {
+  AI_SITE_BLOG_NAV_ID,
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiSiteBlogNavPage,
+  aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfallText,
 } from '../model/ai-site-job'
+import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -83,8 +88,11 @@ import {
   aiSiteLedgerUnits,
   aiSitePendingUnits,
   aiSiteUnitJob,
+  aiSiteWritesPosts,
   createAiJobSiteStep,
+  createAiSiteJobAdmission,
   registerAiSiteJob,
+  type AiSiteUnit,
 } from './ai-job-site-step'
 import {
   AI_SITE_POST_BUDGET,
@@ -339,6 +347,64 @@ describe('the units a plan owes', () => {
     ])
     // A palette change is a proposal with no record to reference.
     expect(built.has('palette')).toBe(false)
+  })
+})
+
+describe('a site start that writes its posts links its blog (AGL-3660)', () => {
+  // The Slow Roads plan as the stand-in check leaves it: Home, About, Contact.
+  const plan = confirmedPlan({
+    create: [LAYOUT],
+    screens: [
+      planScreen({ title: 'Home', slug: '/', id: 'drftHomePg' }),
+      planScreen({ title: 'About', slug: '/about', id: 'drftAbout0' }),
+      planScreen({ title: 'Contact', slug: '/contact', id: 'drftContPg' }),
+    ],
+  })
+  const units = aiSiteJobUnits(plan, { content: 'posts' })
+  const layout = units.find((unit) => unit.kind === 'layout') as AiSiteUnit
+  const ledger = (status: string) =>
+    units.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: unit.slot === 'posts' ? status : 'pending' }))
+  const sitePagesOf = (job: AiJob) =>
+    aiSiteUnitJob(job, layout, aiSiteBuiltRefs(units, [])).inputs?.[AI_LAYOUT_SITE_PAGES_INPUT] as Array<Record<string, unknown>>
+
+  it('hands the layout the blog by its path, second after Home, while the posts are owed', () => {
+    const job = siteJob({ plan, items: ledger('pending') as never })
+    expect(aiSiteWritesPosts(job)).toBe(true)
+    expect(sitePagesOf(job).map((page) => [page['label'], page['href'] ?? page['slug']])).toEqual([
+      ['Home', '/'],
+      ['Blog', '/blog'],
+      ['About', '/about'],
+      ['Contact', '/contact'],
+    ])
+    expect(sitePagesOf(job)[1]).toEqual({ id: AI_SITE_BLOG_NAV_ID, label: 'Blog', slug: '/blog', href: '/blog' })
+  })
+
+  it('reads the blog back off the layout unit’s inputs, and links it in the frame and in the raw header', () => {
+    const job = siteJob({ plan, items: ledger('pending') as never })
+    const unitJob = aiSiteUnitJob(job, layout, aiSiteBuiltRefs(units, []))
+    expect(aiLayoutSitePages(unitJob.inputs).find((page) => page.id === AI_SITE_BLOG_NAV_ID)?.href).toBe('/blog')
+    // The raw layout path writes a Page Link by path.
+    const tree = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'muiBox', nodes: ['bar', 'slot'] },
+        bar: { componentId: 'muiToolbar', nodes: [] },
+        slot: { componentId: 'layoutSlot' },
+      },
+    }
+    const written = aiLayoutWithSitePages(tree, aiLayoutSitePages(unitJob.inputs)) as { nodes: Record<string, { props?: Record<string, unknown> }> }
+    const links = Object.values(written.nodes).filter((node) => node.props?.['renderAs'] === 'link')
+    expect(links.map((node) => node.props?.['href'] ?? node.props?.['screenId'])).toEqual(['drftHomePg', '/blog', 'drftAbout0', 'drftContPg'])
+  })
+
+  it('takes the next free address when a kept plan still holds a page at /blog, and links that', () => {
+    const kept = confirmedPlan({ ...plan, screens: [...plan.screens, planScreen({ title: 'Blog', slug: '/blog', id: 'drftBlogPg' })] })
+    expect(aiSiteBlogNavPage(kept.screens).href).toBe('/posts')
+  })
+
+  it('links no blog where the posts are not owed, or the part was skipped', () => {
+    expect(sitePagesOf(siteJob({ plan })).some((page) => page['id'] === AI_SITE_BLOG_NAV_ID)).toBe(false)
+    expect(aiSiteWritesPosts(siteJob({ plan, items: ledger('skipped') as never }))).toBe(false)
   })
 })
 
@@ -912,6 +978,41 @@ describe('what a scaffold is admitted with', () => {
     })
   })
 
+  it('refuses a Free start what is left of the month cannot pay for, before it spends, with what is left and when it resets (AGL-3660)', async () => {
+    const seen: unknown[] = []
+    const admission = (left: number) =>
+      createAiSiteJobAdmission({
+        freeCreditsLeft: async (_firestore, input) => {
+          seen.push(input.orgId)
+          return { left, total: 300, resetsOn: '2026-11-01' }
+        },
+      })
+    const context = (pages: number, extra: Record<string, unknown> = {}) => ({
+      firestore: {} as unknown as FirebaseFirestore.Firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { ...good, pages },
+      org: { plan: 'free' },
+      ...extra,
+    })
+    const refused = await admission(70)(context(2))
+    expect(refused).toEqual({ status: 429, error: aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, '2026-11-01') })
+    expect(refused?.error).toMatch(/up to about 218 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
+    expect(seen).toEqual(['org-1'])
+    // Enough left for the figure the dialog quotes: admitted.
+    await expect(admission(aiFreeSiteCreditEstimate(2))(context(2))).resolves.toBeNull()
+    await expect(admission(aiFreeSiteCreditEstimate(1))(context(1))).resolves.toBeNull()
+    // Nothing known about what is left: admitted, and the reservation decides.
+    await expect(createAiSiteJobAdmission({ freeCreditsLeft: async () => null })(context(2))).resolves.toBeNull()
+    // A resume carries on the same job: not asked again.
+    seen.length = 0
+    await expect(admission(0)(context(2, { plan: { screens: [], create: [], reuse: [], status: 'confirmed' } }))).resolves.not.toMatchObject({ status: 429 })
+    expect(seen).toEqual([])
+    // A paid workspace is never asked.
+    await expect(admission(0)({ ...context(AI_SITE_PAGES.min), org: { plan: 'pro' } })).resolves.toBeNull()
+    expect(seen).toEqual([])
+  })
+
   it('refuses a site of another workspace', async () => {
     mockOwners.set('host-1', 'org-2')
     await expect(ask(good)).resolves.toEqual({
@@ -1319,6 +1420,35 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     publish.mockResolvedValueOnce({ liveUrl: null, published: [], drafts: [] })
     await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items })))
     expect(publishPosts).not.toHaveBeenCalled()
+  })
+
+  it('tells the publish the blog went unwritten when its posts part failed, so its links come out (AGL-3660)', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const ledger = (posts: Record<string, unknown>) =>
+      aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) => (row.slot === 'posts' ? { ...row, ...posts } : row))
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts: jest.fn(async () => null) as never, dropCache: jest.fn(async () => ({ complete: true })) as never },
+    )
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...pages], items: ledger({ status: 'failed', outputs: [] }) as never })))
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ blogUnwritten: true }))
+    const posts = [entry('job-1-posts-0', 'One')]
+    await step(
+      context(
+        siteJob({
+          inputs: { ...blogInputs, autoConfirm: true },
+          outputs: [LOOK, ...posts, ...pages],
+          items: ledger({ status: 'succeeded', outputs: posts.map((post) => post.id) }) as never,
+        }),
+      ),
+    )
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ blogUnwritten: false }))
+    // A site that owes no posts says nothing about a blog.
+    const plain = aiSiteInitialLedger(aiSiteJobUnits(confirmedPlan()), [LOOK, ...pages])
+    await step(context(siteJob({ inputs: { ...siteJob().inputs, autoConfirm: true }, outputs: [LOOK, ...pages], items: plain })))
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.not.objectContaining({ blogUnwritten: expect.anything() }))
   })
 
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {

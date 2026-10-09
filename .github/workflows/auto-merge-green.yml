@@ -14,7 +14,11 @@ name: Auto-merge green PRs
 #     any branch another open PR is based on are kept).
 #   - A PR into `production` is never merged here, and if anyone turns GitHub
 #     auto-merge on for one, this turns it off again. A promotion is merged by
-#     a person.
+#     a person. The ONE exception is a promotion labeled `hotfix`. Zach,
+#     2026-10-08 (AGL-3690): a fix for anything that stops people signing up or
+#     using the platform reaches production IMMEDIATELY, and nothing may stop
+#     it. A `hotfix` promotion gets the same all-green test as a PR into main,
+#     and is merged the moment it passes.
 #   - A PR labeled `hold` is skipped, for anything that needs a decision first
 #     (a legal publish, a release-day freeze).
 #
@@ -72,23 +76,25 @@ jobs:
       # Kept equal to `production`'s branch protection (and so `main`'s).
       REQUIRED: '["ci","guards","*.emulator.spec.ts","Firestore + RTDB rules matrix"]'
     steps:
-      - name: Production PRs never auto-merge
+      - name: Production PRs never auto-merge (except a hotfix, merged below)
         run: |
           set -euo pipefail
           for n in $(gh pr list --repo "$REPO" --base production --state open \
-              --json number,autoMergeRequest --jq '.[] | select(.autoMergeRequest != null) | .number'); do
+              --json number,autoMergeRequest,labels \
+              --jq '.[] | select(.autoMergeRequest != null) | select([.labels[].name] | index("hotfix") | not) | .number'); do
             gh pr merge "$n" --repo "$REPO" --disable-auto
             gh pr comment "$n" --repo "$REPO" \
               --body "Auto-merge was turned off: a PR into \`production\` is merged by a person (AGL-3685)."
           done
 
-      - name: Merge every green PR into main
+      - name: Merge every green PR into main, and every green hotfix promotion
         run: |
           set -euo pipefail
           merged=0
-          for n in $(gh pr list --repo "$REPO" --base main --state open --limit 100 --json number --jq '.[].number'); do
+          hotfixes=$(gh pr list --repo "$REPO" --base production --state open --label hotfix --json number --jq '.[].number')
+          for n in $(gh pr list --repo "$REPO" --base main --state open --limit 100 --json number --jq '.[].number') $hotfixes; do
             pr=$(gh pr view "$n" --repo "$REPO" \
-              --json isDraft,labels,mergeable,headRefName,headRefOid,statusCheckRollup)
+              --json isDraft,labels,mergeable,baseRefName,headRefName,headRefOid,statusCheckRollup)
             verdict=$(jq -r --argjson required "$REQUIRED" '
               def state: if .__typename == "CheckRun"
                 then (if .status == "COMPLETED" then .conclusion else "PENDING" end)
@@ -97,7 +103,7 @@ jobs:
               [.statusCheckRollup[] | {name: name, state: state}] as $checks
               | if .isDraft then "skip: draft"
                 elif ([.labels[].name] | index("hold")) then "skip: labeled hold"
-                elif (.headRefName | startswith("release/")) then "skip: a release branch"
+                elif .baseRefName == "main" and (.headRefName | startswith("release/")) then "skip: a release branch"
                 elif .mergeable != "MERGEABLE" then "skip: mergeable=\(.mergeable)"
                 elif ($checks | length) == 0 then "skip: no checks yet"
                 elif ([$checks[] | select(.state as $s | ["SUCCESS","SKIPPED","NEUTRAL"] | index($s) | not)] | length) > 0

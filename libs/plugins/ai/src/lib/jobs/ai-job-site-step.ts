@@ -44,6 +44,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiFreeSiteShortfall,
+  aiFreeSiteShortfallText,
   aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
@@ -51,7 +53,9 @@ import {
   aiSiteWords,
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
+  aiSiteBlogNavPage,
 } from '../model/ai-site-job'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -60,7 +64,12 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
-import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
+import {
+  AI_LAYOUT_SITE_PAGES_INPUT,
+  AI_LAYOUT_SITE_PAGES_MAX,
+  aiLayoutIsHomeSlug,
+  aiLayoutSitePagesOfPlan,
+} from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
@@ -603,8 +612,17 @@ export function aiSiteUnitJob(
   // ids are minted on the plan, and the platform writes the header's links.
   // A page is told them too, so its buttons may go to a page built after it.
   if (job.kind === 'site' && (unit.kind === 'layout' || unit.kind === 'page')) {
-    // A guided start links every page the person asked for (AGL-3660).
-    const pages = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
+    // A guided start links every page the person asked for (AGL-3660), and
+    // the blog its first posts are written into, by its path, second after
+    // Home (AGL-3676): the live Slow Roads start linked an "Articles" page
+    // and never the blog.
+    const planned = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
+    const blog = aiSiteWritesPosts(job) ? [aiSiteBlogNavPage(plan.screens)] : []
+    const homes = planned.filter((page) => aiLayoutIsHomeSlug(page.slug))
+    const pages = [...homes, ...blog, ...planned.filter((page) => !aiLayoutIsHomeSlug(page.slug))].slice(
+      0,
+      AI_LAYOUT_SITE_PAGES_MAX,
+    )
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
   }
   // A site's pages and its layout are designed in the layout language and
@@ -613,7 +631,7 @@ export function aiSiteUnitJob(
     // The look designed first (AGL-3660): its header arrangement and band rhythm.
     const look = (job.outputs ?? []).find((output) => output.resource === 'theme' && output.id === 'look')
     const style = look?.proposal?.['style'] as Record<string, unknown> | undefined
-    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'] }
+    if (style) unitInputs['siteStyle'] = { headerAlign: style['headerAlign'], rhythm: style['rhythm'], seed: style['seed'] }
     unitInputs[AI_LAYOUT_LANGUAGE_INPUT] = true
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) unitInputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
@@ -654,36 +672,64 @@ export function aiSiteUnitJob(
 }
 
 /**
+ * Whether this site start writes its first posts (AGL-3676): its ledger owes
+ * the posts part and has not given up on it. The ledger is written before the
+ * layout is built, so the header knows the blog before it exists.
+ */
+export function aiSiteWritesPosts(job: Pick<AiJob, 'items'>): boolean {
+  return (job.items ?? []).some((row) => row.slot === 'posts' && row.status !== 'skipped' && row.status !== 'failed')
+}
+
+/**
  * A scaffold is admitted with inputs that read, for a site of the job's own
  * org, and only where this deployment has loaded the step that builds a page:
  * a scaffold whose pages nothing can build is not a scaffold.
  */
-export const aiSiteJobAdmission: AiJobAdmission = async (context) => {
-  const inputs = parseAiSiteJobInputs(context.inputs)
-  if (typeof inputs === 'string') return { status: 400, error: inputs }
-  // The workspace's own page band (AGL-3594): one or two pages on the Free
-  // taste, four to eight on a paid plan.
-  const freeTaste = aiSiteFreeTaste(context.org)
-  const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
-  if (pages) return { status: 400, error: pages }
-  if (context.plan) {
-    const shape = aiSitePlanRefusal(context.plan, { freeTaste })
-    if (shape) return { status: 400, error: shape }
-  }
-  if (!context.hostId) {
-    return {
-      status: 400,
-      error: 'Open the site the scaffold is for before starting the job',
+export function createAiSiteJobAdmission(
+  deps: { freeCreditsLeft?: typeof readFreeAiCreditsLeft; now?: () => Date } = {},
+): AiJobAdmission {
+  const freeCreditsLeft = deps.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const now = deps.now ?? (() => new Date())
+  return async (context) => {
+    const inputs = parseAiSiteJobInputs(context.inputs)
+    if (typeof inputs === 'string') return { status: 400, error: inputs }
+    // The workspace's own page band (AGL-3594): one or two pages on the Free
+    // taste, four to eight on a paid plan.
+    const freeTaste = aiSiteFreeTaste(context.org)
+    const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
+    if (pages) return { status: 400, error: pages }
+    // A Free start that what is left of the month's Free credits cannot pay for
+    // is refused before it spends (AGL-3660), on the figure the dialog quotes —
+    // the dialog asks the same, and this is what a stale dialog meets. Only at
+    // creation: a resume is the same job carrying on from where it paused.
+    if (freeTaste && !context.plan) {
+      const credits = await freeCreditsLeft(context.firestore, { orgId: context.orgId, org: context.org, now: now() })
+      const shortfall = aiFreeSiteShortfall(credits, inputs.pages)
+      if (credits && shortfall) {
+        return { status: 429, error: aiFreeSiteShortfallText(shortfall, credits.resetsOn) }
+      }
     }
+    if (context.plan) {
+      const shape = aiSitePlanRefusal(context.plan, { freeTaste })
+      if (shape) return { status: 400, error: shape }
+    }
+    if (!context.hostId) {
+      return {
+        status: 400,
+        error: 'Open the site the scaffold is for before starting the job',
+      }
+    }
+    const owner = await resolveOrgIdForHost(context.hostId)
+    if (!owner || owner !== context.orgId)
+      return { status: 404, error: 'Unknown site' }
+    if (!aiJobStepRunnerFor('page')) {
+      return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
+    }
+    return null
   }
-  const owner = await resolveOrgIdForHost(context.hostId)
-  if (!owner || owner !== context.orgId)
-    return { status: 404, error: 'Unknown site' }
-  if (!aiJobStepRunnerFor('page')) {
-    return { status: 400, error: AI_SITE_NO_PAGE_STEP_COPY }
-  }
-  return null
 }
+
+export const aiSiteJobAdmission: AiJobAdmission = createAiSiteJobAdmission()
 
 /** Whether a scaffold's workspace spends the Free taste (AGL-3594); a missing org reads as paid, as the band has always been. */
 export function aiSiteFreeTaste(org: object | null | undefined): boolean {
@@ -883,10 +929,14 @@ export function createAiJobSiteStep(
     /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      // A blog the header links by path before its posts exist (AGL-3660):
+      // owed and not delivered, its links come out of what is published.
+      const postsRow = rows.get('posts')
       const sitePublish = await publish(context.firestore, {
         job,
         outputs: pages,
         now: context.now,
+        ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
