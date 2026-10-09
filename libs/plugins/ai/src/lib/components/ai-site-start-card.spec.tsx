@@ -676,12 +676,12 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
   })
 
   it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
-    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 250, total: 300, resetsOn: '2026-11-01' } })
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 290, total: 300, resetsOn: '2026-11-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
     expect(
       screen.getByText(
-        `Up to about ${aiFreeSiteCreditEstimate(2)} AI credits. You have 250 of your 300 free AI credits left this month, until November 1.`,
+        `Up to about ${aiFreeSiteCreditEstimate(2)} AI credits. You have 290 of your 300 free AI credits left this month, until November 1.`,
       ),
     ).toBeTruthy()
     expect(screen.queryByText(/Building this site can take/)).toBeNull()
@@ -694,7 +694,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    const warning = screen.getByText(/Building this site can take up to about 218 AI credits, and only 70 are left/)
+    const warning = screen.getByText(/Building this site can take up to about 282 AI credits, and only 70 are left/)
     expect(warning.textContent).toMatch(/shared by all your Free workspaces and reset on November 1/)
     // 70 covers no one-page start either, so it offers none.
     expect(warning.textContent).not.toMatch(/choose 1 page/)
