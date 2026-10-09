@@ -404,6 +404,33 @@ data class EventWriteInput(
 )
 
 @Serializable
+data class FirstPartyPlugin(
+    val alwaysOn: Boolean? = null,
+    val alwaysOnForWorkspace: Boolean? = null,
+    val defaultOffPerSite: Boolean? = null,
+    val description: String? = null,
+    val id: String,
+    val label: String,
+    val releaseFlag: String? = null,
+    val requires: List<String>? = null,
+    val siteOff: FirstPartyPluginSiteOff? = null,
+)
+
+@Serializable
+data class FirstPartyPluginSiteOff(
+    val confirm: Boolean? = null,
+    val keeps: String,
+    val pages: FirstPartyPluginSiteOffPages? = null,
+    val stops: String,
+)
+
+@Serializable
+data class FirstPartyPluginSiteOffPages(
+    val heading: String,
+    val none: String,
+)
+
+@Serializable
 data class FormLeadRoutingOptionsItem(
     val label: String,
     val value: String,
@@ -1279,6 +1306,7 @@ data class OrderFulfillment(
     val carrier: String? = null,
     val handover: OrderFulfillmentHandover? = null,
     val id: String,
+    val labelCostCents: Double? = null,
     val labelRef: String? = null,
     val labelUrl: String? = null,
     val lineItemIds: List<Double>,
@@ -2222,6 +2250,7 @@ internal data class ContractValuesPart2(
     @SerialName("EVENT_ORGANIZER_MAX_LENGTH") val eventOrganizerMaxLength: Long,
     @SerialName("EVENT_TITLE_MAX_LENGTH") val eventTitleMaxLength: Long,
     @SerialName("EXPERIMENT_LIST_QUERY") val experimentListQuery: ListQueryDeclaration,
+    @SerialName("FIRST_PARTY_PLUGINS") val firstPartyPlugins: List<FirstPartyPlugin>,
     @SerialName("FORM_IN_USE") val formInUse: ListQueryFilter,
     @SerialName("FORM_LEAD_ROUTING_OPTIONS") val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem>,
     @SerialName("FORM_LIST_FILTER_HEADERS") val formListFilterHeaders: Map<String, String>,
@@ -2265,11 +2294,11 @@ internal data class ContractValuesPart2(
     @SerialName("MEDIA_FOLDER_NAME_MAX_LENGTH") val mediaFolderNameMaxLength: Long,
     @SerialName("MEDIA_KINDS") val mediaKinds: List<MediaKind>,
     @SerialName("MEDIA_LIST_QUERY") val mediaListQuery: ListQueryDeclaration,
-    @SerialName("MEDIA_ORIENTATION_OPTIONS") val mediaOrientationOptions: List<ListFilterOption>,
 )
 
 @Serializable
 internal data class ContractValuesPart3(
+    @SerialName("MEDIA_ORIENTATION_OPTIONS") val mediaOrientationOptions: List<ListFilterOption>,
     @SerialName("MEDIA_SCOPED_SEARCH_NOTICE") val mediaScopedSearchNotice: String,
     @SerialName("MEDIA_SORT_LABELS") val mediaSortLabels: Map<String, String>,
     @SerialName("MEDIA_SORT_ORDER") val mediaSortOrder: Map<String, ListQuerySort>,
@@ -2317,11 +2346,11 @@ internal data class ContractValuesPart3(
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
     @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
-    @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_MAX") val posKioskIdleSecondsMax: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_MIN") val posKioskIdleSecondsMin: Long,
@@ -2434,6 +2463,7 @@ class ContractValues internal constructor(
     val eventOrganizerMaxLength: Long get() = part2.eventOrganizerMaxLength
     val eventTitleMaxLength: Long get() = part2.eventTitleMaxLength
     val experimentListQuery: ListQueryDeclaration get() = part2.experimentListQuery
+    val firstPartyPlugins: List<FirstPartyPlugin> get() = part2.firstPartyPlugins
     val formInUse: ListQueryFilter get() = part2.formInUse
     val formLeadRoutingOptions: List<FormLeadRoutingOptionsItem> get() = part2.formLeadRoutingOptions
     val formListFilterHeaders: Map<String, String> get() = part2.formListFilterHeaders
@@ -2477,7 +2507,7 @@ class ContractValues internal constructor(
     val mediaFolderNameMaxLength: Long get() = part2.mediaFolderNameMaxLength
     val mediaKinds: List<MediaKind> get() = part2.mediaKinds
     val mediaListQuery: ListQueryDeclaration get() = part2.mediaListQuery
-    val mediaOrientationOptions: List<ListFilterOption> get() = part2.mediaOrientationOptions
+    val mediaOrientationOptions: List<ListFilterOption> get() = part3.mediaOrientationOptions
     val mediaScopedSearchNotice: String get() = part3.mediaScopedSearchNotice
     val mediaSortLabels: Map<String, String> get() = part3.mediaSortLabels
     val mediaSortOrder: Map<String, ListQuerySort> get() = part3.mediaSortOrder
@@ -2525,7 +2555,7 @@ class ContractValues internal constructor(
     val outreachTaskTitleMax: Long get() = part3.outreachTaskTitleMax
     val paymentAcceptedMaxLength: Long get() = part3.paymentAcceptedMaxLength
     val posKioskCatalogLimit: Long get() = part3.posKioskCatalogLimit
-    val posKioskDoneSeconds: Long get() = part3.posKioskDoneSeconds
+    val posKioskDoneSeconds: Long get() = part4.posKioskDoneSeconds
     val posKioskIdleSecondsDefault: Long get() = part4.posKioskIdleSecondsDefault
     val posKioskIdleSecondsMax: Long get() = part4.posKioskIdleSecondsMax
     val posKioskIdleSecondsMin: Long get() = part4.posKioskIdleSecondsMin

@@ -1406,9 +1406,22 @@ nothing itself.
   its pages (publish role and byline, as the entry editor's Publish requires) and
   drops the blog's cached addresses. A site whose kind is Online store gets
   "Adding your first products": the `products` step's catalog asked for 3 to 6,
-  each written by the commerce plugin's `product` draft writer as an UNPRICED
-  draft with no photo — off the storefront until the owner prices it, since no
-  price is ever invented. Each part asks before its first pass whether the member
+  each written by the commerce plugin's `product` draft writer with NO price,
+  since no price is ever invented — and, since the 2026-10-08 Ember & Wick
+  start showed no product at all, LISTED before it has one (`comingSoon`):
+  `active`, shown on the storefront as "Price coming soon" with no Add to
+  cart, sold by no door (`variantHasPrice`) and in no feed until the owner
+  prices it; the row and the Products card say "Set prices to start selling".
+  Each gets a photo in its slot: a stock photo of its own words where the
+  deployment has a library, else a starter, for the owner to replace. The
+  pages then LIST the real records (`layout-language/ai-layout-listings.ts`):
+  the shop page's section of items and the home's featured band place the
+  commerce Product grid over the catalog (photo cards linking each product's
+  page — the store's built-in product page where no template is designated),
+  a blog's home features its posts through Collection Entries (cover, date,
+  byline, title, excerpt, each linking its post), any group the model drew
+  for them left out; and a selling site's header carries the Cart button.
+  Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent
   nothing. The pages built after are told the posts' titles or the products'

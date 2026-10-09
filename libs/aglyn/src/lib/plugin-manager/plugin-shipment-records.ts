@@ -124,6 +124,13 @@ export interface PluginShipmentWrite {
   /** The label's file, an https URL the seller may show beside the shipment. */
   labelUrl?: string
   labelRef?: string
+  /**
+   * What the label cost the seller, in integer cents of the record's
+   * currency (AGL-3693); absent when the label was bought in another
+   * currency or the cost is not known. A marketplace that pays the seller
+   * back for shipping (Faire's `maker_cost_cents`) is told it.
+   */
+  labelCostCents?: number
   /** The member who bought the label, for the record's timeline. */
   actorUid?: string
 }

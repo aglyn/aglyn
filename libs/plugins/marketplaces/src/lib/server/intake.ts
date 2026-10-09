@@ -44,6 +44,8 @@ export interface OrderEventFulfillment {
   carrier: string | null
   trackingNumber: string | null
   trackingUrl: string | null
+  /** What the parcel's label cost, in integer cents of the order's currency; `null` when unknown (AGL-3693). */
+  labelCostCents?: number | null
   at: string
 }
 
@@ -86,6 +88,10 @@ export async function onOrderFulfilled(
     trackingNumber:
       typeof fulfillment.trackingNumber === 'string' && fulfillment.trackingNumber.trim() ? fulfillment.trackingNumber.trim() : null,
     trackingUrl: typeof fulfillment.trackingUrl === 'string' && fulfillment.trackingUrl.trim() ? fulfillment.trackingUrl.trim() : null,
+    shippingCostCents:
+      Number.isSafeInteger(fulfillment.labelCostCents) && Number(fulfillment.labelCostCents) >= 0
+        ? Number(fulfillment.labelCostCents)
+        : null,
     atMs: Number.isFinite(atMs) ? atMs : deps.now(),
     state: 'pending',
     message: null,

@@ -50,6 +50,7 @@ import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filt
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -297,6 +298,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         $id: product.$id,
       })),
     [productDocs],
+  )
+  // Listed but not yet priced (AGL-3676), among the products on screen.
+  const comingSoon = useMemo(
+    () =>
+      products.filter(
+        (product) => product.status === 'active' && CommerceModel.productPriceMissing(product),
+      ),
+    [products],
   )
   const columnSort = useListColumnSort<ProductRow>({
     sorts: PRODUCT_LIST_COLUMN_SORTS,
@@ -905,6 +914,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             count is `productCount` — the site's products, the same number
             the gate above counts — not `products.length`, which is one page
             of the table's query (AGL-1716). */}
+        {/* Products listed before they have a price (AGL-3676) — a guided
+            start's — show "Price coming soon" on the store and sell nowhere
+            until each is priced: the one step left before the store sells. */}
+        {comingSoon.length ? (
+          <Alert severity="info">
+            {`Set prices to start selling: ${comingSoon.length === 1 ? `${comingSoon[0].name} shows` : `${comingSoon.length} products show`} “Price coming soon” on your store until you set ${comingSoon.length === 1 ? 'its price' : 'their prices'}. Open each one and give every variant a price.`}
+          </Alert>
+        ) : null}
         <QuotaReadoutComponent
           ready={productQuota !== null}
           used={productCount}

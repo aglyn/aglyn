@@ -9,6 +9,38 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.235 — 2026-10-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.234...v1.0.0-beta.235)
+
+### Added
+
+- a store or blog start lists its real products and posts (AGL-3676) (#1283) ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **email:** getting-started emails, sent once per crossing by an hourly sweep (AGL-3692) (#1269) ([AGL-3692](https://linear.app/aglyn/issue/AGL-3692), [AGL-3691](https://linear.app/aglyn/issue/AGL-3691), [AGL-3690](https://linear.app/aglyn/issue/AGL-3690), [AGL-1131](https://linear.app/aglyn/issue/AGL-1131), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122), [AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-1993](https://linear.app/aglyn/issue/AGL-1993))
+- **native:** install a site's own fonts on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the customer texts switch is native on Apple and Kotlin ([AGL-3669](https://linear.app/aglyn/issue/AGL-3669))
+- **native:** built-in themes and a searchable font browser on iPhone, iPad and Mac ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** the Plugins screens switch workspace and site plugins natively ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** spec writes go through FirestoreWriter; domain names the badge ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+
+### Fixed
+
+- **native:** the Kotlin contract values split into parts under the JVM's 255-slot limit ([AGL-3703](https://linear.app/aglyn/issue/AGL-3703))
+- **commerce:** declare firebase for the tax card, regenerate native contracts ([AGL-3693](https://linear.app/aglyn/issue/AGL-3693), [AGL-3702](https://linear.app/aglyn/issue/AGL-3702))
+- **commerce:** tax card says when Stripe Tax leaves it unused; Faire gets label cost ([AGL-3693](https://linear.app/aglyn/issue/AGL-3693), [AGL-3631](https://linear.app/aglyn/issue/AGL-3631), [AGL-3638](https://linear.app/aglyn/issue/AGL-3638))
+- **native:** the AI plugin's spec opens in Xcode; Kotlin knows the power icons ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+
+<details>
+<summary>Also in this release: 2 test, 1 chore</summary>
+
+- **console:** the community sweep knows the native Support screens' forum link ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** the list-plan tests read every declared query ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** regenerate contracts for the inventory-sync plugin ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.234 — 2026-10-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.233...v1.0.0-beta.234)

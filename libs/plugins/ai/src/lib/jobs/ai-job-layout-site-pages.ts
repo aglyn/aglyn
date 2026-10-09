@@ -109,6 +109,35 @@ export function aiLayoutSitePages(inputs: Readonly<Record<string, unknown>> | nu
 }
 
 /**
+ * The unit input naming the planned pages a start merged into its blog
+ * (AGL-3676): a page that stood in for it, whose links go to the blog.
+ */
+export const AI_LAYOUT_SITE_ALIASES_INPUT = 'siteAliases'
+
+/** A planned page merged into the blog: its id, linked as the blog's path, and the title it had. */
+export interface AiLayoutSiteAlias extends AiLayoutSitePage {
+  href: string
+  standsInFor: string
+}
+
+/** The merged pages a unit's inputs carry; none for any other unit. */
+export function aiLayoutSiteAliases(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutSiteAlias[] {
+  const raw = inputs?.[AI_LAYOUT_SITE_ALIASES_INPUT]
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    const { id, label, slug, href, standsInFor } = (entry ?? {}) as Record<string, unknown>
+    return typeof id === 'string' &&
+      id &&
+      typeof label === 'string' &&
+      typeof href === 'string' &&
+      /^\/[a-z0-9-]+$/.test(href) &&
+      typeof standsInFor === 'string'
+      ? [{ id, label, slug: typeof slug === 'string' ? slug : href, href, standsInFor }]
+      : []
+  })
+}
+
+/**
  * What the layout's user turn says about those pages: that the platform
  * writes the navigation, so the model builds none and leaves no empty element
  * for it. The same promise the completion below keeps.

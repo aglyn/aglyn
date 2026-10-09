@@ -818,6 +818,7 @@ async function runOnce(context, index) {
     let lastShot = 0
     let shots = 0
     let job = null
+    let settledSince = null
     const watchStart = Date.now()
     while (Date.now() - watchStart < timeoutMs) {
       job = (await jobRef.get()).data() ?? null
@@ -835,7 +836,17 @@ async function runOnce(context, index) {
           () => undefined,
         )
       }
-      if (job && AI_JOB_SETTLED_STATUSES.includes(job.status)) break
+      // A guided start passes through `needs_input` while its plan is confirmed
+      // on the person's behalf (`autoConfirm`): a run of 2026-10-09 read that
+      // moment as the end, stopped its beat, and stranded the job. A finished
+      // job ends the watch at once; one asking for input must still be asking
+      // a beat later.
+      if (job && AI_JOB_SETTLED_STATUSES.includes(job.status)) {
+        settledSince ??= Date.now()
+        if (job.status !== 'needs_input' || Date.now() - settledSince >= 30_000) break
+      } else {
+        settledSince = null
+      }
       await page.waitForTimeout(1500)
     }
     // The page's own last word, after the job's.
@@ -1207,17 +1218,64 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
       }
       const named = entries.filter((entry) => pageTexts.some((one) => one.text.includes(entry.title))).map((entry) => entry.title)
       check('pages feature the real post titles', named.length > 0, `${named.length} of ${entries.length} titles on a page: ${named.join(', ') || 'none'}`)
+      // The home lists the posts themselves, each card linking its post (AGL-3676),
+      // and no planned page stands in for the blog in the header.
+      if (slug) {
+        await page.goto(`${origin}/`, { waitUntil: 'load', timeout: 180_000 }).catch(() => null)
+        await page.waitForTimeout(1000)
+        const hrefs = await page.$$eval('a[href]', (anchors) => anchors.map((anchor) => anchor.getAttribute('href') ?? '')).catch(() => [])
+        const linked = entries.filter((entry) => hrefs.includes(`/${slug}/${entry.slug}`)).map((entry) => entry.title)
+        check('the home links each post it lists', linked.length >= Math.min(2, entries.length), `${linked.length} of ${entries.length} posts linked: ${linked.join(', ') || 'none'}`)
+        const nav = await page.locator('header nav').first().innerText({ timeout: 5_000 }).catch(() => '')
+        const standIns = nav.split(/\n+/).map((line) => line.trim()).filter((line) => /^(articles?|journal|posts?|stories|writing)$/i.test(line))
+        check('no page stands in for the blog in the header', standIns.length === 0 && new RegExp(`\\bBlog\\b`).test(nav), `nav: ${nav.replace(/\n+/g, ' | ')}`)
+        const ctas = await page.$$eval('a', (anchors) => anchors.map((anchor) => anchor.textContent ?? '')).catch(() => [])
+        const named = ctas.filter((text) => /\barticles?\b/i.test(text) && !/^Read the post$/.test(text))
+        check('no call to action names a stand-in page', named.length === 0, named.join('; ') || 'none')
+      }
     }
     if (productsRow) {
       check('products row succeeded', productsRow.status === 'succeeded', rowText(productsRow))
       const products = (await hostRef.collection('products').get()).docs.map((doc) => ({ id: doc.id, ...doc.data() }))
       record(run, { products: products.map((product) => ({ id: product.id, name: product.name, status: product.status, priceUsd: product.priceUsd ?? null, variants: (product.variants ?? []).map((variant) => variant.priceUsd ?? null) })) })
       const priced = products.filter((product) => product.priceUsd != null || (product.variants ?? []).some((variant) => variant.priceUsd != null))
+      // Listed before they have a price (AGL-3676): active, unpriced, each with a photo.
       check(
-        '3 to 6 products saved as unpriced drafts',
-        products.length >= 3 && products.length <= 6 && products.every((product) => product.status === 'draft') && priced.length === 0,
-        `${products.length} products: ${products.map((product) => `${product.name} (${product.status})`).join(', ')}; priced ${priced.length}`,
+        '3 to 6 products listed unpriced, each with a photo',
+        products.length >= 3 &&
+          products.length <= 6 &&
+          products.every((product) => product.status === 'active' && (product.mediaUrls ?? []).length > 0) &&
+          priced.length === 0,
+        `${products.length} products: ${products.map((product) => `${product.name} (${product.status}, ${(product.mediaUrls ?? []).length} photo)`).join(', ')}; priced ${priced.length}`,
       )
+      check('products row says to set prices', /Set their prices/.test(productsRow.note ?? ''), rowText(productsRow))
+      // The storefront lists them (AGL-3676): the grid on the home and the shop, each card a product page.
+      const store = pageTexts.filter((one) => one.status === 200)
+      const gridOn = []
+      const productLinks = new Set()
+      for (const entry of run.publish?.published ?? []) {
+        await page.goto(`${origin}${entry.path}`, { waitUntil: 'load', timeout: 180_000 }).catch(() => null)
+        await page.waitForTimeout(1500)
+        const links = await page.$$eval('a[href^="/products/"]', (anchors) => anchors.map((anchor) => anchor.getAttribute('href'))).catch(() => [])
+        if (links.length) gridOn.push(`${entry.path} (${links.length})`)
+        for (const link of links) productLinks.add(link)
+        if (entry.path === '/') {
+          const cart = await page.locator('header [aria-label="Cart"]').count().catch(() => 0)
+          check('the header carries the cart', cart > 0, `${cart} cart button(s) in the header`)
+          run.shots.push(await shoot(page, join(runDir, '32-store-home.png'), { fullPage: true }).catch(() => null))
+        } else if (/shop|product|store/i.test(`${entry.path} ${entry.label}`)) {
+          run.shots.push(await shoot(page, join(runDir, '33-store-shop.png'), { fullPage: true }).catch(() => null))
+        }
+      }
+      check('the home and the shop list the products', gridOn.some((line) => line.startsWith('/ ')) && gridOn.length >= 2, gridOn.join('; ') || 'none')
+      const soon = store.filter((one) => one.visible.includes('Price coming soon')).map((one) => one.path)
+      check('cards say “Price coming soon”', soon.length > 0, soon.join(', ') || 'none')
+      const pdps = []
+      for (const [index, link] of [...productLinks].entries()) {
+        const pdp = await visit(link, index === 0 ? '34-product-page' : null)
+        pdps.push(`${link} ${pdp.status}${pdp.visible.includes('Price coming soon') ? '' : ' (no coming-soon)'}${/Add to cart/.test(pdp.visible) ? ' (Add to cart shown)' : ''}`)
+      }
+      check('every product page answers, coming soon, with nothing to buy', pdps.length > 0 && pdps.every((line) => / 200$/.test(line)), pdps.join('; ') || 'none')
       const named = products.filter((product) => pageTexts.some((one) => one.text.includes(product.name))).map((product) => product.name)
       check('pages feature the real product names', named.length > 0, `${named.length} of ${products.length} names on a page: ${named.join(', ') || 'none'}`)
       const prices = pageTexts.flatMap((one) => (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((price) => `${one.path} ${price}`))

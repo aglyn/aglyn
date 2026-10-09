@@ -25,7 +25,7 @@ import {
 import { aiProductsProposalOf } from '../model/ai-products'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
-import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
+import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS, aiSiteWords } from '../model/ai-site-job'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import {
@@ -33,7 +33,18 @@ import {
   AI_BLOG_POST_STEP,
   generateAiBlogPost,
 } from '../runtime/ai-blog-post-generation'
-import { aiLayoutStarterPhotos } from '../layout-language/ai-layout-pictures'
+import {
+  aiLayoutStarterPhotos,
+  type AiLayoutPicturePhoto,
+  type AiLayoutPictureSlot,
+} from '../layout-language/ai-layout-pictures'
+import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
+import {
+  aiLayoutListingId,
+  aiLayoutListingPlacements,
+  type AiLayoutListing,
+  type AiLayoutListingScreen,
+} from '../layout-language/ai-layout-listings'
 import { aiJobAdmissionFor, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
@@ -58,13 +69,18 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    (`aiPublishSitePosts`), as a person's Publish would.
  *  - ADDING YOUR FIRST PRODUCTS: the `products` step's catalog, asked for
  *    `AI_SITE_PRODUCTS` products, each written through the commerce plugin's
- *    `product` draft writer — a DRAFT with no price, off the storefront until
- *    the owner prices it, since no price is ever invented. No photo either:
- *    the writer takes none, and a stock picture of something else would show
- *    a shopper a product that is not the one for sale.
+ *    `product` draft writer with NO price, since no price is ever invented.
+ *    Since the 2026-10-08 Ember & Wick start, whose store showed no product
+ *    at all, each is LISTED before it has a price (`comingSoon`): on the
+ *    storefront as "Price coming soon", sold by no door until the owner sets
+ *    one — the job's row and the products list both say that is the step
+ *    left. Each gets a photo in its slot, a stock photo of its own words
+ *    where the deployment has a library, else a starter, for the owner to
+ *    replace with their own.
  *
- * The pages built after them are told their titles or names, so the writing
- * page and the shop feature what exists rather than inventing their own.
+ * The pages built after them are told their titles or names, and the
+ * sections that show them list the real records (`aiSiteListings`,
+ * `ai-layout-listings.ts`): the shop's Product grid, the blog's posts.
  *
  * ── Not on the Free taste ────────────────────────────────────────────────
  *
@@ -270,6 +286,52 @@ export interface AiSiteProductsRunnerDeps {
   /** The catalog's runner: the `products` step's. */
   catalog: AiJobStepRunner
   writerFor?: typeof pluginResourceDraftWriter
+  /** Where each product's photo comes from; the stock library, else the starters, otherwise. */
+  photos?: typeof aiSiteProductPhotos
+}
+
+/**
+ * A photo for each product (AGL-3676), in order: a stock photo of the
+ * product's own words, copied into the site's library, where the deployment
+ * has a stock library; else a starter photo, as a page's empty picture takes
+ * one. It fills the photo slot every product card and product page has, for
+ * the owner to replace with their own; the product's note says so. Never
+ * throws: a product with no photo is still written.
+ */
+export async function aiSiteProductPhotos(input: {
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  names: readonly string[]
+  signal?: AbortSignal
+  stockPhotos?: typeof aiLayoutStockPhotoSource
+}): Promise<Array<string | null>> {
+  if (!input.names.length || !input.job.hostId) return input.names.map(() => null)
+  const slots: AiLayoutPictureSlot[] = input.names.map((name, index) => ({
+    imageId: `product${index}`,
+    frameId: null,
+    iconId: null,
+    alt: name,
+    // The product card's own shape (`cardStyle: 'photo'`).
+    aspect: 4 / 5,
+    sectionIndex: 0,
+    role: 'gallery' as const,
+  }))
+  const seed = `${input.job.$id}:products`
+  let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
+  try {
+    const source = (input.stockPhotos ?? aiLayoutStockPhotoSource)({
+      hostId: input.job.hostId,
+      uid: input.job.createdBy,
+      seed,
+      business: aiSiteWords(input.job.inputs).about || input.job.brief,
+      sectionNames: ['Products'],
+      ...(input.signal ? { signal: input.signal } : {}),
+    })
+    if (source) found = await source(slots)
+  } catch (error) {
+    console.warn('ai site products: the stock photos failed; starter photos fill them', { error: String(error) })
+  }
+  const starters = aiLayoutStarterPhotos(slots, seed)
+  return slots.map((_slot, index) => found[index]?.src ?? starters[index]?.src ?? null)
 }
 
 /** The sentence the products unit's brief ends with, which the catalog's rules read as how many. */
@@ -301,9 +363,15 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
     )
     if (!catalog || catalog.proposal?.kind !== 'catalog') return { ...outcome, outputs: [] }
     const proposed = catalog.proposal.products.slice(0, AI_SITE_PRODUCTS.max)
+    const photos = await (deps.photos ?? aiSiteProductPhotos)({
+      job,
+      names: proposed.map((product) => product.name),
+      ...(context.signal ? { signal: context.signal } : {}),
+    }).catch(() => proposed.map(() => null))
     const outputs: AiJobOutput[] = []
     let stopped: string | null = null
     for (const [index, product] of proposed.entries()) {
+      const photo = photos[index]
       const written = await keeper.writer.write({
         orgId: job.orgId,
         hostId: job.hostId,
@@ -312,15 +380,21 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         now: context.now,
         id: aiSiteProductId(job.$id, index),
         name: product.name,
-        // No price: the owner sets it. No photo: the writer takes none.
+        // No price: the owner sets it, and until then the store lists it as
+        // "Price coming soon" and sells it nowhere (AGL-3676). Its photo
+        // slot holds a stock or starter photo for the owner to replace.
         content: {
           name: product.name,
           type: product.type,
-          description: product.description,
+          // Listed at once, so no "[gift card terms]" gap reaches a shopper:
+          // a sentence that leaves a fact for the owner is left out.
+          description: aiSiteProductDescriptionWithoutGaps(product.description),
           tags: product.tags,
           options: product.options,
           seoTitle: product.seoTitle,
           seoDescription: product.seoDescription,
+          comingSoon: true,
+          ...(photo ? { mediaUrls: [photo] } : {}),
         },
       })
       if (written.ok === false) {
@@ -333,7 +407,7 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         hostId: job.hostId,
         hostSubdomain: catalog.output.hostSubdomain ?? null,
         label: written.name,
-        note: 'A draft with no price. Set its price and photo in Products to put it on sale.',
+        note: AI_SITE_PRODUCT_NOTE,
       })
     }
     if (!outputs.length) {
@@ -438,6 +512,76 @@ export async function aiPublishSitePosts(
     return null
   }
 }
+
+/**
+ * The site's listings a layout or a page unit is handed (AGL-3676,
+ * `ai-layout-listings.ts`): the store's catalog once its products are written,
+ * the blog once its posts are, each with the sections of the plan's pages
+ * that list it. A layout is built before either, so it is told the store will
+ * sell (`sells`, its ledger still owing the products part), which puts the
+ * cart in its header.
+ */
+export function aiSiteListings(input: {
+  outputs: readonly AiJobOutput[]
+  screens: readonly AiLayoutListingScreen[]
+  /** The ledger owes a store's first products: a layout built before them carries the cart. */
+  sells?: boolean
+}): AiLayoutListing[] {
+  const listings: AiLayoutListing[] = []
+  const products = input.outputs.filter((output) => output.resource === 'product' && !output.proposal)
+  if (products.length || input.sells) {
+    listings.push({
+      id: aiLayoutListingId('products'),
+      kind: 'products',
+      name: 'the shop',
+      records: products.map((product) => product.label),
+      placements: products.length ? aiLayoutListingPlacements('products', input.screens) : [],
+    })
+  }
+  const posts = input.outputs.filter((output) => output.resource === 'entry')
+  const slug = str(posts[0]?.proposal?.['collectionSlug'])
+  if (posts.length && slug) {
+    listings.push({
+      id: aiLayoutListingId('posts'),
+      kind: 'posts',
+      name: 'the blog',
+      records: posts.map((post) => post.label),
+      href: `/${slug}`,
+      collectionSlug: slug,
+      placements: aiLayoutListingPlacements('posts', input.screens),
+    })
+  }
+  return listings
+}
+
+/**
+ * A proposed product's description with each sentence that leaves a gap for
+ * the owner ("Delivery details: [how and when the card is sent].") taken
+ * out (AGL-3676): a start's products are listed as soon as they are written,
+ * and a live run's gift card showed its gaps on the product page. A line
+ * break is kept; nothing else is changed.
+ */
+export function aiSiteProductDescriptionWithoutGaps(description: string): string {
+  return description
+    .split('\n')
+    .map((line) =>
+      line
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => !/\[[^\]]+\]/.test(sentence))
+        .join(' '),
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** What each product a start wrote says on the job's page (AGL-3676). */
+export const AI_SITE_PRODUCT_NOTE =
+  'On your store as “Price coming soon”. Set its price — and your own photo — in Products to start selling it.'
+
+/** The note a store's products row carries once they are written (AGL-3676): the step left before it sells. */
+export const AI_SITE_PRODUCTS_PRICE_NOTE =
+  'Your products are on your store marked “Price coming soon”. Set their prices in Products to start selling.'
 
 /** What a page of a blog or a store is told about the posts or products built before it. */
 export function aiSiteContentBriefLines(outputs: readonly AiJobOutput[]): string[] {

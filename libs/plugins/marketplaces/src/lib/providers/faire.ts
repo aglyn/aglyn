@@ -56,7 +56,10 @@ import {
  *   ships. Lines are at wholesale prices; Faire's commission and payout fee
  *   come with the order.
  * - **Shipments**: Faire takes shipments per order, not per line, so the
- *   confirmation's lines are not sent.
+ *   confirmation's lines are not sent. What the brand paid to ship goes as
+ *   `maker_cost_cents` (Faire: "the cost the brand paid to ship the order")
+ *   when the shipment's label was bought through a shipping plugin, whose
+ *   cost is known; otherwise it is left out rather than guessed.
  * - **Sandbox**: Faire has no sandbox host; `app.sandbox` changes nothing.
  */
 
@@ -376,6 +379,8 @@ export function createFaireProvider(deps: { http: ProviderHttp }): MarketplacePr
       if (hasTracking(order, confirmation.trackingNumber)) return 'already'
       const carrier = text(confirmation.carrier)
       if (!carrier) throw new ProviderError('invalid', `${PROVIDER} needs the carrier a shipment went with`)
+      const cost = confirmation.shippingCostMinor
+      const makerCost = typeof cost === 'number' && Number.isSafeInteger(cost) && cost >= 0 ? cost : null
       try {
         await call(
           app,
@@ -389,6 +394,9 @@ export function createFaireProvider(deps: { http: ProviderHttp }): MarketplacePr
                 carrier: faireCarrier(carrier),
                 tracking_code: confirmation.trackingNumber,
                 shipping_type: 'SHIP_ON_YOUR_OWN',
+                // What the brand paid to ship it, in cents (AGL-3693): Faire's
+                // `maker_cost_cents`. Sent only when known; never a guess.
+                ...(makerCost === null ? {} : { maker_cost_cents: makerCost }),
               },
             ],
           },

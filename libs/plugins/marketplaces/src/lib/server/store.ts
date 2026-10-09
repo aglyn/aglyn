@@ -127,6 +127,12 @@ export interface StoredShipment {
   carrier: string | null
   trackingNumber: string | null
   trackingUrl: string | null
+  /**
+   * What the seller paid to ship the parcel, in integer cents of the order's
+   * currency (AGL-3693): the label's cost when a shipping plugin bought it.
+   * Absent or `null` when not known.
+   */
+  shippingCostCents?: number | null
   atMs: number
   state: 'pending' | 'confirmed' | 'failed'
   message: string | null

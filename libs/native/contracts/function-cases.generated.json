@@ -6574,6 +6574,23 @@
         }
       ]
     },
+    "isDefaultOffPerSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": false
+        }
+      ]
+    },
     "isListingBrowsable": {
       "module": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
       "cases": [
@@ -6643,6 +6660,64 @@
               "type": "plugin",
               "reviewStatus": "verified"
             }
+          ],
+          "result": true
+        }
+      ]
+    },
+    "isLockedOnForSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "mui"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "forms"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "fonts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isLockedOnForWorkspace": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "mui"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "forms"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "fonts"
           ],
           "result": true
         }
@@ -13684,6 +13759,56 @@
         }
       ]
     },
+    "pluginDependents": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "commerce"
+          ],
+          "result": [
+            "accounts"
+          ]
+        },
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": []
+        }
+      ]
+    },
+    "pluginRequirements": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": [
+            "commerce"
+          ]
+        },
+        {
+          "args": [
+            "commerce"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "nope"
+          ],
+          "result": []
+        }
+      ]
+    },
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -14466,6 +14591,430 @@
         }
       ]
     },
+    "resolveDisableCascade": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "commerce",
+            [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          ],
+          "result": [
+            "accounts"
+          ]
+        },
+        {
+          "args": [
+            "commerce",
+            [
+              "commerce",
+              "crm"
+            ]
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "crm",
+            [
+              "crm"
+            ]
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "mui",
+            [
+              "mui",
+              "commerce",
+              "accounts"
+            ]
+          ],
+          "result": []
+        }
+      ]
+    },
+    "resolveEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "accounts",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "accounts",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": []
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "crm",
+                "commerce",
+                "crm"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "crm",
+            "commerce"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "accounts",
+                "commerce",
+                "bookings"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "accounts",
+            "commerce",
+            "bookings"
+          ]
+        }
+      ]
+    },
+    "resolveHostEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            null
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts",
+                "crm"
+              ]
+            },
+            null
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "commerce",
+            "crm"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts",
+                "crm"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "commerce",
+            "accounts",
+            "crm"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts",
+                "crm"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm",
+                "mui",
+                "forms"
+              ],
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "commerce",
+            "accounts"
+          ]
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ],
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        }
+      ]
+    },
     "resolvePluginInstallState": {
       "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "cases": [
@@ -14543,6 +15092,551 @@
             "shadowed": false,
             "updateAvailable": false
           }
+        }
+      ]
+    },
+    "resolvePluginSiteState": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            null,
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "crm"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-site"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "off-for-site"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "off-for-site"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
         }
       ]
     },
