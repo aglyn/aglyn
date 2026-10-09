@@ -17,6 +17,7 @@
 
 import {
   siteIntegrationHosts,
+  type SiteIntegrationConfigReader,
   type SiteIntegrationDeclaration,
 } from './site-integrations'
 import { SITE_INTEGRATIONS_DECLARED } from './first-party-plugins.generated'
@@ -85,14 +86,15 @@ describe('siteIntegrationHosts', () => {
   })
 
   it('admits nothing while the setting is off, not exactly true, or unreadable', async () => {
-    for (const readConfig of [
+    const readers: SiteIntegrationConfigReader[] = [
       async () => ({ enabled: false }),
       async () => ({ enabled: 'true' }),
       async () => null,
-      async (): Promise<never> => {
+      async (): Promise<null> => {
         throw new Error('unavailable')
       },
-    ]) {
+    ]
+    for (const readConfig of readers) {
       await expect(
         siteIntegrationHosts({ org: business, host: on, readConfig }, declared),
       ).resolves.toEqual({ connectHosts: [], imageHosts: [] })
