@@ -715,7 +715,7 @@ export function buildCollectionListFallbackNodes(
           display: 'block',
           aspectRatio: COLLECTION_LIST_COVER_RATIO,
           borderRadius: 2,
-          bgcolor: 'action.hover',
+          backgroundColor: 'action.hover',
           marginBottom: 1,
         },
       },
