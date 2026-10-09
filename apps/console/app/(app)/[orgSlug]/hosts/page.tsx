@@ -219,7 +219,7 @@ function SiteCard(props: SiteCardProps) {
             // a self-hoster's Sites list linked every one of their
             // sites at OUR domain.
             href={`https://${hostDisplayDomain(hostAddress(host))}/?aglyn-edit`}
-            target={'_blank'}
+            newTab
             rel={'nofollow'}
           >
             {'Visit'}

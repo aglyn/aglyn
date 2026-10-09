@@ -19,7 +19,7 @@
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiDeleteOutline,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPaletteOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
@@ -643,7 +643,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       {
         key: 'details',
         label: 'Open report',
-        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
         href: sendHref(send),
         disabled: !sendHref(send),
         disabledReason: 'This site’s console URL has not resolved yet',
