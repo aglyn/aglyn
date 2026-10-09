@@ -2410,6 +2410,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 // collection holds only invites, roles and billing.
                 orgWide
                 staff
+                help={docsHelp('staffConsole', { anchor: '#org-activity' })}
               />
               <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
             </Stack>

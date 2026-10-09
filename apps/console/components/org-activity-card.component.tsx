@@ -69,6 +69,14 @@ import {
 } from '../utils/list-filters'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
 
+/** The organization's own activity log — the card's default surface. */
+const ORG_ACTIVITY_HELP = docsHelp('inviteTeammates', {
+  anchor: '#activity-log',
+  excerpt:
+    'Who changed what in this organization — settings, members, ' +
+    'invites, and site-level changes.',
+})
+
 export interface OrgActivityCardProps {
   orgId: string
   header?: string
@@ -93,6 +101,13 @@ export interface OrgActivityCardProps {
    * off.
    */
   staff?: boolean
+  /**
+   * The card's help, when it is drawn as a different surface from the
+   * organization's own activity log — "Changes to this member", the staff
+   * org page's "Organization activity" — each of which has its own docs
+   * section (AGL-3707).
+   */
+  help?: ReturnType<typeof docsHelp>
 }
 
 /** Only the default order: the feeds whose query keeps newest first. */
@@ -139,7 +154,14 @@ interface OrgActivityFacets {
  * resolved per row and always sort the page, saying so.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
-  const { orgId, header = 'Recent Activity', targetId, orgWide, staff = false } = props
+  const {
+    orgId,
+    header = 'Recent Activity',
+    targetId,
+    orgWide,
+    staff = false,
+    help = ORG_ACTIVITY_HELP,
+  } = props
   const [opened, setOpened] = useState<ActivityDetails | null>(null)
   const { orgSlug } = useParams<{ orgSlug: string }>()
   const { data: user } = useUser()
@@ -424,12 +446,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   return (
     <CardDisplay
       header={header}
-      help={docsHelp('inviteTeammates', {
-        anchor: '#activity-log',
-        excerpt:
-          'Who changed what in this organization — settings, members, ' +
-          'invites, and site-level changes.',
-      })}
+      help={help}
       contentGutterX
       contentGutterY
       contentBordered="all"
