@@ -184,11 +184,11 @@ export interface AiUpsellDialogProps {
 }
 
 /** The add-on's own section of the Create with AI guide (AGL-3660). */
-const AI_UPSELL_HELP = pluginDocsHelp('aiCreate', {
-  anchor: '#without-the-add-on',
-  excerpt:
-    'Create with AI needs the Aglyn AI add-on on a paid plan. An owner or admin adds it from Billing; on Free, the monthly AI credits cover it.',
-})
+const aiUpsellHelp = () =>
+  pluginDocsHelp('aiCreate', {
+    anchor: '#without-the-add-on',
+    excerpt: `Create with AI needs the ${aiAddonName()} add-on on a paid plan. An owner or admin adds it from Billing; on Free, the monthly AI credits cover it.`,
+  })
 
 export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogProps) {
   const copy = AI_UPSELL_COPY[kind]
@@ -203,7 +203,7 @@ export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogP
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {copy.title}
-        <HelpTip {...AI_UPSELL_HELP} />
+        <HelpTip {...aiUpsellHelp()} />
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
