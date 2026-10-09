@@ -288,9 +288,9 @@ export function PosDevicesCard({ hostId }: PosDevicesCardProps) {
           </Stack>
         ) : null}
         <Stack spacing={1}>
-          <Typography variant="subtitle2">{'Customer displays'}</Typography>
+          <Typography variant="subtitle2">{'Customer displays and kiosks'}</Typography>
           <Typography variant="body2" color="text.secondary">
-            {'Pair a tablet facing your customer from the register: tap Pair display and enter the code on the tablet.'}
+            {'Pair a tablet from the register: tap Pair display, choose Customer display or Self-service kiosk, and enter the code on the tablet.'}
           </Typography>
           {registers.flatMap((register: any) =>
             (displays[register.$id] ?? []).map((display) => (

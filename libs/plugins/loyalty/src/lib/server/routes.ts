@@ -38,7 +38,8 @@ import {
 import { LOYALTY_COLLECTIONS } from '../constants/bundle-common'
 import { isDocumentId, keyId, loyaltyDb, loyaltyRefs } from './db'
 import { sendLoyaltyEmail, storeCreditEmail } from './emails'
-import { normalizeStoredMember, readMemberForWrite, writeLedger, writeMember } from './members'
+import { sendLoyaltySync } from './connector-sync'
+import { loyaltySyncTarget, normalizeStoredMember, readMemberForWrite, writeLedger, writeMember } from './members'
 import { forgetLoyaltyProgramCache, readLoyaltyProgram } from './program-store'
 import { json, loyaltyGate, refuse } from './route-gate'
 
@@ -75,7 +76,7 @@ const NO_TOTALS: LoyaltyProgramTotals = {
 }
 
 /** The program's figures, by aggregate query: never a scan of every member. */
-async function programTotals(orgId: string, hostId: string, program: LoyaltyProgram): Promise<LoyaltyProgramTotals> {
+export async function programTotals(orgId: string, hostId: string, program: LoyaltyProgram): Promise<LoyaltyProgramTotals> {
   if (totalsOverride) return totalsOverride(orgId, hostId, program)
   try {
     const { AggregateField } = await import('firebase-admin/firestore')
@@ -274,10 +275,13 @@ export async function memberRoute(request: Request): Promise<Response> {
       note: note || null,
       actorUid: gate.uid,
       atMs: nowMs,
-    })
+    }, loyaltySyncTarget(program, member.email))
     return { member, replay: false }
   })
   if ('error' in outcome) return refuse(outcome.error[0], outcome.error[1])
+  if (program.connected && points && !outcome.replay) {
+    await sendLoyaltySync({ ...scope, memberKey: outcome.member.memberKey })
+  }
 
   let emailed = false
   if (!outcome.replay) {

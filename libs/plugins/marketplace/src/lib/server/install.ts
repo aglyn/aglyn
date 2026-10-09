@@ -268,6 +268,12 @@ export const installHandler: PluginApiHandler = async (req, res) => {
         // keeps the kind the copy already has.
         ...artifactCreateListKeys('components', {
           displayName: listing.displayName,
+          // The description written above — or, on a re-install (a merge),
+          // the one the copy already has — so the stored-null default
+          // (AGL-3680) never overwrites it.
+          description:
+            listing.description ||
+            (existing.empty ? null : (existing.docs[0].get('description') ?? null)),
           kind: existing.empty ? undefined : existing.docs[0].get('kind'),
         }),
         marketplace: {

@@ -61,6 +61,29 @@ const profile = { data: undefined as unknown, status: 'success' }
  */
 // The register's operations (AGL-3609) have specs of their own; this one
 // reads the page around them.
+// The offline register (AGL-3625) has specs of its own; online, it is inert.
+jest.mock('./pos-offline/register-offline', () => {
+  const inert = {
+    offline: false,
+    ready: false,
+    unavailableReason: null,
+    kit: null,
+    queue: [],
+    syncing: false,
+    syncError: null,
+    notices: [],
+    gridProducts: () => [],
+    findByCode: () => null,
+    totalsFor: () => null,
+    ringCashSale: async () => null,
+    reportNetworkFailure: () => undefined,
+    syncNow: async () => undefined,
+    dismissNotices: () => undefined,
+    discard: async () => undefined,
+  }
+  return { PosOfflineBanner: () => null, PosOfflineCheckout: () => null, usePosOffline: () => inert }
+})
+
 jest.mock('./pos-ops/register-ops', () => ({
   PosOperationsBar: () => null,
   PosCustomerLookup: () => null,

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { isLoyaltyConnectorId, type LoyaltyConnectorId } from './loyalty-connectors'
+
 /**
  * A store's loyalty program (AGL-3640): how customers earn points, what the
  * points are worth, and the referral offer. Pure and framework-free, so the
@@ -46,6 +48,12 @@ export interface LoyaltyProgram {
   refereeMinimumCents: number
   /** Whether members are emailed what they earned and were given. */
   emails: boolean
+  /**
+   * The merchant's own loyalty account that owns the points instead
+   * (AGL-3677), or `null` for the built-in program. Set only by connecting
+   * one; a program change never names it.
+   */
+  connected: LoyaltyConnectorId | null
 }
 
 export const LOYALTY_PROGRAM_DEFAULTS: LoyaltyProgram = {
@@ -59,6 +67,7 @@ export const LOYALTY_PROGRAM_DEFAULTS: LoyaltyProgram = {
   refereeRewardCents: 1000,
   refereeMinimumCents: 0,
   emails: true,
+  connected: null,
 }
 
 /** The bounds each number is held to: `[min, max]`. */
@@ -92,6 +101,7 @@ export function normalizeLoyaltyProgram(raw: unknown): LoyaltyProgram {
   program.enabled = source['enabled'] === true
   program.referralsEnabled = source['referralsEnabled'] === true
   program.emails = source['emails'] !== false
+  program.connected = isLoyaltyConnectorId(source['connected']) ? source['connected'] : null
   for (const field of NUMBER_FIELDS) {
     const [min, max] = LOYALTY_PROGRAM_BOUNDS[field]
     const value = whole(source[field])
@@ -139,6 +149,8 @@ export function loyaltyProgramProblem(change: unknown): string | null {
 export function applyLoyaltyProgramChange(current: LoyaltyProgram, change: Record<string, unknown>): LoyaltyProgram {
   const next: Record<string, unknown> = { ...current }
   for (const key of Object.keys(LOYALTY_PROGRAM_DEFAULTS)) {
+    // Which account owns the points is the connection route's to say.
+    if (key === 'connected') continue
     if (key in change) next[key] = change[key]
   }
   return normalizeLoyaltyProgram(next)

@@ -514,6 +514,193 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
   },
   {
+    "key": "order-ready-for-pickup",
+    "name": "Order ready for pickup",
+    "description": "Tells the buyer their pickup order is ready, where to collect it, the pickup hours and any arrival instructions.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Your order {{order.number}} is ready for pickup",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "order.summary",
+        "description": "The ordered items, one per line",
+        "sample": "2× House Blend"
+      },
+      {
+        "name": "pickup.location",
+        "description": "The pickup location’s name and address",
+        "sample": "Main Street shop, 12 Main St, Springfield"
+      },
+      {
+        "name": "pickup.hours",
+        "description": "The location’s pickup hours; empty when it lists none",
+        "sample": "Pickup hours:\nMo-Fr 09:00-17:00"
+      },
+      {
+        "name": "pickup.instructions",
+        "description": "What to do on arrival, as the store wrote it; empty when it wrote none",
+        "sample": "Ring the bell at the side door."
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your order is ready for pickup",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Order {{order.number}} is ready at {{pickup.location}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{order.summary}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{pickup.hours}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{pickup.instructions}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Bring your order number, {{order.number}}.",
+        "variant": "caption"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "order-picked-up",
+    "name": "Order picked up",
+    "description": "Confirms to the buyer that their pickup order was collected.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "You picked up order {{order.number}}",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "order.summary",
+        "description": "The ordered items, one per line",
+        "sample": "2× House Blend"
+      },
+      {
+        "name": "pickup.location",
+        "description": "The pickup location’s name and address",
+        "sample": "Main Street shop, 12 Main St, Springfield"
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Thanks for picking up your order",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Order {{order.number}} was picked up from {{pickup.location}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{order.summary}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "If something is missing or not right, reply to this email or contact {{host.businessName}}.",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "order-out-for-delivery",
+    "name": "Order out for delivery",
+    "description": "Tells the buyer the store’s own driver is on the way with their local delivery, in the window they booked.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Your order {{order.number}} is out for delivery",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "order.summary",
+        "description": "The ordered items, one per line",
+        "sample": "2× House Blend"
+      },
+      {
+        "name": "delivery.window",
+        "description": "The delivery window the buyer booked",
+        "sample": "Tue, Oct 14, 9:00 AM – 12:00 PM"
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your order is on its way",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{host.businessName}} is out delivering order {{order.number}}. Your window: {{delivery.window}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{order.summary}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
     "key": "sale-notification",
     "name": "New sale",
     "description": "Notifies the seller when an order is placed.",

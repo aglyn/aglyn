@@ -430,7 +430,21 @@ export interface AiLayoutPageReading {
 export interface AiLayoutPlannedSection {
   name: string
   items: number
+  /** What the plan places in it: a form it binds there is one of these. */
+  uses?: readonly string[]
 }
+
+/** A planned section's name that asks for a form: a contact, an inquiry, a booking. */
+const FORM_SECTION =
+  /\b(form|contact|get in touch|reach|write|message|inquir(?:y|ies|e)|enquir(?:y|ies|e)|book(?:ing|ings)?|reserv(?:e|ation|ations)|quote|appointments?|rsvp|sign ?up|subscribe|newsletter|apply|application|register)\b/i
+
+/** Whether a planned section is one a form may fill: it names one, or the plan binds a form there. */
+function takesForm(planned: AiLayoutPlannedSection): boolean {
+  return FORM_SECTION.test(planned.name) || (planned.uses ?? []).some((ref) => /\bform\b/i.test(ref))
+}
+
+/** What a form's section scores against a planned section that asks for no form: never chosen while another fits. */
+const AI_LAYOUT_FORM_MISFIT = -100
 
 const WORD = /[a-z0-9]+/g
 const STOP = new Set(['a', 'an', 'and', 'the', 'of', 'for', 'to', 'our', 'your', 'with', 'in', 'on', 'we', 'us', 'you'])
@@ -443,6 +457,12 @@ const ITEM_KINDS = new Set(['list', 'cards', 'steps', 'stats', 'quotes', 'faq', 
  * How well an answer's section fits a planned one: the words its headings
  * share with the plan's name, and whether it shows items where the plan
  * asked for them and none where it asked for none.
+ *
+ * A shared heading word outweighs the items (AGL-3660): a live portfolio's
+ * plan gave "Works Gallery" no items, and its "Selected works" cards lost the
+ * place to an inquiry form that shared no word with it. A section holding a
+ * form fills only a planned section that asks for one — by its name, or a
+ * form the plan binds there — so the form is never a page's stand-in.
  */
 function fit(raw: unknown, planned: AiLayoutPlannedSection): number {
   const blocks = isRecord(raw) && Array.isArray(raw['blocks']) ? raw['blocks'].filter(isRecord) : []
@@ -457,7 +477,9 @@ function fit(raw: unknown, planned: AiLayoutPlannedSection): number {
   for (const word of named) if (said.has(word) || [...said].some((other) => other.startsWith(word) || word.startsWith(other))) shared += 1
   const showsItems = blocks.some((block) => ITEM_KINDS.has(String(block['kind'])) && (block['kind'] === 'component' || (Array.isArray(block['items']) && block['items'].length > 0)))
   const wantsItems = planned.items > 0
-  return shared * 2 + (wantsItems === showsItems ? 1.5 : -1.5)
+  const holdsForm = blocks.some((block) => block['kind'] === 'form')
+  if (holdsForm && !takesForm(planned)) return AI_LAYOUT_FORM_MISFIT
+  return shared * 2 + (wantsItems === showsItems ? 0.5 : -0.5)
 }
 
 /**

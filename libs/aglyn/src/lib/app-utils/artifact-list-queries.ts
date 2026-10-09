@@ -68,7 +68,32 @@ import {
  *     with the search anyway.
  *   - `Created` ranges: a second range order would double the composites for
  *     a question `Updated` answers nearly as well; one range per list.
- *   - Column sorting: the only declared order is the walk.
+ *
+ * ## The header sorts (AGL-3680)
+ *
+ * Every column sorts on the QUERY, by a stored value every writer stamps:
+ *
+ *   Display name  `nameLower` (above; a starter page's is its starter's
+ *                 name, which is the name its library row shows);
+ *   ID            the walk itself, either way;
+ *   Updated,      `updatedAt` / `createdAt` — stamped by every create, and by
+ *   Created       `backfill-artifacts-list-keys.mjs` on a document that
+ *                 predates either;
+ *   Used in, Kind the stored `kind`; Source the stored `source.type`;
+ *   Description   a layout's or component's `description`, stored as `null`
+ *                 when it has none (`artifactCreateListKeys` + the backfill),
+ *                 because an `orderBy` DROPS a document that lacks the field.
+ *                 A template row's description is its starter's when it
+ *                 leads one, which is no stored field: it sorts the page.
+ *
+ * Each is `alone` — served only while no filter or search is on, falling
+ * back to the list's default header order with a notice — so on the layouts
+ * and components subcollections it costs no composite. Updated newest-first
+ * is not `alone`: it is the order
+ * the Updated range already imposes, so it pairs with every equality and
+ * its composites are the ones the range needed anyway. The templates
+ * library's `libraryRow` scope is an equality every order pairs with, so
+ * each of its orders has one `(libraryRow, order)` composite.
  */
 
 /** The walk every artifact list keeps: the document name, ascending. */
@@ -105,10 +130,56 @@ const UPDATED_FIELD: ListFilterField = {
 /** The quick search every artifact list and gallery shelf offers: the name's word prefixes. */
 export const ARTIFACT_NAME_SEARCH = { tokensPath: 'nameTokens' }
 
+/** One header's two orders, `alone` (see "The header sorts"). */
+const headerSorts = (column: string, path: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label, alone: true },
+  { path, direction: 'desc', column, label, alone: true },
+]
+
+/**
+ * The ID header: the walk ascending — the list's default, served under every
+ * filter — and descending, `alone`.
+ */
+const ID_SORTS: readonly ListQuerySort[] = [
+  { path: LIST_QUERY_ID_PATH, direction: 'asc', column: '$id', label: 'ID' },
+  { path: LIST_QUERY_ID_PATH, direction: 'desc', column: '$id', label: 'ID', alone: true },
+]
+
+/**
+ * Updated newest first FIRST: it is the order the Updated range imposes
+ * (`planListQuery` takes the first declared order on the range's field), so
+ * it is not `alone` — the range's composites already serve it.
+ */
+const TIME_SORTS: readonly ListQuerySort[] = [
+  { path: 'updatedAt', direction: 'desc', column: 'updatedAt', label: 'Updated' },
+  { path: 'updatedAt', direction: 'asc', column: 'updatedAt', label: 'Updated', alone: true },
+  ...headerSorts('createdAt', 'createdAt', 'Created'),
+]
+
+const NAME_SORTS = headerSorts('displayName', 'nameLower', 'Display name')
+const DESCRIPTION_SORTS = headerSorts('description', 'description', 'Description')
+
+/** The layouts page's header sorts; the ID ascending one is the default. */
+export const LAYOUT_LIST_SORTS: readonly ListQuerySort[] = [
+  ...ID_SORTS,
+  ...NAME_SORTS,
+  ...DESCRIPTION_SORTS,
+  ...TIME_SORTS,
+]
+
+/**
+ * The layouts list's scope: live layouts. Every create stores `deletedAt: null`
+ * (`artifactCreateListKeys`) and a delete stamps the time, so the query leaves
+ * tombstones out instead of the page dropping them after the read (AGL-3680).
+ */
+export const LAYOUT_LIST_BASE: readonly ListQueryFilter[] = [
+  { path: 'deletedAt', op: '==', value: null },
+]
+
 /** `hosts/{hostId}/layouts`. */
 export const LAYOUT_LIST_QUERY: ListQueryDeclaration = {
   fields: [NAME_FIELD, ID_FIELD, UPDATED_FIELD],
-  sorts: [ARTIFACT_LIST_ORDER],
+  sorts: [ARTIFACT_LIST_ORDER, ...LAYOUT_LIST_SORTS],
   search: ARTIFACT_NAME_SEARCH,
 }
 
@@ -118,6 +189,15 @@ export const LAYOUT_LIST_HEADERS: Readonly<Record<string, string>> = {
   updatedAt: 'Updated',
 }
 
+/** The components card's header sorts; the ID ascending one is the default. */
+export const COMPONENT_LIST_SORTS: readonly ListQuerySort[] = [
+  ...ID_SORTS,
+  ...NAME_SORTS,
+  ...headerSorts('kind', 'kind', 'Used in'),
+  ...DESCRIPTION_SORTS,
+  ...TIME_SORTS,
+]
+
 /** `hosts/{hostId}/components`. */
 export const COMPONENT_LIST_QUERY: ListQueryDeclaration = {
   fields: [
@@ -126,7 +206,7 @@ export const COMPONENT_LIST_QUERY: ListQueryDeclaration = {
     ID_FIELD,
     UPDATED_FIELD,
   ],
-  sorts: [ARTIFACT_LIST_ORDER],
+  sorts: [ARTIFACT_LIST_ORDER, ...COMPONENT_LIST_SORTS],
   search: ARTIFACT_NAME_SEARCH,
 }
 
@@ -150,6 +230,18 @@ export const TEMPLATE_LIST_BASE: readonly ListQueryFilter[] = [
   { path: 'libraryRow', op: '==', value: true },
 ]
 
+/**
+ * The templates library's header sorts. It shows no ID column, so the walk
+ * stays the unlabelled default; Description sorts the page (see "The header
+ * sorts").
+ */
+export const TEMPLATE_LIST_SORTS: readonly ListQuerySort[] = [
+  ...NAME_SORTS,
+  ...headerSorts('kind', 'kind', 'Kind'),
+  ...headerSorts('source', 'source.type', 'Source'),
+  ...TIME_SORTS,
+]
+
 export const TEMPLATE_LIST_QUERY: ListQueryDeclaration = {
   fields: [
     NAME_FIELD,
@@ -162,7 +254,7 @@ export const TEMPLATE_LIST_QUERY: ListQueryDeclaration = {
     },
     UPDATED_FIELD,
   ],
-  sorts: [ARTIFACT_LIST_ORDER],
+  sorts: [ARTIFACT_LIST_ORDER, ...TEMPLATE_LIST_SORTS],
   search: ARTIFACT_NAME_SEARCH,
 }
 

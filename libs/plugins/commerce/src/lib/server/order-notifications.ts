@@ -276,6 +276,9 @@ export function composeOrderBuyerMessage(input: {
       ? fulfillments.find((entry) => entry.id === options.fulfillmentId)
       : [...fulfillments].sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0))[0]
     if (!fulfillment) return null
+    // Collected at the counter or handed over by the store's driver
+    // (AGL-3624): "picked up" and "delivered" say so, never "shipped".
+    if (fulfillment.handover) return null
     // The units THIS shipment carried (AGL-3611): a partial shipment of a
     // line names its own count, not the line's.
     const shipped = CommerceModel.fulfillmentLineQuantities(order, fulfillment)
@@ -346,6 +349,68 @@ export function composeOrderBuyerMessage(input: {
         `${store} marked order ${number} as delivered.\n\n${summary}` + link,
       sms: `${store}: order ${number} was delivered.${smsLink}`,
       timelineDetail: 'Delivery confirmation sent',
+    }
+  }
+
+  if (event === 'ready_for_pickup' || event === 'picked_up') {
+    const pickup = order.pickup
+    if (order.fulfillmentMethod !== 'pickup' || !pickup) return null
+    const summary = lines.map(lineLabel).join('\n')
+    const where = `${pickup.locationName}${pickup.address ? `, ${pickup.address}` : ''}`
+    const hours = pickup.hours ? `Pickup hours:\n${pickup.hours}` : ''
+    const instructions = pickup.instructions ?? ''
+    if (event === 'picked_up') {
+      return {
+        occurrence: 'order',
+        emailKey: CommerceModel.BUYER_NOTIFICATION_EMAIL_KEYS.picked_up,
+        tokens: { ...base, 'order.summary': summary, 'pickup.location': where },
+        subject: `You picked up order ${number}`,
+        text: `Order ${number} was picked up from ${where}. Thanks for shopping with ${store}.\n\n${summary}` + link,
+        sms: `${store}: order ${number} was picked up. Thank you!${smsLink}`,
+        timelineDetail: 'Pickup confirmation sent',
+      }
+    }
+    return {
+      occurrence: 'order',
+      emailKey: CommerceModel.BUYER_NOTIFICATION_EMAIL_KEYS.ready_for_pickup,
+      tokens: {
+        ...base,
+        'order.summary': summary,
+        'pickup.location': where,
+        'pickup.hours': hours,
+        'pickup.instructions': instructions,
+      },
+      subject: `Your order ${number} is ready for pickup`,
+      text:
+        `Your order ${number} is ready for pickup at ${where}.\n\n${summary}` +
+        (hours ? `\n\n${hours}` : '') +
+        (instructions ? `\n\n${instructions}` : '') +
+        `\n\nBring your order number, ${number}.` +
+        link,
+      sms: `${store}: order ${number} is ready for pickup at ${pickup.locationName}.${smsLink}`,
+      timelineDetail: 'Ready-for-pickup notice sent',
+    }
+  }
+
+  if (event === 'out_for_delivery') {
+    const delivery = order.localDelivery
+    if (order.fulfillmentMethod !== 'local_delivery' || !delivery) return null
+    const summary = lines.map(lineLabel).join('\n')
+    const window = delivery.windowLabel ?? ''
+    return {
+      // Each run out the door is its own message: a failed drop sent out
+      // again tells the buyer again.
+      occurrence: String(delivery.outForDeliveryAtMs ?? 'order'),
+      emailKey: CommerceModel.BUYER_NOTIFICATION_EMAIL_KEYS.out_for_delivery,
+      tokens: { ...base, 'order.summary': summary, 'delivery.window': window },
+      subject: `Your order ${number} is out for delivery`,
+      text:
+        `${store} is on the way with order ${number}` +
+        (window ? `, in your window ${window}` : '') +
+        `.\n\n${summary}` +
+        link,
+      sms: `${store}: order ${number} is out for delivery${window ? ` (${window})` : ''}.${smsLink}`,
+      timelineDetail: 'Out-for-delivery notice sent',
     }
   }
 

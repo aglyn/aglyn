@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.232",
+  "version": "1.0.0-beta.234",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -258,6 +258,8 @@
     "test:native-theme": "node --test tools/scripts/lib/native-theme.test.mjs tools/scripts/lib/native-brand.test.mjs",
     "generate:native-contracts": "node tools/scripts/generate-native-contracts.mjs",
     "generate:native-contracts:check": "node tools/scripts/generate-native-contracts.mjs --check",
+    "generate:native-derived-values": "node tools/scripts/generate-native-derived-values.mjs",
+    "generate:native-derived-values:check": "node tools/scripts/generate-native-derived-values.mjs --check",
     "test:native-contracts": "node --test tools/scripts/lib/native-contracts.test.mjs",
     "generate:native-brand-assets": "node tools/scripts/generate-native-brand-assets.mjs",
     "generate:native-brand-assets:check": "node tools/scripts/generate-native-brand-assets.mjs --check",

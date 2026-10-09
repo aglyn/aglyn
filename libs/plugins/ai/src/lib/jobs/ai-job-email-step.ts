@@ -197,12 +197,13 @@ export const AI_JOB_EMAIL_INSTRUCTIONS: readonly AiSystemBlock[] = [
     text: [
       'You write one marketing email for the owner of a website: its design as one flat node map, three subject lines and three preheaders. Answer with submit_email.',
       'The root is the document wrapper (div, id "_@_") and holds only Email sections (emailSection). Each section is a band holding the email’s blocks from top to bottom: Email text (emailText), Email buttons (emailButton), Email images (emailImage), Email dividers (emailDivider), Email spacers (emailSpacer) and, only when the job binds products, Email product blocks (emailProduct).',
-      'Open with a heading (emailText with variant heading), keep each paragraph short, and give the email one main call to action as a button. Greet the reader by first name with {{contact.firstName}} where a greeting fits. The only merge tokens are {{contact.firstName}}, {{contact.name}} and {{contact.email}}, and only in text: never in a link, a subject line or a preheader.',
+      'Open with a heading (emailText with variant heading), keep each paragraph short, and give the email one main call to action as a button. Greet the reader by first name with {{contact.firstName}} where a greeting fits. The only merge tokens are {{contact.firstName}}, {{contact.name}} and {{contact.email}}, and only in the email’s text: never in a link, a subject line or a preheader.',
       'Every button links somewhere: a page of the site by its address from the site inventory, such as /menu, which is completed with the site’s domain when the email is sent, or a full https address the brief gives.',
       'An image has an empty src for the owner to fill from the media library, alt text describing the picture it should show, and a width of 600 or less.',
       'Place exactly as many Email product blocks as the job binds products, one for each, in the order the brief names them. Each shows its product’s current name, price and picture when the email is sent, so never type a product’s price.',
       'Leave out an unsubscribe link and a postal address: the platform adds the unsubscribe link to every campaign email. A fact the brief does not give, such as a date or a place, goes in square brackets.',
-      `Subject lines: three that take different approaches, such as direct, curious and benefit-led, each at most ${AI_EMAIL_SUBJECT_MAX_CHARS} characters and best under 60, with no merge token. Preheaders: three, each extending the subject line in the same position, at most ${AI_EMAIL_PREHEADER_MAX_CHARS} characters and best between 40 and 110.`,
+      `Subject lines: three that take different approaches, such as direct, curious and benefit-led, each at most ${AI_EMAIL_SUBJECT_MAX_CHARS} characters and best under 60. Preheaders: three, each extending the subject line in the same position, at most ${AI_EMAIL_PREHEADER_MAX_CHARS} characters and best between 40 and 110.`,
+    'Subject lines and preheaders are plain text that nothing fills: they cannot carry a merge token. Write no {{…}} in them and do not address the reader by name there — write "Welcome to the bakery", never "Welcome, {{contact.firstName}}".',
     ].join('\n'),
   },
 ]
@@ -224,12 +225,14 @@ export const AI_JOB_EMAIL_TOOL: AiTool = {
       subjects: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Three subject lines that take different approaches, the strongest first.',
+        description:
+          'Three subject lines that take different approaches, the strongest first. Plain text: no {{…}} merge token.',
       },
       preheaders: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Three preheaders, each extending the subject line in the same position.',
+        description:
+          'Three preheaders, each extending the subject line in the same position. Plain text: no {{…}} merge token.',
       },
     },
   },
@@ -287,6 +290,71 @@ export function parseAiEmailCopy(answer: Readonly<Record<string, unknown>>): AiE
   return { subjects: lines(answer['subjects']), preheaders: lines(answer['preheaders']) }
 }
 
+/**
+ * A merge token that ends a clause, with the words it leaves dangling in
+ * front of it — "to", "for", "your" — and an apostrophe-s it took.
+ */
+const CLAUSE_END_TOKEN =
+  /(?:\s+(?:to|at|from|with|for|of|by|in|on|into|the|a|an|and|&|or|our|your|my))*\s*\{\{[^{}]*\}\}(?:['’]s\b)?(?=\s*(?:[!?.,;:—–]|\s-\s|$))/gi
+
+/** Any other merge token, with an apostrophe-s it took. */
+const INNER_TOKEN = /\{\{[^{}]*\}\}(?:['’]s\b)?/g
+
+/**
+ * A subject line or preheader with its merge tokens taken out (AGL-3676). Such
+ * a line is never filled — the send fills tokens in the email's text only —
+ * so `{{contact.firstName}}` there would reach the inbox as written. The
+ * guided start's welcome email kept greeting by name in its subject and
+ * stopped on `email-header-token` after its re-ask, so the token is removed
+ * and the line around it tidied, never filled with a name:
+ *
+ *  - a token that ends a clause takes the words left dangling in front of it,
+ *    `Welcome to {{business}}!` → `Welcome!`;
+ *  - a separator left with nothing after it goes, `Welcome, {{firstName}}!` →
+ *    `Welcome!`, and a doubled one collapses;
+ *  - a line that opened with the token opens with what followed it,
+ *    capitalized: `{{firstName}}, your table is ready` → `Your table is ready`.
+ *
+ * A line with no token is returned as it was; one that is empty once settled
+ * is left empty, for the copy's own rules to refuse.
+ */
+export function aiSettleEmailHeaderLine(line: string): string {
+  if (!line.includes('{{')) return line
+  const opened = /^\s*\{\{/.test(line)
+  let out = line
+    .replace(CLAUSE_END_TOKEN, '')
+    .replace(INNER_TOKEN, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([!?.,;:])/g, '$1')
+    .replace(/([,;:—–-])(?:\s*[,;:—–-])+/g, '$1')
+    .replace(/[,;:—–-]+\s*(?=[!?.]|$)/g, '')
+    .replace(/^[\s,;:—–!?.-]+/, '')
+    .trim()
+  if (opened && out) out = out[0].toUpperCase() + out.slice(1)
+  return out
+}
+
+/**
+ * The copy as it is kept (AGL-3676): each line's merge tokens taken out, and,
+ * where the model wrote more than three distinct lines of one kind, the first
+ * three of them — the count rule is a cap, not a judgment.
+ */
+export function aiSettleEmailCopy(copy: AiEmailCopy): AiEmailCopy {
+  const settle = (lines: string[]) => {
+    const settled = lines.map(aiSettleEmailHeaderLine)
+    if (settled.length <= AI_EMAIL_VARIANTS) return settled
+    const seen = new Set<string>()
+    const distinct = settled.filter((line) => {
+      const key = line.toLowerCase()
+      if (!line || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    return distinct.length >= AI_EMAIL_VARIANTS ? distinct.slice(0, AI_EMAIL_VARIANTS) : settled
+  }
+  return { subjects: settle(copy.subjects), preheaders: settle(copy.preheaders) }
+}
+
 /** The copy's own rules: three different lines of each, within their lengths, with no merge token. */
 export function aiEmailCopyViolations(copy: AiEmailCopy): AiDoctrineViolation[] {
   const violations: AiDoctrineViolation[] = []
@@ -338,6 +406,63 @@ function visitsOf(tree: Pick<AiValidatedTree, 'rootId' | 'nodes'>) {
     rootId: tree.rootId,
     nodes: tree.nodes as unknown as Record<string, AiDoctrineNode>,
   })
+}
+
+/** The recipient tokens a model writes under another spelling, by that spelling folded. */
+const RECIPIENT_TOKEN_ALIASES: Readonly<Record<string, string>> = {
+  firstname: 'contact.firstName',
+  name: 'contact.name',
+  fullname: 'contact.name',
+  email: 'contact.email',
+  emailaddress: 'contact.email',
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * An email's node map settled where it has one reading (AGL-3676), before the
+ * doctrine reads it:
+ *
+ *  - a recipient token under another spelling — `{{firstName}}`,
+ *    `{{contact.first_name}}`, `{{ email }}` — is written as the token the
+ *    send fills, in text; any other token is left for the check to refuse;
+ *  - a link that opens with the site's address token, `{{site.url}}/menu`, is
+ *    the page address the design completes with that token itself (see
+ *    `aiEmailDesignNodes`), so it is written as `/menu`.
+ *
+ * Reads and returns the tree as the model wrote it.
+ */
+export function aiSettleEmailTree(input: unknown): unknown {
+  if (!isRecord(input) || !isRecord(input['nodes'])) return input
+  const siteUrl = /^\s*\{\{\s*site\.url\s*\}\}/
+  let nodes: Record<string, unknown> | null = null
+  for (const [id, node] of Object.entries(input['nodes'])) {
+    if (!isRecord(node) || !isRecord(node['props'])) continue
+    let props: Record<string, unknown> | null = null
+    for (const [name, value] of Object.entries(node['props'])) {
+      if (typeof value !== 'string' || !value.includes('{{')) continue
+      let next = value
+      if (name === 'href') {
+        if (siteUrl.test(value)) next = value.replace(siteUrl, '').trim() || '/'
+        if (!next.startsWith('/')) next = value
+      } else {
+        next = value.replace(MERGE_TOKEN, (token, key: string) => {
+          if (AI_EMAIL_TEXT_MERGE_TOKENS.includes(key)) return token
+          const alias = RECIPIENT_TOKEN_ALIASES[key.replace(/^contact\./i, '').replace(/[\s_-]/g, '').toLowerCase()]
+          return alias ? `{{${alias}}}` : token
+        })
+      }
+      if (next === value) continue
+      props ??= { ...node['props'] }
+      props[name] = next
+    }
+    if (!props) continue
+    nodes ??= { ...input['nodes'] }
+    nodes[id] = { ...node, props }
+  }
+  return nodes ? { ...input, nodes } : input
 }
 
 /** The design's own rules, on a tree the doctrine admitted. */
@@ -504,8 +629,11 @@ export async function generateAiEmail(input: AiEmailGenerationInput): Promise<Ai
     tool: AI_JOB_EMAIL_TOOL,
     maxTokens: AI_JOB_EMAIL_STEP_BUDGETS[input.step].maxTokens(input.model),
     thinking: 'off',
+    // What has one reading is settled, not re-asked (AGL-3676): the tree's
+    // token spellings and site-address links, the copy's header tokens.
+    complete: aiSettleEmailTree,
     extend: (tree, answer) => {
-      const copy = parseAiEmailCopy(answer)
+      const copy = aiSettleEmailCopy(parseAiEmailCopy(answer))
       const nodes = aiEmailDesignNodes(tree, input.products.ids)
       last = { copy, nodes }
       const violations = [

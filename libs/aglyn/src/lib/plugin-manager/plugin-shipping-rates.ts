@@ -132,6 +132,13 @@ export interface PluginShippingAddressCheck {
   suggested?: PluginShippingAddress
   /** Why it is not deliverable, in the carrier's words. */
   messages: string[]
+  /**
+   * Where the address is on a map, when the provider placed it. Optional:
+   * only some providers return it, and only for addresses they verified. A
+   * caller measuring distance (local delivery radius zones) treats its
+   * absence as "cannot measure", never as zero.
+   */
+  coordinates?: { lat: number; lng: number }
 }
 
 export interface PluginShippingRateQuoter {

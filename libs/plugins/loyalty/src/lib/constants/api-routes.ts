@@ -30,4 +30,10 @@ export const LOYALTY_API_ROUTES = {
   member: 'loyalty/member',
   /** `GET ?hostId&orderId` — what one order earned, spent and gave back. */
   order: 'loyalty/order',
+  /**
+   * `GET ?hostId` — the store's own Smile.io or Yotpo connection and what is
+   * waiting to reach it; `POST {hostId, action}` — connect, disconnect, send
+   * again (AGL-3677).
+   */
+  connection: 'loyalty/connection',
 } as const

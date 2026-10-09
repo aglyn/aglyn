@@ -31,6 +31,12 @@ import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 import { lineRequiresShipping, orderLineFulfillmentStates } from './order-fulfillment'
 import type { OrderPayment } from './commerce-pos'
+import type { PosOfflineOrderStamp } from './commerce-pos-offline'
+import type {
+  OrderFulfillmentMethod,
+  OrderLocalDelivery,
+  OrderPickup,
+} from './order-local-fulfillment'
 
 export type OrderStatus =
   | 'pending'
@@ -200,6 +206,12 @@ export interface OrderFulfillment {
   updatedAtMs?: number
   /** Whether the buyer was to be told about this shipment. */
   notify?: boolean
+  /**
+   * Handed over rather than shipped (AGL-3624): collected at a pickup
+   * location or brought by the store's own driver. No carrier, no tracking,
+   * and no "your order has shipped" message.
+   */
+  handover?: 'pickup' | 'local_delivery'
   atMs: number
 }
 
@@ -407,6 +419,16 @@ export interface HostOrder {
    */
   locationId?: string
   /**
+   * How the buyer chose to receive the order (AGL-3624). Absent reads as
+   * shipped, which every order before pickup and local delivery was. Also
+   * stamps `locationId` above when the stock came off that location.
+   */
+  fulfillmentMethod?: OrderFulfillmentMethod
+  /** The pickup the buyer chose (AGL-3624), with `fulfillmentMethod` `pickup`. */
+  pickup?: OrderPickup
+  /** The store's own delivery the buyer chose (AGL-3624), with `fulfillmentMethod` `local_delivery`. */
+  localDelivery?: OrderLocalDelivery
+  /**
    * The register a POS sale was rung on, and the console user who rang it
    * (AGL-472, AGL-3607).
    */
@@ -430,6 +452,18 @@ export interface HostOrder {
   payments?: OrderPayment[]
   /** How the customer asked for their receipt at the register (AGL-3608). */
   receiptRequest?: { channel: 'email' | 'sms' | 'print' | 'none'; to?: string; atMs: number }
+  /**
+   * A register sale a customer built at a self-service kiosk (AGL-3623), and
+   * the kiosk (its device token's hash prefix).
+   */
+  posSource?: 'kiosk'
+  kioskDeviceId?: string
+  /**
+   * Set while a kiosk order waits in its register's queue for a cashier to
+   * take payment ("Pay at counter"), and when it joined.
+   */
+  kioskQueueRegisterId?: string
+  kioskQueuedAtMs?: number
   /**
    * The register discount that was applied, and the member who applied it
    * (AGL-2161). Present only on a POS order that carries a discount.
@@ -496,6 +530,12 @@ export interface HostOrder {
   shippingAddress?: OrderAddress
   billingAddress?: OrderAddress
   timeline?: OrderTimelineEvent[]
+  /**
+   * A register sale rung while offline (AGL-3625): when it was rung, when it
+   * synced, and what did not match — stock that went short, a price that
+   * changed. Absent on every other order.
+   */
+  offline?: PosOfflineOrderStamp
   fulfillments?: OrderFulfillment[]
   note?: string
   couponCode?: string

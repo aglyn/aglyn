@@ -990,6 +990,60 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'to a {{brand.productName}} account.',
       source: 'apps/console/app/api/account/emails/route.ts',
     },
+    // AGL-3691. A message a staffer writes to one account from its staff
+    // page, sent in the platform's design. The subject heads the body, so the
+    // email states its topic even to a reader who skipped the subject line
+    // (AGL-3432). It leaves from the platform sender with Reply-To set to the
+    // staffer, so an answer reaches a person rather than `noreply@`.
+    {
+      key: 'staff-follow-up',
+      name: 'Follow-up from the team',
+      description:
+        'A message a staff member writes to one account from its page in ' +
+        'the staff console, sent in the platform design. Replies go to the ' +
+        'staff member who sent it.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{message.subject}}',
+      mergeTokens: [
+        {
+          name: 'name',
+          description: "The account holder's first name, or nothing",
+          sample: 'Alex',
+        },
+        {
+          name: 'message.subject',
+          description: 'What the message is about, in one line',
+          sample: 'Your site is ready to publish',
+        },
+        {
+          name: 'message.body',
+          description: 'The message itself, as the staff member wrote it',
+          sample:
+            'I saw you started a site yesterday. Reply here if anything ' +
+            'got in the way and I will sort it out.',
+        },
+        {
+          name: 'sender.name',
+          description: 'The staff member who wrote it',
+          sample: 'Zach',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{message.subject}}', variant: 'heading' },
+        { block: 'text', text: 'Hi {{name}},', variant: 'body' },
+        { block: 'text', text: '{{message.body}}', variant: 'body' },
+        { block: 'text', text: '{{sender.name}}', variant: 'body' },
+        {
+          block: 'text',
+          text: 'Reply to this email to reach {{sender.name}} directly.',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this because you have a {{brand.productName}} ' +
+        'account and our team wrote to you about it.',
+      source: 'apps/console/app/api/admin/users/system-email/route.ts',
+    },
     // AGL-3367. The platform's other senders, each of which composed its
     // own plain text and so went out with no header or footer. A sender whose
     // message is assembled per send (a digest's list, an alert's figures)

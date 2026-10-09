@@ -167,8 +167,15 @@ export const schema: Aglyn.ComponentSchema = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Stack',
-  // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
-  flags: { lazyHydration: Aglyn.FEATURE_FLAG.ENABLED },
+  flags: {
+    // Static: may sit in a subtree that keeps its server HTML (AGL-3581).
+    lazyHydration: Aglyn.FEATURE_FLAG.ENABLED,
+    // MUI draws the divider between `Children.toArray(children)`, so the
+    // renderer has to hand it one React child per node child (AGL-3660).
+    // Wrapped in the single `<Branch>`, a Stack of any size read as ONE
+    // child and no divider was ever drawn, on the canvas or a live page.
+    positionalChildren: Aglyn.FEATURE_FLAG.ENABLED,
+  },
   description:
     'Lays children out in a row or column with even spacing — the workhorse for most layouts.',
   category: Aglyn.ComponentCategory.LAYOUT,

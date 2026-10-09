@@ -952,6 +952,16 @@ allow read, write: if false;
 
 
 
+match /loyaltyConnections/{hostId} {
+allow read, write: if false;
+}
+match /loyaltySync/{rowId} {
+allow read, write: if false;
+}
+
+
+
+
 
 
 
@@ -3840,7 +3850,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory']) &&
@@ -3848,6 +3858,14 @@ subcollection != 'salesChannels' && (isStaff() ||
 
 
 !string(document).matches('.*/formSubmissions/[^/]+')));
+
+
+
+
+
+
+
+
 
 
 
@@ -4001,7 +4019,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'leads', 'siteMembers',
-'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
 'printJobs', 'returns', 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
 'aiMemory'])));
@@ -4059,7 +4077,7 @@ subcollection != 'salesChannels' && (isStaff() ||
 'emailAttributions', 'campaignAttributions',
 'campaignSequenceReports',
 'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
 'orderWebhooks',
 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
 }
@@ -5002,6 +5020,17 @@ allow write: if false;
 match /mailGatewayLedger/{key} {
 allow read: if isStaff();
 allow write: if false;
+}
+
+
+
+
+
+
+
+
+match /stockPhotoSearches/{key} {
+allow read, write: if false;
 }
 
 

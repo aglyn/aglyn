@@ -62,6 +62,14 @@ describe('one open shift per register', () => {
     expect(opened.openingFloatCents).toBe(15000)
     expect(opened.openedBy).toBe('cashier')
     expect(h.memory.read('hosts/shop/registers/front')?.['openShiftId']).toBe(opened.id)
+    // Every field the history sorts by is on the shift from the start (AGL-3680).
+    expect(h.memory.read(`hosts/shop/registers/front/shifts/${opened.id}`)).toMatchObject({
+      closedAtMs: null,
+      netSalesCents: null,
+      expectedCashCents: null,
+      countedCashCents: null,
+      varianceCents: null,
+    })
   })
 
   it('refuses a second open while one stands', async () => {
@@ -167,6 +175,9 @@ describe('the X and Z reports', () => {
     expect(stored['countedCashCents']).toBe(13800)
     expect(stored['varianceCents']).toBe(-60)
     expect(stored['report']['orderCount']).toBe(2)
+    // Flattened so the history can order by it (AGL-3680).
+    expect(stored['netSalesCents']).toBe(stored['report']['netSalesCents'])
+    expect(typeof stored['closedAtMs']).toBe('number')
     expect(stored['closedBy']).toBe('cashier')
     expect(h.memory.read('hosts/shop/registers/front')?.['openShiftId']).toBeNull()
     // A new shift may open now.

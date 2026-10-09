@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { LOYALTY_API_ROUTES } from '../constants/api-routes'
 import { formatLoyaltyCents, formatPoints } from '../model/loyalty-math'
 import type { LoyaltyProgramTotals } from '../model/loyalty-member'
+import { LOYALTY_CONNECTOR_LABELS } from '../model/loyalty-connectors'
 import { loyaltyRewardRatePct, type LoyaltyProgram } from '../model/loyalty-program'
 import { centsFromDollars, dollarsFromCents, useLoyaltyFetch } from './loyalty-api'
 
@@ -33,13 +34,16 @@ export interface LoyaltyProgramAnswer {
   totals: LoyaltyProgramTotals
 }
 
-type Draft = Record<keyof LoyaltyProgram, string | boolean>
+/** Every field the card edits: which account owns the points is the connection card's (AGL-3677). */
+type EditableKey = Exclude<keyof LoyaltyProgram, 'connected'>
+type Draft = Record<EditableKey, string | boolean>
 
-const MONEY_FIELDS = new Set<keyof LoyaltyProgram>(['referrerRewardCents', 'refereeRewardCents', 'refereeMinimumCents'])
+const MONEY_FIELDS = new Set<EditableKey>(['referrerRewardCents', 'refereeRewardCents', 'refereeMinimumCents'])
 
 function toDraft(program: LoyaltyProgram): Draft {
   const draft = {} as Draft
-  for (const [key, value] of Object.entries(program) as Array<[keyof LoyaltyProgram, number | boolean]>) {
+  for (const [key, value] of Object.entries(program) as Array<[EditableKey, number | boolean]>) {
+    if ((key as string) === 'connected') continue
     draft[key] = typeof value === 'boolean' ? value : MONEY_FIELDS.has(key) ? dollarsFromCents(value) : String(value)
   }
   return draft
@@ -48,7 +52,7 @@ function toDraft(program: LoyaltyProgram): Draft {
 /** The draft as a change the route checks, or the first field that is not a number. */
 function toChange(draft: Draft): { change: Record<string, unknown> } | { problem: string } {
   const change: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(draft) as Array<[keyof LoyaltyProgram, string | boolean]>) {
+  for (const [key, value] of Object.entries(draft) as Array<[EditableKey, string | boolean]>) {
     if (typeof value === 'boolean') {
       change[key] = value
     } else if (MONEY_FIELDS.has(key)) {
@@ -123,7 +127,7 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
     }
   }
 
-  const text = (key: keyof LoyaltyProgram, label: string, helper: string, money = false) => (
+  const text = (key: EditableKey, label: string, helper: string, money = false) => (
     <TextField
       label={label}
       value={String(draft[key])}
@@ -149,10 +153,15 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
 
   const program = answer.program
   const totals = answer.totals
+  const connected = program.connected ? LOYALTY_CONNECTOR_LABELS[program.connected] : null
   return (
     <CardDisplay
       header="Rewards"
-      subheader={`Customers earn points on every order, online and at the register, and spend them like store credit. Today a member gets back ${loyaltyRewardRatePct(program)}% of what they spend.`}
+      subheader={
+        connected
+          ? `Customers earn points on every order, online and at the register, and spend them like store credit. The points are kept in your ${connected} account; these rates decide what each order earns and what points are worth here.`
+          : `Customers earn points on every order, online and at the register, and spend them like store credit. Today a member gets back ${loyaltyRewardRatePct(program)}% of what they spend.`
+      }
       help={pluginDocsHelp('loyalty', {
         anchor: '#set-up-your-program',
         excerpt: 'Set how many points a dollar earns, what points are worth, and the referral offer.',
@@ -185,7 +194,7 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <Typography variant="overline" color="text.secondary">
-                {'Points held'}
+                {connected ? `Points (last read from ${connected})` : 'Points held'}
               </Typography>
               <Typography variant="h6">{formatPoints(totals.outstandingPoints ?? 0)}</Typography>
               <Typography variant="caption" color="text.secondary">
@@ -211,11 +220,14 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
           <Grid size={{ xs: 12, sm: 6 }}>
             {text('minRedeemPoints', 'Points needed to redeem', 'A customer spends points once they hold at least this many.')}
           </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            {text('welcomePoints', 'Welcome points', 'Given with a customer’s first order. 0 for none.')}
-          </Grid>
+          {connected ? null : (
+            <Grid size={{ xs: 12, sm: 6 }}>
+              {text('welcomePoints', 'Welcome points', 'Given with a customer’s first order. 0 for none.')}
+            </Grid>
+          )}
         </Grid>
-        <Stack spacing={2}>
+        {connected ? null : (
+          <Stack spacing={2}>
           {toggle('referralsEnabled', 'Members can refer friends')}
           {draft.referralsEnabled ? (
             <Grid container spacing={2}>
@@ -230,7 +242,8 @@ export function LoyaltyProgramCard(props: { hostId: string; onChanged?: (answer:
               </Grid>
             </Grid>
           ) : null}
-        </Stack>
+          </Stack>
+        )}
         {toggle('emails', 'Email members what they earn and are given')}
       </Stack>
     </CardDisplay>

@@ -53,11 +53,14 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
-import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
+import { aiSiteKindDesignLines, aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { aiSiteSeed } from '../model/ai-site-look'
+import type { AiLayoutDesign } from '../layout-language/ai-layout-design'
+import { aiOriginJobId } from './ai-job-draft-ids'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
-import { aiLayoutSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutIsHomeSlug, aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
 
 /**
@@ -121,6 +124,13 @@ export const AI_LAYOUT_FRAME_THINKING_TOKENS = 4_000
  * keeps a page small.
  */
 export const AI_JOB_PAGE_LANGUAGE_TOKENS = 3_000 + AI_LAYOUT_PAGE_THINKING_TOKENS
+
+/**
+ * The most one section of a page is written in, its copy included: the top of
+ * the 120 to 250 tokens a section runs to. The Free site wall prices each
+ * planned section at it (AGL-3660).
+ */
+export const AI_LAYOUT_SECTION_MOST_TOKENS = 250
 
 /**
  * The time a language page pass needs: its lookup rounds, its answer and its
@@ -269,6 +279,20 @@ export function aiLayoutPagePrompt(input: {
   ].join('\n')
 }
 
+/**
+ * The site a page is designed for (AGL-3660): the kind its job names, the
+ * seed its look was drawn with — the same for every page of the site, so the
+ * site reads as one design — and whether the page is its home. `null` for a
+ * job that names no kind of site, which compiles the compiler's first way.
+ */
+export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: string): AiLayoutDesign | null {
+  const kind = aiSiteKindOfInputs(job.inputs)
+  if (!kind) return null
+  const style = job.inputs?.['siteStyle'] as Record<string, unknown> | undefined
+  const seed = typeof style?.['seed'] === 'number' && Number.isFinite(style['seed']) ? (style['seed'] as number) >>> 0 : aiSiteSeed(aiOriginJobId(job))
+  return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug) }
+}
+
 /** A validated language page, stored as the page keeps it. */
 export interface AiLayoutPageBuilt {
   nodes: NodesMap
@@ -293,6 +317,8 @@ export interface AiLayoutPageCheckInput {
   kept?: Array<AiLayoutSection | null>
   /** The plan indices this answer's sections fill, in order; absent, every section. */
   only?: readonly number[]
+  /** The site the page is drawn for (`aiLayoutDesignOf`); absent, the compiler's first design. */
+  design?: AiLayoutDesign | null
 }
 
 /**
@@ -416,6 +442,7 @@ export function aiLayoutPageCheck(
       {
         reusableComponents: input.reusableComponents,
         sectionIds: input.sectionIds,
+        ...(input.design ? { design: input.design } : {}),
       },
     )
     const stored = aiLayoutStoredTree(
@@ -465,6 +492,8 @@ export function aiLayoutPageCheck(
       {
         ...input.context,
         scrollTargetIds: input.sectionIds,
+        // The layout language draws its own picture cards (AGL-3660).
+        repeatsCompiled: true,
       },
     )
     // Each section's items as they are stored, after anything the gaps took out.
@@ -564,6 +593,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           context: input.context,
           reusableComponents: input.reusableComponents,
           kept,
+          design: aiLayoutDesignOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
         }),
       ),

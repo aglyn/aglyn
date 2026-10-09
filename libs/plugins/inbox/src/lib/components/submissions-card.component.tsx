@@ -71,6 +71,8 @@ import {
   usePluginApiPost,
 } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   Avatar,
   Box,
@@ -135,6 +137,9 @@ const SUBMISSION_SELECT_FIELDS = ['read', 'formId', 'hostId']
 const SUBMISSION_HIDDEN_COLUMNS = { read: false, formId: false }
 
 /** Every field of a message, as one line — what the Message column draws. */
+/** The page-sorted headers, for their notice (AGL-3680). */
+const SUBMISSION_PAGE_SORT_HEADERS = { from: 'From', hostId: 'Site', message: 'Message' }
+
 const messageTextOf = (submission: any): string =>
   Object.entries(submission?.fields ?? {})
     .map(([key, value]) => `${key}: ${value}`)
@@ -288,6 +293,13 @@ export function SubmissionsCard({
     [formId, hostId, orgId],
   )
   const gridFilter = useListGridFilter({ selectFields: SUBMISSION_SELECT_FIELDS })
+  /*
+   * EVERY HEADER SORTS (AGL-3680). Received and Read order the QUERY (see
+   * `SUBMISSION_LIST_QUERY`); From, Site and Message are drawn from the
+   * message, so they sort the page on screen and say so. Null is newest
+   * first, the inbox's own order.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
 
   /*
    * The inbox WALKS its submissions instead of sampling them (AGL-2501,
@@ -328,7 +340,12 @@ export function SubmissionsCard({
   } = useListQuery<any>({
     collection: pluginRecordListWalk(FORM_SUBMISSION_KIND, firestore, { hostId, orgId }),
     declaration,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords, base },
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort: askedSort,
+      base,
+    },
     deps: [firestore, hostId, orgId],
     idField: '$id',
   })
@@ -363,6 +380,24 @@ export function SubmissionsCard({
       }),
     [plan.refused, declaration, submissionOptions],
   )
+  const submissionPageSorts = useMemo(
+    () => ({
+      from: (submission: any) => submissionSender(submission.fields).label,
+      hostId: (submission: any) => orgSiteName(orgMount, submission.hostId),
+      message: (submission: any) => messageTextOf(submission),
+    }),
+    [orgMount],
+  )
+  const columnSort = useListColumnSort<any>({
+    sorts: declaration.sorts,
+    defaultSort: declaration.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: submissions,
+    pageSorts: submissionPageSorts,
+    headers: SUBMISSION_PAGE_SORT_HEADERS,
+  })
   const searching = gridFilter.searchWords.some((word) => word.trim())
   const filtering = gridFilter.clauses.length > 0 || searching
   /** Narrowed by nothing but a Form clause. */
@@ -740,10 +775,14 @@ export function SubmissionsCard({
               onChange={gridFilter.setClauses}
               options={submissionOptions}
             />
-            <ListQueryNotices refused={refusals} notices={plan.notices} />
+            <ListQueryNotices
+              refused={refusals}
+              notices={[...plan.notices, ...columnSort.notices]}
+            />
             <ListTable
               aria-label={scoped ? 'Submissions to this form' : 'Form submissions'}
-              rows={submissions}
+              rows={columnSort.rows}
+              columnSort={columnSort}
               columns={listFilterGridColumns(
                 submissionColumns,
                 declaration.fields,
@@ -768,13 +807,12 @@ export function SubmissionsCard({
               }}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search go to the query; the grid neither
-              // filters nor sorts the page it holds.
+              // The panel, the search and the headers go to the query (From,
+              // Site and Message sort the page, and say so).
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
             />
             <ListPagination
               page={submissionPage}

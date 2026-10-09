@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-themes",
-  "version": "1.0.0-beta.232",
+  "version": "1.0.0-beta.234",
   "private": true,
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
@@ -26,8 +26,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.232",
-    "@aglyn/shared-data-types": "1.0.0-beta.232",
+    "@aglyn/aglyn": "1.0.0-beta.234",
+    "@aglyn/shared-data-types": "1.0.0-beta.234",
     "@swc/helpers": "0.5.23"
   },
   "sideEffects": false

@@ -186,7 +186,7 @@ async function registerExists(hostId: string, registerId: string): Promise<boole
 }
 
 /** The store's name, logo and welcome line, for the idle and thank-you screens. */
-async function displayBranding(hostId: string) {
+export async function displayBranding(hostId: string) {
   const firestore = firebaseAdmin.app().firestore()
   const host = await firestore.collection('hosts').doc(hostId).get()
   const ownerOrg = await getOrgForHost(hostId).catch(() => null)
@@ -202,15 +202,29 @@ async function displayBranding(hostId: string) {
 }
 
 /** The display token on a request, or ''. */
-function displayToken(req: PluginApiRequest, body: Record<string, any>): string {
+export function displayToken(req: PluginApiRequest, body: Record<string, any>): string {
   const header = String(req.headers['x-pos-display-token'] ?? '')
   return (header || String(body['token'] ?? '')).trim().slice(0, 128)
 }
 
+/** What a paired device's token opens. */
+export interface PosDeviceToken {
+  hostId: string
+  registerId: string
+  ref: any
+  /**
+   * A customer display, or a self-service kiosk (AGL-3623). A token minted
+   * before kiosks existed has no mode and is a display.
+   */
+  mode: CommerceModel.PosDeviceMode
+  /** The staff member whose pairing code opened this device. */
+  createdBy: string
+  /** The token document, for the caller that keeps device settings on it. */
+  data: Record<string, any>
+}
+
 /** The register a live display token opens, or null. */
-async function resolveDisplayToken(
-  token: string,
-): Promise<{ hostId: string; registerId: string; ref: any } | null> {
+export async function resolveDisplayToken(token: string): Promise<PosDeviceToken | null> {
   if (!/^[A-Za-z0-9_-]{40,128}$/.test(token)) return null
   const ref = firebaseAdmin.app().firestore().collection(TOKENS).doc(sha256(token))
   const snapshot = await ref.get()
@@ -225,7 +239,19 @@ async function resolveDisplayToken(
   if (Date.now() - lastSeen > 60_000) {
     await ref.set({ lastSeenAtMs: Date.now() }, { merge: true }).catch(() => undefined)
   }
-  return { hostId, registerId, ref }
+  return {
+    hostId,
+    registerId,
+    ref,
+    mode: snapshot.get('mode') === 'kiosk' ? 'kiosk' : 'display',
+    createdBy: String(snapshot.get('createdBy') ?? ''),
+    data: (snapshot.data() ?? {}) as Record<string, any>,
+  }
+}
+
+/** A token row's mode, `display` for one that predates kiosks. */
+function tokenMode(doc: any): CommerceModel.PosDeviceMode {
+  return doc.get('mode') === 'kiosk' ? 'kiosk' : 'display'
 }
 
 /**
@@ -256,8 +282,18 @@ export const posDisplayHandler: PluginApiHandler = async (req, res) => {
         const display = await resolveDisplayToken(displayToken(req, body))
         if (!display) return res.status(401).json({ error: 'This display is not paired.' })
         if (action === 'forget') {
+          // A kiosk leaves kiosk mode behind a staff PIN (AGL-3623), through
+          // `commerce/pos-kiosk`, never by a customer's tap here.
+          if (display.mode === 'kiosk') {
+            return res.status(403).json({ error: 'Ask a staff member to unlock this kiosk.' })
+          }
           await display.ref.delete()
           return res.status(200).json({ ok: true })
+        }
+        // A kiosk is not the register's customer display (AGL-3623): the
+        // basket the cashier is ringing up belongs to another customer.
+        if (display.mode === 'kiosk') {
+          return res.status(403).json({ error: 'This device is a self-service kiosk.' })
         }
         const snapshot = await stateRef(display.hostId, display.registerId).get()
         const state = snapshot.exists ? (snapshot.data() as CommerceModel.PosDisplayState) : null
@@ -300,6 +336,9 @@ async function pair(
     return res.status(429).json({ error: 'Too many tries. Wait a few minutes and try again.' })
   }
   const code = String(body['code'] ?? '').replace(/\D/g, '')
+  // The device asks for the kind of screen it is; the code decides. A kiosk
+  // code opens a kiosk, and a display code never does (AGL-3623).
+  const wanted: CommerceModel.PosDeviceMode = body['mode'] === 'kiosk' ? 'kiosk' : 'display'
   if (code.length !== 6) return res.status(400).json({ error: 'Enter the 6-digit code from the register.' })
   const firestore = firebaseAdmin.app().firestore()
   const pairingRef = firestore.collection(PAIRINGS).doc(sha256(code))
@@ -314,20 +353,37 @@ async function pair(
     if (!(expiresAtMs > Date.now())) return null
     const hostId = String(snapshot.get('hostId') ?? '')
     const registerId = String(snapshot.get('registerId') ?? '')
+    const mode: CommerceModel.PosDeviceMode = snapshot.get('mode') === 'kiosk' ? 'kiosk' : 'display'
+    // The wrong kind of screen leaves the code spent: the register shows a
+    // new one for the device it meant.
+    if (mode !== wanted) return { mismatch: mode }
     transaction.set(firestore.collection(TOKENS).doc(sha256(token)), {
       hostId,
       registerId,
+      mode,
       createdAtMs: Date.now(),
       createdBy: String(snapshot.get('createdBy') ?? ''),
       lastSeenAtMs: Date.now(),
-      label: String(body['label'] ?? '').slice(0, 60) || 'Customer display',
+      label:
+        String(body['label'] ?? '').slice(0, 60) ||
+        (mode === 'kiosk' ? 'Self-service kiosk' : 'Customer display'),
     })
-    return { hostId, registerId }
+    return { hostId, registerId, mode }
   })
   if (!paired) {
     return res.status(404).json({ error: 'That code is not valid. Show a new code on the register.' })
   }
-  return res.status(200).json({ token, branding: await displayBranding(paired.hostId) })
+  if ('mismatch' in paired) {
+    return res.status(409).json({
+      error:
+        paired.mismatch === 'kiosk'
+          ? 'That code is for a self-service kiosk. Open the kiosk address, or show a display code on the register.'
+          : 'That code is for a customer display. Choose Self-service kiosk on the register and show a new code.',
+    })
+  }
+  return res
+    .status(200)
+    .json({ token, mode: paired.mode, branding: await displayBranding(paired.hostId) })
 }
 
 async function staffAction(
@@ -359,6 +415,8 @@ async function staffAction(
             registerId,
             expiresAtMs,
             createdBy: gate.staff.uid,
+            // A kiosk code (AGL-3623) opens a self-service kiosk instead.
+            mode: body['mode'] === 'kiosk' ? 'kiosk' : 'display',
           })
           return true
         })
@@ -388,8 +446,10 @@ async function staffAction(
       return res.status(200).json({
         state,
         // A display that polled within the last two minutes is "connected".
+        // A kiosk is not the register's display (AGL-3623).
         connected: displays.docs.some(
-          (doc: any) => Date.now() - Number(doc.get('lastSeenAtMs') ?? 0) < 120_000,
+          (doc: any) =>
+            tokenMode(doc) === 'display' && Date.now() - Number(doc.get('lastSeenAtMs') ?? 0) < 120_000,
         ),
       })
     }
@@ -404,6 +464,7 @@ async function staffAction(
         displays: displays.docs.map((doc: any) => ({
           id: doc.id.slice(0, 16),
           label: String(doc.get('label') ?? 'Customer display'),
+          mode: tokenMode(doc),
           createdAtMs: Number(doc.get('createdAtMs') ?? 0),
           lastSeenAtMs: Number(doc.get('lastSeenAtMs') ?? 0),
         })),
