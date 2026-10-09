@@ -167,11 +167,26 @@ export interface StaffMediaAsset extends StaffMediaRow {
   owner: { uid: string; email: string | null; displayName: string | null } | null
   /** The scope tokens the asset is limited to (`host:{id}`, …); empty = everyone in the library. */
   visibleTo: string[]
+  /**
+   * The uploader's rights confirmation an audio file carries (AGL-3716): who
+   * confirmed and when. `null` for every other file, and for audio that
+   * predates it — which a takedown review should read as "never confirmed".
+   */
+  rightsConfirmation: { uid: string; atMs: number } | null
   usage: {
     references: StaffMediaUsage[]
     /** `full`, `published` or `partial` — an empty list means "used nowhere" only when `full`. */
     coverage: string
   } | null
+}
+
+/** A stored rights confirmation as the staff dialog shows it, or null. */
+export function staffRightsConfirmation(value: unknown): StaffMediaAsset['rightsConfirmation'] {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const uid = typeof record['uid'] === 'string' ? record['uid'] : ''
+  const atMs = typeof record['atMs'] === 'number' && Number.isFinite(record['atMs']) ? record['atMs'] : 0
+  return uid && atMs ? { uid, atMs } : null
 }
 
 const TYPE_WORDS: Record<string, string> = {

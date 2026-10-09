@@ -136,7 +136,9 @@ export const VISITOR_WRITE_RATE_WINDOW_MS = 60_000
  * `svix-signature` HEADER. Header presence is not a credential — the
  * dispatcher cannot verify signatures it does not own, so exempting on the
  * header would let any caller skip the limiter by attaching a garbage one to
- * a cart POST.
+ * a cart POST. (The console limiter does exempt the cron secret, but only
+ * once it has compared the VALUE with `CRON_SECRET` — a credential it owns —
+ * in `consoleApiRateLimitRefusal`.)
  *
  * Nor is `commerce/supplier-update`, whose HMAC token makes it a machine
  * caller but whose volume is set by a supplier's own system rather than by a

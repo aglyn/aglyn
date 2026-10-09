@@ -346,6 +346,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "music",
+    "label": "Music player",
+    "alwaysOnForWorkspace": true,
+    "description": "Play your own tracks from the media library on your site.",
+    "siteOff": {
+      "stops": "Switching the Music player off for this site stops its players rendering on its published pages.",
+      "keeps": "The audio in your media library is kept, and players keep working on the workspace's other sites."
+    }
+  },
+  {
     "id": "ad-conversions",
     "label": "Ad conversions",
     "alwaysOnForWorkspace": true,
@@ -395,6 +405,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "live-chat": "elements",
   "review-platforms": "console-only",
   "weglot": "elements",
+  "music": "elements",
   "ad-conversions": "console-only",
 }
 

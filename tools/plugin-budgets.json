@@ -166,5 +166,9 @@
   "lightbox": {
     "baseline": 5225,
     "budget": 7168
+  },
+  "music": {
+    "baseline": 13442,
+    "budget": 17408
   }
 }

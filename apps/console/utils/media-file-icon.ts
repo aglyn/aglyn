@@ -85,6 +85,15 @@ const EXACT_TYPE_ICONS: Record<string, MediaFileTypeIcon> = {
     label: 'PPTX',
   },
 
+  // Audio (AGL-3716). The family fall-back would caption `audio/mpeg` as
+  // MPEG and `audio/mp4` as MP4, which read as video; these name the file
+  // the way its owner knows it.
+  'audio/mpeg': { Icon: AudiotrackIcon, label: 'MP3' },
+  'audio/mp4': { Icon: AudiotrackIcon, label: 'M4A' },
+  'audio/aac': { Icon: AudiotrackIcon, label: 'AAC' },
+  'audio/ogg': { Icon: AudiotrackIcon, label: 'OGG' },
+  'audio/wav': { Icon: AudiotrackIcon, label: 'WAV' },
+
   // Text-ish payloads.
   'text/plain': { Icon: DescriptionIcon, label: 'TXT' },
   'text/markdown': { Icon: DescriptionIcon, label: 'MD' },

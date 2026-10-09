@@ -371,6 +371,7 @@ itself change what the rest of the page shows — wire an
 | --- | --- |
 | **Image** | An image with fit, size and radius controls, an optional link, and an automatic responsive `srcSet` for media-library URLs. **Open in a lightbox** shows it full size when pressed. See [Image](#image) below. |
 | **Video** | A video file from your media library, poster first. See [Video](video.md). |
+| **Music player** | Your own tracks from your media library, one or a playlist of **Track** elements. See [Music player](music-player.md). |
 | **Icon** | Any icon from the icon picker. |
 | **Image List** / **Image List Item** | A dense gallery. See [Image List](#image-list) below. |
 
@@ -462,6 +463,7 @@ plugin you install from the marketplace, and appear under **Input** once it is i
 
 - [The Besigner](overview.md)
 - [Video](video.md) — posters, preload, captions and the lightbox
+- [Music player](music-player.md) — tracks, playlists, rights confirmation and takedowns
 - [Drag-and-drop hierarchy](drag-drop-hierarchy.md) — which elements accept which children
 - [Long documents in markdown](long-form-markdown.md) — the Markdown and Table of contents elements
 - [Responsive styling](responsive-styling.md)

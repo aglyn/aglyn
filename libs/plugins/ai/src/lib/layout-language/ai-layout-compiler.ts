@@ -2475,7 +2475,8 @@ export const AI_LAYOUT_POST_ADDRESS_TOKENS: readonly string[] = ['{{entry.url}}'
 function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBlock | null {
   if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
   const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
-  return index ? { kind: 'button', text: 'Shop all', to: `page:${index.screenId}`, style: 'secondary' } : null
+  if (!index) return null
+  return { kind: 'button', text: listing.kind === 'tracks' ? 'All music' : 'Shop all', to: `page:${index.screenId}`, style: 'secondary' }
 }
 
 function listingSection(
@@ -2562,6 +2563,16 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
   const shown = featured ? AI_LAYOUT_FEATURED_RECORDS[listing.kind] : 12
   const element = AI_LAYOUT_LISTING_ELEMENTS[listing.kind]
   let id: string
+  if (listing.kind === 'tracks') {
+    // An empty player (AGL-3716): its "add your tracks" state, which the owner
+    // fills from their own media library. No source, ever — the section's
+    // heading and words are the model's, the recordings the owner's.
+    id = tree.add(element, null, null, null, 'player')
+    page.settled.push({ at: scope.at, what: 'an empty music player placed for the owner’s own tracks' })
+    // The player is what the section shows: its tracks are the owner's to add.
+    noted(scope, [id, id])
+    return id
+  }
   if (listing.kind === 'products') {
     id = tree.add(
       element,

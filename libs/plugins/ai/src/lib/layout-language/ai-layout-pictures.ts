@@ -217,7 +217,8 @@ function rotate<T>(list: readonly T[], by: number): T[] {
  * five starters, and the owner's photo went to a stoneware card before the
  * About section that described the artist asked for it. Only a page with more
  * slots than starters repeats one: the photo placed longest ago, never the
- * one in a slot beside it.
+ * one in a slot beside it. The owner's portrait goes only to a picture of
+ * people; a gallery picture never takes it, even to avoid a repeat.
  */
 export function aiLayoutStarterPhotos(
   slots: readonly AiLayoutPictureSlot[],
@@ -238,7 +239,9 @@ export function aiLayoutStarterPhotos(
       ALL_STARTERS.filter((name) => !pool.includes(name)),
       turn,
     )
-    const candidates = [...pool, ...rest]
+    // The owner's portrait is a picture of a person, and only a picture of
+    // people takes it: never a vase in a gallery (AGL-3660).
+    const candidates = [...pool, ...rest].filter((name) => slot.role === 'about' || name !== 'about')
     const unused = candidates.find((candidate) => !placedAt.has(candidate))
     const beside = new Set([names[index - 1], names[index + 1]].filter(Boolean))
     const name =

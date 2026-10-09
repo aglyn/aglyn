@@ -183,7 +183,7 @@ changes, and the form's **Update** saves them.
 
 On a paid plan, a site with the **Online store** style also gets three to six **products**,
 each with a description and a photo, and a **Cart** button in the header. Each product gets
-a starting price of **$25** so it can be bought; set its real price, and your own photo, in
+a placeholder starting price so it can be bought; set its real price, and your own photo, in
 **Products**. A product without a price shows **Price coming soon** on the store, with no
 **Add to cart**, until you give it one. See [Product copy and catalogs with
 AI](./products-with-ai.md).

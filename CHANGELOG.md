@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.237 — 2026-10-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.236...v1.0.0-beta.237)
+
+### Fixed
+
+- **ai:** stock photos match their captions and never repeat in a job ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a store's Shop page is its storefront, with or without products ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** store products keep library photos as CDN paths, our refusals refunded ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **console:** the activity cards each open their own docs section ([AGL-3707](https://linear.app/aglyn/issue/AGL-3707))
+
+### Performance
+
+- **console:** a new visible tab takes the Firestore lease from a hidden one ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **remote-config:** align the template file with production
+
+</details>
+
 ## v1.0.0-beta.236 — 2026-10-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/99362d865...v1.0.0-beta.236)

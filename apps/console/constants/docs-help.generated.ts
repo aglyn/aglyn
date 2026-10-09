@@ -533,6 +533,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/besigner/multi-select',
     title: 'Multi-select & multi-drag',
   },
+  musicPlayer: {
+    path: '/building-sites/besigner/music-player',
+    title: 'Music player',
+  },
   onboardingDeepLinks: {
     path: '/staff-console/onboarding-deep-links',
     title: 'Onboarding deep links (marketing → console)',
@@ -996,6 +1000,7 @@ export const DOCS_HELP_ANCHORS = {
   modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#edit-records', '#tips', '#related'],
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
+  musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   operatorAlerts: ['#channels', '#settings', '#alert-list', '#health', '#render-monitor', '#self-hosting'],
   orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],

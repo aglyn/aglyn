@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { ASSIST_MUSIC_EDIT_LINE } from './assist-music'
 import { linealRelationshipPermits } from '@aglyn/aglyn/app-utils/lineal-order'
 import {
   SCREEN_SEO_TEXT_FIELDS,
@@ -268,6 +269,7 @@ export function editCanvasBlock(kind: AssistEditDocumentKind): string {
     '- Nothing you propose is applied until the user presses Apply, and then it lands as an unsaved change they can undo. Never say a change is made.',
     `- Name only element ids listed in the canvas block that follows, or "${CANVAS_ROOT_ELEMENT_ID}" for the document root. Never invent an id for an element already on the canvas. If the element the user means is not listed, say so and ask them to select it.`,
     '- If the request is a question rather than a change, answer it and call no tool.',
+    ASSIST_MUSIC_EDIT_LINE,
     'Operations — every field is required; fill the ones an operation does not use with "", [] or -1:',
     '- updateProps: nodeId and props — only the settings to change, as name/value strings ("true" or "false" for a switch). Every other setting on the element is kept.',
     `- updateSx: nodeId and sx as key/value/breakpoint. A color is a theme token — ${AI_SX_TOKENS.palette.join(', ')} — never a hex, rgb or color name. A unitless number is theme spacing units; a size carries its unit ("320px", "50%"). breakpoint is "" or one of ${AI_SX_TOKENS.breakpoints.join(', ')}.`,

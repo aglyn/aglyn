@@ -67,6 +67,7 @@ const KIND_TITLES: Readonly<Record<Aglyn.MediaPickerKind, string>> = {
   image: 'Choose an image',
   video: 'Choose a video',
   pdf: 'Choose a PDF',
+  audio: 'Choose audio',
 }
 
 /**

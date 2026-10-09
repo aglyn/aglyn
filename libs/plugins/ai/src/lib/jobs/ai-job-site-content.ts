@@ -39,6 +39,7 @@ import {
   type AiLayoutPicturePhoto,
   type AiLayoutPictureSlot,
 } from '../layout-language/ai-layout-pictures'
+import { aiOriginJobId } from './ai-job-draft-ids'
 import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
 import {
   aiLayoutListingId,
@@ -228,6 +229,7 @@ export async function aiSitePostCover(input: {
         seed: `${job.$id}:posts:${index}`,
         business: aiSiteWords(job.inputs).about || job.brief,
         sectionNames: ['Blog'],
+        jobId: aiOriginJobId(job),
         ...(input.signal ? { signal: input.signal } : {}),
       })
       const [found] = source
@@ -390,6 +392,7 @@ export async function aiSiteProductPhotos(input: {
       seed,
       business: aiSiteWords(input.job.inputs).about || input.job.brief,
       sectionNames: ['Products'],
+      jobId: aiOriginJobId(input.job),
       ...(input.signal ? { signal: input.signal } : {}),
     })
     if (source) found = await source(slots)
@@ -661,6 +664,12 @@ export function aiSiteListings(input: {
    * six cards naming kinds of candle. An empty catalog says so in the grid.
    */
   store?: boolean
+  /**
+   * The site is a music site (`siteKind: 'music'`, AGL-3716): its Music page,
+   * or its home, places an empty Music player for the artist's own tracks.
+   * Nothing is sourced: the owner uploads the recordings.
+   */
+  music?: boolean
 }): AiLayoutListing[] {
   const listings: AiLayoutListing[] = []
   const products = input.outputs.filter((output) => output.resource === 'product' && !output.proposal)
@@ -690,6 +699,12 @@ export function aiSiteListings(input: {
       collectionSlug: slug,
       placements: aiLayoutListingPlacements('posts', input.screens),
     })
+  }
+  if (input.music) {
+    const placements = aiLayoutListingPlacements('tracks', input.screens)
+    if (placements.length) {
+      listings.push({ id: aiLayoutListingId('tracks'), kind: 'tracks', name: 'the music', records: [], placements })
+    }
   }
   return listings
 }

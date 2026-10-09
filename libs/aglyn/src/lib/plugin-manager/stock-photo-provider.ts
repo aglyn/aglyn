@@ -78,6 +78,11 @@ export interface StockPhoto {
   photographerUrl?: string
   /** The library's tags, lowercase. */
   tags: string[]
+  /**
+   * The library's own description of the photo, where it writes one (a
+   * Pexels hit's `alt`). A caller ranks hits by it with the tags.
+   */
+  alt?: string
 }
 
 /** What an asset copied from a library records about where it came from. */

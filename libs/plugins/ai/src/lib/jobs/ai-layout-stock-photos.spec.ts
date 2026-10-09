@@ -33,13 +33,22 @@ import {
   aiResolveLayoutPictures,
 } from '../layout-language/ai-layout-pictures'
 import {
+  AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
   aiStockBusinessWords,
+  aiStockCraftWords,
+  aiStockForgetJobPhotos,
   aiStockOrientation,
   aiStockPick,
+  aiStockPlacedSrcs,
+  aiStockRank,
+  aiStockRelevance,
   aiStockSearchesFor,
+  aiStockStem,
   aiStockSubjectWords,
 } from './ai-layout-stock-photos'
+import { aiJobPagesPlacedPhotos } from './ai-job-page-step'
+import type { AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
 import { aiCompileLayoutPage, type AiLayoutPagePlan } from '../layout-language/ai-layout-compiler'
 import { aiLayoutDesignChoices } from '../layout-language/ai-layout-design'
 import type { AiLayoutSection } from '../layout-language/ai-layout-language'
@@ -98,7 +107,7 @@ function yogaPage(): NodesMap {
   return result.value.nodes
 }
 
-const photo = (id: number, width = 1280, height = 853): StockPhoto & { downloadUrl: string } => ({
+const photo = (id: number, width = 1280, height = 853, tags = ['yoga']): StockPhoto & { downloadUrl: string } => ({
   provider: 'pixabay',
   id: String(id),
   width,
@@ -106,16 +115,16 @@ const photo = (id: number, width = 1280, height = 853): StockPhoto & { downloadU
   pageUrl: `https://pixabay.com/photos/yoga-${id}/`,
   photographer: `user${id}`,
   photographerUrl: `https://pixabay.com/users/user${id}-${id}/`,
-  tags: ['yoga'],
+  tags,
   downloadUrl: `https://pixabay.com/get/g${id}_1280.jpg`,
 })
 
 /** Recorded-shape hits per query; anything else finds nothing. */
 const HITS: Record<string, StockPhoto[]> = {
   'yoga studio': [photo(1), photo(2), photo(3), photo(4)],
-  'yoga studio teacher smiling mat': [photo(11, 853, 1280), photo(12, 853, 1280)],
-  'yoga studio students stretching sunrise': [],
-  'students stretching sunrise': [photo(21), photo(1)],
+  'yoga studio teacher': [photo(11, 853, 1280), photo(12, 853, 1280)],
+  'students stretching yoga': [],
+  'students stretching': [photo(21, 1280, 853, ['students', 'stretch', 'stretching']), photo(1)],
 }
 
 function fakeProvider(overrides: Partial<StockPhotoProvider> = {}) {
@@ -191,7 +200,7 @@ describe('the stock photo searches (AGL-3660)', () => {
   })
 
   it("reads a picture's subject from its alt text, else its section", () => {
-    expect(aiStockSubjectWords('A potter shaping a clay bowl on a wheel', 'Gallery')).toBe('potter shaping clay')
+    expect(aiStockSubjectWords('A potter shaping a clay bowl on a wheel', 'Gallery')).toBe('shaping clay bowl')
     expect(aiStockSubjectWords('', 'Our gallery')).toBe('gallery')
   })
 
@@ -250,9 +259,9 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
     expect(srcs(nodes)).toEqual(['media:host-1/m1', 'media:host-1/m2', 'media:host-1/m3'])
     expect(searches.map((search) => search.query)).toEqual([
       'yoga studio',
-      'yoga studio teacher smiling mat',
-      'yoga studio students stretching sunrise',
-      'students stretching sunrise',
+      'yoga studio teacher',
+      'students stretching yoga',
+      'students stretching',
     ])
     expect(searches[1]).toMatchObject({ people: true })
     // Three different photos, each downloaded once.
@@ -475,5 +484,254 @@ describe('a designed page’s pictures ask the stock photo library too (AGL-3660
     })
     const src = String((nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[heroId]?.props?.['src'])
     expect(STARTER_SRCS.has(src)).toBe(true)
+  })
+})
+
+describe('a picture of a thing shows the thing (AGL-3660, the Juniper Clay start)', () => {
+  let warn: jest.SpyInstance
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    aiStockForgetJobPhotos()
+  })
+  afterEach(() => warn.mockRestore())
+
+  const BUSINESS = 'A small-batch ceramics studio in Asheville making tableware'
+
+  /** A ceramics hit: its id, its tags, and the page address the library gives it. */
+  const hit = (id: number, tags: string[], slug = tags.join('-')): StockPhoto => ({
+    provider: 'pexels',
+    id: String(id),
+    width: 1200,
+    height: 1500,
+    pageUrl: `https://www.pexels.com/photo/${slug}-${id}/`,
+    photographer: `maker${id}`,
+    tags,
+  })
+
+  const slot = (index: number, alt: string, role: AiLayoutPictureSlot['role'] = 'gallery'): AiLayoutPictureSlot => ({
+    imageId: `img${index}`,
+    frameId: null,
+    iconId: null,
+    alt,
+    aspect: 4 / 5,
+    sectionIndex: role === 'about' ? 2 : 1,
+    role,
+  })
+
+  /** A provider answering by query from a table, recording what it was asked. */
+  function tableProvider(table: Record<string, StockPhoto[]>) {
+    const asked: string[] = []
+    const provider: StockPhotoProvider = {
+      id: 'pexels',
+      label: 'Pexels',
+      isConfigured: () => true,
+      search: async (request) => {
+        asked.push(request.query)
+        return { photos: table[request.query] ?? [], cached: false }
+      },
+      download: async () => ({ bytes: new Uint8Array([0xff, 0xd8, 0xff]), contentType: 'image/jpeg' }),
+      credit: (found) => ({
+        providerLabel: 'Pexels',
+        license: 'Pexels License',
+        licenseUrl: 'https://www.pexels.com/license/',
+        attributionRequired: false,
+        text: `Photo by ${found.photographer} on Pexels.`,
+      }),
+    }
+    return { provider, asked }
+  }
+
+  /** A library storing each photo as `media:host-1/{provider}-{id}`, so a page's src names its photo. */
+  function namedLibrary() {
+    const held = new Map<string, string>()
+    const ingest: PluginMediaIngest = {
+      ingest: async (request) => {
+        const key = String(request.stockPhoto?.key)
+        const src = `media:host-1/${key.replace(':', '-')}`
+        held.set(key, src)
+        return { ok: true, mediaId: key, src, width: 1200, height: 1500 }
+      },
+      findStockPhoto: async ({ sourceKey }) => {
+        const src = held.get(sourceKey)
+        return src ? { mediaId: sourceKey, src, width: 1200, height: 1500 } : null
+      },
+    }
+    return { ingest, held }
+  }
+
+  it('asks for the subject noun of the caption, filler dropped, qualified by the craft', () => {
+    expect(aiStockSubjectWords('A beautiful hand-thrown stoneware serving bowl on a linen cloth', 'Selected work')).toBe(
+      'stoneware serving bowl',
+    )
+    expect(aiStockSubjectWords('Espresso cup in a speckled white glaze', 'Selected work')).toBe('espresso cup')
+    expect(aiStockSubjectWords('Close-up of a round stem vase', 'Selected work')).toBe('round stem vase')
+    expect(aiStockSubjectWords('The maker smiling at her wheel', 'About')).toBe('maker')
+    expect(aiStockBusinessWords(BUSINESS)).toBe('small-batch ceramics studio')
+    expect(aiStockCraftWords('ceramics studio')).toBe('ceramic')
+    expect(aiStockCraftWords('yoga studio')).toBe('yoga')
+    expect(aiStockCraftWords('shop')).toBe('')
+    expect(['bowls', 'vases', 'berries', 'dishes', 'glass'].map(aiStockStem)).toEqual(['bowl', 'vase', 'berry', 'dish', 'glass'])
+
+    const searches = aiStockSearchesFor(
+      { role: 'gallery', alt: 'x', aspect: 4 / 5 },
+      { business: 'ceramics studio', subject: 'espresso cup' },
+    )
+    expect(searches.map((search) => [search.query, search.neutral === true])).toEqual([
+      ['espresso cup ceramic', false],
+      ['espresso cup', false],
+      ['ceramics studio interior', true],
+    ])
+    // A subject that already names the craft is not qualified twice.
+    expect(
+      aiStockSearchesFor({ role: 'gallery', alt: 'x', aspect: 1 }, { business: 'ceramics studio', subject: 'ceramic mug' })[0]
+        ?.query,
+    ).toBe('ceramic mug')
+  })
+
+  it('scores a hit by the subject words it names, so the bowl wins over the crackers', () => {
+    const crackers = hit(1, ['crackers', 'snack', 'food', 'cheese'])
+    const bowl = hit(2, ['bowls', 'ceramics', 'pottery'])
+    const vase = hit(3, [], 'white-ceramic-vase-with-stems')
+    const described: StockPhoto = { ...hit(4, []), alt: 'Two stoneware serving bowls on a table' }
+    expect(aiStockRelevance(crackers, { subject: 'serving bowl', craft: 'ceramic' })).toBe(0)
+    expect(aiStockRelevance(bowl, { subject: 'serving bowl', craft: 'ceramic' })).toBe(2.25)
+    // The page address and the library's own description count as its tags do.
+    expect(aiStockRelevance(vase, { subject: 'stem vase' })).toBe(3)
+    expect(aiStockRelevance(described, { subject: 'stoneware serving bowl' })).toBe(4)
+
+    // The crackers come first from the library, and lose under every seed.
+    for (let job = 0; job < 20; job += 1) {
+      expect(aiStockPick([crackers, bowl], new Set(), `job-${job}`, { subject: 'serving bowl' })?.id).toBe('2')
+    }
+    // Strict, a hit naming none of the subject is no candidate at all.
+    expect(aiStockRank([crackers], new Set(), 'any', { subject: 'serving bowl', strict: true })).toEqual([])
+    expect(aiStockRank([crackers], new Set(), 'any', { subject: 'serving bowl' })).toEqual([crackers])
+  })
+
+  it('fills each work card with a photo of its own object, and never a photo naming none of it', async () => {
+    const { provider } = tableProvider({
+      'stoneware serving bowl ceramic': [hit(1, ['crackers', 'snack']), hit(2, ['serving', 'bowl', 'ceramic'])],
+      'espresso cup ceramic': [hit(3, ['plants', 'leaves', 'green']), hit(4, ['espresso', 'cup', 'coffee'])],
+      'round stem vase ceramic': [hit(5, ['vase', 'stems', 'flowers'])],
+    })
+    const { ingest } = namedLibrary()
+    const source = aiLayoutStockPhotoSource(
+      {
+        hostId: 'host-1',
+        uid: 'member-1',
+        seed: 'job-j:work',
+        business: BUSINESS,
+        sectionNames: ['Hero', 'Selected work'],
+        jobId: 'job-j',
+      },
+      { provider: () => provider, ingest: () => ingest },
+    )
+    const photos = await source?.([
+      slot(0, 'A hand-thrown stoneware serving bowl on linen'),
+      slot(1, 'Espresso cup in a speckled glaze'),
+      slot(2, 'Round stem vase with dried flowers'),
+    ])
+    expect(photos?.map((found) => found?.src)).toEqual([
+      'media:host-1/pexels-2',
+      'media:host-1/pexels-4',
+      'media:host-1/pexels-5',
+    ])
+  })
+
+  it('places no photo twice on a page', async () => {
+    const shared = [hit(1, ['ceramic', 'bowl']), hit(2, ['ceramic', 'bowl'])]
+    const { provider } = tableProvider({ 'bowl ceramic': shared, 'small bowl ceramic': shared })
+    const { ingest } = namedLibrary()
+    const source = aiLayoutStockPhotoSource(
+      { hostId: 'host-1', uid: 'member-1', seed: 'job-d:work', business: BUSINESS, sectionNames: ['Hero', 'Work'] },
+      { provider: () => provider, ingest: () => ingest },
+    )
+    const photos = await source?.([slot(0, 'A bowl'), slot(1, 'A small bowl'), slot(2, 'A bowl')])
+    const srcs = (photos ?? []).map((found) => found?.src).filter(Boolean)
+    // Two photos for three bowls: the third is left to its fallback rather than repeat one.
+    expect(srcs).toHaveLength(2)
+    expect(new Set(srcs).size).toBe(2)
+    expect(photos?.[2]).toBeNull()
+  })
+
+  it('never places the About portrait on another page of the same job, in this process or read from its drafts', async () => {
+    const portrait = hit(7, ['potter', 'woman', 'portrait', 'vase', 'ceramic'])
+    const { provider } = tableProvider({
+      'small-batch ceramics studio maker': [portrait],
+      'round stem vase ceramic': [portrait, hit(8, ['vase', 'stem', 'ceramic'])],
+    })
+    const { ingest } = namedLibrary()
+    const sourceFor = (seed: string, extra: { jobId?: string; avoid?: string[] } = {}) =>
+      aiLayoutStockPhotoSource(
+        { hostId: 'host-1', uid: 'member-1', seed, business: BUSINESS, sectionNames: ['Hero', 'Work', 'About'], ...extra },
+        { provider: () => provider, ingest: () => ingest },
+      )
+    const about = await sourceFor('job-x:about', { jobId: 'job-x' })?.([slot(0, 'The maker at her wheel', 'about')])
+    expect(about?.[0]?.src).toBe('media:host-1/pexels-7')
+
+    // The work page, built later in the same process: the portrait is the about page's.
+    const work = await sourceFor('job-x:work', { jobId: 'job-x' })?.([slot(0, 'Round stem vase')])
+    expect(work?.[0]?.src).toBe('media:host-1/pexels-8')
+
+    // A repeated pass over the about page keeps its own portrait.
+    const again = await sourceFor('job-x:about', { jobId: 'job-x' })?.([slot(0, 'The maker at her wheel', 'about')])
+    expect(again?.[0]?.src).toBe('media:host-1/pexels-7')
+
+    // In another process nothing is remembered: what the job's other pages show is handed in.
+    aiStockForgetJobPhotos()
+    const elsewhere = await sourceFor('job-x:work', { jobId: 'job-x', avoid: ['media:host-1/pexels-7'] })?.([
+      slot(0, 'Round stem vase'),
+    ])
+    expect(elsewhere?.[0]?.src).toBe('media:host-1/pexels-8')
+  })
+
+  it('reads what the job’s other pages show from their drafts, never this page’s own', async () => {
+    const pages: Record<string, NodesMap> = {
+      about: {
+        a: { componentId: 'image', props: { src: 'media:host-1/m-portrait' } },
+        b: { componentId: 'image', props: { src: '/_static/starter/hero-team.jpg' } },
+        c: { componentId: 'text', props: { src: 'media:host-1/not-an-image' } },
+      } as unknown as NodesMap,
+      work: { d: { componentId: 'image', props: { src: 'media:host-1/m-vase' } } } as unknown as NodesMap,
+    }
+    expect(aiStockPlacedSrcs(pages['about'])).toEqual(['media:host-1/m-portrait'])
+    const read: string[] = []
+    const readNodes = (async (_firestore: unknown, input: { id: string }) => {
+      read.push(input.id)
+      if (input.id === 'broken') throw new Error('gone')
+      return pages[input.id] ? { versionId: 'v1', nodes: pages[input.id] } : null
+    }) as never
+    const avoid = await aiJobPagesPlacedPhotos(
+      {} as never,
+      {
+        hostId: 'host-1',
+        job: { inputs: { [AI_STOCK_PHOTO_PAGES_INPUT]: ['about', 'work', 'broken', 'work'] } },
+        draftId: 'work',
+      },
+      readNodes,
+    )
+    expect(avoid).toEqual(['media:host-1/m-portrait'])
+    expect(read.sort()).toEqual(['about', 'broken'])
+    expect(
+      await aiJobPagesPlacedPhotos({} as never, { hostId: 'host-1', job: { inputs: {} }, draftId: 'w' }, readNodes),
+    ).toEqual([])
+  })
+
+  it('falls back to a neutral photo of the place when nothing names the object, and asks each query once', async () => {
+    const { provider, asked } = tableProvider({
+      'espresso cup ceramic': [hit(1, ['plants', 'leaves'])],
+      'espresso cup': [hit(2, ['crackers', 'snack'])],
+      'small-batch ceramics studio interior': [hit(3, ['studio', 'pottery', 'shelves', 'ceramic'])],
+    })
+    const { ingest } = namedLibrary()
+    const source = aiLayoutStockPhotoSource(
+      { hostId: 'host-1', uid: 'member-1', seed: 'job-f:work', business: BUSINESS, sectionNames: ['Hero', 'Work'] },
+      { provider: () => provider, ingest: () => ingest },
+    )
+    const photos = await source?.([slot(0, 'Espresso cup'), slot(1, 'Espresso cup')])
+    // The plants and the crackers never fill it; the studio does, once.
+    expect(photos?.[0]?.src).toBe('media:host-1/pexels-3')
+    expect(photos?.[1]).toBeNull()
+    expect(asked).toEqual(['espresso cup ceramic', 'espresso cup', 'small-batch ceramics studio interior'])
   })
 })

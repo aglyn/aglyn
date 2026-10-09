@@ -56,6 +56,8 @@ const SPEAKS_ALONE = new Set([
   'product-grid',
   'collectionEntries',
   'cart',
+  // A music site's player, placed empty for the owner's tracks (AGL-3716).
+  'musicPlayer',
 ])
 
 const HEADING_VARIANTS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'overline'])

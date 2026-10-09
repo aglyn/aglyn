@@ -106,6 +106,7 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
   ['bookings', 'libs/plugins/bookings/src/lib/plugin.ts'],
   ['events-calendar', 'libs/plugins/events-calendar/src/lib/plugin.ts'],
   ['lightbox', 'libs/plugins/lightbox/src/lib/site.ts'],
+  ['music', 'libs/plugins/music/src/lib/plugin.ts'],
 ]
 
 /**
@@ -114,6 +115,11 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
  * a model composing the tenant's OWN page may also reach the layout and
  * surface primitives, the media lists and the collection blocks, which are
  * bound to this site's data and so stay out of a listing.
+ *
+ * `musicPlayer` and its `musicTrack` rows play the owner's OWN audio from the
+ * media library (AGL-3716): a model may place an empty player for the owner
+ * to fill, and never a source — `aiOwnerAudioRefusal` drops any `src` that is
+ * not a library reference and every `rightsConfirmed` a model writes.
  *
  * `video` plays a library film or a declared host's link behind a poster,
  * which is the player a featured video binds to (AGL-3433). `videoEmbed`
@@ -148,6 +154,8 @@ const PAGE_EXTRA_IDS = [
   'collectionSearch',
   'videoEmbed',
   'socialLinks',
+  'musicPlayer',
+  'musicTrack',
 ]
 
 /**
@@ -188,6 +196,18 @@ const NEVER_IDS = new Set([
   'emailHtml',
   'emailRichtext',
 ])
+
+/**
+ * Props a model is never offered, by element (AGL-3716): an answer only the
+ * site owner can give. The Music player's rights confirmation says the owner
+ * holds the rights to a recording; `aiOwnerAudioRefusal` drops it from any
+ * tree a model writes as well, so leaving it off the palette is the first
+ * line, not the only one.
+ */
+const PERSON_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
+  musicPlayer: ['rightsConfirmed'],
+  musicTrack: ['rightsConfirmed'],
+}
 
 /** Elements whose `children` is a button label. */
 const BUTTON_LIKE_IDS = new Set([
@@ -654,6 +674,8 @@ async function main(): Promise<void> {
       const propFields: Dict = {}
       const textLimits: Dict = {}
       for (const attribute of flattenAttributes(schema.attributes)) {
+        // A prop only a person may set is not offered at all (AGL-3716).
+        if (PERSON_ONLY_PROPS[id]?.includes(attribute.name)) continue
         const declared = declareProp(id, attribute, AI_TEXT_LIMITS)
         if (!declared) {
           undeclaredFieldKinds.add(String(attribute.component))

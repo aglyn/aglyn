@@ -401,7 +401,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['concert', 'gig', 'tour', 'song', 'shows', 'tracks', 'producer', 'fans', 'listen'],
     starter: 'landing',
     look: { bases: ['carbon', 'minimal', 'material-ui'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'cool', 'tinted'], fonts: ['anton', 'syne', 'grotesk', 'archivo'], corners: ['sharp'], buttons: 'caps', headingScale: 1.3, density: 'regular' },
-    design: 'Loud and visual: the name huge in the opening, an image band, releases or shows as image cards only as the brief gives them, a short bio, and a booking or contact section. Dark bands are welcome.',
+    design: 'Loud and visual: the name huge in the opening, an image band, a listen section where the platform places a music player for the artist’s own tracks, releases or shows as image cards only as the brief gives them, a short bio, and a booking or contact section. Dark bands are welcome. Never name or link songs by other artists.',
     pages: 'Home, Music or Shows, About, and Booking or Contact with the form.',
   },
   {
