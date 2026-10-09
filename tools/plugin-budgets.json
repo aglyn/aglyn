@@ -142,5 +142,9 @@
   "loyalty": {
     "baseline": 9161,
     "budget": 12288
+  },
+  "review-platforms": {
+    "baseline": 5110,
+    "budget": 7168
   }
 }
