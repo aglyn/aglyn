@@ -1327,6 +1327,17 @@
         "keeps": "Members keep their points and store credit.",
         "stops": "Stops new points, rewards at checkout and at the register, and referral credit."
       }
+    },
+    {
+      "defaultOffPerSite": true,
+      "description": "Translate your published site with your own Weglot account.",
+      "id": "weglot",
+      "label": "Weglot translation",
+      "releaseFlag": "release_weglot",
+      "siteOff": {
+        "keeps": "Your Weglot settings and your Weglot account's translations are kept.",
+        "stops": "Stops loading Weglot and its language switcher on this site's pages."
+      }
     }
   ],
   "FORM_IN_USE": {

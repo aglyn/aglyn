@@ -9583,7 +9583,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "weglot"
           ]
         },
         {
@@ -9622,7 +9623,8 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "weglot"
           ]
         },
         {
