@@ -107,7 +107,7 @@
     },
     "release_addon_store": {
       "defaultValue": {
-        "value": "{\"enabled\": true, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Self-serve add-ons launch 2026-07-18 (AGL-524..535) — kill-switch armed\"}"
       },
       "description": "Self-serve add-on purchases on the Billing page: seats, datasets, extra sites, POS registers, Event Calendar.",
       "valueType": "JSON"
@@ -128,9 +128,9 @@
     },
     "release_assist": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
       },
-      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default; needs two published legal artifacts (AGL-1909): the privacy-policy Q&A disclosure and the Anthropic row on /legal/subprocessors. The real trigger is ANTHROPIC_API_KEY, not the flag.",
+      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). ON in production. Needs two published legal artifacts (AGL-1909): the privacy-policy Q&A disclosure and the Anthropic row on /legal/subprocessors. The real trigger is ANTHROPIC_API_KEY, not the flag.",
       "valueType": "JSON"
     },
     "release_video_uploads": {
@@ -149,16 +149,16 @@
     },
     "release_ai_generative": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace on every tier, 2026-09-29 (owner decision; AGL-3341 follow-through).\"}"
       },
-      "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). OFF by default, staff preview only; generative routes answer 404 while off. On, it sends customer briefs and site content to Anthropic under the Assist disclosure (AGL-1909).",
+      "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). ON for every workspace since 2026-09-29; generative routes answer 404 when off. It sends customer briefs and site content to Anthropic under the Assist disclosure (AGL-1909).",
       "valueType": "JSON"
     },
     "release_crm_assist_whole_record": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"AGL-3520: legal v10 (Privacy §2 + Subprocessors) published 2026-10-05; beta.225 live\"}"
       },
-      "description": "CRM assistance (AGL-3520). OFF: AI gets the disclosed fields of a record. ON: the whole record, contact details and custom fields included. Turn on only after Privacy Policy section 2 and the Subprocessors row are republished.",
+      "description": "CRM assistance (AGL-3520). OFF: AI gets the disclosed fields of a record. ON (since 2026-10-05, after Privacy Policy section 2 and the Subprocessors row were republished): the whole record, contact details and custom fields included.",
       "valueType": "JSON"
     },
     "release_weglot": {

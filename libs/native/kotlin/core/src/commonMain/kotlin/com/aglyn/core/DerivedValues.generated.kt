@@ -43,10 +43,10 @@ object ReleaseFlagDefaults {
     "release_addon_store" to ReleaseFlagValue(true, 0, listOf()),
     "release_native_checkout" to ReleaseFlagValue(true, 0, listOf()),
     "release_edit_bar" to ReleaseFlagValue(true, 0, listOf()),
-    "release_assist" to ReleaseFlagValue(false, 0, listOf()),
+    "release_assist" to ReleaseFlagValue(true, 0, listOf()),
     "release_video_uploads" to ReleaseFlagValue(false, 0, listOf()),
     "release_video_delivery" to ReleaseFlagValue(false, 0, listOf()),
-    "release_ai_generative" to ReleaseFlagValue(false, 0, listOf()),
-    "release_crm_assist_whole_record" to ReleaseFlagValue(false, 0, listOf()),
+    "release_ai_generative" to ReleaseFlagValue(true, 0, listOf()),
+    "release_crm_assist_whole_record" to ReleaseFlagValue(true, 0, listOf()),
   )
 }
