@@ -586,6 +586,25 @@
           }
         },
         {
+          "type": "fields",
+          "title": "Upgrade proposal",
+          "when": "data.detail.org.upgradeProposal.plan",
+          "rows": [
+            {
+              "label": "Proposed plan",
+              "value": "{data.detail.org.upgradeProposal.plan:title}"
+            },
+            {
+              "label": "Proposed by",
+              "value": "{data.detail.org.upgradeProposal.proposedBy}"
+            },
+            {
+              "label": "Note",
+              "value": "{data.detail.org.upgradeProposal.note|'—'}"
+            }
+          ]
+        },
+        {
           "type": "actions",
           "title": "Staff actions",
           "items": [
@@ -738,6 +757,73 @@
                 "reason": "{form.reason}"
               },
               "success": "Removed"
+            },
+            {
+              "id": "propose",
+              "label": "Propose a plan",
+              "icon": "sparkles|workspace_premium",
+              "url": "/api/admin/org-upgrade-proposal",
+              "prompt": [
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "propose",
+                "plan": "{form.plan}",
+                "note": "{form.note}"
+              },
+              "success": "Proposed; the owner is told",
+              "reload": true
+            },
+            {
+              "id": "withdraw",
+              "label": "Withdraw the proposal",
+              "icon": "xmark.circle|cancel",
+              "when": "data.detail.org.upgradeProposal.plan",
+              "confirm": "Withdraw the plan proposed to this workspace?",
+              "url": "/api/admin/org-upgrade-proposal",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "withdraw"
+              },
+              "success": "Withdrawn",
+              "reload": true
             }
           ]
         }
@@ -2412,6 +2498,14 @@
         "csp": {
           "url": "/api/admin/csp-reports?days=7",
           "optional": true
+        },
+        "gateways": {
+          "url": "/api/admin/email-health/gateways",
+          "optional": true
+        },
+        "config": {
+          "url": "/api/admin/server-config",
+          "optional": true
         }
       },
       "blocks": [
@@ -2444,6 +2538,54 @@
           "secondary": "{item.documentUri} · {item.count|'1'}×",
           "count": false,
           "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Held sending domains",
+          "when": "data.gateways",
+          "items": "data.gateways.held",
+          "primary": "{item.sendingDomain}",
+          "secondary": "{item.gateway:title} · refused {item.blocked30:number} in 30 days · {item.lastBlockedDetail|'no detail'}",
+          "badges": [
+            {
+              "text": "Shared sender",
+              "when": "item.shared",
+              "tone": "error"
+            }
+          ],
+          "icon": "exclamationmark.octagon|report",
+          "count": false,
+          "empty": "None held."
+        },
+        {
+          "type": "list",
+          "title": "Mail gateway refusals, last 30 days",
+          "when": "data.gateways",
+          "items": "data.gateways.refused",
+          "primary": "{item.sendingDomain}",
+          "secondary": "{item.gateway:title} · refused {item.blocked30:number}, delivered {item.delivered30:number}",
+          "tertiary": "{item.lastBlockedAtMs:datetime}",
+          "badges": [
+            {
+              "text": "{item.holds:yesno}",
+              "tones": {
+                "Yes": "error",
+                "*": "success"
+              }
+            }
+          ],
+          "count": false,
+          "empty": "No refusals."
+        },
+        {
+          "type": "list",
+          "title": "Resolved server config",
+          "when": "data.config",
+          "items": "data.config",
+          "primary": "{item.key}",
+          "trailing": "{item.value}",
+          "count": false,
+          "empty": "—"
         }
       ]
     },
@@ -2642,6 +2784,10 @@
         "filing": {
           "url": "/api/admin/tax-filing",
           "optional": true
+        },
+        "purchases": {
+          "url": "/api/admin/tax-purchases?period={params.period|now.quarter}",
+          "optional": true
         }
       },
       "blocks": [
@@ -2713,6 +2859,82 @@
                 "note": "{form.note}"
               },
               "success": "Saved"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Item 3: taxable purchases",
+          "when": "data.purchases",
+          "footer": "Use tax on Aglyn's own purchases, typed in by hand each period. A period nobody has entered reads not computed, never zero.",
+          "rows": [
+            {
+              "label": "Period",
+              "value": "{data.purchases.period}"
+            },
+            {
+              "label": "Amount",
+              "value": "{data.purchases.entry.amountDollars|'Not computed'}"
+            },
+            {
+              "label": "Note",
+              "value": "{data.purchases.entry.note|'—'}"
+            },
+            {
+              "label": "Entered by",
+              "value": "{data.purchases.entry.enteredBy|'—'}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "staff.super && data.purchases",
+          "items": [
+            {
+              "id": "enter",
+              "label": "Enter the amount",
+              "icon": "square.and.pencil|edit",
+              "method": "PUT",
+              "url": "/api/admin/tax-purchases",
+              "prompt": [
+                {
+                  "key": "amount",
+                  "label": "Amount in dollars (0.00 if you looked and there was none)",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.purchases.entry.amountDollars}"
+                },
+                {
+                  "key": "note",
+                  "label": "Where it came from",
+                  "kind": "multiline",
+                  "initial": "{data.purchases.entry.note}"
+                }
+              ],
+              "body": {
+                "period": "{data.purchases.period}",
+                "amount": "{form.amount}",
+                "note": "{form.note}"
+              },
+              "success": "Saved",
+              "reload": true
+            },
+            {
+              "id": "clear",
+              "label": "Clear the entry",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.purchases.entry",
+              "method": "DELETE",
+              "url": "/api/admin/tax-purchases",
+              "reason": true,
+              "body": {
+                "period": "{data.purchases.period}",
+                "note": "{form.reason}"
+              },
+              "confirm": "Clear the taxable purchases entered for {data.purchases.period}?",
+              "success": "Cleared",
+              "reload": true
             }
           ]
         }
@@ -2867,6 +3089,93 @@
             "success": "Saved",
             "reload": true
           }
+        }
+      ]
+    },
+    {
+      "id": "core.staff.churn",
+      "title": "Why people leave",
+      "subtitle": "Cancellation surveys, by reason, surface and plan",
+      "icon": "person.crop.circle.badge.minus|person_remove",
+      "scope": "staff",
+      "group": "staff",
+      "order": 20,
+      "requires": "staff.is",
+      "links": [
+        "/admin/churn"
+      ],
+      "load": {
+        "churn": "/api/admin/churn-report"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Overview",
+          "rows": [
+            {
+              "label": "Surveys answered",
+              "value": "{data.churn.surveys:number}"
+            },
+            {
+              "label": "Cancellations",
+              "value": "{data.churn.cancels.total:number}"
+            },
+            {
+              "label": "Skipped the retention step",
+              "value": "{data.churn.cancels.funnelSkipped:number}"
+            },
+            {
+              "label": "Win-backs offered",
+              "value": "{data.churn.winbacks.reserved:number}"
+            },
+            {
+              "label": "Win-backs taken",
+              "value": "{data.churn.winbacks.applied:number}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.churn.capped",
+          "text": "Only the most recent surveys are counted."
+        },
+        {
+          "type": "list",
+          "title": "By reason",
+          "items": "data.churn.byReason",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "By surface",
+          "items": "data.churn.bySurface",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "By plan",
+          "items": "data.churn.byPlan",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "In their words",
+          "items": "data.churn.comments",
+          "primary": "{item.detail}",
+          "secondary": "{item.reason:title} · {item.plan:title}",
+          "tertiary": "{item.atMs:datetime}",
+          "count": false,
+          "empty": "No comments."
         }
       ]
     }
