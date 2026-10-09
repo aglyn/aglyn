@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
@@ -100,6 +101,9 @@ export const AI_SITE_POSTS = 3
 
 /** How many first products a paid store gets: asked for, and the most written. */
 export const AI_SITE_PRODUCTS = { min: 3, max: 6 } as const
+
+/** What a products row says when none of what we made could be written: our failure, refunded. */
+export const AI_SITE_PRODUCTS_NOT_WRITTEN_COPY = 'Your first products could not be added this time.'
 
 /** What each part's row reads. */
 export const AI_SITE_POSTS_LABEL = 'Writing your first posts'
@@ -393,7 +397,30 @@ export async function aiSiteProductPhotos(input: {
     console.warn('ai site products: the stock photos failed; starter photos fill them', { error: String(error) })
   }
   const starters = aiLayoutStarterPhotos(slots, seed)
-  return slots.map((_slot, index) => found[index]?.src ?? starters[index]?.src ?? null)
+  const hostId = input.job.hostId
+  return slots.map(
+    (_slot, index) =>
+      aiSiteProductPhotoSrc(found[index]?.src, hostId) ?? aiSiteProductPhotoSrc(starters[index]?.src, hostId),
+  )
+}
+
+/**
+ * A photo as a product stores it: the form the console's picker writes when
+ * an owner picks one from the library (`console-media-picker-provider`), the
+ * asset's CDN path `/api/media/cdn/{scope}/{mediaId}`, or a starter's own
+ * site path. A page's picture slot holds the library's `media:` reference
+ * (`mediaNodeSrc`), which is what the stock source hands back, and the
+ * product's rules take only an https address or a path on the site: the
+ * candle store's guided start of 2026-10-09 (job FYNasg1h0S) wrote no
+ * product at all because every photo was a `media:` reference. The path
+ * names the asset, not its bytes, so a replace in the library still reaches
+ * the product. Anything else is no photo, never a value the product refuses.
+ */
+export function aiSiteProductPhotoSrc(src: string | null | undefined, hostId: string): string | null {
+  if (!src) return null
+  const path = resolveMediaSrc(src, { hostId })
+  if (!path || path.length > 2_000 || /[\s"'<>]/.test(path)) return null
+  return path.startsWith('/') || path.startsWith('https://') ? path : null
 }
 
 /** The sentence the products unit's brief ends with, which the catalog's rules read as how many. */
@@ -404,9 +431,12 @@ export function aiSiteProductsBriefLine(input: AiSiteProductsInput = AI_SITE_PRO
 /**
  * The products unit's runner: the `products` step's catalog for the store's
  * brief, then each proposed product, up to the most a site starts with,
- * written as an unpriced draft by the plugin that keeps products. A product
- * past the plan's allowance stops the writing there, and the row says how
- * many were added; none at all is the allowance's review.
+ * written by the plugin that keeps products at its default price, listed. A
+ * product past the plan's allowance stops the writing there, and the row
+ * says how many were added; none at all is the allowance's review. A photo
+ * the product's rules refuse is dropped and the product written without it;
+ * a product they refuse outright is skipped, and none written for that
+ * reason is our failure, refunded, never the person's review (AGL-3676).
  */
 export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJobStepRunner {
   const writerFor = deps.writerFor ?? pluginResourceDraftWriter
@@ -432,8 +462,36 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
     }).catch(() => proposed.map(() => null))
     const outputs: AiJobOutput[] = []
     let stopped: string | null = null
+    /** The product's rules refusing what we made: ours, never the workspace's (AGL-3676). */
+    let rejected: string | null = null
     for (const [index, product] of proposed.entries()) {
-      const photo = photos[index]
+      const content: Record<string, unknown> = {
+        name: product.name,
+        type: product.type,
+        // Listed at once, so no "[gift card terms]" gap reaches a shopper:
+        // a sentence that leaves a fact for the owner is left out.
+        description: aiSiteProductDescriptionWithoutGaps(product.description),
+        tags: product.tags,
+        options: product.options,
+        seoTitle: product.seoTitle,
+        seoDescription: product.seoDescription,
+        comingSoon: true,
+      }
+      // A photo we picked that the product's rules refuse is dropped, never
+      // the product: its slot stays empty for the owner's own.
+      const photo = photos[index] ?? null
+      const withPhoto = photo ? { ...content, mediaUrls: [photo] } : content
+      const photoRefused =
+        photo !== null &&
+        keeper.writer.check(withPhoto, { hostId: job.hostId }).ok === false &&
+        keeper.writer.check(content, { hostId: job.hostId }).ok
+      if (photoRefused) {
+        console.warn('ai site products: the product refused its photo; written without it', {
+          orgId: job.orgId,
+          jobId: job.$id,
+          photo,
+        })
+      }
       const written = await keeper.writer.write({
         orgId: job.orgId,
         hostId: job.hostId,
@@ -445,21 +503,22 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         // No price stated: the writer gives it the store's default price
         // for the owner to change (AGL-3676). Listed at once. Its photo
         // slot holds a stock or starter photo for the owner to replace.
-        content: {
-          name: product.name,
-          type: product.type,
-          // Listed at once, so no "[gift card terms]" gap reaches a shopper:
-          // a sentence that leaves a fact for the owner is left out.
-          description: aiSiteProductDescriptionWithoutGaps(product.description),
-          tags: product.tags,
-          options: product.options,
-          seoTitle: product.seoTitle,
-          seoDescription: product.seoDescription,
-          comingSoon: true,
-          ...(photo ? { mediaUrls: [photo] } : {}),
-        },
+        content: photoRefused ? content : withPhoto,
       })
       if (written.ok === false) {
+        // A 400 is the product's rules refusing content we made: that one
+        // product is skipped and the rest are still written. Anything else
+        // (the allowance, the role, the site) stops the writing there.
+        if (written.status === 400) {
+          console.error('ai site products: the product writer refused a product we made', {
+            orgId: job.orgId,
+            jobId: job.$id,
+            index,
+            error: written.error,
+          })
+          rejected = written.error
+          continue
+        }
         stopped = written.error
         break
       }
@@ -473,12 +532,19 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
       })
     }
     if (!outputs.length) {
+      // Nothing written because the product's rules refused what we made:
+      // the failure is ours, so the item's credits are refunded
+      // (`aiUnitFailure` → `ours: true`). Only the workspace's allowance,
+      // role or site is the person's to review.
+      if (!stopped && rejected) return { ...outcome, outputs: [], failure: AI_SITE_PRODUCTS_NOT_WRITTEN_COPY }
       return { ...outcome, outputs: [], review: limitReview(stopped ?? 'No product could be added.') }
     }
     // The allowance that stopped the rest is said where the last one added is.
+    const last = outputs[outputs.length - 1]
     if (stopped) {
-      const last = outputs[outputs.length - 1]
       last.note = `${last.note} ${outputs.length} of ${proposed.length} added: ${stopped}.`
+    } else if (outputs.length < proposed.length) {
+      last.note = `${last.note} ${outputs.length} of ${proposed.length} added.`
     }
     return { ...outcome, outputs }
   }
