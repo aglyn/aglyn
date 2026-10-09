@@ -174,6 +174,7 @@ export function aiCompileLayoutFrame(
     pictures: 0,
     features: 0,
     splitAt: -2,
+    quotesOnly: [],
   }
   const name = aiLayoutFitText(plan.siteName, 'heading') || 'Home'
   const header = frame.header ?? { blocks: [] }

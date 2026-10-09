@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { COLLECTION_ENTRIES_COMPONENT_ID } from '@aglyn/aglyn/app-utils/collection-entries'
 import { AI_PALETTE, AI_SURFACES } from '../runtime/ai-palette.generated'
-import { aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
+import { aiLayoutListingContext, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
 import { aiLayoutFrameCheck } from '../jobs/ai-job-layout-language'
 import { AI_LAYOUT_POST_CARD_TOKENS, aiCompileLayoutPage } from './ai-layout-compiler'
 import {
@@ -118,6 +118,29 @@ describe('where a site lists its records (AGL-3676)', () => {
 
   it('features the posts on a blog’s home in its first band of items, whatever the plan named it', () => {
     expect(POSTS.placements).toEqual([{ screenId: 'home', section: 2, role: 'featured' }])
+  })
+
+  it('prefers the band that names the writing over an earlier band of items (live Clay Notes plan)', () => {
+    const placements = aiLayoutListingPlacements('posts', [
+      {
+        id: 'home',
+        title: 'Home',
+        slug: '/',
+        sections: [
+          { name: 'hero with blog link', items: 0 },
+          { name: 'what you will find: glazes, firings, studio notes', items: 3 },
+          { name: 'featured posts cards linking to /blog', items: 3 },
+        ],
+      },
+    ])
+    expect(placements).toEqual([{ screenId: 'home', section: 2, role: 'featured' }])
+  })
+
+  it('gives the page step’s last pass what a post card binds', () => {
+    const base = { screenIds: [], formIds: [], componentIds: [], codeBuilt: true }
+    const posts = aiLayoutListingContext(base, targets('home', [POSTS]))
+    expect([...(posts.bindingTokens ?? [])]).toEqual(['{{entry.url}}', '{{entry.coverImage}}'])
+    expect(aiLayoutListingContext(base, targets('shop', [POSTS]))).toBe(base)
   })
 
   it('reads the listings a unit carries, dropping one it cannot place', () => {

@@ -136,6 +136,16 @@ export interface AiLayoutCompileOptions {
   design?: AiLayoutDesign
 }
 
+/**
+ * What a section is called to a screen reader: its plan name, with any note
+ * the plan left in brackets taken out. A live blog plan (2026-10-09) named a
+ * section "reader notes and kind words [to be added by owner]"; carried into
+ * the label it read as a gap, and the page's gap pass took the section out.
+ */
+function sectionLabel(name: string, index: number): string {
+  return aiLayoutFitText(name.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim(), 'note') || `Section ${index + 1}`
+}
+
 /** A section root's id where the caller gives none. */
 function sectionIdOf(index: number): string {
   return `section-${index + 1}`
@@ -155,6 +165,8 @@ export interface AiLayoutCompiledPage {
    * anything later takes words out.
    */
   itemIds: string[][]
+  /** Plan sections whose only items were quotes, which a published page leaves out (AGL-3676). */
+  quotesOnly: number[]
 }
 
 /** The most pictures a page carries; each beyond it is one more empty slot to fill. */
@@ -192,6 +204,8 @@ export interface PageScope {
   features: number
   /** The last section whose heading the design set beside its items: never two in a row. */
   splitAt: number
+  /** Sections whose only items were quotes, left out (AGL-3676). */
+  quotesOnly: number[]
 }
 
 /** Everything one section's compile shares. */
@@ -278,6 +292,7 @@ export function aiCompileLayoutPage(
     pictures: 0,
     features: 0,
     splitAt: -2,
+    quotesOnly: [],
   }
   const roots = plan.sections.map((_, index) => {
     const section = sections[index] ?? { blocks: [] }
@@ -297,6 +312,7 @@ export function aiCompileLayoutPage(
     scrollTo: page.scrollTo,
     settled: page.settled,
     itemIds: page.itemIds,
+    quotesOnly: page.quotesOnly,
   }
 }
 
@@ -350,6 +366,11 @@ function compileSection(
     page.settled.push({ at, what: 'a quotes group left out: a published page shows no customer words the brief did not give' })
     return false
   })
+  // A section whose only items were those quotes has none left to show, and is
+  // not asked for them again: no answer can give words the brief did not (AGL-3676).
+  if (raw.blocks.some((block) => block.kind === 'quotes') && !blocks.some((block) => AI_LAYOUT_GROUP_KINDS.has(block.kind) || block.kind === 'component')) {
+    page.quotesOnly.push(index)
+  }
   // A section the site's records fill — its catalog, its blog — shows them
   // through the element that keeps them, around the words the design gave it (AGL-3676).
   const listed = aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
@@ -530,7 +551,7 @@ function compileSection(
     'section',
     {
       element: 'section',
-      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
+      ariaLabel: sectionLabel(name, index),
       ...(band === 'dark' ? { colorScheme: 'dark' } : {}),
     },
     bandSx(band),
@@ -1904,7 +1925,7 @@ function designedRoot(
     'section',
     {
       element: 'section',
-      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
+      ariaLabel: sectionLabel(name, index),
       ...(dark ? { colorScheme: 'dark' } : {}),
       // A photo cover that opens the page runs up under the header, which sits over it.
       ...(index === 0 && scope.overPhoto ? { underHeader: true } : {}),
@@ -2474,7 +2495,7 @@ function listingSection(
     'section',
     {
       element: 'section',
-      ariaLabel: aiLayoutFitText(name, 'note') || `Section ${index + 1}`,
+      ariaLabel: sectionLabel(name, index),
       ...(scope.band === 'dark' ? { colorScheme: 'dark' } : {}),
     },
     bandSx(scope.band),

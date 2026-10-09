@@ -404,8 +404,11 @@ export function aiLayoutShownItems(
 export function aiLayoutEmptyItemSections(
   screen: Pick<AiBuildPlanScreen, 'sections'>,
   items: readonly number[],
+  /** Sections whose only items were customer quotes, which no answer may give (AGL-3676). */
+  quotesOnly: readonly number[] = [],
 ): AiDoctrineViolation[] {
   return screen.sections.flatMap((section, index): AiDoctrineViolation[] => {
+    if (quotesOnly.includes(index)) return []
     const least = leastItems(section.items)
     if (!least) return []
     const shown = items[index] ?? 0
@@ -534,7 +537,7 @@ export function aiLayoutPageCheck(
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
       ...copy.violations,
-      ...aiLayoutEmptyItemSections(input.screen, items),
+      ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly),
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,

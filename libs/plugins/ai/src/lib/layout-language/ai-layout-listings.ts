@@ -167,7 +167,7 @@ export interface AiLayoutListingScreen {
 const PRODUCT_PAGE = /\b(shop|store|products?|catalog(?:ue)?|collections?|range|browse)\b/i
 const PRODUCT_SECTION =
   /\b(shop|store|products?|catalog(?:ue)?|collections?|range|bestsellers?|best[- ]sellers?|new arrivals|arrivals|featured|favou?rites|signature)\b/i
-const POST_SECTION = /\b(blog|posts?|articles?|writing|journal|stories|essays?|latest|recent|news)\b/i
+const POST_SECTION = /\b(blog|posts?|articles?|writing|journal|stories|essays?|latest|recent|news|featured)\b/i
 
 const firstSegment = (slug: string) => slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()
 const isHome = (slug: string) => firstSegment(slug) === ''
@@ -182,9 +182,9 @@ const isHome = (slug: string) => firstSegment(slug) === ''
  *    page features a few in its first section after the hero whose name
  *    says products ("Featured candles", "Bestsellers"), else in the first
  *    section after the hero planned with items.
- *  - POSTS. The home features the latest in its first section after the hero
- *    whose name says writing ("Featured writing", "Latest posts") or that is
- *    planned with items ("Featured journeys cards"); and any other page
+ *  - POSTS. The home features the latest in its first section of items after
+ *    the hero whose name says writing ("Featured writing", "Latest posts"),
+ *    else its first section of items after the hero; and any other page
  *    whose name says it is about the writing does the same. The blog's own
  *    index is the platform's.
  *
@@ -217,10 +217,12 @@ export function aiLayoutListingPlacements(
   }
   for (const screen of screens) {
     if (isHome(screen.slug)) {
-      // On a blog's home the first band after the hero that names the
-      // writing or shows items is its writing, whatever the plan named it
-      // ("Featured journeys cards").
-      place(screen, afterHero(screen, (name, items) => POST_SECTION.test(name) || items > 0), 'featured')
+      // On a blog's home the band that names the writing ("Featured posts
+      // cards", "Featured journeys") lists it; failing one, the first band of
+      // items after the hero. A live Clay Notes plan (2026-10-09) opened its
+      // home with "What you will find" before "Featured posts cards".
+      const named = afterHero(screen, (name, items) => items > 0 && POST_SECTION.test(name))
+      place(screen, named !== -1 ? named : afterHero(screen, (_name, items) => items > 0), 'featured')
       continue
     }
     if (!POST_SECTION.test(screen.title)) continue
