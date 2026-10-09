@@ -653,7 +653,7 @@ export function createEngine(deps: EngineDeps) {
           throw new CourierRefusal(
             502,
             `${label(run.provider)} did not answer, so it is not known whether a courier was booked. ` +
-              'Don’t book again: Aglyn checks with the courier and updates this order within a few minutes.',
+              'Don’t book again: this order is checked with the courier and updated within a few minutes.',
           )
         } else {
           // Refused outright: nothing was booked. Release the claim.
