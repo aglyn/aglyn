@@ -300,7 +300,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
     <CardDisplay
       header={'Activity'}
       help={docsHelp('inviteTeammates', {
-        anchor: '#activity-log',
+        anchor: '#site-activity-log',
         excerpt:
           'Every change made to this site in the console — who did ' +
           'what, and when.',

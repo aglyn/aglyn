@@ -39,9 +39,20 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 
 ## Set up bookings
 
-1. Define **services** (what can be booked, duration, price).
-2. Configure **availability** — the windows when slots are offered.
-3. Add the **booking widget** to a page as a canvas element.
+The **Services** card on the site's Bookings page defines what visitors can
+book: each service's length, price and the weekly hours it is offered in.
+
+1. Select **Add service** and enter its **Name**, **Duration (minutes)** and
+   **Price** (`0` is free). A paid service needs Stripe connected first (see
+   above); **Show the price as** offers a label such as a free estimate instead
+   — see [Price labels](#price-labels).
+2. Choose the service's **Timezone** and, under **Weekly availability**, the
+   days and hours slots are offered.
+3. Under **Booking form**, choose whether to ask for a phone number or an
+   address — see [Asking for a phone number and an address](#phone-and-address).
+4. Select **Save service**. A service you add here is active at once.
+5. Add the **booking widget** to a page as a canvas element, so visitors can
+   pick a service and a time.
 
 ### Draft services {#draft-services}
 
@@ -156,7 +167,7 @@ that does not change it.
 A service is not goods: the sales-tax rate configured for your store is a goods
 rate, and whether a service is taxable is a different question with frequently
 the opposite answer. So Aglyn does not apply your store's sales rate to an
-appointment. Instead, **Commerce → Settings → Taxes → Service tax** is where
+appointment. Instead, **Service tax**, on the **Taxes** card in the store's settings, is where
 you set your own rate for it.
 
 When you set one, Aglyn adds it to the booking charge as its own receipt line
@@ -175,7 +186,11 @@ be paid. Confirm your obligations with a qualified tax professional.
 
 ## Manage
 
-Use the console **bookings** page to see and manage upcoming appointments.
+The **Upcoming bookings** card on the site's Bookings page lists every booking
+still to come, with the customer and the time each one holds.
+
+**Export** in its header downloads your bookings as a file — see
+[Export bookings](#export-bookings).
 
 Each upcoming booking carries **View in CRM**, which opens the booker's contact — the
 [CRM's](../../content-and-data/crm/overview.md) Contacts list asked for their

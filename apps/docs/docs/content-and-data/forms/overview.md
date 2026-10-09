@@ -453,6 +453,15 @@ offering a Send that would fail.
 
 <!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
 
+#### The Inbox card on a site's dashboard {#inbox-card}
+
+The **Inbox** card on a site's dashboard shows the three newest form submissions, with
+the same unread dot, sender and form name as the Inbox itself; **Open inbox** takes you to
+the full list. Under the rows it says how many of them are unread, or *All caught up*,
+and *more in the Inbox* when there are others. When the site's captures left leads still
+to be worked, a last line counts the open leads and links to the CRM's Leads list. The card
+stays off the dashboard until the site has a submission or an open lead.
+
 ### Every site's Inbox at once {#every-sites-inbox-at-once}
 
 Your organization has an **Inbox** of its own, beside **CRM** and **Marketing**, for
@@ -480,8 +489,28 @@ each site's own, which is unchanged.
 
 ### One form's own page {#one-forms-own-page}
 
-The Inbox answers "who is waiting for a reply" for the whole site. **Forms →** a form
-answers a different question: how this one form is doing. Open it from the Forms list.
+Each form has its own page: open it from the **Forms** list to rename it, route its
+submissions, publish a new version and see how it is doing. The Inbox answers "who is
+waiting for a reply" for the whole site; a form's page answers how this one form is doing.
+A link to a form id the site does not hold — one deleted, or one from another site —
+shows **Form not found** with a way back to the list.
+
+Each card saves what it shows, from the **Save** in its own header: **Details** saves the
+name and campaigns, and **CRM routing** saves the lead switch and the consent field.
+A card's **Save** and **Discard changes** stay grayed out until something in that card
+differs from what's saved, and saving one card never saves the other. If you reload or
+close the page, or open the Besigner, while a card has unsaved changes, you're asked first.
+
+#### Details {#form-details}
+
+**Details** holds the form's display name and the campaigns it belongs to; rename it or
+file it under a campaign, then **Save**. The form's id is shown under the name and never
+changes — every submission is filed under it, so renaming a form never splits its
+history. A form can belong to several campaigns, since the same signup form is often
+placed by more than one push. Picking a campaign only files the form; it does not decide
+who a campaign mails or which campaign a submission is credited to.
+
+#### CRM routing {#form-crm-routing}
 
 **CRM routing** says what the CRM does with a submission. The switch — **Also create a
 lead from the address someone gives this form** — makes the form a lead surface: a
@@ -497,13 +526,20 @@ as *subscribe* or *marketing consent* — counts even before you pick it as the 
 field. **See the contacts this form captured in the CRM** opens the Contacts list
 narrowed to source Form and this form.
 
-Each card saves what it shows, from the **Save** in its own header: **Details** saves the
-name and campaigns, and **CRM routing** saves the lead switch and the consent field.
-A card's **Save** and **Discard changes** stay grayed out until something in that card
-differs from what's saved, and saving one card never saves the other. If you reload or
-close the page, or open the Besigner, while a card has unsaved changes, you're asked first.
+#### Versions {#form-versions}
 
-**What this form has collected** carries the counters:
+**Versions** lists the form's designs; **Open** one in the Besigner to edit it, and
+**Publish** it to update every page that places the form. Saving a version in the
+Besigner does not publish it, and the version your pages serve is marked **Current**.
+A form with no versions yet gets its first one when you open the Besigner. Publishing
+needs a role on the site that can publish, and it is refused — with the reasons listed
+on the card — when the design does not meet what the form's settings require, such as
+the email and consent fields **CRM routing** needs.
+
+#### What this form has collected {#form-collected}
+
+**What this form has collected** counts this form's views, submissions and leads, and
+the rates between them, so you can see how the form is doing. The counters:
 
 - **Views** — times the form was rendered on a live page. Not times it was *seen*: a
   form below the fold that nobody scrolled to still counts, and a form in a popup counts
@@ -531,10 +567,14 @@ Two things to know before you read the rates:
 - **Each rate covers only the months its denominator was being recorded**, which is why a
   form with years of submissions may show a completion rate over a much shorter period.
 
-**Submissions to this form** is the same table the Inbox shows, narrowed to this form,
-and it loads when you press **Show submissions** rather than on every visit — reading
+#### Submissions to this form {#form-submissions}
+
+**Submissions to this form** is the same table the Inbox shows, narrowed to this form;
+press **Show submissions** to load it. It loads on that press rather than on every visit — reading
 messages is a query over everything the site has ever collected, and most visits to this
 page are about the form's settings.
+
+#### Saves to contact fields {#form-saves-to-contact-fields}
 
 **Saves to contact fields** lists every field the published design declares, with a
 choice beside each of your [custom contact fields](../crm/custom-fields.md#save-a-form-field).

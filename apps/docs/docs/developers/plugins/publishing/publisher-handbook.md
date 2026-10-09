@@ -26,6 +26,15 @@ the marketplace side.
    from **Marketplace → Payouts**. The platform fee is 20% (30% on free
    plans).
 
+### Set up your public profile {#public-profile}
+
+The **Public profile** card on **Marketplace → Profile** is your publisher identity:
+set a handle, display name, bio and logo, then **Save profile** before you publish.
+They are shown on everything your organization publishes to the marketplace, and on
+your [publisher page](../publish-a-plugin.md#your-publisher-profile). The same card
+takes optional support contacts — a support email and URL — and links to your website,
+GitHub, X and LinkedIn, so buyers know where to ask for help.
+
 ## The publisher agreement
 
 Your **organization** — not you personally — is the publishing party, so
@@ -232,6 +241,14 @@ The one thing the draft cannot keep is your **bundle and manifest
 files**: a browser will not let a page hold a file across a reload, so
 you re-choose them, and the page says so rather than pretending it is
 ready to publish.
+
+### Bundle and manifest {#bundle-and-manifest}
+
+The **Bundle and manifest** section of the publish page takes your built bundle and
+its manifest: choose the bundle file, then choose the manifest file or paste its JSON.
+The bundle is verified before it is stored and content-addressed by sha256 once it is,
+so a new build is always a new object. On an update the manifest's `id` must match the
+listing's — see [Shipping a new version](#shipping-a-new-version).
 
 The sections are: **bundle and manifest** (choose the file or paste the
 JSON), **listing** (name, description, category, README, changelog,
@@ -499,6 +516,27 @@ whole page becomes the editor), or use the **Edit** action on
 | License | Short label (e.g. `MIT`) — listings without one get flagged in review. |
 | Homepage / repository | Public links build trust; reviewers check them. The repository is asked for at publish and required — editing it here changes the listing, not what past versions declared. |
 
+### Edit a listing {#edit-listing}
+
+Select **Edit listing** on your own listing's detail page and the page becomes the
+editor for what buyers see: name, summary, rich-text body and media. Save, and the
+listing changes at once — no new version, and no new review, because review is about
+the bundle's bytes rather than the words around them.
+
+### Your listings {#your-listings}
+
+**Marketplace → Listings** lists everything your organization has published, with its
+preview image; a row's menu is where you **Publish new version…**, **Edit listing**, or
+switch a plugin between private and public. Private plugins never appear in Browse, so
+this list — and **View** on a row — is where you find them.
+
+### The Links card {#listing-links}
+
+The **Links** card on a listing shows the **Homepage** and **Source repository** its
+publisher gave, so a buyer can read the source before installing. Set them under
+**Homepage / repository** when you edit the listing; the repository is required at
+publish, and a working public one is what reviewers check first.
+
 Be explicit about **data & permissions** in the README: what your plugin
 reads/writes and every host in your manifest's network allowlist —
 unverified sandbox listings show buyers a risk disclaimer, and good docs
@@ -545,6 +583,20 @@ with the reason rather than quietly edited, so you get to fix your own
 words.
 
 ## Versioning & updates
+
+### The Changelog card {#listing-changelog}
+
+The **Changelog** card on a listing shows what each approved version changed, newest
+first, in the words its publisher wrote when publishing it. Write the changelog on the
+publish page every time you ship; a listing whose publisher has never written one shows
+no Changelog card at all, rather than an empty one.
+
+### Version history {#version-history}
+
+**Version history** on a listing's detail page lists every published version with its
+changelog, a **Latest** marker on the newest, and a **Realm-trusted** chip on versions
+that carry it. Buyers read it to decide whether to update; you add to it with
+[Publish new version](#shipping-a-new-version).
 
 ### Shipping a new version
 
@@ -613,6 +665,22 @@ counts the organizations and sites that currently hold a pin — it goes
 down when someone uninstalls. A big gap between the two is churn worth
 investigating.
 
+### The Install card {#install-card}
+
+The **Install** card on a listing's detail page is where an install happens: choose
+where it lands — all sites, selected sites, or the whole organization for a plugin —
+then confirm. A paid listing asks for the purchase first, and the same card offers
+**Uninstall** (or **Uninstall org-wide**) once it is installed.
+
+### Installed from the marketplace {#installed-from-the-marketplace}
+
+**Installed from the marketplace**, on the workspace's **Plugins** page, lists every
+marketplace item this workspace has installed — org-wide, or the sites it is on — with
+the version it is pinned to and whether an update is out. Open one to manage that
+installation; browse the marketplace to add one.
+
+### Licenses {#licenses}
+
 A purchase licenses the buyer's organization, and **Marketplace → Licenses** lists
 what the workspace holds and what the buyer bought across every workspace, one table
 each. Each table filters through its own toolbar: **Search** finds a license by the
@@ -624,6 +692,18 @@ as a chip above it; the tables keep their own order and their column headers do 
 re-sort them. A word that more than 30 listing names share is refused with a note asking
 for more of it. See
 [Filter and search a list](../../../getting-started/console-tour.md#filter-and-search).
+
+#### This workspace {#workspace-licenses}
+
+**This workspace** lists the marketplace licenses this workspace owns — installable by
+any member with install permission, whoever on the team paid for it. Use it to check
+what you already own before buying again.
+
+#### Bought by you {#licenses-you-bought}
+
+**Bought by you** lists your own purchases across every workspace you belong to, with
+the workspace each one licenses. A purchase licenses one organization, so check here
+before you look for a license in the wrong place.
 
 Every listing shows its **artifact type** as a chip — Plugin, Component,
 Site template, Layout, Dataset schema, Email template or Email starter — so
@@ -652,6 +732,26 @@ account, with what buyers paid, the tax and the platform fee shown beside it.
 Refunds and lost chargebacks are excluded from that total: your share is
 pulled back from your Connect account, and the amount returned is listed
 separately.
+
+### Set up payouts {#set-up-payouts}
+
+The **Payouts** card on **Marketplace → Payouts** connects your organization's Stripe
+account so paid listings can pay you: select **Set up payouts** and finish Stripe's
+onboarding. The card then says where you stand — payouts enabled, setup still to
+finish in Stripe, or an account to reconnect — and links to your payouts in Stripe. The
+platform fee is 20% per sale, 30% on the Free plan.
+
+### Purchases and the platform fee {#purchases-and-fees}
+
+Every paid purchase records what the buyer paid and the platform fee taken from it, and
+Aglyn staff see recent purchases on their marketplace overview with the fee from each
+sale. Your share is what is left once that fee is taken, before sales tax.
+
+### When a refund cannot be pulled back {#refund-reversals}
+
+When a sale is refunded, your share is pulled back from your Connect account; if Stripe
+refuses that reversal, you keep the share and the platform absorbs the refund until it
+is recovered. Aglyn staff track each one, with the amount owed, until it is.
 
 ### The $3 minimum on paid listings {#low-prices-and-processing}
 

@@ -112,6 +112,50 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
   (seconds)** beside it is how long the film runs, which search results can show; it
   fills in when you choose a library film. See [Build a video collection](#video-collection).
 
+### Title, address and byline {#entry-basics}
+
+The **Entry** card holds what the entry is and who wrote it: its **Title**, its
+**Slug** — taken from the title until you change it — an **Excerpt**, a **Category**
+picked from the collection's list, comma-separated **Tags**, and an **Author** (or a
+**Custom byline**). Once the entry is published its address no longer follows the title,
+because editing the slug then moves a live URL and breaks links already pointing at it.
+
+### What is recorded {#entry-details}
+
+The **Details** card is the entry's record, read-only: its **Entry ID**, public
+**Address**, **Collection**, **Byline**, **Category and tags**, and the dates it was
+**created**, **last updated**, **published** and — when it is queued — **scheduled
+for**. Change any of them in the cards that edit them.
+
+### Cover image {#entry-cover-image}
+
+The **Cover image** is the picture at the top of the entry and on its share card —
+choose one from your media library or paste an image URL, and describe it in the alt
+text screen readers announce. It is previewed at the 1200×630 crop social networks
+apply, and it outranks the site's default [social image](../seo/overview.md#social-cards)
+when the entry is shared.
+
+### Featured video {#entry-featured-video}
+
+The **Featured video** is the film an entry is about, played in place of the cover image
+at the top of the entry. Choose one from your media library, or paste a link to a video
+file or a video host, and set **Video length (seconds)** so search results can show how
+long it runs — it fills in by itself for a library film. See
+[Build a video collection](#video-collection).
+
+### Search and social text {#entry-seo}
+
+The entry's **SEO** card sets the **SEO title** (up to 60 characters) and **SEO
+description** (up to 155) that search engines and share cards show. Leave either blank
+and the entry's own title and excerpt are used instead.
+
+### Entry traffic {#entry-traffic}
+
+The **Entry traffic** card shows this entry's page views over the last 14 days,
+counted against its public address — a bar per day. Reading it needs a plan that
+includes per-page traffic; the device and referrer breakdown is for the whole site, on
+the site's **Analytics** page.
+
 ### Scheduling
 
 The same three publication controls live in **two places**, so you can decide when a post goes

@@ -13,6 +13,12 @@ a staff claim. The `abuseReports` collection is `allow read: if isStaff()` and
 in a Firestore console tab is a supported path.
 :::
 
+## The queue page {#abuse-queue-page}
+
+**Staff → Abuse reports** lists every report filed from the public form, newest
+first: triage each one by severity, act with Lockdown or Disabled files, then save
+its status with what you did.
+
 This is the intake for people who are **not our customers**. A bank's fraud desk,
 a browser vendor, a photographer whose work was lifted, a stranger who clicked
 something wrong — none of them can open a support ticket (that route needs a
@@ -535,6 +541,20 @@ Early fraud warnings and disputes on marketplace sales count toward the
 [seller fraud pattern](#seller-fraud-pattern) under the **publisher's**
 workspace, never the buyer's.
 
+### Reported listings and reviews {#reported-listings}
+
+**Staff → Marketplace reports** is the queue for reports users file against a
+marketplace listing or a review: read the reason each reporter gave, then move it to
+**Reviewing**, **Actioned** or **Dismiss** it, with a note saying what you did.
+
+The menu at the top of the card shows one state at a time — **Open** by default, or
+**Reviewing**, **Actioned**, **Dismissed** or **Everything** — newest update first,
+and says when older reports in that state are not shown. Each report shows its status,
+whether it is about a listing or a review, and the reason in full; the reporter's
+account is shown only to staff roles allowed to see it. The statuses mean what they do
+on the abuse queue ([Statuses](#statuses)). Closing a report needs a note, which the
+server refuses to skip, and every change writes an audit row.
+
 ## Risk notices: what the workspace is told {#risk-notices}
 
 Every row a risk source files — a held email, page or marketplace submission, a
@@ -601,6 +621,28 @@ cannot reach us escalates to a browser vendor or a blocklist, and that block doe
 not distinguish the phishing subdomain from the four hundred honest customer
 sites beside it. Answering one report quickly is the cheapest insurance we have
 on the whole platform.
+
+## Reading a report {#reading-a-report}
+
+Each report is its own card: read the header and the reported address, decide
+which lever answers it, then set its status and write what you did before you
+press **Save status**.
+
+- **The header** carries the severity, the category, the status, **reported N×**
+  when the same address was reported more than once, and — on copyright reports
+  only — the account's [copyright strikes](#repeat-infringers). A missing strike
+  chip means the count was not looked up, never zero.
+- **The reported address** is deliberately not a link. Open it, if you must, in a
+  disposable browser that is not signed in to the console.
+- **Site and workspace ids** resolved from the address sit beside it, with buttons
+  to **Lockdown** and **Disabled files**. Those pages open empty: copy the id across,
+  so the target is typed by the person who decided on it. See
+  [Which lever answers which report](#which-lever).
+- **Alerts** on the card explain reports the platform filed itself — a Stripe fraud
+  signal, a seller fraud pattern, a held outbound email or page — and any review the
+  workspace's owners asked for. Those rows have no reporter to reply to.
+- **What you did** is optional while a report is open and required when you close it.
+  Nothing changes until you save.
 
 ## CSAM is not a takedown button {#csam}
 
@@ -843,6 +885,10 @@ The queue shows the earliest and latest lawful instants either side of the date
 we picked, so you can see it sits inside the window rather than take our word.
 
 ### The steps {#counter-notice-steps}
+
+Each counter-notice is its own card in the queue: move it to the step that matches
+what happened, write what you did and why, and press **Save step** — each step
+changes what happens to the site.
 
 | Step | What it means | What it does to the site |
 | --- | --- | --- |

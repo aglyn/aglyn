@@ -1434,7 +1434,7 @@ function Screens(props) {
             href: buildRoute(Route.HOST_SCREENS, { orgSlug,  host }),
           },
         ]}
-        help="screens"
+        help={{ topic: 'screens', anchor: '#the-pages-list' }}
         header={{
           children: 'Pages',
           icon: { path: ICON_VARIANT_PAGES.path },
@@ -1783,7 +1783,7 @@ const formSchema = {
       type: 'text',
       label: 'Slug',
       help: docsHelp('screens', {
-        anchor: '#screens--routing',
+        anchor: '#slug',
         excerpt:
           'Publishing registers the slug in the routing map — nested ' +
           'pages compose their path from their parents.',

@@ -98,12 +98,7 @@ interface RecipientRow {
   lastEventAtMs: number
 }
 
-const recipientsDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#opens--clicks',
-  excerpt:
-    'The people an email reached, and which of them opened it or clicked ' +
-    'a link — read from the per-recipient delivery log.',
-})
+const recipientsDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#email-recipients' })
 
 export interface EmailRecipientsCardProps {
   hostId: string

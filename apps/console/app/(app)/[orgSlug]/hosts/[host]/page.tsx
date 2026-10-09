@@ -57,7 +57,7 @@ function HostDashboard() {
 
   return (
     <DashboardLayout
-      help="consoleTour"
+      help={{ topic: 'consoleTour', anchor: '#a-sites-dashboard' }}
       header={{
         children: 'My Dashboard',
         icon: { path: ICON_VARIANT_HOME.path },

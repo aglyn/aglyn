@@ -196,7 +196,7 @@ export function ChannelConnection(props: ChannelConnectionProps) {
     <CardDisplay
       variant="outlined"
       header={`Product sync with ${labels.service}`}
-      help={pluginDocsHelp('salesChannels')}
+      help={pluginDocsHelp('salesChannels', { anchor: '#how-fresh-the-feed-is' })}
       subheader={
         connection
           ? `Connected ${formatTime(connection.connectedAtMs)}. Sends the products this feed lists straight to ${labels.service}.`

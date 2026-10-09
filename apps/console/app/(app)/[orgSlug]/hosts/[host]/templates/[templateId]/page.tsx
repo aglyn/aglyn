@@ -466,7 +466,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={`Starter bundle · ${template?.source?.starterName ?? starterId}`}
             help={docsHelp('templatesLibrary', {
-              anchor: '#where-a-template-came-from',
+              anchor: '#first-party-starters',
               excerpt:
                 'The starter this template came from, and what re-applying it would ' +
                 'bring across.',

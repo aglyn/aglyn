@@ -24,6 +24,7 @@ import {
   type DocsHelpAnchor,
   DOCS_HELP_TOPICS,
   type DocsHelpTopicKey,
+  docsHelpTitle,
 } from '../constants/docs-links'
 import DocsHelpExcerpt from './docs-help-excerpt.component'
 
@@ -46,9 +47,11 @@ export interface DocsHelpTipProps<
    * you are standing in".
    */
   anchor?: DocsHelpAnchor<K>
-  /** Override the tooltip title (defaults to the topic's docs page title). */
+  /** Override the tooltip title (defaults to the anchor's heading, else the
+   * topic's docs page title). */
   title?: string
-  /** Override the tooltip excerpt (defaults to the topic's docs excerpt). */
+  /** Override the tooltip excerpt (defaults to the anchor's section, else the
+   * topic's docs excerpt). */
   excerpt?: ReactNode
   sx?: SxProps
 }
@@ -65,15 +68,17 @@ export function DocsHelpTip<K extends DocsHelpTopicKey>(
   props: DocsHelpTipProps<K>,
 ) {
   const { topic, anchor, sx } = props
-  const topicEntry = DOCS_HELP_TOPICS[topic]
-  const { path } = topicEntry
-  const title = props.title ?? topicEntry.title
+  const { path } = DOCS_HELP_TOPICS[topic]
+  // An anchored tip is titled by its heading, not its page (AGL-3707).
+  const title = props.title ?? docsHelpTitle(topic, anchor)
   // The excerpt arrives with the tooltip rather than with this button: it is
   // read only once the tooltip opens, and the registry's prose is ~20 KB the
   // console shell would otherwise carry on every page (AGL-2706). The title
   // and path stay synchronous below — they are this control's accessible name
   // and its href.
-  const excerpt = props.excerpt ?? <DocsHelpExcerpt topic={topic} />
+  const excerpt = props.excerpt ?? (
+    <DocsHelpExcerpt topic={topic} anchor={anchor} />
+  )
   const href = `${buildDocsUrl(path)}${anchor ?? ''}`
 
   return <HelpTip title={title} excerpt={excerpt} href={href} sx={sx} />

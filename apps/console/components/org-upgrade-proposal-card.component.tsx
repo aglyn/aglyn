@@ -57,7 +57,7 @@ export function OrgUpgradeProposalCard() {
         orgName: org?.name ?? currentOrg?.orgName ?? null,
         productName: branding.productName,
       })}
-      help={docsHelp('billing', { anchor: '#plan-total' })}
+      help={docsHelp('billing', { anchor: '#upgrade-proposal' })}
       HeaderProps={{
         action: (
           <Button

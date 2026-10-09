@@ -461,7 +461,7 @@ describe('the gates, each forced on its own', () => {
   it('a follow-up standing alone but retrieving weakly ALSO escalates', () => {
     // The second question, and the reason the follow-up bar is raised rather
     // than removed. It stands on its own words, and retrieval knows the
-    // answer only modestly: the bookings overview wins, but at a score under
+    // answer only modestly: one page wins, but at a score under
     // the follow-up bar of 8 and by a lead under 2x. Answered as a first
     // question (the bar there is 5 and 1.3x); escalated mid-thread, where a
     // weak match is also evidence that the missing half is in the transcript.
@@ -472,8 +472,10 @@ describe('the gates, each forced on its own', () => {
     // by well under 2x; a page about generating one (AGL-2907) then took a
     // share of the same words, and the question's first-turn margin fell
     // under 1.3 — refused as `ambiguous`, never reaching the gate this test
-    // is about.
-    const question = 'how do I take bookings from my site'
+    // is about. Then "how do I take bookings from my site", until the
+    // card-level setup sections (AGL-3707) rewrote the bookings overview's
+    // openers and its first turn fell to `low-coverage`.
+    const question = 'how do I build a form'
     expect(questionStandsAlone(question)).toBe(true)
     const first = verdictFor(question, false)
     expect(first.answered).toBe(true)
