@@ -242,6 +242,12 @@
       "@aglyn/plugins-post-purchase/*": [
         "../../libs/plugins/post-purchase/src/lib/*"
       ],
+      "@aglyn/plugins-review-platforms": [
+        "../../libs/plugins/review-platforms/src/index.ts"
+      ],
+      "@aglyn/plugins-review-platforms/*": [
+        "../../libs/plugins/review-platforms/src/lib/*"
+      ],
       "@aglyn/plugins-shipping": [
         "../../libs/plugins/shipping/src/index.ts"
       ],

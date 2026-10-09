@@ -45,14 +45,16 @@ export interface YotpoCredentials {
   fetchImpl?: ProviderFetch
 }
 
-const store = (appKey: string) => `${YOTPO_API_BASE}/stores/${encodeURIComponent(appKey)}`
+/** One of a store's Core API collections: `access_tokens`, `products` or `orders`. */
+const store = (appKey: string, collection: 'access_tokens' | 'products' | 'orders') =>
+  [YOTPO_API_BASE, 'stores', encodeURIComponent(appKey), collection].join('/')
 
 /** A token for the merchant's store. Also how a key pair is checked before it is kept. */
 export async function yotpoAccessToken(credentials: YotpoCredentials): Promise<string> {
   const answer = await callProvider<{ access_token?: unknown }>({
     vendor: VENDOR,
     method: 'POST',
-    url: `${store(credentials.appKey)}/access_tokens`,
+    url: store(credentials.appKey, 'access_tokens'),
     json: { secret: credentials.secretKey },
     fetchImpl: credentials.fetchImpl,
   })
@@ -93,7 +95,7 @@ export async function sendYotpoOrder(credentials: YotpoCredentials, order: Yotpo
     await callProvider({
       vendor: VENDOR,
       method: 'POST',
-      url: `${store(credentials.appKey)}/products`,
+      url: store(credentials.appKey, 'products'),
       headers,
       accept: [409],
       json: {
@@ -111,7 +113,7 @@ export async function sendYotpoOrder(credentials: YotpoCredentials, order: Yotpo
   const answer = await callProvider({
     vendor: VENDOR,
     method: 'POST',
-    url: `${store(credentials.appKey)}/orders`,
+    url: store(credentials.appKey, 'orders'),
     headers,
     accept: [409],
     json: {
