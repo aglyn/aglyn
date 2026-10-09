@@ -160,6 +160,13 @@
       },
       "description": "CRM assistance (AGL-3520). OFF: AI gets the disclosed fields of a record. ON: the whole record, contact details and custom fields included. Turn on only after Privacy Policy section 2 and the Subprocessors row are republished.",
       "valueType": "JSON"
+    },
+    "release_weglot": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released with the plugin 2026-10-09 (AGL-3700); each site still switches it on\"}"
+      },
+      "description": "Weglot translation on published sites with the merchant's own Weglot key (AGL-3700). Platform-wide kill switch; each site still switches it on itself.",
+      "valueType": "JSON"
     }
   },
   "version": {

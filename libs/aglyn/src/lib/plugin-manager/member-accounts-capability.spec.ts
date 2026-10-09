@@ -70,8 +70,10 @@ describe('user accounts is a per-site capability (AGL-2486)', () => {
     // Live chat (AGL-3698) is the second: a NEW plugin, so being off until a
     // site turns it on takes nothing away from any site — and it is what keeps
     // its page enricher and the lockdown verdict from reading a settings
-    // document for every site on the platform.
-    const DECIDED = new Set([ACCOUNTS_PLUGIN_ID, 'live-chat'])
+    // document for every site on the platform. Weglot (AGL-3700) is the
+    // third, for the same two reasons: new, and its loader and the site CSP
+    // read its settings only for a site that switched it on.
+    const DECIDED = new Set([ACCOUNTS_PLUGIN_ID, 'live-chat', 'weglot'])
     for (const plugin of FIRST_PARTY_PLUGINS) {
       expect([plugin.id, isDefaultOffPerSite(plugin.id)]).toEqual([plugin.id, DECIDED.has(plugin.id)])
     }

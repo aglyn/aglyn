@@ -47,11 +47,6 @@ export const PLUGIN_DOCS = {
     title: 'Server-side ad conversions',
     excerpt: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising. Rolling out.',
   },
-  adTracking: {
-    path: '/marketing-and-automation/analytics/ad-tracking',
-    title: 'Ad tracking',
-    excerpt: 'Run your own Meta, TikTok, Pinterest, Google Ads and LinkedIn tags on your site — only for visitors who allow advertising.',
-  },
   aglynAssist: {
     path: '/getting-started/aglyn-assist',
     title: 'Aglyn Assist',
@@ -535,7 +530,6 @@ export const PLUGIN_DOCS_ANCHORS = {
   abuseReports: ['#abuse-queue-page', '#fraud-and-risk-alerts-by-email', '#where-reports-come-from', '#held-outbound-email', '#what-is-screened', '#tiers', '#web-risk', '#deciding-a-held-row', '#security-hold', '#names-and-domains', '#stripe-fraud-signals', '#seller-fraud-pattern', '#card-testing-velocity', '#marketplace', '#reported-listings', '#risk-notices', '#triage-by-severity', '#reading-a-report', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#counter-notices', '#counter-notice-clock', '#counter-notice-steps', '#repeat-infringers', '#repeat-infringer-threshold', '#known-gaps', '#related'],
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#crm-events', '#funnel-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#transactional-replies', '#merge-tags', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   adConversions: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
-  adTracking: ['#browser-tags', '#tiktok-pixel', '#pinterest-tag', '#consent', '#related'],
   aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   aiAllotments: ['#allotments', '#hard-or-soft', '#the-pool-comes-first', '#limiting-models', '#who-can-set-them', '#a-members-allotment', '#a-sites-allotment', '#usage-strip', '#choosing-a-model', '#related'],
   aiAssistBuilds: ['#ask-or-build', '#what-it-can-build', '#the-plan-card', '#confirm-the-plan', '#one-job-many-parts', '#what-it-costs', '#who-can-use-it', '#related'],
@@ -653,10 +647,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   actionsBuilder: {
     '#create-an-action': 'Create an action',
-  },
-  adTracking: {
-    '#pinterest-tag': 'Pinterest tag',
-    '#tiktok-pixel': 'TikTok pixel',
   },
   aglynAssist: {
     '#what-it-can-do': 'What it can do',

@@ -44,10 +44,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   actionsBuilder: {
     '#create-an-action': 'Metered runs. You build both in the same place; steps that need a higher plan are labeled in the editor.',
   },
-  adTracking: {
-    '#pinterest-tag': 'The same advertising consent as your other tags. With an access token on the Ad conversions card, the same events are also sent from the server.',
-    '#tiktok-pixel': 'Mmerce).',
-  },
   aglynAssist: {
     '#what-it-can-do': 'E, connect a domain, set up shipping, invite a teammate — and it answers from this documentation, linking the exact docs section and the console page where you do it.',
   },

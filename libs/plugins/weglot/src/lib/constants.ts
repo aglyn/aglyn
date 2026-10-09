@@ -57,6 +57,16 @@ export const WEGLOT_CONNECT_HOSTS = [
   'api.weglot.com',
 ] as const
 export const WEGLOT_IMAGE_HOSTS = ['cdn.weglot.com'] as const
+/**
+ * The same hosts as the origins the loader's script reaches. Named as
+ * `https://` literals so the egress sweep (`subprocessor-inventory.spec.ts`)
+ * finds every host the plugin declares; the spec holds the two lists equal.
+ */
+export const WEGLOT_CONNECT_ORIGINS = [
+  'https://cdn.weglot.com',
+  'https://cdn-api-weglot.com',
+  'https://api.weglot.com',
+] as const
 
 /** The `<script>` element ids the page uses, stable for specs. */
 export const WEGLOT_BOOT_ELEMENT_ID = 'aglyn-weglot-boot'

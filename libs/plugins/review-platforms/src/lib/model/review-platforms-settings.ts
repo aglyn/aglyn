@@ -107,7 +107,13 @@ export const EMPTY_REVIEW_PLATFORMS_SETTINGS: ReviewPlatformsSettingsView = {
 }
 
 /** The domain every Trustpilot invitation address is on. */
-export const TRUSTPILOT_INVITE_DOMAIN = 'invite.trustpilot.com'
+/**
+ * Trustpilot's invitation mail domain. Held as an origin so the egress sweep
+ * (`subprocessor-inventory.spec.ts`, which reads `https://` literals) sees the
+ * host the order email is blind-copied to; the egress itself is that email.
+ */
+export const TRUSTPILOT_INVITE_ORIGIN = 'https://invite.trustpilot.com'
+export const TRUSTPILOT_INVITE_DOMAIN = new URL(TRUSTPILOT_INVITE_ORIGIN).hostname
 
 /**
  * A Trustpilot invitation address, lower-cased — `yourshop.com+1a2b3c@invite.trustpilot.com`

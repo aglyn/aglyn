@@ -577,6 +577,14 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
   {
     pluginId: 'couriers',
     subprocessors: [],
+    hosts: [
+      {
+        host: "developer.doordash.com",
+        disposition: "no-request",
+        reason: "DoorDash's developer portal, linked from the Couriers card (`libs/plugins/couriers/src/lib/model/couriers.ts`) so the merchant can create their own DoorDash Drive keys. Opened by the merchant's own browser; no platform server requests it.",
+        dataReceived: "Nothing. No request is made.",
+      },
+    ],
     uses: [
       {
         host: "openapi.doordash.com",

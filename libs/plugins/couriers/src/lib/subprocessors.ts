@@ -16,6 +16,7 @@
  */
 
 import type {
+  PluginEgressHostDeclaration,
   PluginEgressUseDeclaration,
   PluginSubprocessorsAnswer,
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
@@ -42,6 +43,21 @@ export const COURIERS_USES: PluginEgressUseDeclaration[] = [
 ]
 
 /** The plugin's `subprocessors` entry: no recipient of Aglyn's own, only the merchant's chosen destination. */
+/**
+ * DoorDash's developer portal, linked from the Couriers card so a merchant can
+ * create their own Drive keys (`COURIER_PROVIDERS.doordash.portal` in
+ * `model/couriers.ts`). The merchant's browser opens it; no server requests it.
+ */
+export const COURIERS_HOSTS: PluginEgressHostDeclaration[] = [
+  {
+    host: 'developer.doordash.com',
+    disposition: 'no-request',
+    reason:
+      "DoorDash's developer portal, linked from the Couriers card (`libs/plugins/couriers/src/lib/model/couriers.ts`) so the merchant can create their own DoorDash Drive keys. Opened by the merchant's own browser; no platform server requests it.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+]
+
 export function couriersSubprocessors(): PluginSubprocessorsAnswer {
-  return { subprocessors: [], uses: COURIERS_USES }
+  return { subprocessors: [], uses: COURIERS_USES, hosts: COURIERS_HOSTS }
 }

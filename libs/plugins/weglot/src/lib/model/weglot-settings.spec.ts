@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-config'
 import {
   WEGLOT_CONNECT_HOSTS,
+  WEGLOT_CONNECT_ORIGINS,
   WEGLOT_IMAGE_HOSTS,
   WEGLOT_PLUGIN_ID,
 } from '../constants'
@@ -175,6 +176,12 @@ describe('the plugins.config.json declaration', () => {
       },
     })
     expect(entry?.['siteCsp']?.['variantField']).toBeUndefined()
+  })
+
+  it('names each connect host as the origin the egress sweep reads', () => {
+    expect(WEGLOT_CONNECT_ORIGINS.map((origin) => new URL(origin).hostname)).toEqual([
+      ...WEGLOT_CONNECT_HOSTS,
+    ])
   })
 
   it('is off on every site until an admin switches it on', () => {
