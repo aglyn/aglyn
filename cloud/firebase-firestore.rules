@@ -3672,11 +3672,13 @@ service cloud.firestore {
       // exclusions this block would narrow nothing and every editor and author
       // on the site would keep the catch-all's write.
       //
-      // `live-chat` is the exception, and it is closed to every client
-      // (AGL-3698): its document decides which vendor script a published page
-      // loads and which hosts the site's Content-Security-Policy admits, so it
-      // is written only by `/api/live-chat/settings`, which parses every
-      // field first. Staff included — the route admits staff too.
+      // `live-chat` is the exception, and it is closed to the site's own
+      // members, the admin included (AGL-3698): its document decides which
+      // vendor script a published page loads and which hosts the site's
+      // Content-Security-Policy admits, so it is written by
+      // `/api/live-chat/settings`, which parses every field first. Staff keep
+      // the catch-all's staff write below, as for every host subcollection;
+      // the route admits staff as well.
       match /pluginSettings/{pluginId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow write: if pluginId != 'live-chat' && (isStaff() ||

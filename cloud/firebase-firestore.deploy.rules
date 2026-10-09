@@ -3677,6 +3677,8 @@ request.resource.data.diff(resource.data)
 
 
 
+
+
 match /pluginSettings/{pluginId} {
 allow read: if isStaff() || isHostMember(hostId);
 allow write: if pluginId != 'live-chat' && (isStaff() ||

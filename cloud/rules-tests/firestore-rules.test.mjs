@@ -14260,8 +14260,9 @@ describe("a site's live chat settings are written by their route alone (AGL-3698
   /*
    * `hosts/{hostId}/pluginSettings/live-chat` decides which vendor script a
    * published page loads and which hosts the site's policy admits, so no
-   * client writes it — the owner and staff included. `/api/live-chat/settings`
-   * parses every field and writes it with the Admin SDK. Members still READ
+   * member of the site writes it — the owner included. `/api/live-chat/settings`
+   * parses every field and writes it with the Admin SDK. Staff keep the host
+   * catch-all's staff write, as for every subcollection. Members still READ
    * it, like every other plugin's site settings, and the generic document
    * beside it keeps its admin write: both halves asserted, so a rule that
    * closed every plugin's settings would fail here too.
@@ -14283,11 +14284,11 @@ describe("a site's live chat settings are written by their route alone (AGL-3698
     })
   })
 
-  it('refuses every client write, the site admin and staff included', async () => {
+  it("refuses every write by the site's own members, the admin included", async () => {
     for (const [who, client] of [
       ['the owner', () => authed(OWNER)],
       ['an editor', () => authed(EDITOR)],
-      ['staff', () => authed(STAFF, { staff: true })],
+      ['a viewer', () => authed(VIEWER)],
     ]) {
       await mustDeny(
         `${who} pointing the chat at another key`,
