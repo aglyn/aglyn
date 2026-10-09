@@ -920,6 +920,20 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Review platforms (AGL-3699): one site's Trustpilot and Yotpo
+      // settings — the invitation address every order email may be copied
+      // to, and API credentials sealed under REVIEW_PLATFORMS_TOKEN_KEY — and
+      // whether each service was asked to invite one order's buyer. Server-
+      // written AND server-read: the plugin's routes serve what the console
+      // shows. A client that could write the settings could copy a store's
+      // order emails to an inbox of its choosing.
+      match /reviewPlatformsHostSettings/{hostId} {
+        allow read, write: if false;
+      }
+      match /reviewPlatformsInvitations/{recordId} {
+        allow read, write: if false;
+      }
+
       // Rewards (AGL-3640): one store's loyalty program, its members' points,
       // store credit and live checkout holds, the rewards and referral codes
       // that spend them, every movement of a balance, what each sale took
@@ -2564,6 +2578,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Couriers (AGL-3695): a site's connection to the merchant's OWN DoorDash
+    // Drive developer account — its live and test keys with the signing
+    // secret sealed, and the hash of the token DoorDash's webhooks carry —
+    // and each local-delivery order's courier: the quote, the one run booked
+    // at a time, and the runs before it. Written and read by the couriers
+    // plugin's console routes, webhook, event intake and job through the Admin
+    // SDK only. Deny ALL client access, staff and the owner included: a client
+    // that could read a connection could carry off a sealed key, and one that
+    // could write a courier record could book or call off a courier the
+    // merchant pays for. Org erasure destroys both by the `orgId` field.
+    match /courierConnections/{connectionId} {
+      allow read, write: if false;
+    }
+    match /courierDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
     // Marketplaces (AGL-3638): a site's connection to the merchant's OWN
     // Amazon, eBay, Etsy, TikTok Shop, Walmart or Faire seller account — its
     // grant sealed, its settings, order cursor, log and what each listing was
@@ -3691,11 +3722,19 @@ service cloud.firestore {
       // the re-grant — exactly the `webhooks`/`orders` shape. Without the
       // exclusions this block would narrow nothing and every editor and author
       // on the site would keep the catch-all's write.
+      //
+      // `live-chat` is the exception, and it is closed to the site's own
+      // members, the admin included (AGL-3698): its document decides which
+      // vendor script a published page loads and which hosts the site's
+      // Content-Security-Policy admits, so it is written by
+      // `/api/live-chat/settings`, which parses every field first. Staff keep
+      // the catch-all's staff write below, as for every host subcollection;
+      // the route admits staff as well.
       match /pluginSettings/{pluginId} {
         allow read: if isStaff() || isHostMember(hostId);
-        allow write: if isStaff() ||
+        allow write: if pluginId != 'live-chat' && (isStaff() ||
           (hostMemberRole(hostId) == 'admin' && isVerified() &&
-            !hostWritesFrozen(hostId));
+            !hostWritesFrozen(hostId)));
       }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc

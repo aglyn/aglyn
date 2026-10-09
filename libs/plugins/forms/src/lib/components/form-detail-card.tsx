@@ -622,12 +622,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
     return (
       <CardDisplay
         header="Form not found"
-        help={pluginDocsHelp('forms', {
-          anchor: '#build-a-form',
-          excerpt:
-            'A form is created from the Forms list and keeps the id every ' +
-            'submission is filed under.',
-        })}
+        help={pluginDocsHelp('forms', { anchor: '#one-forms-own-page' })}
         contentGutterX
         contentGutterY
       >
@@ -652,12 +647,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
           children: (
             <CardDisplay
               header="Details"
-              help={pluginDocsHelp('forms', {
-                anchor: '#build-a-form',
-                excerpt:
-                  'The id is what every submission is filed under, so ' +
-                  'renaming a form never splits its history.',
-              })}
+              help={pluginDocsHelp('forms', { anchor: '#form-details' })}
               HeaderProps={{
                 action: (
                   <FormDetailCardActions
@@ -716,13 +706,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
           children: (
             <CardDisplay
               header="CRM routing"
-              help={pluginDocsHelp('forms', {
-                anchor: '#where-submissions-go',
-                excerpt:
-                  'Every submission reaches the Inbox and updates the ' +
-                  'contact. Lead routing and the consent field decide ' +
-                  'what else happens to it.',
-              })}
+              help={pluginDocsHelp('forms', { anchor: '#form-crm-routing' })}
               HeaderProps={{
                 action: (
                   <FormDetailCardActions
@@ -866,12 +850,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
           children: (
             <CardDisplay
               header="Versions"
-              help={pluginDocsHelp('forms', {
-                anchor: '#build-a-form',
-                excerpt:
-                  'Publishing a form version updates every page that ' +
-                  'places it. Saving does not — a save is not a publish.',
-              })}
+              help={pluginDocsHelp('forms', { anchor: '#form-versions' })}
               contentGutterX
               contentGutterY
             >

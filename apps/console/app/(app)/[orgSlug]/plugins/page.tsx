@@ -155,7 +155,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
           </Button>
         </AppLink>
       }
-      help="plugins"
+      help={{ topic: 'installYourFirstPlugin', anchor: '#manage-plugins' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
@@ -174,9 +174,8 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
 
           <CardDisplay
             header={'Built in'}
-            help={docsHelp('plugins', {
-              excerpt:
-                `${branding.productName}’s own plugins. Switching one off removes it from every site in this organization — its navigation, the editor, published pages and the API.`,
+            help={docsHelp('installYourFirstPlugin', {
+              anchor: '#built-in-plugins',
             })}
             contentGutterX
             contentGutterY

@@ -40,6 +40,13 @@ first. See
 | **Component** | An element tree | A reusable component, or a drop onto a page |
 | **Layout** | Page chrome — header, footer, navigation | A new shared layout |
 
+## Your Templates list {#templates-list}
+
+A site's **Templates** page lists every template it has — pages, components and layouts
+you saved, ones installed from the marketplace, and Aglyn's starters — with how many your
+plan allows opposite the heading. **Create Template** starts a blank one; open a row to
+see where it came from and to use it.
+
 ## Installing from the marketplace
 
 Installing a marketplace template **adds it to your library and publishes nothing**.

@@ -83,13 +83,7 @@ import { useRecordRouteContext } from './record-route-context'
  * header without help is a header a reader has no way out of — which is
  * exactly the state that branch describes.
  */
-const reportDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'What one campaign did: delivery, opens, clicks, bounces, complaints, ' +
-    'unsubscribes and the revenue it was credited with, each with the ' +
-    'population it is measured against.',
-})
+const reportDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#the-campaign-report' })
 
 export interface CampaignReportCardProps {
   /** The site, or `null` on the org Marketing hub. */

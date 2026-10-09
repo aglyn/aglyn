@@ -29,8 +29,17 @@ import {
   meterHostEmail,
   renderHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  isEmailConfigured,
+  renderTextEmailHtml,
+  sendEmail,
+} from '@aglyn/shared-util-email'
+import {
+  resolvePluginOrderEmailCopies,
+  withOrderEmailDataBlocks,
+} from '@aglyn/aglyn/plugin-manager/plugin-order-email-copies'
 import * as CommerceModel from '../model'
+import { orderViewFromData } from './api-v1/order-view'
 import { mintDownloadToken } from './download'
 import { orderStatusUrl } from './order-status-token'
 
@@ -549,12 +558,17 @@ async function releaseMessage(
     .catch(() => undefined)
 }
 
+/** How long a buyer email waits on plugins asking to be copied on it. */
+const EMAIL_COPIES_TIMEOUT_MS = 3_000
+
 async function deliverEmail(
   store: StoreContext,
   ref: OrderRef,
   to: string,
   message: ComposedMessage,
   context: string,
+  /** The moment and order, for plugins copied on it; absent for a merchant-asked resend. */
+  about?: { event: OrderBuyerEvent; order: CommerceModel.HostOrder },
 ): Promise<void> {
   const designed = await renderHostEmailWithTokens(
     store.firestore,
@@ -563,11 +577,35 @@ async function deliverEmail(
     message.tokens,
   )
   const org = await getOrgForHost(ref.hostId).catch(() => null)
-  await sendEmail({
+  // Plugins copied on this email (AGL-3699): a review platform's invitation
+  // address, with the data block it reads. Asked through core's seam, by
+  // the email's key and moment; nothing answers unless a site connected one.
+  const copies = about
+    ? await resolvePluginOrderEmailCopies(
+        {
+          hostId: ref.hostId,
+          recordId: ref.orderId,
+          emailKey: message.emailKey,
+          moment: about.event,
+          recipient: to,
+          order: orderViewFromData(ref.orderId, about.order as Record<string, any>),
+        },
+        { timeoutMs: EMAIL_COPIES_TIMEOUT_MS },
+      )
+    : { bcc: [] as string[], html: '', settle: async () => undefined }
+  const subject = designed?.subject ?? message.subject
+  const text = designed?.text || message.text
+  // A data block lives in the HTML part, so a text-only email gets the same
+  // HTML part `sendEmail` would have synthesized, carrying it.
+  const html = copies.html
+    ? withOrderEmailDataBlocks(designed?.html || renderTextEmailHtml(text, subject), copies.html)
+    : designed?.html
+  const result = await sendEmail({
     to,
-    subject: designed?.subject ?? message.subject,
-    text: designed?.text || message.text,
-    ...(designed?.html ? { html: designed.html } : {}),
+    subject,
+    text,
+    ...(html ? { html } : {}),
+    ...(copies.bcc.length ? { bcc: copies.bcc } : {}),
     fromName: Aglyn.resolveBrandingProfile(org?.org as never).fromName,
     sendingIdentity: await hostSendingIdentity(ref.hostId),
     audience: 'tenant',
@@ -576,6 +614,7 @@ async function deliverEmail(
     // rules never hold it (AGL-3356).
     owedFor: 'order',
   })
+  await copies.settle(Boolean(result?.sent))
   // Cost meter (AGL-1438), as every transactional store email.
   await meterHostEmail(ref.hostId)
 }
@@ -762,7 +801,7 @@ export async function notifyOrderBuyer(
       let held: number | null = null
       try {
         if (target.channel === 'email') {
-          await deliverEmail(store, ref, target.to, message, context)
+          await deliverEmail(store, ref, target.to, message, context, { event, order })
         } else {
           const sent = await deliverSms(
             ref,

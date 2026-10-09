@@ -25,6 +25,16 @@ the rows already on screen. Each filter in force shows as a chip above the table
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The
 role pickers and **Permissions** in each row work as before.
 
+## The Team page {#team-page}
+
+**Organization → Team** is where you manage the people who build and run your sites, in
+three tabs: **Members** lists everyone and invites more, **Custom roles** defines what a
+role may do, and **Recent activity** shows what changed across the organization. Recent
+activity appears only to members whose role carries **Activity & audit log**.
+
+Open anyone on **Members** for their own page — see
+[A member's page](invite-teammates.md#member-page).
+
 ## Team roles
 
 - Invite teammates to a site and assign **roles**.

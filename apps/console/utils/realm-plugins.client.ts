@@ -181,6 +181,29 @@ function orgRealmInstalls(
 }
 
 /**
+ * Start fetching the org's install list without loading anything (AGL-3660).
+ *
+ * The shell gate used to ask for the list only after every first-party shell
+ * chunk had loaded, so the boot splash held for the chunk wave AND THEN the
+ * `/api/orgs/realm-plugins` round trip. The list depends on neither the chunks
+ * nor the release flags, so the gate starts it as soon as the workspace is
+ * known and the later `loadOrgRealmPlugins` finds it in flight. Registration
+ * order is unchanged: realm bundles are still loaded and registered after the
+ * first-party set.
+ *
+ * Fetches exactly what `loadOrgRealmPlugins` would have fetched and nothing
+ * more: nothing when no artifacts origin is configured (that function returns
+ * before fetching), and the same cache key, so it is one request, not two.
+ */
+export function prefetchOrgRealmInstalls(
+  orgId: string,
+  user: MaybeTokenSource,
+): void {
+  if (!(process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? '')) return
+  void orgRealmInstalls(orgId, user)
+}
+
+/**
  * Loads the org's realm installs that belong at `where` (AGL-3142), and only
  * those, and answers with the ones it handed the loader: the editor needs
  * their ids to offer their elements (AGL-3391).

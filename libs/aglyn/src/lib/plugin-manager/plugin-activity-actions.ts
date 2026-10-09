@@ -68,6 +68,12 @@ export interface PluginActivityAction {
   key: string
   /** What a person reads for the code in the feed and the actor table. */
   label: string
+  /**
+   * The same act as a sentence about its target (AGL-3660): `{target}` is
+   * replaced by the target's noun and name — `Created {target} with Aglyn AI`
+   * reads `Created page Home with Aglyn AI`. Absent, a row reads `label`.
+   */
+  sentence?: string
   /** Which log(s) the writers put the code in. */
   scope: PluginActivityScope | readonly PluginActivityScope[]
   /** The feed target types rows carrying this code file their output under. */
@@ -95,6 +101,29 @@ export interface PluginActivityGroup {
    * an access. Matched exactly.
    */
   staffAuditAccessActions?: readonly string[]
+  /**
+   * What a person reads for each staff audit code the plugin's doors write
+   * (AGL-3660) — the audit trail shows these words and keeps the code for
+   * the row's tooltip and details. Matched exactly.
+   */
+  staffAuditLabels?: Readonly<Record<string, string>>
+  /**
+   * A staff audit row's words drawn from what the act left (AGL-3660): the
+   * plugin reads its own `after` (what a job made, from what) and answers
+   * the sentence and the outcome. `undefined` falls back to the label.
+   */
+  staffAuditDescribe?: (entry: {
+    action: string
+    after: Readonly<Record<string, unknown>>
+  }) => { action?: string; result?: string } | undefined
+  /**
+   * The plugin's collections as an audit target path walks them, named for
+   * a reader (AGL-3660). `job` marks the collection whose id is the job an
+   * activity row links to.
+   */
+  staffAuditCollections?: Readonly<Record<string, { noun: string; job?: boolean }>>
+  /** Activity target types whose id is such a job (AGL-3660). */
+  jobTargetTypes?: readonly string[]
 }
 
 export interface PluginActivityRegistration {
@@ -191,6 +220,58 @@ export function listPluginActivityRegistrations(): PluginActivityRegistration[] 
 /** Every declared action across plugins. */
 export function listPluginActivityActions(): PluginActivityAction[] {
   return listPluginActivityRegistrations().flatMap((entry) => [...entry.actions])
+}
+
+/** A declared code's sentence template (`{target}` placeholder), if it has one. */
+export function pluginActivityActionSentence(action: unknown): string | undefined {
+  if (typeof action !== 'string') return undefined
+  for (const registration of registrations.values()) {
+    const match = registration.actions.find((entry) => entry.key === action)
+    if (match) return match.sentence
+  }
+  return undefined
+}
+
+/** What a plugin declared a staff audit code reads as; `undefined` otherwise. */
+export function pluginStaffAuditActionLabel(action: unknown): string | undefined {
+  if (typeof action !== 'string') return undefined
+  for (const registration of registrations.values()) {
+    const label = registration.group.staffAuditLabels?.[action]
+    if (label) return label
+  }
+  return undefined
+}
+
+/** A plugin's words for one staff audit row, from its `after`; `undefined` if none. */
+export function pluginStaffAuditDescribe(
+  action: string,
+  after: Readonly<Record<string, unknown>>,
+): { action?: string; result?: string } | undefined {
+  for (const registration of registrations.values()) {
+    const described = registration.group.staffAuditDescribe?.({ action, after })
+    if (described) return described
+  }
+  return undefined
+}
+
+/** How a plugin names one of its collections in an audit path, if it does. */
+export function pluginStaffAuditCollection(
+  collection: string,
+): { noun: string; job?: boolean } | undefined {
+  for (const registration of registrations.values()) {
+    const named = registration.group.staffAuditCollections?.[collection]
+    if (named) return named
+  }
+  return undefined
+}
+
+/** Whether an activity target type names a plugin's job. */
+export function isPluginJobTargetType(type: unknown): boolean {
+  if (typeof type !== 'string') return false
+  for (const registration of registrations.values()) {
+    if (registration.group.jobTargetTypes?.includes(type)) return true
+  }
+  return false
 }
 
 /** The readable label for a declared code; `undefined` for any other action. */

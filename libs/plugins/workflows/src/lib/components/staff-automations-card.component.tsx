@@ -329,9 +329,7 @@ export function StaffOrgAutomationsCard(props: { orgId: string }) {
       <CardDisplay
         header={'Organization automations'}
         help={pluginDocsHelp('staffConsole', {
-          anchor: '#staff-automations',
-          excerpt:
-            "The organization's automations, whether each is on and where it is paused — read-only, each opening its trigger and steps.",
+          anchor: '#staff-org-automations',
         })}
         contentGutterX
         contentGutterY

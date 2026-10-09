@@ -44,6 +44,23 @@
  * knows what the email is about (AGL-3432). Customer copy says "pages",
  * never "screens". No prices. The product is named by token, so a renamed
  * deployment reads as itself.
+ *
+ * ## Same design as every other system email
+ *
+ * Each is a catalog entry like `welcome` or `email-verification`, so it
+ * renders through `renderSystemEmail`: the staff design when one is published
+ * under Staff → Emails, else these blocks, inside the same header, footer,
+ * palette and button. Like the rest, an email carries ONE button; anything
+ * else it points at is a caption line with a bare link, the house shape of
+ * the opt-out caption `notification` and the digests carry.
+ *
+ * ## Docs links
+ *
+ * Each email points at the docs page that walks through its one task. The
+ * paths live in {@link RETENTION_DOCS_PATHS}, the merge values are built from
+ * the deployment's docs origin by {@link retentionDocsMergeValues} at send
+ * time, so the copy names a token and never a host, and a spec holds every
+ * path to a real page under `apps/docs`.
  */
 
 import type {
@@ -57,6 +74,42 @@ export const RETENTION_BUILD_SITE_EMAIL = 'retention-build-site'
 export const RETENTION_PUBLISH_REMINDER_EMAIL = 'retention-publish-reminder'
 export const RETENTION_IDLE_EMAIL = 'retention-idle'
 export const RETENTION_NEXT_STEPS_EMAIL = 'retention-next-steps'
+
+/**
+ * The docs pages the getting-started emails link to, by merge token: a path
+ * on the docs site, with a heading anchor where the page covers more than
+ * the one task. Each is a page under `apps/docs/docs` (the docs site serves
+ * it at its root), which `retention-emails.spec.ts` checks.
+ */
+export const RETENTION_DOCS_PATHS = {
+  'docs.verifyEmailUrl':
+    '/workspace-and-billing/signing-in-and-sessions#verifying-your-email',
+  'docs.generateSiteUrl': '/ai/generate-a-site',
+  'docs.publishUrl': '/getting-started/publish-your-first-screen',
+  'docs.connectDomainUrl': '/building-sites/custom-domains/connect-a-domain',
+  'docs.formsUrl': '/content-and-data/forms/overview',
+  'docs.generateSectionUrl': '/ai/generate-section',
+  'docs.copyAssistUrl': '/ai/copy-assist',
+} as const
+
+export type RetentionDocsToken = keyof typeof RETENTION_DOCS_PATHS
+
+/**
+ * Every docs link as a merge value, on the given docs origin. The console
+ * passes its own docs origin (`DOCS_BASE_URL`), so a self-hosted deployment
+ * links its own docs build.
+ */
+export function retentionDocsMergeValues(
+  docsOrigin: string,
+): Record<RetentionDocsToken, string> {
+  const origin = docsOrigin.trim().replace(/\/+$/, '')
+  return Object.fromEntries(
+    Object.entries(RETENTION_DOCS_PATHS).map(([token, path]) => [
+      token,
+      `${origin}${path}`,
+    ]),
+  ) as Record<RetentionDocsToken, string>
+}
 
 /**
  * The retention emails that are product tips, governed by the account's
@@ -78,7 +131,14 @@ export const PRODUCT_TIP_RETENTION_EMAILS: ReadonlySet<string> = new Set([
  */
 export function retentionSystemEmailTemplates(
   SAMPLE_CONSOLE_ORIGIN: string,
+  SAMPLE_DOCS_ORIGIN: string,
 ): readonly SystemEmailTemplateDefinition[] {
+  const docsSamples = retentionDocsMergeValues(SAMPLE_DOCS_ORIGIN)
+  const DOCS_TOKEN = (
+    name: RetentionDocsToken,
+    description: string,
+  ): SystemEmailMergeToken => ({ name, description, sample: docsSamples[name] })
+
   const NAME_TOKEN: SystemEmailMergeToken = {
     name: 'name',
     description: "The account holder's first name, or “there”",
@@ -103,9 +163,10 @@ export function retentionSystemEmailTemplates(
     sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user/emails`,
   }
 
+  // The house opt-out line, as `notification` and the digests word it.
   const PREFERENCES_CAPTION: SystemEmailDefaultBlock = {
     block: 'text',
-    text: 'Rather not get tips like this? Turn off product emails: {{preferencesUrl}}',
+    text: 'Change what you are emailed about: {{preferencesUrl}}',
     variant: 'caption',
   }
 
@@ -126,6 +187,10 @@ export function retentionSystemEmailTemplates(
           description: 'One-time link that confirms the address',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/verify-email?oobCode=…`,
         },
+        DOCS_TOKEN(
+          'docs.verifyEmailUrl',
+          'Docs: verifying your email, under Signing in & sessions',
+        ),
       ],
       defaultBody: [
         {
@@ -149,6 +214,11 @@ export function retentionSystemEmailTemplates(
             'ignore this email and nothing happens.',
           variant: 'caption',
         },
+        {
+          block: 'text',
+          text: 'Link expired or not arriving? See verifying your email: {{docs.verifyEmailUrl}}',
+          variant: 'caption',
+        },
       ],
       footerReason:
         'You’re receiving this because this address was used to sign up ' +
@@ -164,7 +234,12 @@ export function retentionSystemEmailTemplates(
         'only the starter pages.',
       deliveredBy: 'resend',
       defaultSubject: 'Your website is a few minutes away',
-      mergeTokens: [NAME_TOKEN, CTA_TOKEN, PREFERENCES_TOKEN],
+      mergeTokens: [
+        NAME_TOKEN,
+        CTA_TOKEN,
+        DOCS_TOKEN('docs.generateSiteUrl', 'Docs: generate a website from a prompt'),
+        PREFERENCES_TOKEN,
+      ],
       defaultBody: [
         {
           block: 'text',
@@ -187,6 +262,11 @@ export function retentionSystemEmailTemplates(
           variant: 'body',
         },
         { block: 'button', label: 'Build my site', href: '{{ctaUrl}}' },
+        {
+          block: 'text',
+          text: 'How a site is built from your description, step by step: {{docs.generateSiteUrl}}',
+          variant: 'caption',
+        },
         PREFERENCES_CAPTION,
       ],
       footerReason:
@@ -202,7 +282,13 @@ export function retentionSystemEmailTemplates(
         'has published none of its own work.',
       deliveredBy: 'resend',
       defaultSubject: 'Your changes on {{site.name}} are not live yet',
-      mergeTokens: [NAME_TOKEN, SITE_NAME_TOKEN, CTA_TOKEN, PREFERENCES_TOKEN],
+      mergeTokens: [
+        NAME_TOKEN,
+        SITE_NAME_TOKEN,
+        CTA_TOKEN,
+        DOCS_TOKEN('docs.publishUrl', 'Docs: publish your first page'),
+        PREFERENCES_TOKEN,
+      ],
       defaultBody: [
         {
           block: 'text',
@@ -218,6 +304,11 @@ export function retentionSystemEmailTemplates(
           variant: 'body',
         },
         { block: 'button', label: 'Review and publish', href: '{{ctaUrl}}' },
+        {
+          block: 'text',
+          text: 'How previewing and publishing a page works: {{docs.publishUrl}}',
+          variant: 'caption',
+        },
         PREFERENCES_CAPTION,
       ],
       footerReason:
@@ -234,7 +325,14 @@ export function retentionSystemEmailTemplates(
         'back resets it.',
       deliveredBy: 'resend',
       defaultSubject: 'Pick up where you left off on {{site.name}}',
-      mergeTokens: [NAME_TOKEN, SITE_NAME_TOKEN, CTA_TOKEN, PREFERENCES_TOKEN],
+      mergeTokens: [
+        NAME_TOKEN,
+        SITE_NAME_TOKEN,
+        CTA_TOKEN,
+        DOCS_TOKEN('docs.generateSectionUrl', 'Docs: generate a section on the canvas'),
+        DOCS_TOKEN('docs.copyAssistUrl', 'Docs: rewrite and write copy with AI'),
+        PREFERENCES_TOKEN,
+      ],
       defaultBody: [
         {
           block: 'text',
@@ -253,11 +351,18 @@ export function retentionSystemEmailTemplates(
         {
           block: 'text',
           text:
-            'Short on time? {{brand.productName}} AI can draft a new page or ' +
-            'rewrite a section from one sentence.',
+            'Short on time? {{brand.productName}} AI can build a new section ' +
+            'or rewrite the words on a page from one sentence.',
           variant: 'body',
         },
         { block: 'button', label: 'Open my site', href: '{{ctaUrl}}' },
+        {
+          block: 'text',
+          text:
+            'Build a section with AI: {{docs.generateSectionUrl}}\n' +
+            'Rewrite your copy with AI: {{docs.copyAssistUrl}}',
+          variant: 'caption',
+        },
         PREFERENCES_CAPTION,
       ],
       footerReason:
@@ -291,6 +396,8 @@ export function retentionSystemEmailTemplates(
           description: 'The site’s forms in the console',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/hosts/test-site/forms`,
         },
+        DOCS_TOKEN('docs.connectDomainUrl', 'Docs: connect a domain'),
+        DOCS_TOKEN('docs.formsUrl', 'Docs: forms and lead capture'),
         PREFERENCES_TOKEN,
       ],
       defaultBody: [
@@ -307,12 +414,19 @@ export function retentionSystemEmailTemplates(
           text:
             'Three things that help people find and reach you:\n' +
             '1. Connect your own domain, so the address is yours.\n' +
-            '2. Add a contact form, so visitors can reach you from any page.\n' +
+            '2. Add a contact form, so visitors can reach you from any ' +
+            'page: {{formsUrl}}\n' +
             '3. Share the link where your customers already are.',
           variant: 'body',
         },
         { block: 'button', label: 'Connect a domain', href: '{{domainUrl}}' },
-        { block: 'button', label: 'Add a form', href: '{{formsUrl}}' },
+        {
+          block: 'text',
+          text:
+            'Connect a domain, step by step: {{docs.connectDomainUrl}}\n' +
+            'Add a form and read its submissions: {{docs.formsUrl}}',
+          variant: 'caption',
+        },
         PREFERENCES_CAPTION,
       ],
       footerReason:

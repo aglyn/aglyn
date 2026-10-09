@@ -55,8 +55,16 @@ class RegisterModel(
   private val scope: CoroutineScope,
   /** How long the register waits between tries to reach the console again while it is out of reach. */
   private val reconnectMs: Long = RECONNECT_MS,
+  /** The shift and staff PIN routes. */
+  val opsApi: PosOpsApi = OfflinePosOps,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
+
+  /** Who is ringing: the cashier a PIN switched in, and the idle lock. */
+  val cashier = PosCashier(opsApi, { register?.id }, { context?.ops?.autoLockMinutes ?: 0 })
+
+  /** The register's shift and its drawer. */
+  val shift = PosShiftModel(opsApi, scope, { register?.id }, { cashier.assertion })
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
@@ -123,6 +131,7 @@ class RegisterModel(
     scope.launch { loadCategories() }
     scope.launch { loadContext() }
     scope.launch { reconnectWhileOffline() }
+    scope.launch { keepTheTill() }
     loadGrid()
   }
 
@@ -138,6 +147,14 @@ class RegisterModel(
     while (currentCoroutineContext().isActive) {
       delay(reconnectMs)
       if (!online) loadContext()
+    }
+  }
+
+  /** The idle lock and the cashier's assertion renewal, on the clock's beat. */
+  private suspend fun keepTheTill() {
+    while (currentCoroutineContext().isActive) {
+      delay(CASHIER_TICK_MS)
+      cashier.tick()
     }
   }
 
@@ -168,11 +185,13 @@ class RegisterModel(
   }
 
   fun selectRegister(next: PosRegister) {
+    if (register?.id != next.id) cashier.reset()
     register = next
     store.registerId = next.id
     cart = store.cart(next.id)
     holds = store.holds(next.id)
     resumePendingSale(next)
+    shift.refresh()
   }
 
   private suspend fun loadCategories() {

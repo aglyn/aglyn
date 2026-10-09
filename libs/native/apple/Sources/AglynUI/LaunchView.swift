@@ -21,29 +21,36 @@ public struct AglynLaunchView: View {
   }
 
   public var body: some View {
-    VStack(spacing: AglynSpace.two) {
-      AglynArtwork.logo
-        .resizable()
-        .scaledToFit()
-        .frame(maxWidth: 200, maxHeight: 56)
-        .accessibilityLabel(name)
-      if let caption {
-        Text(caption).font(AglynFont.title).foregroundStyle(AglynColor.tint)
+    // The logo sits dead centre at the launch screen's size (LaunchLogo,
+    // 184 x 56, generated with the brand assets), with no fade, so the
+    // system's first frame hands over to this view without a jump. The
+    // caption and the late spinner hang below it.
+    AglynArtwork.logo
+      .resizable()
+      .scaledToFit()
+      .frame(width: 184, height: 56)
+      .accessibilityLabel(name)
+      .overlay(alignment: .top) {
+        VStack(spacing: AglynSpace.two) {
+          if let caption {
+            Text(caption).font(AglynFont.title).foregroundStyle(AglynColor.tint)
+          }
+          ProgressView()
+            .controlSize(.regular)
+            .opacity(slow ? 1 : 0)
+            .accessibilityHidden(!slow)
+        }
+        .opacity(shown ? 1 : 0)
+        .fixedSize()
+        .offset(y: 56 + AglynSpace.two)
       }
-      ProgressView()
-        .controlSize(.regular)
-        .opacity(slow ? 1 : 0)
-        .accessibilityHidden(!slow)
-    }
-    .opacity(shown ? 1 : 0)
-    .scaleEffect(shown ? 1 : 0.96)
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(.background)
-    .task {
-      withAnimation(.easeOut(duration: 0.25)) { shown = true }
-      try? await Task.sleep(for: .milliseconds(800))
-      withAnimation(.easeIn(duration: 0.2)) { slow = true }
-    }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(.background)
+      .task {
+        withAnimation(.easeOut(duration: 0.25)) { shown = true }
+        try? await Task.sleep(for: .milliseconds(800))
+        withAnimation(.easeIn(duration: 0.2)) { slow = true }
+      }
   }
 }
 

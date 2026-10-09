@@ -34,6 +34,7 @@ import {
 import { finishPosDisplayReceipt } from './pos-display'
 import * as CommerceModel from '../model'
 import { posRegisterSettings } from '../plugin-config'
+import { posOpsSettings } from '../pos-ops-config'
 import {
   authorizePosStaff,
   posIdempotencyKey,
@@ -128,10 +129,13 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
             livemode: Boolean(doc.get('livemode')),
           }))
         : []
+      const config = await getPluginConfig(staff.orgId || undefined, 'commerce', { hostId })
       return res.status(200).json({
-        settings: posRegisterSettings(
-          await getPluginConfig(staff.orgId || undefined, 'commerce', { hostId }),
-        ),
+        settings: posRegisterSettings(config),
+        // The register's own rules (AGL-3609): the shift it requires, the
+        // idle lock and the refund limit. The console reads the same config
+        // client-side; the native apps read it here.
+        ops: posOpsSettings(config),
         terminal: { available: posTerminalAvailable(), testMode: posStripeTestMode() },
         readers,
         publishableKey: String(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''),

@@ -51,6 +51,7 @@ import StaffAcquisitionCard from '../../../../../components/staff-acquisition-ca
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
+import AccountAvatar from '../../../../../components/account-avatar.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import StaffUserDeviceSessionsCard, {
@@ -366,9 +367,25 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       ]}
       header={{
         children: accountLabel ?? 'User',
-        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+        // The account's photo, or its initials, once it has loaded
+        // (AGL-3660); the staff glyph until then.
+        icon: detail ? (
+          <Stack
+            component="span"
+            sx={{ mr: { xs: 1.25, sm: 1.75 }, flexShrink: 0, display: 'inline-flex' }}
+          >
+            <AccountAvatar
+              photoUrl={(detail.user as { photoUrl?: string | null }).photoUrl}
+              name={detail.user.displayName}
+              email={detail.user.email}
+              size={40}
+            />
+          </Stack>
+        ) : (
+          { path: ICON_VARIANT_SYMBOL_SECURE.path }
+        ),
       }}
-      help={{ topic: 'staffConsole', anchor: '#password-help' }}
+      help={{ topic: 'staffConsole', anchor: '#user-detail' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* The detail fetch is staff-gated server-side, so a non-staff
@@ -416,9 +433,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <CardDisplay
                             header="Identity"
                             help={docsHelp('staffConsole', {
-                              anchor: '#whats-there',
-                              excerpt:
-                                "The account's auth state and staff role, with audited identity edits. Impersonation replaces your session with this account.",
+                              anchor: '#user-identity',
                             })}
                             contentGutterX
                             contentGutterY
@@ -642,10 +657,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         children: (
                           <CardDisplay
                             header="Organizations"
-                            help={docsHelp('architectureMultiTenancy', {
-                              anchor: '#membership-lifecycle',
-                              excerpt:
-                                'Every organization this account belongs to, with its role and per-site access.',
+                            help={docsHelp('staffConsole', {
+                              anchor: '#user-organizations',
                             })}
                             contentGutterX
                             contentGutterY
@@ -752,9 +765,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <CardDisplay
                             header="Password"
                             help={docsHelp('staffConsole', {
-                              anchor: '#whats-there',
-                              excerpt:
-                                'Email this account a reset link, or set a password directly when they cannot receive mail. Both are audited.',
+                              anchor: '#password-help',
                             })}
                             contentGutterX
                             contentGutterY
@@ -775,30 +786,6 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                               }}
                             />
                           </CardDisplay>
-                        ),
-                      },
-                      {
-                        key: 'device-sessions',
-                        children: (
-                          /*
-                           * AGL-1513 part 2. The registry has recorded every sign-in
-                           * since AGL-665 and AGL-1959 gave the OWNER a list and a
-                           * sign-out; staff had neither, so "someone stole my laptop"
-                           * was answered by disabling the whole account. This is the
-                           * same write behind the same audit trail as every other
-                           * action on this page.
-                           */
-                          <StaffUserDeviceSessionsCard
-                            subjectLabel={detail.user.email ?? detail.user.uid}
-                            rows={detail.devices?.rows ?? []}
-                            // A missing `devices` key is a read that did not happen,
-                            // which is the same thing to a reader as a read that
-                            // failed — and the opposite of "no other devices".
-                            lookupFailed={detail.devices?.lookupFailed ?? true}
-                            onSignOut={async (deviceId) =>
-                              callManage({ action: 'signOutDevice', deviceId })
-                            }
-                          />
                         ),
                       },
                       {
@@ -827,6 +814,33 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ),
                       },
                     ]}
+                  />
+                ),
+              },
+              {
+                // Full width (AGL-3660): a sign-in history is a table, and in
+                // the balanced columns it was the card that outgrew its
+                // column's share and left the other one ending early.
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * AGL-1513 part 2. The registry has recorded every sign-in
+                   * since AGL-665 and AGL-1959 gave the OWNER a list and a
+                   * sign-out; staff had neither, so "someone stole my laptop"
+                   * was answered by disabling the whole account. This is the
+                   * same write behind the same audit trail as every other
+                   * action on this page.
+                   */
+                  <StaffUserDeviceSessionsCard
+                    subjectLabel={detail.user.email ?? detail.user.uid}
+                    rows={detail.devices?.rows ?? []}
+                    // A missing `devices` key is a read that did not happen,
+                    // which is the same thing to a reader as a read that
+                    // failed — and the opposite of "no other devices".
+                    lookupFailed={detail.devices?.lookupFailed ?? true}
+                    onSignOut={async (deviceId) =>
+                      callManage({ action: 'signOutDevice', deviceId })
+                    }
                   />
                 ),
               },
@@ -878,9 +892,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <CardDisplay
                     header="Legal acceptances"
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Which version of the Terms and Privacy Policy this account accepted, when, and whether the 30-day arbitration opt-out window is still open.',
+                      anchor: '#legal-acceptances',
                     })}
                     contentGutterX
                     contentGutterY
@@ -1050,10 +1062,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <ActorActivityTable
                     endpoint={`/api/admin/user-activity?uid=${encodeURIComponent(uid)}`}
                     header="Activity by this account"
+                    staff
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Console actions logged for this account, across every organization and site — as distinct from the staff actions taken against it.',
+                      anchor: '#user-activity',
                     })}
                     description={
                       'Console actions logged for this account, across every ' +
@@ -1073,9 +1084,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     kind="change"
                     header="Recent audit trail"
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Audited staff actions performed by or on this account, newest first, filtered and searched across the whole trail.',
+                      anchor: '#user-audit-trail',
                     })}
                     description={
                       'Audited staff actions performed BY or ON this ' +
@@ -1111,9 +1120,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     kind="access"
                     header="Data access by staff"
                     help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Audited staff READS of this account’s private data — kept apart from the actions above so a burst of views cannot bury an impersonation.',
+                      anchor: '#user-data-access',
                     })}
                     description={
                       'Times a staff member opened this account’s ' +

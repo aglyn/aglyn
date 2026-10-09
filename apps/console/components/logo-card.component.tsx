@@ -65,11 +65,7 @@ export function LogoCard(props: LogoCardProps) {
   return (
     <CardDisplay
       header={'Site logo'}
-      help={docsHelp('media', {
-        excerpt:
-          "Your site's brand mark, picked from the media library — " +
-          'shown while pages load on your live site.',
-      })}
+      help={docsHelp('gettingStarted', { anchor: '#site-logo' })}
       contentGutterX
       contentGutterY
     >

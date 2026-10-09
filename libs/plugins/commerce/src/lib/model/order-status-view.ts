@@ -19,7 +19,9 @@ import type { HostOrder, OrderStatus } from './commerce-orders'
 import { fulfillmentIsActive, fulfillmentLineQuantities } from './order-fulfillment'
 import { carrierLabelFor, fulfillmentTrackingUrl } from './tracking-url'
 import {
+  ORDER_COURIER_STATE_LABELS,
   ORDER_LOCAL_DELIVERY_STATUS_LABELS,
+  orderCourierIsActive,
   ORDER_PICKUP_STATUS_LABELS,
   orderLocalDeliveryStatus,
   orderPickupStatus,
@@ -128,6 +130,17 @@ export interface OrderStatusView {
     windowLabel: string | null
     status: OrderLocalDeliveryStatus
     statusLabel: string
+    /**
+     * The outside courier bringing it (AGL-3695), while one is: who, where
+     * the run stands, the courier's own tracking page and the arrival
+     * estimate. Optional so an answer from before this field reads as none.
+     */
+    courier?: {
+      providerLabel: string
+      stateLabel: string
+      trackingUrl: string | null
+      etaMs: number | null
+    } | null
   }
 }
 
@@ -317,8 +330,27 @@ export function buildOrderStatusView(input: {
             windowLabel: delivery.windowLabel ?? null,
             status: orderLocalDeliveryStatus(delivery.status),
             statusLabel: ORDER_LOCAL_DELIVERY_STATUS_LABELS[orderLocalDeliveryStatus(delivery.status)],
+            ...(courierView(delivery.courier) ? { courier: courierView(delivery.courier) } : {}),
           },
         }
       : {}),
+  }
+}
+
+/**
+ * The courier as a buyer reads it: only a run still under way, only an https
+ * tracking page, and no reference, fee or test flag (AGL-3695).
+ */
+function courierView(
+  courier: NonNullable<HostOrder['localDelivery']>['courier'],
+): NonNullable<NonNullable<OrderStatusView['localDelivery']>['courier']> | null {
+  if (!courier || !orderCourierIsActive(courier)) return null
+  const trackingUrl = /^https:\/\/[^\s]+$/.test(String(courier.trackingUrl ?? '')) ? String(courier.trackingUrl) : null
+  const etaMs = Number(courier.etaMs)
+  return {
+    providerLabel: String(courier.providerLabel || 'Courier'),
+    stateLabel: ORDER_COURIER_STATE_LABELS[courier.state] ?? 'Courier requested',
+    trackingUrl,
+    etaMs: Number.isFinite(etaMs) && etaMs > 0 ? etaMs : null,
   }
 }

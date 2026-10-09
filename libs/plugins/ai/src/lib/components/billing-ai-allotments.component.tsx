@@ -463,8 +463,8 @@ export function AiAllotmentsCard(props: { orgId?: string }) {
     <div id="ai-allotments">
       <CardDisplay
         header={'AI allotments'}
-        help={pluginDocsHelp('billing', {
-          anchor: '#ai-allotments',
+        help={pluginDocsHelp('aiAllotments', {
+          anchor: '#allotments',
           excerpt:
             'A monthly share of the workspace’s AI credits for a member or a site — ' +
             'hard or soft, with an optional list of models.',

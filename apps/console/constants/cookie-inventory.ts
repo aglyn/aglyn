@@ -561,4 +561,28 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     surface: `${CONSOLE_HOST}, set on google.com by Firebase App Check`,
     purpose: 'Bot protection',
   },
+  /**
+   * A merchant's own live chat (AGL-3698). FUNCTIONAL, not advertising:
+   * neither vendor uses this storage for ads, it keeps the visitor's chat and
+   * identifies them to the merchant's agents. It is set only after the
+   * visitor presses the chat button, which is the visitor asking for the
+   * service — or, on a site that chose to load the chat with the page, only
+   * for a visitor whose recorded consent grants analytics, the rule the
+   * Video element's "Load the player with the page" follows. Tidio keeps
+   * most of it in local storage rather than cookies.
+   */
+  Tidio: {
+    names: ['tidio_state_<public key>', 'tidio_token'],
+    loaderToken: 'TIDIO_CHAT_PROVIDER',
+    surface: `customer sites (*.${TENANT_DOMAIN} and custom domains) whose owner turned on Live chat with Tidio`,
+    purpose:
+      'Keeps your chat with the site and recognizes you when you return to it',
+  },
+  LiveChat: {
+    names: ['__lc_cid', '__lc_cst', '__lc2_cid', '__lc2_cst'],
+    loaderToken: 'LIVECHAT_CHAT_PROVIDER',
+    surface: `customer sites (*.${TENANT_DOMAIN} and custom domains) whose owner turned on Live chat with LiveChat`,
+    purpose:
+      'Keeps your chat with the site and recognizes you when you return to it',
+  },
 }

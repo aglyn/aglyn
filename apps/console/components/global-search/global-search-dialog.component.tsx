@@ -389,7 +389,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
             is a page rather than a sentence. `DOCS_HELP_TOPICS.consoleSearch`
             is that page, and this is its one call site.
           */}
-          <DocsHelpTip topic="consoleSearch" />
+          <DocsHelpTip topic="consoleSearch" anchor="#what-it-searches" />
           </Stack>
         </>
       ) : null}

@@ -208,6 +208,7 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
           quick={{
             icon: mdiOpenInNew.path,
             label: 'View member',
+            newTab: true,
             to: memberHref(row.uid),
           }}
           items={[]}

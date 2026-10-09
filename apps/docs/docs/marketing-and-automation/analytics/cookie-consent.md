@@ -102,6 +102,12 @@ page filed under a campaign is counted the same way.
   - Switch the question back off and any advertising grants already on file
     stop counting immediately; they are re-derived on every read, not trusted
     as stored.
+- **A live chat loaded with the page.** On a site whose [Live chat](../../building-sites/live-chat.md)
+  is set to **Load the chat with the page**, Tidio or LiveChat loads before anyone
+  presses the chat button only for a visitor whose state grants analytics, and the
+  banner names the chat service beside Google Analytics. A press on the chat button
+  loads it for any visitor, because they asked for it — see
+  [Privacy and cookies](../../building-sites/live-chat.md#privacy-and-cookies).
 
 **Always on (strictly necessary)** — these keep working regardless of the choice,
 because the site cannot function without them:

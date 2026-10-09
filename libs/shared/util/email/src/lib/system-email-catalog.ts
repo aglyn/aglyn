@@ -35,6 +35,21 @@ const SAMPLE_CONSOLE_ORIGIN: string =
   'https://app.aglyn.com'
 
 /**
+ * The docs origin the getting-started emails' docs-link samples build on
+ * (AGL-3692), read the way the console's `DOCS_BASE_URL` reads it. Only a
+ * preview and test-send sample: the real send fills those links from the
+ * console's own docs origin.
+ */
+const SAMPLE_DOCS_ORIGIN: string =
+  (
+    process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
+    process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
+    ''
+  )
+    .trim()
+    .replace(/\/+$/, '') || 'https://docs.aglyn.com'
+
+/**
  * Mirrors `PLATFORM_SUPPORT_URL`'s precedence, including the step that makes
  * the operator identity sufficient on its own: a configured support URL, else
  * the operator's support mailbox as a `mailto:`, else the console's own
@@ -1603,7 +1618,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
   [
     ...BASE_SYSTEM_EMAIL_TEMPLATES,
     ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES,
-    ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
+    ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN, SAMPLE_DOCS_ORIGIN),
   ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],

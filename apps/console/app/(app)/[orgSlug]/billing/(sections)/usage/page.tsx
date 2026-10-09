@@ -123,13 +123,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
           children: (
             <CardDisplay
               header={'Usage'}
-              help={docsHelp('billing', {
-                anchor: '#usage-meters',
-                excerpt:
-                  'Live meters for sites, storage, bandwidth, and ' +
-                  "campaign email sends against your plan's quotas. " +
-                  'Transactional mail is counted but never capped.',
-              })}
+              help={docsHelp('billing', { anchor: '#usage-card' })}
               contentGutterX
               contentGutterY
             >
@@ -147,10 +141,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
             <CardDisplay
               header={'Metered usage estimate'}
               help={docsHelp('billing', {
-                anchor: '#usage-meters',
-                excerpt:
-                  'A cost estimate for metered overages this period, ' +
-                  'based on current usage across your sites.',
+                anchor: '#metered-usage-estimate',
               })}
               contentGutterX
               contentGutterY
@@ -175,10 +166,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'Usage history'}
                       help={docsHelp('billing', {
-                        anchor: '#usage-meters',
-                        excerpt:
-                          'How your metered usage has moved over the last ' +
-                          'twelve months, from your monthly billing rollups.',
+                        anchor: '#usage-history',
                       })}
                       contentGutterX
                       contentGutterY
@@ -199,11 +187,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                           'rather uploads stopped instead.'
                         }
                         help={docsHelp('billing', {
-                          anchor: '#storage-overage',
-                          excerpt:
-                            'Uploads past your included storage are refused ' +
-                            'unless you turn on metered storage, which carries a ' +
-                            'monthly spend limit you set.',
+                          anchor: '#if-you-would-rather-uploads-stopped',
                         })}
                         contentGutterX
                         contentGutterY
@@ -227,13 +211,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                           'percentage of an amount you choose. A budget warns ' +
                           'you — it never stops anything.'
                         }
-                        help={docsHelp('billing', {
-                          anchor: '#usage-budget',
-                          excerpt:
-                            'Set a monthly usage budget and the percentages you ' +
-                            'want to hear about; alerts arrive in the console ' +
-                            'and by email.',
-                        })}
+                        help={docsHelp('billing', { anchor: '#usage-budget' })}
                         contentGutterX
                         contentGutterY
                       >

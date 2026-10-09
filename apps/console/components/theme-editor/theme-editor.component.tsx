@@ -359,11 +359,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
             contentGutterY
             contentGutterX
             header="Color scheme"
-            help={docsHelp('editYourTheme', {
-              anchor: '#set-colors-and-fonts',
-              excerpt:
-                'Pick the palette for light and dark schemes — primary, secondary, surfaces, and text; the preview updates live.',
-            })}
+            help={docsHelp('editYourTheme', { anchor: '#color-scheme' })}
           >
             <TextField
               select
@@ -420,11 +416,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
             contentGutterY
             contentGutterX
             header="Typography"
-            help={docsHelp('editYourTheme', {
-              anchor: '#set-colors-and-fonts',
-              excerpt:
-                'Choose the heading and body font families and base sizing your whole site inherits.',
-            })}
+            help={docsHelp('editYourTheme', { anchor: '#fonts' })}
           >
             {/* The fonts plugin's picker where the workspace has it
                 (AGL-3656), else the editor's own short list. */}
@@ -461,10 +453,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
             contentGutterY
             contentGutterX
             header="Shape & spacing"
-            help={docsHelp('editYourTheme', {
-              excerpt:
-                'Corner radii and spacing scale applied across components — buttons, cards, and inputs follow it.',
-            })}
+            help={docsHelp('editYourTheme', { anchor: '#shape-and-spacing' })}
           >
             <Stack spacing={2}>
               <Stack spacing={0.5}>
@@ -535,10 +524,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
             contentGutterY
             contentGutterX
             header={COMPONENT_OVERRIDES_FIELD.label}
-            help={docsHelp('themeBuilder', {
-              excerpt:
-                'Fine-tune how specific components render beyond the base palette and typography.',
-            })}
+            help={docsHelp('editYourTheme', { anchor: '#style-components' })}
           >
             <Stack spacing={1}>
               <Typography variant="body2" color="text.secondary">

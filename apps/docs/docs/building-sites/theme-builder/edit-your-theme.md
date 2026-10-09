@@ -58,6 +58,17 @@ stored as your edits *on top of* the theme you picked, so:
 Your **Dark scheme** setting belongs to the site, not the theme, so it stays as you set it
 whichever theme you pick.
 
+### What you have changed {#what-you-have-changed}
+
+The **What you have changed** card lists every value your site sets differently from the
+theme it runs, so you can see your edits at a glance and undo any one of them. Each row
+names the setting and shows the **Theme** value beside **Yours**; **Reset** on a row puts
+that one value back, and **Reset everything** drops all of them.
+
+When nothing differs, the card says the site is running the theme exactly as it ships.
+Edits made while a different theme was picked are flagged as such: they still apply, but
+were chosen against another theme's values.
+
 ## Set colors and fonts
 
 - Choose your **palette** and **typography**.
@@ -78,6 +89,34 @@ whichever theme you pick.
   dark design of its own.
 - **Dark scheme** — set it to **Off** when your content only reads well in light: every
   visitor stays on light and the theme mode switcher is hidden on published pages.
+
+### Color scheme {#color-scheme}
+
+The **Color scheme** card sets your site's colors, once for **Light** and once for
+**Dark** — switch between the two tabs and pick each color; the preview updates as you go.
+
+- **Dark scheme** at the top decides whether visitors can get a dark site at all:
+  **Follows the visitor**, or **Off — always light**.
+- **Palette** — your brand colors: **Primary**, **Secondary** and **Tertiary**, plus the
+  status colors **Error**, **Warning**, **Info** and **Success**.
+- **Background & text** — the page **Background**, the **Paper** cards sit on, and the
+  **Text**, **Secondary text** and **Disabled text** colors.
+- **Tints** — pale washes of your accents, used to fill tiles and panels.
+- **Divider** — the color of separating lines.
+
+**Copy from dark** (or **Copy from light**) fills the tab you are on from the other scheme,
+a quick start when the two should mostly match.
+
+## Shape & spacing {#shape-and-spacing}
+
+The **Shape & spacing** card sets the proportions every component follows, so buttons,
+cards and inputs stay consistent without restyling each one.
+
+- **Border radius** — how rounded corners are, from 0 (square) to 24px.
+- **Spacing unit (px)** — the step every gap and padding is a multiple of, from 2 to
+  16px. Raise it for a roomier site, lower it for a denser one.
+- **Nav height, mobile (px)** and **Nav height, desktop (px)** — the height of the top
+  navigation bar on small screens, and from 600px wide up.
 
 ## Fonts
 

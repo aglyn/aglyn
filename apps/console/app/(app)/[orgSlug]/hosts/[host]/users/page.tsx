@@ -52,7 +52,7 @@ const HostUsers: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.HOST_USERS, { orgSlug,  host }),
         },
       ]}
-      help="members"
+      help={{ topic: 'members', anchor: '#the-users-page' }}
       header={{
         children: 'Users',
         icon: { path: ICON_VARIANT_USER_SETTINGS.path },

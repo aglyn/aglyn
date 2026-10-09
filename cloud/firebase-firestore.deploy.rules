@@ -927,6 +927,20 @@ allow read, write: if false;
 
 
 
+match /reviewPlatformsHostSettings/{hostId} {
+allow read, write: if false;
+}
+match /reviewPlatformsInvitations/{recordId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -2574,6 +2588,23 @@ allow read, write: if false;
 
 
 
+match /courierConnections/{connectionId} {
+allow read, write: if false;
+}
+match /courierDeliveries/{deliveryId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /marketplaceConnections/{connectionId} {
 allow read, write: if false;
 match /log/{entryId} {
@@ -3691,11 +3722,19 @@ request.resource.data.diff(resource.data)
 
 
 
+
+
+
+
+
+
+
+
 match /pluginSettings/{pluginId} {
 allow read: if isStaff() || isHostMember(hostId);
-allow write: if isStaff() ||
+allow write: if pluginId != 'live-chat' && (isStaff() ||
 (hostMemberRole(hostId) == 'admin' && isVerified() &&
-!hostWritesFrozen(hostId));
+!hostWritesFrozen(hostId)));
 }
 
 

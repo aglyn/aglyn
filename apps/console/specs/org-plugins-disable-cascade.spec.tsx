@@ -198,6 +198,9 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'inventory-sync',
       'delivery-apps',
       'loyalty',
+      'couriers',
+      'live-chat',
+      'review-platforms',
       'ad-conversions',
       'commerce',
     ])
@@ -265,6 +268,9 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'inventory-sync',
         'delivery-apps',
         'loyalty',
+        'couriers',
+        'live-chat',
+        'review-platforms',
         'ad-conversions',
       ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(

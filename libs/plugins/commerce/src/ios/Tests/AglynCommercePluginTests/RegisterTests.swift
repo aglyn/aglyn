@@ -253,7 +253,7 @@ final class CheckoutTests: XCTestCase {
       .success(answer(due: 0, payment: settled, completed: true)),
     ]
     let collector = SimulatedCardCollector(delay: .zero)
-    await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
     let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
     await checkout.payCard(DeviceReaderService(collector))
     XCTAssertEqual(checkout.step, .receipt(changeCents: 0))
@@ -270,7 +270,7 @@ final class CheckoutTests: XCTestCase {
       .success(answer(due: 1080, payment: nil)),
     ]
     let collector = SimulatedCardCollector(delay: .zero)
-    await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
     let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
     await checkout.payCard(DeviceReaderService(collector))
     XCTAssertEqual(checkout.notice?.message, "The amount to charge does not match the register. Start the payment again.")

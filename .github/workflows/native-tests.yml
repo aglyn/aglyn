@@ -1,0 +1,182 @@
+name: Native tests
+
+# AGL-3704. The Kotlin and Swift tests of the native apps (Aglyn and Aglyn POS
+# on Android, the JVM desktop, iOS and macOS) ran nowhere in CI, so main's
+# native tests broke three times without a red: ListQueryCasesTest's maps, the
+# 255-slot ContractValues class (AGL-3703) and duplicate kit types.
+#
+# TWO JOBS, TWO REQUIRED CHECKS
+#   `native kotlin`  ubuntu: every module's `desktopTest`, plus the Android
+#                    sources of both apps compiled (`compileDebugKotlin`).
+#   `native swift`   macOS: `swift test` for AglynKit and every plugin's
+#                    src/ios package that has Tests (found, not listed, so a
+#                    new one is picked up), `swift build` of the plugin
+#                    manifest, and `xcodebuild build` of Aglyn and AglynPOS for
+#                    macOS.
+#
+# THEY ALWAYS RUN, AND MOSTLY PASS IN SECONDS
+#   Both names are required checks on `main` and `production`, and a required
+#   check that never reports blocks the PR forever, so there is no `paths:`
+#   filter here. Instead each job's first step asks
+#   `tools/scripts/native-ci-changed.mjs` whether anything native-relevant
+#   changed since the base (the PR's base, or `before` on a push) and the
+#   heavy steps run only when it did. A skipped step still ends the job
+#   SUCCESS, which is what auto-merge-green.yml and branch protection read.
+#   An unknown base runs everything.
+
+on:
+  pull_request:
+    branches: [main, production]
+  push:
+    branches: [main, production]
+  workflow_dispatch:
+
+concurrency:
+  group: native-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kotlin:
+    name: native kotlin
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # Full history so the base is reachable, without blobs: the diff reads
+      # trees only, and the working tree's blobs come with the checkout.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Did anything native change?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node tools/scripts/native-ci-changed.mjs --base "$BASE" --head HEAD
+
+      - uses: actions/setup-java@v6
+        if: steps.changed.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # Every module's JVM desktop tests, then the Android sources of both
+      # apps (and through them every Android library and plugin module).
+      # compileDebugKotlin is the cheapest task that compiles them: no dexing,
+      # no packaging. Gradle installs the SDK platform it needs.
+      - name: Gradle desktopTest + Android compile
+        if: steps.changed.outputs.run == 'true'
+        working-directory: apps/android
+        run: ./gradlew --no-daemon --continue desktopTest :app:compileDebugKotlin :pos:compileDebugKotlin
+
+      - name: Test reports
+        if: failure() && steps.changed.outputs.run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-kotlin-test-reports
+          path: |
+            apps/android/**/build/reports/tests/
+            libs/native/kotlin/**/build/reports/tests/
+            libs/plugins/*/src/android/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  swift:
+    name: native swift
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      # One scratch path for every package: each plugin package depends on
+      # AglynKit and through it the Firebase SDK, and a shared build
+      # directory compiles that once instead of once per package.
+      SPM_SCRATCH: ${{ github.workspace }}/../spm-scratch
+      # The Swift Build engine, which Xcode 27's SwiftPM uses by default and
+      # older images' SwiftPM does not. The native engine copies a symlinked
+      # resource (contracts.generated.json links to libs/native/contracts) as
+      # the link itself, which dangles inside the bundle, so every test that
+      # reads the contracts traps.
+      SPM_BUILD_SYSTEM: swiftbuild
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Did anything native change?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node tools/scripts/native-ci-changed.mjs --base "$BASE" --head HEAD
+
+      # The newest Xcode on the image: the apps are developed on the current
+      # release, and an older one may lack an SDK the sources use.
+      - name: Select Xcode
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          best='' best_version=''
+          for app in /Applications/Xcode*.app; do
+            [ -f "$app/Contents/version.plist" ] || continue
+            [ -L "$app" ] && continue
+            version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/version.plist")
+            echo "$app $version"
+            if [ -z "$best_version" ] || [ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -1)" = "$version" ]; then
+              best=$app best_version=$version
+            fi
+          done
+          sudo xcode-select -s "$best"
+          xcodebuild -version
+          swift --version
+
+      - name: Swift package cache
+        if: steps.changed.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('libs/native/apple/Package.swift', 'apps/ios/Aglyn.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: swiftpm-${{ runner.os }}-
+
+      - name: swift test (AglynKit and every plugin package with Tests)
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          packages=$( { echo libs/native/apple; find libs/plugins -path '*/src/ios/Package.swift' -not -path '*/.build/*' | xargs -n1 dirname | sort; } )
+          failed=''
+          for pkg in $packages; do
+            [ -d "$pkg/Tests" ] || { echo "::notice::$pkg has no Tests; skipped"; continue; }
+            echo "::group::swift test $pkg"
+            if ! swift test --package-path "$pkg" --scratch-path "$SPM_SCRATCH" --build-system "$SPM_BUILD_SYSTEM"; then
+              failed="$failed $pkg"
+              echo "::error::swift test failed in $pkg"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "failed:$failed"
+            exit 1
+          fi
+
+      - name: swift build apps/ios/PluginManifest
+        if: steps.changed.outputs.run == 'true'
+        run: swift build --package-path apps/ios/PluginManifest --scratch-path "$SPM_SCRATCH" --build-system "$SPM_BUILD_SYSTEM"
+
+      - name: xcodebuild Aglyn and AglynPOS (macOS)
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          for scheme in Aglyn AglynPOS; do
+            echo "::group::xcodebuild $scheme"
+            xcodebuild build \
+              -project apps/ios/Aglyn.xcodeproj \
+              -scheme "$scheme" \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+              -skipPackagePluginValidation \
+              CODE_SIGNING_ALLOWED=NO \
+              -quiet
+            echo "::endgroup::"
+          done

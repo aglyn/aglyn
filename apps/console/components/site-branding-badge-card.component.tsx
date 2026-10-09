@@ -57,7 +57,7 @@ export function SiteBrandingBadgeCard() {
     <CardDisplay
       header={`${branding.productName} badge`}
       help={docsHelp('billing', {
-        anchor: '#tiers--entitlements',
+        anchor: '#made-with-badge',
         excerpt:
           `Published sites on the Free plan carry a small "Made with ${branding.productName}" badge; paid plans drop it.`,
       })}

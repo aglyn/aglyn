@@ -26,7 +26,7 @@ import {
   mdiCogOutline,
   mdiDeleteOutline,
   mdiFileDocumentMultipleOutline,
-  mdiOpenInNew,
+  mdiEyeOutline,
   mdiPencilOutline,
   mdiPublish,
   mdiPublishOff,
@@ -1132,13 +1132,9 @@ export function CollectionEntriesPage() {
         actions.push({
           key: 'view',
           label: 'View on site',
-          icon: <MdiIcon path={mdiOpenInNew.path} size={0.8} />,
-          onClick: () =>
-            void window.open(
-              `${siteBase}/${selected?.slug}/${entry.slug}`,
-              '_blank',
-              'noreferrer',
-            ),
+          icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+          href: `${siteBase}/${selected?.slug}/${entry.slug}`,
+          external: true,
         })
       }
       actions.push({
@@ -1485,7 +1481,7 @@ export function CollectionEntriesPage() {
               ]
             : []),
         ]}
-        help="content"
+        help={{ topic: 'content', anchor: '#content-collections--blog' }}
         header={{
           children: 'Content',
           icon: { path: mdiFileDocumentMultipleOutline.path },
@@ -1529,7 +1525,9 @@ export function CollectionEntriesPage() {
                 content: (
                   <CardDisplay
                     header={'Collections & Entries'}
-                    help={docsHelp('buildABlog')}
+                    help={docsHelp('buildABlog', {
+                      anchor: '#1-create-a-collection',
+                    })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"

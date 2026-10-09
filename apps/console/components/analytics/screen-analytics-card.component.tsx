@@ -39,6 +39,20 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
 
+/**
+ * One help for the card in every state it draws (AGL-3707). `#dwell-time`,
+ * because the Pages table on Analytics takes `#per-screen-traffic`; the title
+ * keeps the card's own name until the analytics docs give it a section.
+ */
+const PAGE_TRAFFIC_HELP = docsHelp('analytics', {
+  anchor: '#dwell-time',
+  title: 'Page traffic',
+  excerpt:
+    "This page's views over the last 14 days, its device split and top " +
+    'referrers, and the average time a visitor stayed — measured over the ' +
+    'visits that reported one, capped at 30 minutes.',
+})
+
 const DAYS = 14
 
 interface DayStat {
@@ -150,7 +164,7 @@ export function ScreenAnalyticsCard(props: {
     return (
       <CardDisplay
         header={'Page traffic'}
-        help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
+        help={PAGE_TRAFFIC_HELP}
         contentGutterX
         contentGutterY
       >
@@ -165,7 +179,7 @@ export function ScreenAnalyticsCard(props: {
     return (
       <CardDisplay
         header={'Page traffic'}
-        help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
+        help={PAGE_TRAFFIC_HELP}
         contentGutterX
         contentGutterY
       >
@@ -228,13 +242,7 @@ export function ScreenAnalyticsCard(props: {
   return (
     <CardDisplay
       header={'Page traffic (14 days)'}
-      help={docsHelp('analytics', {
-        anchor: '#dwell-time',
-        excerpt:
-          "This page's views over the last 14 days, its device split and " +
-          'top referrers, and the average time a visitor stayed — measured ' +
-          'over the visits that reported one, capped at 30 minutes.',
-      })}
+      help={PAGE_TRAFFIC_HELP}
       contentGutterX
       contentGutterY
     >

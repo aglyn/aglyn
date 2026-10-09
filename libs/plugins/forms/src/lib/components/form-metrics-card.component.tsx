@@ -164,13 +164,7 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
   return (
     <CardDisplay
       header="What this form has collected"
-      help={pluginDocsHelp('forms', {
-        anchor: '#one-forms-own-page',
-        excerpt:
-          'Views and starts are counted in the visitor’s browser and ' +
-          'submissions on the server, and each rate covers only the months ' +
-          'its denominator was recorded.',
-      })}
+      help={pluginDocsHelp('forms', { anchor: '#form-collected' })}
       contentGutterX
       contentGutterY
     >
