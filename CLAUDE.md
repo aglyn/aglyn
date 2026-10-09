@@ -37,7 +37,8 @@ merged PR (number, title, one line on what it does) and each direct commit
 ⛔ The body is ALWAYS kept current. EVERY time anything new lands on an open
 PR (a CI fix, a `git merge origin/main`, another PR riding the promotion, a
 single commit), `gh pr edit <n> --body-file …` goes out in the same step as the
-push, before you do anything else. A body that lags the branch by even one commit,
+push, before you do anything else — and the TITLE is updated too, so it
+names what the PR now carries (a promotion's title names its main themes). A body that lags the branch by even one commit,
 says "plus a few fixes", or lists only the headline PRs, is incomplete.
 
 ## Verify in the cheapest tier that can see the mistake
