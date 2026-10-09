@@ -33,16 +33,10 @@ import {
   Badge,
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Drawer,
   MenuItem,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
   useMediaQuery,
   useTheme,
@@ -86,6 +80,7 @@ import { PosReceiptPanel } from './pos/pos-receipt-panel.component'
 import { PosTenderPanel } from './pos/pos-tender-panel.component'
 import { PosKioskQueue } from './pos/pos-kiosk-queue.component'
 import { posDisplayTipCents, usePosDisplay } from './pos/use-pos-display'
+import { posRegistersSettingsHref, usePosPairing } from './pos/pos-pairing.component'
 import {
   type ConsoleWidgetSlotRenderer,
   useConsoleWidgetSlot,
@@ -241,7 +236,7 @@ const PosOrdersZone = memo(function PosOrdersZone(props: {
   return <Renderer slot={POS_ORDERS_ZONE.id} hostId={hostId} orgId={undefined} registerId={registerId} />
 })
 
-export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
+export function PosConsolePage({ hostId, basePath }: ConsolePluginPageProps) {
   const WidgetSlot = useConsoleWidgetSlot()
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -383,12 +378,6 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const [saleLines, setSaleLines] = useState<RegisterLine[]>([])
   const [opening, setOpening] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [pairing, setPairing] = useState<{
-    code: string
-    expiresAtMs: number
-    /** A customer display, or a self-service kiosk (AGL-3623). */
-    mode: CommerceModel.PosDeviceMode
-  } | null>(null)
   const display = usePosDisplay(user, hostId, registerId)
 
   /**
@@ -484,17 +473,12 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     [enqueueSnackbar],
   )
 
-  /** A pairing code for a customer display or a self-service kiosk (AGL-3623). */
-  const showPairingCode = useCallback(
-    async (mode: CommerceModel.PosDeviceMode) => {
-      try {
-        setPairing({ ...(await display.pairingCode(mode)), mode })
-      } catch (error) {
-        notify(error instanceof PosRequestError ? error.message : 'Could not make a code', 'error')
-      }
-    },
-    [display, notify],
-  )
+  /**
+   * A pairing code for a customer display or a self-service kiosk (AGL-3623),
+   * through the same flow the POS devices card offers (AGL-3712).
+   */
+  const onPairingError = useCallback((message: string) => notify(message, 'error'), [notify])
+  const pairingFlow = usePosPairing({ user, hostId, onError: onPairingError })
 
   /**
    * Adds a line, or more of an identical one: the same product, variant and
@@ -725,16 +709,29 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     return () => clearTimeout(timer)
   }, [display, mirrored, sale, itemsCents, discountCents, estimateCents, pendingTipCents])
 
+  const registersHref = posRegistersSettingsHref(basePath)
   const registerPicker = !planReady ? (
     <Typography variant="body2" color="text.secondary">
       {'Checking your plan…'}
     </Typography>
   ) : usableRegisters.length === 0 ? (
-    <Typography variant="body2" color="warning.main">
-      {registers.length > 0
-        ? 'Your registers exceed your plan — remove extras or upgrade in Billing to take payments.'
-        : 'No POS register yet. Add one under Commerce → Settings → POS registers before taking payments.'}
-    </Typography>
+    registers.length > 0 ? (
+      <Typography variant="body2" color="warning.main">
+        {'Your registers exceed your plan — remove extras or upgrade in Billing to take payments.'}
+      </Typography>
+    ) : (
+      // A way there, not a path to follow by hand (AGL-3712).
+      <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+        <Typography variant="body2" color="warning.main">
+          {'No POS register yet. Add one before taking payments.'}
+        </Typography>
+        {registersHref ? (
+          <Button size="small" variant="outlined" href={registersHref}>
+            {'Add a register'}
+          </Button>
+        ) : null}
+      </Stack>
+    )
   ) : usableRegisters.length > 1 ? (
     <TextField
       label="Register"
@@ -789,7 +786,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         {registerId ? (
           <Button
             size="small"
-            onClick={() => void showPairingCode('display')}
+            onClick={() => void pairingFlow.open(registerId, 'display')}
           >
             {display.connected ? 'Display connected' : 'Pair display'}
           </Button>
@@ -1111,41 +1108,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
           setSheetOpen(false)
         }}
       />
-      <Dialog open={Boolean(pairing)} onClose={() => setPairing(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>{pairing?.mode === 'kiosk' ? 'Pair a self-service kiosk' : 'Pair a customer display'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <ToggleButtonGroup
-            exclusive
-            fullWidth
-            size="small"
-            value={pairing?.mode ?? 'display'}
-            onChange={(_event, mode: CommerceModel.PosDeviceMode | null) => {
-              if (mode && mode !== pairing?.mode) void showPairingCode(mode)
-            }}
-            sx={{ mt: 1 }}
-          >
-            <ToggleButton value="display">{'Customer display'}</ToggleButton>
-            <ToggleButton value="kiosk">{'Self-service kiosk'}</ToggleButton>
-          </ToggleButtonGroup>
-          <Typography variant="body2" color="text.secondary">
-            {(pairing?.mode === 'kiosk'
-              ? 'On the tablet customers order from, open this address and enter the code. '
-              : 'On the tablet facing your customer, open this address and enter the code. ') +
-              'The code works once and expires in 10 minutes.'}
-          </Typography>
-          <Typography variant="body1" sx={{ wordBreak: 'break-all' }}>
-            {`${typeof window === 'undefined' ? '' : window.location.origin}/kiosk/commerce/${
-              pairing?.mode === 'kiosk' ? 'pos-kiosk' : 'pos-display'
-            }`}
-          </Typography>
-          <Typography variant="h3" component="p" sx={{ textAlign: 'center', letterSpacing: 8 }}>
-            {pairing?.code}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPairing(null)}>{'Done'}</Button>
-        </DialogActions>
-      </Dialog>
+      {pairingFlow.dialog}
     </>
   )
 }

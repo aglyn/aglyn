@@ -36,6 +36,10 @@ for the how-to.
   the register's card reader, or an order number to pay at the counter. Orders sent
   to the counter wait on the register under **Kiosk orders**. An idle kiosk clears the
   customer's order and details, and staff unlock it with their register PIN.
+- **[Pair from POS devices](commerce-and-bookings/commerce/pos-and-reservations.md#customer-display)** —
+  each register on **Products → Settings → POS devices** now has its own **Pair display**
+  button for a customer display or a kiosk, and a site with no register yet gets an
+  **Add a register** button there and on the register page.
 
 ## October 2026 — buy online, pick up in store, and local delivery
 

@@ -91,6 +91,7 @@ function CommercePromotionsZone(props: { hostId: string }) {
 function sectionBody(
   section: CommerceConsoleSectionId,
   hostId: string,
+  canManagePos: boolean,
 ): ReactNode {
   switch (section) {
     case 'catalog':
@@ -204,7 +205,7 @@ function sectionBody(
               size: { xs: 12 },
               children: <RegisterHardwareCards hostId={hostId} />,
             },
-            { size: { xs: 12 }, children: <PosDevicesCard hostId={hostId} /> },
+            { size: { xs: 12 }, children: <PosDevicesCard hostId={hostId} canManagePos={canManagePos} /> },
             {
               size: { xs: 12 },
               children: <ShippingSettingsCard hostId={hostId} />,
@@ -285,7 +286,13 @@ function sectionBody(
  * this page only has to say what each section contains.
  */
 export function CommerceConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, section, sections, basePath } = props
+  const { hostId, section, sections, basePath, permissions, hostRole } = props
+  /*
+   * The register's own gate, for the devices card's Pair display (AGL-3712):
+   * `managePos` on a site role that may run it — what the server's
+   * `mayWorkRegister` asks. The server stays the enforcement point.
+   */
+  const canManagePos = permissions?.managePos === true && hostRole?.canPublish === true
 
   /*
    * Nothing, deliberately, while the redirect is in flight.
@@ -298,7 +305,7 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as CommerceConsoleSectionId, hostId)}
+      {sectionBody(section as CommerceConsoleSectionId, hostId, canManagePos)}
     </HubSections>
   )
 }
