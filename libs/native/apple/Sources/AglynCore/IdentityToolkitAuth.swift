@@ -186,6 +186,36 @@ public actor IdentityToolkitAuth {
       ])
   }
 
+  /// Changes the password: signing in with the current one proves it and
+  /// gives the fresh token the change needs, and the answer's new tokens
+  /// replace the old, which a password change revokes.
+  @discardableResult
+  public func changePassword(email: String, current: String, new: String) async throws -> AglynUser {
+    let user = try await signIn(email: email, password: current)
+    guard let token = session?.idToken else { throw IdentityToolkitError(code: nil, status: 401) }
+    let body = try await post(
+      "\(identityBase)/v1/accounts:update?key=\(apiKey)",
+      json: ["idToken": .string(token), "password": .string(new), "returnSecureToken": .bool(true)])
+    guard case .string(let idToken)? = body["idToken"], case .string(let refreshToken)? = body["refreshToken"]
+    else { throw IdentityToolkitError(code: nil, status: 200) }
+    accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+    return user
+  }
+
+  /// Sets the display name on the account, as the console does when the name changes.
+  @discardableResult
+  public func updateDisplayName(_ name: String) async throws -> AglynUser {
+    guard let current = session else { throw IdentityToolkitError(code: nil, status: 401) }
+    let body = try await post(
+      "\(identityBase)/v1/accounts:update?key=\(apiKey)",
+      json: ["idToken": .string(current.idToken), "displayName": .string(name), "returnSecureToken": .bool(true)])
+    let user = AglynUser(uid: current.user.uid, email: current.user.email, displayName: name.isEmpty ? nil : name)
+    accept(
+      user: user, idToken: body["idToken"]?.stringValue ?? current.idToken,
+      refreshToken: body["refreshToken"]?.stringValue ?? current.refreshToken, expiresIn: body["expiresIn"])
+    return user
+  }
+
   /// The current ID token, refreshed a minute before it expires; nil when signed out.
   public func idToken(forceRefresh: Bool) async throws -> String? {
     guard let current = session else { return nil }

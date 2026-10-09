@@ -95,6 +95,18 @@ public func signInErrorMessage(_ error: Error) -> String {
   }
 }
 
+/// The words a failed password change shows.
+public func passwordChangeMessage(_ error: Error) -> String {
+  if let rest = error as? IdentityToolkitError, rest.code?.hasPrefix("WEAK_PASSWORD") == true {
+    return "That password is too weak. Use a longer one."
+  }
+  if let code = AuthErrorCode(rawValue: (error as NSError).code), code == .weakPassword {
+    return "That password is too weak. Use a longer one."
+  }
+  let message = signInErrorMessage(error)
+  return message.hasPrefix("That email and password") ? "Your current password is not right." : message
+}
+
 /// The signed-in person, observed: who is signed in, and the ID token the
 /// console API and the WebView session are minted from. With the SDK the
 /// user is kept in the Keychain by Firebase; with REST the refresh token is
@@ -152,6 +164,32 @@ public final class AuthSession {
       return
     }
     _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
+  }
+
+  /// Changes the password, after proving the current one.
+  public func changePassword(current: String, new: String) async throws {
+    guard let email = user?.email else { throw IdentityToolkitError(code: "INVALID_LOGIN_CREDENTIALS", status: 401) }
+    if let rest {
+      user = try await rest.changePassword(email: email, current: current, new: new)
+      return
+    }
+    guard let signedIn = Auth.auth().currentUser else { throw IdentityToolkitError(code: nil, status: 401) }
+    try await signedIn.reauthenticate(with: EmailAuthProvider.credential(withEmail: email, password: current))
+    try await signedIn.updatePassword(to: new)
+  }
+
+  /// Keeps the account's display name in step with the profile (rosters and comments read it).
+  public func updateDisplayName(_ name: String) async throws {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let rest {
+      user = try await rest.updateDisplayName(trimmed)
+      return
+    }
+    guard let signedIn = Auth.auth().currentUser else { return }
+    let change = signedIn.createProfileChangeRequest()
+    change.displayName = trimmed
+    try await change.commitChanges()
+    user = AglynUser(uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed)
   }
 
   public func resetPassword(email: String) async throws {

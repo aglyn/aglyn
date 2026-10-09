@@ -40,14 +40,51 @@
               "key": "phoneNumber",
               "label": "Phone",
               "kind": "text",
-              "initial": "{item.phoneNumber}"
+              "initial": "{item.phoneNumber}",
+              "help": "Saved in international form, like +15125550123."
             },
             {
-              "key": "photoURL",
-              "label": "Photo URL",
-              "kind": "url",
-              "initial": "{item.photoURL}",
-              "placeholder": "https://"
+              "key": "organization",
+              "label": "Organization name",
+              "kind": "text",
+              "initial": "{item.organization}"
+            },
+            {
+              "key": "line1",
+              "label": "Address",
+              "kind": "text",
+              "initial": "{item.address.line1}"
+            },
+            {
+              "key": "line2",
+              "label": "Apartment, suite, etc.",
+              "kind": "text",
+              "initial": "{item.address.line2}"
+            },
+            {
+              "key": "city",
+              "label": "City",
+              "kind": "text",
+              "initial": "{item.address.city}"
+            },
+            {
+              "key": "state",
+              "label": "State / Province",
+              "kind": "text",
+              "initial": "{item.address.state}"
+            },
+            {
+              "key": "postalCode",
+              "label": "Postal code",
+              "kind": "text",
+              "initial": "{item.address.postalCode}"
+            },
+            {
+              "key": "country",
+              "label": "Country (2 letters)",
+              "kind": "text",
+              "initial": "{item.address.country}",
+              "placeholder": "US"
             }
           ],
           "submit": {
@@ -57,12 +94,118 @@
               "fields": {
                 "firstName": "{form.firstName}",
                 "lastName": "{form.lastName}",
-                "phoneNumber": "{form.phoneNumber}",
-                "photoURL": "{form.photoURL}"
+                "phoneNumber": "{form.phoneNumber:phone}",
+                "organization": "{form.organization}",
+                "address": {
+                  "line1": "{form.line1}",
+                  "line2": "{form.line2}",
+                  "city": "{form.city}",
+                  "state": "{form.state}",
+                  "postalCode": "{form.postalCode}",
+                  "country": "{form.country:upper}"
+                },
+                "addressErasedAt": {
+                  "$delete": true
+                }
+              }
+            },
+            "then": {
+              "label": "Name",
+              "account": "updateDisplayName",
+              "body": {
+                "name": "{form.firstName} {form.lastName}"
               }
             },
             "success": "Saved"
+          },
+          "title": "Basic info",
+          "footer": "Your name and contact details, shown to teammates. Your address is private to you."
+        },
+        {
+          "type": "form",
+          "title": "Profile image",
+          "id": "photo",
+          "object": "data.me",
+          "fields": [
+            {
+              "key": "photoUrl",
+              "label": "Image URL",
+              "kind": "url",
+              "initial": "{item.photoUrl}",
+              "placeholder": "https://",
+              "help": "An https:// link to an image."
+            }
+          ],
+          "submit": {
+            "label": "Save image",
+            "write": {
+              "doc": "users/{user.uid}",
+              "fields": {
+                "photoUrl": "{form.photoUrl}",
+                "photoUrlErasedAt": {
+                  "$delete": true
+                }
+              }
+            },
+            "then": {
+              "label": "Roster",
+              "url": "/api/account/photo",
+              "body": {
+                "photoUrl": "{form.photoUrl}"
+              }
+            },
+            "success": "Profile image saved"
           }
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "removePhoto",
+              "label": "Remove my image",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.me.photoUrl",
+              "confirm": "Remove your profile image?",
+              "write": {
+                "doc": "users/{user.uid}",
+                "fields": {
+                  "photoUrl": {
+                    "$delete": true
+                  },
+                  "photoUrlErasedAt": {
+                    "$serverTimestamp": true
+                  }
+                }
+              },
+              "then": {
+                "label": "Roster",
+                "url": "/api/account/photo",
+                "body": {
+                  "photoUrl": ""
+                }
+              },
+              "success": "Image removed"
+            },
+            {
+              "id": "eraseAddress",
+              "label": "Erase my address",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.me.address",
+              "confirm": "Erase your address? It will not be filled in again from your sign-in provider.",
+              "write": {
+                "doc": "users/{user.uid}",
+                "fields": {
+                  "address": null,
+                  "addressErasedAt": {
+                    "$serverTimestamp": true
+                  }
+                }
+              },
+              "success": "Address erased"
+            }
+          ]
         },
         {
           "type": "fields",
@@ -257,6 +400,38 @@
           "title": "Password",
           "items": [
             {
+              "id": "change",
+              "label": "Change my password",
+              "icon": "key|password",
+              "account": "changePassword",
+              "prompt": [
+                {
+                  "key": "current",
+                  "label": "Current password",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "password",
+                  "label": "New password (12 or more characters)",
+                  "kind": "password",
+                  "required": true
+                },
+                {
+                  "key": "confirm",
+                  "label": "New password again",
+                  "kind": "password",
+                  "required": true
+                }
+              ],
+              "body": {
+                "current": "{form.current}",
+                "new": "{form.password}",
+                "confirm": "{form.confirm}"
+              },
+              "success": "Password changed"
+            },
+            {
               "id": "reset",
               "label": "Email me a password reset link",
               "icon": "key|password",
@@ -266,7 +441,8 @@
               },
               "success": "Check {user.email} for the link"
             }
-          ]
+          ],
+          "footer": "Changing it needs your current password. Accounts that sign in with Google or a company login have no password to change."
         },
         {
           "type": "list",

@@ -131,7 +131,7 @@ fun SpecScreen(
     return
   }
   val key = "${spec.id}:${plugin.orgId}:${plugin.hostId}:$params"
-  val model = remember(key) { ScreenModel(spec, base, plugin.api, plugin.firestore, plugin.writer) }
+  val model = remember(key) { ScreenModel(spec, base, plugin.api, plugin.firestore, plugin.writer, session.account) }
   LaunchedEffect(key) { if (seed != null) model.seed(seed) else model.load() }
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }

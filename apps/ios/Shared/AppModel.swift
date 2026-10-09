@@ -115,7 +115,13 @@ final class AppModel {
         guard let email = await self?.auth?.user?.email else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
         try await self?.auth?.signIn(email: email, password: password)
       },
-      refreshClaims: { [weak self] in await self?.refreshClaims(force: true) })
+      refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
+      account: AccountOperations(
+        changePassword: { [weak self] current, new in
+          try await self?.auth?.changePassword(current: current, new: new)
+        },
+        updateDisplayName: { [weak self] name in try await self?.auth?.updateDisplayName(name) },
+        message: { passwordChangeMessage($0) }))
   }
 
   func signOut() async {

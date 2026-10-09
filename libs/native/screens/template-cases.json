@@ -143,6 +143,22 @@
     {
       "template": "{{literal}}",
       "expect": "{literal}}"
+    },
+    {
+      "template": "{'(512) 555-0123':phone}",
+      "expect": "+15125550123"
+    },
+    {
+      "template": "{'+44 20 7946 0958':phone}",
+      "expect": "+442079460958"
+    },
+    {
+      "template": "{'1 512 555 0123':phone}",
+      "expect": "+15125550123"
+    },
+    {
+      "template": "{'555':phone}",
+      "expect": "555"
     }
   ],
   "url": [

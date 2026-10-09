@@ -353,10 +353,25 @@ object ScreenValues {
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       "upper" -> text(value).uppercase()
+      "phone" -> normalizedPhone(text(value)) ?: text(value)
       "json" -> value?.toString() ?: ""
       else -> text(value)
     }
   }
+}
+
+/**
+ * Best-effort E.164, as the console stores a phone number: `+` and 8 to 15
+ * digits, or a US/CA number with or without the leading 1. Anything else is not guessed at.
+ */
+fun normalizedPhone(input: String): String? {
+  val raw = input.trim()
+  if (raw.isEmpty()) return null
+  val digits = raw.filter { it in '0'..'9' }
+  if (raw.startsWith("+")) return if (digits.length in 8..15) "+$digits" else null
+  if (digits.length == 10) return "+1$digits"
+  if (digits.length == 11 && digits.startsWith("1")) return "+$digits"
+  return null
 }
 
 /** An ISO-8601 instant or date as epoch milliseconds; null when it is not one. */

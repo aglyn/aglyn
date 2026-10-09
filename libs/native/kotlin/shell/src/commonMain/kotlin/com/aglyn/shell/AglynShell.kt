@@ -149,6 +149,10 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     refreshClaims = { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()) },
     openHostedPage = services.openHostedPage,
     back = { navigator.back() },
+    account = com.aglyn.screens.AccountOperations(
+      changePassword = { current, new -> services.auth.changePassword(current, new) },
+      updateDisplayName = { name -> services.auth.updateDisplayName(name) },
+    ),
   )
 
   androidx.compose.runtime.CompositionLocalProvider(com.aglyn.screens.LocalScreenSession provides screenSession) {

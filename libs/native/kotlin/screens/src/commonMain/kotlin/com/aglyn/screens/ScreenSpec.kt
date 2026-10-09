@@ -104,7 +104,7 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     }
   }
   val back: Boolean = json.isTrue("back")
-  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null)
+  val reload: Boolean = !json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null)
   val whenCondition: String? = json.str("when")
   val link: String? = json.str("link")
   /** A Besigner path (whole, from the console root) opened in the app's web view. */
@@ -114,6 +114,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val otherwise: ActionSpec? = json.obj("else")?.let { parse(it) }
   /** A follow-up the action makes once it succeeds (best effort, like the console's). */
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
+  /** A change to the signed-in person's own sign-in, made through the session (`changePassword`, `updateDisplayName`); its inputs are the body. */
+  val account: String? = json.str("account")
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
 

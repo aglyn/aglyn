@@ -61,6 +61,46 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(store.load()?.uid, "u1")
   }
 
+  func testAPasswordChangeProvesTheCurrentOneThenReplacesTheTokens() async throws {
+    let transport = RecordingTransport([
+      (200, signedIn),
+      (200, #"{"idToken":"id2","refreshToken":"r2","expiresIn":"3600"}"#),
+    ])
+    let store = MemoryCredentialStore()
+    let session = auth(transport, store: store)
+    try await session.changePassword(email: "a@example.test", current: "old", new: "a-much-longer-new-one")
+    XCTAssertEqual(transport.requests[0].url?.path.hasSuffix("accounts:signInWithPassword"), true)
+    XCTAssertEqual(transport.json(0)["password"] as? String, "old")
+    XCTAssertEqual(transport.requests[1].url?.path.hasSuffix("accounts:update"), true)
+    XCTAssertEqual(transport.json(1)["idToken"] as? String, "id1")
+    XCTAssertEqual(transport.json(1)["password"] as? String, "a-much-longer-new-one")
+    XCTAssertEqual(store.load()?.refreshToken, "r2")
+    let token = try await session.idToken(forceRefresh: false)
+    XCTAssertEqual(token, "id2")
+  }
+
+  func testAWrongCurrentPasswordStopsTheChangeBeforeTheUpdate() async {
+    let transport = RecordingTransport([(400, #"{"error":{"message":"INVALID_LOGIN_CREDENTIALS"}}"#)])
+    do {
+      try await auth(transport).changePassword(email: "a@example.test", current: "bad", new: "whatever-long-enough")
+      XCTFail("expected a refusal")
+    } catch {
+      XCTAssertEqual(passwordChangeMessage(error), "Your current password is not right.")
+    }
+    XCTAssertEqual(transport.requests.count, 1)
+  }
+
+  func testTheDisplayNameIsSetOnTheAccountAndKept() async throws {
+    let transport = RecordingTransport([(200, signedIn), (200, #"{"idToken":"id1","refreshToken":"r1"}"#)])
+    let store = MemoryCredentialStore()
+    let session = auth(transport, store: store)
+    try await session.signIn(email: "a@example.test", password: "pw")
+    let user = try await session.updateDisplayName("Ada Lovelace")
+    XCTAssertEqual(user.displayName, "Ada Lovelace")
+    XCTAssertEqual(transport.json(1)["displayName"] as? String, "Ada Lovelace")
+    XCTAssertEqual(store.load()?.displayName, "Ada Lovelace")
+  }
+
   func testARefusedSignInCarriesTheCode() async {
     let transport = RecordingTransport([(400, #"{"error":{"message":"INVALID_LOGIN_CREDENTIALS"}}"#)])
     do {

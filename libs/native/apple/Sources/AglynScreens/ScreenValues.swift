@@ -414,10 +414,25 @@ public enum ScreenValues {
       return raw.prefix(1).uppercased() + raw.dropFirst()
     case "upper":
       return text(value).uppercased()
+    case "phone":
+      return normalizedPhone(text(value)) ?? text(value)
     case "json":
       return (try? value.map { String(data: try $0.encoded(), encoding: .utf8) ?? "" }) ?? ""
     default:
       return text(value)
     }
+  }
+
+  /// Best-effort E.164, as the console stores a phone number: `+` and 8 to 15
+  /// digits, or a US/CA number with or without the leading 1. Anything else
+  /// is not guessed at.
+  public static func normalizedPhone(_ input: String) -> String? {
+    let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.isEmpty { return nil }
+    let digits = raw.filter { $0.isASCII && $0.isNumber }
+    if raw.hasPrefix("+") { return (8...15).contains(digits.count) ? "+" + digits : nil }
+    if digits.count == 10 { return "+1" + digits }
+    if digits.count == 11, digits.hasPrefix("1") { return "+" + digits }
+    return nil
   }
 }

@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -156,6 +157,53 @@ class IdentityToolkitAuthSession(
         displayName = body["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
       ),
     )
+  }
+
+  /** `accounts:update` with the current ID token; the new tokens replace the old, which a password change revokes. */
+  private suspend fun update(fields: Map<String, JsonPrimitive>): JsonObject {
+    val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(authErrorMessage(null))
+    val response = try {
+      http.post("$identityBase/v1/accounts:update?key=$apiKey") {
+        contentType(ContentType.Application.Json)
+        setBody(JsonObject(fields + mapOf("idToken" to JsonPrimitive(idToken), "returnSecureToken" to JsonPrimitive(true))).toString())
+      }
+    } catch (error: Exception) {
+      throw AuthError(authErrorMessage(null), error)
+    }
+    val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+    if (response.status.value !in 200..299 || body == null) {
+      val code = (body?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content
+      throw AuthError(passwordChangeMessage(code))
+    }
+    lock.withLock {
+      val current = tokens ?: return@withLock
+      val fresh = Tokens(
+        idToken = body["idToken"]?.jsonPrimitive?.content ?: current.idToken,
+        refreshToken = body["refreshToken"]?.jsonPrimitive?.content ?: current.refreshToken,
+        expiresAt = now() + (body["expiresIn"]?.jsonPrimitive?.content?.toLongOrNull() ?: 3600) * 1000,
+        uid = current.uid,
+      )
+      tokens = fresh
+      keep(fresh.refreshToken)
+    }
+    return body
+  }
+
+  override suspend fun changePassword(current: String, new: String) {
+    val email = (mutable.value as? AuthState.SignedIn)?.user?.email ?: throw AuthError(passwordChangeMessage(null))
+    // Signing in with the current password proves it and gives the fresh token the change needs.
+    try {
+      signInWithEmail(email, current)
+    } catch (error: AuthError) {
+      throw AuthError(if ("do not match" in error.message) passwordChangeMessage("INVALID_LOGIN_CREDENTIALS") else error.message, error)
+    }
+    update(mapOf("password" to JsonPrimitive(new)))
+  }
+
+  override suspend fun updateDisplayName(name: String) {
+    val signedIn = (mutable.value as? AuthState.SignedIn)?.user ?: return
+    update(mapOf("displayName" to JsonPrimitive(name)))
+    mutable.value = AuthState.SignedIn(signedIn.copy(displayName = name.ifEmpty { null }))
   }
 
   override suspend fun signOut() = lock.withLock { signOutLocked() }

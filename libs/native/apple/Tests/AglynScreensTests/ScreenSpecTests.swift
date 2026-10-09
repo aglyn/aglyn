@@ -141,6 +141,42 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testAccountActionsChangeThePasswordAndNameThroughTheSession() async throws {
+    final class Calls: @unchecked Sendable { var passwords: [[String]] = []; var names: [String] = [] }
+    let calls = Calls()
+    let account = AccountOperations(
+      changePassword: { calls.passwords.append([$0, $1]) }, updateDisplayName: { calls.names.append($0) },
+      message: { _ in "nope" })
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: RecordingTransport(responses: []))
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api, account: account)
+    let change = try XCTUnwrap(
+      ActionSpec([
+        "label": "Change", "account": "changePassword",
+        "body": ["current": "{form.current}", "new": "{form.password}", "confirm": "{form.confirm}"], "success": "Done",
+      ]))
+    let short: JSONValue = ["form": ["current": "old", "password": "short", "confirm": "short"]]
+    XCTAssertEqual(await model.run(change, in: short), .failed("Use at least 12 characters."))
+    let mismatch: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "different-long-one"]]
+    XCTAssertEqual(await model.run(change, in: mismatch), .failed("The two new passwords do not match."))
+    XCTAssertTrue(calls.passwords.isEmpty)
+    let good: JSONValue = ["form": ["current": "old", "password": "a-long-enough-one", "confirm": "a-long-enough-one"]]
+    XCTAssertEqual(await model.run(change, in: good), .done(message: "Done", response: nil))
+    XCTAssertEqual(calls.passwords, [["old", "a-long-enough-one"]])
+    let name = try XCTUnwrap(ActionSpec(["label": "Name", "account": "updateDisplayName", "body": ["name": "{form.first} {form.last}"]]))
+    _ = await model.run(name, in: ["form": ["first": "Ada", "last": "Lovelace"]])
+    XCTAssertEqual(calls.names, ["Ada Lovelace"])
+  }
+
+  @MainActor
+  func testWriteTurnsSentinelObjectsIntoFirestoreSentinels() throws {
+    let plain = FirestoreLoads.plain(["a": ["$serverTimestamp": true], "b": ["$delete": true], "c": ["d": "x"]])
+    let record = try XCTUnwrap(plain as? [String: Any])
+    XCTAssertEqual(record["a"] as? FirestoreSentinel, .serverTimestamp)
+    XCTAssertEqual(record["b"] as? FirestoreSentinel, .delete)
+    XCTAssertEqual((record["c"] as? [String: Any])?["d"] as? String, "x")
+  }
+
+  @MainActor
   func testLoadsPageThroughCursors() async throws {
     let transport = RecordingTransport(responses: [
       (200, #"{"rows":[{"$id":"a"}],"nextCursor":"a"}"#), (200, #"{"rows":[{"$id":"b"}],"nextCursor":null}"#),

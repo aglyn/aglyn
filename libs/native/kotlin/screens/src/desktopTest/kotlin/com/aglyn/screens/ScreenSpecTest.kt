@@ -176,6 +176,41 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun accountActionsChangeThePasswordAndNameThroughTheSession() = runTest {
+    val passwords = mutableListOf<Pair<String, String>>()
+    val names = mutableListOf<String>()
+    val account = AccountOperations(
+      changePassword = { current, new -> passwords += current to new },
+      updateDisplayName = { names += it },
+    )
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val model = ScreenModel(spec, JsonObject(emptyMap()), client(sent = mutableListOf()), account = account)
+    val change = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Change","account":"changePassword","success":"Done",
+           "body":{"current":"{form.current}","new":"{form.password}","confirm":"{form.confirm}"}}""",
+      ),
+    )!!
+    fun form(password: String, confirm: String) = Json.parseToJsonElement("""{"form":{"current":"old","password":"$password","confirm":"$confirm"}}""")
+    assertEquals(ActionOutcome.Failed("Use at least 12 characters."), model.run(change, form("short", "short")))
+    assertEquals(ActionOutcome.Failed("The two new passwords do not match."), model.run(change, form("a-long-enough-one", "different-long-one")))
+    assertTrue(passwords.isEmpty())
+    assertEquals(ActionOutcome.Done("Done", null), model.run(change, form("a-long-enough-one", "a-long-enough-one")))
+    assertEquals(listOf("old" to "a-long-enough-one"), passwords)
+    val name = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Name","account":"updateDisplayName","body":{"name":"{form.first} {form.last}"}}"""))!!
+    model.run(name, Json.parseToJsonElement("""{"form":{"first":"Ada","last":"Lovelace"}}"""))
+    assertEquals(listOf("Ada Lovelace"), names)
+  }
+
+  @Test
+  fun writeTurnsSentinelObjectsIntoFirestoreSentinels() {
+    val plain = ScreenModel.plain(Json.parseToJsonElement("""{"a":{"${'$'}serverTimestamp":true},"b":{"${'$'}delete":true},"c":{"d":"x"}}""")) as Map<*, *>
+    assertEquals(com.aglyn.core.ServerTimestamp, plain["a"])
+    assertEquals(com.aglyn.core.FirestoreDelete, plain["b"])
+    assertEquals("x", (plain["c"] as Map<*, *>)["d"])
+  }
+
+  @Test
   fun loadsPageThroughCursors() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(

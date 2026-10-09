@@ -7,6 +7,29 @@ import Foundation
 import Observation
 import SwiftUI
 
+/// What a spec's `account` actions do to the signed-in person's own sign-in
+/// (the console does these with the Firebase client SDK, not a route).
+public struct AccountOperations: Sendable {
+  /// Proves the current password, then sets the new one.
+  public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
+  /// Keeps the account's display name in step with the profile.
+  public var updateDisplayName: @Sendable (_ name: String) async throws -> Void
+  /// The words a refusal from either shows.
+  public var message: @Sendable (_ error: Error) -> String
+
+  public init(
+    changePassword: @escaping @Sendable (String, String) async throws -> Void = { _, _ in
+      throw ConsoleAPIError(status: 0, message: "Changing the password is not available here.")
+    },
+    updateDisplayName: @escaping @Sendable (String) async throws -> Void = { _ in },
+    message: @escaping @Sendable (Error) -> String = { $0.localizedDescription }
+  ) {
+    self.changePassword = changePassword
+    self.updateDisplayName = updateDisplayName
+    self.message = message
+  }
+}
+
 /// Who is signed in and where, beyond what a plugin context carries: the
 /// shell sets it once in the environment, and every spec screen reads it.
 public struct ScreenSession: Sendable {
@@ -22,12 +45,14 @@ public struct ScreenSession: Sendable {
   public var reauthenticate: @Sendable (_ password: String) async throws -> Void
   /// Re-reads the token's claims (after a reauth, or when a screen asks).
   public var refreshClaims: @Sendable () async -> Void
+  public var account: AccountOperations
 
   public init(
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
     siteName: String? = nil, claims: TokenClaims = TokenClaims(), origin: String = "",
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
-    refreshClaims: @escaping @Sendable () async -> Void = {}
+    refreshClaims: @escaping @Sendable () async -> Void = {},
+    account: AccountOperations = AccountOperations()
   ) {
     self.email = email
     self.displayName = displayName
@@ -38,6 +63,7 @@ public struct ScreenSession: Sendable {
     self.origin = origin
     self.reauthenticate = reauthenticate
     self.refreshClaims = refreshClaims
+    self.account = account
   }
 
   /// The base context every template reads.
@@ -129,10 +155,11 @@ public final class ScreenModel {
   @ObservationIgnored private let api: ConsoleAPIClient?
   @ObservationIgnored private let reader: FirestoreReader?
   @ObservationIgnored private let writer: FirestoreWriter?
+  @ObservationIgnored private let account: AccountOperations?
 
   public init(
     spec: ScreenSpec, context: JSONValue, api: ConsoleAPIClient?, reader: FirestoreReader? = nil,
-    writer: FirestoreWriter? = nil
+    writer: FirestoreWriter? = nil, account: AccountOperations? = nil
   ) {
     self.spec = spec
     // A spec's fixed rows (`constants`) read as `const`.
@@ -140,6 +167,7 @@ public final class ScreenModel {
     self.api = api
     self.reader = reader
     self.writer = writer
+    self.account = account
   }
 
   /// Seeds data without a network (previews, snapshot tests).
@@ -270,6 +298,29 @@ public final class ScreenModel {
   }
 
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
+    if let operation = action.account {
+      guard let account else { return .failed("That is not available here.") }
+      do {
+        let form = ScreenValues.resolveBody(action.body ?? [:], in: scope)
+        switch operation {
+        case "changePassword":
+          let current = ScreenValues.text(form["current"]), new = ScreenValues.text(form["new"])
+          guard !current.isEmpty else { return .failed("Enter your current password.") }
+          guard new == ScreenValues.text(form["confirm"]) else { return .failed("The two new passwords do not match.") }
+          guard new.count >= 12 else { return .failed("Use at least 12 characters.") }
+          try await account.changePassword(current, new)
+        case "updateDisplayName":
+          // A blank name is not written over the one the account has.
+          let name = ScreenValues.text(form["name"]).trimmingCharacters(in: .whitespaces)
+          if !name.isEmpty { try await account.updateDisplayName(name) }
+        default:
+          return .failed("That is not available here.")
+        }
+        return .done(message: action.success.map { ScreenValues.render($0, in: scope) }, response: nil)
+      } catch {
+        return .failed(account.message(error))
+      }
+    }
     if let write = action.write {
       guard let writer, let doc = write["doc"]?.stringValue else { return .failed("Saving is not available here.") }
       do {

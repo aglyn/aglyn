@@ -34,7 +34,11 @@ enum FirestoreLoads {
     case .number(let number): return number == number.rounded() && abs(number) < 9e15 ? Int(number) as Any : number
     case .string(let text): return text
     case .array(let items): return items.map(plain)
-    case .object(let record): return record.mapValues(plain)
+    case .object(let record):
+      // `{"$serverTimestamp": true}` and `{"$delete": true}` are the web SDK's sentinels.
+      if record.count == 1, record["$serverTimestamp"] != nil { return FirestoreSentinel.serverTimestamp }
+      if record.count == 1, record["$delete"] != nil { return FirestoreSentinel.delete }
+      return record.mapValues(plain)
     }
   }
 

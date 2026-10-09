@@ -24,6 +24,20 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
+ * What a spec's `account` actions do to the signed-in person's own sign-in (the
+ * console does these with the Firebase client SDK, not a route). Twin of the
+ * Apple `AccountOperations`.
+ */
+data class AccountOperations(
+  /** Proves the current password, then sets the new one. */
+  val changePassword: suspend (current: String, new: String) -> Unit = { _, _ ->
+    throw IllegalStateException("Changing the password is not available here.")
+  },
+  /** Keeps the account's display name in step with the profile. */
+  val updateDisplayName: suspend (name: String) -> Unit = {},
+)
+
+/**
  * Who is signed in and where, beyond what a plugin context carries. The
  * shell provides it once; every spec screen reads it. Twin of the Apple
  * `ScreenSession`.
@@ -44,6 +58,7 @@ data class ScreenSession(
   val openHostedPage: (url: String) -> Unit = {},
   /** Leaves the current screen (an action that ends it, like a delete). */
   val back: () -> Unit = {},
+  val account: AccountOperations = AccountOperations(),
 ) {
   fun context(plugin: NativePluginContext?, params: NativeParams): JsonElement {
     val role = orgRole.orEmpty()
@@ -102,6 +117,7 @@ class ScreenModel(
   private val api: ConsoleApiClient?,
   private val reader: com.aglyn.core.FirestoreReader? = null,
   private val writer: com.aglyn.core.FirestoreWriter? = null,
+  private val account: AccountOperations? = null,
 ) {
   sealed interface Phase {
     data object Loading : Phase
@@ -220,6 +236,31 @@ class ScreenModel(
   }
 
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
+    action.account?.let { operation ->
+      val target = account ?: return ActionOutcome.Failed("That is not available here.")
+      return try {
+        val form = ScreenValues.resolveBody(action.body ?: JsonObject(emptyMap()), scope)
+        fun field(key: String) = ScreenValues.text(form.obj(key))
+        when (operation) {
+          "changePassword" -> {
+            val current = field("current")
+            val new = field("new")
+            if (current.isEmpty()) return ActionOutcome.Failed("Enter your current password.")
+            if (new != field("confirm")) return ActionOutcome.Failed("The two new passwords do not match.")
+            if (new.length < 12) return ActionOutcome.Failed("Use at least 12 characters.")
+            target.changePassword(current, new)
+          }
+          // A blank name is not written over the one the account has.
+          "updateDisplayName" -> field("name").trim().takeIf { it.isNotEmpty() }?.let { target.updateDisplayName(it) }
+          else -> return ActionOutcome.Failed("That is not available here.")
+        }
+        ActionOutcome.Done(action.success?.let { ScreenValues.render(it, scope) }, null)
+      } catch (error: CancellationException) {
+        throw error
+      } catch (error: Throwable) {
+        ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
+      }
+    }
     action.write?.let { write ->
       val doc = write.str("doc") ?: return ActionOutcome.Failed("Saving is not available here.")
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
@@ -264,7 +305,12 @@ class ScreenModel(
         else -> value.content.toLongOrNull() ?: value.content.toDoubleOrNull()
       }
       is JsonArray -> value.map { plain(it) }
-      is JsonObject -> value.mapValues { plain(it.value) }
+      is JsonObject -> when {
+        // `{"$serverTimestamp": true}` and `{"$delete": true}` are the web SDK's sentinels.
+        value.size == 1 && value["\$serverTimestamp"] != null -> com.aglyn.core.ServerTimestamp
+        value.size == 1 && value["\$delete"] != null -> com.aglyn.core.FirestoreDelete
+        else -> value.mapValues { plain(it.value) }
+      }
     }
 
     internal fun appending(rows: JsonArray, path: String, value: JsonElement): JsonElement {
