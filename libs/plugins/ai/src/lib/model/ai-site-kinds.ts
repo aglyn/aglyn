@@ -254,7 +254,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     blurb: 'Product-first pages for things you sell',
     icon: 'bag',
     keywords: ['online store', 'online shop', 'web shop', 'boutique', 'ecommerce', 'e-commerce', 'merch', 'merchandise', 'jewelry', 'jewellery', 'clothing', 'apparel', 'candle', 'soap', 'etsy', 'gift shop', 'bookstore', 'bookshop', 'florist', 'flower shop', 'plant shop', 'retail', 'wholesale', 'subscription box', 'thrift', 'sneakers'],
-    hints: ['store', 'shop', 'product', 'sell', 'selling', 'buy', 'order', 'brand', 'handmade', 'goods', 'gifts', 'collection', 'shipping'],
+    hints: ['store', 'shop', 'market', 'product', 'sell', 'selling', 'buy', 'order', 'brand', 'handmade', 'goods', 'gifts', 'collection', 'shipping'],
     starter: 'physical-shop',
     look: { bases: ['minimal', 'cupertino', 'material3'], chroma: 'balanced', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['inter', 'outfit', 'manrope', 'dmserif', 'syne'], corners: ['soft', 'sharp', 'round'], buttons: 'pill', headingScale: 1, density: 'regular' },
     design: 'Product-grid first: a short opening with one strong image, then the product range as a grid of image cards, what makes the products different, and care, shipping or returns answers only as the brief gives them. Keep copy short and let images lead.',
@@ -326,7 +326,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     blurb: 'Gyms, trainers and studios with energy',
     icon: 'bolt',
     keywords: ['gym', 'fitness', 'personal trainer', 'personal training', 'trainer', 'crossfit', 'boxing', 'kickboxing', 'martial arts', 'martial', 'karate', 'judo', 'jiu jitsu', 'taekwondo', 'mma', 'pilates', 'bootcamp', 'boot camp', 'sports', 'sport', 'running', 'runner', 'marathon', 'triathlon', 'cycling', 'climbing', 'bouldering', 'dance', 'swim', 'swimming', 'soccer', 'football', 'basketball', 'baseball', 'softball', 'volleyball', 'tennis', 'pickleball', 'golf', 'hockey', 'rugby', 'lacrosse', 'wrestling', 'gymnastics', 'athletics', 'athlete', 'strength training', 'weightlifting', 'powerlifting', 'health club', 'league'],
-    hints: ['training', 'team', 'workout', 'coach', 'coaching', 'studio', 'classes', 'members', 'race', 'game', 'tournament'],
+    hints: ['training', 'team', 'workout', 'coach', 'coaching', 'studio', 'members', 'race', 'game', 'tournament'],
     starter: 'business',
     look: { bases: ['bootstrap', 'material-ui', 'carbon', 'material3'], chroma: 'vivid', hues: [[0, 30], [90, 140], [180, 210], [270, 300]], grounds: ['white', 'cool'], fonts: ['barlow', 'anton', 'archivo', 'outfit'], corners: ['sharp', 'soft'], buttons: 'caps', headingScale: 1.15, density: 'compact' },
     design: 'High-energy: a punchy opening with a strong call to action, classes or programs as cards, how to start as steps, and a repeated join or book section. Use a dark band and a brand band.',
@@ -338,7 +338,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     blurb: 'Calm, spacious pages for classes and retreats',
     icon: 'leaf',
     keywords: ['yoga', 'meditation', 'mindfulness', 'breathwork', 'reiki', 'sound bath', 'sound healing', 'tai chi', 'qigong'],
-    hints: ['retreat', 'spa', 'calm', 'classes', 'studio', 'healing', 'stillness'],
+    hints: ['retreat', 'spa', 'calm', 'studio', 'healing', 'stillness'],
     starter: 'business',
     look: { bases: ['material3', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: [[20, 50], [80, 150], [260, 300], [170, 200]], grounds: ['warm', 'tinted'], fonts: ['garamond', 'lora', 'quicksand', 'instrument', 'fraunces'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1.05, density: 'airy' },
     design: 'Calm and spacious: a quiet opening, classes as soft cards, what a first class is like as steps, a gentle about, and an easy way to book. Soft bands, no dark band, lots of space.',
@@ -385,8 +385,8 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     label: 'Nonprofit & community',
     blurb: 'A cause, its impact and how to help',
     icon: 'hands',
-    keywords: ['nonprofit', 'non-profit', 'charity', 'charitable', 'foundation', 'church', 'parish', 'congregation', 'mosque', 'synagogue', 'temple', 'ministry', 'food bank', 'food pantry', 'pantry', 'shelter', 'animal shelter', 'animal rescue', 'rescue', 'volunteer', 'association', 'homeowners association', 'neighborhood association', 'hoa', 'pta', 'pto', 'parent teacher association', 'ngo', 'donate', 'donation', 'fundraising', 'mutual aid', 'community center', 'senior center', 'guild', 'rotary', 'advocacy', 'coalition', 'civic', 'veterans'],
-    hints: ['community', 'club', 'group', 'members', 'neighbors', 'neighborhood', 'join', 'meetup', 'gathering', 'mission', 'cause', 'together', 'fellowship', 'faith', 'fundraiser', 'residents', 'families'],
+    keywords: ['nonprofit', 'non-profit', 'charity', 'charitable', 'foundation', 'church', 'parish', 'congregation', 'mosque', 'synagogue', 'temple', 'ministry', 'food bank', 'food pantry', 'pantry', 'shelter', 'animal shelter', 'animal rescue', 'rescue', 'volunteer', 'association', 'homeowners association', 'neighborhood association', 'hoa', 'pta', 'pto', 'parent teacher association', 'ngo', 'donate', 'donation', 'fundraising', 'mutual aid', 'community center', 'senior center', 'makerspace', 'hackerspace', 'guild', 'rotary', 'advocacy', 'coalition', 'civic', 'veterans'],
+    hints: ['community', 'club', 'group', 'troupe', 'circle', 'society', 'collective', 'members', 'neighbors', 'neighborhood', 'join', 'meetup', 'gathering', 'mission', 'cause', 'together', 'fellowship', 'faith', 'fundraiser', 'residents', 'families'],
     starter: 'business',
     look: { bases: ['material3', 'fluent', 'starter'], chroma: 'balanced', hues: [[130, 200], [20, 45], [200, 230], [340, 360]], grounds: ['white', 'warm'], fonts: ['merriweather', 'lora', 'jakarta', 'fraunces', 'nunito'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.05, density: 'regular' },
     design: 'Mission-led: the cause in one line, what the organization does as cards, how to help as steps (volunteer, give, spread the word), and a clear way to get involved. A brand band for the call to help.',
@@ -493,6 +493,8 @@ const KEYWORD_WEIGHT = 3
 const PHRASE_WEIGHT_PER_WORD = 2
 const HINT_WEIGHT = 1
 const HEAD_NOUN_BONUS = 2
+/** A generic head noun with nothing specific said: enough to clear {@link MIN_SCORE} alone, never to beat a keyword. */
+const HEAD_HINT_BONUS = 1
 /** "Who it's for" describes the people, not the site, so it counts half. */
 const AUDIENCE_SHARE = 0.5
 /** Below this no kind is meant: one stray hint is not a reason to pick a narrow vertical. */
@@ -532,10 +534,17 @@ interface AiSiteKindScore {
   at: number
 }
 
-/** Adds what one text says for each kind to `scores`; returns where the last keyword ends, by kind. */
-function aiSiteKindScores(text: string, share: number, scores: Map<AiSiteKind, AiSiteKindScore>): Map<AiSiteKind, number> {
+/** One term found in a text, by word position. */
+interface AiSiteKindMatch {
+  kind: AiSiteKind
+  end: number
+  keyword: boolean
+}
+
+/** Adds what one text says for each kind to `scores`; returns every term it found. */
+function aiSiteKindScores(text: string, share: number, scores: Map<AiSiteKind, AiSiteKindScore>): AiSiteKindMatch[] {
   const words = tokens(text)
-  const keywordEnds = new Map<AiSiteKind, number>()
+  const matches: AiSiteKindMatch[] = []
   // Words a longer term has matched; terms of one length share their words
   // (two kinds may both have "studio"), and a shorter term never reuses them.
   const claimed = new Array<boolean>(words.length).fill(false)
@@ -559,10 +568,29 @@ function aiSiteKindScores(text: string, share: number, scores: Map<AiSiteKind, A
       }
       entry.at = Math.max(entry.at, end)
       scores.set(term.kind, entry)
-      if (term.keyword) keywordEnds.set(term.kind, Math.max(keywordEnds.get(term.kind) ?? -1, end))
+      matches.push({ kind: term.kind, end, keyword: term.keyword })
     }
   }
-  return keywordEnds
+  return matches
+}
+
+/**
+ * The kind the head of an answer names, if any. Its last keyword when it has
+ * one. When nothing specific is said anywhere, its last generic word that
+ * belongs to exactly one kind: "a pet store" is a store, "a writers group" a
+ * community, "a cooking class studio" a class (studio says nothing, since
+ * four kinds share it). A generic word outside the head never counts here.
+ */
+function aiSiteHeadKind(head: readonly AiSiteKindMatch[], specific: boolean): AiSiteKind | null {
+  const keywords = head.filter((match) => match.keyword)
+  if (keywords.length) return keywords.reduce((last, match) => (match.end > last.end ? match : last)).kind
+  if (specific) return null
+  const ends = [...new Set(head.map((match) => match.end))].sort((a, b) => b - a)
+  for (const end of ends) {
+    const kinds = new Set(head.filter((match) => match.end === end).map((match) => match.kind))
+    if (kinds.size === 1) return [...kinds][0] as AiSiteKind
+  }
+  return null
 }
 
 /**
@@ -577,7 +605,9 @@ function aiSiteKindScores(text: string, share: number, scores: Map<AiSiteKind, A
  * community, built from club + neighborhood + meetups + neighbors, and never
  * fitness on "club". The head noun — the last keyword before the answer's
  * first modifier — earns a bonus ("a bookstore with author events" is a
- * store). The audience counts half. The highest score wins; of two equal,
+ * store); when the answer and audience name nothing specific, a generic head
+ * noun that only one kind has may decide ("a bike shop" is a store, "a hiking
+ * group" a community). The audience counts half. The highest score wins; of two equal,
  * the one named later, since English puts the noun last ("a food blog" is a
  * blog). A best score of no more than a stray hint, or a tie that order
  * cannot settle, is `business`, the most general kind.
@@ -585,18 +615,13 @@ function aiSiteKindScores(text: string, share: number, scores: Map<AiSiteKind, A
 export function aiSiteKindFor(siteType: string, audience = ''): AiSiteKind {
   const general = AI_SITE_KINDS[0] as AiSiteKind
   const scores = new Map<AiSiteKind, AiSiteKindScore>()
-  aiSiteKindScores(siteType, 1, scores)
-  const head = siteType.split(HEAD_END)[0] ?? ''
-  let headNoun: { kind: AiSiteKind; end: number } | null = null
-  for (const [kind, end] of aiSiteKindScores(head, 0, new Map())) {
-    if (!headNoun || end > headNoun.end) headNoun = { kind, end }
-  }
-  if (headNoun) {
-    const entry = scores.get(headNoun.kind)
-    if (entry) entry.score += HEAD_NOUN_BONUS
-  }
+  const found = aiSiteKindScores(siteType, 1, scores)
   const fromAudience = new Map<AiSiteKind, AiSiteKindScore>()
-  if (audience) aiSiteKindScores(audience, AUDIENCE_SHARE, fromAudience)
+  if (audience) found.push(...aiSiteKindScores(audience, AUDIENCE_SHARE, fromAudience))
+  const head = aiSiteKindScores(siteType.split(HEAD_END)[0] ?? '', 0, new Map())
+  const headKind = aiSiteHeadKind(head, found.some((match) => match.keyword))
+  const headEntry = headKind ? scores.get(headKind) : undefined
+  if (headEntry) headEntry.score += head.some((match) => match.keyword) ? HEAD_NOUN_BONUS : HEAD_HINT_BONUS
   for (const [kind, { score }] of fromAudience) {
     const entry = scores.get(kind) ?? { score: 0, at: -1 }
     entry.score += score

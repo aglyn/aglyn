@@ -39,6 +39,17 @@ const BRIEFS: readonly Brief[] = [
   ['A youth mentoring charity', 'Donors and volunteers', 'nonprofit'],
   ['A community center with classes and events', 'Seniors and families on the north side', 'nonprofit'],
   ['A quilting guild', 'Quilters in the county', 'nonprofit'],
+  // Generic head nouns decide when nothing specific competes.
+  ['A pet store', 'Dog and cat owners in town', 'store'],
+  ['A bike shop', 'Commuters and weekend riders', 'store'],
+  ['A farmers market', 'Families who shop local', 'store'],
+  ['A hiking group', 'Outdoor lovers', 'nonprofit'],
+  ['A writers group', 'Local writers', 'nonprofit'],
+  ['A gaming group', 'Gamers', 'nonprofit'],
+  ['An improv theater troupe', 'Comedy fans', 'nonprofit'],
+  ['A historical society', 'History buffs in the county', 'nonprofit'],
+  ['A makerspace', 'Tinkerers and hobbyists', 'nonprofit'],
+  ['A cooking class studio', 'Home cooks', 'education'],
   // Clubs that ARE sport.
   ['A running club with Saturday long runs and a couch-to-5K group', 'Runners of every pace', 'fitness'],
   ['A youth soccer club with spring and fall leagues', 'Parents of kids aged 5 to 14', 'fitness'],
@@ -159,10 +170,22 @@ describe('aiSiteKindFor', () => {
     expect(AI_SITE_KINDS.map((kind) => kind.id).filter((id) => !covered.has(id))).toEqual([])
   })
 
-  it('never picks a narrow kind on one generic word', () => {
-    for (const word of ['club', 'studio', 'personal', 'center', 'group', 'class', 'classes', 'shop', 'team', 'training']) {
+  it('never picks a narrow kind on a generic word several kinds share', () => {
+    for (const word of ['studio', 'personal', 'center', 'training', 'workshop']) {
       expect(aiSiteKindFor(`a ${word}`).id).toBe('business')
     }
+  })
+
+  it('lets a generic head noun decide only when nothing specific competes', () => {
+    expect(aiSiteKindFor('a shop').id).toBe('store')
+    expect(aiSiteKindFor('a club').id).toBe('nonprofit')
+    expect(aiSiteKindFor('classes').id).toBe('education')
+    // Not the head: "group" and "shop" only describe it.
+    expect(aiSiteKindFor('a place to meet with a group').id).toBe('business')
+    expect(aiSiteKindFor('a website for my shop').id).toBe('business')
+    // A specific word anywhere outranks a generic head.
+    expect(aiSiteKindFor('a yoga group').id).toBe('yoga')
+    expect(aiSiteKindFor('a club', 'golf players').id).toBe('fitness')
   })
 
   it('falls back to the most general kind on a tie it cannot settle', () => {
