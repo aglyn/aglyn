@@ -37,6 +37,13 @@ beforeEach(() => {
       id: 'ai',
       label: 'AI',
       staffAuditLabels: { 'ai.job.resume': 'Confirmed an Aglyn AI plan' },
+      // The plugin words its own rows; core only asks (AGL-3660).
+      staffAuditDescribe: ({ action, after }) =>
+        action === 'ai.job.output'
+          ? { action: `Created page ${String(after['label'])} with Aglyn AI`, result: 'Draft created' }
+          : undefined,
+      staffAuditCollections: { aiJobs: { noun: 'Aglyn AI job', job: true } },
+      jobTargetTypes: ['aiJob'],
     },
     actions: [
       {

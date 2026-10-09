@@ -117,6 +117,41 @@ export const AI_STAFF_AUDIT_LABELS: Readonly<Record<string, string>> = {
   ),
 }
 
+/** A job output's `resource`, as the noun the audit sentence uses. */
+const AI_OUTPUT_NOUNS: Readonly<Record<string, string>> = {
+  screen: 'page',
+  reusableComponent: 'component',
+  emailScreen: 'email',
+  orgAutomation: 'automation',
+  workflow: 'automation',
+  entry: 'post',
+  text: 'copy',
+  seo: 'search fixes',
+  crm: 'CRM answer',
+  insight: 'insight',
+}
+
+/**
+ * An `ai.job.output` audit row in words (AGL-3660), from the `after` the
+ * job writer stores — `{ resource, label }`: `Created page Home with Aglyn
+ * AI`, and its outcome, a draft.
+ */
+export function aiStaffAuditDescribe(entry: {
+  action: string
+  after: Readonly<Record<string, unknown>>
+}): { action?: string; result?: string } | undefined {
+  if (entry.action !== AI_ACTIVITY_ACTIONS.jobOutput) return undefined
+  const resource = typeof entry.after['resource'] === 'string' ? entry.after['resource'] : ''
+  const label = typeof entry.after['label'] === 'string' ? entry.after['label'].trim() : ''
+  const noun =
+    AI_OUTPUT_NOUNS[resource] ??
+    (resource ? resource.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : 'draft')
+  return {
+    action: `Created ${noun}${label ? ` ${label}` : ''} with ${PLATFORM_BRAND_NAME} AI`,
+    result: 'Draft created',
+  }
+}
+
 /** Every code, in catalog order — what a filter sends as `isAnyOf`. */
 export const AI_ACTIVITY_ACTION_LIST: readonly AiActivityAction[] =
   Object.values(AI_ACTIVITY_ACTIONS)
@@ -311,6 +346,11 @@ export function registerAiActivityActions(): void {
         'user.ai-requests-viewed',
       ],
       staffAuditLabels: AI_STAFF_AUDIT_LABELS,
+      // The audit trail's words for a job's output, its job collection and
+      // the feed's job rows, read by core's shared describer (AGL-3660).
+      staffAuditDescribe: aiStaffAuditDescribe,
+      staffAuditCollections: { aiJobs: { noun: `${PLATFORM_BRAND_NAME} AI job`, job: true } },
+      jobTargetTypes: ['aiJob'],
     },
     actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
       key,

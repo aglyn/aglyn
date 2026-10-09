@@ -107,6 +107,23 @@ export interface PluginActivityGroup {
    * the row's tooltip and details. Matched exactly.
    */
   staffAuditLabels?: Readonly<Record<string, string>>
+  /**
+   * A staff audit row's words drawn from what the act left (AGL-3660): the
+   * plugin reads its own `after` (what a job made, from what) and answers
+   * the sentence and the outcome. `undefined` falls back to the label.
+   */
+  staffAuditDescribe?: (entry: {
+    action: string
+    after: Readonly<Record<string, unknown>>
+  }) => { action?: string; result?: string } | undefined
+  /**
+   * The plugin's collections as an audit target path walks them, named for
+   * a reader (AGL-3660). `job` marks the collection whose id is the job an
+   * activity row links to.
+   */
+  staffAuditCollections?: Readonly<Record<string, { noun: string; job?: boolean }>>
+  /** Activity target types whose id is such a job (AGL-3660). */
+  jobTargetTypes?: readonly string[]
 }
 
 export interface PluginActivityRegistration {
@@ -223,6 +240,38 @@ export function pluginStaffAuditActionLabel(action: unknown): string | undefined
     if (label) return label
   }
   return undefined
+}
+
+/** A plugin's words for one staff audit row, from its `after`; `undefined` if none. */
+export function pluginStaffAuditDescribe(
+  action: string,
+  after: Readonly<Record<string, unknown>>,
+): { action?: string; result?: string } | undefined {
+  for (const registration of registrations.values()) {
+    const described = registration.group.staffAuditDescribe?.({ action, after })
+    if (described) return described
+  }
+  return undefined
+}
+
+/** How a plugin names one of its collections in an audit path, if it does. */
+export function pluginStaffAuditCollection(
+  collection: string,
+): { noun: string; job?: boolean } | undefined {
+  for (const registration of registrations.values()) {
+    const named = registration.group.staffAuditCollections?.[collection]
+    if (named) return named
+  }
+  return undefined
+}
+
+/** Whether an activity target type names a plugin's job. */
+export function isPluginJobTargetType(type: unknown): boolean {
+  if (typeof type !== 'string') return false
+  for (const registration of registrations.values()) {
+    if (registration.group.jobTargetTypes?.includes(type)) return true
+  }
+  return false
 }
 
 /** The readable label for a declared code; `undefined` for any other action. */

@@ -42,11 +42,13 @@ import {
   type ActivityTargetLike,
 } from './activity-presenter'
 import { orgOverrideReasonSummary } from './org-override-reason'
-import { PLATFORM_BRAND_NAME } from './platform-brand'
 import {
+  isPluginJobTargetType,
   pluginActivityActionSentence,
   pluginActivityTargetLabel,
   pluginStaffAuditActionLabel,
+  pluginStaffAuditCollection,
+  pluginStaffAuditDescribe,
 } from '../plugin-manager/plugin-activity-actions'
 
 /** What a list row and the details dialog show for one entry. */
@@ -69,7 +71,7 @@ export interface ActivityDescription {
   orgId: string | null
   /** The site the entry concerns, when it names one. */
   hostId: string | null
-  /** The AI job behind the entry, when there is one. */
+  /** The plugin job behind the entry (an AI job), when there is one. */
   jobId: string | null
   /** The account the entry concerns, when it names one. */
   uid: string | null
@@ -84,9 +86,6 @@ export interface ActivityNames {
   /** An account's address (or name) by uid. */
   users?: Readonly<Record<string, string | null | undefined>>
 }
-
-/** How the platform's AI is named in a sentence. */
-export const PLATFORM_AI_NAME = `${PLATFORM_BRAND_NAME} AI`
 
 /** `screen` → `page`, `Home` → `page Home`: the noun a sentence uses. */
 export function activityTargetPhrase(target: ActivityTargetLike | null | undefined): string {
@@ -262,7 +261,6 @@ const NAMESPACE_LABELS: Readonly<Record<string, string>> = {
   orgs: 'Organizations',
   user: 'Account',
   host: 'Site',
-  ai: PLATFORM_AI_NAME,
 }
 
 /** `paymentMethod` → `payment method`, `reattach-domain` → `reattach domain`. */
@@ -298,7 +296,6 @@ const COLLECTION_NOUNS: Readonly<Record<string, string>> = {
   orgs: 'Organization',
   hosts: 'Site',
   users: 'Account',
-  aiJobs: `${PLATFORM_AI_NAME} job`,
   members: 'Member',
   invites: 'Invitation',
   screens: 'Page',
@@ -339,19 +336,6 @@ const str = (value: unknown): string | null =>
 const num = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null
 
-/** An AI job's audit `after.resource`, as the noun a sentence uses. */
-const AI_RESOURCE_NOUNS: Readonly<Record<string, string>> = {
-  screen: 'page',
-  reusableComponent: 'component',
-  emailScreen: 'email',
-  orgAutomation: 'automation',
-  workflow: 'automation',
-  entry: 'post',
-  text: 'copy',
-  seo: 'search fixes',
-  crm: 'CRM answer',
-}
-
 /** What an audit act did, in words, and the words it was about. */
 export function describeStaffAudit(
   entry: StaffAuditEntryLike,
@@ -363,18 +347,17 @@ export function describeStaffAudit(
   const pairs = path && path.includes('/') ? pathPairs(path) : []
   const idOf = (collection: string) => pairs.find(([name]) => name === collection)?.[1] || null
   const orgId = idOf('orgs')
-  const jobId = idOf('aiJobs')
+  // A plugin's job collection (the AI plugin's jobs) names the job the row
+  // links to; core knows it only through the plugin's declaration.
+  const jobPair = pairs.find(([name]) => pluginStaffAuditCollection(name)?.job)
+  const jobId = jobPair?.[1] || null
   const hostId = str(after['hostId']) ?? idOf('hosts')
   const uid = idOf('users') ?? str(entry.subjectUid)
   const label = str(after['label'])
-  const resource = str(after['resource'])
-
-  let action = staffAuditActionLabel(code)
-  // A job's output names what it made: `Created page Home with Aglyn AI`.
-  if (code === 'ai.job.output') {
-    const noun = (resource && (AI_RESOURCE_NOUNS[resource] ?? words(resource))) || 'draft'
-    action = `Created ${noun}${label ? ` ${label}` : ''} with ${PLATFORM_AI_NAME}`
-  }
+  // A plugin may word the row from what the act left: the AI plugin names
+  // what a job made (`Created page Home with Aglyn AI`).
+  const declared = code ? pluginStaffAuditDescribe(code, after) : undefined
+  const action = declared?.action ?? staffAuditActionLabel(code)
 
   const site = hostId ? (names.hosts?.[hostId] ?? null) : null
   const org = orgId ? (names.orgs?.[orgId] ?? null) : null
@@ -383,21 +366,22 @@ export function describeStaffAudit(
   const parts: string[] = []
   if (site) parts.push(site)
   else if (org) parts.push(org)
-  if (jobId) parts.push(label ?? `${PLATFORM_AI_NAME} job`)
+  if (jobPair) parts.push(label ?? pluginStaffAuditCollection(jobPair[0])?.noun ?? 'Job')
   else if (last && last[0] === 'users') parts.push(person ?? 'Account')
   else if (last && last[0] !== 'orgs' && last[0] !== 'hosts') {
-    parts.push(COLLECTION_NOUNS[last[0]] ?? activityTypeLabel(last[0]))
+    parts.push(
+      COLLECTION_NOUNS[last[0]] ??
+        pluginStaffAuditCollection(last[0])?.noun ??
+        activityTypeLabel(last[0]),
+    )
   }
   if (!parts.length) {
-    if (last) parts.push(COLLECTION_NOUNS[last[0]] ?? 'Item')
+    if (last) parts.push(COLLECTION_NOUNS[last[0]] ?? pluginStaffAuditCollection(last[0])?.noun ?? 'Item')
     else if (path) parts.push(isActivityCode(path) || /^[\w-]{16,}$/.test(path) ? 'Platform' : path)
     else parts.push('—')
   }
 
-  const result =
-    str(after['result']) ??
-    str(after['status']) ??
-    (code === 'ai.job.output' ? 'Draft created' : null)
+  const result = str(after['result']) ?? str(after['status']) ?? declared?.result ?? null
 
   return {
     action,
@@ -438,7 +422,7 @@ export function describeActivity(
   const orgId = entry.scopeType === 'org' ? (entry.scopeId ?? null) : null
   const site = hostId ? (names.hosts?.[hostId] ?? null) : null
   const type = str(target?.type)
-  const jobId = type === 'aiJob' ? str(target?.id) : str(target?.jobId)
+  const jobId = isPluginJobTargetType(type) ? str(target?.id) : str(target?.jobId)
   const noun = type ? (pluginActivityTargetLabel(type) ?? activityTypeLabel(type)) : null
   const item = str(target?.name) ?? noun
   const parts = [site, item].filter((part): part is string => Boolean(part))
