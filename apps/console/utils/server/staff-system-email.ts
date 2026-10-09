@@ -61,11 +61,13 @@ export const ACTION_LINK_SYSTEM_EMAILS: Readonly<
   'email-verification': { kind: 'verifyEmail', token: 'verifyUrl' },
   'password-reset': { kind: 'resetPassword', token: 'resetUrl' },
   'admin-password-reset': { kind: 'resetPassword', token: 'resetUrl' },
+  'retention-verify-reminder': { kind: 'verifyEmail', token: 'verifyUrl' },
 }
 
 /** Emails that only mean something to an account that has not verified. */
 const VERIFICATION_ONLY_SYSTEM_EMAILS: ReadonlySet<string> = new Set([
   'email-verification',
+  'retention-verify-reminder',
 ])
 
 /** Stands in for an action link in a preview. */
@@ -138,6 +140,9 @@ export function autoMergeValues(
     'user.email': target.email,
     'org.name': orgName,
     consoleUrl: slug ? `${origin}/${slug}` : origin,
+    // The getting-started emails' button (AGL-3692): the workspace, which
+    // offers its site and the AI start. Staff can point it anywhere.
+    ctaUrl: slug ? `${origin}/${slug}` : `${origin}/signin`,
     signInUrl: `${origin}/signin`,
     billingUrl: slug ? `${origin}/${slug}/billing` : '',
     settingsUrl: `${origin}/manage/notifications/settings`,

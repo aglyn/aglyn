@@ -98,6 +98,16 @@ final class ConsoleAPIClientTests: XCTestCase {
     XCTAssertEqual(sent.value(forHTTPHeaderField: "Accept"), "application/json")
   }
 
+  func testSendsARawBodyWithItsOwnContentType() async throws {
+    StubProtocol.reset([.status(200, #"{"ok":true}"#)])
+    let bytes = Data([0, 1, 2, 3])
+    _ = try await client().request("/api/fonts/prepare", method: .post, query: [("hostId", "h1")], rawBody: (bytes, "application/octet-stream"))
+    let sent = StubProtocol.requests[0]
+    XCTAssertEqual(sent.value(forHTTPHeaderField: "Content-Type"), "application/octet-stream")
+    XCTAssertEqual(sent.httpBody, bytes)
+    XCTAssertEqual(sent.url?.absoluteString, "https://app.example.com/api/fonts/prepare?hostId=h1")
+  }
+
   func testAPathStartsWithOneSlash() async {
     do {
       _ = try await client().request("//evil.example/x")

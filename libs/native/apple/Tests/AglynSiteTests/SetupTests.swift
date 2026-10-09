@@ -124,6 +124,33 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(formatThemeNumber(1.5), "1.5")
   }
 
+  func testReadsTheBuiltInThemesTheRouteOffers() {
+    let presets = themePresets(
+      of: .array([
+        .object(["id": "themes.bootstrap", "name": "Bootstrap", "description": "Bootstrap 5’s blue", "swatches": ["#0d6efd", "#6c757d"]]),
+        .object(["name": "No id"]),
+        .object(["id": "themes.bare"]),
+      ]))
+    XCTAssertEqual(presets.map(\.id), ["themes.bootstrap", "themes.bare"])
+    XCTAssertEqual(presets.first?.swatches, ["#0d6efd", "#6c757d"])
+    XCTAssertEqual(presets.last?.name, "themes.bare")
+    XCTAssertTrue(themePresets(of: nil).isEmpty)
+    XCTAssertEqual(themeSelection(of: ["themeSelection": ["kind": "preset", "id": "themes.bootstrap", "name": "Bootstrap"]]).kind, "preset")
+  }
+
+  func testFiltersTheFontCatalogByWordAndCategory() {
+    let fonts = [
+      ThemeFontOption(family: "Inter", category: "sans-serif"), ThemeFontOption(family: "Playfair Display", category: "serif"),
+      ThemeFontOption(family: "Roboto Mono", category: "monospace"), ThemeFontOption(family: "Roboto", category: "sans-serif"),
+    ]
+    XCTAssertEqual(filterFonts(fonts, search: "", category: nil).count, 4)
+    XCTAssertEqual(filterFonts(fonts, search: "roboto", category: nil).map(\.family), ["Roboto Mono", "Roboto"])
+    XCTAssertEqual(filterFonts(fonts, search: "play disp", category: nil).map(\.family), ["Playfair Display"])
+    XCTAssertEqual(filterFonts(fonts, search: "roboto", category: "monospace").map(\.family), ["Roboto Mono"])
+    XCTAssertTrue(filterFonts(fonts, search: "zzz", category: nil).isEmpty)
+    XCTAssertEqual(fontCategories.map(\.value), ["sans-serif", "serif", "display", "handwriting", "monospace"])
+  }
+
   func testReadsTheThemeSelection() {
     XCTAssertEqual(themeSelection(of: ["themeSelection": ["kind": "custom", "id": "t1", "name": "Mine"]]).id, "t1")
     XCTAssertEqual(themeSelection(of: ["themeInstalledFrom": ["listingId": "l1"]]).kind, "installed")

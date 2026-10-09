@@ -301,6 +301,7 @@ private struct BuiltInLayoutCard: View {
   var body: some View {
     ImmediateCard(title: "Built-in pages") { runner in
       Text("The layout your site's own pages (search, error fallbacks) wear.").font(AglynFont.subheadline).foregroundStyle(.secondary)
+        .aglynTask(id: hostID) { await layouts.bind(context.firestore, FirestoreQuery(["hosts", hostID, "layouts"], limit: 50)) }
       let options = (layouts.state.value ?? [])
         .filter { $0.data["deletedAt"] == nil }
         .map { (id: $0.id, name: $0.string("displayName").flatMap { $0.trimmed.isEmpty ? nil : $0 } ?? "Untitled layout") }
@@ -320,7 +321,6 @@ private struct BuiltInLayoutCard: View {
       }
       .disabled(!canEdit || runner.busy)
     }
-    .task(id: hostID) { await layouts.bind(context.firestore, FirestoreQuery(["hosts", hostID, "layouts"], limit: 50)) }
   }
 }
 
@@ -624,18 +624,49 @@ private struct NamingTarget: Identifiable {
   var name: String
 }
 
+/// What the theme page loads once: the editor's controls, what they show, and the built-in themes.
+private struct ThemeLoaded: Equatable {
+  var catalog: ThemeCatalog
+  var stored: ThemeValues
+  var presets: [ThemePreset]
+}
+
 private struct ThemeSection: View {
   let context: NativePluginContext
   let hostID: String
   let doc: FirestoreDocument
   let api: HostSettingsAPI
   let canEdit: Bool
+  @State private var load: LiveValue<ThemeLoaded> = .loading
+  @State private var attempt = 0
 
   var body: some View {
     ThemeLibraryCard(
-      context: context, hostID: hostID, host: doc.data, api: api, canManage: themeLibraryRoles.contains(context.siteRole ?? ""))
-    ThemeEditorCard(api: api, canEdit: canEdit, version: ThemeLoadKey(updatedAt: doc.date("updatedAt"), edited: hasThemeEdits(doc.data)))
+      context: context, hostID: hostID, host: doc.data, api: api, presets: load.value?.presets ?? [],
+      canManage: themeLibraryRoles.contains(context.siteRole ?? ""), reloadKey: reloadKey, reload: { await reload() })
+    FontInstallerCard(context: context, hostID: hostID, canEdit: canEdit)
+    ThemeEditorCard(
+      api: api, canEdit: canEdit, load: load, retry: { attempt += 1 },
+      saved: { values in
+        if var loaded = load.value {
+          loaded.stored = values
+          load = .ready(loaded)
+        }
+      })
   }
+
+  private func reload() async {
+    do {
+      let (catalog, stored, presets) = try await api.themeEditor()
+      load = .ready(ThemeLoaded(catalog: catalog, stored: stored, presets: presets))
+    } catch is CancellationError {
+    } catch {
+      load = .failed((error as? ConsoleAPIError)?.message ?? "The theme could not be loaded.")
+    }
+  }
+
+  /// What reloads the editor: the site document changing under it.
+  private var reloadKey: String { "\(attempt)-\(doc.date("updatedAt")?.timeIntervalSince1970 ?? 0)-\(hasThemeEdits(doc.data))" }
 }
 
 private struct ThemeLibraryCard: View {
@@ -643,7 +674,10 @@ private struct ThemeLibraryCard: View {
   let hostID: String
   let host: [String: Any]
   let api: HostSettingsAPI
+  let presets: [ThemePreset]
   let canManage: Bool
+  let reloadKey: String
+  let reload: () async -> Void
   @State private var saved = LiveQuery()
   @State private var runner = newRunner()
   @State private var naming: NamingTarget?
@@ -656,6 +690,7 @@ private struct ThemeLibraryCard: View {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
           Text(selection.name ?? (selection.kind == "default" ? "Default theme" : "Custom theme")).font(AglynFont.headline)
+            .aglynTask(id: reloadKey) { await reload() }
           Text(selectionDetail(selection) + (edited ? " · with your edits" : "")).font(AglynFont.subheadline).foregroundStyle(.secondary)
         }
         Spacer()
@@ -683,6 +718,28 @@ private struct ThemeLibraryCard: View {
       }
       if let error = runner.error, naming == nil, deleting == nil { AglynNotice(error, tone: .error) }
       if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() } }
+    }
+    if !presets.isEmpty {
+      Section("Built-in themes") {
+        ForEach(presets) { preset in
+          let current = selection.kind == "preset" && selection.id == preset.id
+          AglynRow(preset.name, subtitle: preset.description) {
+            HStack(spacing: AglynSpace.one) {
+              ThemeSwatches(colors: preset.swatches)
+              if current {
+                StatusChip("In use", tone: .success)
+              } else {
+                Button("Use") {
+                  runner.run("Switched to \(preset.name).") { try await api.selectTheme(kind: "preset", id: preset.id) }
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canManage || runner.busy)
+              }
+            }
+          }
+          .accessibilityIdentifier("preset-\(preset.id)")
+        }
+      }
     }
     Section("Saved themes") {
       switch saved.state {
@@ -746,6 +803,23 @@ private struct ThemeLibraryCard: View {
   }
 }
 
+/// A preset's colors as small dots.
+private struct ThemeSwatches: View {
+  let colors: [String]
+
+  var body: some View {
+    HStack(spacing: -4) {
+      ForEach(Array(colors.enumerated()), id: \.offset) { _, css in
+        Circle()
+          .fill(Color(aglynCSS: css))
+          .overlay(Circle().strokeBorder(AglynColor.divider))
+          .frame(width: 16, height: 16)
+      }
+    }
+    .accessibilityHidden(true)
+  }
+}
+
 private struct NameThemeSheet: View {
   let target: NamingTarget
   let runner: ActionRunner
@@ -770,47 +844,24 @@ private struct NameThemeSheet: View {
   }
 }
 
-/// What reloads the editor: the site document changing under it.
-private struct ThemeLoadKey: Equatable {
-  let updatedAt: Date?
-  let edited: Bool
-}
-
 private struct ThemeEditorCard: View {
   let api: HostSettingsAPI
   let canEdit: Bool
-  let version: ThemeLoadKey
-  private struct Loaded: Equatable {
-    var catalog: ThemeCatalog
-    var stored: ThemeValues
-  }
-  @State private var load: LiveValue<Loaded> = .loading
-  @State private var attempt = 0
+  let load: LiveValue<ThemeLoaded>
+  let retry: () -> Void
+  let saved: (ThemeValues) -> Void
 
   var body: some View {
-    Group {
-      switch load {
-      case .loading:
-        Section("Theme editor") { SkeletonRows(count: 4) }
-      case .failed(let message):
-        Section("Theme editor") {
-          AglynNotice(message, tone: .error)
-          Button("Try again") { attempt += 1 }
-        }
-      case .ready(let loaded):
-        ThemeEditorForm(api: api, canEdit: canEdit, catalog: loaded.catalog, stored: loaded.stored) { values in
-          load = .ready(Loaded(catalog: loaded.catalog, stored: values))
-        }
+    switch load {
+    case .loading:
+      Section("Theme editor") { SkeletonRows(count: 4) }
+    case .failed(let message):
+      Section("Theme editor") {
+        AglynNotice(message, tone: .error)
+        Button("Try again", action: retry)
       }
-    }
-    .task(id: "\(attempt)-\(String(describing: version))") {
-      do {
-        let (catalog, stored) = try await api.themeEditor()
-        load = .ready(Loaded(catalog: catalog, stored: stored))
-      } catch is CancellationError {
-      } catch {
-        load = .failed((error as? ConsoleAPIError)?.message ?? "The theme could not be loaded.")
-      }
+    case .ready(let loaded):
+      ThemeEditorForm(api: api, canEdit: canEdit, catalog: loaded.catalog, stored: loaded.stored, saved: saved)
     }
   }
 }
@@ -823,6 +874,7 @@ private struct ThemeEditorForm: View {
   let saved: (ThemeValues) -> Void
   @State private var draft: ThemeValues
   @State private var scheme: String
+  @State private var browsingFonts = false
   @State private var runner = newRunner()
 
   init(api: HostSettingsAPI, canEdit: Bool, catalog: ThemeCatalog, stored: ThemeValues, saved: @escaping (ThemeValues) -> Void) {
@@ -869,11 +921,22 @@ private struct ThemeEditorForm: View {
         ForEach(catalog.darkSchemeOptions, id: \.value) { Text($0.label).tag($0.value) }
       }
       .disabled(!canEdit)
-      Picker("Font family", selection: $draft.fontFamily) {
-        Text("The theme's own").tag(catalog.systemFont)
-        ForEach(catalog.fonts, id: \.family) { Text($0.family).tag($0.family) }
+      Button {
+        browsingFonts = true
+      } label: {
+        LabeledContent("Font family") {
+          HStack(spacing: 4) {
+            Text(draft.fontFamily == catalog.systemFont ? "The theme's own" : draft.fontFamily).foregroundStyle(.secondary)
+            Image(systemName: "chevron.right").imageScale(.small).foregroundStyle(.tertiary)
+          }
+        }
       }
+      .buttonStyle(.plain)
       .disabled(!canEdit)
+      .accessibilityIdentifier("font-family")
+      .sheet(isPresented: $browsingFonts) {
+        FontBrowserSheet(catalog: catalog, selection: draft.fontFamily) { draft.fontFamily = $0 }
+      }
       ThemeNumberField(range: catalog.borderRadius, value: $draft.borderRadius, enabled: canEdit)
       ThemeNumberField(range: catalog.spacing, value: $draft.spacing, enabled: canEdit)
       ThemeNumberField(range: catalog.navHeightXs, value: $draft.navHeightXs, enabled: canEdit)
@@ -896,6 +959,65 @@ extension ThemeEditorForm {
         colors[token] = .some(next)
         draft.colors[scheme] = colors
       })
+  }
+}
+
+/// The Google Fonts catalog as a searchable list by category: pick one for the theme, or the theme's own.
+private struct FontBrowserSheet: View {
+  let catalog: ThemeCatalog
+  let selection: String
+  let pick: (String) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var search = ""
+  @State private var category = "all"
+
+  var body: some View {
+    NavigationStack {
+      let fonts = filterFonts(catalog.fonts, search: search, category: category == "all" ? nil : category)
+      List {
+        Section {
+          row("The theme's own", detail: nil, family: catalog.systemFont)
+        }
+        Section("\(fonts.count) \(fonts.count == 1 ? "font" : "fonts")") {
+          ForEach(fonts, id: \.family) { font in
+            row(font.family, detail: fontCategories.first { $0.value == font.category }?.label ?? font.category, family: font.family)
+          }
+        }
+      }
+      .safeAreaInset(edge: .top, spacing: 0) {
+        AglynChipRow(
+          [AglynChipOption("all", "All")] + fontCategories.map { AglynChipOption($0.value, $0.label) }, selected: category
+        ) { category = $0 }
+        .background(.bar)
+      }
+      .searchable(text: $search, prompt: "Search fonts")
+      .navigationTitle("Font family")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+    }
+    .frame(minWidth: 380, minHeight: 480)
+  }
+
+  private func row(_ title: String, detail: String?, family: String) -> some View {
+    Button {
+      pick(family)
+      dismiss()
+    } label: {
+      HStack {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title)
+          if let detail { Text(detail).font(AglynFont.caption).foregroundStyle(.secondary) }
+        }
+        Spacer()
+        if family == selection { Image(systemName: "checkmark").foregroundStyle(AglynColor.tint) }
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(family == selection ? .isSelected : [])
+    .accessibilityIdentifier("font-\(family)")
   }
 }
 
@@ -944,6 +1066,11 @@ private struct EmailsSection: View {
     Section {
       Text("The emails your site sends customers. A customized email uses your design; the rest send their default.")
         .font(AglynFont.subheadline).foregroundStyle(.secondary)
+        .aglynTask(id: hostID) {
+          await templates.bind(context.firestore, FirestoreQuery(["hosts", hostID, contracts.tenantEmailCollection], limit: 100))
+        }
+        .aglynTask(id: context.orgID) { if let orgID = context.orgID { await org.bind(context.firestore, ["orgs", orgID]) } }
+        .background(Color.clear.sheet(item: resetBinding) { item in resetSheet(item.entry) })
       if let error = runner.error, resetting == nil { AglynNotice(error, tone: .error) }
       if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() } }
     }
@@ -959,23 +1086,24 @@ private struct EmailsSection: View {
   }
 
   var body: some View {
-    Group { rows }
-      .task(id: hostID) {
-        await templates.bind(context.firestore, FirestoreQuery(["hosts", hostID, contracts.tenantEmailCollection], limit: 100))
+    rows
+  }
+
+  private var resetBinding: Binding<IdentifiedEmail?> {
+    Binding(get: { resetting.map { IdentifiedEmail(entry: $0) } }, set: { if $0 == nil { resetting = nil } })
+  }
+
+  private func resetSheet(_ entry: TenantEmailEntry) -> some View {
+    AglynActionSheet(
+      "Reset \(entry.name ?? "this email")?",
+      message: "It sends the default design again. Your design stays in its version history.", confirmLabel: "Reset",
+      destructive: true, busy: runner.busy, error: runner.error, onCancel: { resetting = nil },
+      onConfirm: {
+        runner.run("\(entry.name ?? "The email") sends its default again.", onDone: { resetting = nil }) {
+          try await api.resetEmail(entry.key ?? "")
+        }
       }
-      .task(id: context.orgID) { if let orgID = context.orgID { await org.bind(context.firestore, ["orgs", orgID]) } }
-      .sheet(item: Binding(get: { resetting.map { IdentifiedEmail(entry: $0) } }, set: { if $0 == nil { resetting = nil } })) { item in
-        AglynActionSheet(
-          "Reset \(item.entry.name ?? "this email")?",
-          message: "It sends the default design again. Your design stays in its version history.", confirmLabel: "Reset",
-          destructive: true, busy: runner.busy, error: runner.error, onCancel: { resetting = nil },
-          onConfirm: {
-            runner.run("\(item.entry.name ?? "The email") sends its default again.", onDone: { resetting = nil }) {
-              try await api.resetEmail(item.entry.key ?? "")
-            }
-          }
-        ) { EmptyView() }
-      }
+    ) { EmptyView() }
   }
 
   @ViewBuilder

@@ -64,6 +64,8 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   MenuItem,
   Stack,
@@ -77,7 +79,15 @@ import {
 } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type SyntheticEvent,
+} from 'react'
 import {
   AI_JOB_AUTO_CONFIRM_INPUT,
   AI_SITE_FREE_PAGES,
@@ -161,6 +171,14 @@ import { publishAiJob } from './ai-jobs-store'
  * Before a job is started all three are the zone's own `startBlank`: the
  * starter site, and no job, no draft, no record of a site half begun. After,
  * they close through `leave`, and the job builds the site.
+ *
+ * Escape and the close control are DISMISSALS, though, and Skip is a choice
+ * (AGL-3660, 2026-10-08). Once anything is typed or picked, a dismissal asks
+ * "Leave without your answers?" first, focused on Keep editing, so a stray
+ * Escape — the second press after closing the model menu was the one in
+ * production — can never trade a brief for the starter. Escape that reached
+ * the dialog from a portal it does not contain (a menu, a select's list) is
+ * that popup's, and the dialog ignores it.
  *
  * The header is the dialog's own chrome rather than part of its body, so the
  * way out cannot be scrolled off, and it is never disabled — least of all
@@ -361,6 +379,10 @@ export function AiSiteStartCard({
   // the create door refuses on: the less of its own band and its owner's
   // allowance across their Free workspaces. `null` when the route said none.
   const [freeCredits, setFreeCredits] = useState<AiFreeCreditsLeft | null>(null)
+  // "Leave without your answers?" (AGL-3660): a dismissal with a brief typed.
+  const [confirmingLeave, setConfirmingLeave] = useState(false)
+  // The dialog's own root, to tell its Escape from a nested popup's.
+  const dialogRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -487,6 +509,27 @@ export function AiSiteStartCard({
   // Before a job is started every way out is the blank site, which writes the
   // starter (AGL-3594); after, it only closes — the job builds the site.
   const exit = started ? (leave ?? startBlank) : startBlank
+  // Anything the person typed or picked, which a dismissal must not discard
+  // silently (AGL-3660). After a job starts there is nothing left to lose.
+  const drafted =
+    !started &&
+    Boolean(answers.siteType.trim() || answers.audience.trim() || answers.kind !== null)
+  // Escape and the close control: a dismissal, never a choice. Escape that
+  // bubbled here through React from a portal outside this dialog's own DOM is
+  // a nested menu's, already handled there, and is not this dialog's to act on.
+  const dismiss = (event?: SyntheticEvent | object, reason?: string) => {
+    if (reason === 'escapeKeyDown') {
+      const target = (event as SyntheticEvent | undefined)?.target
+      const root = dialogRef.current
+      if (root && target instanceof Node && !root.contains(target)) return
+    }
+    if (drafted) setConfirmingLeave(true)
+    else exit()
+  }
+  const leaveDraft = () => {
+    setConfirmingLeave(false)
+    exit()
+  }
 
   // The chosen model's cost against Auto's, as the model list states it.
   const modelMultiplier =
@@ -512,7 +555,8 @@ export function AiSiteStartCard({
     <Dialog
       open
       fullScreen
-      onClose={exit}
+      ref={dialogRef}
+      onClose={dismiss}
       aria-labelledby={TITLE_ID}
       // The console's own page surface, in both modes. A Dialog's paper sits
       // at elevation 24 by default, and in dark mode MUI lightens an elevated
@@ -537,7 +581,7 @@ export function AiSiteStartCard({
           <IconButton
             edge="start"
             color="inherit"
-            onClick={exit}
+            onClick={() => dismiss()}
             aria-label="Close the guided start"
           >
             <MdiIcon path={ICON_VARIANT_CLOSE.path} />
@@ -807,6 +851,28 @@ export function AiSiteStartCard({
           </Button>
         </DialogActions>
       )}
+      <Dialog
+        open={confirmingLeave}
+        onClose={() => setConfirmingLeave(false)}
+        aria-labelledby={`${TITLE_ID}-leave`}
+        aria-describedby={`${TITLE_ID}-leave-text`}
+        maxWidth="xs"
+      >
+        <DialogTitle id={`${TITLE_ID}-leave`}>{'Leave without your answers?'}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id={`${TITLE_ID}-leave-text`}>
+            {'What you typed is not saved. Leaving starts your site from the starter site instead.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={leaveDraft}>
+            {'Leave and start blank'}
+          </Button>
+          <Button variant="contained" autoFocus onClick={() => setConfirmingLeave(false)}>
+            {'Keep editing'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   )
 }
