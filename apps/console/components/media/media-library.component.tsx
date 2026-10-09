@@ -118,7 +118,6 @@ import {
   doc,
   getCountFromServer,
   getDoc,
-  getDocs,
   limit,
   query,
   type QueryConstraint,
@@ -151,6 +150,8 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
+import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
+import { settleMediaPageRead } from './media-page-read'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { probeVideoFile } from '../../utils/video-probe'
@@ -901,12 +902,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const fetchPage = useCallback(
     async (cursor: QueryDocumentSnapshot | null) => {
-      const snapshot = await firestoreOneShotRetry(
+      // Bounded (AGL-3660): a bare `getDocs` never settles in a tab the
+      // multi-tab cache has stopped syncing, and the library sat on
+      // "Loading media…" for as long as the tab stayed open. See
+      // `settleMediaPageRead`.
+      const { snapshot } = await firestoreOneShotRetry(
         () =>
-          getDocs(
-            query(
-              collection(firestore, scopeCollection, scopeId, 'media'),
-              ...buildConstraints(cursor),
+          settleMediaPageRead(() =>
+            getDocsBounded(
+              query(
+                collection(firestore, scopeCollection, scopeId, 'media'),
+                ...buildConstraints(cursor),
+              ),
             ),
           ),
         // Named for the session-health verdict (AGL-1063).

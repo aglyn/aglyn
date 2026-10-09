@@ -272,7 +272,9 @@ export function DefaultRecordSharingCard(props: AutoCreateCompaniesCardProps) {
   return (
     <CardDisplay
       header={'Default sharing for new records'}
-      help={pluginDocsHelp('crmSettings')}
+      help={pluginDocsHelp('crmSharing', {
+        anchor: '#access-read-only-or-read-and-edit',
+      })}
       contentGutterX
       contentGutterY
     >

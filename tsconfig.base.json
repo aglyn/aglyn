@@ -89,6 +89,8 @@
       "@aglyn/plugins-marketing-platforms/*": ["./libs/plugins/marketing-platforms/src/lib/*"],
       "@aglyn/plugins-zapier": ["./libs/plugins/zapier/src/index.ts"],
       "@aglyn/plugins-zapier/*": ["./libs/plugins/zapier/src/lib/*"],
+      "@aglyn/plugins-live-chat": ["./libs/plugins/live-chat/src/index.ts"],
+      "@aglyn/plugins-live-chat/*": ["./libs/plugins/live-chat/src/lib/*"],
       "@aglyn/plugins-fulfillment-networks": ["./libs/plugins/fulfillment-networks/src/index.ts"],
       "@aglyn/plugins-fulfillment-networks/*": ["./libs/plugins/fulfillment-networks/src/lib/*"],
       "@aglyn/plugins-marketplaces": ["./libs/plugins/marketplaces/src/index.ts"],

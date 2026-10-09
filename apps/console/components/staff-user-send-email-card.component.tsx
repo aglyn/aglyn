@@ -171,6 +171,7 @@ export function StaffUserSendEmailCard({ uid }: { uid: string }) {
       header="Send an email"
       help={docsHelp('staffConsole', {
         anchor: '#whats-there',
+        title: 'Send an email',
         excerpt:
           'Send this account any system email, or a follow-up you write, from the platform sender. ' +
           'Links are minted fresh when you send, and every send is audited.',

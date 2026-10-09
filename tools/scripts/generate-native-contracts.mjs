@@ -45,6 +45,7 @@ import {
   SWIFT_CONTRACTS_FILE,
   swiftContractsContent,
 } from './lib/native-contracts.mjs'
+import { pluginSettingsSpec } from './lib/native-plugin-settings.mjs'
 import {
   functionCases,
   functionCasesContent,
@@ -60,6 +61,13 @@ const FUNCTION_CASES_FILE = 'libs/native/contracts/function-cases.generated.json
 const PLANNER = 'libs/shared/util/tools/src/lib/list-query/list-query-plan.ts'
 const FILTER = 'libs/shared/util/tools/src/lib/list-query/list-filter.ts'
 const NAME_SEARCH = 'libs/aglyn/src/lib/app-utils/name-search.ts'
+const PLUGIN_SETTINGS_FILE = 'libs/native/screens/plugin-settings.screens.json'
+// Each plugin whose console draws a settings card from a PluginConfigSchema.
+const PLUGIN_SETTINGS = [
+  { module: 'libs/plugins/ai/src/lib/plugin-config.ts', name: 'AI_CONFIG_SCHEMA', label: 'AI' },
+  { module: 'libs/plugins/commerce/src/lib/plugin-config.ts', name: 'COMMERCE_CONFIG_SCHEMA', label: 'Commerce' },
+  { module: 'libs/plugins/bookings/src/lib/plugin-config.ts', name: 'BOOKINGS_CONFIG_SCHEMA', label: 'Bookings' },
+]
 
 // The planner bounds a day in local time; the cases are recorded in UTC and
 // say so, and each port replays them in that zone.
@@ -150,7 +158,11 @@ async function main() {
   }
   const functions = functionCases(config.functionCases ?? {}, (module) => modules[module], plainValue)
 
+  const settings = []
+  for (const { module, name, label } of PLUGIN_SETTINGS) settings.push({ schema: (await load(module))[name], label })
+
   const outputs = [
+    { file: PLUGIN_SETTINGS_FILE, content: pluginSettingsSpec(settings) },
     { file: CONTRACTS_JSON_FILE, content: contractsJsonContent(values) },
     { file: SWIFT_CONTRACTS_FILE, content: swiftContractsContent(model) },
     { file: KOTLIN_CONTRACTS_FILE, content: kotlinContractsContent(model) },

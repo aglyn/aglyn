@@ -68,8 +68,8 @@ export interface MemberPostsCardProps {
  * while it was not. A refusal the operator can see is the fix.
  */
 
-const memberPostsHelp = pluginDocsHelp('membersOnly', {
-  anchor: '#manage-your-members',
+const memberPostsHelp = pluginDocsHelp('commerceEndToEnd', {
+  anchor: '#member-updates',
 })
 
 export function MemberPostsCard(props: MemberPostsCardProps) {

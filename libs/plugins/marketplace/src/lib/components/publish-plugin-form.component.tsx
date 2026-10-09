@@ -686,10 +686,7 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       <CardDisplay
         header={isUpdate ? 'The new bundle and manifest' : 'Bundle and manifest'}
         help={pluginDocsHelp('publisherHandbook', {
-          anchor: '#publishing-a-version',
-          excerpt:
-            'One self-contained bundle plus its manifest — verified before ' +
-            'it is stored, and content-addressed once it is.',
+          anchor: '#bundle-and-manifest',
         })}
         contentGutterX
         contentGutterY

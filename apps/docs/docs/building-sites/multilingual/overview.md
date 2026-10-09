@@ -17,6 +17,16 @@ Business.
 
 ![The Languages card in Setup → Basic details](/img/multilingual/setup-languages.png)
 
+## The Languages card {#languages-card}
+
+The **Languages** card in Setup lists the languages your site publishes in: type their
+codes, comma-separated (`en, es, fr`), pick the **Default**, and press **Save languages**.
+Then link each page to its translations from the Pages list (the globe button), and add a
+[language switcher](#language-switcher) so visitors can change language.
+
+The default is the language your site declares on every page — see
+[What language your site says it is in](../seo/overview.md#what-language-your-site-says-it-is-in).
+
 ## Locale variants
 
 Create **locale variants** of your content so each language has its own version, while

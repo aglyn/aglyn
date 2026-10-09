@@ -270,7 +270,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: displayName,
         icon: { path: mdiAccountOutline.path },
       }}
-      help={{ topic: 'team', anchor: '#site-membership' }}
+      help={{ topic: 'inviteTeammates', anchor: '#member-page' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
@@ -281,12 +281,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
           ) : (
             <CardDisplay
               header={'Member'}
-              help={docsHelp('inviteTeammates', {
-                anchor: '#how-team-members-act',
-                excerpt:
-                  "Set this member's role and job title, and restrict " +
-                  'editors and viewers to specific sites.',
-              })}
+              help={docsHelp('inviteTeammates', { anchor: '#member-access' })}
               contentGutterX
               contentGutterY
             >
@@ -484,11 +479,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
             <CardDisplay
               header={'Password'}
               help={docsHelp('inviteTeammates', {
-                anchor: '#how-team-members-act',
-                excerpt:
-                  'Email this member a password reset link, or set a ' +
-                  'password for them when their account belongs to this ' +
-                  'organization alone.',
+                anchor: '#help-a-teammate-who-is-locked-out',
               })}
               contentGutterX
               contentGutterY
@@ -545,11 +536,9 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                 currentOrg.$id,
               )}&actorId=${encodeURIComponent(uid)}`}
               header={'Activity by this member'}
-              help={{
-                title: 'Activity by this member',
-                excerpt:
-                  'Everything this person has done in this organization — on its sites as well as at organization level. Requires the org.auditLog permission.',
-              }}
+              help={docsHelp('inviteTeammates', {
+                anchor: '#member-activity',
+              })}
               description={
                 'Everything they have done in this organization, on its ' +
                 'sites as well as at organization level.'

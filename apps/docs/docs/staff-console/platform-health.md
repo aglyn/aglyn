@@ -11,6 +11,12 @@ This page lives at **Staff → Health** and requires a staff claim. Everything o
 read-only; the levers it points at live on [Lockdown](lockdown.md).
 :::
 
+## The health board {#health-board}
+
+**Staff → Health** reads every platform health probe on one page and shows each as
+OK, degraded or no answer: start here on a bad day, and act from
+[Lockdown](lockdown.md) once you know what is wrong.
+
 The platform runs a family of health probes. Each one answers a question an operator
 has on a bad day, and each one used to answer it only to whoever knew the URL. This
 page is where they are read.

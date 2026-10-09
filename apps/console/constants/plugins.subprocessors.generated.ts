@@ -895,4 +895,22 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       },
     ],
   },
+  {
+    pluginId: 'live-chat',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "code.tidio.co",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Tidio’s widget loader for the merchant’s own Tidio account, named by the public key a site admin saves in the Live chat card, added to that site’s published pages by `libs/plugins/live-chat/src/lib/loader.ts` only when a visitor asks for the chat (or, where the merchant chose it, once the visitor’s consent grants analytics). The widget then reaches Tidio’s own hosts, which the tenant policy admits for that site alone.",
+        dataReceived: "Nothing from the platform’s servers. The site visitor’s browser loads the vendor’s widget, which then sends the vendor what the visitor types into the chat, the page they are on and the browser’s technical details (IP address, user agent, language), and stores the vendor’s own visitor identifier in the browser. No account, payment or order data the platform holds is sent.",
+      },
+      {
+        host: "cdn.livechatinc.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. LiveChat’s widget loader for the merchant’s own LiveChat account, named by the license number a site admin saves in the Live chat card, added to that site’s published pages by `libs/plugins/live-chat/src/lib/loader.ts` only when a visitor asks for the chat (or, where the merchant chose it, once the visitor’s consent grants analytics). The widget then reaches LiveChat’s own hosts, which the tenant policy admits for that site alone.",
+        dataReceived: "Nothing from the platform’s servers. The site visitor’s browser loads the vendor’s widget, which then sends the vendor what the visitor types into the chat, the page they are on and the browser’s technical details (IP address, user agent, language), and stores the vendor’s own visitor identifier in the browser. No account, payment or order data the platform holds is sent.",
+      },
+    ],
+  },
 ]

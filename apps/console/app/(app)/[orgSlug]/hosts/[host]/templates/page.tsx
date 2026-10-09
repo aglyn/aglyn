@@ -130,7 +130,7 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.HOST_TEMPLATES, { orgSlug, host }),
         },
       ]}
-      help="templatesLibrary"
+      help={{ topic: 'templatesLibrary', anchor: '#templates-list' }}
       header={{
         children: 'Templates',
         icon: { path: mdiBookmarkOutline.path },

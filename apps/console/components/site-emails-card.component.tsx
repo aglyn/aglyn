@@ -191,11 +191,7 @@ export function SiteEmailsCard() {
   return (
     <CardDisplay
       header={'Emails this site sends'}
-      help={docsHelp('designedEmails', {
-        excerpt:
-          'Design the transactional emails your site sends its customers ' +
-          'with email-safe blocks and merge tokens.',
-      })}
+      help={docsHelp('gettingStarted', { anchor: '#site-emails' })}
       subheader={
         'The transactional emails your site sends to your own customers. ' +
         'A group applies only when that feature is enabled on this site.'

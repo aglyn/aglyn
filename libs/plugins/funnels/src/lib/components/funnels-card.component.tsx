@@ -86,7 +86,11 @@ import {
 
 export const FUNNEL_RANGES = [7, 14, 30, 90] as const
 
-const HELP = pluginDocsHelp('funnels')
+const HELP = pluginDocsHelp('funnels', {
+  anchor: '#create',
+  excerpt:
+    'Your site’s funnels: how many visitors reached each step in order and where they dropped off. Select New funnel to name one and add two to eight steps.',
+})
 
 export interface FunnelsCardProps {
   hostId: string

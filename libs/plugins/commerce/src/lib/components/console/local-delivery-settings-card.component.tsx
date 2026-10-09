@@ -171,7 +171,9 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
   return (
     <CardDisplay
       header={'Local delivery'}
-      help={pluginDocsHelp('commerce', { anchor: '#pickup-and-local-delivery' })}
+      help={pluginDocsHelp('pickupAndDelivery', {
+        anchor: '#set-up-local-delivery',
+      })}
       HeaderProps={{
         action: (
           <Button variant="contained" size="small" disabled={!draft || badWindowLines.length > 0} onClick={handleSave}>

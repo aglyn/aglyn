@@ -165,6 +165,18 @@ to run on a page.
 a saved function's editor can explain, change or fix it — each opens unsaved in the editor.
 See [Functions and variables with AI](../../ai/logic-with-ai.md).
 
+### The Functions card {#functions-card}
+
+The **Functions** card on a site's **Logic** page lists every function the site has, each
+with its parameters and the value it returns — press **Add function** to build one, or
+**Edit** to change it. **Usage** finds where a function is used before you change it,
+and **Delete** removes it. Your plan sets how many functions a site can have; at the
+limit, **Add function** says so and points you to Billing.
+
+In the builder, give the function a **name**, its **Parameters**, any **Variables** it
+works with, and its **Operations** — numbered steps with **Then do this** and
+**Otherwise do this** branches — then pick the value it returns.
+
 ### Parameters a visitor can answer
 
 When a function is placed on a page in a

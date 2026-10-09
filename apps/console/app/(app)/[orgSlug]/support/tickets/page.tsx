@@ -139,10 +139,7 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Your tickets'}
             help={docsHelp('supportAndCommunity', {
-              anchor: '#support-tickets',
-              excerpt:
-                `Private ticket threads with the ${branding.productName} team ` +
-                '— from Pro upward.',
+              anchor: '#your-tickets',
             })}
             contentGutterX
             contentGutterY

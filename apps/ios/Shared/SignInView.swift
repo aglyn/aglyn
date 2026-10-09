@@ -25,7 +25,7 @@ struct SignInView: View {
             .resizable()
             .scaledToFit()
             .frame(height: 44)
-            .accessibilityLabel(model.brandName)
+            .accessibilityLabel(model.appName)
           if model.app == .pos {
             Text("POS").font(AglynFont.title).foregroundStyle(AglynColor.tint)
           }

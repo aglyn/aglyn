@@ -23,7 +23,7 @@ import {
   pluginRecordListByIdsQuery,
   pluginRecordsFromRows,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
-import { mdiEyeOutline, mdiMapMarkerOutline } from '@aglyn/shared-data-mdi'
+import { mdiPageNextOutline, mdiMapMarkerOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   ListRowActions,
@@ -138,13 +138,8 @@ const ID_CHUNK = PLUGIN_RECORD_LIST_IDS_MAX
 /** A credited form conversion's `refId` names a submission of this kind. */
 const SUBMISSION_RECORD_KIND = CAMPAIGN_CONVERSION_RECORD_KINDS.form
 
-const conversionsDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'A conversion is credited to the last campaign whose link the visitor ' +
-    'followed. The four kinds count different things about the same visits ' +
-    'and are never added together.',
-})
+/** One Conversions card — the organization's no-sites branch carries it too. */
+export const conversionsDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#conversions' })
 
 /** The stored record plus the document name the reader listed it under. */
 type ConversionRow = CampaignConversionRecord & { $id: string }
@@ -540,7 +535,7 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
             {
               key: 'campaign',
               label: 'Open campaign',
-              icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+              icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
               href: campaignHref(row),
               disabled: !campaignHref(row),
               /*

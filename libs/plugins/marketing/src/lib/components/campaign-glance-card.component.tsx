@@ -77,12 +77,7 @@ export function CampaignGlanceCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Last campaign'}
-      help={pluginDocsHelp('emailCampaigns', {
-        anchor: '#opens--clicks',
-        excerpt:
-          'Sent, opens, and clicks for your most recent campaign — open ' +
-          'Campaigns for the full history.',
-      })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#last-campaign-card' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

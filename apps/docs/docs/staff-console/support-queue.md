@@ -10,6 +10,8 @@ description: Triage customer support tickets from the staff console — filter, 
 Requires a staff claim. `/admin/*` returns a **404** for everyone else.
 :::
 
+## The queue page {#support-queue-page}
+
 **Admin → Support** is the triage queue for every organization's
 [support tickets](../workspace-and-billing/support-and-community.md). It's the staff
 counterpart to the customer's Support tickets page — the same threads, seen across

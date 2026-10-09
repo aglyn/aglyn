@@ -626,3 +626,23 @@ export async function listStaffUidsAcrossPools(): Promise<string[]> {
   ])
   return [...projectUids, ...tenantUidLists.flat()]
 }
+
+/**
+ * How many accounts the staff Users list holds (AGL-3660).
+ *
+ * Firebase Auth has no count aggregate, and the Users list is Auth across
+ * every pool — not the Firestore `users/{uid}` profile docs, which are made on
+ * demand and can be missing for a real account or outlive an erased one. So
+ * the count walks the same directory the list does and collapses a uid that
+ * shows in more than one pool to one person, exactly as the list's rows do.
+ * `truncated` means the cap was reached and the figure is a floor.
+ */
+export async function countUsersAcrossPools(
+  cap = 20000,
+): Promise<{ count: number; truncated: boolean }> {
+  const scan = await scanUsersAcrossPools(cap)
+  return {
+    count: collapseCrossPoolUidRows(scan.users).length,
+    truncated: scan.truncated || scan.tenantTruncated.length > 0,
+  }
+}
