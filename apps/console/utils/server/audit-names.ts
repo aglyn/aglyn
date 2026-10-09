@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 import type { ActivityNames } from '@aglyn/aglyn/app-utils/activity-labels'
-import { resolveUidsToPeople } from '@aglyn/tenant-data-admin'
+import { resolveUidsToPeople } from '@aglyn/tenant-data-admin/server/resolve-people'
 
 /**
  * The few facts of an audit row's `after` a list may show (AGL-3660): what
@@ -84,10 +84,12 @@ export async function resolveAuditNames(
     if (row.subjectUid) uids.add(row.subjectUid)
     if (row.actorUid && !row.actorUid.includes(':')) uids.add(row.actorUid)
   }
-  const read = async (collection: string, ids: Set<string>) => {
-    const refs = [...ids].slice(0, NAME_READS).map((id) => firestore.collection(collection).doc(id))
-    if (!refs.length) return {}
+  // Names are cosmetic: a read that fails leaves the row its generic noun,
+  // and never fails the list it decorates — so nothing here throws or logs.
+  const read = async (collection: string, ids: Set<string>): Promise<Record<string, string | null>> => {
+    if (!ids.size) return {}
     try {
+      const refs = [...ids].slice(0, NAME_READS).map((id) => firestore.collection(collection).doc(id))
       const snapshots = await firestore.getAll(...refs)
       return Object.fromEntries(
         snapshots
@@ -98,15 +100,22 @@ export async function resolveAuditNames(
               null,
           ]),
       )
-    } catch (error) {
-      console.error('audit names: read failed', { collection, error })
+    } catch {
+      return {}
+    }
+  }
+  const readPeople = async () => {
+    if (!uids.size) return {}
+    try {
+      return await resolveUidsToPeople([...uids].slice(0, NAME_READS))
+    } catch {
       return {}
     }
   }
   const [orgs, hosts, people] = await Promise.all([
     read('orgs', orgIds),
     read('hosts', hostIds),
-    resolveUidsToPeople([...uids].slice(0, NAME_READS)).catch(() => ({})),
+    readPeople(),
   ])
   const users = Object.fromEntries(
     Object.entries(people as Record<string, { email?: string | null; displayName?: string | null }>).map(
