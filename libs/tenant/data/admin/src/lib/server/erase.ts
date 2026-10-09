@@ -144,6 +144,45 @@ async function eraseHostSupplierDeliveries(hostId: string): Promise<number> {
 }
 
 /**
+ * Every in-app notification about the site, in every inbox (AGL-3719).
+ *
+ * `users/{uid}/notifications/{id}` names the site in `hostId` — "Your site is
+ * live", "Your site job needs you", the staff operator alerts — and links into
+ * it (`/{hostId}/ai-jobs/…`). Nothing else collects them: they carry no TTL,
+ * the `recursiveDelete(hosts/{hostId})` below cannot see a user's tree, and
+ * the inbox outlives the site, so every one became a link to a 404 that stood
+ * forever. A 2026-10-09 audit found 14 of them against deleted test sites.
+ *
+ * A collection-group query rather than a walk of the org's members, because
+ * the staff alerts land in inboxes that are not members of the org. That
+ * query needs the `notifications.hostId` COLLECTION_GROUP override in
+ * `cloud/firebase-firestore.indexes.json`.
+ *
+ * Best-effort, like every other trailing cleanup in `eraseHost`.
+ */
+async function eraseHostNotifications(hostId: string): Promise<number> {
+  if (!hostId) return 0
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const rows = await firestore
+      .collectionGroup('notifications')
+      .where('hostId', '==', hostId)
+      .get()
+    for (let index = 0; index < rows.docs.length; index += 400) {
+      const batch = firestore.batch()
+      for (const doc of rows.docs.slice(index, index + 400)) {
+        batch.delete(doc.ref)
+      }
+      await batch.commit()
+    }
+    return rows.size
+  } catch (error) {
+    console.error(`eraseHost: notification cleanup failed for ${hostId}`, error)
+    return 0
+  }
+}
+
+/**
  * Destroy the org documents that belong to the site (AGL-3273).
  *
  * Some plugin storage is the organization's and names the site each document
@@ -313,6 +352,8 @@ export async function eraseHost(
   // SUPPLIER_DELIVERY_COLLECTION below for why this is here and not implied
   // by the recursiveDelete at the end of this function.
   await eraseHostSupplierDeliveries(hostId)
+  // In-app notifications about the site, in every inbox (AGL-3719).
+  await eraseHostNotifications(hostId)
 
   // Routing: the middleware resolves a request to a host via hostIndex and
   // the owning org's hosts map — drop both so the subdomain/cname 404s.

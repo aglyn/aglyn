@@ -11190,6 +11190,28 @@
       "collectionGroup": "stockPhotoSearches",
       "fieldPath": "photos",
       "indexes": []
+    },
+    {
+      "collectionGroup": "notifications",
+      "fieldPath": "hostId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ]
 }
