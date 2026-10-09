@@ -79,6 +79,7 @@ import {
 } from './firestore-cache'
 import { markMultiTabFirestore } from './firestore-multitab-wedge'
 import { firestorePersistencePrefix } from './firestore-shared-client-state'
+import { startFirestoreTabHandoff } from './firestore-tab-handoff'
 
 /**
  * Drop-in replacement for reactfire's `ObservableStatus<T>` — reactfire is
@@ -483,10 +484,14 @@ function bootFirebaseCore(
         // Only the durable multi-tab cache can be locked by another tab,
         // so only it gets the lease check after a stalled recovery.
         if (firestoreCacheClass === 'durable' && app.options?.projectId) {
-          markMultiTabFirestore(
-            getFirestore(app),
-            `${firestorePersistencePrefix(app.name, app.options.projectId)}main`,
-          )
+          const prefix = firestorePersistencePrefix(app.name, app.options.projectId)
+          markMultiTabFirestore(getFirestore(app), `${prefix}main`)
+          // A visible tab opened while a background tab holds the shared
+          // cache's lease takes the lease at boot instead of routing every
+          // query through the background tab until its lease lapses
+          // (AGL-3660). In initializeFirestore's task: its first step
+          // snapshots the other tabs before this tab's client can start.
+          void startFirestoreTabHandoff(getFirestore(app), prefix)
         }
       }
     } catch {
