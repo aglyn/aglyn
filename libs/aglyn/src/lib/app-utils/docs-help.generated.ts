@@ -47,6 +47,16 @@ export const PLUGIN_DOCS = {
     title: 'Aglyn Assist',
     excerpt: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   },
+  aiAllotments: {
+    path: '/ai/ai-allotments',
+    title: 'AI allotments, usage and model choice',
+    excerpt: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
+  },
+  aiAssistBuilds: {
+    path: '/ai/assist-builds',
+    title: 'Build from Assist chat',
+    excerpt: 'Ask Aglyn Assist for what you need in one message — pages, a form, an email, products, a booking service, an automation — and it shows one plan card. Confirm it and one job builds every part as a draft.',
+  },
   aiAutomations: {
     path: '/ai/automations-with-ai',
     title: 'Automations with AI',
@@ -57,20 +67,60 @@ export const PLUGIN_DOCS = {
     title: 'Business profile',
     excerpt: 'Tell Aglyn AI what your business does, who it is for and how it sounds. Every AI job for the site reads it, uses your real contact details only, and remembers the edits you keep.',
   },
+  aiComponent: {
+    path: '/building-sites/components/generate-a-component-with-aglyn-ai',
+    title: 'Generate a reusable component with Aglyn AI',
+    excerpt: 'Describe a block your site repeats, or point at one already on a page, and Aglyn AI makes it a reusable component with typed properties bound to the elements that show them.',
+  },
+  aiCreate: {
+    path: '/ai/create-with-ai',
+    title: 'Create with AI on every list',
+    excerpt: 'The Create with AI button sits beside the create button on every list Aglyn AI can fill: pages, templates, layouts, forms, components, emails, campaigns, automations, products, overlays and media.',
+  },
+  aiCredits: {
+    path: '/ai/ai-credits',
+    title: 'AI credits',
+    excerpt: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what the add-on adds, what jobs cost, the check before a job starts, and when credits come back.',
+  },
   aiCrm: {
     path: '/ai/crm-by-ai',
     title: 'The AI CRM built into Aglyn',
     excerpt: 'An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields.',
+  },
+  aiEmail: {
+    path: '/marketing-and-automation/email-campaigns/generate-with-ai',
+    title: 'Generate an email campaign with AI',
+    excerpt: 'An AI email campaign generator that drafts rather than sends: turn a brief into a draft email design, or a draft campaign and the email it would send. Nothing is sent, and nothing is aimed at anybody, until you choose.',
   },
   aiExperiments: {
     path: '/ai/ab-tests-with-ai',
     title: 'A/B tests by AI: write variants, read the result',
     excerpt: 'Have Aglyn AI write two to four variants for a page, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
   },
+  aiForm: {
+    path: '/ai/generate-a-form',
+    title: 'Generate a form from a description',
+    excerpt: 'An AI form generator inside Aglyn: describe the form you need and a build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing already agreed.',
+  },
+  aiImages: {
+    path: '/ai/create-images',
+    title: 'Create images with AI',
+    excerpt: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits.',
+  },
   aiInsights: {
     path: '/marketing-and-automation/analytics/insights',
     title: 'Insights',
     excerpt: 'Ask Aglyn AI a question about your site\'s figures in plain words, and get answers where every number is traced to the figure it comes from — plus weekly insights by email.',
+  },
+  aiJobs: {
+    path: '/ai/ai-jobs-and-activity',
+    title: 'AI jobs and activity',
+    excerpt: 'Review what Aglyn AI did: a site\'s AI jobs page lists every job with its kind, brief, status and credits, each job has its own page, and the AI filter in your activity logs records who started, applied or canceled what.',
+  },
+  aiLayout: {
+    path: '/building-sites/screens-and-layouts/layouts',
+    title: 'Layouts',
+    excerpt: 'A layout is the shared frame your pages render inside — header, nav and footer in one place, nested up to five deep.',
   },
   aiLogic: {
     path: '/ai/logic-with-ai',
@@ -87,6 +137,11 @@ export const PLUGIN_DOCS = {
     title: 'AI monitoring',
     excerpt: 'How staff watch one organization\'s AI usage — add-on, credits, overage, refusals, jobs, tokens, cache hits and margin — read its AI conversations, and find those figures across the staff console.',
   },
+  aiPage: {
+    path: '/building-sites/screens-and-layouts/generate-a-page',
+    title: 'Generate a page from a prompt',
+    excerpt: 'An AI landing page generator built into the canvas: describe a page and Aglyn AI plans it, then builds it section by section as an unpublished draft from your own theme, layout, components and forms.',
+  },
   aiProducts: {
     path: '/ai/products-with-ai',
     title: 'Product copy and catalogs with AI',
@@ -96,6 +151,26 @@ export const PLUGIN_DOCS = {
     path: '/building-sites/seo/seo-by-ai',
     title: 'AI SEO for your website',
     excerpt: 'AI SEO for websites, on the pages you already have: have AI write a page or product\'s search listing, propose a fix for each finding of the SEO check, and draft your structured data and /llms.txt.',
+  },
+  aiSite: {
+    path: '/ai/generate-a-site',
+    title: 'Generate a website from a prompt',
+    excerpt: 'Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds it. A guided start publishes it.',
+  },
+  aiSiteLooks: {
+    path: '/ai/site-looks',
+    title: 'Looks and themes for AI sites',
+    excerpt: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
+  },
+  aiStart: {
+    path: '/ai/start-with-ai',
+    title: 'Start a new site with AI',
+    excerpt: 'Answer a few questions when you create a site and Aglyn AI plans, writes and publishes it: its look, header and footer, contact form and pages, plus a store or a blog when that is what the site is.',
+  },
+  aiTemplate: {
+    path: '/building-sites/site-templates/templates-library',
+    title: 'Your templates library',
+    excerpt: 'Save pages, components and layouts as reusable templates — and the safe landing place for anything you install from the marketplace.',
   },
   aiThemes: {
     path: '/ai/theme-assist',
@@ -440,17 +515,32 @@ export const PLUGIN_DOCS_ANCHORS = {
   abuseReports: ['#abuse-queue-page', '#fraud-and-risk-alerts-by-email', '#where-reports-come-from', '#held-outbound-email', '#what-is-screened', '#tiers', '#web-risk', '#deciding-a-held-row', '#security-hold', '#names-and-domains', '#stripe-fraud-signals', '#seller-fraud-pattern', '#card-testing-velocity', '#marketplace', '#reported-listings', '#risk-notices', '#triage-by-severity', '#reading-a-report', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#counter-notices', '#counter-notice-clock', '#counter-notice-steps', '#repeat-infringers', '#repeat-infringer-threshold', '#known-gaps', '#related'],
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#crm-events', '#funnel-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#transactional-replies', '#merge-tags', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
+  aiAllotments: ['#allotments', '#hard-or-soft', '#the-pool-comes-first', '#limiting-models', '#who-can-set-them', '#a-members-allotment', '#a-sites-allotment', '#usage-strip', '#choosing-a-model', '#related'],
+  aiAssistBuilds: ['#ask-or-build', '#what-it-can-build', '#the-plan-card', '#confirm-the-plan', '#one-job-many-parts', '#what-it-costs', '#who-can-use-it', '#related'],
   aiAutomations: ['#draft', '#org-automations', '#change', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
-  aiBusinessProfile: ['#where-to-edit-it', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
+  aiBusinessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
+  aiComponent: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
+  aiCreate: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
+  aiCredits: ['#monthly-credits', '#free-plan', '#the-aglyn-ai-add-on', '#what-things-cost', '#before-a-job-starts', '#when-credits-run-out', '#past-the-band', '#credits-given-back', '#see-your-credits', '#related'],
   aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiEmail: ['#where-to-start-it', '#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#draft-versions', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
+  aiImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
+  aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
+  aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
   aiLogic: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMarketing: ['#write-overlay-copy', '#create-an-overlay', '#create-a-campaign', '#ask-about-these-numbers', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#compensating-credits', '#ai-conversations', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
+  aiPage: ['#describe-the-page', '#review-the-plan', '#how-the-page-is-built', '#the-draft', '#what-a-page-job-uses', '#who-can-use-it', '#related'],
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
-  aiThemes: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
+  aiSite: ['#starting-a-new-site-from-a-few-questions', '#on-the-free-plan', '#if-the-plan-does-not-work-out', '#what-a-scaffold-builds', '#what-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
+  aiSiteLooks: ['#choose-a-style', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
+  aiStart: ['#how-do-you-want-to-start', '#your-business', '#style', '#details', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#a-store-from-the-start', '#a-blog-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
+  aiTemplate: ['#the-three-kinds', '#templates-list', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
+  aiThemes: ['#describe-a-change', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
   billing: ['#billing-page', '#current-plan', '#billing-link', '#tiers--entitlements', '#made-with-badge', '#leaving-notice', '#plan-without-subscription', '#upgrade-proposal', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#usage-card', '#metered-usage-estimate', '#usage-history', '#campaign-sending-pace', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#what-you-will-pay', '#billing-history', '#billing-email', '#payment-methods', '#billing-address', '#billing-address-on-profile', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#functions-card', '#parameters-a-visitor-can-answer', '#a-calculator-you-lay-out', '#where-used--safety', '#workflows', '#related'],
@@ -543,6 +633,16 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   aglynAssist: {
     '#what-it-can-do': 'What it can do',
   },
+  aiAllotments: {
+    '#a-members-allotment': 'A member\'s allotment',
+    '#a-sites-allotment': 'A site\'s allotment',
+    '#allotments': 'Allotments',
+    '#choosing-a-model': 'Choosing a model',
+    '#usage-strip': 'Your usage while you work',
+  },
+  aiAssistBuilds: {
+    '#the-plan-card': 'The plan card',
+  },
   aiAutomations: {
     '#change': 'Change or fix an automation',
     '#draft': 'Draft an automation from a description',
@@ -552,14 +652,48 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   aiBusinessProfile: {
     '#what-aglyn-ai-learned': 'What Aglyn AI learned',
   },
+  aiComponent: {
+    '#from-a-brief': 'From a brief',
+  },
+  aiCreate: {
+    '#without-the-add-on': 'Without the add-on',
+  },
+  aiCredits: {
+    '#before-a-job-starts': 'Before a job starts',
+    '#past-the-band': 'Past the band',
+    '#see-your-credits': 'See your credits',
+  },
   aiCrm: {
     '#draft-an-email': 'Draft a one-to-one email',
     '#match-columns': 'Match an import\'s columns',
     '#summarize-a-record': 'Summarize a record',
   },
+  aiEmail: {
+    '#where-to-start-it': 'Where to start it',
+    '#write-the-brief': 'Write the brief',
+  },
   aiExperiments: {
     '#the-verdict': 'The verdict is decided before the model is asked',
     '#write-variants': 'Write variants',
+  },
+  aiForm: {
+    '#describe-the-form': 'Describe the form',
+  },
+  aiImages: {
+    '#credits': 'Credits',
+    '#declined-pictures': 'Declined pictures',
+    '#make-a-picture': 'Make a picture',
+    '#shapes-and-how-many': 'Shapes and how many',
+    '#who-can-use-it': 'Who can use it',
+  },
+  aiInsights: {
+    '#asking-a-question': 'Asking a question',
+  },
+  aiJobs: {
+    '#ai-jobs-in-assist': 'AI jobs in Assist',
+  },
+  aiLayout: {
+    '#generate-a-layout-with-aglyn-ai': 'Generate a layout with Aglyn AI',
   },
   aiLogic: {
     '#change': 'Change, fix or explain a function',
@@ -575,8 +709,35 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#the-ai-card': 'The AI card',
     '#the-spend-leaderboard': 'The spend leaderboard',
   },
+  aiPage: {
+    '#describe-the-page': 'Describe the page',
+  },
+  aiProducts: {
+    '#propose-a-first-catalog': 'Propose a first catalog',
+    '#write-a-products-copy': 'Write a product\'s copy',
+  },
   aiSeo: {
     '#fix-what-the-seo-check-finds': 'Fix what the SEO check finds',
+    '#write-a-pages-listing': 'Write a page\'s listing',
+    '#write-a-products-listing': 'Write a product\'s listing',
+  },
+  aiSite: {
+    '#generate-for-several-sites-at-once': 'Generate for several sites at once',
+  },
+  aiSiteLooks: {
+    '#choose-a-style': 'Choose a style',
+  },
+  aiStart: {
+    '#details': 'Details',
+    '#how-do-you-want-to-start': 'How do you want to start?',
+    '#the-sites-search-listing': 'The site\'s search listing',
+    '#your-business': 'Your business',
+  },
+  aiTemplate: {
+    '#generate-a-page-template-with-aglyn-ai': 'Generate a page template with Aglyn AI',
+  },
+  aiThemes: {
+    '#describe-a-change': 'Change what you describe, or design a new theme',
   },
   assistSignals: {
     '#docs-gaps': 'Docs gaps',
@@ -588,9 +749,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#where-the-money-goes': 'Where the money goes',
   },
   billing: {
-    '#ai-allotments': 'AI allotments',
     '#api-access': 'API access',
-    '#assist-overage': 'AI assist overage',
     '#billing-address': 'Billing address',
     '#billing-address-on-profile': 'On your workspace profile',
     '#billing-email': 'Billing email',
@@ -613,7 +772,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#usage-budget': 'Usage budget',
     '#usage-card': 'The Usage card',
     '#usage-history': 'Usage history',
-    '#usage-meters': 'Usage meters',
     '#what-you-will-pay': 'What you will pay',
     '#who-is-generating-what': 'Who is generating what',
   },

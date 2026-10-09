@@ -81,9 +81,21 @@ export const DOCS_HELP_TOPICS = {
     path: '/ai/ai-allotments',
     title: 'AI allotments, usage and model choice',
   },
+  aiCredits: {
+    path: '/ai/ai-credits',
+    title: 'AI credits',
+  },
+  aiJobsAndActivity: {
+    path: '/ai/ai-jobs-and-activity',
+    title: 'AI jobs and activity',
+  },
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
     title: 'AI monitoring',
+  },
+  aiPrivacy: {
+    path: '/ai/ai-privacy',
+    title: 'Privacy and Aglyn AI',
   },
   analytics: {
     path: '/marketing-and-automation/analytics/overview',
@@ -96,6 +108,10 @@ export const DOCS_HELP_TOPICS = {
   architectureMultiTenancy: {
     path: '/staff-console/architecture-multi-tenancy',
     title: 'Architecture: Multi-Tenant Organizations',
+  },
+  assistBuilds: {
+    path: '/ai/assist-builds',
+    title: 'Build from Assist chat',
   },
   assistSignals: {
     path: '/staff-console/assist-signals',
@@ -220,6 +236,10 @@ export const DOCS_HELP_TOPICS = {
   createImages: {
     path: '/ai/create-images',
     title: 'Create images with AI',
+  },
+  createWithAi: {
+    path: '/ai/create-with-ai',
+    title: 'Create with AI on every list',
   },
   crm: {
     path: '/content-and-data/crm/overview',
@@ -693,6 +713,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
   },
+  siteLooks: {
+    path: '/ai/site-looks',
+    title: 'Looks and themes for AI sites',
+  },
   siteProtection: {
     path: '/building-sites/site-protection/overview',
     title: 'Site Protection & Error Pages',
@@ -708,6 +732,14 @@ export const DOCS_HELP_TOPICS = {
   staffConsole: {
     path: '/staff-console/overview',
     title: 'Staff Console (internal)',
+  },
+  startWithAi: {
+    path: '/ai/start-with-ai',
+    title: 'Start a new site with AI',
+  },
+  stockPhotos: {
+    path: '/ai/stock-photos',
+    title: 'Stock photos in AI sites',
   },
   storeImportAndExport: {
     path: '/commerce-and-bookings/commerce/store-import-and-export',
@@ -836,11 +868,15 @@ export const DOCS_HELP_ANCHORS = {
   agencySites: ['#one-brief', '#shared-and-not', '#organization-model', '#per-client-spend', '#off-for-one-site', '#white-label', '#who-publishes', '#related'],
   aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   ai: ['#drafts-only', '#what-it-can-build', '#the-add-on', '#credits-and-caps', '#who-can-use-it', '#switch-ai-off-for-one-site', '#what-is-sent', '#related'],
-  aiAllotments: ['#allotments', '#hard-or-soft', '#the-pool-comes-first', '#limiting-models', '#who-can-set-them', '#usage-strip', '#choosing-a-model', '#related'],
+  aiAllotments: ['#allotments', '#hard-or-soft', '#the-pool-comes-first', '#limiting-models', '#who-can-set-them', '#a-members-allotment', '#a-sites-allotment', '#usage-strip', '#choosing-a-model', '#related'],
+  aiCredits: ['#monthly-credits', '#free-plan', '#the-aglyn-ai-add-on', '#what-things-cost', '#before-a-job-starts', '#when-credits-run-out', '#past-the-band', '#credits-given-back', '#see-your-credits', '#related'],
+  aiJobsAndActivity: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
   aiMonitoring: ['#the-ai-card', '#compensating-credits', '#ai-conversations', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
+  aiPrivacy: ['#what-is-sent', '#who-processes-it', '#what-is-never-sent', '#how-long-it-is-kept', '#turn-ai-off', '#legal-pages', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#tracking-card', '#ga-measurement-id', '#gtm-container', '#meta-pixel', '#google-ads-tag', '#linkedin-insight-tag', '#related'],
   animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#easing', '#stagger-children', '#replay-each-time', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
+  assistBuilds: ['#ask-or-build', '#what-it-can-build', '#the-plan-card', '#confirm-the-plan', '#one-job-many-parts', '#what-it-costs', '#who-can-use-it', '#related'],
   assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
   automations: ['#the-events', '#the-steps', '#assigning-an-owner-or-rotating-one', '#an-automated-email-on-the-timeline', '#recipes', '#installing-from-the-organization', '#example-tag-every-new-contact-from-a-form', '#example-spread-qualified-leads-across-the-team', '#example-follow-up-on-a-won-deal', '#related'],
   automationsWithAi: ['#draft', '#org-automations', '#change', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
@@ -854,7 +890,7 @@ export const DOCS_HELP_ANCHORS = {
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#routed-sections-agl-2501', '#which-registration-owns-a-path', '#gating-a-section', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
-  businessProfile: ['#where-to-edit-it', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
+  businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#slugs', '#merchant-center-feed', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
@@ -871,7 +907,8 @@ export const DOCS_HELP_ANCHORS = {
   copyAssist: ['#use-it', '#what-you-get-back', '#tips', '#who-can-use-it', '#related'],
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
-  createImages: ['#make-a-picture', '#what-each-picture-gets', '#credits', '#safety', '#what-is-sent', '#who-can-use-it', '#related'],
+  createImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
+  createWithAi: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#known-by', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
   crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
@@ -988,10 +1025,13 @@ export const DOCS_HELP_ANCHORS = {
   sharing: ['#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
   shipping: ['#zones-and-rates', '#where-parcels-ship-from', '#carrier-accounts', '#shipping-labels'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
+  siteLooks: ['#choose-a-style', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],
   sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#rotating-your-signing-certificate', '#3-turn-it-on', '#how-it-works', '#enforcement', '#you-must-keep-one-way-in-that-does-not-go-through-your-idp', '#an-owner-who-signs-in-outside-your-identity-pool', '#or-a-break-glass-account-inside-the-pool', '#transferring-ownership-while-you-are-enforcing', '#if-we-cannot-check', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
   staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
+  startWithAi: ['#how-do-you-want-to-start', '#your-business', '#style', '#details', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#a-store-from-the-start', '#a-blog-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
+  stockPhotos: ['#where-the-photos-come-from', '#in-your-media-library', '#credits', '#the-photographers-credit', '#what-is-sent', '#related'],
   storeImportAndExport: ['#export', '#products-are-a-row-per-variant', '#the-shopify-preset', '#import', '#products', '#categories', '#discounts-and-coupons', '#gift-cards', '#orders-are-exported-only'],
   supportAndCommunity: ['#support-tickets', '#your-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#forum-threads', '#support-link', '#related'],
   supportQueue: ['#support-queue-page', '#triage', '#notifications', '#related'],
@@ -1003,7 +1043,7 @@ export const DOCS_HELP_ANCHORS = {
   templatesLibrary: ['#the-three-kinds', '#templates-list', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
   termReference: ['#platform--accounts', '#aglyn', '#aglyn-ai', '#aglyn-assist', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#page', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage', '#credit-ai-credit', '#allotment'],
   textEditing: ['#edit-inline', '#committing', '#inline-toolbar', '#rich-text', '#the-text-attribute', '#text-field-read-only', '#remove-formatting', '#line-breaks', '#bindings-in-text', '#limits', '#wrapped-outlines', '#related'],
-  themeAssist: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
+  themeAssist: ['#describe-a-change', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],
   themeStyles: ['#why-a-name-beats-a-number', '#text-style-sets-everything-at-once', '#what-your-theme-offers', '#colors-spacing-and-shadows', '#checking-a-page-you-already-built'],
   transferHub: ['#what-you-can-move', '#export-records', '#import-records', '#1-upload', '#2-columns', '#3-values', '#4-matching', '#5-conflicts', '#6-dry-run', '#7-import', '#8-results', '#export-a-package', '#import-a-package', '#resume-an-import-you-left', '#undo-an-import', '#history'],
@@ -1058,6 +1098,21 @@ export const DOCS_HELP_SECTION_TITLES: {
   aglynAssist: {
     '#what-it-can-do': 'What it can do',
   },
+  aiAllotments: {
+    '#a-members-allotment': 'A member\'s allotment',
+    '#a-sites-allotment': 'A site\'s allotment',
+    '#allotments': 'Allotments',
+    '#choosing-a-model': 'Choosing a model',
+    '#usage-strip': 'Your usage while you work',
+  },
+  aiCredits: {
+    '#before-a-job-starts': 'Before a job starts',
+    '#past-the-band': 'Past the band',
+    '#see-your-credits': 'See your credits',
+  },
+  aiJobsAndActivity: {
+    '#the-ai-jobs-page': 'The AI jobs page',
+  },
   aiMonitoring: {
     '#ai-conversations': 'AI conversations',
     '#one-account': 'One account, across organizations',
@@ -1096,9 +1151,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#what-you-can-do': 'What you can do',
   },
   billing: {
-    '#ai-allotments': 'AI allotments',
     '#api-access': 'API access',
-    '#assist-overage': 'AI assist overage',
     '#billing-address': 'Billing address',
     '#billing-address-on-profile': 'On your workspace profile',
     '#billing-email': 'Billing email',
@@ -1121,7 +1174,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#usage-budget': 'Usage budget',
     '#usage-card': 'The Usage card',
     '#usage-history': 'Usage history',
-    '#usage-meters': 'Usage meters',
     '#what-you-will-pay': 'What you will pay',
     '#who-is-generating-what': 'Who is generating what',
   },
@@ -1158,6 +1210,8 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   businessProfile: {
     '#contact-details-are-never-invented': 'Contact details are never invented',
+    '#the-business-profile-card': 'The Business profile card',
+    '#workspace-defaults': 'Workspace defaults',
   },
   catalog: {
     '#categories-and-tags': 'Categories and tags',
@@ -1350,9 +1404,6 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   glossary: {
     '#organization-org': 'Organization (org)',
-  },
-  howAglynAiBuilds: {
-    '#finding-your-ai-jobs': 'Finding your AI jobs',
   },
   installYourFirstPlugin: {
     '#a-plugins-page': 'A plugin\'s page',

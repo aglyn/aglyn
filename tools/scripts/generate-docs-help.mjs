@@ -140,6 +140,24 @@ const PLUGIN_TOPICS = {
   // What Aglyn AI learned from a site's edits, on Setup → Business profile (AGL-3661).
   aiBusinessProfile: '/ai/business-profile',
   aiExperiments: '/ai/ab-tests-with-ai',
+  // The AI feature guides behind the AI plugin's own dialogs, cards and
+  // field hints (AGL-3660): each surface links its own section rather than
+  // the overview.
+  aiAllotments: '/ai/ai-allotments',
+  aiAssistBuilds: '/ai/assist-builds',
+  aiComponent: '/building-sites/components/generate-a-component-with-aglyn-ai',
+  aiCreate: '/ai/create-with-ai',
+  aiCredits: '/ai/ai-credits',
+  aiEmail: '/marketing-and-automation/email-campaigns/generate-with-ai',
+  aiForm: '/ai/generate-a-form',
+  aiImages: '/ai/create-images',
+  aiJobs: '/ai/ai-jobs-and-activity',
+  aiLayout: '/building-sites/screens-and-layouts/layouts',
+  aiPage: '/building-sites/screens-and-layouts/generate-a-page',
+  aiSite: '/ai/generate-a-site',
+  aiSiteLooks: '/ai/site-looks',
+  aiStart: '/ai/start-with-ai',
+  aiTemplate: '/building-sites/site-templates/templates-library',
   aiMarketing: '/ai/marketing-with-ai',
   aiInsights: '/marketing-and-automation/analytics/insights',
   aiLogic: '/ai/logic-with-ai',

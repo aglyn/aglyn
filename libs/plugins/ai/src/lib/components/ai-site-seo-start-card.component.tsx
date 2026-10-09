@@ -18,6 +18,7 @@
 'use client'
 
 import type { ConsoleHostSeoZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -151,12 +152,16 @@ export function AiSiteSeoStartCard({ hostId, orgId, seo, proposeDraft }: Console
     <CardDisplay
       contentGutterX
       contentGutterY
-      HeaderProps={{
-        title: 'The listing your answers describe',
-        subheader:
-          'What you said this site is, and who it is for, as the title and description every ' +
-          'page without its own falls back to. Nothing is saved until you press Update below.',
-      }}
+      help={pluginDocsHelp('aiStart', {
+        anchor: '#the-sites-search-listing',
+        excerpt:
+          'A search title and description from your guided-start answers. Put in the form stages them in the SEO form; Update saves them.',
+      })}
+      header={'The listing your answers describe'}
+      subheader={
+        'What you said this site is, and who it is for, as the title and description every ' +
+        'page without its own falls back to. Nothing is saved until you press Update below.'
+      }
     >
       <Stack spacing={2}>
         {Object.entries(proposal.values).map(([field, value]) => (

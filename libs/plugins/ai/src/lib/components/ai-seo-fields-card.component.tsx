@@ -315,9 +315,18 @@ export function AiSeoFieldsCard(props: ConsoleSeoFieldsZoneProps) {
   const running = Boolean(job && !isTerminal(job))
   const saveWord = subject.kind === 'product' ? 'Save product' : 'Save SEO'
   const unnamed = subject.kind === 'product' && !subject.name.trim()
-  const help = pluginDocsHelp('aiSeo', {
-    excerpt: 'Write a search listing from what the page says. It is put in the fields as unsaved changes; nothing is saved until you save.',
-  })
+  const help =
+    subject.kind === 'product'
+      ? pluginDocsHelp('aiSeo', {
+          anchor: '#write-a-products-listing',
+          excerpt:
+            'Write this product’s search title and description from its name, copy and options. They go in the fields unsaved; Save product keeps them.',
+        })
+      : pluginDocsHelp('aiSeo', {
+          anchor: '#write-a-pages-listing',
+          excerpt:
+            'Write this page’s search title and description from what the page says. They go in the fields unsaved; Save SEO keeps them.',
+        })
 
   const stage = (offer: ConsoleSeoFieldValues, key: string) => {
     proposeValues(offer, key)
