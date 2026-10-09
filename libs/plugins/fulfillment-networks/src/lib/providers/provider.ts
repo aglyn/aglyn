@@ -31,6 +31,8 @@ export interface NetworkCredential {
   channelId?: string | null
   /** Amazon: the marketplace whose inventory ships. */
   marketplaceId?: string | null
+  /** ShipMonk: the merchant's API store every order is created under (AGL-3697). */
+  storeId?: string | null
 }
 
 /** What a connect reads from the network about the account it was granted. */
@@ -96,7 +98,10 @@ export interface NetworkShipment {
   /** The network's own words for that, when it gave any. */
   trackingDetail: string | null
   shippedAtMs: number | null
-  /** Amazon: the package number its tracking is read by. */
+  /**
+   * The handle its tracking is read back by: Amazon's package number;
+   * ShipMonk's order key (its tracking is read from the order).
+   */
   packageNumber?: string | null
 }
 
@@ -119,7 +124,13 @@ export interface NetworkStock {
   fulfillable: number
 }
 
-export type NetworkCancelOutcome = 'canceled' | 'too_late'
+/**
+ * - `canceled` — the network stopped the order.
+ * - `too_late` — it is already being packed or has shipped.
+ * - `requested` — the network took the request and its warehouse confirms it
+ *   (ShipMonk's `cancellation_requested`); the order is read back until it does.
+ */
+export type NetworkCancelOutcome = 'canceled' | 'too_late' | 'requested'
 
 export interface FulfillmentNetworkProvider {
   id: NetworkProviderId

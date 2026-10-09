@@ -169,6 +169,21 @@ describe('redactSecrets', () => {
     expect(out.nested.clientSecret).toMatchObject({ redacted: true, present: true })
   })
 
+  it('withholds a fulfillment network connection’s sealed key and webhook secret, keeping the store id (AGL-3697)', () => {
+    const out = redactSecrets({
+      provider: 'shipmonk',
+      storeId: '11364',
+      sealedAccessToken: 'v1.k1.sealed-api-key',
+      sealedRefreshToken: null,
+      sealedWebhookSecret: 'v1.k1.sealed-webhook-secret',
+      tokenKeyId: 'k1',
+    }) as any
+    expect(out.storeId).toBe('11364')
+    expect(out.sealedAccessToken).toMatchObject({ redacted: true, present: true })
+    expect(out.sealedWebhookSecret).toMatchObject({ redacted: true, present: true })
+    expect(JSON.stringify(out)).not.toMatch(/sealed-api-key|sealed-webhook-secret/)
+  })
+
   it('distinguishes an absent secret from a held one', () => {
     const out = redactSecrets({ secret: '' }) as any
     expect(out.secret).toEqual({ redacted: true, present: false, reason: 'secret' })
