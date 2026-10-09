@@ -512,6 +512,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               orgId={currentOrg.$id}
               targetId={uid}
               header={'Changes to this member'}
+              help={docsHelp('inviteTeammates', { anchor: '#member-changes' })}
             />
           ) : null}
           {currentOrg?.$id ? (

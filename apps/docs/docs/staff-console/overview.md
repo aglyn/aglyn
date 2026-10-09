@@ -874,6 +874,13 @@ The staff audit entries that reference this organization, from the latest 200 in
 log: each shows the action, who did it, when, and the reason they gave. The full,
 filterable record is on the [Audit log](#audit-log).
 
+#### Organization activity {#org-activity}
+
+What the organization did itself — invites, role changes, billing edits and its sites'
+changes — newest first: the same feed its owner reads, with each row's details adding
+the stored code and path and linking to the staff pages. Use it beside **Recent admin
+actions**, which lists only what staff did.
+
 #### Success manager {#success-manager}
 
 Name the success manager an organization is promised: enter their **Name** and

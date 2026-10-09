@@ -175,6 +175,13 @@ member** lists what others changed about them, such as role and access edits. Bo
 the **Activity & audit log** permission, the same as the organization's
 [activity log](#activity-log).
 
+#### Changes to this member {#member-changes}
+
+**Changes to this member** lists what other people changed about this person, such as role
+and site-access edits, newest first, with who made each change and when.
+It reads the same entries as the organization's [activity log](#activity-log), narrowed to
+the ones whose target is this member.
+
 ## Help a teammate who is locked out
 
 When a teammate cannot sign in, open them from the **Team** page and use the
