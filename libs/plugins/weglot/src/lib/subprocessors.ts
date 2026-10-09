@@ -31,7 +31,7 @@ import { WEGLOT_CONNECT_HOSTS } from './constants'
  * is written down for each.
  */
 const MERCHANT_CHOSE =
-  'Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not Aglyn, and no Aglyn server calls it.'
+  'Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not the platform, and no platform server calls it.'
 
 const HOST_ROLES: Record<(typeof WEGLOT_CONNECT_HOSTS)[number], string> = {
   'cdn.weglot.com':
@@ -48,7 +48,7 @@ export const WEGLOT_HOSTS: PluginEgressHostDeclaration[] = WEGLOT_CONNECT_HOSTS.
     disposition: 'not-a-subprocessor' as const,
     reason: `${HOST_ROLES[host]} ${MERCHANT_CHOSE}`,
     dataReceived:
-      'From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from Aglyn’s servers, and no workspace data beyond what the published page already shows.',
+      'From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from the platform’s servers, and no workspace data beyond what the published page already shows.',
   }),
 )
 
