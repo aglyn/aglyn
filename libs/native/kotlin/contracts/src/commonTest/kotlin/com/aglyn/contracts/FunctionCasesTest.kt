@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "expandVariantMatrix", "renameProductOptions")))
   }
 
   @Test
@@ -175,6 +175,23 @@ class FunctionCasesTest {
     }
     cases("liftLegacyProduct").forEach { (args, result) ->
       assertEquals(product(result), liftLegacyProduct(product(args[0])), args.toString())
+    }
+  }
+
+  @Test
+  fun variantMatrixCases() {
+    val options = { e: JsonElement? -> (e as? JsonArray).orEmpty().map { ContractJsonFormat.decodeFromJsonElement(ProductOption.serializer(), it) } }
+    cases("expandVariantMatrix").forEach { (args, result) ->
+      val expected = result.jsonArray.map { combo -> combo.jsonObject.mapValues { it.value.jsonPrimitive.content } }
+      assertEquals(expected, expandVariantMatrix(options(args[0]).takeIf { args[0] !is JsonNull }), args.toString())
+    }
+    cases("renameProductOptions").forEach { (args, result) ->
+      val product = args[0].jsonObject
+      val variants = { e: JsonElement? -> (e as JsonArray).map { ContractJsonFormat.decodeFromJsonElement(ProductVariant.serializer(), it) } }
+      val names = args[1].jsonArray.map { str(it) }
+      val (renamed, moved) = renameProductOptions(options(product["options"]), variants(product["variants"]), names)
+      assertEquals(options(result.jsonObject["options"]), renamed, args.toString())
+      assertEquals(variants(result.jsonObject["variants"]), moved, args.toString())
     }
   }
 
