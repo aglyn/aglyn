@@ -49,7 +49,10 @@ type TestWindow = Window & Record<string, any>
 
 beforeEach(() => {
   idle = false
-  document.head.innerHTML = ''
+  // Only our own elements: emotion keeps its style tags in <head>.
+  document
+    .querySelectorAll(`#${WEGLOT_SCRIPT_ELEMENT_ID}, script:not([data-emotion])`)
+    .forEach((element) => element.remove())
   window.localStorage.clear()
   delete (window as TestWindow)[WEGLOT_LOADER_GLOBAL]
   delete (window as TestWindow)['Weglot']
@@ -78,8 +81,10 @@ describe('the Weglot site runtime (AGL-3700)', () => {
     )
     expect(html).toContain(`id="${WEGLOT_BOOT_ELEMENT_ID}"`)
     expect(html).toContain(settings.apiKey)
-    // The library itself is never a parser-inserted <script src>.
-    expect(html).not.toContain('src="https://cdn.weglot.com')
+    // The library itself is never a parser-inserted <script src>: the boot
+    // is the only script element, and it carries no src.
+    expect(html.match(/<script/g)).toHaveLength(1)
+    expect(html).not.toMatch(/<script[^>]*\ssrc=/)
     // The themed switcher is client-only: the cached HTML cannot know the
     // visitor's language.
     expect(html).not.toContain('Language')
