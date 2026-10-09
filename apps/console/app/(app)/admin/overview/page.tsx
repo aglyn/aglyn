@@ -49,6 +49,26 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
+/** A card row that opens the organization: hover tint and a visible keyboard focus ring. */
+const orgRowLinkSx = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: 1,
+  px: 1,
+  py: 0.5,
+  mx: -1,
+  borderRadius: 1,
+  color: 'inherit',
+  textDecoration: 'none',
+  '&:hover': { bgcolor: 'action.hover' },
+  '&:focus-visible': {
+    outline: '2px solid',
+    outlineColor: 'primary.main',
+    outlineOffset: -2,
+    bgcolor: 'action.hover',
+  },
+} as const
+
 function formatDate(ms: number | null): string {
   return ms ? new Date(ms).toLocaleDateString() : '—'
 }
@@ -195,6 +215,16 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   help: 'Organizations created in the last 30 days.',
                 },
                 {
+                  label: 'Users',
+                  value:
+                    metrics?.users != null
+                      ? `${metrics.users.toLocaleString('en-US')}${
+                          metrics.usersTruncated ? '+' : ''
+                        }`
+                      : null,
+                  help: 'Total user accounts across every sign-in pool — the same directory the Users page lists, one per person.',
+                },
+                {
                   label: 'Sites',
                   value: metrics?.hosts,
                   help: 'Sites (hosts) across every organization, published and draft.',
@@ -232,7 +262,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                 // than a card header with its help icon, and "Signups (30d)"
                 // or the MRR tile's button would wrap inside it.
 
-                size: { xs: 12, sm: 6, md: 3 },
+                size: { xs: 12, sm: 6, md: 'grow' },
 
                 children: (
                   <CardDisplay
@@ -298,10 +328,13 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                     ) : (
                       <Stack spacing={0.5}>
                         {(data?.newestOrgs ?? []).map((org: any) => (
-                          <Stack
+                          <AppLink
                             key={org.$id}
-                            direction="row"
-                            sx={{ justifyContent: 'space-between' }}
+                            href={buildRoute(Route.ADMIN_ORG_DETAIL, {
+                              orgId: org.$id,
+                            })}
+                            underline="none"
+                            sx={orgRowLinkSx}
                           >
                             <Typography
                               variant="body2"
@@ -314,11 +347,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                               variant="caption"
                               color="text.secondary"
                             >
-                              {`${org.plan ?? 'no plan'} · ${formatDate(
+                              {`${org.plan ?? 'free'} · ${formatDate(
                                 org.createdAt,
                               )}`}
                             </Typography>
-                          </Stack>
+                          </AppLink>
                         ))}
                       </Stack>
                     )}
@@ -353,10 +386,13 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                     ) : (
                       <Stack spacing={0.5}>
                         {(data?.topUsage ?? []).map((usage: any) => (
-                          <Stack
+                          <AppLink
                             key={usage.orgId}
-                            direction="row"
-                            sx={{ justifyContent: 'space-between' }}
+                            href={buildRoute(Route.ADMIN_ORG_DETAIL, {
+                              orgId: usage.orgId,
+                            })}
+                            underline="none"
+                            sx={orgRowLinkSx}
                           >
                             <Typography
                               variant="body2"
@@ -379,7 +415,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                                 `$${usage.costUsd.toFixed(2)}`,
                               ].join(' · ')}
                             </Typography>
-                          </Stack>
+                          </AppLink>
                         ))}
                       </Stack>
                     )}
