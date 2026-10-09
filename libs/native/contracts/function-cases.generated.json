@@ -12997,6 +12997,106 @@
         }
       ]
     },
+    "resolveStaffRoleGate": {
+      "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": false,
+            "ready": false
+          }
+        },
+        {
+          "args": [
+            "super",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": true,
+            "blocked": false,
+            "ready": true
+          }
+        },
+        {
+          "args": [
+            "support",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "billing",
+            [
+              "super",
+              "billing"
+            ]
+          ],
+          "result": {
+            "admitted": true,
+            "blocked": false,
+            "ready": true
+          }
+        },
+        {
+          "args": [
+            "support",
+            [
+              "super",
+              "billing"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super or billing staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "super",
+            []
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the  staff role. Ask someone who holds it."
+          }
+        }
+      ]
+    },
     "rollUp": {
       "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "cases": [
