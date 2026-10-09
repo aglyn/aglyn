@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynScreens
 import AglynUI
 import SwiftUI
 
@@ -48,6 +49,7 @@ struct MainShell: View {
     .sheet(isPresented: $navigation.showSwitcher) {
       SwitcherView().environment(model)
     }
+    .environment(\.aglynScreenSession, model.screenSession)
     .onAppear { DebugLaunch.route(navigation) }
   }
 
@@ -132,6 +134,15 @@ struct MainShell: View {
             }
             ForEach(screens) { item in
               Label(item.title, systemImage: item.icon).tag(ShellSection.plugin(item.screen))
+            }
+          }
+        }
+        // The console's own areas (core screens, libs/native/screens), by group.
+        ForEach(CoreGroupList.groups(model), id: \.id) { group in
+          Section(group.heading) {
+            ForEach(group.screens) { screen in
+              Label(screen.label, systemImage: screen.icon).tag(ShellSection.plugin(screen.id))
+                .accessibilityIdentifier("sidebar-\(screen.id)")
             }
           }
         }
@@ -247,3 +258,4 @@ struct MoreView: View {
     .navigationTitle("More")
   }
 }
+

@@ -213,6 +213,13 @@ async function main(): Promise<void> {
       core.components.registerComponent(entry.component, entry.schema)
     }
   }
+  // The store's elements a page or a layout lists the site's records with (AGL-3676).
+  for (const file of ['libs/plugins/commerce/src/lib/components/product-grid.tsx', 'libs/plugins/commerce/src/lib/components/cart.tsx']) {
+    const mod = await load(file)
+    core.components.registerComponent(mod.default, mod.schema)
+  }
+  const collections = await load('libs/aglyn/src/lib/app-utils/collection-entries.ts')
+  const siteContext = await load('libs/aglyn/src/lib/app-utils/site-context.ts')
   const renderer = await load('libs/aglyn-node-renderer/src/index.ts')
   const siteTheme = await load('libs/aglyn-node-renderer/src/lib/hooks/use-aglyn-site-theme.ts')
   const themes = await load('libs/shared/ui/theme/src/index.ts')
@@ -351,6 +358,14 @@ async function main(): Promise<void> {
         theme?: Dict
         style?: Dict
         forms?: Record<string, { rootId: string; nodes: Dict }>
+        /**
+         * The site's own records a page lists (AGL-3676), as the published
+         * page is handed them: a Product grid's first page, as the commerce
+         * enricher seeds it (`items`, each `{ id, name, slug, priceUsd,
+         * maxPriceUsd, imageUrl?, soldOut, priceComingSoon? }`), and a blog's
+         * entries by its collection slug, as compose expands them.
+         */
+        records?: { products?: Dict[]; posts?: { slug: string; entries: Dict[] } }
       }
       const theme = data.theme ?? (data.style ? themeOfStyle(data.style) : defaults.DEFAULT_SITE_THEME)
       const fonts = ((theme.fonts ?? []) as Dict[])
@@ -359,17 +374,37 @@ async function main(): Promise<void> {
         .join('')
       const render = (screen: Dict, scheme: 'light' | 'dark', menuOpen: boolean): string => {
         core.components.registerComponent(menuOpen ? OpenDrawer : drawer.default, drawerSchema)
-        const composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
+        let composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
+        // A blog's posts expanded into each Collection Entries block, as compose expands them.
+        const posts = data.records?.posts
+        if (posts) {
+          composed = collections.expandCollectionEntries(composed, { [posts.slug]: { slug: posts.slug, entries: posts.entries } }, posts.slug, 'UTC')
+        }
         core.canvas.setNodes(composed)
         const root = core.canvas.getNode('_@_')
+        // Each Product grid's first page, seeded as the commerce enricher seeds it.
+        const grids = Object.fromEntries(
+          (Object.entries(composed) as Array<[string, Dict]>)
+            .filter(([, node]) => node?.componentId === 'product-grid')
+            // The first page the grid's own query would return: at most its Max items or its page size.
+            .map(([id, node]) => {
+              const most = Number(node.props?.maxItems ?? node.props?.pageSize) || Infinity
+              return [id, { items: (data.records?.products ?? []).slice(0, most) }]
+            }),
+        )
+        const site = data.records ? { hostId: 'site-shot', pageData: { commerce: { grids } } } : {}
         // Both schemes' themes, as the tenant's HostThemeProvider gives them, so an
         // "Always dark" band (a dark band, a photo cover) pins its scheme here too.
         const schemeThemes = themes.createSiteSchemeThemes((pinned: 'light' | 'dark') => siteTheme.createAglynSiteTheme({ theme, scheme: pinned }))
         const markup = renderToStaticMarkup(
           h(
-            themes.SiteSchemeThemesContext.Provider,
-            { value: schemeThemes },
-            h(themes.ThemeProvider, { theme: schemeThemes(scheme) }, h(CssBaseline, null), h(renderer.AglynNodeRenderer, { node: root })),
+            siteContext.SiteContext.Provider,
+            { value: site },
+            h(
+              themes.SiteSchemeThemesContext.Provider,
+              { value: schemeThemes },
+              h(themes.ThemeProvider, { theme: schemeThemes(scheme) }, h(CssBaseline, null), h(renderer.AglynNodeRenderer, { node: root })),
+            ),
           ),
         )
         return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${fonts}<title>${key}</title></head><body>${markup}</body></html>`

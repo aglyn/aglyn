@@ -467,6 +467,18 @@ describe('an imported order’s run (AGL-3638)', () => {
     expect(h.store.connections.get(ID)!.shipments.confirmed).toBe(1)
   })
 
+  it('hands the adapter what the parcel cost to ship, or null when unknown (AGL-3693)', async () => {
+    const h = harness()
+    const id = await imported(h)
+    await queue(h, id, 'f1', { shippingCostCents: 1250 })
+    await queue(h, id, 'f2', { trackingNumber: '1Z998' })
+    expect(await h.engine.runOrder(id)).toBe('done')
+    expect(h.confirmations.map((one) => [one.trackingNumber, one.shippingCostMinor])).toEqual([
+      ['1Z999', 1250],
+      ['1Z998', null],
+    ])
+  })
+
   it('says why a shipment without tracking, or one the marketplace refused, was not confirmed', async () => {
     const h = harness()
     const id = await imported(h)

@@ -1,0 +1,178 @@
+{
+  "$comment": "Route answers in the console's own shapes, for rendering spec screens without a server: both platforms' snapshot tools draw each screen here at phone, tablet and desktop sizes (AglynScreens' SnapshotFixtures, com.aglyn.screens SnapshotRender). Nothing here reaches a route or the app at run time.",
+  "session": {
+    "email": "mobile-owner@example.test", "displayName": "Mobile Owner", "orgName": "Demo Workspace", "orgRole": "owner",
+    "siteName": "Demo Site", "orgId": "mobile-demo-org", "orgSlug": "demo-workspace", "hostId": "mobile-demo-site", "hostSlug": "demo-site", "uid": "seed-owner"
+  },
+  "staffSession": { "email": "mobile-staff@example.test", "displayName": "Mobile Staff", "claims": { "staff": true, "staffRole": "super" } },
+  "screens": {
+    "core.team": {
+      "data": {
+        "members": { "members": [
+          { "$id": "seed-owner", "displayName": "Mobile Owner", "email": "mobile-owner@example.test", "role": "owner", "allHosts": true, "title": "Founder" },
+          { "$id": "seed-admin-ava", "displayName": "Ava Patel", "email": "ava@example.test", "role": "admin", "allHosts": true, "title": "Operations" },
+          { "$id": "seed-editor-leo", "displayName": "Leo Martins", "email": "leo@example.test", "role": "editor", "allHosts": false, "title": "Designer" },
+          { "$id": "seed-viewer-kim", "displayName": "Kim Nguyen", "email": "kim@example.test", "role": "viewer", "allHosts": true }
+        ] },
+        "invites": { "invites": [ { "$id": "seed-invite-sam", "email": "sam@example.test", "role": "editor", "createdAt": 1791158400000 } ] },
+        "seats": { "managerSeats": 2, "pendingManagerSeats": 0, "memberCount": 4 }
+      }
+    },
+    "core.team.member": {
+      "params": { "uid": "seed-editor-leo" },
+      "data": {
+        "list": { "members": [ { "$id": "seed-editor-leo", "displayName": "Leo Martins", "email": "leo@example.test", "role": "editor", "allHosts": false, "title": "Designer", "joinedAt": 1788566400000 } ] },
+        "roles": { "roles": [ { "$id": "role-content", "name": "Content lead", "description": "Publishes and manages data" } ] },
+        "activity": { "entries": [
+          { "$id": "a1", "action": "published page", "target": { "type": "screen", "name": "Home" }, "createdAt": { "seconds": 1791380000 } },
+          { "$id": "a2", "action": "updated form", "target": { "type": "form", "name": "Contact" }, "createdAt": { "seconds": 1791290000 } }
+        ] }
+      }
+    },
+    "core.team.roles": {
+      "data": { "roles": { "roles": [
+        { "$id": "role-content", "name": "Content lead", "description": "Publishes and manages data" },
+        { "$id": "role-billing", "name": "Bookkeeper", "description": "Sees billing and invoices" }
+      ] } }
+    },
+    "core.team.activity": {
+      "data": { "activity": { "entries": [
+        { "$id": "a1", "action": "published page", "target": { "type": "screen", "name": "Home" }, "actorEmail": "leo@example.test", "createdAt": { "seconds": 1791380000 } },
+        { "$id": "a2", "action": "invited member", "target": { "type": "member", "name": "sam@example.test" }, "actorEmail": "mobile-owner@example.test", "createdAt": { "seconds": 1791300000 } },
+        { "$id": "a3", "action": "changed plan", "target": { "type": "org", "name": "Demo Workspace" }, "actorEmail": "mobile-owner@example.test", "createdAt": { "seconds": 1791200000 } }
+      ] } }
+    },
+    "core.settings": { "data": {} },
+    "core.settings.general": {
+      "data": { "org": { "$id": "mobile-demo-org", "name": "Demo Workspace", "slug": "demo-workspace", "timeZone": "America/Chicago", "defaultMediaScope": "host", "defaultResourceScope": "host" } }
+    },
+    "core.settings.apiKeys": {
+      "data": { "keys": { "keys": [
+        { "keyId": "k1", "name": "Zapier", "keyPrefix": "agk_live_3f9", "scopes": ["contacts:read", "contacts:write"], "lastUsedAt": 1791370000000 },
+        { "keyId": "k2", "name": "Inventory sync", "keyPrefix": "agk_live_a71", "scopes": ["datasets:read", "datasets:write"] },
+        { "keyId": "k3", "name": "Old CRM", "keyPrefix": "agk_live_0c2", "scopes": ["contacts:read"], "revokedAt": 1789000000000 }
+      ] } }
+    },
+    "core.settings.sso": {
+      "data": { "sso": { "ok": true, "sso": { "status": "active", "enforced": false, "displayName": "Okta" }, "metadata": { "acsUrl": "https://auth.aglyn.com/__/auth/handler", "entityId": "aglyn-demo-workspace" },
+        "claims": [ { "domain": "demo.example.test", "verified": true, "attested": false, "recordHost": "_aglyn-challenge.demo.example.test", "recordValue": "aglyn-domain-verification=4f1c" } ] } }
+    },
+    "core.billing": {
+      "data": {
+        "org": { "$id": "mobile-demo-org", "name": "Demo Workspace", "plan": "pro", "subscription": { "status": "active", "interval": "month", "currentPeriodEnd": 1793145600000 } },
+        "billing": null,
+        "usage": { "monthPageViews": 18240, "monthMediaBandwidthBytes": 1932735283, "bandwidthGb": 3.6 }
+      }
+    },
+    "core.billing.invoices": {
+      "data": { "invoices": { "invoices": [
+        { "id": "in_1", "number": "A1B2-0007", "status": "paid", "totalCents": 4900, "currency": "usd", "created": "2026-10-01T09:00:00Z", "hostedInvoiceUrl": "https://invoice.stripe.com/i/demo", "invoicePdf": "https://pay.stripe.com/invoice/demo/pdf" },
+        { "id": "in_2", "number": "A1B2-0006", "status": "paid", "totalCents": 4900, "currency": "usd", "created": "2026-09-01T09:00:00Z", "hostedInvoiceUrl": "https://invoice.stripe.com/i/demo2" },
+        { "id": "in_3", "number": "A1B2-0005", "status": "open", "totalCents": 1250, "currency": "usd", "created": "2026-08-15T09:00:00Z", "hostedInvoiceUrl": "https://invoice.stripe.com/i/demo3" }
+      ] } }
+    },
+    "core.billing.settings": {
+      "data": { "profile": { "configured": true, "customer": { "email": "billing@demo.example.test", "name": "Demo Workspace LLC",
+        "address": { "line1": "100 Congress Ave", "line2": "Suite 200", "city": "Austin", "state": "TX", "postalCode": "78701", "country": "US" } },
+        "taxIds": [ { "id": "txi_1", "type": "us_ein", "value": "12-3456789", "verification": "verified" } ],
+        "paymentMethods": [ { "id": "pm_1", "type": "card", "brand": "visa", "last4": "4242", "expMonth": 4, "expYear": 2029, "isDefault": true }, { "id": "pm_2", "type": "card", "brand": "mastercard", "last4": "4444", "expMonth": 9, "expYear": 2027, "isDefault": false } ] } }
+    },
+    "core.billing.usage": {
+      "data": { "usage": { "monthPageViews": 18240, "monthMediaBandwidthBytes": 1932735283, "bandwidthGb": 3.6 }, "budget": { "budgetSet": true, "amountUsd": 40, "month": "2026-10", "spend": { "lines": [ { "id": "assist", "label": "Assist", "units": 168, "unitLabel": "Assist credits" } ] } }, "storage": { "metered": true, "monthlyCapUsd": 25, "defaultCapUsd": 25 } }
+    },
+    "core.account.profile": {
+      "data": { "me": { "$id": "seed-owner", "firstName": "Mobile", "lastName": "Owner", "phoneNumber": "+1 512 555 0101" } }
+    },
+    "core.account.emails": {
+      "data": { "emails": { "emails": [ { "address": "mobile-owner@example.test", "primary": true, "verified": true }, { "address": "owner@demo.example.test", "verified": false } ] }, "consent": { "decision": "granted", "currentTextVersion": "2026-09-20" } }
+    },
+    "core.account.security": {
+      "data": { "devices": { "devices": [
+        { "id": "d1", "deviceName": "iPhone 17 Pro", "location": "Austin, TX", "lastSeenMs": 1791380000000 },
+        { "id": "d2", "deviceName": "MacBook Pro · Safari", "location": "Austin, TX", "lastSeenMs": 1791200000000 }
+      ] }, "passkeys": { "items": [ { "$id": "cred-1", "name": "iCloud Keychain", "createdAt": 1788000000000, "lastUsedAt": 1791300000000 } ] } }
+    },
+    "core.support.tickets": {
+      "data": { "tickets": { "tickets": [
+        { "$id": "t1", "subject": "Domain stuck on pending", "status": "open", "updatedAt": 1791370000000 },
+        { "$id": "t2", "subject": "Invoice address change", "status": "closed", "updatedAt": 1790000000000 }
+      ] } }
+    },
+    "core.support.ticket": {
+      "params": { "ticketId": "t1" },
+      "data": { "ticket": { "ticket": { "$id": "t1", "subject": "Domain stuck on pending", "status": "open", "createdAt": 1791300000000, "responseDueAt": 1791400000000 },
+        "messages": [ { "$id": "m1", "body": "My domain has said pending for a day.", "authorEmail": "mobile-owner@example.test", "createdAt": 1791300000000 }, { "$id": "m2", "body": "Thanks — the CNAME points at the old host. Update it to cname.aglyn.app and it will attach.", "authorEmail": "support@aglyn.com", "createdAt": 1791330000000 } ] } }
+    },
+    "core.site.general": {
+      "data": { "site": { "$id": "mobile-demo-site", "displayName": "Demo Site", "subdomain": "demo-site", "timeZone": "America/Chicago" } }
+    },
+    "core.site.domain": {
+      "data": {
+        "status": { "domain": "www.demo.example.test", "state": "ownership-pending", "attachmentPending": false,
+          "verification": [ { "type": "TXT", "domain": "_vercel.demo.example.test", "value": "vc-domain-verify=www.demo.example.test,8d2f" }, { "type": "CNAME", "domain": "www.demo.example.test", "value": "cname.aglyn.app" } ], "conflicts": [] },
+        "site": { "subdomain": "demo-site" }
+      }
+    },
+    "core.site.users": {
+      "data": {
+        "members": { "items": [ { "$id": "seed-owner", "displayName": "Mobile Owner", "email": "mobile-owner@example.test", "role": "admin", "owner": true, "status": "active" }, { "$id": "seed-collab-riley", "displayName": "Riley Chen", "email": "riley@example.test", "role": "editor", "status": "active" } ] },
+        "accounts": { "items": [ { "$id": "sm1", "displayName": "Jordan Lee", "email": "jordan@example.test", "createdAt": 1790500000000 } ] }
+      }
+    },
+    "core.site.security": {
+      "data": { "site": { "approvedMediaHosts": ["images.unsplash.com"], "approvedFontHosts": ["fonts.gstatic.com"], "approvedFormActions": [], "approvedFrameHosts": ["www.youtube.com"], "approvedConnectHosts": [] } }
+    },
+    "core.staff.overview": {
+      "staff": true,
+      "data": { "overview": { "orgs": 1284, "payingOrgs": 212, "compedOrgs": 9, "hosts": 1730, "mrrUsd": 9420, "rollupMonth": "2026-10",
+        "planCounts": [ { "plan": "free", "count": 1063 }, { "plan": "starter", "count": 96 }, { "plan": "pro", "count": 88 }, { "plan": "business", "count": 28 } ],
+        "anomalies": [ { "kind": "bandwidth-spike", "title": "Bandwidth spike", "detail": "Demo Workspace used 4× last month", "orgId": "mobile-demo-org" } ],
+        "newestOrgs": [ { "$id": "mobile-demo-org", "name": "Demo Workspace", "plan": "pro", "createdAt": 1791300000000 } ] } }
+    },
+    "core.staff.orgs": {
+      "staff": true,
+      "data": { "orgs": { "orgs": [
+        { "$id": "mobile-demo-org", "name": "Demo Workspace", "slug": "demo-workspace", "plan": "pro", "createdAt": 1788000000000, "subscription": { "status": "active" } },
+        { "$id": "org-2", "name": "Bluebird Bakery", "slug": "bluebird", "plan": "starter", "createdAt": 1789000000000, "subscription": { "status": "past_due" } },
+        { "$id": "org-3", "name": "Northwind Studio", "slug": "northwind", "createdAt": 1790000000000, "suspended": true }
+      ], "hasMore": false } }
+    },
+    "core.staff.org": {
+      "staff": true,
+      "params": { "orgId": "mobile-demo-org" },
+      "data": {
+        "detail": { "org": { "$id": "mobile-demo-org", "name": "Demo Workspace", "slug": "demo-workspace", "plan": "pro", "subscription": { "status": "active", "currentPeriodEnd": 1793145600000 }, "ownerEmail": "mobile-owner@example.test", "createdAt": 1788000000000 },
+          "people": [ { "uid": "seed-owner", "displayName": "Mobile Owner", "email": "mobile-owner@example.test" } ], "audit": [ { "action": "plan changed", "actorEmail": "mobile-owner@example.test", "at": 1791200000000 } ] },
+        "hosts": { "hosts": [ { "$id": "mobile-demo-site", "displayName": "Demo Site", "subdomain": "demo-site", "cname": "www.demo.example.test" } ] },
+        "notes": { "notes": [ { "text": "Asked about the Agency plan.", "actorEmail": "mobile-staff@example.test", "createdAt": 1791100000000 } ] }
+      }
+    },
+    "core.staff.user": {
+      "staff": true,
+      "params": { "uid": "seed-owner" },
+      "data": { "detail": { "user": { "uid": "seed-owner", "email": "mobile-owner@example.test", "displayName": "Mobile Owner", "disabled": false, "staff": false, "providers": ["password", "google.com"], "createdAt": 1788000000000, "lastSignInAt": 1791380000000,
+        "memberships": [ { "orgId": "mobile-demo-org", "orgName": "Demo Workspace", "role": "owner" } ], "devices": [ { "id": "d1", "deviceName": "iPhone 17 Pro", "location": "Austin, TX", "lastSeenMs": 1791380000000 } ] } } }
+    },
+    "core.staff.lockdown": {
+      "staff": true,
+      "data": { "locks": { "signupsCreationTrigger": { "status": "ok" }, "records": [ { "id": "org:org-3", "scope": "org", "targetId": "org-3", "mode": "full", "reason": "Phishing pages reported", "actorEmail": "mobile-staff@example.test", "atMs": 1791000000000 } ] } }
+    },
+    "ai.jobs": {
+      "data": {
+        "jobs": { "jobs": [
+          { "id": "j1", "kind": "site", "status": "running", "brief": "A bakery site with menu, about and contact", "createdAt": "2026-10-07T14:00:00Z", "creditsSpent": 120 },
+          { "id": "j2", "kind": "page", "status": "done", "brief": "Holiday specials page", "createdAt": "2026-10-05T10:00:00Z", "creditsSpent": 40 },
+          { "id": "j3", "kind": "products", "status": "failed", "brief": "Import 12 products from a photo", "createdAt": "2026-10-03T09:00:00Z", "creditsSpent": 8 }
+        ] },
+        "credits": { "credits": { "used": 168, "limit": 1000, "remaining": 832 } }
+      }
+    },
+    "ai.credits": {
+      "data": {
+        "credits": { "credits": { "used": 168, "limit": 1000, "remaining": 832 } },
+        "overage": { "hardCap": true, "capUsd": 25, "sellsOverage": true, "label": "Stop AI assist at the included band", "capLabel": "Monthly cap on extra AI use", "minCapUsd": 5, "maxCapUsd": 500 },
+        "allotments": { "members": [ { "uid": "seed-owner", "name": "Mobile Owner", "role": "owner", "credits": { "used": 120 } }, { "uid": "seed-editor-leo", "name": "Leo Martins", "role": "editor", "credits": { "used": 48 } } ], "sites": [ { "hostId": "mobile-demo-site", "name": "Demo Site", "credits": { "used": 168 } } ] }
+      }
+    }
+  }
+}

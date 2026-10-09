@@ -31,8 +31,8 @@ class ListQueryCasesTest {
     "SITE_LIST_DECLARATION" -> Contracts.siteListDeclaration
     "FORM_LIST_QUERY" -> Contracts.formListQuery
     "SUBMISSION_LIST_QUERY" -> Contracts.submissionListQuery
-    "COMPONENT_LIST_QUERY" -> Contracts.componentListQuery
     "LAYOUT_LIST_QUERY" -> Contracts.layoutListQuery
+    "COMPONENT_LIST_QUERY" -> Contracts.componentListQuery
     "TEMPLATE_LIST_QUERY" -> Contracts.templateListQuery
     "ENTRY_LIST_QUERY" -> Contracts.entryListQuery
     else -> error("no declaration $name")

@@ -39,6 +39,8 @@ const request = jest.fn()
 jest.mock('./tax-engines-api', () => ({
   useTaxEnginesFetch: () => request,
   useTaxEngineConnection: () => ({ ...connectionState, refresh: jest.fn(), replace: jest.fn() }),
+  // Taxes on Manual rates: the setting the service is used under (AGL-3693).
+  useStoreTaxSettings: () => ({ mode: 'manual' }),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

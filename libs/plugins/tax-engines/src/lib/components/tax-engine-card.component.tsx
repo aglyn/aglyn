@@ -37,13 +37,15 @@ import { useCallback, useState } from 'react'
 import { TAX_ENGINES_API_ROUTES } from '../constants/api-routes'
 import {
   TAX_ENGINE_PROVIDER_LABELS,
+  taxServiceUse,
+  type StoreTaxSettingsView,
   type TaxEngineAddress,
   type TaxEngineConnectionView,
   type TaxEngineEnvironment,
   type TaxEngineProviderId,
 } from '../model/tax-engines'
 import { TaxExemptionsSection } from './tax-exemptions-section.component'
-import { useTaxEngineConnection, useTaxEnginesFetch } from './tax-engines-api'
+import { useStoreTaxSettings, useTaxEngineConnection, useTaxEnginesFetch } from './tax-engines-api'
 
 /**
  * What commerce's `commerceSettings` zone hands a widget, restated here
@@ -81,30 +83,93 @@ const EMPTY_FORM: ConnectForm = {
 export function TaxEngineCard(props: TaxEngineCardProps) {
   const { hostId } = props
   const state = useTaxEngineConnection(hostId)
+  const storeTax = useStoreTaxSettings(state.available ? hostId : undefined)
   if (state.loading || !state.available) return null
   return state.connection ? (
-    <ConnectedCard hostId={hostId} connection={state.connection} onChange={state.replace} />
+    <ConnectedCard hostId={hostId} connection={state.connection} storeTax={storeTax} onChange={state.replace} />
   ) : (
-    <ConnectCard hostId={hostId} onConnected={state.replace} />
+    <ConnectCard hostId={hostId} storeTax={storeTax} onConnected={state.replace} />
+  )
+}
+
+/**
+ * The id of commerce's Taxes card on the store's Settings (AGL-3693),
+ * restated because a plugin never imports another. "Go to Taxes" scrolls
+ * to it.
+ */
+export const STORE_TAXES_CARD_ELEMENT_ID = 'commerce-store-taxes'
+
+function scrollToTaxes() {
+  document
+    .getElementById(STORE_TAXES_CARD_ELEMENT_ID)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** Why the store's current Taxes setting leaves the service unused. */
+const NOT_IN_USE_NOW: Readonly<
+  Record<'stripe' | 'none' | 'undecided' | 'prices-include-tax', { applies: string; now: string }>
+> = {
+  stripe: {
+    applies: 'Applies only when Taxes is set to Manual rates.',
+    now: 'Your store uses automatic tax (Stripe Tax) now',
+  },
+  none: {
+    applies: 'Applies only when Taxes is set to Manual rates.',
+    now: 'Your store is set not to collect sales tax now',
+  },
+  undecided: {
+    applies: 'Applies only when Taxes is set to Manual rates.',
+    now: 'Your store has not chosen how it handles sales tax yet',
+  },
+  'prices-include-tax': {
+    applies: 'Applies only when Taxes is set to Manual rates with prices that do not include tax.',
+    now: 'Your store’s prices include tax now',
+  },
+}
+
+/**
+ * Says plainly when the connected service is NOT used (AGL-3693): checkout
+ * and the register ask it only while Taxes is on Manual rates with prices
+ * that exclude tax, and only orders it priced are recorded there.
+ */
+function NotInUseNotice(props: { storeTax: StoreTaxSettingsView | null | undefined; serviceLabel: string }) {
+  const { storeTax, serviceLabel } = props
+  if (storeTax === undefined) return null
+  const use = taxServiceUse(storeTax)
+  if (!('reason' in use)) return null
+  const copy = NOT_IN_USE_NOW[use.reason]
+  return (
+    <Alert
+      severity="warning"
+      action={
+        <Button color="inherit" size="small" onClick={scrollToTaxes}>
+          {'Go to Taxes'}
+        </Button>
+      }
+    >
+      {`${copy.applies} ${copy.now}, so ${serviceLabel} is not asked for the tax on any sale ` +
+        'and new orders are not recorded there.'}
+    </Alert>
   )
 }
 
 function ResponsibilityNote() {
   return (
     <Alert severity="info">
-      {`${PLATFORM_BRAND_NAME} asks your tax service for the tax on each sale and records your ` +
-        'paid orders and refunds there. You remain responsible for registering where you owe ' +
-        'tax, filing your returns and paying the tax you collect — the tax service and your ' +
-        'own advisor are where those decisions are made.'}
+      {`While Taxes is set to Manual rates, ${PLATFORM_BRAND_NAME} asks your tax service for the ` +
+        'tax on each sale and records your paid orders and refunds there. You remain responsible ' +
+        'for registering where you owe tax, filing your returns and paying the tax you collect — ' +
+        'the tax service and your own advisor are where those decisions are made.'}
     </Alert>
   )
 }
 
 function ConnectCard(props: {
   hostId: string
+  storeTax: StoreTaxSettingsView | null | undefined
   onConnected: (connection: TaxEngineConnectionView | null) => void
 }) {
-  const { hostId, onConnected } = props
+  const { hostId, storeTax, onConnected } = props
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState<ConnectForm>(EMPTY_FORM)
@@ -140,6 +205,7 @@ function ConnectCard(props: {
       contentGutterY
     >
       <Stack spacing={1.5}>
+        <NotInUseNotice storeTax={storeTax} serviceLabel="a connected service" />
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
           <TextField
             select
@@ -213,9 +279,11 @@ function ConnectCard(props: {
 function ConnectedCard(props: {
   hostId: string
   connection: TaxEngineConnectionView
+  storeTax: StoreTaxSettingsView | null | undefined
   onChange: (connection: TaxEngineConnectionView | null) => void
 }) {
-  const { hostId, connection, onChange } = props
+  const { hostId, connection, storeTax, onChange } = props
+  const inUse = storeTax !== undefined && taxServiceUse(storeTax).applies
   const request = useTaxEnginesFetch()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
@@ -310,12 +378,15 @@ function ConnectedCard(props: {
             {connection.lastError ?? `${connection.providerLabel} did not accept the stored credentials.`}
           </Alert>
         )}
-        <Alert severity="info">
-          {`Checkout and the register ask ${connection.providerLabel} for the tax on every sale ` +
-            'while this store collects tax at its own rates (Taxes, above). Those rates stay as the ' +
-            `fallback: when ${connection.providerLabel} does not answer within 5 seconds, the sale ` +
-            'is taxed at them and the order says so.'}
-        </Alert>
+        <NotInUseNotice storeTax={storeTax} serviceLabel={connection.providerLabel} />
+        {inUse ? (
+          <Alert severity="info">
+            {`Checkout and the register ask ${connection.providerLabel} for the tax on every sale ` +
+              'while this store collects tax at its own rates (Taxes, above). Those rates stay as the ' +
+              `fallback: when ${connection.providerLabel} does not answer within 5 seconds, the sale ` +
+              'is taxed at them and the order says so.'}
+          </Alert>
+        ) : null}
         <Stack spacing={1}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">{'Ship-from address'}</Typography>

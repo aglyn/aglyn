@@ -273,7 +273,7 @@ class ShellUiTest {
     onNodeWithTag("sign-in-submit").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
     runOnIdle { navigator.select(ShellNavigator.SETTINGS) }
-    onNodeWithTag("settings-notifications").performClick()
+    onNodeWithTag("settings-notifications").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
   }
 }

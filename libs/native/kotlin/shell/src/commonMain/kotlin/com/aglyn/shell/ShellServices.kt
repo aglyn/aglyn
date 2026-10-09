@@ -46,6 +46,12 @@ class ShellServices(
   val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,
   /** Writes as the signed-in person, under the same rules as the console's own writes. */
   val writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+  /**
+   * Opens a page someone else hosts (Stripe Checkout, the Customer Portal)
+   * in the platform's secure in-app browser: Custom Tabs on Android, the
+   * system browser on desktop. Never a web view of ours.
+   */
+  val openHostedPage: (url: String) -> Unit = {},
   /** Remote images for every screen ([com.aglyn.ui.LocalImageLoader]). */
   val imageLoader: com.aglyn.ui.ImageLoader? = HttpImageLoader(com.aglyn.core.defaultHttpClient()),
   /** The device's photo, camera and file pickers ([com.aglyn.ui.LocalMediaPicker]); the entry point binds them. */
@@ -76,7 +82,7 @@ sealed interface Route {
  * core rather than a plugin's: loaded before the generated plugin manifest,
  * through the same registrar and declaration check.
  */
-val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = listOf(com.aglyn.site.SitePlatformEntry)
+val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = listOf(com.aglyn.site.SitePlatformEntry, com.aglyn.screens.CoreScreens.manifestEntry)
 
 /** The site's Pages screen, which the site registration (libs/native/kotlin/site) contributes. */
 const val SITE_PAGES_SCREEN_ID = "site.pages"

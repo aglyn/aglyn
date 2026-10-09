@@ -738,6 +738,7 @@ export function createEngine(deps: EngineDeps) {
             carrier: shipment.carrier,
             trackingNumber: shipment.trackingNumber,
             trackingUrl: shipment.trackingUrl,
+            shippingCostMinor: shipment.shippingCostCents ?? null,
             shippedAtMs: shipment.atMs,
             reference: `${order.recordId}:${fulfillmentId}`.slice(0, 120),
           })

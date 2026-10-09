@@ -6,6 +6,7 @@
 package com.aglyn.plugins.manifest
 
 import com.aglyn.pluginhost.NativePluginManifestEntry
+import com.aglyn.plugins.ai.registerAINative
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
 import com.aglyn.plugins.crm.registerCrmNative
@@ -17,10 +18,16 @@ import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
+import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
 
 object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
+        NativePluginManifestEntry(
+            id = "ai",
+            contributes = mapOf("screens" to listOf("ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
+            register = ::registerAINative,
+        ),
         NativePluginManifestEntry(
             id = "bookings",
             contributes = mapOf("screens" to listOf("bookings.booking", "bookings.calendar", "bookings.counter", "bookings.services"), "widgets" to listOf("bookings.today"), "quickActions" to listOf("bookings.open"), "deepLinks" to listOf("bookings.page")),
@@ -75,6 +82,11 @@ object NativePluginManifest {
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "sms",
+            contributes = mapOf("screens" to listOf("sms.texts"), "quickActions" to listOf("sms.open")),
+            register = ::registerSmsNative,
         ),
         NativePluginManifestEntry(
             id = "workflows",

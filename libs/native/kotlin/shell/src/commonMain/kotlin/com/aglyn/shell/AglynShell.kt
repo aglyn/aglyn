@@ -17,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -130,6 +132,26 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
 
   BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.back() }
 
+  // The token's claims gate the staff section; read from the token itself, as the console does.
+  var claims by remember(uid) { mutableStateOf(com.aglyn.core.TokenClaims()) }
+  LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }
+  val authState by services.auth.state.collectAsState()
+  val user = (authState as? AuthState.SignedIn)?.user
+  val screenSession = com.aglyn.screens.ScreenSession(
+    email = user?.email,
+    displayName = user?.displayName,
+    orgName = workspace.org?.name,
+    orgRole = workspace.org?.role,
+    siteName = workspace.site?.name,
+    claims = claims,
+    origin = services.config.consoleOrigin,
+    reauthenticate = { password -> services.auth.signInWithEmail(user?.email.orEmpty(), password) },
+    refreshClaims = { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()) },
+    openHostedPage = services.openHostedPage,
+    back = { navigator.back() },
+  )
+
+  androidx.compose.runtime.CompositionLocalProvider(com.aglyn.screens.LocalScreenSession provides screenSession) {
   val inDrawer = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
   AglynNavigationSuite(
     destinations, navigator.top, onSelect = navigator::select,
@@ -188,7 +210,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
             navigator.top == ShellNavigator.MORE -> MoreScreen(services, context)
             navigator.top == ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
-            navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services) { navigator.push(Route.NotificationSettings) }
+            navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services, context, screenSession.claims.isStaff) { navigator.push(Route.NotificationSettings) }
             navigator.top.startsWith("screen:") ->
               PluginScreenHost(services, context, navigator.top.removePrefix("screen:"), emptyMap(), workspace.site != null) {
                 navigator.select(ShellNavigator.HOME)
@@ -199,4 +221,5 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       }
     }
   }
+}
 }

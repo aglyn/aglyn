@@ -563,6 +563,14 @@
         "DROP_OFF_MAX_HOURS",
         "DROP_OFF_WATCHES_MAX"
       ]
+    },
+    "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts": {
+      "types": [
+        "FirstPartyPlugin"
+      ],
+      "values": [
+        "FIRST_PARTY_PLUGINS"
+      ]
     }
   },
   "ints": [
@@ -8752,6 +8760,313 @@
               }
             ]
           }
+        ]
+      ]
+    },
+    "resolveEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "enabledPlugins": []
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "crm",
+              "commerce",
+              "crm"
+            ]
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "accounts",
+              "commerce",
+              "bookings"
+            ]
+          }
+        ]
+      ]
+    },
+    "resolveHostEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          null,
+          null
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          null
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          {
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          {
+            "disabledPlugins": [
+              "crm",
+              "mui",
+              "forms"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "disabledPlugins": [
+              "accounts"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ]
+      ]
+    },
+    "resolvePluginSiteState": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "argsProduct": [
+        [
+          null,
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "disabledPlugins": [
+              "crm"
+            ]
+          },
+          {
+            "enabledPlugins": [
+              "accounts"
+            ]
+          },
+          {
+            "disabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          "mui",
+          "forms",
+          "crm",
+          "accounts",
+          "commerce"
+        ]
+      ]
+    },
+    "resolveDisableCascade": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "commerce",
+          [
+            "commerce",
+            "accounts",
+            "crm"
+          ]
+        ],
+        [
+          "commerce",
+          [
+            "commerce",
+            "crm"
+          ]
+        ],
+        [
+          "crm",
+          [
+            "crm"
+          ]
+        ],
+        [
+          "mui",
+          [
+            "mui",
+            "commerce",
+            "accounts"
+          ]
+        ]
+      ]
+    },
+    "pluginRequirements": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "commerce"
+        ],
+        [
+          "nope"
+        ]
+      ]
+    },
+    "pluginDependents": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "commerce"
+        ],
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "isLockedOnForWorkspace": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "crm"
+        ],
+        [
+          "fonts"
+        ]
+      ]
+    },
+    "isLockedOnForSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "fonts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "isDefaultOffPerSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "buyerNotificationEnabled": {
+      "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "args": [
+        [
+          null,
+          "texts"
+        ],
+        [
+          {},
+          "texts"
+        ],
+        [
+          {
+            "texts": false
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": true
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": "no"
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": false
+          },
+          "receipt"
+        ],
+        [
+          {
+            "receipt": false
+          },
+          "receipt"
+        ],
+        [
+          {
+            "receipt": false,
+            "texts": true
+          },
+          "texts"
+        ],
+        [
+          "off",
+          "texts"
+        ],
+        [
+          [],
+          "texts"
+        ],
+        [
+          {
+            "texts": null
+          },
+          "texts"
         ]
       ]
     }

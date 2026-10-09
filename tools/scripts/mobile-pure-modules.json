@@ -134,6 +134,14 @@
       "why": "Reached by booking-contact-fields: contact shapes and the phone normalizer; no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "why": "The plugin switchboard resolvers (which plugins a workspace and a site run, what switching one off strands), ported for the native Plugins screens and replayed from function-cases (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
+      "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
+    },
+    {
       "path": "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts",
       "why": "What a service asks the booker for and how a booking's phone and address read (AGL-3670)."
     },
