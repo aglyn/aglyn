@@ -73,9 +73,12 @@ import { registerAiConsole } from '../plugin'
 import {
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
-  aiFreeSiteCreditEstimate,
-  aiSiteCreditEstimate,
+  aiFreeCreditsNoneLeftText,
+  aiFreeSiteCreditRange,
+  aiFreeSitePrompt,
+  aiSiteCreditRange,
 } from '../model/ai-site-job'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText, aiCreditRangeText } from '../model/ai-credit-estimate'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import { resetAiModelOptionReadsForTests } from './use-ai-model-choice'
 
@@ -672,9 +675,8 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
     expect(options).toEqual(['1', '2'])
     expect(screen.queryByLabelText('Welcome email')).toBeNull()
-    expect(
-      screen.getByText(new RegExp(`Up to about ${aiFreeSiteCreditEstimate(2)} of the 300 AI credits`)),
-    ).toBeTruthy()
+    // About what it is likely to cost, and at most (AGL-3722).
+    expect(screen.getByText('About 137 credits (up to 282), of the 300 AI credits you get free each month.')).toBeTruthy()
   })
 
   it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
@@ -683,36 +685,72 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
     expect(
       screen.getByText(
-        `Up to about ${aiFreeSiteCreditEstimate(2)} AI credits. You have 290 of your 300 free AI credits left this month, until November 1.`,
+        `${aiCreditRangeText(aiFreeSiteCreditRange(2))}. You have 290 of your 300 free AI credits left this month, until November 1.`,
       ),
     ).toBeTruthy()
-    expect(screen.queryByText(/Building this site can take/)).toBeNull()
+    // It fits: no prompt.
+    expect(screen.queryByText(/Build what fits/)).toBeNull()
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('does not start a site what is left cannot pay for: says so, offers the upgrade, and starts no job (AGL-3660)', async () => {
+  it('asks before a site past what is left, starts nothing until the go-ahead, then starts it confirmed (AGL-3722)', async () => {
     await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 70, total: 300, resetsOn: '2026-11-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    const warning = screen.getByText(/Building this site can take up to about 282 AI credits, and only 70 are left/)
-    expect(warning.textContent).toMatch(/shared by all your Free workspaces and reset on November 1/)
-    // 70 covers no one-page start either, so it offers none.
-    expect(warning.textContent).not.toMatch(/choose 1 page/)
+    const prompt = aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 2)!
+    const warning = screen.getByRole('alert', { name: 'More than your credits left' })
+    expect(warning.textContent).toContain(aiCreditsPromptText(prompt, 'site'))
+    expect(warning.textContent).toContain(
+      'This site is about 137 credits (up to 282). You have 70 left, so it will build as much as it can and pause when your credits run out.',
+    )
     expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
+    // Plan my site alone starts nothing: only an explicit choice does.
     const start = screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement
     expect(start.disabled).toBe(true)
     fireEvent.click(start)
     expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Build what fits' }))
+    await waitFor(() => expect(postCall()).toBeTruthy())
+    const body = JSON.parse(postCall()[1].body)
+    expect(body.creditsConfirmed).toBe(true)
+    expect(body.inputs).toEqual(expect.objectContaining({ pages: 2 }))
   })
 
-  it('points at one page when what is left covers one and not two (AGL-3660)', async () => {
-    const left = aiFreeSiteCreditEstimate(1)
-    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left, total: 300, resetsOn: '2026-11-01' } })
+  it('offers the home page first, as a one-page start, with what it is likely to cost (AGL-3722)', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 120, total: 300, resetsOn: '2026-11-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
-    expect(screen.getByText(/Or choose 1 page, which what you have left covers\./)).toBeTruthy()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: `Build the home page first (about ${aiFreeSiteCreditRange(1).likely} credits)` }))
+    await waitFor(() => expect(postCall()).toBeTruthy())
+    const body = JSON.parse(postCall()[1].body)
+    expect(body.inputs).toEqual(expect.objectContaining({ pages: 1 }))
+    expect(body.creditsConfirmed).toBe(true)
+  })
+
+  it('stops only when nothing is left at all, with when the credits renew and Upgrade', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 0, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    expect(screen.getByText(aiFreeCreditsNoneLeftText('2026-11-01'))).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Build what fits' })).toBeNull()
+    expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('a stale dialog meets the door’s prompt and can still build what fits (AGL-3722)', async () => {
+    await openFreeCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    const prompt = aiFreeSitePrompt({ left: 60, resetsOn: '2026-11-01' }, 2)!
+    mockFetch.mockResolvedValueOnce(json({ error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }, 409))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    expect(await screen.findByRole('button', { name: 'Build what fits' })).toBeTruthy()
+    // Nothing started: the dialog stays on its answers, Plan my site held.
+    expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('starts a two-page site job with no welcome email', async () => {
@@ -737,8 +775,8 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
   it('offers the model picker on a paid plan, prices the estimate by the pick, and starts the job on it', async () => {
     await openCard()
     const picker = screen.getByRole('button', { name: 'AI model: Auto' })
-    const auto = aiSiteCreditEstimate(5, { welcomeEmail: true })
-    expect(screen.getByText(`About ${auto.toLocaleString('en-US')} credits, estimated.`)).toBeTruthy()
+    const auto = aiSiteCreditRange(5, { welcomeEmail: true })
+    expect(screen.getByText(`${aiCreditRangeText(auto)}, estimated.`)).toBeTruthy()
     mockFetch.mockResolvedValueOnce(
       json({
         kind: 'job.page',
@@ -753,7 +791,11 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     fireEvent.click(picker)
     fireEvent.click(await screen.findByText('Claude Haiku 4.5'))
     expect(screen.getByRole('button', { name: 'AI model: Claude Haiku 4.5' })).toBeTruthy()
-    expect(screen.getByText(`About ${Math.round(auto * 0.4).toLocaleString('en-US')} credits, estimated.`)).toBeTruthy()
+    expect(
+      screen.getByText(
+        `${aiCreditRangeText({ likely: Math.round(auto.likely * 0.4), p90: Math.round(auto.p90 * 0.4), ceiling: Math.round(auto.ceiling * 0.4) })}, estimated.`,
+      ),
+    ).toBeTruthy()
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))

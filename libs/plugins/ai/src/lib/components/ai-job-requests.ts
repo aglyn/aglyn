@@ -17,6 +17,7 @@
 'use client'
 
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
+import { AI_CREDITS_CONFIRM_CODE, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { assistBuildJobRequest, type AssistBuildProposal } from '../model/assist-build'
 import { publishAiJob } from './ai-jobs-store'
@@ -36,6 +37,11 @@ import { publishAiJob } from './ai-jobs-store'
 export interface AiJobDecision {
   job: AiJobSummary | null
   error: string | null
+  /**
+   * A Free job past what is left (AGL-3722): the door's 409 asks for the
+   * person's go-ahead with these figures and choices instead of starting it.
+   */
+  credits?: AiCreditsPrompt | null
 }
 
 /**
@@ -45,6 +51,10 @@ export interface AiJobDecision {
 export interface AiJobResumeOptions {
   publish?: boolean
   retry?: 'failed-items'
+  /** "Build what fits" (AGL-3722): a Free job past what is left, started on the person's go-ahead. */
+  creditsConfirmed?: boolean
+  /** "Build the home page first" (AGL-3722): the plan narrowed to its home page and what it needs. */
+  reduce?: 'first-page'
 }
 
 /**
@@ -69,17 +79,24 @@ export async function resumeAiJobRequest(
           hostId: job.hostId,
           ...(options.publish ? { publish: true } : {}),
           ...(options.retry ? { retry: options.retry } : {}),
+          ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
+          ...(options.reduce ? { reduce: options.reduce } : {}),
         }),
       },
     )
     const payload = await response.json().catch(() => null)
     const next = (payload?.job as AiJobSummary | undefined) ?? null
     publishAiJob(next)
+    const credits =
+      response.status === 409 && payload?.code === AI_CREDITS_CONFIRM_CODE
+        ? ((payload?.credits as AiCreditsPrompt | undefined) ?? null)
+        : null
     return {
       job: next,
       error: response.ok
         ? null
         : String(payload?.error ?? 'The job could not be resumed — try again.'),
+      ...(credits ? { credits } : {}),
     }
   } catch {
     return { job: null, error: 'The job could not be resumed — try again.' }

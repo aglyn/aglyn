@@ -45,8 +45,11 @@ import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { aiBuildUnitJob, createAiJobBuildStep } from './ai-job-build-step'
-import { aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
+import { aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
+import { aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
+import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
+import { registerAiJobStep } from './ai-jobs'
 
 const NOW = new Date('2026-10-06T12:00:00.000Z')
 
@@ -324,5 +327,109 @@ describe('the build step (AGL-3616)', () => {
       status: 'skipped',
       note: 'Not built: Version history requires a Pro plan — see Billing to upgrade',
     })
+  })
+})
+
+describe('a Free build is admitted on its measured p90, and asks before it starts past what is left (AGL-3722)', () => {
+  // The StillWing brief that was refused at 600-odd credits with 164 left: a
+  // home of six sections and a quote page of three, one layout, one form.
+  const section = (name: string, uses: string[] = []) => ({ name, uses, items: 0 })
+  const screen = (title: string, slug: string, sections: ReturnType<typeof section>[], id: string) => ({
+    title,
+    slug,
+    layout: 'new:Frame',
+    template: null,
+    duplicateOf: null,
+    nav: true,
+    seoTitle: title,
+    seoDescription: title,
+    sections,
+    record: null,
+    id,
+  })
+  const STILLWING: AiJobPlan = {
+    reuse: [],
+    create: [
+      { kind: 'layout', name: 'Frame', why: 'shared header and footer', duplicateOf: null, fields: [], id: 'layout-1' },
+      { kind: 'form', name: 'Quote', why: 'quote requests', duplicateOf: null, fields: [], id: 'form-1' },
+    ],
+    screens: [
+      screen('Home', '/', ['hero', 'services', 'process', 'work', 'reviews', 'cta'].map((name) => section(name)), 'page-1'),
+      screen('Get a quote', '/quote', [section('intro'), section('form', ['new:Quote']), section('faq')], 'page-2'),
+    ],
+    status: 'proposed',
+    labels: {},
+    proposedAt: NOW as never,
+    confirmedAt: null,
+    confirmedBy: null,
+  }
+  const reads: string[] = []
+  const admission = (left: number) =>
+    createAiBuildJobAdmission({
+      opsFor: async () => OPS,
+      now: () => NOW,
+      freeCreditsLeft: async (_firestore, input) => {
+        reads.push(input.orgId)
+        return { left, total: 300, resetsOn: '2026-11-01' }
+      },
+    })
+  const ask = (left: number, extra: Record<string, unknown> = {}) =>
+    admission(left)({
+      firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: {},
+      org: { plan: 'free' },
+      plan: STILLWING,
+      ...extra,
+    })
+
+  beforeAll(() => registerAiJobStep('page', pageRunner([])))
+  beforeEach(() => {
+    reads.length = 0
+  })
+
+  it('quotes it at its measured figures: about 106 (p90 127, up to 650)', () => {
+    expect(aiBuildCreditRange(STILLWING, { ops: OPS })).toEqual({ likely: 106, p90: 127, ceiling: 650 })
+  })
+
+  it('admits it with no prompt when its p90 fits — the prod refusal at 164 left is gone', async () => {
+    await expect(ask(164)).resolves.toBeNull()
+    await expect(ask(127)).resolves.toBeNull()
+    expect(reads).toEqual(['org-1', 'org-1'])
+  })
+
+  it('answers past what is left with the prompt (no start), the home page first and what is left', async () => {
+    const refused = await ask(100)
+    const home = aiBuildFirstPagePlan(STILLWING)!
+    expect(home.screens.map((one) => one.title)).toEqual(['Home'])
+    expect(home.create.map((one) => one.name)).toEqual(['Frame'])
+    const prompt = {
+      likely: 106,
+      p90: 127,
+      ceiling: 650,
+      left: 100,
+      resetsOn: '2026-11-01',
+      smaller: { label: 'Build the home page first', ...aiBuildCreditRange(home, { ops: OPS }) },
+    }
+    expect(refused).toEqual({ status: 409, error: aiCreditsPromptText(prompt, 'build'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt })
+    expect(refused?.error).toBe(
+      'This build is about 106 credits (up to 650). You have 100 left, so it will build as much as it can and pause when ' +
+        'your credits run out. You can upgrade or resume when they renew on November 1.',
+    )
+  })
+
+  it('admits it on the go-ahead and tells the door what was confirmed; the smaller first build fits on its own', async () => {
+    const confirmed: unknown[] = []
+    await expect(ask(100, { creditsConfirmed: true, onCreditsConfirmed: (one: unknown) => confirmed.push(one) })).resolves.toBeNull()
+    expect(confirmed).toEqual([expect.objectContaining({ likely: 106, p90: 127, left: 100 })])
+    await expect(ask(100, { plan: aiBuildFirstPagePlan(STILLWING) })).resolves.toBeNull()
+  })
+
+  it('refuses only when nothing is left, and never reads a paid workspace', async () => {
+    await expect(ask(0, { creditsConfirmed: true })).resolves.toEqual({ status: 429, error: aiFreeCreditsNoneLeftText('2026-11-01') })
+    reads.length = 0
+    await expect(ask(0, { org: { plan: 'pro' } })).resolves.toBeNull()
+    expect(reads).toEqual([])
   })
 })

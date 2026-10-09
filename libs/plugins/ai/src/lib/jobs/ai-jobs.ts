@@ -46,6 +46,7 @@ import {
   type AiJobStepTokens,
   type AiJobSummary,
 } from '../model/ai-jobs.types'
+import type { AiJobCreditsConfirmation } from '../model/ai-credit-estimate'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
@@ -560,6 +561,8 @@ export interface CreateAiJobInput {
   createdBy: string
   /** The creator's address, for the activity row; the document stores the uid only. */
   createdByEmail?: string | null
+  /** A Free start the creator chose to build past what was left (AGL-3722). */
+  creditsConfirmed?: AiJobCreditsConfirmation | null
 }
 
 /**
@@ -611,6 +614,7 @@ export async function createAiJob(
     expiresAt: assistExchangeExpiry(now),
     error: null,
     lease: null,
+    ...(input.creditsConfirmed ? { creditsConfirmed: input.creditsConfirmed } : {}),
   }
   await ref.set(data)
   await logAiJobCreated(
@@ -1638,6 +1642,10 @@ export async function retryAiBuildJob(
   orgId: string,
   jobId: string,
   now = new Date(),
+  options: {
+    /** A Free Try again the person chose to run past what was left (AGL-3722). */
+    creditsConfirmed?: AiJobCreditsConfirmation | null
+  } = {},
 ): Promise<{ job: AiJob; changed: boolean; retried: string[] }> {
   let retried: string[] = []
   const result = await transition(firestore, orgId, jobId, (current) => {
@@ -1664,6 +1672,7 @@ export async function retryAiBuildJob(
           ? next.retried.length * AI_JOB_STEP_RESERVE_CREDITS
           : aiBuildCreditEstimate(plan, { slots: new Set(next.retried) }),
       ),
+      ...(options.creditsConfirmed ? { creditsConfirmed: options.creditsConfirmed } : {}),
       updatedAt: now,
     }
   })
@@ -1695,6 +1704,17 @@ export async function resumeAiJob(
      * pass put its pages live.
      */
     publishConfirmed?: boolean
+    /**
+     * A Free build or start the person chose to build past what was left
+     * (AGL-3722), kept on the job: who, when, what was left.
+     */
+    creditsConfirmed?: AiJobCreditsConfirmation | null
+    /**
+     * The smaller first build the person chose instead (AGL-3722): its plan
+     * — the home page and what it needs — is the one confirmed, in place of
+     * the plan the job proposed. Only while that plan waits for confirmation.
+     */
+    reducePlan?: (plan: AiJobPlan) => AiJobPlan | null
   } = {},
 ): Promise<{ job: AiJob; changed: boolean }> {
   return transition(firestore, orgId, jobId, (current) => {
@@ -1711,7 +1731,8 @@ export async function resumeAiJob(
     )
     const outstanding = steps.filter((step) => step.status === 'pending').length
     const pending = outstanding > 0
-    const confirming = current.review?.reason === 'plan' && current.plan ? current.plan : null
+    const proposed = current.review?.reason === 'plan' && current.plan ? current.plan : null
+    const confirming = proposed && options.reducePlan ? (options.reducePlan(proposed) ?? proposed) : proposed
     const confirmed = confirming
       ? {
           plan: {
@@ -1733,6 +1754,7 @@ export async function resumeAiJob(
       error: null,
       ...confirmed,
       ...publish,
+      ...(options.creditsConfirmed ? { creditsConfirmed: options.creditsConfirmed } : {}),
       creditsReserved: pending
         ? Math.max(
             outstanding * AI_JOB_STEP_RESERVE_CREDITS,
