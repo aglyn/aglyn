@@ -21,8 +21,9 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 
 /**
- * ShipBob and Amazon (AGL-3634): each the merchant's OWN account, connected
- * by the merchant's own consent, so each is a destination the customer chose
+ * ShipBob and Amazon (AGL-3634), and ShipMonk (AGL-3697): each the
+ * merchant's OWN account, connected by the merchant's own consent (a grant,
+ * or for ShipMonk the merchant's own API key), so each is a destination the customer chose
  * rather than a recipient of Aglyn's. Nothing reaches either until a site
  * connects one, and then only that site's orders and stock.
  */
@@ -32,6 +33,7 @@ const ORDER_DATA =
 
 const SHIPBOB_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/shipbob.ts`'
 const AMAZON_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/amazon-mcf.ts`'
+const SHIPMONK_FILE = '`libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`'
 const OAUTH_FILE = '`libs/plugins/fulfillment-networks/src/lib/server/oauth.ts`'
 
 const api = (host: string, network: string, file: string, sandbox: boolean): PluginEgressHostDeclaration => ({
@@ -71,6 +73,16 @@ export const FULFILLMENT_NETWORKS_HOSTS: PluginEgressHostDeclaration[] = [
   consentPage('sellercentral.amazon.com'),
   consentPage('sellercentral-europe.amazon.com'),
   consentPage('sellercentral.amazon.co.jp'),
+  {
+    ...api('api.shipmonk.com', 'ShipMonk', SHIPMONK_FILE, false),
+    reason: `Customer-chosen destination. The ShipMonk API of the store whose own API key a site's admin pastes in the store's settings, reached only from ${SHIPMONK_FILE} with that key, to send the orders the merchant routes to it and read their shipments and stock back.`,
+    dataReceived: ORDER_DATA.replace('the access token the merchant\'s grant issued', 'the API key the merchant pasted'),
+  },
+  {
+    ...api('sandbox.shipmonk.dev', 'ShipMonk', SHIPMONK_FILE, true),
+    reason: `Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from ${SHIPMONK_FILE}. Used only by a deployment pointed at the sandbox (\`SHIPMONK_ENVIRONMENT=sandbox\`), where nothing real ships.`,
+    dataReceived: ORDER_DATA.replace('the access token the merchant\'s grant issued', 'the API key the merchant pasted'),
+  },
 ]
 
 /** The plugin's `subprocessors` entry: no recipient of Aglyn's own, only the merchant's chosen destinations. */
