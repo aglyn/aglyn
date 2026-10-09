@@ -386,6 +386,18 @@ describe('Etsy (AGL-3638)', () => {
       expect(sentJson(calls[1])).toEqual({ tracking_code: 'CP123', carrier_name: 'canada-post', send_bcc: false })
     })
 
+    it('sends no shipping cost: Etsy’s receipt tracking has no field for one (AGL-3693)', async () => {
+      const routes = [
+        { method: 'GET', match: '/shops/555/receipts/3001', body: { receipt_id: 3001, shipments: [] } },
+        { method: 'POST', match: '/shops/555/receipts/3001/tracking', body: { receipt_id: 3001, is_shipped: true } },
+      ]
+      const without = mockHttp(routes)
+      const withCost = mockHttp(routes)
+      await createEtsyProvider({ http: without.http }).confirmShipment(APP, CREDENTIAL, CONFIRMATION)
+      await createEtsyProvider({ http: withCost.http }).confirmShipment(APP, CREDENTIAL, { ...CONFIRMATION, shippingCostMinor: 845 })
+      expect(sentJson(withCost.calls[1])).toEqual(sentJson(without.calls[1]))
+    })
+
     it('answers already when the receipt carries the tracking code or Etsy says so', async () => {
       const held = mockHttp([{ method: 'GET', match: '/receipts/3001', body: { shipments: [{ tracking_code: 'CP123', carrier_name: 'canada-post' }] } }])
       expect(await createEtsyProvider({ http: held.http }).confirmShipment(APP, CREDENTIAL, CONFIRMATION)).toBe('already')

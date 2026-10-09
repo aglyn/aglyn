@@ -1,0 +1,314 @@
+{
+  "$comment": "Cases both renderers replay (AglynScreensTests, com.aglyn.screens ScreenValuesTest), so a spec reads the same on Apple and Kotlin. Dates print in UTC here.",
+  "context": {
+    "org": {
+      "id": "org1",
+      "name": "Acme",
+      "role": "admin",
+      "manager": true
+    },
+    "staff": {
+      "is": false,
+      "role": null
+    },
+    "params": {
+      "uid": "u2",
+      "empty": ""
+    },
+    "data": {
+      "members": [
+        {
+          "$id": "u1",
+          "email": "a@acme.test",
+          "displayName": "Ada",
+          "role": "owner",
+          "count": 0
+        },
+        {
+          "$id": "u2",
+          "email": "b@acme.test",
+          "displayName": "",
+          "role": "editor",
+          "joined": 1791331200
+        }
+      ],
+      "perms": {
+        "org.settings": true
+      },
+      "money": 123456,
+      "currency": "eur",
+      "bytes": 1572864,
+      "ratio": 0.456,
+      "when": "2026-10-07T15:04:00Z",
+      "ts": {
+        "_seconds": 1791385440
+      },
+      "flag": false,
+      "list": [
+        "x",
+        "y"
+      ],
+      "big": 1234567.891
+    }
+  },
+  "render": [
+    {
+      "template": "Hi {data.members.0.displayName}",
+      "expect": "Hi Ada"
+    },
+    {
+      "template": "{data.members.1.displayName|data.members.1.email}",
+      "expect": "b@acme.test"
+    },
+    {
+      "template": "{data.missing|'none'}",
+      "expect": "none"
+    },
+    {
+      "template": "{data.members.0.count|'n/a'}",
+      "expect": "n/a"
+    },
+    {
+      "template": "{data.members.0.count}",
+      "expect": "0"
+    },
+    {
+      "template": "{data.members[$id=params.uid].email}",
+      "expect": "b@acme.test"
+    },
+    {
+      "template": "{data.perms[org.settings]:yesno}",
+      "expect": "Yes"
+    },
+    {
+      "template": "{data.money:cents}",
+      "expect": "$1,234.56"
+    },
+    {
+      "template": "{data.money:cents/data.currency}",
+      "expect": "€1,234.56"
+    },
+    {
+      "template": "{data.bytes:bytes}",
+      "expect": "1.5 MB"
+    },
+    {
+      "template": "{data.ratio:percent}",
+      "expect": "45.6%"
+    },
+    {
+      "template": "{data.when:date}",
+      "expect": "Oct 7, 2026"
+    },
+    {
+      "template": "{data.when:datetime}",
+      "expect": "Oct 7, 2026, 3:04 PM"
+    },
+    {
+      "template": "{data.ts:datetime}",
+      "expect": "Oct 7, 2026, 3:04 PM"
+    },
+    {
+      "template": "{data.members.1.joined:date}",
+      "expect": "Oct 7, 2026"
+    },
+    {
+      "template": "{data.flag:yesno}",
+      "expect": "No"
+    },
+    {
+      "template": "{data.list}",
+      "expect": "x, y"
+    },
+    {
+      "template": "{data.list:count} items",
+      "expect": "2 items"
+    },
+    {
+      "template": "{data.members.length}",
+      "expect": "2"
+    },
+    {
+      "template": "{data.big:number}",
+      "expect": "1,234,567.89"
+    },
+    {
+      "template": "{data.members.1.role:title}",
+      "expect": "Editor"
+    },
+    {
+      "template": "past_due",
+      "expect": "past_due"
+    },
+    {
+      "template": "{{literal}}",
+      "expect": "{literal}}"
+    }
+  ],
+  "url": [
+    {
+      "template": "/api/orgs/members?orgId={org.id}&q={data.members.0.email}",
+      "expect": "/api/orgs/members?orgId=org1&q=a%40acme.test"
+    }
+  ],
+  "resolve": [
+    {
+      "template": "{data.money}",
+      "expect": 123456
+    },
+    {
+      "template": "{data.flag}",
+      "expect": false
+    },
+    {
+      "template": "{data.missing}",
+      "expect": null
+    },
+    {
+      "template": "id {org.id}",
+      "expect": "id org1"
+    }
+  ],
+  "body": [
+    {
+      "body": {
+        "orgId": "{org.id}",
+        "uid": "{params.uid}",
+        "skip": "{data.missing}",
+        "nested": {
+          "on": "{data.perms[org.settings]}"
+        },
+        "empty": "{params.empty}"
+      },
+      "expect": {
+        "orgId": "org1",
+        "uid": "u2",
+        "nested": {
+          "on": true
+        },
+        "empty": ""
+      }
+    },
+    {
+      "body": {
+        "scopes": {
+          "$pick": {
+            "b:write": "{data.flag}",
+            "a:read": "{data.perms[org.settings]}",
+            "c:x": "{'yes'}"
+          }
+        }
+      },
+      "expect": {
+        "scopes": [
+          "a:read",
+          "c:x"
+        ]
+      }
+    },
+    {
+      "body": {
+        "a": {
+          "$append": {
+            "list": "{data.list}",
+            "item": "z"
+          }
+        },
+        "b": {
+          "$append": {
+            "list": "{data.list}",
+            "item": "x"
+          }
+        },
+        "c": {
+          "$without": {
+            "list": "{data.list}",
+            "item": "x"
+          }
+        },
+        "d": {
+          "$append": {
+            "list": "{data.missing}",
+            "item": "q"
+          }
+        }
+      },
+      "expect": {
+        "a": [
+          "x",
+          "y",
+          "z"
+        ],
+        "b": [
+          "x",
+          "y"
+        ],
+        "c": [
+          "y"
+        ],
+        "d": [
+          "q"
+        ]
+      }
+    },
+    {
+      "body": {
+        "clear": null,
+        "gone": "{data.missing}"
+      },
+      "expect": {
+        "clear": null
+      }
+    }
+  ],
+  "condition": [
+    {
+      "when": "",
+      "expect": true
+    },
+    {
+      "when": "org.manager",
+      "expect": true
+    },
+    {
+      "when": "!org.manager",
+      "expect": false
+    },
+    {
+      "when": "staff.is",
+      "expect": false
+    },
+    {
+      "when": "org.manager && staff.is",
+      "expect": false
+    },
+    {
+      "when": "staff.is || org.manager",
+      "expect": true
+    },
+    {
+      "when": "org.role == admin",
+      "expect": true
+    },
+    {
+      "when": "org.role == owner,admin",
+      "expect": true
+    },
+    {
+      "when": "org.role != admin",
+      "expect": false
+    },
+    {
+      "when": "data.members[$id=params.uid].role != owner",
+      "expect": true
+    },
+    {
+      "when": "data.list",
+      "expect": true
+    },
+    {
+      "when": "data.flag",
+      "expect": false
+    }
+  ]
+}

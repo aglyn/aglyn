@@ -341,6 +341,34 @@ describe('Faire shipments (AGL-3638)', () => {
     })
   })
 
+  it('sends what the brand paid to ship as maker_cost_cents, and nothing when it is not known (AGL-3693)', async () => {
+    const { http, calls } = mockHttp([
+      { method: 'GET', match: '/orders/bo_bxdmjbwxid', body: ORDER },
+      { method: 'POST', match: '/orders/bo_bxdmjbwxid/shipments', body: {} },
+    ])
+    const provider = createFaireProvider({ http })
+    await expect(provider.confirmShipment(APP, CREDENTIAL, { ...CONFIRMATION, shippingCostMinor: 2300 })).resolves.toBe('confirmed')
+    expect(sentJson(calls[1])).toEqual({
+      shipments: [
+        {
+          order_id: 'bo_bxdmjbwxid',
+          carrier: 'FEDEX',
+          tracking_code: '9402 9300',
+          shipping_type: 'SHIP_ON_YOUR_OWN',
+          maker_cost_cents: 2300,
+        },
+      ],
+    })
+    // Free shipping is a cost of zero, and is said.
+    await provider.confirmShipment(APP, CREDENTIAL, { ...CONFIRMATION, shippingCostMinor: 0 })
+    expect(sentJson(calls[3]).shipments[0].maker_cost_cents).toBe(0)
+    // Unknown, or not whole cents: left out rather than guessed.
+    for (const shippingCostMinor of [null, 12.5, -1]) {
+      await provider.confirmShipment(APP, CREDENTIAL, { ...CONFIRMATION, shippingCostMinor })
+      expect(sentJson(calls[calls.length - 1]).shipments[0]).not.toHaveProperty('maker_cost_cents')
+    }
+  })
+
   it('answers already when the order carries the tracking number', async () => {
     const { http, calls } = mockHttp([
       { method: 'GET', match: '/orders/bo_bxdmjbwxid', body: { ...ORDER, shipments: [{ id: 's_1', tracking_code: '94029300', carrier: 'fedex' }] } },

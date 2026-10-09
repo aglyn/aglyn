@@ -26,6 +26,7 @@ import {
   type SectionScope,
 } from './ai-layout-compiler'
 import { aiLayoutFitText } from './ai-layout-copy'
+import { AI_LAYOUT_CART_ELEMENT } from './ai-layout-listings'
 import {
   AI_LAYOUT_MAX_ITEMS,
   type AiLayoutBand,
@@ -34,6 +35,7 @@ import {
   type AiLayoutSettlement,
 } from './ai-layout-language'
 import {
+  aiLayoutRenamedLabel,
   aiLayoutResolveLink,
   type AiLayoutPage,
   type AiLayoutTargets,
@@ -68,6 +70,12 @@ export interface AiLayoutFramePlan {
    * would read as a second loud band, so the footer takes the quiet one.
    */
   closesDark?: boolean
+  /**
+   * Whether the site sells (AGL-3676): its header carries the store's cart
+   * button — the commerce plugin's Cart, which opens the cart in a drawer
+   * from every page — beside the navigation.
+   */
+  cart?: boolean
 }
 
 export interface AiLayoutCompiledFrame {
@@ -166,6 +174,7 @@ export function aiCompileLayoutFrame(
     pictures: 0,
     features: 0,
     splitAt: -2,
+    quotesOnly: [],
   }
   const name = aiLayoutFitText(plan.siteName, 'heading') || 'Home'
   const header = frame.header ?? { blocks: [] }
@@ -269,7 +278,7 @@ export function aiCompileLayoutFrame(
     })
   const ctaProps = ctaTo
     ? {
-        children: ctaLabel,
+        children: aiLayoutRenamedLabel(ctaLabel, ctaTo),
         variant: 'contained',
         color: scope.band === 'brand' ? 'secondary' : 'primary',
         ...destinationProps(ctaTo),
@@ -345,12 +354,16 @@ export function aiCompileLayoutFrame(
           'navRoom',
         )
       : nav
+  // A store's cart, on every page, where a shopper looks for it (AGL-3676).
+  const cart = plan.cart
+    ? tree.add(AI_LAYOUT_CART_ELEMENT, { variant: 'button' }, { flexShrink: 0 }, null, 'cart')
+    : null
   // The row lives in a Container inside the Toolbar Content, which may only sit in an App Bar.
   const row = tree.add(
     'muiContainer',
     { maxWidth: 'lg' },
     { display: 'flex', alignItems: 'center', columnGap: 3 },
-    [brand, middle, cta, toggle, drawer],
+    [brand, middle, cta, cart, toggle, drawer],
     'headerRow',
   )
   const toolbar = tree.add(

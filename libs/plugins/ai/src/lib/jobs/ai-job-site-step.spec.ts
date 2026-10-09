@@ -59,7 +59,9 @@ import {
   aiFreeSiteCreditEstimate,
   aiFreeSiteShortfallText,
 } from '../model/ai-site-job'
-import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
+import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSiteAliases, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutPageTargets } from './ai-job-page-language'
+import { aiLayoutRenamedLabel, aiLayoutResolveLink } from '../layout-language/ai-layout-links'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -74,6 +76,7 @@ import type {
   AiJobStepRunner,
 } from './ai-job-text-step'
 import {
+  AI_SITE_BLOG_MERGED_NOTE,
   AI_SITE_MAX_PASSES,
   AI_SITE_NO_PAGE_STEP_COPY,
   AI_SITE_NO_PLAN_COPY,
@@ -99,7 +102,9 @@ import {
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
+  AI_SITE_PRODUCTS_PRICE_NOTE,
 } from './ai-job-site-content'
+import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -400,6 +405,45 @@ describe('a site start that writes its posts links its blog (AGL-3660)', () => {
   it('takes the next free address when a kept plan still holds a page at /blog, and links that', () => {
     const kept = confirmedPlan({ ...plan, screens: [...plan.screens, planScreen({ title: 'Blog', slug: '/blog', id: 'drftBlogPg' })] })
     expect(aiSiteBlogNavPage(kept.screens).href).toBe('/posts')
+  })
+
+  /*
+   * The plan step asks once for a plan with no page standing in for the blog,
+   * and keeps a second answer that still has one (#1264). The Slow Roads
+   * render linked both "Blog" and "Articles", and its hero said "Read the
+   * articles". The scaffold merges such a page into the blog (AGL-3676).
+   */
+  it('merges a kept page standing in for the blog into it: unlinked, its links the blog’s, its row skipped', async () => {
+    const kept = confirmedPlan({
+      ...plan,
+      screens: [...plan.screens, planScreen({ title: 'Articles', slug: '/articles', id: 'drftArticl' })],
+    })
+    const keptUnits = aiSiteJobUnits(kept, { content: 'posts' })
+    const keptLayout = keptUnits.find((unit) => unit.kind === 'layout') as AiSiteUnit
+    const items = keptUnits.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: 'pending' }))
+    const job = siteJob({ plan: kept, items: items as never })
+    const unitJob = aiSiteUnitJob(job, keptLayout, aiSiteBuiltRefs(keptUnits, []))
+    const pages = aiLayoutSitePages(unitJob.inputs)
+    expect(pages.map((page) => page.label)).toEqual(['Home', 'Blog', 'About', 'Contact'])
+    expect(aiLayoutSiteAliases(unitJob.inputs)).toEqual([
+      { id: 'drftArticl', label: 'Blog', slug: '/blog', href: '/blog', standsInFor: 'Articles' },
+    ])
+    // A link to the merged page goes to the blog, under words that name it.
+    const targets = aiLayoutPageTargets({ job: unitJob, inventory: null, own: [] })
+    const destination = aiLayoutResolveLink('page:drftArticl', 'Read the articles', { sections: [], from: 0, formSection: null }, targets)
+    expect(destination).toMatchObject({ kind: 'path', href: '/blog' })
+    expect(aiLayoutRenamedLabel('Read the articles', destination as never)).toBe('Read the blog')
+    expect(aiLayoutRenamedLabel('Browse Articles', destination as never)).toBe('Browse Blog')
+    // Its page is not built while the posts are written.
+    const slot = keptUnits.find((unit) => unit.kind === 'page' && unit.screen?.id === 'drftArticl')?.slot
+    const page = jest.fn()
+    const step = stepWith({ page }, { contentRefusal: async () => null })
+    const ahead = items.map((row) => (row.slot === slot || row.op === 'posts' ? row : { ...row, status: 'succeeded' }))
+    const outcome = await step(
+      context(siteJob({ plan: kept, items: ahead.map((row) => (row.op === 'posts' ? { ...row, status: 'succeeded' } : row)) as never })),
+    )
+    expect(page).not.toHaveBeenCalled()
+    expect(outcome.item).toEqual({ slot, status: 'skipped', note: AI_SITE_BLOG_MERGED_NOTE })
   })
 
   it('links no blog where the posts are not owed, or the part was skipped', () => {
@@ -1385,6 +1429,27 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     expect(seen[0]).toMatchObject({ $id: 'job-1-products', kind: 'products', inputs: { target: 'catalog' } })
     expect(seen[0].brief.split('\n').pop()).toBe("Propose between 3 and 6 products: the store's first ones.")
     expect(outcome.item).toMatchObject({ slot: 'products', status: 'succeeded', outputs: ['job-1-products-0'] })
+    // The row says what is left before the store sells (AGL-3676).
+    expect(outcome.item?.note).toBe(AI_SITE_PRODUCTS_PRICE_NOTE)
+  })
+
+  it('hands each page the store’s catalog and the blog to list, and a selling site’s layout its cart (AGL-3676)', () => {
+    const plan = confirmedPlan({ create: [LAYOUT] })
+    const units = aiSiteJobUnits(plan, { content: 'products' })
+    const page = units.find((unit) => unit.kind === 'page')
+    const layout = units.find((unit) => unit.kind === 'layout')
+    if (!page || !layout) throw new Error('a page and a layout are units')
+    const listingsOf = (job: AiJob) => aiLayoutListingsOf(job.inputs)
+    const store = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, outputs: [LOOK, output('product', 'p0', 'Fig candle')] }), page, new Map())
+    expect(listingsOf(store)).toEqual([expect.objectContaining({ kind: 'products', records: ['Fig candle'] })])
+    const blog = aiSiteUnitJob(siteJob({ plan, inputs: blogInputs, outputs: [LOOK, entry('a', 'Centering clay')] }), page, new Map())
+    expect(listingsOf(blog)).toEqual([expect.objectContaining({ kind: 'posts', href: '/blog', collectionSlug: 'blog' })])
+    // Built before the products, the layout is told the store sells while its ledger owes them.
+    const owed = units.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: 'pending' }))
+    const sells = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: owed as never }), layout, aiSiteBuiltRefs(units, []))
+    expect(listingsOf(sells).map((listing) => listing.kind)).toEqual(['products'])
+    const skipped = owed.map((row) => (row.slot === 'products' ? { ...row, status: 'skipped' } : row))
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
   })
 
   it('tells each page the posts and the products built before it, by name', () => {

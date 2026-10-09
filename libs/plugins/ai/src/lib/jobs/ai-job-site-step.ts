@@ -54,6 +54,8 @@ import {
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
   aiSiteBlogNavPage,
+  aiSiteIsBlogStandIn,
+  aiSitePlanWithoutBlogStandIns,
 } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
@@ -65,12 +67,14 @@ import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
 import {
+  AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
   AI_LAYOUT_SITE_PAGES_MAX,
   aiLayoutIsHomeSlug,
   aiLayoutSitePagesOfPlan,
 } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
+import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import {
@@ -79,10 +83,12 @@ import {
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
+  AI_SITE_PRODUCTS_PRICE_NOTE,
   aiPublishSitePosts,
   aiSiteContentBriefLines,
   aiSiteContentPart,
   aiSiteContentRefusal,
+  aiSiteListings,
   aiSiteProductsBriefLine,
   createAiSiteProductsRunner,
   runAiSitePostsUnit,
@@ -616,14 +622,32 @@ export function aiSiteUnitJob(
     // the blog its first posts are written into, by its path, second after
     // Home (AGL-3676): the live Slow Roads start linked an "Articles" page
     // and never the blog.
-    const planned = aiLayoutSitePagesOfPlan(plan.screens, { guided: true })
-    const blog = aiSiteWritesPosts(job) ? [aiSiteBlogNavPage(plan.screens)] : []
+    // A planned page standing in for that blog — "Articles", "Journal" — is
+    // merged into it (AGL-3676): not linked, not built, and every link to it
+    // goes to the blog, under words that name the blog.
+    const writesPosts = aiSiteWritesPosts(job)
+    const merged = writesPosts ? aiSitePlanWithoutBlogStandIns(plan.screens) : { screens: plan.screens, standIns: [] }
+    const planned = aiLayoutSitePagesOfPlan(merged.screens, { guided: true })
+    const blogPage = aiSiteBlogNavPage(merged.screens)
+    const blog = writesPosts ? [blogPage] : []
     const homes = planned.filter((page) => aiLayoutIsHomeSlug(page.slug))
     const pages = [...homes, ...blog, ...planned.filter((page) => !aiLayoutIsHomeSlug(page.slug))].slice(
       0,
       AI_LAYOUT_SITE_PAGES_MAX,
     )
     if (pages.length) unitInputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
+    const aliases = merged.standIns
+      .filter((screen): screen is typeof screen & { id: string } => typeof screen.id === 'string' && !!screen.id)
+      .map((screen) => ({ id: screen.id, label: blogPage.label, slug: blogPage.slug, href: blogPage.href, standsInFor: screen.title }))
+    if (aliases.length) unitInputs[AI_LAYOUT_SITE_ALIASES_INPUT] = aliases
+    // The store's catalog and the blog, listed by the sections that show them,
+    // and the cart in a selling site's header (AGL-3676).
+    const listings = aiSiteListings({
+      outputs: job.outputs ?? [],
+      screens: merged.screens,
+      sells: aiSiteSellsProducts(job),
+    })
+    if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
@@ -644,7 +668,10 @@ export function aiSiteUnitJob(
         .filter((output) => output.resource === 'entry')
         .map((output) => ({ id: output.id, title: output.label })),
       total: AI_SITE_POSTS,
-      avoidSlugs: plan.screens.map((screen) => screen.slug.replace(/^\/+/, '').split('/')[0]).filter(Boolean),
+      // A page standing in for the blog is merged into it, so its address is the blog's to take.
+      avoidSlugs: aiSitePlanWithoutBlogStandIns(plan.screens)
+        .screens.map((screen) => screen.slug.replace(/^\/+/, '').split('/')[0])
+        .filter(Boolean),
       byline: typeof inputs === 'string' ? '' : (inputs.businessName ?? ''),
     }
     unitInputs[AI_SITE_CONTENT_INPUT] = posts
@@ -678,6 +705,18 @@ export function aiSiteUnitJob(
  */
 export function aiSiteWritesPosts(job: Pick<AiJob, 'items'>): boolean {
   return (job.items ?? []).some((row) => row.slot === 'posts' && row.status !== 'skipped' && row.status !== 'failed')
+}
+
+/** What the row of a planned page merged into the blog says (AGL-3676). */
+export const AI_SITE_BLOG_MERGED_NOTE = 'Your blog takes this page’s place: its posts are listed there, and its links go to it.'
+
+/**
+ * Whether this site start sells (AGL-3676): its ledger owes the store's first
+ * products and has not given up on them, so the layout built before them
+ * carries the cart.
+ */
+export function aiSiteSellsProducts(job: Pick<AiJob, 'items'>): boolean {
+  return (job.items ?? []).some((row) => row.slot === 'products' && row.status !== 'skipped' && row.status !== 'failed')
 }
 
 /**
@@ -1008,6 +1047,12 @@ export function createAiJobSiteStep(
     // A blog's posts and a store's products ask, before their first pass,
     // whether this member may have them here (AGL-3676): a refusal spends
     // nothing, and the row says why, as a build's item does.
+    // A planned page standing in for the blog this start writes is merged into
+    // it (AGL-3676): not built, its address the blog's, its links the blog's.
+    // The plan step asks for a plan without one only once.
+    if (unit.kind === 'page' && unit.screen && aiSiteIsBlogStandIn(unit.screen) && aiSiteWritesPosts(job)) {
+      return closing(settle({ slot: unit.slot, status: 'skipped', note: AI_SITE_BLOG_MERGED_NOTE }))
+    }
     if ((unit.kind === 'posts' || unit.kind === 'products') && rows.get(unit.slot)?.status !== 'running') {
       const refusal = await contentRefusal(unit.kind, { ...context, job }).catch((error: unknown) => {
         console.error('ai site part admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
@@ -1071,7 +1116,9 @@ export function createAiJobSiteStep(
         slot: unit.slot,
         status: degraded ? 'degraded' : 'succeeded',
         outputs: outcome.outputs.map((output) => output.id),
-        note,
+        // A store's products are listed before they are priced (AGL-3676):
+        // the row says what is left before the store sells.
+        note: unit.kind === 'products' && outcome.outputs.length ? AI_SITE_PRODUCTS_PRICE_NOTE : note,
         ...(degraded ? { degradedBy: degradation.degradedBy } : {}),
       },
       spent,

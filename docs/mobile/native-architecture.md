@@ -831,3 +831,92 @@ each issue's runbook comment:
 - Windows code signing (Azure Trusted Signing or an EV certificate) and/or a
   Microsoft Store account;
 - `apple-app-site-association` and `assetlinks.json` on the console origin.
+
+## 13. Console screens as specs (AGL-3671, AGL-3667)
+
+The workspace management areas (team, roles, workspace settings, billing,
+your account, support, site admin) and the staff section are drawn from
+**screen specs**: JSON that names what a screen loads from the console's own
+API routes (or the Firestore documents the console itself reads), what it
+shows, and which routes its actions call. Both platforms ship one renderer
+each, in their shared kits: `AglynScreens` (SwiftUI) and `:native-screens`
+(Compose). A spec is written once and both apps draw it, so a screen cannot
+mean one thing on iPhone and another on Windows. The same template cases
+(`libs/native/screens/template-cases.json`) are replayed by both platforms'
+tests.
+
+Core's specs live in `libs/native/screens/*.screens.json` and register as a
+plugin named `core` ahead of the manifest's plugins (`CoreScreens`). A
+plugin's specs live beside its native code, in
+`libs/plugins/<p>/src/android/screens/`, linked into its Swift package's
+resources, and its registrar calls `SpecScreens.register`; their ids are
+declared under the plugin's `mobile.contributes` like any other screen
+(the AI plugin is the first).
+
+### Grammar
+
+A file is `{ "screens": [ … ] }`. A screen:
+
+| key | meaning |
+| -- | -- |
+| `id`, `title` | registry id (`core.*` or `<plugin>.*`); the title is a template |
+| `label`, `subtitle` | the plain name the sidebar and app bar show, and a one-line description |
+| `icon` | `"<SF Symbol>|<Material Symbol>"` |
+| `scope` | `org`, `site` (needs a picked site), `account` or `staff` |
+| `group`, `order` | where the shell lists it: `workspace`, `site`, `account`, `staff` |
+| `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
+| `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
+| `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
+| `actions` | the screen's toolbar actions |
+| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
+| `constants` | fixed rows, read as `const` |
+
+An action is `{ label, icon, method, url, body, confirm, confirmWhen, destructive, prompt,
+reason, success, open, navigate, back, reload, when, link, copy, reveal,
+else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+adds the required reason the staff routes record; `open` names the response
+field holding a URL that opens in the platform's secure browser sheet
+(Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
+Custom Tabs); `else` runs on a 404 (add a member, else invite them); `then`
+follows a success; `write` merges a document the person writes directly, as
+the console does (their own profile, the site document), under the rules.
+A route that answers `reauth-required` gets a password sheet, a fresh sign-in
+and one retry.
+
+Templates are `{path|fallback|'literal':format}` over the context `org`,
+`site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
+`response` and `const`. A path takes `rows[field=other.path]` (the first row
+whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
+`cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
+`count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
+`&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
+in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
+and `{"$append"|"$without": {list, item}}` edits a list.
+
+### The plugin switchboard
+
+`{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`
+also reads `hosts/{site}`, as the console's switchboards do, and resolves them
+with the enabled-plugins resolvers ported to `AglynContracts` and
+`com.aglyn.contracts` (`PluginSwitchboard`), which replay the console's answers
+from `function-cases.generated.json` over the generated `FIRST_PARTY_PLUGINS`
+catalog. Each row carries what it shows (`on`, `locked`, the site `state`,
+the `cascade` a switch-off strands) and exactly what its switch writes: the
+whole workspace list for `/api/orgs/settings` `set-enabled-plugins`
+(`enable`, `disable`), or the site's `disabledPlugins` and `enabledPlugins`
+(`turnOn`, `turnOff`) merged into the host document under the rules.
+
+### Rules the specs keep
+
+- **No privileged path.** Every load and action names a console route or a
+  document the console itself reads or writes with the client SDK; the route
+  or rule decides, as for the console.
+- **Staff only on a staff token.** The staff group shows only when the ID
+  token carries `staff: true`; `staff.super` gates the super-only triggers.
+  `/api/admin/*` re-checks both.
+- **No purchases in the app.** Plans, payment methods and invoices open on
+  Stripe's hosted pages; the app shows the plan and usage, never a price it
+  sets.
+- `libs/native/screens/fixtures.json` holds route answers in the console's
+  shapes for the snapshot renderers; nothing reads it at run time.

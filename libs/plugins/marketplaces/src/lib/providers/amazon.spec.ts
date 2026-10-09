@@ -830,6 +830,20 @@ describe('Amazon marketplace (AGL-3638)', () => {
       )
     })
 
+    it('sends no shipping cost: Amazon’s shipment confirmation has no field for one (AGL-3693)', async () => {
+      const routes = [
+        { method: 'POST', match: '/orders/v0/orders/113-1234567-1234567/shipmentConfirmation', status: 204 },
+      ]
+      const without = mockHttp(routes)
+      const withCost = mockHttp(routes)
+      await createAmazonProvider({ http: without.http }).confirmShipment(APP, CREDENTIAL, CONFIRMATION)
+      await createAmazonProvider({ http: withCost.http }).confirmShipment(APP, CREDENTIAL, {
+        ...CONFIRMATION,
+        shippingCostMinor: 845,
+      })
+      expect(sentJson(withCost.calls[0])).toEqual(sentJson(without.calls[0]))
+    })
+
     it('answers already for a shipment Amazon has, and never retries the write', async () => {
       const { http, calls } = mockHttp([
         {
