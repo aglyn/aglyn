@@ -167,6 +167,18 @@
     {
       "template": "id {org.id}",
       "expect": "id org1"
+    },
+    {
+      "template": "{data.flag ?? 'x'}",
+      "expect": false
+    },
+    {
+      "template": "{data.missing ?? data.flag}",
+      "expect": false
+    },
+    {
+      "template": "{data.missing ?? 'fallback'}",
+      "expect": "fallback"
     }
   ],
   "body": [

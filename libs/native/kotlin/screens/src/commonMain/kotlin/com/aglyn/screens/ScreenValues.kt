@@ -110,6 +110,24 @@ object ScreenValues {
       format = body.substring(colon + 1).trim()
       body = body.substring(0, colon)
     }
+    // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
+    if (body.contains("??")) {
+      var found: JsonElement? = null
+      for (alternative in body.split("??")) {
+        val part = alternative.trim()
+        if (part.length >= 2 && part.startsWith("'") && part.endsWith("'")) {
+          found = JsonPrimitive(part.substring(1, part.length - 1))
+          break
+        }
+        val value = lookup(part, context)
+        if (value != null && value != JsonNull) {
+          found = value
+          break
+        }
+      }
+      val named = format
+      return if (named.isNullOrEmpty()) found else JsonPrimitive(formatted(found, named, context))
+    }
     var picked: JsonElement? = null
     var firstPresent: JsonElement? = null
     for (alternative in splitUnquoted(body, '|')) {
