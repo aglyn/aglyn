@@ -101,9 +101,3 @@ While a courier is on the way, your buyer's order status page shows
 **DoorDash**, where the courier is, the arrival estimate and a **Track your
 courier** link to DoorDash's live map. The **Out for delivery** and
 **Delivered** emails are the ones your own driver's steps send.
-
-## Why not Uber Direct? {#uber-direct}
-
-Uber Direct's terms have a merchant promise not to share its Uber Direct
-keys with anyone else, so you can't connect your own Uber Direct account to
-Aglyn. Aglyn offers DoorDash Drive only.
