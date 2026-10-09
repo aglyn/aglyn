@@ -137,9 +137,11 @@ const PLUGIN_TOPICS = {
   aiBusinessProfile: '/ai/business-profile',
   aiExperiments: '/ai/ab-tests-with-ai',
   aiMarketing: '/ai/marketing-with-ai',
-  // The Ad conversions card on a site's setup page and the Tracking tab's
-  // TikTok and Pinterest fields (AGL-3694).
+  // The Tracking tab's TikTok and Pinterest fields, and the Ad conversions
+  // card on a site's setup page (AGL-3694), whose guide is unlisted until
+  // AD_CONVERSIONS_TOKEN_KEY is set.
   adTracking: '/marketing-and-automation/analytics/ad-tracking',
+  adConversions: '/marketing-and-automation/analytics/connect-conversions-api',
   aiInsights: '/marketing-and-automation/analytics/insights',
   aiLogic: '/ai/logic-with-ai',
   aiProducts: '/ai/products-with-ai',
@@ -275,6 +277,9 @@ const PLUGIN_TOPICS = {
 // still link it when the card itself renders only behind that same flag: the
 // reader who can see the card is the reader the page was written for.
 const PLUGIN_UNLISTED_TOPICS = new Set([
+  // The Ad conversions card draws nothing until the console holds
+  // AD_CONVERSIONS_TOKEN_KEY, the gate the guide waits on (AGL-3694).
+  'adConversions',
   // Accounting's console page is gated by `release_accounting`, the flag the
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',

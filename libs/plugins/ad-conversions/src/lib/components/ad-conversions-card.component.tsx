@@ -48,7 +48,9 @@ const STATUS: Readonly<Record<AdConnectionStatus, { label: string; tone: StatusT
 const formatTime = (ms: number | null): string => (ms ? new Date(ms).toLocaleString() : 'Not yet')
 
 const help = (excerpt: string, anchor: '#conversions-api' | '#consent' | '#test-events') =>
-  pluginDocsHelp('adTracking', { anchor, excerpt })
+  anchor === '#consent'
+    ? pluginDocsHelp('adTracking', { anchor, excerpt })
+    : pluginDocsHelp('adConversions', { anchor, excerpt })
 
 /**
  * AD CONVERSIONS (AGL-3694): a site's Conversions API connections to the

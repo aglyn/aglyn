@@ -28,14 +28,26 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — your own TikTok and Pinterest tags, and server-side conversions (newest)
+<!--
+AGL-3694: held unpublished until the deployment sets AD_CONVERSIONS_TOKEN_KEY on
+the console, like the guide it links (`unlisted: true`). Once the key is set on
+aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
+"Rolling out" note from marketing-and-automation/analytics/connect-conversions-api.md.
+
+## October 2026 — server-side ad conversions
+
+- **[Server-side ad conversions](marketing-and-automation/analytics/connect-conversions-api.md)** —
+  connect the Meta Conversions API, the TikTok Events API or the Pinterest
+  Conversions API and purchases and leads are also sent from the server, for
+  visitors who allow advertising, paired with the browser tag so each is counted once.
+-->
+
+## October 2026 — your own TikTok and Pinterest tags (newest)
 
 - **[Ad tracking](marketing-and-automation/analytics/ad-tracking.md)** — your Meta
   pixel, TikTok pixel, Pinterest tag, Google Ads and LinkedIn tags now run on your
   site, for visitors who allow advertising, and report product views, add-to-carts,
-  checkouts, purchases and leads. Connect the Meta Conversions API, the TikTok Events
-  API or the Pinterest Conversions API and purchases and leads are also sent from the
-  server, paired with the browser tag so each is counted once.
+  checkouts, purchases and leads.
 
 ## October 2026 — a self-service kiosk
 

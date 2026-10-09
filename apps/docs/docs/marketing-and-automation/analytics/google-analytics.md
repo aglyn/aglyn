@@ -143,5 +143,5 @@ property:
 
 - [Analytics](./overview.md) — the built-in Traffic card and per-page figures
 - [Cookie consent](./cookie-consent.md) — what has to be true before any of this runs
-- [Ad tracking](./ad-tracking.md) — your own Meta, TikTok and Pinterest tags, and their server-side events
+- [Ad tracking](./ad-tracking.md) — your own Meta, TikTok and Pinterest tags
 - [Interactions](../../building-sites/besigner/interactions-and-custom-html.md) — sending an event of your own

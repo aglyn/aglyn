@@ -833,7 +833,7 @@ export const DOCS_HELP_ANCHORS = {
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#aglyn-ai', '#aglyn-ai-questions', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
-  adTracking: ['#browser-tags', '#consent', '#conversions-api', '#test-events', '#related'],
+  adTracking: ['#browser-tags', '#consent', '#related'],
   agencySites: ['#one-brief', '#shared-and-not', '#organization-model', '#per-client-spend', '#off-for-one-site', '#white-label', '#who-publishes', '#related'],
   aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   ai: ['#drafts-only', '#what-it-can-build', '#the-add-on', '#credits-and-caps', '#who-can-use-it', '#switch-ai-off-for-one-site', '#what-is-sent', '#related'],
