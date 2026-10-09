@@ -3489,6 +3489,108 @@
           ]
         }
       }
+    },
+    {
+      "id": "live-chat",
+      "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",
+      "package": "@aglyn/plugins-live-chat",
+      "register": {
+        "site": "registerLiveChatSite",
+        "console": "registerLiveChatConsole",
+        "tenantApi": "registerLiveChatApi",
+        "consoleApi": "registerLiveChatConsoleApi",
+        "subprocessors": "liveChatSubprocessors"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "apiPrefixes": [
+        "live-chat"
+      ],
+      "catalog": {
+        "order": 36,
+        "label": "Live chat",
+        "alwaysOnForWorkspace": true,
+        "defaultOffPerSite": true,
+        "description": "Chat with visitors through your own Tidio or LiveChat account.",
+        "siteOff": {
+          "stops": "Switching Live chat off for this site removes the chat from its pages.",
+          "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account."
+        },
+        "publishedSiteImpact": "elements"
+      },
+      "siteCsp": {
+        "$comment": "The vendors' own published CSP host lists (Tidio's Widget SDK security policy; LiveChat's per-host CSP2 list), narrowed to the directives the tenant enforces. Must equal LIVE_CHAT_PROVIDERS' cspHosts (providers.spec.ts).",
+        "switchField": "enabled",
+        "variantField": "provider",
+        "requiredField": "publicKey",
+        "variants": {
+          "tidio": {
+            "connect": [
+              "socket.tidio.co",
+              "api-v2.tidio.co",
+              "uploads.tidio.com",
+              "sentry-new.tidio.co",
+              "widget-v4.tidiochat.com"
+            ],
+            "img": [
+              "code.tidio.co",
+              "avatars.tidiochat.com",
+              "tidio-images-messenger.s3.us-east-1.amazonaws.com",
+              "cdnjs.cloudflare.com",
+              "unpkg.com"
+            ],
+            "media": [
+              "code.tidio.co",
+              "widget-v4.tidiochat.com"
+            ],
+            "font": [
+              "code.tidio.co"
+            ]
+          },
+          "livechat": {
+            "connect": [
+              "api.livechatinc.com",
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com",
+              "api.text.com"
+            ],
+            "frame": [
+              "api.livechatinc.com",
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com"
+            ],
+            "img": [
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com",
+              "cdn.livechat-static.com",
+              "cdn.livechat-files.com",
+              "cdn.files-text.com"
+            ],
+            "media": [
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com",
+              "cdn.livechat-static.com"
+            ],
+            "font": [
+              "cdn.livechatinc.com",
+              "secure.livechatinc.com"
+            ]
+          }
+        }
+      },
+      "contributes": {
+        "site": {
+          "features": [
+            "live-chat-launcher"
+          ]
+        },
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
     }
   ]
 }

@@ -28,7 +28,15 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — a self-service kiosk (newest)
+## October 2026 — live chat with Tidio or LiveChat (newest)
+
+- **[Live chat](building-sites/live-chat.md)** — chat with your visitors through your
+  own Tidio or LiveChat account. Paste the key from its install code, choose the pages
+  it shows on, and a chat button appears on your site. The chat loads only when a
+  visitor presses the button, so it never slows your pages; you can also have it load
+  with the page for visitors who allowed analytics. Included on every plan.
+
+## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
   pair a tablet to a register and let customers order themselves: products by

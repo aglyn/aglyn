@@ -282,6 +282,11 @@ export const PLUGIN_DOCS = {
     title: 'Invite teammates',
     excerpt: 'Add people to your site and understand how team members act within your organization.',
   },
+  liveChat: {
+    path: '/building-sites/live-chat',
+    title: 'Live chat',
+    excerpt: 'Chat with your site\'s visitors through your own Tidio or LiveChat account. The chat loads only when a visitor asks for it, so it never slows your pages.',
+  },
   loyalty: {
     path: '/commerce-and-bookings/commerce/rewards-and-referrals',
     title: 'Rewards, referrals and store credit',
@@ -472,6 +477,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
   inventorySync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
+  liveChat: ['#set-up-live-chat', '#which-pages-show-the-chat', '#how-the-chat-loads', '#privacy-and-cookies'],
   loyalty: ['#set-up-your-program', '#how-customers-earn', '#spending-rewards-online', '#at-the-register', '#referrals', '#members-and-store-credit', '#on-an-order', '#refunds-and-cancellations', '#emails', '#switching-it-off-for-a-site'],
   loyaltyConnectors: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
