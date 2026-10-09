@@ -47,10 +47,14 @@ export const DOCS_HELP_EXCERPTS = {
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits.',
   aiAllotments: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
+  aiCredits: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what the add-on adds, what jobs cost, the check before a job starts, and when credits come back.',
+  aiJobsAndActivity: 'Review what Aglyn AI did: a site\'s AI jobs page lists every job with its kind, brief, status and credits, each job has its own page, and the AI filter in your activity logs records who started, applied or canceled what.',
   aiMonitoring: 'How staff watch one organization\'s AI usage — add-on, credits, overage, refusals, jobs, tokens, cache hits and margin — read its AI conversations, and find those figures across the staff console.',
+  aiPrivacy: 'What Aglyn AI sends to its AI providers, which provider handles what, what is never sent, and how long briefs and conversations are kept — with links to the legal pages that govern it.',
   analytics: 'Built-in pageview analytics, the Traffic card and its growth figure, per-page metrics, and average time on a page.',
   animations: 'Add fade, slide and zoom motion to any element, stagger a row of cards, choose when it plays, and keep the page fast and accessible.',
   architectureMultiTenancy: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',
+  assistBuilds: 'Ask Aglyn Assist for what you need in one message — pages, a form, an email, products, a booking service, an automation — and it shows one plan card. Confirm it and one job builds every part as a draft.',
   assistSignals: 'The docs-gap and cost board behind Assist — how the ranking is ordered, why ungrounded questions are counted separately, and what the cache-read rate says about margin.',
   automations: 'The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that tag, stage, assign, create a task or log an activity, and one-click recipes.',
   automationsWithAi: 'Aglyn AI drafts an automation from a description, changes or fixes one you already have as a copy switched off, explains what one does and tells you why one of its runs failed.',
@@ -82,6 +86,7 @@ export const DOCS_HELP_EXCERPTS = {
   copyPaste: 'Copy any element — with its children — and paste it elsewhere, including into a different page, layout or component.',
   createARedirect: 'Add a redirect rule and read its hit metrics.',
   createImages: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits.',
+  createWithAi: 'The Create with AI button sits beside the create button on every list Aglyn AI can fill: pages, templates, layouts, forms, components, emails, campaigns, automations, products, overlays and media.',
   crm: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   crmByAi: 'An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields.',
   customDomains: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
@@ -200,10 +205,13 @@ export const DOCS_HELP_EXCERPTS = {
   sharing: 'Let another of your sites see a lead, a contact, a company or a deal — one record by hand, a selection from a list, or every record a sharing rule matches, now and later — without sharing the person\'s consent.',
   shipping: 'Shipping zones and rates, local pickup, and the postal address each inventory location ships from.',
   siteBackupAndPackages: 'Download a site or the items you pick as one package, import one into any of your sites, compare each item with the site\'s copy and choose how to handle it before anything is written, and undo an import.',
+  siteLooks: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
   siteSearch: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',
   sso: 'How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
   staffConsole: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
+  startWithAi: 'Answer a few questions when you create a site and Aglyn AI plans, writes and publishes it: its look, header and footer, contact form and pages, plus a store or a blog when that is what the site is.',
+  stockPhotos: 'Pages Aglyn AI writes for a new site use free stock photos from Pixabay, copied into your own media library at no AI credit cost, with the photographer\'s credit kept on each picture.',
   storeImportAndExport: 'Import products from a file or Shopify, update them by handle or SKU, issue gift cards, record shipments from a tracking file, and export store data with the fields you choose.',
   supportAndCommunity: 'Open a support ticket with the Aglyn team, and ask other builders in the community forum.',
   supportQueue: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
@@ -270,6 +278,21 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   aglynAssist: {
     '#what-it-can-do': 'E, connect a domain, set up shipping, invite a teammate — and it answers from this documentation, linking the exact docs section and the console page where you do it.',
   },
+  aiAllotments: {
+    '#a-members-allotment': 'E site. A collaborator who is the site\'s Admin can set the other collaborators\' allotments on that site.',
+    '#a-sites-allotment': 'Er site for a site collaborator. It shows what they have drawn this month and whether the allotment is hard or soft.',
+    '#allotments': 'Each month, so one client site, one contractor or one teammate cannot spend what everyone else was counting on.',
+    '#choosing-a-model': 'Warns, and at a hard allotment it says who can raise it. The line updates from the answer to each request, so it never costs a request of its own; after a reload it shows where you stood at your last request.',
+    '#usage-strip': 'Eryone on that site may draw together each month. Use it to keep one client site from spending what the others need: when a hard site allotment is used, AI stops on that site and keeps working on the rest.',
+  },
+  aiCredits: {
+    '#before-a-job-starts': 'Photos.md) in an AI site | Nothing | A model you choose with the Model switch can cost more or less than Auto; the switch shows each model\'s cost.',
+    '#past-the-band': 'N hour. See Paused, or out of credits.',
+    '#see-your-credits': 'Re not given back when you cancel a job yourself (you pay for what ran until then), or when the AI declines what the brief asked for.',
+  },
+  aiJobsAndActivity: {
+    '#the-ai-jobs-page': 'Ho started, applied or canceled what." ---',
+  },
   aiMonitoring: {
     '#ai-conversations': 'Credits once. It does not touch the daily request or message caps, which reset at midnight UTC on their own, and it does not change what the month cost us: the margin and spend figures keep the real provider spend.',
     '#one-account': 'I add-on\'s share, and the fleet summary totals it. The add-on was already inside the net revenue figure — this names it, so the assist band\'s cost reads against what it brings in rather than as pure drag.',
@@ -308,9 +331,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#what-you-can-do': 'Lity Free. The Besigner is core to building; some components and actions it exposes are plan-gated (noted where relevant).',
   },
   billing: {
-    '#ai-allotments': 'No judgment about it, and it never shows a dollar figure — the share is of the workspace\'s own credits.',
     '#api-access': 'Closes. Clearing datasets after a month has ended lowers the next invoice, not the one for the month that just finished.',
-    '#assist-overage': 'He optional cap means anyone who wants a hard ceiling can have one, at a number they choose.',
     '#billing-address': 'Hat you meant.',
     '#billing-address-on-profile': 'It affects your next invoice. Invoices already issued are never re-rated.',
     '#billing-email': 'Rst; Load older invoices reaches further back, and the filters above the table narrow what is shown.',
@@ -333,7 +354,6 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#usage-budget': 'Ps until next month or an upgrade. The same warning appears as a banner in the console, with a link to Billing → Usage.',
     '#usage-card': 'Ail your customers never receive.',
     '#usage-history': '. On a plan whose limits are included caps rather than meters, the card says there are no usage charges.',
-    '#usage-meters': 'Ps working as a grace period).',
     '#what-you-will-pay': 'Or expired code is refused immediately, with the reason — not at the moment you are charged.',
     '#who-is-generating-what': 'Reach. Transactional mail — receipts, invites, password resets — is never paced by it.',
   },
@@ -369,7 +389,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#4-save-and-test': 'Ces](actions-builder.md#sequences) for the rest, including what a wait means for the emails sent after it.',
   },
   businessProfile: {
-    '#contact-details-are-never-invented': 'Has a Business profile defaults card. A site uses those values wherever its own profile is empty, so a workspace that runs many sites for one business writes them once.',
+    '#contact-details-are-never-invented': 'Card. A site uses those values wherever its own profile is empty, so a workspace that runs many sites for one business writes them once.',
+    '#the-business-profile-card': 'Settings: the facts Aglyn AI reads from your other settings, each with a link to the card that edits it.',
+    '#workspace-defaults': 'In your SEO settings, or the workspace\'s default. What you type is never replaced.',
   },
   catalog: {
     '#categories-and-tags': 'Eir prices left empty, and proposed discounts are created switched off.',
@@ -562,9 +584,6 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   glossary: {
     '#organization-org': 'D}"] Org --> H2["Host (site)hosts/{hostId}"] H1 --> S1["Pages, layouts, media, content"] H2 --> S2["Pages, layouts, media, content"] `',
-  },
-  howAglynAiBuilds: {
-    '#finding-your-ai-jobs': 'Nfirm, in the same job. The job then waits for you. The window you started it from stays with it: it shows the job planning, then the plan itself, with Confirm plan to build it and Cancel job to stop.',
   },
   installYourFirstPlugin: {
     '#a-plugins-page': 'Ts own switch. Switching one off removes it from every site in the workspace — its navigation, the editor, published pages and the API — and switching it back on restores it.',

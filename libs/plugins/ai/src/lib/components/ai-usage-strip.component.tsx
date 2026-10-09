@@ -17,7 +17,8 @@
 'use client'
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
-import { AppLink } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { AppLink, HelpTip } from '@aglyn/shared-ui-jsx'
 import { Box, LinearProgress, Stack, Typography } from '@mui/material'
 import type { AiUsageMeterWire } from '../usage/ai-usage-wire'
 import { useAiUsageMeter } from './use-ai-usage-meter'
@@ -30,6 +31,13 @@ export interface AiUsageStripProps {
 }
 
 const credits = (value: number): string => value.toLocaleString()
+
+/** The usage line's own section of the allotments guide (AGL-3660). */
+const AI_USAGE_STRIP_HELP = pluginDocsHelp('aiAllotments', {
+  anchor: '#usage-strip',
+  excerpt:
+    'Your credits this month against your allotment, the workspace pool, and what your last request cost. It warns from 80%.',
+})
 
 /** The line about the reader's own month, in the words the strip uses. */
 export function aiUsageStripMineLabel(meter: AiUsageMeterWire): string {
@@ -94,6 +102,7 @@ export function AiUsageStrip({ orgId, orgSlug }: AiUsageStripProps) {
             {`Last request: ${credits(meter.last)} credits`}
           </Typography>
         ) : null}
+        <HelpTip sx={{ alignSelf: 'center' }} {...AI_USAGE_STRIP_HELP} />
       </Stack>
       {pct !== null ? (
         <LinearProgress

@@ -240,8 +240,18 @@
     },
     "libs/aglyn/src/lib/app-utils/functions.ts": {
       "values": [
-        "FUNCTION_BUILTIN_NAMES",
-        "FUNCTION_MAX_OPERATIONS"
+        "FUNCTION_MAX_OPERATIONS",
+        "FUNCTION_BUILTIN_NAMES"
+      ],
+      "types": [
+        "HostFunction",
+        "HostFunctionParameter",
+        "HostFunctionVariable",
+        "HostFunctionParameterOption",
+        "FunctionConditionalOperation",
+        "FunctionSetOperation",
+        "FunctionComparator",
+        "FunctionValueType"
       ]
     },
     "libs/aglyn/src/lib/app-utils/host-events.ts": {
@@ -574,9 +584,67 @@
       "values": [
         "FIRST_PARTY_PLUGINS"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts": {
+      "types": [
+        "PosShift",
+        "PosShiftReport",
+        "PosCashEvent",
+        "PosCashEventType",
+        "PosTenderMethod"
+      ],
+      "values": [
+        "POS_CASH_EVENT_LABELS",
+        "POS_TENDER_LABELS"
+      ]
+    },
+    "libs/plugins/data/src/lib/model/dataset-model-core.ts": {
+      "types": [
+        "DatasetModel",
+        "DatasetFieldDefinition",
+        "DatasetFieldType",
+        "DatasetFieldValidation",
+        "DatasetFieldEntry"
+      ],
+      "values": [
+        "DATASET_FIELD_TYPES",
+        "DATASET_FIELD_TYPE_LABELS",
+        "DATASET_FILTER_PREFIX_MAX",
+        "DATASET_AUTHORABLE_FIELD_TYPES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/variables.ts": {
+      "types": [
+        "HostVariableType"
+      ],
+      "values": [
+        "HOST_VARIABLE_TYPE_LABELS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/where-used-summary.ts": {
+      "types": [
+        "WhereUsedResult",
+        "WhereUsedDependent"
+      ]
+    },
+    "libs/plugins/marketplace/src/lib/model/listing-query.ts": {
+      "values": [
+        "MARKETPLACE_BROWSE_QUERY",
+        "BROWSE_SORTS",
+        "HELD_LICENCE_QUERY"
+      ]
+    },
+    "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts": {
+      "values": [
+        "ARTIFACT_TYPE_LABELS",
+        "INSTALL_TARGETS",
+        "LISTING_CATEGORIES"
+      ]
     }
   },
   "ints": [
+    "WhereUsedResult.total",
+    "WhereUsedResult.legacyCount",
     "BookingActions.refundCents",
     "BookingWindow.start",
     "BookingWindow.end",
@@ -620,7 +688,8 @@
   ],
   "json": [
     "ListQueryFilter.value",
-    "ListQueryRefusal.clause"
+    "ListQueryRefusal.clause",
+    "DatasetFieldDefinition.default"
   ],
   "omit": [
     "HostProduct.deletedAt",
@@ -633,6 +702,16 @@
     "HostProduct",
     "ProductVariant",
     "TenantEmailEntry",
+    "DatasetFieldDefinition",
+    "DatasetFieldValidation",
+    "DatasetModel",
+    "HostFunction",
+    "HostFunctionParameter",
+    "HostFunctionVariable",
+    "FunctionSetOperation",
+    "FunctionConditionalOperation",
+    "WhereUsedResult",
+    "WhereUsedDependent",
     "OrderPickup",
     "OrderLocalDelivery",
     "OrderLocalDeliveryCourier",
@@ -656,7 +735,8 @@
     "TEMPLATE_LIST_QUERY": {
       "base": "TEMPLATE_LIST_BASE"
     },
-    "ENTRY_LIST_QUERY": {}
+    "ENTRY_LIST_QUERY": {},
+    "MARKETPLACE_BROWSE_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -9927,6 +10007,2193 @@
             ]
           },
           []
+        ]
+      ]
+    },
+    "posPinProblem": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "args": [
+        [
+          "4821"
+        ],
+        [
+          "1234"
+        ],
+        [
+          "4321"
+        ],
+        [
+          "1111"
+        ],
+        [
+          "123"
+        ],
+        [
+          "1234567"
+        ],
+        [
+          "12a4"
+        ],
+        [
+          ""
+        ],
+        [
+          "735190"
+        ],
+        [
+          "9876"
+        ],
+        [
+          "246810"
+        ],
+        [
+          "0000"
+        ],
+        [
+          "abcd"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "posCashVarianceCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
+      "args": [
+        [
+          21240,
+          21240
+        ],
+        [
+          20000,
+          21240
+        ],
+        [
+          22000,
+          21240
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          100.4,
+          200.6
+        ]
+      ]
+    },
+    "formatDatasetValue": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          "Sourdough"
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          ""
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          null
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          true
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          false
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          "maybe"
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1767225600000
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1700000000123
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          "soon"
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          {
+            "latitude": 45.52,
+            "longitude": -122.68
+          }
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          "x"
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          [
+            "a",
+            "b c"
+          ]
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          "one"
+        ],
+        [
+          {
+            "name": "M",
+            "type": "map"
+          },
+          {
+            "a": 1,
+            "b": "two"
+          }
+        ],
+        [
+          {
+            "name": "N",
+            "type": "float"
+          },
+          8.5
+        ],
+        [
+          {
+            "name": "I",
+            "type": "int32"
+          },
+          12
+        ],
+        [
+          {
+            "name": "R",
+            "type": "reference"
+          },
+          "rec-1"
+        ]
+      ]
+    },
+    "datasetValueToInput": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          "Sourdough"
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          null
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          true
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          false
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1767225600000
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1700000000123
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          {
+            "latitude": 45.52,
+            "longitude": -122.68
+          }
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          [
+            "a",
+            "b"
+          ]
+        ],
+        [
+          {
+            "name": "M",
+            "type": "map"
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "name": "N",
+            "type": "float"
+          },
+          8.5
+        ],
+        [
+          {
+            "name": "R",
+            "type": "reference",
+            "reference": {
+              "datasetId": "d",
+              "multiple": true
+            }
+          },
+          [
+            "x",
+            "y"
+          ]
+        ]
+      ]
+    },
+    "parseDatasetFieldEntries": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Title, Unit price"
+        ],
+        [
+          "roast_preference\nOrigin country, origin-country"
+        ],
+        [
+          "  , 123, Ünïcode name, a-b"
+        ],
+        [
+          ""
+        ],
+        [
+          "name, Name, NAME, email_2"
+        ]
+      ]
+    },
+    "slugifyDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Roast preference"
+        ],
+        [
+          "  Unit-price  "
+        ],
+        [
+          "2nd place"
+        ],
+        [
+          "__x__"
+        ],
+        [
+          "Ünïcode"
+        ],
+        [
+          "already_ok"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "datasetDisplayName": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "displayName": " Menu "
+          }
+        ],
+        [
+          {
+            "name": "Legacy"
+          }
+        ],
+        [
+          {
+            "displayName": "  ",
+            "name": "Old"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "effectiveDatasetModel": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "model": {
+              "order": [
+                "name",
+                "price",
+                "inStock",
+                "category",
+                "tags",
+                "launched",
+                "where",
+                "ref"
+              ],
+              "fields": {
+                "name": {
+                  "name": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                "price": {
+                  "name": "Price",
+                  "type": "float"
+                },
+                "inStock": {
+                  "name": "In stock",
+                  "type": "bool"
+                },
+                "category": {
+                  "name": "Category",
+                  "type": "text",
+                  "validation": {
+                    "options": [
+                      "Bread",
+                      "Pastry",
+                      "Cake"
+                    ]
+                  }
+                },
+                "tags": {
+                  "name": "Tags",
+                  "type": "sorted"
+                },
+                "launched": {
+                  "name": "Launched",
+                  "type": "timestamp"
+                },
+                "where": {
+                  "name": "Where",
+                  "type": "coordinates"
+                },
+                "ref": {
+                  "name": "Supplier",
+                  "type": "reference",
+                  "reference": {
+                    "datasetId": "ds",
+                    "multiple": true
+                  }
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "fields": [
+              "city",
+              "roast_preference"
+            ]
+          }
+        ],
+        [
+          {
+            "model": {
+              "fields": {},
+              "order": []
+            },
+            "fields": [
+              "a"
+            ]
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "planDatasetRecordQuery": {
+      "module": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
+      "args": [
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "sour"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "Sourdough loaf"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.category",
+              "op": "equals",
+              "value": "Bread"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.category",
+              "op": "isAnyOf",
+              "value": "Bread,Cake"
+            }
+          ],
+          [
+            "rye"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.inStock",
+              "op": "equals",
+              "value": "true"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.price",
+              "op": "=",
+              "value": "8.5"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "Seeded rye bread"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "rye"
+            }
+          ],
+          [
+            "seeded"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "equals",
+              "value": "Seeded Rye"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.tags",
+              "op": "contains",
+              "value": "vegan"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.tags",
+              "op": "contains",
+              "value": "vegan"
+            },
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "rye"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.launched",
+              "op": "after",
+              "value": "2026-01-01"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "supercalifragilistic"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "a.b"
+            ],
+            "fields": {
+              "a.b": {
+                "name": "Dotted",
+                "type": "text"
+              }
+            }
+          },
+          [
+            {
+              "field": "values.a.b",
+              "op": "contains",
+              "value": "x"
+            }
+          ],
+          []
+        ]
+      ]
+    },
+    "validateDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "",
+          []
+        ],
+        [
+          "  ",
+          []
+        ],
+        [
+          "2nd",
+          []
+        ],
+        [
+          "ok_id",
+          []
+        ],
+        [
+          "Has Space",
+          []
+        ],
+        [
+          "name",
+          [
+            "Name"
+          ]
+        ],
+        [
+          "email_2",
+          [
+            "name",
+            "email"
+          ]
+        ],
+        [
+          "Über",
+          []
+        ]
+      ]
+    },
+    "defaultDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Roast preference",
+          []
+        ],
+        [
+          "Name",
+          [
+            "name"
+          ]
+        ],
+        [
+          "Name",
+          [
+            "NAME",
+            "name_2"
+          ]
+        ],
+        [
+          "123",
+          []
+        ],
+        [
+          "Unit-price",
+          [
+            "unit_price",
+            "Unit_Price_2"
+          ]
+        ]
+      ]
+    },
+    "describeScope": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          [
+            "org"
+          ],
+          {}
+        ],
+        [
+          [
+            "host:a"
+          ],
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          [
+            "host:a"
+          ],
+          {}
+        ],
+        [
+          [
+            "host:a",
+            "host:b"
+          ],
+          {}
+        ],
+        [
+          [],
+          {}
+        ],
+        [
+          null,
+          {}
+        ],
+        [
+          [
+            "org",
+            "host:a"
+          ],
+          {}
+        ]
+      ]
+    },
+    "scopeToStore": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          [
+            "org"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "host:b"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "org"
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ],
+        [
+          [
+            "bogus"
+          ]
+        ],
+        [
+          [
+            "host:h0",
+            "host:h1",
+            "host:h2",
+            "host:h3",
+            "host:h4",
+            "host:h5",
+            "host:h6",
+            "host:h7",
+            "host:h8",
+            "host:h9",
+            "host:h10",
+            "host:h11",
+            "host:h12",
+            "host:h13",
+            "host:h14",
+            "host:h15",
+            "host:h16",
+            "host:h17",
+            "host:h18",
+            "host:h19",
+            "host:h20",
+            "host:h21",
+            "host:h22",
+            "host:h23",
+            "host:h24",
+            "host:h25",
+            "host:h26",
+            "host:h27",
+            "host:h28",
+            "host:h29",
+            "host:h30"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "host:a"
+          ]
+        ]
+      ]
+    },
+    "narrowsScope": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          [
+            "org"
+          ],
+          [
+            "org"
+          ]
+        ],
+        [
+          [
+            "org"
+          ],
+          [
+            "host:a"
+          ]
+        ],
+        [
+          [
+            "host:a"
+          ],
+          [
+            "org"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "host:b"
+          ],
+          [
+            "host:a"
+          ]
+        ],
+        [
+          [
+            "host:a"
+          ],
+          [
+            "host:a",
+            "host:b"
+          ]
+        ],
+        [
+          [],
+          [
+            "host:a"
+          ]
+        ],
+        [
+          null,
+          [
+            "org"
+          ]
+        ]
+      ]
+    },
+    "listFilterOperatorLabel": {
+      "module": "libs/shared/util/tools/src/lib/list-query/list-filter-sentence.ts",
+      "args": [
+        [
+          "contains"
+        ],
+        [
+          "doesNotContain"
+        ],
+        [
+          "equals"
+        ],
+        [
+          "is"
+        ],
+        [
+          "="
+        ],
+        [
+          "doesNotEqual"
+        ],
+        [
+          "!="
+        ],
+        [
+          "startsWith"
+        ],
+        [
+          "endsWith"
+        ],
+        [
+          "isAnyOf"
+        ],
+        [
+          "isEmpty"
+        ],
+        [
+          "isNotEmpty"
+        ],
+        [
+          "after"
+        ],
+        [
+          "onOrAfter"
+        ],
+        [
+          "before"
+        ],
+        [
+          "onOrBefore"
+        ],
+        [
+          ">"
+        ],
+        [
+          ">="
+        ],
+        [
+          "<"
+        ],
+        [
+          "<="
+        ],
+        [
+          "whatever"
+        ]
+      ]
+    },
+    "formatVariableValue": {
+      "module": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "args": [
+        [
+          {
+            "name": "a",
+            "type": "text",
+            "value": "Hello"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "boolean",
+            "value": "true"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "boolean",
+            "value": "yes"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "number",
+            "value": "12.50"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "number",
+            "value": "abc"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "date",
+            "value": "2026-03-01"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "date",
+            "value": "not a date"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "time",
+            "value": "09:30"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "collection",
+            "value": "[\"a\",\"b\",3]"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "dictionary",
+            "value": "{\"city\":\"Portland\",\"open\":true}"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "dictionary",
+            "value": "{oops"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "text"
+          }
+        ]
+      ]
+    },
+    "isVariableName": {
+      "module": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "args": [
+        [
+          "tax_rate"
+        ],
+        [
+          "_x"
+        ],
+        [
+          "2fast"
+        ],
+        [
+          "has space"
+        ],
+        [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          ""
+        ],
+        [
+          "Ünï"
+        ]
+      ]
+    },
+    "parseFunctionParameterOptions": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          "small: Small, large: Large"
+        ],
+        [
+          "a, a, b"
+        ],
+        [
+          "x:x, y: "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          " basic : Basic plan , plus"
+        ]
+      ]
+    },
+    "formatFunctionParameterOptions": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          [
+            {
+              "value": "small",
+              "label": "Small"
+            },
+            {
+              "value": "x"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "value": "a",
+              "label": "a"
+            }
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "summarizeDependents": {
+      "module": "libs/aglyn/src/lib/app-utils/where-used-summary.ts",
+      "args": [
+        [
+          {
+            "dependents": [
+              {
+                "type": "screen",
+                "id": "s1",
+                "name": "Home",
+                "via": [
+                  "id"
+                ]
+              },
+              {
+                "type": "screen",
+                "id": "s2",
+                "name": "About",
+                "via": [
+                  "id"
+                ]
+              },
+              {
+                "type": "workflow",
+                "id": "w",
+                "name": "W",
+                "via": [
+                  "name"
+                ]
+              }
+            ],
+            "total": 3,
+            "legacyCount": 1
+          }
+        ],
+        [
+          {
+            "dependents": [
+              {
+                "type": "layout",
+                "id": "l",
+                "name": "L",
+                "via": [
+                  "id"
+                ]
+              }
+            ],
+            "total": 1,
+            "legacyCount": 0
+          }
+        ],
+        [
+          {
+            "dependents": [],
+            "total": 0,
+            "legacyCount": 0
+          }
+        ]
+      ]
+    },
+    "browseBase": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          "org1"
+        ],
+        [
+          "org1",
+          "pub9"
+        ],
+        [
+          null,
+          "pub9"
+        ]
+      ]
+    },
+    "listingArtifactType": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
+      "args": [
+        [
+          {
+            "artifactType": "theme"
+          }
+        ],
+        [
+          {
+            "kind": "template"
+          }
+        ],
+        [
+          {
+            "type": "plugin"
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "isListingBrowsable": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
+      "args": [
+        [
+          {
+            "artifactType": "plugin",
+            "reviewStatus": "listed"
+          }
+        ],
+        [
+          {
+            "artifactType": "plugin",
+            "reviewStatus": "submitted"
+          }
+        ],
+        [
+          {
+            "artifactType": "plugin"
+          }
+        ],
+        [
+          {
+            "artifactType": "component",
+            "reviewStatus": "rejected"
+          }
+        ],
+        [
+          {
+            "artifactType": "theme",
+            "hiddenAt": 1
+          }
+        ],
+        [
+          {
+            "visibility": "private"
+          }
+        ],
+        [
+          {
+            "workspaceLockedAt": 2
+          }
+        ],
+        [
+          {
+            "type": "plugin",
+            "reviewStatus": "verified"
+          }
+        ]
+      ]
+    },
+    "resolvePluginInstallState": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.2.0",
+          null,
+          null
+        ],
+        [
+          "1.2.0",
+          {
+            "version": "1.2.0"
+          },
+          null
+        ],
+        [
+          "1.3.0",
+          null,
+          {
+            "version": "1.2.0"
+          }
+        ],
+        [
+          "2",
+          {
+            "version": 2
+          },
+          {
+            "version": 1
+          }
+        ],
+        [
+          null,
+          {
+            "version": "1"
+          },
+          null
+        ]
+      ]
+    },
+    "marketplaceInstallEndpoint": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "plugin"
+        ],
+        [
+          "component"
+        ],
+        [
+          "template"
+        ],
+        [
+          "layout"
+        ],
+        [
+          "theme"
+        ],
+        [
+          "datasetSchema"
+        ],
+        [
+          "emailTemplate"
+        ],
+        [
+          "emailStarter"
+        ],
+        [
+          "other"
+        ]
+      ]
+    },
+    "marketplaceLandingMessage": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "plugin",
+          "X"
+        ],
+        [
+          "template",
+          "Hero"
+        ],
+        [
+          "layout",
+          "L"
+        ],
+        [
+          "emailTemplate",
+          "Welcome"
+        ],
+        [
+          "emailStarter",
+          "Promo"
+        ],
+        [
+          "datasetSchema",
+          "Menu"
+        ],
+        [
+          "theme",
+          "Bold"
+        ],
+        [
+          "component",
+          "C"
         ]
       ]
     }

@@ -175,7 +175,9 @@ describe.each(ENTRIES)('$widgetId on a plan without the add-on', ({ zone, widget
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText(aiUpsellOffer(false))).toBeTruthy()
     expect(aiUpsellOffer(false)).toMatch(/Ask a workspace owner or admin/)
-    expect(within(dialog).queryByRole('link')).toBeNull()
+    // The only link is the title's help `?`, to the docs (AGL-3660): no way to buy.
+    const links = within(dialog).queryAllByRole('link')
+    expect(links.every((link) => link.getAttribute('href')?.includes('/ai/create-with-ai'))).toBe(true)
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy()
     expect(mockTrack).toHaveBeenCalledWith('ai_upsell_shown', { kind, can_manage: false })
     expect(mockFetch).not.toHaveBeenCalled()

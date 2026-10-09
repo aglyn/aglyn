@@ -1,6 +1,7 @@
 package com.aglyn.core
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
@@ -24,6 +25,9 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
     val next = if (limit != null && docs.size > limit) cursorOf(rows.last(), query.orderBy) else null
     return FirestorePage(rows, next)
   }
+
+  override suspend fun count(query: FirestoreQuery): Long? =
+    build(query.copy(limit = null, startAfter = null)).count().get(AggregateSource.SERVER).await().count
 
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {
     trySend(Live.Loading)

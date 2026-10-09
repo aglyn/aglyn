@@ -22,7 +22,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Content collections | `hosts/[host]/content/*` | AGL-3668 | [x] | [x] |
 | Media | `hosts/[host]/media`, `[orgSlug]/media`, `video-delivery` | AGL-3668 | [x] | [x] |
 | Forms and submissions | `forms` | AGL-3668 | [x] | [x] |
-| Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [ ] | [ ] |
+| Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [ ] | [x] |
 | Fonts, theme presets, plugin marketplace, logic | `fonts`, `theme-presets`, `marketplace`, `logic` | AGL-3668 | [ ] | [ ] |
 | CRM | `crm` | AGL-3669 | [x] | [x] |
 | Inbox | `inbox` | AGL-3669 | [x] | [x] |

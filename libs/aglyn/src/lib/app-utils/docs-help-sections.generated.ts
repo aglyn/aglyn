@@ -47,6 +47,16 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   aglynAssist: {
     '#what-it-can-do': 'E, connect a domain, set up shipping, invite a teammate — and it answers from this documentation, linking the exact docs section and the console page where you do it.',
   },
+  aiAllotments: {
+    '#a-members-allotment': 'E site. A collaborator who is the site\'s Admin can set the other collaborators\' allotments on that site.',
+    '#a-sites-allotment': 'Er site for a site collaborator. It shows what they have drawn this month and whether the allotment is hard or soft.',
+    '#allotments': 'Each month, so one client site, one contractor or one teammate cannot spend what everyone else was counting on.',
+    '#choosing-a-model': 'Warns, and at a hard allotment it says who can raise it. The line updates from the answer to each request, so it never costs a request of its own; after a reload it shows where you stood at your last request.',
+    '#usage-strip': 'Eryone on that site may draw together each month. Use it to keep one client site from spending what the others need: when a hard site allotment is used, AI stops on that site and keeps working on the rest.',
+  },
+  aiAssistBuilds: {
+    '#the-plan-card': 'S. On the Free plan it holds 2 pages, and some parts, such as templates, campaigns, automations, products and edits to existing pages, need a paid plan.',
+  },
   aiAutomations: {
     '#change': 'Tion, switched off. Choose the sites it runs on, check its steps, and save it with the editor\'s own Save — or close the editor, and nothing changes.',
     '#draft': 'At one does, and tell you why one of its runs failed. None of them runs an automation, switches one on, or changes one you have saved: what it drafts arrives as a new automation, switched off.',
@@ -54,16 +64,50 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#org-automations': 'N more than one of — is left as a placeholder for you to pick.',
   },
   aiBusinessProfile: {
-    '#what-aglyn-ai-learned': 'Ot entered reads Not entered, and Aglyn AI writes around it, or leaves a bracketed placeholder such as [phone number] for you to fill, instead of making one up.',
+    '#what-aglyn-ai-learned': 'Tered, and Aglyn AI writes around it, or leaves a bracketed placeholder such as [phone number] for you to fill, instead of making one up.',
+  },
+  aiComponent: {
+    '#from-a-brief': '*Generate with AI permission. Free includes one reusable component per site, and Starter and above include as many as you need: on a site already holding the components its plan includes, the job says so before it…',
+  },
+  aiCreate: {
+    '#without-the-add-on': 'Ds, an automation that is switched off. It uses your theme and reuses what the site already has, following the building rules, and reads your business profile.',
+  },
+  aiCredits: {
+    '#before-a-job-starts': 'Photos.md) in an AI site | Nothing | A model you choose with the Model switch can cost more or less than Auto; the switch shows each model\'s cost.',
+    '#past-the-band': 'N hour. See Paused, or out of credits.',
+    '#see-your-credits': 'Re not given back when you cancel a job yourself (you pay for what ran until then), or when the AI declines what the brief asked for.',
   },
   aiCrm: {
     '#draft-an-email': 'New timeline entry, a new or finished task, or an edited note makes the next summary a new one.',
     '#match-columns': 'R. What you type into the request is kept with the AI request, as every AI request is, and members of your workspace can see it in the list of AI jobs, so describe the email rather than pasting private details into…',
     '#summarize-a-record': 'T, company, deal or lead, with a suggested next step.',
   },
+  aiEmail: {
+    '#where-to-start-it': 'Eaders to choose between. Ask for a campaign instead and it writes the same design plus the draft campaign that would send it.',
+    '#write-the-brief': 'Er, the rest as alternatives. Change which one leads at any time, or write your own.',
+  },
   aiExperiments: {
     '#the-verdict': 'Id not give it, and to write in that copy\'s own language.',
     '#write-variants': 'Leaves the test exactly as it was. Explain this result with AI has nothing to apply at all.',
+  },
+  aiForm: {
+    '#describe-the-form': 'Ge. No page on your site places it, so nothing on the live site changes.',
+  },
+  aiImages: {
+    '#credits': 'Google\'s image models, an invisible watermark. Google marks every picture its image models make with its SynthID watermark, so the picture can later be identified as generated.',
+    '#declined-pictures': 'The people in a Lifestyle with people picture are asked for as made-up people, and a Cartoon or anime picture as original characters.',
+    '#make-a-picture': 'On; where it is not, the menu lists the Vector kinds alone. Each picture is stored the way a file you upload is stored: in the open folder, counted toward your storage, served from the same addresses, and with alt…',
+    '#shapes-and-how-many': 'Y a few seconds later, selected, so you can move, tag or open them at once.',
+    '#who-can-use-it': 'R site, no file from your library, and no name, email address or account identifier.',
+  },
+  aiInsights: {
+    '#asking-a-question': 'Ws is left out.',
+  },
+  aiJobs: {
+    '#ai-jobs-in-assist': 'To build only the parts that failed; For a new site this is the Building your site page; see Start a new site with AI.',
+  },
+  aiLayout: {
+    '#generate-a-layout-with-aglyn-ai': 'Copy until you assign it, so nothing on the live site changes.',
   },
   aiLogic: {
     '#change': 'Ariable} Create with AI at the top of the Variables card writes one site variable — a name, a type and a value in that type\'s stored form, such as a dictionary of plan prices {"starter":19,"pro":49}.',
@@ -79,8 +123,35 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#the-ai-card': 'Trun what a subscription brings in on its own. This page is where staff watch that happen — per organization, on the page they already open to look at an organization, and across the fleet on the boards that already…',
     '#the-spend-leaderboard': 'Answer to "is this one person driving the spend in three workspaces".',
   },
+  aiPage: {
+    '#describe-the-page': 'D forms your site already has. It arrives as an unpublished draft, and nothing on your live site changes until you publish it.',
+  },
+  aiProducts: {
+    '#propose-a-first-catalog': 'Criptions, search listings and tags with AI as they land. Once the import has created your products, their copy is written as above and waits in the review table on the products page.',
+    '#write-a-products-copy': 'Th AI Aglyn AI can write the copy for your products and help you set up a store.',
+  },
   aiSeo: {
     '#fix-what-the-seo-check-finds': 'Sting section has the same Write with AI control. It proposes an SEO title and an SEO description from the product\'s name and description.',
+    '#write-a-pages-listing': 'The editor or the form as unsaved changes, or in a new draft version, and your live site changes only when you save or publish.',
+    '#write-a-products-listing': 'Picture. | The listing is written from the version you are looking at, in the language of its text.',
+  },
+  aiSite: {
+    '#generate-for-several-sites-at-once': 'Builds.md#finding-your-ai-jobs). Every other planned job — a page, a form, a site generated for an existing site — still stops after its plan: it shows the plan with its estimate and Confirm plan, and builds nothing…',
+  },
+  aiSiteLooks: {
+    '#choose-a-style': 'Onts, and the style of its buttons, cards and forms. The style you choose decides the family that look comes from.',
+  },
+  aiStart: {
+    '#details': 'Nt, a blog and so on. One is picked for you from your first answer; choose another to change it.',
+    '#how-do-you-want-to-start': 'Hrough each question and what happens after you choose Plan my site.',
+    '#the-sites-search-listing': 'Se the site\'s search indexing setting. Until the site is built, its address shows a short coming soon page with the site\'s name, which search engines are asked not to index.',
+    '#your-business': 'Ite does not ask again. If you have typed or picked something, the window first asks Leave without your answers?, because what you typed is not saved.',
+  },
+  aiTemplate: {
+    '#generate-a-page-template-with-aglyn-ai': 'Ate is linked back to the template afterwards. Editing a page will never change the template, and updating a template will never change pages you already made.',
+  },
+  aiThemes: {
+    '#describe-a-change': 'Olors, font, corner radius, spacing, navigation heights, dark scheme and component overrides you can set by hand.',
   },
   assistSignals: {
     '#docs-gaps': 'That left writes out would read it as healthy. A signal recorded before kinds were kept is read by its route: the Besigner modes name themselves, a generation job reads as job, and every other turn as assist.',
@@ -92,9 +163,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#where-the-money-goes': 'Nput tokens and cache reads cost far less, so a prefix that is written on every turn and read on none is the worst of the three outcomes — and it looks, from every other panel, exactly like normal traffic.',
   },
   billing: {
-    '#ai-allotments': 'No judgment about it, and it never shows a dollar figure — the share is of the workspace\'s own credits.',
     '#api-access': 'Closes. Clearing datasets after a month has ended lowers the next invoice, not the one for the month that just finished.',
-    '#assist-overage': 'He optional cap means anyone who wants a hard ceiling can have one, at a number they choose.',
     '#billing-address': 'Hat you meant.',
     '#billing-address-on-profile': 'It affects your next invoice. Invoices already issued are never re-rated.',
     '#billing-email': 'Rst; Load older invoices reaches further back, and the filters above the table narrow what is shown.',
@@ -117,7 +186,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#usage-budget': 'Ps until next month or an upgrade. The same warning appears as a banner in the console, with a link to Billing → Usage.',
     '#usage-card': 'Ail your customers never receive.',
     '#usage-history': '. On a plan whose limits are included caps rather than meters, the card says there are no usage charges.',
-    '#usage-meters': 'Ps working as a grace period).',
     '#what-you-will-pay': 'Or expired code is refused immediately, with the reason — not at the moment you are charged.',
     '#who-is-generating-what': 'Reach. Transactional mail — receipts, invites, password resets — is never paced by it.',
   },

@@ -60,6 +60,8 @@ data class PosContext(
   /** The site's smart (internet) readers, driven through the server. */
   val readers: List<PosSmartReader>,
   val smsReceipts: Boolean,
+  /** The site's register rules: shifts, the idle lock, the refund limit. */
+  val ops: PosOpsSettings = PosOpsSettings(),
 )
 
 data class PosSalePayment(
@@ -146,6 +148,7 @@ fun readPosContext(body: JsonElement?): PosContext {
       )
     },
     smsReceipts = record["smsReceipts"].bool(),
+    ops = readPosOpsSettings(record["ops"]),
   )
 }
 
@@ -270,7 +273,12 @@ interface PosSaleApi {
 }
 
 /** The register's calls over the console API, as the signed-in member. */
-class ConsolePosSaleApi(private val api: ConsoleApiClient, override val hostId: String) : PosSaleApi {
+class ConsolePosSaleApi(
+  private val api: ConsoleApiClient,
+  override val hostId: String,
+  /** The cashier a PIN switched in, if any; the sale and each payment it starts name them. */
+  private val cashierAssertion: () -> String? = { null },
+) : PosSaleApi {
   override suspend fun context(): PosContext =
     readPosContext(api.request(POS_PAYMENT_ROUTE, ApiMethod.GET, query = mapOf("hostId" to hostId, "action" to "context")))
 
@@ -283,13 +291,16 @@ class ConsolePosSaleApi(private val api: ConsoleApiClient, override val hostId: 
       put("lines", cart.saleLines())
       if (cart.discountPct > 0) put("discountPct", cart.discountPct)
       if (cart.customerEmail.isNotEmpty()) put("customerEmail", cart.customerEmail)
+      cashierAssertion()?.let { put("cashierAssertion", it) }
     }
     return readOpenedSale(api.request(POS_ORDER_ROUTE, ApiMethod.POST, body, idempotencyKey = attemptKey))
   }
 
   override suspend fun payment(orderId: String, step: SaleStep, attemptKey: String?): PosPaymentAnswer {
     require(!step.startsPayment || !attemptKey.isNullOrEmpty()) { "A payment needs its attempt key." }
-    return readPaymentAnswer(api.request(POS_PAYMENT_ROUTE, ApiMethod.POST, step.body(hostId, orderId), idempotencyKey = attemptKey))
+    val body = step.body(hostId, orderId)
+    val named = if (step.startsPayment) cashierAssertion()?.let { JsonObject(body + ("cashierAssertion" to JsonPrimitive(it))) } ?: body else body
+    return readPaymentAnswer(api.request(POS_PAYMENT_ROUTE, ApiMethod.POST, named, idempotencyKey = attemptKey))
   }
 
   override suspend fun giftCardBalance(code: String): GiftCardBalance {

@@ -34,7 +34,7 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "expandVariantMatrix", "renameProductOptions")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions")))
   }
 
   @Test
@@ -83,6 +83,16 @@ class FunctionCasesTest {
   fun describeRestockCheckCases() = cases("describeRestockCheck").forEach { (args, result) ->
     val check = ContractJsonFormat.decodeFromJsonElement(OrderRestockCheck.serializer(), args[0])
     assertEquals(result.jsonPrimitive.content, describeRestockCheck(check, order(args[1])), args.toString())
+  }
+
+  @Test
+  fun posPinProblemCases() = cases("posPinProblem").forEach { (args, result) ->
+    assertEquals(str(result), posPinProblem(str(args[0])), args.toString())
+  }
+
+  @Test
+  fun posCashVarianceCases() = cases("posCashVarianceCents").forEach { (args, result) ->
+    assertEquals(result.jsonPrimitive.long, posCashVarianceCents(args[0].jsonPrimitive.double, args[1].jsonPrimitive.double), args.toString())
   }
 
   @Test
