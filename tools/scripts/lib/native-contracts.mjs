@@ -136,6 +136,10 @@ export function buildContractModel({ ts, program, root, config, pure }) {
     // Aliases first: Record and Readonly are structural once resolved.
     const alias = type.aliasSymbol?.name
     if (alias === 'Readonly' && type.aliasTypeArguments?.length === 1) return ref(type.aliasTypeArguments[0], hint, where)
+    // A `Partial<Record<K, V>>` is the same map: a key a payload lacks is just absent.
+    if (alias === 'Partial' && type.aliasTypeArguments?.[0]?.aliasSymbol?.name === 'Record') {
+      return ref(type.aliasTypeArguments[0], hint, where)
+    }
     if (alias === 'Record' && type.aliasTypeArguments?.length === 2) {
       const [keyType, valueType] = type.aliasTypeArguments
       const keyOk =
@@ -522,11 +526,76 @@ open class RawEnumSerializer<E : Enum<E>>(
 }
 `
 
+/**
+ * The JVM caps a method signature at 255 slots, and kotlinx.serialization gives
+ * every @Serializable class a synthetic constructor taking each field, a `seen`
+ * bitmask int per 32 fields, a SerializationConstructorMarker and `this`. One
+ * class holding every contract value crossed that cap at ~190 values
+ * (AGL-3703: `ClassFormatError: Too many arguments in method signature`), so
+ * the values are split into part classes of a fixed size, in the model's
+ * (alphabetical) order, and `ContractValues` is a facade forwarding to them.
+ */
+export const KOTLIN_VALUES_PER_PART = 48
+/** The most slots one part's synthetic constructor may take: half the JVM's 255. */
+export const KOTLIN_PART_SLOT_BUDGET = 128
+
+/** A non-null Long or Double is a two-slot primitive on the JVM; everything else is one reference slot. */
+const kotlinSlotsOf = (v) => (!v.type.nullable && (v.type.kind === 'int' || v.type.kind === 'double') ? 2 : 1)
+
+/** Slots of the synthetic serialization constructor a @Serializable class of these values gets. */
+export function kotlinConstructorSlots(values) {
+  return 1 + values.reduce((sum, v) => sum + kotlinSlotsOf(v), 0) + Math.ceil(values.length / 32) + 1
+}
+
+/** Splits the values into parts, refusing any part over the slot budget. */
+export function kotlinValueParts(values, { perPart = KOTLIN_VALUES_PER_PART, slotBudget = KOTLIN_PART_SLOT_BUDGET } = {}) {
+  const parts = []
+  for (let i = 0; i < values.length; i += perPart) parts.push(values.slice(i, i + perPart))
+  parts.forEach((part, i) => {
+    const slots = kotlinConstructorSlots(part)
+    if (slots > slotBudget) {
+      throw new Error(
+        `ContractValuesPart${i + 1} needs ${slots} JVM constructor slots, over the budget of ${slotBudget} ` +
+          `(the JVM refuses a class past 255): lower KOTLIN_VALUES_PER_PART in tools/scripts/lib/native-contracts.mjs`,
+      )
+    }
+  })
+  return parts
+}
+
 function kotlinValues(values) {
-  const props = values.map(
-    (v) => `    @SerialName(${JSON.stringify(v.name)}) val ${camelFromConstant(v.name)}: ${kotlinType(v.type)}${v.type.nullable ? '?' : ''},`,
+  const declared = (v) => `${kotlinType(v.type)}${v.type.nullable ? '?' : ''}`
+  const parts = kotlinValueParts(values)
+  const partName = (i) => `ContractValuesPart${i + 1}`
+  const partField = (i) => `part${i + 1}`
+  const partClasses = parts.map(
+    (part, i) =>
+      `@Serializable\ninternal data class ${partName(i)}(\n` +
+      part.map((v) => `    @SerialName(${JSON.stringify(v.name)}) val ${camelFromConstant(v.name)}: ${declared(v)},`).join('\n') +
+      `\n)\n`,
   )
-  return `/** The values in contracts.generated.json, keyed as the TypeScript exports are. */\n@Serializable\ndata class ContractValues(\n${props.join('\n')}\n)\n`
+  const ctor = parts.map((_, i) => `    private val ${partField(i)}: ${partName(i)},`).join('\n')
+  const getters = parts.flatMap((part, i) =>
+    part.map((v) => `    val ${camelFromConstant(v.name)}: ${declared(v)} get() = ${partField(i)}.${camelFromConstant(v.name)}`),
+  )
+  const decodes = parts.map((_, i) => `                json.decodeFromJsonElement(${partName(i)}.serializer(), tree),`).join('\n')
+  const fields = parts.map((_, i) => partField(i))
+  const equality = fields.length ? fields.map((f) => `${f} == other.${f}`).join(' && ') : 'true'
+  return (
+    `${partClasses.join('\n')}\n` +
+    `/**\n * The values in contracts.generated.json, keyed as the TypeScript exports are.\n` +
+    ` * Each part decodes from the same JSON; split so no class passes the JVM's\n * 255-slot constructor limit (AGL-3703).\n */\n` +
+    `class ContractValues internal constructor(\n${ctor}\n) {\n` +
+    `${getters.join('\n')}\n\n` +
+    `    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && ${equality})\n\n` +
+    `    override fun hashCode(): Int = listOf<Any>(${fields.join(', ')}).hashCode()\n\n` +
+    `    companion object {\n` +
+    `        /** Decodes every part from one JSON text; the format must ignore unknown keys. */\n` +
+    `        fun decode(json: Json, text: String): ContractValues {\n` +
+    `            val tree = json.parseToJsonElement(text)\n` +
+    `            return ContractValues(\n${decodes}\n            )\n` +
+    `        }\n    }\n}\n`
+  )
 }
 
 export function kotlinContractsContent(model) {
@@ -542,6 +611,7 @@ export function kotlinContractsContent(model) {
     `import kotlinx.serialization.descriptors.SerialDescriptor\n` +
     `import kotlinx.serialization.encoding.Decoder\n` +
     `import kotlinx.serialization.encoding.Encoder\n` +
+    `import kotlinx.serialization.json.Json\n` +
     `import kotlinx.serialization.json.JsonElement\n\n` +
     `${KOTLIN_RAW_ENUM}\n${body.join('\n')}\n${kotlinValues(model.values)}`
   )

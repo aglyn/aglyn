@@ -12,6 +12,7 @@ let package = Package(
   products: [.library(name: "AglynPluginManifest", targets: ["AglynPluginManifest"])],
   dependencies: [
     .package(path: "../../../libs/native/apple"),
+    .package(path: "Plugins/AglynAiPlugin"),
     .package(path: "Plugins/AglynBookingsPlugin"),
     .package(path: "Plugins/AglynCommercePlugin"),
     .package(path: "Plugins/AglynCrmPlugin"),
@@ -23,6 +24,7 @@ let package = Package(
     .package(path: "Plugins/AglynMarketingPlugin"),
     .package(path: "Plugins/AglynOutreachPlugin"),
     .package(path: "Plugins/AglynRedirectsPlugin"),
+    .package(path: "Plugins/AglynSmsPlugin"),
     .package(path: "Plugins/AglynWorkflowsPlugin"),
   ],
   targets: [
@@ -30,6 +32,7 @@ let package = Package(
       name: "AglynPluginManifest",
       dependencies: [
         .product(name: "AglynPluginHost", package: "apple"),
+        .product(name: "AglynAiPlugin", package: "AglynAiPlugin"),
         .product(name: "AglynBookingsPlugin", package: "AglynBookingsPlugin"),
         .product(name: "AglynCommercePlugin", package: "AglynCommercePlugin"),
         .product(name: "AglynCrmPlugin", package: "AglynCrmPlugin"),
@@ -41,6 +44,7 @@ let package = Package(
         .product(name: "AglynMarketingPlugin", package: "AglynMarketingPlugin"),
         .product(name: "AglynOutreachPlugin", package: "AglynOutreachPlugin"),
         .product(name: "AglynRedirectsPlugin", package: "AglynRedirectsPlugin"),
+        .product(name: "AglynSmsPlugin", package: "AglynSmsPlugin"),
         .product(name: "AglynWorkflowsPlugin", package: "AglynWorkflowsPlugin"),
       ]
     ),

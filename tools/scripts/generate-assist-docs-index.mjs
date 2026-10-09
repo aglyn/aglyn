@@ -173,7 +173,9 @@ function readDocSections(absPath, urlPath) {
   if (/^unlisted:\s*true\s*$/m.test(fm[1])) return []
   const title = stripQuotes(fm[1].match(/^title:\s*(.+)$/m)?.[1])
   if (!title) return []
-  const body = source.slice(fm[0].length)
+  // An HTML comment is not published — a section held back until its
+  // feature is configured (AGL-3696) — so Assist must not quote it either.
+  const body = source.slice(fm[0].length).replace(/<!--[\s\S]*?-->/g, '')
 
   // Split the body on H2 headings; the run before the first H2 is the intro.
   const entries = []

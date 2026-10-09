@@ -93,7 +93,7 @@ const buildBasicSchema = (inheritedTimeZone: string): FormSchema => ({
   title: 'Basic details',
   CardDisplayProps: {
     help: docsHelp('gettingStarted', {
-      anchor: '#what-a-site-contains',
+      anchor: '#basic-details',
       excerpt:
         'The site name shown across the console, the subdomain it is served ' +
         'from, and the zone its published dates read in.',
@@ -106,7 +106,7 @@ const buildBasicSchema = (inheritedTimeZone: string): FormSchema => ({
       label: 'Display name',
       type: 'text',
       help: docsHelp('gettingStarted', {
-        anchor: '#create-your-first-site',
+        anchor: '#display-name',
         excerpt:
           'What this site is called inside the console — the site switcher, ' +
           'breadcrumbs and notifications. Visitors never see it; the title ' +
@@ -137,7 +137,7 @@ const buildBasicSchema = (inheritedTimeZone: string): FormSchema => ({
       label: 'Subdomain',
       type: 'text',
       help: docsHelp('gettingStarted', {
-        anchor: '#create-your-first-site',
+        anchor: '#subdomain',
         excerpt:
           `Your site's address on ${TENANT_APEX} — you can also connect ` +
           'your own domain from the Custom Domain tab.',
@@ -234,6 +234,8 @@ const CLEARABLE_TRACKING_PATHS = [
   'analytics.adTags.meta',
   'analytics.adTags.google-ads',
   'analytics.adTags.linkedin',
+  'analytics.adTags.tiktok',
+  'analytics.adTags.pinterest',
 ] as const
 
 /**
@@ -296,12 +298,7 @@ const trackingSchema: FormSchema = {
       'anywhere the region cannot be determined, nothing loads until the ' +
       'visitor accepts. Elsewhere they load from the first visit and the ' +
       'visitor can turn them off at any time.',
-    help: docsHelp('analytics', {
-      anchor: '#google-analytics',
-      excerpt:
-        'Send your site’s traffic to Google Analytics or a Tag Manager ' +
-        'container. Visitors are asked for consent first.',
-    }),
+    help: docsHelp('analytics', { anchor: '#tracking-card' }),
   },
   fields: [
     {
@@ -313,12 +310,7 @@ const trackingSchema: FormSchema = {
         'UK, EU and EEA, and anywhere the region cannot be determined, it ' +
         'waits for the visitor to accept; elsewhere it runs from the first ' +
         'visit and the visitor can turn it off at any time.',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Track your site in Google Analytics alongside the built-in ' +
-          'pageview analytics.',
-      }),
+      help: docsHelp('analytics', { anchor: '#ga-measurement-id' }),
       type: 'text',
       validate: [
         {
@@ -357,12 +349,7 @@ const trackingSchema: FormSchema = {
         'Do not put an Analytics or Google Ads tag in the container if you ' +
         'have filled in the fields above — that loads the same measurement ' +
         'twice and counts every visit and conversion twice.',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Load a Google Tag Manager container on your site. Consent Mode ' +
-          'signals are set before the container loads.',
-      }),
+      help: docsHelp('analytics', { anchor: '#gtm-container' }),
       type: 'text',
       validate: [
         {
@@ -397,13 +384,7 @@ const trackingSchema: FormSchema = {
         'a separate choice from analytics: in the UK, EU and EEA it waits ' +
         'for an accept; elsewhere it runs from the first visit. Withdrawing ' +
         'removes the tag and clears its cookies.',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Run a Meta pixel on your site for ads and remarketing. It waits ' +
-          'for advertising consent, which is a separate choice from ' +
-          'analytics.',
-      }),
+      help: docsHelp('analytics', { anchor: '#meta-pixel' }),
       type: 'text',
       validate: [
         {
@@ -436,12 +417,7 @@ const trackingSchema: FormSchema = {
         'Optional — e.g. AW-123456789, from Google Ads. Runs without ' +
         'Analytics or Tag Manager. Consent works the same way as the pixel ' +
         'above.',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Run Google Ads conversion tracking and remarketing on your site ' +
-          'without needing Google Analytics or Tag Manager.',
-      }),
+      help: docsHelp('analytics', { anchor: '#google-ads-tag' }),
       type: 'text',
       validate: [
         {
@@ -460,19 +436,55 @@ const trackingSchema: FormSchema = {
         'Optional — the numeric partner ID from LinkedIn Campaign Manager. ' +
         'Consent works the same way. LinkedIn also sets cookies on its own ' +
         'domain, which only LinkedIn can clear.',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Run the LinkedIn Insight Tag on your site for ads and ' +
-          'remarketing, under the same consent as the other advertising ' +
-          'tags.',
-      }),
+      help: docsHelp('analytics', { anchor: '#linkedin-insight-tag' }),
       type: 'text',
       validate: [
         {
           type: FieldValidatorType.PATTERN,
           pattern: Aglyn.LINKEDIN_PARTNER_ID_PATTERN.source,
           message: 'A LinkedIn partner ID is 4–10 digits',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      /*
+       * TikTok and Pinterest (AGL-3694), the site owner's own, on the same
+       * terms as the pixel above: a separate advertising choice, removed and
+       * swept on withdrawal, and — with an access token on the Ad
+       * conversions card — paired with the same events sent from the server.
+       */
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.tiktok',
+      label: 'TikTok pixel ID',
+      helperText:
+        'Optional — the pixel code from TikTok Ads Manager → Events, like ' +
+        'C4ABCDEFGH1234567890. Consent works the same way as the pixel above.',
+      help: docsHelp('adTracking', { anchor: '#tiktok-pixel' }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.TIKTOK_PIXEL_ID_PATTERN.source,
+          message: 'A TikTok pixel ID is 16–24 capital letters and digits',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.pinterest',
+      label: 'Pinterest tag ID',
+      helperText:
+        'Optional — the numeric tag ID from Pinterest Ads → Conversions. ' +
+        'Consent works the same way as the pixel above.',
+      help: docsHelp('adTracking', { anchor: '#pinterest-tag' }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.PINTEREST_TAG_ID_PATTERN.source,
+          message: 'A Pinterest tag ID is 10–16 digits',
         },
       ],
       FormFieldGridProps: { size: { xs: 12, sm: 6 } },
@@ -485,6 +497,7 @@ const seoSchema: FormSchema = {
   title: 'SEO',
   CardDisplayProps: {
     help: docsHelp('seo', {
+      anchor: '#site-wide-defaults',
       excerpt:
         'Site-wide defaults for titles, descriptions, and structured ' +
         'data — pages can override them in their own SEO editor.',
@@ -540,7 +553,7 @@ const seoSchema: FormSchema = {
       label: 'Description',
       type: 'text',
       help: docsHelp('seo', {
-        anchor: '#per-screen-seo',
+        anchor: '#site-description',
         excerpt:
           'Default meta description shown under your site in search ' +
           'results when a page sets none of its own.',
@@ -585,7 +598,7 @@ const seoSchema: FormSchema = {
         'Joins a page’s NAME to the site title above, for pages with ' +
         'no SEO title, e.g. "|" or "·"',
       help: docsHelp('seo', {
-        anchor: '#how-a-page-title-is-built',
+        anchor: '#title-separator',
         excerpt:
           'Character placed between a page’s name and the site title ' +
           'when the page sets no SEO title of its own, e.g. "|" or "·".',
@@ -627,7 +640,7 @@ const seoSchema: FormSchema = {
         'How a page with no SEO title of its own is titled. Leave empty ' +
         `for ${DEFAULT_TITLE_PATTERN}.`,
       help: docsHelp('seo', {
-        anchor: '#how-a-page-title-is-built',
+        anchor: '#title-pattern',
         excerpt:
           'The pattern a page with no SEO title of its own is titled ' +
           'with — page name, separator and site name, in whatever order ' +
@@ -678,7 +691,7 @@ const seoEntitySchema: FormSchema = {
   title: 'Entity',
   CardDisplayProps: {
     help: docsHelp('seo', {
-      anchor: '#structured-data',
+      anchor: '#entity-card',
       excerpt:
         'Who publishes this site — emitted as JSON-LD structured data ' +
         'so search engines show rich results.',
@@ -690,7 +703,7 @@ const seoEntitySchema: FormSchema = {
       name: 'seo.entity.type',
       label: 'Type',
       help: docsHelp('seo', {
-        anchor: '#structured-data',
+        anchor: '#entity-type',
         excerpt:
           'Whether this site is published by a company or by a person. ' +
           'The two carry different structured-data fields, so the ' +
@@ -709,7 +722,7 @@ const seoEntitySchema: FormSchema = {
       name: 'seo.entity.name',
       label: 'Name',
       help: docsHelp('seo', {
-        anchor: '#structured-data',
+        anchor: '#entity-name',
         excerpt:
           'The publisher’s legal or trading name, as it should appear ' +
           'in search results. Not the site title — that is the SEO ' +
@@ -733,7 +746,7 @@ const seoEntitySchema: FormSchema = {
         'What the publisher IS, in a sentence — not what this page is ' +
         'about. Falls back to the site description above',
       help: docsHelp('seo', {
-        anchor: '#structured-data',
+        anchor: '#entity-description',
         excerpt:
           'One sentence describing the organization or person behind ' +
           'the site — published as the entity’s `description` so AI ' +
@@ -756,7 +769,7 @@ const seoEntitySchema: FormSchema = {
         'Only when the publisher’s main address is somewhere else — ' +
         'leave blank and this site’s own address is used',
       help: docsHelp('seo', {
-        anchor: '#structured-data',
+        anchor: '#entity-website',
         excerpt:
           'The publisher’s canonical address, for a brand site whose ' +
           'company lives at a different domain.',
@@ -783,7 +796,7 @@ const seoEntitySchema: FormSchema = {
         'Published in your structured data and in /llms.txt, so an AI ' +
         'assistant can tell someone how to reach you',
       help: docsHelp('seo', {
-        anchor: '#structured-data',
+        anchor: '#entity-contact',
         excerpt:
           'A published contact address for the organization. Appears in ' +
           'the site’s `contactPoint` structured data.',
@@ -829,7 +842,7 @@ const seoAddressSchema: FormSchema = {
   title: 'Address',
   CardDisplayProps: {
     help: docsHelp('seo', {
-      anchor: '#structured-data',
+      anchor: '#address-card',
       excerpt:
         'Your postal address, published as `PostalAddress` structured ' +
         'data. Partial is fine — every field is optional.',
@@ -1008,7 +1021,7 @@ const seoAgentSchema: FormSchema = {
   title: 'AI agents',
   CardDisplayProps: {
     help: docsHelp('seo', {
-      anchor: '#structured-data',
+      anchor: '#ai-agents-card',
       excerpt:
         'What AI agents are told about your site in /llms.txt — when to ' +
         'reach for you, and how to call you.',

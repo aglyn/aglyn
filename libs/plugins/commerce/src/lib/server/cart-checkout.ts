@@ -18,6 +18,10 @@
 import { randomUUID } from 'crypto'
 import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  advertisingRequestFacts,
+  recordAdvertisingOrderConsent,
+} from '@aglyn/aglyn/plugin-manager/plugin-advertising-conversions'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { checkoutRecoveryState } from '../model/checkout-recovery'
@@ -1543,6 +1547,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         items: startedItems,
       })
     }
+    // The shopper's advertising consent, for the order this session may
+    // become (AGL-3694) — see `checkout.ts`. Never fails the checkout.
+    await recordAdvertisingOrderConsent({
+      hostId: String(hostId),
+      orderKey: String(session.id ?? ''),
+      wire: body.adConsent,
+      ...advertisingRequestFacts(req.headers as never),
+    })
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error: any) {

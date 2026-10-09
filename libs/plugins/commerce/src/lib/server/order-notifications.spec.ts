@@ -21,6 +21,10 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-sms-messaging'
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import {
+  registerPluginOrderEmailCopies,
+  type PluginOrderEmailCopyRequest,
+} from '@aglyn/aglyn/plugin-manager/plugin-order-email-copies'
+import {
   composeOrderBuyerMessage,
   notifyOrderBuyer,
   onlineReceiptExtras,
@@ -104,7 +108,7 @@ const firestore: any = {
   },
 }
 
-const mockSendEmail = jest.fn(async (_options: any) => undefined)
+const mockSendEmail = jest.fn(async (_options: any): Promise<any> => undefined)
 const mockRender = jest.fn(async (..._args: any[]) => null as any)
 const mockMeter = jest.fn(async (_hostId: string) => undefined)
 let emailConfigured = true
@@ -112,6 +116,7 @@ let emailConfigured = true
 jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => emailConfigured,
   sendEmail: (options: any) => mockSendEmail(options),
+  renderTextEmailHtml: (text: string) => `<html><body><p>${text}</p></body></html>`,
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -159,6 +164,7 @@ beforeEach(() => {
   emailConfigured = true
   process.env.TOKEN_SIGNING_SECRET = 'test-secret'
   unregisterPluginServices('sms-test')
+  unregisterPluginServices('copies-test')
 })
 
 const shipment = (id: string, lineItemIds: number[], extra: Record<string, any> = {}) => ({
@@ -393,6 +399,81 @@ describe('notifyOrderBuyer (AGL-3610)', () => {
       outcome: 'handled',
       channels: [{ channel: 'sms', outcome: 'failed', error: 'suppressed' }],
     })
+  })
+})
+
+describe('plugins copied on a buyer email (AGL-3699)', () => {
+  function copyOn(moment: string, settled: boolean[], asked: PluginOrderEmailCopyRequest[] = []) {
+    registerPluginOrderEmailCopies(
+      async (request) => {
+        asked.push(request)
+        if (request.moment !== moment) return null
+        return {
+          bcc: ['northwind.example+a1@invite.trustpilot.com'],
+          dataBlocks: [{ type: 'application/json+trustpilot', json: { referenceId: '1042' } }],
+          settle: async (sent) => {
+            settled.push(sent)
+          },
+        }
+      },
+      { pluginId: 'copies-test' },
+    )
+  }
+
+  it('blind-copies the email a plugin asks for, with its data block in the HTML part, and says it left', async () => {
+    seed({ status: 'delivered' })
+    const settled: boolean[] = []
+    const asked: PluginOrderEmailCopyRequest[] = []
+    copyOn('delivered', settled, asked)
+    mockSendEmail.mockResolvedValueOnce({ sent: true, id: 'm_1' })
+    await notifyOrderBuyer(REF, 'delivered')
+    const options = mockSendEmail.mock.calls[0][0]
+    expect(options.bcc).toEqual(['northwind.example+a1@invite.trustpilot.com'])
+    expect(options.to).toBe('buyer@example.com')
+    // No designed email: the synthesized HTML part carries the block.
+    expect(options.html).toBe(
+      '<html><body><p>' +
+        options.text +
+        '</p><script type="application/json+trustpilot">{"referenceId":"1042"}</script></body></html>',
+    )
+    expect(settled).toEqual([true])
+    expect(asked[0]).toMatchObject({
+      hostId: HOST,
+      recordId: ORDER,
+      emailKey: 'order-delivered',
+      moment: 'delivered',
+      recipient: 'buyer@example.com',
+    })
+    // The order as the public API shapes it, rehearsal flag and all.
+    expect(asked[0].order).toMatchObject({ id: ORDER, number: 1042, status: 'delivered', livemode: true })
+  })
+
+  it('puts the block inside a designed email, and tells the plugin when the email did not leave', async () => {
+    seed({ status: 'delivered' })
+    const settled: boolean[] = []
+    copyOn('delivered', settled)
+    mockRender.mockResolvedValueOnce({ subject: 'Delivered', text: 'Here', html: '<html><body><h1>Here</h1></body></html>' })
+    mockSendEmail.mockResolvedValueOnce({ sent: false, reason: 'rejected' })
+    await notifyOrderBuyer(REF, 'delivered')
+    expect(mockSendEmail.mock.calls[0][0].html).toBe(
+      '<html><body><h1>Here</h1><script type="application/json+trustpilot">{"referenceId":"1042"}</script></body></html>',
+    )
+    expect(settled).toEqual([false])
+  })
+
+  it('adds nothing on a moment no plugin asked for, and never on a merchant-asked resend', async () => {
+    seed({ fulfillments: [shipment('f1', [0, 1])] })
+    const settled: boolean[] = []
+    const asked: PluginOrderEmailCopyRequest[] = []
+    copyOn('delivered', settled, asked)
+    await notifyOrderBuyer(REF, 'shipped', { fulfillmentId: 'f1' })
+    expect(mockSendEmail.mock.calls[0][0]).not.toHaveProperty('bcc')
+    expect(mockSendEmail.mock.calls[0][0]).not.toHaveProperty('html')
+    asked.length = 0
+    await sendOrderReceipt(REF, { channel: 'email', to: 'buyer@example.com' })
+    expect(asked).toHaveLength(0)
+    expect(mockSendEmail.mock.calls[1][0]).not.toHaveProperty('bcc')
+    expect(settled).toEqual([])
   })
 })
 

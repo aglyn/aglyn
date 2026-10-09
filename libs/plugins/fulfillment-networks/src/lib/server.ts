@@ -25,6 +25,7 @@ import type { NetworkRoutes } from './server/routes'
  * request, so registering costs the console nothing. ShipBob's webhook is a
  * machine route: the dispatcher skips its per-site gates and the route
  * verifies the token its address carries before it reads the body.
+ * ShipMonk's (AGL-3697) is one too, verified by its HMAC signature.
  */
 let routes: Promise<NetworkRoutes> | null = null
 
@@ -48,6 +49,8 @@ export function registerFulfillmentNetworksConsoleApi(): void {
     [routesTable.order, (r) => r.order],
     [routesTable.orderSend, (r) => r.orderSend],
     [routesTable.orderCancel, (r) => r.orderCancel],
+    [routesTable.connectKey, (r) => r.connectKey],
+    [routesTable.webhookSecret, (r) => r.webhookSecret],
   ]
   for (const [path, pick] of table) {
     const run = handler(pick)
@@ -55,4 +58,7 @@ export function registerFulfillmentNetworksConsoleApi(): void {
   }
   const webhook = handler((r) => r.webhookShipbob)
   registerPluginApiRoute(routesTable.webhookShipbob, { web: (request) => webhook(request) }, { machine: true })
+  // ShipMonk's webhook (AGL-3697): a machine route too, verified by its signature before its body is parsed.
+  const shipmonkWebhook = handler((r) => r.webhookShipmonk)
+  registerPluginApiRoute(routesTable.webhookShipmonk, { web: (request) => shipmonkWebhook(request) }, { machine: true })
 }

@@ -27,7 +27,11 @@ import test from 'node:test'
 import {
   buildContractModel,
   camelFromConstant,
+  kotlinConstructorSlots,
   kotlinContractsContent,
+  KOTLIN_PART_SLOT_BUDGET,
+  KOTLIN_VALUES_PER_PART,
+  kotlinValueParts,
   plainValue,
   swiftContractsContent,
 } from './native-contracts.mjs'
@@ -49,6 +53,7 @@ const FIXTURE = {
       lines: readonly Line[]
       totals: Record<string, number>
       byStatus: Record<Status, string>
+      partlyByStatus: Partial<Record<Status, number>>
       meta: { source: 'pos' | 'web'; tags?: string[] }
       extra: unknown
       code: 301 | 302
@@ -103,6 +108,7 @@ test('the model: enums, structs, maps, inline shapes, nullability, ints, json an
   assert.deepEqual(fields.lines.type, { kind: 'array', of: { kind: 'named', name: 'Line' } })
   assert.deepEqual(fields.totals.type, { kind: 'map', of: { kind: 'double' } })
   assert.deepEqual(fields.byStatus.type, { kind: 'map', of: { kind: 'string' } })
+  assert.deepEqual(fields.partlyByStatus.type, { kind: 'map', of: { kind: 'double' } }, 'a Partial<Record> is the same map')
   assert.deepEqual(fields.meta.type, { kind: 'named', name: 'OrderMeta' })
   assert.deepEqual(fields.extra.type, { kind: 'json' })
   assert.deepEqual(fields.code.type, { kind: 'int' })
@@ -177,6 +183,31 @@ test('Kotlin: serializable data classes and raw-string enums with an UNKNOWN fal
   assert.match(kotlin, /val lines: List<Line>,/)
   assert.match(kotlin, /val extra: JsonElement,/)
   assert.match(kotlin, /@SerialName\("LABELS"\) val labels: Map<String, String>,/)
+  assert.match(kotlin, /internal data class ContractValuesPart1\(/)
+  assert.match(kotlin, /val labels: Map<String, String> get\(\) = part1\.labels/)
+  assert.match(kotlin, /json\.decodeFromJsonElement\(ContractValuesPart1\.serializer\(\), tree\)/)
+  assert.doesNotMatch(kotlin, /data class ContractValues\(/)
+})
+
+test('Kotlin values split into parts under the JVM 255-slot constructor limit (AGL-3703)', () => {
+  const value = (name, kind, nullable = false) => ({ name, type: { kind, nullable } })
+  const longs = Array.from({ length: 300 }, (_, i) => value(`V_${String(i).padStart(3, '0')}`, 'int'))
+  // A non-null Long is 2 slots; `this`, one seen-mask int per 32 fields and the marker add the rest.
+  assert.equal(kotlinConstructorSlots([value('A', 'int'), value('B', 'int', true), value('C', 'string')]), 1 + 4 + 1 + 1)
+  const parts = kotlinValueParts(longs)
+  assert.equal(parts.length, Math.ceil(300 / KOTLIN_VALUES_PER_PART))
+  assert.deepEqual(parts.flat(), longs)
+  for (const part of parts) assert.ok(kotlinConstructorSlots(part) <= KOTLIN_PART_SLOT_BUDGET)
+  assert.ok(KOTLIN_PART_SLOT_BUDGET < 255)
+  // One class of every value is what broke: the guard refuses it by name.
+  assert.throws(
+    () => kotlinValueParts(longs, { perPart: 300 }),
+    /ContractValuesPart1 needs 612 JVM constructor slots, over the budget of 128/,
+  )
+  const kotlin = kotlinContractsContent({ types: [], values: longs })
+  assert.match(kotlin, new RegExp(`internal data class ContractValuesPart${parts.length}\\(`))
+  assert.doesNotMatch(kotlin, new RegExp(`ContractValuesPart${parts.length + 1}`))
+  assert.match(kotlin, /val v299: Long get\(\) = part7\.v299/)
 })
 
 test('values are plain JSON or refused', () => {

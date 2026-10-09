@@ -59,6 +59,11 @@ object AndroidShell {
       peripherals = peripherals,
       push = com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion),
       writer = com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore),
+      openHostedPage = { url ->
+        val intent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+        intent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.launchUrl(context, android.net.Uri.parse(url))
+      },
     )
   }
 }

@@ -86,6 +86,29 @@ except deleted products.
 - **Reserved in checkout** holds units for a shopper who has reached the
   payment page, so the last one cannot be sold twice.
 
+### Inventory locations {#inventory-locations}
+
+The **Inventory locations** card, in the store's settings, splits your stock
+across warehouses or storefronts: add a location for each place you keep stock,
+then set each variant's count per location.
+
+Without locations, every variant has a single stock count. How many locations
+you can add depends on your plan; the card says when you reach the limit.
+
+1. Type a name under **New location** and select **Add**. The first location
+   you add becomes the **Default**; **Make default** on another row moves it.
+2. Select **Add address** on a row to give the location its postal address.
+   Shipping labels use it as the address parcels ship from (see
+   [Where parcels ship from](./shipping.md#where-parcels-ship-from)), and
+   buyers who pick up are sent there.
+3. Optionally select **Pickup** on a row to let buyers collect orders there,
+   with pickup hours and arrival instructions — see
+   [Set up pickup](./pickup-and-local-delivery.md#set-up-pickup).
+4. In the products hub, enter each variant's stock for each location.
+
+POS registers sell from the location you give them, so a sale at the till takes
+stock from that location. **Remove** deletes a location after you confirm.
+
 ### Reserved stock {#reserved-stock}
 
 When a shopper reaches the payment page, the units in their basket are
@@ -183,8 +206,12 @@ remaining amount first.
 
 ## Recovery & alerts {#recovery-and-alerts}
 
-Two queues the storefront fills and Aglyn drains for you, both visible so you
-can see they are moving.
+The **Recovery & alerts** card, in the **Orders** section of the products hub,
+shows the abandoned-checkout reminders and back-in-stock alerts Aglyn sends for
+you. There is nothing to set up.
+
+They are two queues the storefront fills and Aglyn drains for you, both visible
+so you can see they are moving.
 
 **Abandoned checkouts** — a shopper who reached checkout, entered their email
 and left. Aglyn emails them once, with a link back to the cart they had built,
@@ -421,8 +448,9 @@ switch; including commerce is your plan's. See
 
 ## Payment methods
 
-**Settings → Payment methods** chooses what shoppers may pay with besides a
-card. Cards are always on. Every other method is on unless you turn it off,
+The **Payment methods** card, in the store's settings, chooses what shoppers may
+pay with besides a card, once your Stripe account is connected on the
+**Payments** card. Cards are always on. Every other method is on unless you turn it off,
 except stablecoins, which you turn on. Stripe shows a method only on orders it
 suits: the right currency, an amount inside its limits, and a shopper in a
 country it serves.
@@ -475,6 +503,34 @@ Turning a method on or off never changes your fees.
   inclusive pricing supported) or **Stripe Tax** automatic calculation;
   products can be tax-exempt.
 
+### Tax settings {#tax-settings}
+
+The **Taxes** card, in the store's settings, decides how your store charges
+sales tax: rates you enter, Stripe Tax, or none at all. Checkout stays off until you choose an option and save, so no order
+is taken that cannot be taxed correctly.
+
+1. Choose the **Calculation**:
+   - **Manual rates** — you enter the rates.
+   - **Stripe Tax (automatic)** — Stripe works out the tax for each buyer's
+     location at checkout. Activate Stripe Tax in your Stripe dashboard first.
+   - **Don't collect sales tax** — no tax is added to any order, and orders
+     still go through. Choose it when you have no obligation to collect.
+2. For manual rates, enter the **Origin country** and **Origin state**: where
+   the store ships or sells from. It is not the address Aglyn bills your
+   workspace at, and not where your payouts go.
+3. Select **Add rate** for each region you collect in: a **Country**, an
+   optional **State**, the rate in **%** and the **Label** buyers see. A state
+   rate beats a country rate.
+4. Turn on **Prices include tax** if your prices already include it, VAT-style.
+5. Optionally set a **Lodging tax** rate for reservations (see below) and a
+   **Service tax** rate for paid bookings (see
+   [Bookings](../bookings/overview.md#service-tax)).
+6. Select **Save tax settings**.
+
+What the store has collected is reported on the
+[Storefront sales tax](#storefront-sales-tax) card. A store that uses Avalara
+or TaxJar sets that up separately: see [Tax services](./tax-services.md).
+
 ### Lodging tax on reservations
 
 A stay is not goods. The sales-tax settings above configure a **goods** rate
@@ -482,7 +538,7 @@ resolved against an address; occupancy (lodging/hotel) tax is a separate
 regime with its own rates, its own registration and its own return, so
 reservations do not use them.
 
-**Commerce → Settings → Taxes → Lodging tax** is where you set your own rate
+**Lodging tax**, on the **Taxes** card in the store's settings, is where you set your own rate
 for it. It is **off by default** — leave it blank and reservations charge no
 lodging tax, exactly as before.
 
@@ -592,6 +648,107 @@ out for delivery, and the buyer is emailed at each step. See
 Assign a **supplier** to a product and paid orders route automatically —
 by email and/or HMAC-signed webhook — with a token link the supplier uses
 to post tracking back, which fulfills the order. Pro plan and above.
+
+The supplier needs no Aglyn account. To set it up:
+
+1. In the store's settings, find the **Dropship suppliers** card and select
+   **Add supplier**.
+2. Enter the supplier's **Name**, and how it hears about orders: a
+   **Notification email**, which gets the order details and a tracking link for
+   each sale, a **Webhook URL** with its **Webhook secret**, or both.
+3. Open each product the supplier fulfills, and choose it under **Supplier** in
+   the product editor. **None (self-fulfilled)** keeps the product with you.
+
+From then on, each paid order for that product is sent to the supplier. When
+the supplier posts tracking through its link, the order is fulfilled.
+
+## Store settings {#store-settings}
+
+The **Store settings** card, in the store's settings, sets the pages product and
+collection links open, the currency prices show in, guest checkout, your terms
+link and the receipt footer.
+
+1. Choose the **Product page template**: a page you designed with the **Product
+   detail** block, rendered at `/products/{slug}` for every product. With
+   **None**, product links lead nowhere. See
+   [The product page template](../../guides/commerce-end-to-end.md#the-product-page-template).
+2. Choose the **Collection page template**, a page with a **Product grid**,
+   rendered at `/collections/{slug}`.
+3. Leave **Currency** at USD; charges settle in USD.
+4. Turn on **Allow guest checkout** to let buyers pay without an account.
+5. Optionally enter a **Terms URL**, linked from checkout, and a **Receipt
+   footer**.
+6. Select **Save store settings**.
+
+Taxes and shipping have their own cards. Store password and maintenance mode
+live under Site Protection.
+
+## Discounts and coupons {#discounts-and-coupons}
+
+Your store has two kinds of money-off code, both in the **Promotions** section
+of the products hub. They are your codes for your buyers — not the coupons
+Aglyn applies to your own subscription.
+
+### Discounts {#discounts}
+
+The **Discounts** card makes codes buyers type at checkout, or automatic
+promotions that apply on their own, for a percent off, an amount off or free
+shipping.
+
+1. Select **Add discount**.
+2. Enter a **Code**, such as `SAVE10`, or leave it blank for an automatic
+   promotion and give it a **Promotion name** instead.
+3. Choose the **Type** — **Percent off**, **Fixed amount off** or **Free
+   shipping** — and its value.
+4. Optionally set a **Min subtotal**, a **Max uses**, and the dates it
+   **Starts** and **Ends**.
+5. Select **Save**.
+
+Discounts apply at your storefront checkout and at the register. Each row shows
+how many times it has been used; **Edit** changes it and **Delete** removes it.
+**Import** and **Export** in the card header move discounts in and out with a
+file.
+
+### Coupons {#coupons}
+
+The **Coupons** card makes simple percent-off codes buyers enter at checkout,
+with an optional limit on uses and an expiry date. For anything more, use a
+[discount](#discounts).
+
+1. Select **Add coupon**.
+2. Enter the **Code**: letters and numbers, saved in capitals, such as
+   `LAUNCH20`.
+3. Enter the **Percent off**, and optionally **Max redemptions** (blank is
+   unlimited) and the day it expires. The code still works on the day it
+   expires.
+4. Select **Create**. The coupon is live at once.
+
+Each row shows the code, the percent off, its uses and its expiry.
+**Disable** stops a coupon without deleting it, and **Enable** brings it back.
+
+## Commerce at a glance {#commerce-glance}
+
+The **Commerce** card on your site's overview and Analytics pages shows the last
+30 days of sales at a glance: revenue, orders, average order value, and how many
+products are low on stock.
+
+It appears once the site has a product or an order, and the figures need the
+Pro plan or above; on a lower plan the card says so, and every order is still
+recorded. Revenue counts paid orders less what was refunded, and leaves out
+test-mode orders. The card lists the five latest orders, and **Open store**
+takes you to the products hub.
+
+## Commerce analytics {#commerce-analytics}
+
+The **Commerce analytics** card, in the **Analytics** section of the products
+hub, shows the last 30 days of revenue, orders and average order value, a
+14-day revenue trend and your top products. Pro plan and above.
+
+Nothing needs setting up: the figures come from your orders. Refunds are taken
+off, and pending, canceled and test-mode orders are left out.
+Storefront events such as `view_item`
+and `add_to_cart` also go to your site's Google Analytics when it is connected.
+The [Storefront sales tax](#storefront-sales-tax) card sits beside it.
 
 ## Related
 

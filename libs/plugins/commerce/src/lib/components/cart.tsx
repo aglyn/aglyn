@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { advertisingConsentField } from '@aglyn/aglyn/app-utils/advertising-consent'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   buildBeginCheckoutParams,
@@ -295,6 +296,9 @@ function CartLines(props: {
           ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
           // Where and when, never the fee: the server decides it again.
           ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
+          // The visitor's advertising consent and the vendors' browser ids, only
+          // where that consent grants advertising (AGL-3694); absent otherwise.
+          ...advertisingConsentField(hostId),
         }),
       })
       const payload = await response.json().catch(() => ({}))

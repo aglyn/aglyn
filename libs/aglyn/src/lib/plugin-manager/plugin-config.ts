@@ -50,6 +50,26 @@ export interface PluginConfigSchema {
   pluginId: string
   fields: PluginConfigField[]
   defaults: Record<string, unknown>
+  /**
+   * What an operator must read before filling the form in (AGL-3700) — a
+   * limit the settings cannot express, such as what a translation does NOT
+   * do for search. Shown above the fields at both scopes.
+   */
+  notice?: string
+  /**
+   * The settings change what a published page serves (AGL-3700). A site-scope
+   * save then drops that site's cached pages, so the change is live at once
+   * rather than within the page cache's window.
+   */
+  affectsPublishedPages?: boolean
+  /**
+   * The settings card's own docs heading (AGL-3700): a docs help topic key and
+   * one of that page's anchors. Each card's `?` names its own section, so a
+   * plugin that documents its settings points here; without it the card links
+   * the generic plugin-settings section. Names only — the console resolves
+   * them against its registry, so no docs prose rides a site bundle.
+   */
+  help?: { topic: string; anchor: `#${string}` }
   /** Cross-field validation; returns an error message or null. */
   validate?: (values: Record<string, unknown>) => string | null
 }

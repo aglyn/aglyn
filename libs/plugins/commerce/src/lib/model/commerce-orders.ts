@@ -194,6 +194,14 @@ export interface OrderFulfillment {
   /** The shipping plugin's id for that label (AGL-3612), so a retry finds this shipment. */
   labelRef?: string
   /**
+   * What that label cost the store, in integer cents of the order's currency
+   * (AGL-3693), when the shipping plugin said — or, for a shipment entered
+   * by hand, what the merchant typed in the fulfill dialog's Shipping cost
+   * (AGL-3705; 0 is free shipping, absent is not known). A marketplace that
+   * pays the seller back for shipping is told it.
+   */
+  labelCostCents?: number
+  /**
    * Where the carrier says the parcel is (AGL-3612): `pre_transit`,
    * `in_transit`, `out_for_delivery`, `delivered`, `exception` or `returned`,
    * written by a tracking webhook through the shipment-records seam.

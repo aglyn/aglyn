@@ -43,7 +43,10 @@ import usePermissionsOnHost from '../hooks/use-permissions-on-host'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
 import { useUrlNamedOrg, useUrlNamesOrg } from '../hooks/use-url-names-org'
-import { loadOrgRealmPlugins } from '../utils/realm-plugins.client'
+import {
+  loadOrgRealmPlugins,
+  prefetchOrgRealmInstalls,
+} from '../utils/realm-plugins.client'
 
 /**
  * The workspace's EFFECTIVE plugin set (AGL-416/422): the org switchboard
@@ -244,6 +247,18 @@ export default function ConsolePluginsGate({
       active = false
     }
   }, [])
+
+  // The realm install list, started the moment the workspace is known
+  // (AGL-3660). It needs neither the release flags nor the first-party chunks
+  // the effect below waits on, so it no longer queues behind them: the effect
+  // below finds the request in flight. Same rule as below, though: nothing
+  // for a route that names no workspace (AGL-1937).
+  useEffect(() => {
+    if (!namesOrg || !orgId) return
+    prefetchOrgRealmInstalls(orgId, user)
+    // `user` identity churns with token refreshes; orgId names the session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namesOrg, orgId])
 
   useEffect(() => {
     // Nothing loads until the URL names a workspace (AGL-1937).

@@ -239,7 +239,7 @@ export function OrgApiKeysCard() {
     <CardDisplay
       header={'API keys'}
       help={docsHelp('billing', {
-        anchor: '#tiers--entitlements',
+        anchor: '#api-access',
         title: 'REST API & API keys',
         excerpt:
           'Programmatic access to your datasets, contacts, sites, and form submissions. Included on Business and every plan above it.',

@@ -89,7 +89,7 @@ export default function TeamSectionsLayout({
         // every level except theirs — the one that says where they are.
         ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
-      help="team"
+      help={{ topic: 'team', anchor: '#team-page' }}
       header={{
         children: 'Team',
         icon: { path: mdiAccountMultipleOutline.path },

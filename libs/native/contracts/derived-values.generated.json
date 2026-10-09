@@ -697,6 +697,11 @@
       "rolloutPercent": 0,
       "plans": []
     },
+    "release_weglot": {
+      "enabled": true,
+      "rolloutPercent": 0,
+      "plans": []
+    },
     "release_addon_store": {
       "enabled": true,
       "rolloutPercent": 0,

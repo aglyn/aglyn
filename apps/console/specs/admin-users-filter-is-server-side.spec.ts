@@ -171,14 +171,16 @@ beforeEach(() => {
   })
 })
 
-describe('an unfiltered listing never pays for a walk', () => {
-  it('THE CONTROL: the plain listing pages, and does not scan', async () => {
-    // Without this the assertions below cannot tell "did not scan" from
-    // "never reached the handler".
+describe('an unfiltered listing is the whole directory, newest first (AGL-3660)', () => {
+  it('THE CONTROL: the plain listing reads the directory once and sorts it', async () => {
+    // Auth lists by uid, so "newest account first" is answered only by the
+    // bounded read of the whole directory — once, never a walk as well.
+    // Grace's account (5 Aug) is newer than Ada's (14 Jul).
     const payload = await call()
-    expect(uids(payload)).toEqual(['uid-ada', 'uid-grace'])
-    expect(mockListCalls).toBe(1)
-    expect(mockScanCalls).toBe(0)
+    // In the route's order, not `uids`' alphabetical one.
+    expect(payload.users.map((row: any) => row.uid)).toEqual(['uid-grace', 'uid-ada'])
+    expect(mockScanCalls).toBe(1)
+    expect(mockListCalls).toBe(0)
   })
 })
 
@@ -325,8 +327,9 @@ describe('every clause and the search apply TOGETHER (AGL-3321)', () => {
       'email',
       'staffRole',
     ])
-    // Nothing served, so nothing walked.
-    expect(mockScanCalls).toBe(0)
+    // Nothing served: the one read is the default order's (AGL-3660), and
+    // every row of it comes back.
+    expect(mockScanCalls).toBe(1)
   })
 
   it('refuses rather than answers from PART of the directory', async () => {

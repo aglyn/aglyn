@@ -35,6 +35,21 @@ const SAMPLE_CONSOLE_ORIGIN: string =
   'https://app.aglyn.com'
 
 /**
+ * The docs origin the getting-started emails' docs-link samples build on
+ * (AGL-3692), read the way the console's `DOCS_BASE_URL` reads it. Only a
+ * preview and test-send sample: the real send fills those links from the
+ * console's own docs origin.
+ */
+const SAMPLE_DOCS_ORIGIN: string =
+  (
+    process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
+    process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
+    ''
+  )
+    .trim()
+    .replace(/\/+$/, '') || 'https://docs.aglyn.com'
+
+/**
  * Mirrors `PLATFORM_SUPPORT_URL`'s precedence, including the step that makes
  * the operator identity sufficient on its own: a configured support URL, else
  * the operator's support mailbox as a `mailto:`, else the console's own
@@ -62,6 +77,7 @@ const SAMPLE_SUPPORT_URL: string =
 import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
+import { retentionSystemEmailTemplates } from './retention-emails'
 
 /**
  * Who actually puts the message on the wire.
@@ -1597,7 +1613,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
 export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
   // The risk notices (AGL-3368) are generated from their own catalog, one key
   // per kind, so they live in `risk-notice-emails.ts` beside it.
-  [...BASE_SYSTEM_EMAIL_TEMPLATES, ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES].map((entry) => ({
+  // The getting-started emails (AGL-3692) likewise live beside their own
+  // notes on which preference governs them, in `retention-emails.ts`.
+  [
+    ...BASE_SYSTEM_EMAIL_TEMPLATES,
+    ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES,
+    ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN, SAMPLE_DOCS_ORIGIN),
+  ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],
   }))

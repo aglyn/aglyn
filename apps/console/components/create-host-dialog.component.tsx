@@ -38,6 +38,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { firstTouchField } from '../utils/account-acquisition'
 import { SITE_START_PARAM, SITE_START_VALUE } from './host-first-run-gate.component'
 
 export interface CreateHostDialogProps {
@@ -91,6 +92,9 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           // Create into the selected workspace (AGL-236); the server
           // falls back to the user's first org when absent.
           ...(currentOrg ? { orgId: currentOrg.$id } : {}),
+          // A first site can provision the workspace too, which records
+          // where a brand-new account came from (AGL-3706).
+          ...firstTouchField(),
         }),
       })
       const payload = await response.json()

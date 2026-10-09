@@ -44,6 +44,9 @@ Until one of those happens, a site that started this way has no page yet, and it
 address shows a short **coming soon** page with the site's name, which search
 engines are asked not to index.
 
+Every question, step and button of the guided start is walked through on
+[Start a new site with AI](./start-with-ai.md).
+
 ### On the Free plan
 
 A Free workspace's AI start builds **one or two pages**: the home page and the one

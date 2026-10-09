@@ -29,6 +29,7 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { applyListQuery } from './list-filter'
 import { ACTIVITY_LIST_QUERY, activityActorBase } from '../activity-list-query'
+import { mirroredOrgCopies, mirrorId } from '../activity-mirror'
 
 /**
  * One person's activity, wherever it happened — and one organization's,
@@ -203,16 +204,45 @@ export async function readActorActivity(
   // The cursor is a document PATH, not a timestamp. Two entries can share a
   // second — a save and its revalidation, a bulk role change — and starting
   // after a timestamp would either repeat them on the next page or skip them.
+  //
+  // The page STARTS AT it rather than after it: the cursor row was consumed
+  // by the previous page and is read again only as context, so the org copy
+  // of a site row (`../activity-mirror`, AGL-3660) whose site row ended the
+  // previous page is still recognized as the copy.
   const after = await cursorDocument(firestore, cursor)
-  // One extra row answers "is there another page" without a second query.
-  const snapshot = await (after ? ordered.startAfter(after) : ordered)
-    .limit(pageSize + 1)
-    .get()
-  const docs = snapshot.docs.slice(0, pageSize)
+  // One extra row answers "is there another page" without a second query;
+  // `pageSize` more leave room for the org copies a page collapses, so a
+  // page of pairs is still a full page and every shown row's twin is read.
+  const limit = pageSize * 2 + 1 + (after ? 1 : 0)
+  const snapshot = await (after ? ordered.startAt(after) : ordered).limit(limit).get()
+  const window = snapshot.docs.map((doc) => ({
+    path: doc.ref.path,
+    entry: flattenEntry(doc, doc.ref.parent.parent?.path ?? ''),
+  }))
+  const context = after && window[0]?.path === after.ref.path ? 1 : 0
+  const dropped = mirroredOrgCopies(window.map(({ entry }) => entry))
+  const rows = window.slice(context)
+  const kept: number[] = []
+  rows.forEach(({ entry }, index) => {
+    if (!dropped.has(mirrorId(entry))) kept.push(index)
+  })
+  const next = kept[pageSize]
+  // The next page resumes just before its first row, so a copy dropped
+  // between the two pages is consumed here rather than shown there. A window
+  // that came back full with no row past the page means mostly copies were
+  // read: resume after the last one rather than claim the feed ended.
+  const resumeAt =
+    next !== undefined
+      ? rows[next - 1]?.path
+      : snapshot.docs.length === limit
+        ? rows[rows.length - 1]?.path
+        : undefined
   return {
-    entries: docs.map((doc) => flattenEntry(doc, doc.ref.parent.parent?.path ?? '')),
-    nextCursor:
-      snapshot.docs.length > pageSize ? (docs[docs.length - 1]?.ref.path ?? null) : null,
+    entries: kept.slice(0, pageSize).flatMap((index) => {
+      const row = rows[index]
+      return row ? [row.entry] : []
+    }),
+    nextCursor: resumeAt ?? null,
     refused: plan.refused,
     notices: plan.notices,
   }
@@ -478,8 +508,15 @@ export async function readOrgWideActivity(
       }),
     )
     const shown = new Set(from?.ids ?? [])
-    const merged = perSubject
-      .flat()
+    // A site event its writer also filed in the org log is one row, the
+    // site's (AGL-3660). Collapsed before the shown ids are removed, so the
+    // re-read boundary second still pairs a copy with a site row the last
+    // page showed. Each dropped copy leaves its site row in the merge, so
+    // the newest `count` below are still certain.
+    const read = perSubject.flat()
+    const dropped = mirroredOrgCopies(read)
+    const merged = read
+      .filter((entry) => !dropped.has(mirrorId(entry)))
       .filter(
         (entry) =>
           !(from && entry.createdAt?.seconds === from.seconds && shown.has(entry.$id)),

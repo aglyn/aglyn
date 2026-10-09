@@ -93,6 +93,13 @@ export interface AiLayoutDesignChoices {
   splitHeads: boolean
   /** How work is laid out where the kind shows it as pictures. */
   pictures: 'mosaic' | 'even'
+  /**
+   * How a blog's own posts are listed where a page shows them (AGL-3676):
+   * `grid`, a cover over each post's date, title and excerpt in columns; or
+   * `ruled`, a list under thin rules, the date in its own column and a small
+   * cover beside each title — the two ways an editorial site lists writing.
+   */
+  writing: 'grid' | 'ruled'
 }
 
 type Family = 'gallery' | 'editorial' | 'hospitality' | 'calm' | 'retail' | 'standard'
@@ -159,22 +166,31 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
   const family = aiLayoutFamily(design.kind)
   const heroes = HEROES[design.kind] ?? DEFAULT_HEROES
   const hero = next() < 0.55 ? (heroes[0] as AiLayoutHeroVariant) : pick(next, heroes)
+  const group = family === 'calm' ? pick(next, ['cards', 'cards', 'ruled'] as const) : pick(next, ['ruled', 'cards', 'ruled'] as const)
   return {
     hero,
-    group: family === 'calm' ? pick(next, ['cards', 'cards', 'ruled'] as const) : pick(next, ['ruled', 'cards', 'ruled'] as const),
+    // A store's reasons to buy — the making, the shipping, the care — read
+    // as open ruled columns beside its product photos, never as a SaaS
+    // page's feature cards (AGL-3676).
+    group: family === 'retail' ? 'ruled' : group,
     steps: pick(next, ['timeline', 'numbers', 'timeline'] as const),
     features: true,
     featureLeft: next() < 0.5,
     coverClose: heroes.includes('cover') && next() < 0.7,
     splitHeads: family === 'editorial' || family === 'standard' ? next() < 0.6 : next() < 0.35,
     pictures: design.kind === 'photography' ? pick(next, ['even', 'mosaic'] as const) : pick(next, ['mosaic', 'mosaic', 'even'] as const),
+    // Drawn last, so every choice above stays what it was for a seed.
+    writing: pick(next, ['grid', 'ruled'] as const),
   }
 }
 
 const WORK = /\b(work|works|project|projects|portfolio|gallery|galleries|case|cases|studies|selected|commission|commissions|illustration|illustrations|photo|photos|series|book|books|editorial|brand|collection|collections|wedding|weddings|portrait|portraits|session|sessions|shoot|shoots)\b/i
 const WRITING = /\b(article|articles|post|posts|writing|writings|latest|featured|journey|journeys|recipe|recipes|story|stories|essay|essays|guide|guides|issue|issues|episode|episodes)\b/i
 const DISHES = /\b(menu|menus|dish|dishes|breakfast|brunch|lunch|dinner|pastry|pastries|coffee|drink|drinks|cocktail|cocktails|wine|wines|highlight|highlights|favorite|favorites|favourites|special|specials|plate|plates|bake|bakes|bread|cake|cakes)\b/i
-const PRODUCTS = /\b(bestseller|bestsellers|best sellers|collection|collections|product|products|shop|range|candle|candles|gift|gifts|set|sets|new arrivals|arrivals)\b/i
+// A store's own products are listed by its Product grid (AGL-3676), never drawn
+// from words: what a store shows as pictures is how its range is grouped — its
+// collections, gift sets, occasions and scents. "Candle care and burn notes" is no band of pictures.
+const CATEGORIES = /\b(collection|collections|range|ranges|categor(?:y|ies)|gift|gifts|gift sets?|sets|occasion|occasions|scent|scents|edit|edits)\b/i
 
 /**
  * How a section's group of cards is drawn, from what the section is about:
@@ -191,6 +207,6 @@ export function aiLayoutGroupVariant(
   if (family === 'gallery' && (WORK.test(words) || design.kind === 'photography')) return 'pictures'
   if (family === 'editorial' && WRITING.test(words)) return 'articles'
   if (family === 'hospitality' && DISHES.test(words)) return 'menu'
-  if (family === 'retail' && PRODUCTS.test(words)) return 'pictures'
+  if (family === 'retail' && CATEGORIES.test(words)) return 'pictures'
   return choices.group
 }

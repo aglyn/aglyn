@@ -52,7 +52,7 @@ export function SiteConsentGroupCard(props: SiteConsentGroupCardProps) {
   return (
     <CardDisplay
       header="Consent group"
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#consent-groups' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#consent-group-join' })}
       contentGutterX
       contentGutterY
     >

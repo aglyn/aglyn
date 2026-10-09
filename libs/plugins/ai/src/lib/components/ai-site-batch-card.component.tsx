@@ -18,6 +18,7 @@
 'use client'
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleOrgSitesZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -370,12 +371,16 @@ export function AiSiteBatchCard(
     <CardDisplay
       contentGutterX
       contentGutterY
-      HeaderProps={{
-        title: 'Generate sites with AI',
-        subheader:
-          'One brief across many of your sites. Each site plans first and waits for you to ' +
-          'confirm it; everything it builds is a draft.',
-      }}
+      help={pluginDocsHelp('aiSite', {
+        anchor: '#generate-for-several-sites-at-once',
+        excerpt:
+          'One brief across many of your sites, with each site’s own name, city and brand. Each site plans first, waits for you to confirm it, and builds drafts.',
+      })}
+      header={'Generate sites with AI'}
+      subheader={
+        'One brief across many of your sites. Each site plans first and waits for you to ' +
+        'confirm it; everything it builds is a draft.'
+      }
     >
       <Stack spacing={2}>
         {notice && <Alert severity="info">{notice}</Alert>}

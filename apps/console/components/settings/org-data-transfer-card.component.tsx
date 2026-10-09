@@ -401,6 +401,7 @@ export function OrgDataTransferCard(props: { onImported?(): void }) {
     <CardDisplay
       header={'Import & export'}
       help={docsHelp('transferHub', {
+        anchor: '#what-you-can-move',
         excerpt: 'Move records and packages in and out of this workspace: choose the fields, match what you have, decide every conflict, and undo for seven days.',
       })}
       HeaderProps={{

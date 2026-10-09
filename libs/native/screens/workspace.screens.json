@@ -1,0 +1,558 @@
+{
+  "$comment": "Workspace settings: the console's [orgSlug]/settings sections over /api/orgs/settings, /api/orgs/api-keys, /api/orgs/sso, /api/orgs/risk-notices, /api/orgs/delete, /api/transfer/jobs and /api/crm/erase-person, reading orgs/{orgId} as the console does. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.settings",
+      "title": "Workspace settings",
+      "subtitle": "Name, profile, branding, keys and more",
+      "icon": "gearshape.2|settings",
+      "scope": "org",
+      "group": "workspace",
+      "order": 30,
+      "links": ["/settings"],
+      "blocks": [
+        {
+          "type": "links",
+          "items": [
+            { "title": "General", "subtitle": "Name, workspace URL, time zone", "icon": "slider.horizontal.3|tune", "screen": "core.settings.general" },
+            { "title": "Business profile", "subtitle": "Logo and contact details", "icon": "building.2|business", "screen": "core.settings.profile" },
+            { "title": "Branding", "subtitle": "White-label product name, colors, console domain", "icon": "paintpalette|palette", "screen": "core.settings.branding", "when": "org.manager" },
+            { "title": "API keys", "subtitle": "Keys for integrations", "icon": "key|key", "screen": "core.settings.apiKeys", "when": "org.manager" },
+            { "title": "Single sign-on", "subtitle": "SAML, verified domains, enforcement", "icon": "lock.shield|security", "screen": "core.settings.sso", "when": "org.manager" },
+            { "title": "Holds and reviews", "subtitle": "Anything paused on this workspace", "icon": "exclamationmark.shield|policy", "screen": "core.settings.holds", "when": "org.manager" },
+            { "title": "Imports and exports", "subtitle": "Transfer history", "icon": "arrow.up.arrow.down|sync", "screen": "core.settings.data", "when": "org.manager" },
+            { "title": "Privacy requests", "subtitle": "Erase a person's data", "icon": "hand.raised|privacy_tip", "screen": "core.settings.privacy", "when": "org.manager" },
+            { "title": "Ownership", "subtitle": "Transfer the workspace", "icon": "person.badge.key|manage_accounts", "screen": "core.settings.ownership", "when": "org.owner || staff.is" },
+            { "title": "Delete workspace", "subtitle": "Close the workspace for good", "icon": "trash|delete_forever", "screen": "core.settings.delete", "when": "org.owner || staff.is" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.general",
+      "title": "General",
+      "icon": "slider.horizontal.3|tune",
+      "scope": "org",
+      "links": ["/settings/general"],
+      "load": { "org": { "doc": "orgs/{org.id}" } },
+      "blocks": [
+        {
+          "type": "form",
+          "title": "Name",
+          "id": "name",
+          "fields": [{ "key": "name", "label": "Workspace name", "kind": "text", "required": true, "initial": "{data.org.name}" }],
+          "submit": { "label": "Save name", "when": "org.manager", "url": "/api/orgs/settings", "body": { "orgId": "{org.id}", "action": "rename", "name": "{form.name}" }, "success": "Renamed to {form.name}" }
+        },
+        {
+          "type": "form",
+          "title": "Workspace URL",
+          "id": "slug",
+          "footer": "Changing it moves every console link; old links stop working.",
+          "fields": [{ "key": "slug", "label": "URL name", "kind": "url", "required": true, "initial": "{data.org.slug}", "help": "3–30 lowercase letters, digits or dashes." }],
+          "submit": { "label": "Change URL", "when": "org.owner || staff.is", "confirm": "Change the workspace URL to {form.slug}?", "url": "/api/orgs/settings", "body": { "orgId": "{org.id}", "action": "change-slug", "slug": "{form.slug}" }, "success": "The workspace URL is now {response.slug}" }
+        },
+        {
+          "type": "form",
+          "title": "Time zone",
+          "id": "tz",
+          "footer": "Reports, digests and schedules use this zone.",
+          "fields": [{ "key": "timeZone", "label": "Time zone", "kind": "text", "initial": "{data.org.timeZone}", "placeholder": "America/Chicago", "help": "An IANA zone name, like America/New_York." }],
+          "submit": { "label": "Save time zone", "when": "org.manager", "url": "/api/orgs/settings", "body": { "orgId": "{org.id}", "action": "set-time-zone", "timeZone": "{form.timeZone}" }, "success": "Saved" }
+        },
+        {
+          "type": "form",
+          "title": "Defaults for new things",
+          "id": "scope",
+          "when": "org.manager",
+          "fields": [
+            { "key": "media", "label": "New media belongs to", "kind": "select", "initial": "{data.org.defaultMediaScope|'host'}", "options": [{ "value": "host", "label": "The site it is uploaded to" }, { "value": "org", "label": "The whole workspace" }] }
+          ],
+          "submit": { "label": "Save", "url": "/api/orgs/settings", "body": { "orgId": "{org.id}", "action": "set-default-media-scope", "defaultMediaScope": "{form.media}" }, "success": "Saved" }
+        },
+        {
+          "type": "form",
+          "id": "datasets",
+          "when": "org.manager",
+          "fields": [
+            { "key": "resource", "label": "New datasets belong to", "kind": "select", "initial": "{data.org.defaultResourceScope|'host'}", "options": [{ "value": "host", "label": "The site they are made on" }, { "value": "org", "label": "The whole workspace" }] }
+          ],
+          "submit": { "label": "Save", "url": "/api/orgs/settings", "body": { "orgId": "{org.id}", "action": "set-default-resource-scope", "defaultResourceScope": "{form.resource}" }, "success": "Saved" }
+        }
+      ]
+    },
+    {
+      "id": "core.settings.profile",
+      "title": "Business profile",
+      "icon": "building.2|business",
+      "scope": "org",
+      "links": ["/settings/profile"],
+      "load": { "org": { "doc": "orgs/{org.id}" } },
+      "blocks": [
+        {
+          "type": "form",
+          "fields": [
+            { "key": "logoUrl", "label": "Logo URL", "kind": "url", "initial": "{data.org.logoUrl}", "placeholder": "https://" },
+            { "key": "logoDarkUrl", "label": "Logo for dark backgrounds", "kind": "url", "initial": "{data.org.logoDarkUrl}", "placeholder": "https://" },
+            { "key": "contactEmail", "label": "Contact email", "kind": "email", "initial": "{data.org.contact.email}" },
+            { "key": "contactPhone", "label": "Contact phone", "kind": "text", "initial": "{data.org.contact.phone}" },
+            { "key": "contactWebsite", "label": "Website", "kind": "url", "initial": "{data.org.contact.website}", "placeholder": "https://" }
+          ],
+          "submit": {
+            "label": "Save profile",
+            "when": "org.manager",
+            "url": "/api/orgs/settings",
+            "body": { "orgId": "{org.id}", "action": "update-profile", "logoUrl": "{form.logoUrl}", "logoDarkUrl": "{form.logoDarkUrl}", "contactEmail": "{form.contactEmail}", "contactPhone": "{form.contactPhone}", "contactWebsite": "{form.contactWebsite}" },
+            "success": "Saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.settings.branding",
+      "title": "Branding",
+      "icon": "paintpalette|palette",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": ["/settings/branding"],
+      "load": { "org": { "doc": "orgs/{org.id}" } },
+      "blocks": [
+        { "type": "notice", "tone": "info", "text": "White-label branding replaces the product name, logos and colors your team and clients see in the console and in emails." },
+        {
+          "type": "form",
+          "object": "data.org.brandingProfile",
+          "fields": [
+            { "key": "productName", "label": "Product name", "kind": "text", "initial": "{item.productName}" },
+            { "key": "fromName", "label": "Email sender name", "kind": "text", "initial": "{item.fromName}" },
+            { "key": "supportUrl", "label": "Support URL", "kind": "url", "initial": "{item.supportUrl}" },
+            { "key": "primaryColor", "label": "Primary color", "kind": "text", "initial": "{item.primaryColor}", "placeholder": "#4F46E5" },
+            { "key": "logoUrl", "label": "Logo URL", "kind": "url", "initial": "{item.logoUrl}" },
+            { "key": "logoDarkUrl", "label": "Dark logo URL", "kind": "url", "initial": "{item.logoDarkUrl}" },
+            { "key": "faviconUrl", "label": "Favicon URL", "kind": "url", "initial": "{item.faviconUrl}" },
+            { "key": "faviconDarkUrl", "label": "Dark favicon URL", "kind": "url", "initial": "{item.faviconDarkUrl}" },
+            { "key": "emailLogoUrl", "label": "Email logo URL", "kind": "url", "initial": "{item.emailLogoUrl}" },
+            { "key": "customConsoleDomain", "label": "Console domain", "kind": "url", "initial": "{item.customConsoleDomain}", "placeholder": "app.youragency.com", "help": "Point a CNAME at the console, then save." }
+          ],
+          "submit": {
+            "label": "Save branding",
+            "url": "/api/orgs/settings",
+            "body": {
+              "orgId": "{org.id}", "action": "update-branding",
+              "brandingProfile": {
+                "productName": "{form.productName}", "fromName": "{form.fromName}", "supportUrl": "{form.supportUrl}", "primaryColor": "{form.primaryColor}",
+                "logoUrl": "{form.logoUrl}", "logoDarkUrl": "{form.logoDarkUrl}", "faviconUrl": "{form.faviconUrl}", "faviconDarkUrl": "{form.faviconDarkUrl}",
+                "emailLogoUrl": "{form.emailLogoUrl}", "customConsoleDomain": "{form.customConsoleDomain}"
+              }
+            },
+            "success": "Saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.settings.apiKeys",
+      "title": "API keys",
+      "icon": "key|key",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": ["/settings/api-keys"],
+      "load": { "keys": "/api/orgs/api-keys?orgId={org.id}" },
+      "actions": [
+        {
+          "id": "create",
+          "label": "New key",
+          "icon": "plus|add",
+          "url": "/api/orgs/api-keys",
+          "prompt": [
+            { "key": "name", "label": "Name", "kind": "text", "required": true, "placeholder": "Zapier, CRM sync" },
+            { "key": "datasetsRead", "label": "Read datasets", "kind": "toggle" },
+            { "key": "datasetsWrite", "label": "Write datasets", "kind": "toggle" },
+            { "key": "contactsRead", "label": "Read contacts", "kind": "toggle" },
+            { "key": "contactsWrite", "label": "Write contacts", "kind": "toggle" },
+            { "key": "sitesRead", "label": "Read sites", "kind": "toggle" },
+            { "key": "sitesWrite", "label": "Edit sites", "kind": "toggle" },
+            { "key": "sitesPublish", "label": "Publish sites", "kind": "toggle" },
+            { "key": "formsRead", "label": "Read form entries", "kind": "toggle" }
+          ],
+          "body": {
+            "orgId": "{org.id}", "action": "create", "name": "{form.name}",
+            "scopes": { "$pick": {
+              "datasets:read": "{form.datasetsRead}", "datasets:write": "{form.datasetsWrite}", "contacts:read": "{form.contactsRead}",
+              "contacts:write": "{form.contactsWrite}", "sites:read": "{form.sitesRead}", "sites:write": "{form.sitesWrite}",
+              "sites:publish": "{form.sitesPublish}", "forms:read": "{form.formsRead}"
+            } }
+          },
+          "reveal": "token",
+          "success": "Created {form.name}. Copy the key now; it is shown once."
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.keys.keys",
+          "filter": "!item.revokedAt",
+          "primary": "{item.name}",
+          "secondary": "{item.keyPrefix}… · {item.scopes}",
+          "tertiary": "Last used {item.lastUsedAt|'never':datetime}",
+          "icon": "key|key",
+          "actions": [
+            {
+              "id": "revoke", "label": "Revoke", "icon": "xmark.circle|cancel", "destructive": true,
+              "confirm": "Revoke {item.name}? Integrations using it stop working at once.",
+              "url": "/api/orgs/api-keys", "body": { "orgId": "{org.id}", "action": "revoke", "keyId": "{item.keyId}" }, "success": "Revoked {item.name}"
+            }
+          ],
+          "empty": "No API keys yet."
+        },
+        {
+          "type": "list",
+          "title": "Revoked",
+          "items": "data.keys.keys",
+          "filter": "item.revokedAt",
+          "primary": "{item.name}",
+          "secondary": "Revoked {item.revokedAt:date}",
+          "icon": "key|key",
+          "empty": "None."
+        }
+      ]
+    },
+    {
+      "id": "core.settings.sso",
+      "title": "Single sign-on",
+      "icon": "lock.shield|security",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": ["/settings/sso"],
+      "load": { "sso": { "url": "/api/orgs/sso", "method": "POST", "body": { "orgId": "{org.id}", "action": "status" } } },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Status",
+          "rows": [
+            { "label": "Single sign-on", "value": "{data.sso.sso.status|'Off':title}", "chip": true, "tones": { "Active": "success", "Disabled": "warning", "*": "neutral" } },
+            { "label": "Required for members", "value": "{data.sso.sso.enforced:yesno}" },
+            { "label": "Provider", "value": "{data.sso.sso.displayName|data.sso.sso.providerId}" },
+            { "label": "Reply (ACS) URL", "value": "{data.sso.metadata.acsUrl}" },
+            { "label": "Entity ID", "value": "{data.sso.metadata.entityId}" }
+          ],
+          "footer": "Long-press a value to copy it into your identity provider."
+        },
+        {
+          "type": "list",
+          "title": "Domains",
+          "items": "data.sso.claims",
+          "primary": "{item.domain}",
+          "secondary": "TXT {item.recordHost} = {item.recordValue}",
+          "badges": [
+            { "text": "Verified", "when": "item.verified", "tone": "success" },
+            { "text": "Attested", "when": "item.attested", "tone": "info" },
+            { "text": "Waiting for DNS", "when": "!item.verified && !item.attested", "tone": "warning" }
+          ],
+          "actions": [
+            { "id": "copyHost", "label": "Copy record name", "icon": "doc.on.doc|content_copy", "copy": "{item.recordHost}" },
+            { "id": "copyValue", "label": "Copy record value", "icon": "doc.on.doc|content_copy", "copy": "{item.recordValue}" },
+            { "id": "verify", "label": "Check DNS now", "icon": "checkmark.seal|verified", "when": "!item.verified", "url": "/api/orgs/sso", "body": { "orgId": "{org.id}", "action": "verify-domain", "domain": "{item.domain}" }, "success": "Checked {item.domain}" },
+            { "id": "remove", "label": "Remove domain", "icon": "trash|delete", "destructive": true, "confirm": "Remove {item.domain}?", "url": "/api/orgs/sso", "body": { "orgId": "{org.id}", "action": "remove-domain", "domain": "{item.domain}" }, "success": "Removed" }
+          ],
+          "empty": "Add the email domain your team signs in with."
+        },
+        {
+          "type": "actions",
+          "title": "Manage",
+          "items": [
+            { "id": "addDomain", "label": "Add a domain", "icon": "plus|add", "url": "/api/orgs/sso", "prompt": [{ "key": "domain", "label": "Domain", "kind": "url", "required": true, "placeholder": "yourcompany.com" }], "body": { "orgId": "{org.id}", "action": "add-domain", "domain": "{form.domain}" }, "success": "Added {form.domain}. Publish the TXT record, then check DNS." },
+            {
+              "id": "saveIdp", "label": "Set up the identity provider", "icon": "server.rack|dns", "url": "/api/orgs/sso",
+              "prompt": [
+                { "key": "displayName", "label": "Provider name", "kind": "text", "initial": "{data.sso.sso.displayName}", "placeholder": "Okta" },
+                { "key": "entityId", "label": "IdP entity ID", "kind": "text", "required": true, "initial": "{data.sso.sso.entityId}" },
+                { "key": "ssoUrl", "label": "IdP sign-in URL", "kind": "url", "required": true, "initial": "{data.sso.sso.ssoUrl}" },
+                { "key": "certificate", "label": "X.509 certificate (PEM)", "kind": "multiline", "required": true }
+              ],
+              "body": { "orgId": "{org.id}", "action": "save-idp", "displayName": "{form.displayName}", "entityId": "{form.entityId}", "ssoUrl": "{form.ssoUrl}", "certificate": "{form.certificate}" },
+              "success": "Saved the provider"
+            },
+            { "id": "activate", "label": "Turn single sign-on on", "icon": "power|toggle_on", "when": "data.sso.sso.status != active", "confirm": "Turn single sign-on on for the verified domains?", "url": "/api/orgs/sso", "body": { "orgId": "{org.id}", "action": "activate" }, "success": "Single sign-on is on" },
+            { "id": "enforce", "label": "Require it for every member", "icon": "lock|lock", "when": "data.sso.sso.status == active && !data.sso.sso.enforced", "confirm": "Members on these domains will only sign in through the provider. Make sure a break-glass owner is set.", "url": "/api/orgs/sso", "body": { "orgId": "{org.id}", "action": "enforce-apply", "confirm": true }, "success": "Required" },
+            { "id": "enforceOff", "label": "Stop requiring it", "icon": "lock.open|lock_open", "when": "data.sso.sso.enforced", "url": "/api/orgs/sso", "body": { "orgId": "{org.id}", "action": "enforce-off" }, "success": "No longer required" },
+            { "id": "disable", "label": "Turn single sign-on off", "icon": "power|block", "destructive": true, "when": "data.sso.sso.status == active", "confirm": "Turn single sign-on off? Members sign in with their passwords again.", "url": "/api/orgs/sso", "body": { "orgId": "{org.id}", "action": "disable" }, "success": "Single sign-on is off" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.holds",
+      "title": "Holds and reviews",
+      "icon": "exclamationmark.shield|policy",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": ["/settings/holds"],
+      "load": { "notices": "/api/orgs/risk-notices?orgId={org.id}" },
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.notices.notices",
+          "primary": "{item.title}",
+          "secondary": "{item.summary}",
+          "tertiary": "{item.reference} · {item.occurredAtMs:datetime}",
+          "icon": "exclamationmark.triangle|warning",
+          "badges": [
+            { "text": "{item.status:title}", "tones": { "Active": "error", "Resolved": "success", "*": "neutral" } },
+            { "text": "{item.severity:title}", "tones": { "Critical": "error", "High": "error", "*": "warning" } }
+          ],
+          "actions": [
+            {
+              "id": "review", "label": "Request a review", "icon": "envelope|mail", "when": "item.reviewable",
+              "url": "/api/orgs/risk-notices",
+              "prompt": [{ "key": "note", "label": "What changed", "kind": "multiline", "required": true, "help": "Tell the team what you fixed, so they can lift the hold." }],
+              "body": { "orgId": "{org.id}", "noticeId": "{item.noticeId}", "note": "{form.note}" },
+              "success": "Review requested"
+            }
+          ],
+          "empty": "Nothing is on hold."
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data",
+      "title": "Imports and exports",
+      "icon": "arrow.up.arrow.down|sync",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": ["/settings/data"],
+      "load": { "jobs": { "url": "/api/transfer/jobs", "method": "POST", "body": { "orgId": "{org.id}", "limit": 50 } } },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "History",
+          "items": "data.jobs.jobs",
+          "primary": "{item.label|item.resource:title} {item.kind:title}",
+          "secondary": "{item.fileName|item.resource}",
+          "tertiary": "{item.createdByEmail} · {item.createdAt:datetime}",
+          "icon": "arrow.up.arrow.down|sync",
+          "badges": [{ "text": "{item.status:title}", "tones": { "Done": "success", "Applied": "success", "Failed": "error", "*": "neutral" } }],
+          "empty": "No imports or exports yet."
+        }
+      ]
+    },
+    {
+      "id": "core.settings.privacy",
+      "title": "Privacy requests",
+      "icon": "hand.raised|privacy_tip",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": ["/settings/privacy"],
+      "blocks": [
+        { "type": "notice", "tone": "warning", "text": "Erasing a person removes their contact record, form entries and messages across every site in this workspace. It cannot be undone." },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "erase", "label": "Erase a person's data", "icon": "trash|delete_forever", "destructive": true,
+              "url": "/api/crm/erase-person",
+              "prompt": [
+                { "key": "email", "label": "Their email", "kind": "email", "required": true },
+                { "key": "confirmEmail", "label": "Type it again", "kind": "email", "required": true }
+              ],
+              "body": { "orgId": "{org.id}", "email": "{form.email}", "confirmEmail": "{form.confirmEmail}" },
+              "success": "Erased {form.email}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.ownership",
+      "title": "Ownership",
+      "icon": "person.badge.key|manage_accounts",
+      "scope": "org",
+      "requires": "org.owner || staff.is",
+      "links": ["/settings/ownership"],
+      "load": { "members": "/api/orgs/members?orgId={org.id}" },
+      "blocks": [
+        { "type": "notice", "tone": "info", "text": "The owner holds billing and can delete the workspace. Transfer it to an admin here, or send a handoff from Team to someone new." },
+        {
+          "type": "list",
+          "title": "Transfer to",
+          "items": "data.members.members",
+          "filter": "item.role == admin",
+          "primary": "{item.displayName|item.email}",
+          "secondary": "{item.email}",
+          "icon": "person.crop.circle|account_circle",
+          "actions": [
+            {
+              "id": "transfer", "label": "Make owner", "icon": "crown|manage_accounts", "destructive": true,
+              "confirm": "Make {item.displayName|item.email} the owner of {org.name}? You become an admin.",
+              "url": "/api/orgs/settings", "body": { "orgId": "{org.id}", "action": "transfer-ownership", "targetUid": "{item.$id}" },
+              "success": "{item.email} owns the workspace now"
+            }
+          ],
+          "empty": "Make someone an admin first; ownership moves to an admin."
+        }
+      ]
+    },
+    {
+      "id": "core.settings.delete",
+      "title": "Delete workspace",
+      "icon": "trash|delete_forever",
+      "scope": "org",
+      "requires": "org.owner || staff.is",
+      "links": ["/settings/delete"],
+      "load": { "org": { "doc": "orgs/{org.id}" } },
+      "blocks": [
+        { "type": "notice", "tone": "error", "when": "!data.org.erasureRequestedAt", "text": "Deleting {org.name} cancels its plan, takes every site offline and erases its data after the grace period." },
+        { "type": "notice", "tone": "warning", "when": "data.org.erasureRequestedAt", "text": "Deletion was requested {data.org.erasureRequestedAt:date}. You can cancel it until the grace period ends." },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "request", "label": "Delete this workspace", "icon": "trash|delete_forever", "destructive": true, "when": "!data.org.erasureRequestedAt",
+              "url": "/api/orgs/delete",
+              "prompt": [{ "key": "typed", "label": "Type the workspace name to confirm", "kind": "text", "required": true, "mustMatch": "{org.name}", "help": "{org.name}" }],
+              "confirm": "This cannot be undone after the grace period.",
+              "body": { "orgId": "{org.id}", "action": "request" },
+              "success": "Deletion requested"
+            },
+            { "id": "cancel", "label": "Cancel the deletion", "icon": "arrow.uturn.backward|undo", "when": "data.org.erasureRequestedAt", "url": "/api/orgs/delete", "body": { "orgId": "{org.id}", "action": "cancel" }, "success": "Deletion cancelled" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.plugins",
+      "title": "Plugins",
+      "subtitle": "Built-in plugins on or off for every site",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "org",
+      "group": "workspace",
+      "order": 35,
+      "links": ["/plugins", "/settings/plugins"],
+      "load": { "plugins": { "switchboard": "org" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!org.manager",
+          "text": "Only owners and admins can switch plugins. You can see what this workspace runs."
+        },
+        {
+          "type": "list",
+          "id": "builtIn",
+          "title": "Built in",
+          "items": "data.plugins.rows",
+          "primary": "{item.label}",
+          "secondary": "{item.description}",
+          "footer": "The plugins that ship with Aglyn. Turning one off removes it from navigation, the editor, published sites and the API for every site in this workspace.",
+          "badges": [{ "when": "item.locked", "text": "Always on", "tone": "info" }],
+          "open": { "screen": "core.plugin", "params": { "pluginId": "{item.id}" } },
+          "toggle": {
+            "value": "{item.on}",
+            "disabled": "item.locked || !org.manager",
+            "label": "{item.label} for every site",
+            "on": {
+              "id": "on",
+              "label": "Turn on",
+              "icon": "power|power_settings_new",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{item.enable}" },
+              "success": "Plugins updated",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turning {item.label} off also turns off {item.cascade}, which need it, on every site in this workspace.",
+              "confirmWhen": "item.cascade",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{item.disable}" },
+              "success": "Plugins updated",
+              "reload": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.plugin",
+      "title": "{data.plugins.rows[id=params.pluginId].label|params.pluginId}",
+      "label": "Plugin",
+      "icon": "puzzlepiece.extension|extension",
+      "scope": "org",
+      "links": ["/plugins/:pluginId"],
+      "load": { "plugins": { "switchboard": "org" } },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.plugins.rows[id=params.pluginId].locked",
+          "text": "Always on. Every workspace runs it, so it has no switch."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "!data.plugins.rows[id=params.pluginId].locked && data.plugins.rows[id=params.pluginId].on",
+          "text": "On for every site in this workspace. A site can still turn it off for itself."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!data.plugins.rows[id=params.pluginId].on",
+          "text": "Off for every site in this workspace. No site can turn it on until the workspace does."
+        },
+        {
+          "type": "fields",
+          "title": "About",
+          "rows": [
+            { "label": "What it does", "value": "{data.plugins.rows[id=params.pluginId].description|'—'}" },
+            { "label": "Needs", "value": "{data.plugins.rows[id=params.pluginId].requires|'Nothing else'}" },
+            { "label": "Needed by", "value": "{data.plugins.rows[id=params.pluginId].dependents|'Nothing else'}" }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "org.manager && data.plugins.rows[id=params.pluginId].on && data.plugins.rows[id=params.pluginId].cascade",
+          "text": "Turning it off also turns off {data.plugins.rows[id=params.pluginId].cascade}, which need it."
+        },
+        {
+          "type": "actions",
+          "when": "org.manager && !data.plugins.rows[id=params.pluginId].locked",
+          "items": [
+            {
+              "id": "on",
+              "label": "Turn on",
+              "icon": "power|power_settings_new",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{data.plugins.rows[id=params.pluginId].enable}" },
+              "success": "Plugins updated",
+              "reload": true,
+              "when": "!data.plugins.rows[id=params.pluginId].on"
+            },
+            {
+              "id": "off",
+              "label": "Turn off",
+              "icon": "poweroff|power_off",
+              "destructive": true,
+              "confirm": "Turn {data.plugins.rows[id=params.pluginId].label} off for every site in this workspace?",
+              "url": "/api/orgs/settings",
+              "body": { "orgId": "{org.id}", "action": "set-enabled-plugins", "enabledPlugins": "{data.plugins.rows[id=params.pluginId].disable}" },
+              "success": "Plugins updated",
+              "reload": true,
+              "when": "data.plugins.rows[id=params.pluginId].on"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "items": [
+            { "title": "AI settings", "subtitle": "Provider and the model for each kind of step", "icon": "gearshape|settings", "screen": "core.pluginSettings.ai", "when": "org.manager && params.pluginId == ai" },
+            { "title": "Commerce settings", "subtitle": "Register discounts, tipping, receipts and the customer display", "icon": "gearshape|settings", "screen": "core.pluginSettings.commerce", "when": "org.manager && params.pluginId == commerce" },
+            { "title": "Bookings settings", "subtitle": "Booking horizon and the booking page", "icon": "gearshape|settings", "screen": "core.pluginSettings.bookings", "when": "org.manager && params.pluginId == bookings" }
+          ]
+        },
+        { "type": "zone", "name": "pluginSettings", "title": "Settings", "params": { "pluginId": "{params.pluginId}" } }
+      ]
+    }
+  ]
+}

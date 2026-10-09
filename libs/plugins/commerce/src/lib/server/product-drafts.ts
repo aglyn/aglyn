@@ -29,6 +29,7 @@ import {
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  COMMERCE_DEFAULT_PRICE_USD,
   COMMERCE_MAX_OPTION_VALUES,
   COMMERCE_MAX_OPTIONS,
   COMMERCE_MAX_PRICE_USD,
@@ -58,10 +59,15 @@ import {
  *    refused by every sale door — with one variant per combination of its
  *    options, no photo, and the search, stock and smart-collection keys every
  *    product write derives. Born live (`deletedAt: null`), as the product
- *    resource stamps it, so the products table lists it.
- *  - THE PRICE is left empty unless the content states one. An unpriced
- *    product is marked for the merchant to price: the editor will not save it
- *    and the card will not activate it until every variant has a price.
+ *    resource stamps it, so the products table lists it. A caller may ask
+ *    for it to be LISTED before it has a price (`comingSoon`, AGL-3676): it
+ *    is then `active` and the storefront says "Price coming soon" where the
+ *    price would be — still sold by no door until every variant is priced —
+ *    and may hand it photos already in the site's media library.
+ *  - THE PRICE is the one the content states, else the default price
+ *    (`COMMERCE_DEFAULT_PRICE_USD`, AGL-3676) for the owner to change. Only
+ *    a caller that says `priceUsd: null` gets a product with none, which the
+ *    storefront lists as "Price coming soon" and no door sells.
  *  - THE ROOM is the `productsPerHost` allowance, counted the way the
  *    resources route and the importer count it, inside the transaction that
  *    creates. THE PLAN is the `commerce` feature, and THE ROLE a member who
@@ -105,8 +111,8 @@ export function productDraftLimitRefusal(limit: number): string {
 /**
  * What a caller sends as `content`: a proposed product, as the AI products
  * job proposes one, with an optional stated price for every variant and the
- * ids of categories the site already has. A photo is never taken: the
- * merchant adds pictures in the editor.
+ * ids of categories the site already has, and optionally photos already in
+ * the site's media library and whether to list it before it has a price.
  */
 export interface ProductDraftContent {
   name: string
@@ -116,11 +122,34 @@ export interface ProductDraftContent {
   options?: Array<{ name: string; values: string[] }>
   seoTitle?: string
   seoDescription?: string
-  /** One price for every variant, in dollars; absent leaves them unpriced. */
-  priceUsd?: number
+  /**
+   * One price for every variant, in dollars. Absent is the default price
+   * (AGL-3676); `null` leaves them unpriced on purpose.
+   */
+  priceUsd?: number | null
   /** Ids of the site's product categories; one the site lacks is dropped. */
   categoryIds?: string[]
+  /**
+   * List the product on the storefront before it has a price (AGL-3676):
+   * written `active`, so the catalog shows it and its page answers, while
+   * every sale door still refuses a variant with no price
+   * (`variantHasPrice`) and the storefront says "Price coming soon" where a
+   * price would be. Absent or false, an unpriced product stays a draft.
+   */
+  comingSoon?: boolean
+  /**
+   * Photos already in the site's media library, first = primary (AGL-3676):
+   * the slot a guided start fills with a stock photo, or a starter, for the
+   * merchant to replace with their own.
+   */
+  mediaUrls?: string[]
 }
+
+/** The most photos a draft is written with. */
+export const PRODUCT_DRAFT_MEDIA_MAX = 4
+
+/** A photo address a draft keeps: an https URL or a path on the site, never a script or a data URL. */
+const MEDIA_URL = /^(?:https:\/\/[^\s"'<>]+|\/[^\s"'<>]*)$/
 
 const PRODUCT_TYPES: readonly ProductType[] = ['physical', 'digital', 'service']
 
@@ -145,9 +174,12 @@ function strings(label: string, value: unknown, problems: string[]): string[] {
 /** A draft as the writer will store it, before its slug and keys are settled. */
 export interface ProductDraftRead {
   proposal: ProposedProduct
-  /** The price stated for every variant, or `null` for the merchant to set. */
+  /** The price for every variant (stated, else the default), or `null` for the merchant to set. */
   priceUsd: number | null
   categoryIds: string[]
+  /** Listed before it has a price (`ProductDraftContent.comingSoon`). */
+  comingSoon: boolean
+  mediaUrls: string[]
 }
 
 export type ProductDraftContentRead =
@@ -225,9 +257,9 @@ export function readProductDraftContent(
     }
   }
 
-  // No price unless one is stated: the merchant sets it otherwise.
+  // The stated price, else the default (AGL-3676); `null` asks for none.
   const rawPrice = content['priceUsd']
-  let priceUsd: number | null = null
+  let priceUsd: number | null = rawPrice === null ? null : COMMERCE_DEFAULT_PRICE_USD
   if (rawPrice !== undefined && rawPrice !== null) {
     if (
       typeof rawPrice !== 'number' ||
@@ -240,6 +272,17 @@ export function readProductDraftContent(
     } else {
       priceUsd = rawPrice
     }
+  }
+  const rawComingSoon = content['comingSoon']
+  if (rawComingSoon !== undefined && typeof rawComingSoon !== 'boolean') {
+    problems.push('Coming soon is true or false')
+  }
+  const mediaUrls = strings('Photos', content['mediaUrls'], problems)
+  if (mediaUrls.length > PRODUCT_DRAFT_MEDIA_MAX) {
+    problems.push(`A product is written with at most ${PRODUCT_DRAFT_MEDIA_MAX} photos`)
+  }
+  if (mediaUrls.some((url) => url.length > 2_000 || !MEDIA_URL.test(url))) {
+    problems.push('A photo is an https address or a path on this site')
   }
   if (problems.length) return { ok: false, problems: [...new Set(problems)] }
   return {
@@ -256,6 +299,8 @@ export function readProductDraftContent(
       },
       priceUsd,
       categoryIds,
+      comingSoon: rawComingSoon === true,
+      mediaUrls,
     },
   }
 }
@@ -279,6 +324,10 @@ export function productDraftDocument(
     // The search keys travel with every create; recomputed for the price.
     ...productSearchFields(priced as HostProduct),
     slug,
+    // Listed before it has a price (AGL-3676): the storefront says "Price
+    // coming soon", and no sale door sells a variant without one.
+    ...(read.comingSoon ? { status: 'active' as const } : {}),
+    ...(read.mediaUrls.length ? { mediaUrls: read.mediaUrls } : {}),
     ...(read.categoryIds.length ? { categoryIds: read.categoryIds } : {}),
   }
 }

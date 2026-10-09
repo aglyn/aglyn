@@ -36,7 +36,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true, firebaseAdmin: 
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { productPriceMissing, validateProduct, type HostProduct } from '../model/commerce'
+import {
+  COMMERCE_DEFAULT_PRICE_USD,
+  productPriceMissing,
+  validateProduct,
+  variantHasPrice,
+  type HostProduct,
+} from '../model/commerce'
 import {
   checkProductDraftContent,
   createProductDraftWriter,
@@ -176,7 +182,7 @@ beforeEach(() => {
 })
 
 describe('the product writer', () => {
-  it('writes an unpriced draft with no photo, marked for the merchant to price', async () => {
+  it('writes a draft at the default price where none is stated, with no photo (AGL-3676)', async () => {
     const written = await writer.write(request())
     expect(written).toEqual({
       ok: true,
@@ -184,7 +190,7 @@ describe('the product writer', () => {
       id: 'draft-1',
       name: 'Sourdough loaf',
       versionId: null,
-      facts: { status: 'draft', slug: 'sourdough-loaf', type: 'physical', variants: 2, priceMissing: true },
+      facts: { status: 'draft', slug: 'sourdough-loaf', type: 'physical', variants: 2, priceMissing: false },
     })
     const product = stored()
     expect(product).toMatchObject({
@@ -206,13 +212,28 @@ describe('the product writer', () => {
       nameLower: 'sourdough loaf',
       soldOut: false,
     })
-    expect(product.variants).toHaveLength(2)
+    expect(product.variants.map((variant) => variant.priceUsd)).toEqual([
+      COMMERCE_DEFAULT_PRICE_USD,
+      COMMERCE_DEFAULT_PRICE_USD,
+    ])
+    expect(product).toMatchObject({
+      priceUsd: COMMERCE_DEFAULT_PRICE_USD,
+      priceFromCents: COMMERCE_DEFAULT_PRICE_USD * 100,
+    })
+    expect(productPriceMissing(product)).toBe(false)
+    for (const field of ['mediaUrls', 'imageUrl']) expect(product).not.toHaveProperty(field)
+    expect(validateProduct(product)).toBeNull()
+  })
+
+  it('leaves every variant unpriced where the content asks for no price, and that saves (AGL-3676)', async () => {
+    const written = await writer.write(request({ content: { ...CONTENT, priceUsd: null } }))
+    expect(written).toMatchObject({ ok: true, facts: { priceMissing: true } })
+    const product = stored()
     expect(product.variants.every((variant) => !('priceUsd' in variant))).toBe(true)
-    expect(productPriceMissing(product)).toBe(true)
-    // No photo, and no flat price that would read as free.
-    for (const field of ['mediaUrls', 'imageUrl', 'priceUsd']) expect(product).not.toHaveProperty(field)
-    // The editor's own rule refuses to save it until it is priced.
-    expect(validateProduct(product)).toBe('Set a price for every variant')
+    // No flat price that would read as free.
+    expect(product).not.toHaveProperty('priceUsd')
+    // The owner's own rule stores it: the storefront says "Price coming soon".
+    expect(validateProduct(product)).toBeNull()
   })
 
   it('prices every variant when the content states a price', async () => {
@@ -222,6 +243,20 @@ describe('the product writer', () => {
     expect(product.variants.map((variant) => variant.priceUsd)).toEqual([9.5, 9.5])
     expect(product).toMatchObject({ priceUsd: 9.5, priceFromCents: 950, status: 'draft' })
     expect(validateProduct(product)).toBeNull()
+  })
+
+  it('lists a product before it has a price where asked, with its photo, still sold by no door (AGL-3676)', async () => {
+    const written = await writer.write(
+      request({
+        content: { ...CONTENT, priceUsd: null, comingSoon: true, mediaUrls: ['/_static/starter/gallery-craft.jpg'] },
+      }),
+    )
+    expect(written).toMatchObject({ ok: true, facts: { status: 'active', priceMissing: true } })
+    const product = stored()
+    expect(product).toMatchObject({ status: 'active', mediaUrls: ['/_static/starter/gallery-craft.jpg'] })
+    // No price is invented: every variant is still unpriced, and there is no flat price.
+    expect(product.variants.every((variant) => !variantHasPrice(variant))).toBe(true)
+    expect(product).not.toHaveProperty('priceUsd')
   })
 
   it('takes a slug no product holds, a deleted one included', async () => {
@@ -239,7 +274,7 @@ describe('the product writer', () => {
     expect(commits).toEqual([])
     expect(await writer.read({ hostId: 'host-1', id: 'draft-1' })).toMatchObject({
       id: 'draft-1',
-      facts: { status: 'draft', priceMissing: true },
+      facts: { status: 'draft', priceMissing: false },
     })
     expect(await writer.read({ hostId: 'host-1', id: 'nothing' })).toBeNull()
   })
@@ -289,7 +324,7 @@ describe('the check', () => {
   it('passes a proposal with what it would store', () => {
     expect(checkProductDraftContent(CONTENT)).toEqual({
       ok: true,
-      facts: { status: 'draft', slug: 'sourdough-loaf', type: 'physical', variants: 2, priceMissing: true },
+      facts: { status: 'draft', slug: 'sourdough-loaf', type: 'physical', variants: 2, priceMissing: false },
     })
     expect(checkProductDraftContent({ name: 'Gift card' })).toMatchObject({ ok: true, facts: { variants: 1 } })
   })
@@ -301,6 +336,18 @@ describe('the check', () => {
     expect(problemsOf({ priceUsd: 1.005 })).toHaveLength(1)
     expect(problemsOf({ priceUsd: 100_000 })).toHaveLength(1)
     expect(problemsOf({ priceUsd: 0 })).toEqual([])
+  })
+
+  it('takes photos only as https addresses or paths on the site, and a coming-soon that is true or false', () => {
+    expect(problemsOf({ mediaUrls: ['https://cdn.example/a.jpg', '/media/b.jpg'] })).toEqual([])
+    expect(problemsOf({ mediaUrls: ['javascript:alert(1)'] })).toEqual(['A photo is an https address or a path on this site'])
+    expect(problemsOf({ mediaUrls: ['data:image/png;base64,AAAA'] })).toEqual(['A photo is an https address or a path on this site'])
+    expect(problemsOf({ mediaUrls: ['/a', '/b', '/c', '/d', '/e'] })).toEqual(['A product is written with at most 4 photos'])
+    expect(problemsOf({ comingSoon: 'yes' })).toEqual(['Coming soon is true or false'])
+    expect(checkProductDraftContent({ ...CONTENT, comingSoon: true, priceUsd: null })).toMatchObject({
+      ok: true,
+      facts: { status: 'active', priceMissing: true },
+    })
   })
 
   it('refuses options the editor would refuse, before building any variant', () => {

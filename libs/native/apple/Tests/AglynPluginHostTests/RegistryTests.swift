@@ -118,3 +118,29 @@ private final class NullReader: FirestoreReader, @unchecked Sendable {
   func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
   func deleteDocument(_ path: [String]) async throws {}
 }
+
+@MainActor
+final class StaffContributionTests: XCTestCase {
+  func testStaffCardsAndScreensShowOnlyToTheStaffTheyAdmit() {
+    let registry = NativePluginRegistry()
+    let registrar = NativePluginRegistrar(
+      pluginID: "shop",
+      declared: NativeContributionDeclaration(screens: ["shop.staff", "shop.list"], widgets: ["shop.site-card", "shop.home"]),
+      registry: registry)
+    registrar.screen("shop.list", title: "Shop") { _, _ in EmptyView() }
+    registrar.screen("shop.staff", title: "Shop staff", staffRoles: ["super"]) { _, _ in EmptyView() }
+    registrar.widget("shop.home", title: "Home card", order: 1) { _ in EmptyView() }
+    registrar.staffWidget("shop.site-card", title: "Site card", zone: .staffSite, order: 1) { _, subject in
+      Text(subject["hostId"] ?? "")
+    }
+    XCTAssertTrue(registrar.errors.isEmpty)
+    XCTAssertEqual(registry.widgets(for: .aglyn).map(\.id), ["shop.home"])
+    XCTAssertEqual(registry.screens(for: .aglyn).map(\.id), ["shop.list"])
+    XCTAssertTrue(registry.staffWidgets(.staffSite, for: nil).isEmpty)
+    XCTAssertEqual(registry.staffWidgets(.staffSite, for: StaffStanding(role: "support")).map(\.id), ["shop.site-card"])
+    XCTAssertTrue(registry.staffScreens(for: StaffStanding(role: "support")).isEmpty)
+    XCTAssertEqual(registry.staffScreens(for: StaffStanding(role: "super")).map(\.id), ["shop.staff"])
+    XCTAssertFalse(registry.screen("shop.staff")!.admits(nil))
+    XCTAssertTrue(registry.screen("shop.list")!.admits(nil))
+  }
+}

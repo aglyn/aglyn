@@ -224,6 +224,10 @@ band and its owner's allowance across every Free workspace they hold
 (`aiFreeSiteCreditEstimate`) and disables the start below it, and the site
 kind's admission refuses the create with a 429 on the same figure, so a stale
 dialog cannot start a job that would pause between its form and its first page.
+The figure is the whole worst case (`aiFreeSiteWorstCaseCredits`): the plan,
+the look, the layout and form, each page and its listing, the sections the
+plan is held to and the room for one retried page — 282 credits for two pages,
+236 for one — never a nominal count that leaves any of them out.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
@@ -1406,9 +1410,24 @@ nothing itself.
   its pages (publish role and byline, as the entry editor's Publish requires) and
   drops the blog's cached addresses. A site whose kind is Online store gets
   "Adding your first products": the `products` step's catalog asked for 3 to 6,
-  each written by the commerce plugin's `product` draft writer as an UNPRICED
-  draft with no photo — off the storefront until the owner prices it, since no
-  price is ever invented. Each part asks before its first pass whether the member
+  each written by the commerce plugin's `product` draft writer at the
+  store's default price (`COMMERCE_DEFAULT_PRICE_USD`, $25 — the catalog
+  proposes none; Zach 2026-10-08, AGL-3676), for the owner to change — and,
+  since the 2026-10-08 Ember & Wick start showed no product at all, LISTED at
+  once (`comingSoon`: `active`); the row says the price is a starting one. An
+  owner who clears a price keeps the product: the storefront shows "Price
+  coming soon" with no Add to cart, sold by no door (`variantHasPrice`) and
+  in no feed until it is priced again.
+  Each gets a photo in its slot: a stock photo of its own words where the
+  deployment has a library, else a starter, for the owner to replace. The
+  pages then LIST the real records (`layout-language/ai-layout-listings.ts`):
+  the shop page's section of items and the home's featured band place the
+  commerce Product grid over the catalog (photo cards linking each product's
+  page — the store's built-in product page where no template is designated),
+  a blog's home features its posts through Collection Entries (cover, date,
+  byline, title, excerpt, each linking its post), any group the model drew
+  for them left out; and a selling site's header carries the Cart button.
+  Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent
   nothing. The pages built after are told the posts' titles or the products'

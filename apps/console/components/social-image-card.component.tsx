@@ -113,7 +113,7 @@ export function SocialImageCard(props: SocialImageCardProps) {
       embedded={embedded}
       header={'Social image'}
       help={docsHelp('seo', {
-        anchor: '#social-cards',
+        anchor: '#site-social-image',
         excerpt:
           'The picture shown when any page of this site is shared to ' +
           'social media or chat. Each page can override it in its own SEO ' +

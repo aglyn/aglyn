@@ -534,7 +534,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   return (
     <CardDisplay
       header={'Marketplace components'}
-      help={pluginDocsHelp('plugins', { anchor: '#install--upgrade' })}
+      help={pluginDocsHelp('plugins', { anchor: '#browse-card' })}
       contentGutterX
       contentGutterY
     >

@@ -71,11 +71,7 @@ const BillingSettingsSection: NextPageWithLayout<Record<string, never>> = () => 
           <CardDisplay
             header={'Billing email'}
             subheader={'Invoices will be sent to the following email address.'}
-            help={docsHelp('billing', {
-              anchor: '#billing-email',
-              excerpt:
-                'Where invoices, receipts and the notices about a failed card are sent — and why it is not your organization’s contact email.',
-            })}
+            help={docsHelp('billing', { anchor: '#billing-email' })}
             contentGutterX
             contentGutterY
           >
@@ -89,11 +85,7 @@ const BillingSettingsSection: NextPageWithLayout<Record<string, never>> = () => 
           <CardDisplay
             header={'Payment methods'}
             subheader={'The cards your subscription and usage are charged to.'}
-            help={docsHelp('billing', {
-              anchor: '#payment-methods',
-              excerpt:
-                'The cards on file, how a new one is added through Stripe’s own form, and why the last card cannot be removed under a live subscription.',
-            })}
+            help={docsHelp('billing', { anchor: '#payment-methods' })}
             contentGutterX
             contentGutterY
           >
@@ -115,11 +107,7 @@ const BillingSettingsSection: NextPageWithLayout<Record<string, never>> = () => 
               'affect tax on your own storefront sales — that comes from the ' +
               'tax origin in Commerce.'
             }
-            help={docsHelp('billing', {
-              anchor: '#billing-address',
-              excerpt:
-                'The address invoices are issued to and sales tax is computed from, and why it can be replaced but not emptied.',
-            })}
+            help={docsHelp('billing', { anchor: '#billing-address' })}
             contentGutterX
             contentGutterY
           >
@@ -133,11 +121,7 @@ const BillingSettingsSection: NextPageWithLayout<Record<string, never>> = () => 
           <CardDisplay
             header={'Tax ID'}
             subheader={'Specify a tax ID to have it appear on your invoices.'}
-            help={docsHelp('billing', {
-              anchor: '#tax-ids',
-              excerpt:
-                'Put a VAT, ABN, GST or EIN number on your invoices, and what Stripe checks before accepting one.',
-            })}
+            help={docsHelp('billing', { anchor: '#tax-ids' })}
             contentGutterX
             contentGutterY
           >

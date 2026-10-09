@@ -79,6 +79,7 @@ describe('order events (AGL-3638)', () => {
       carrier: 'USPS',
       trackingNumber: '9400',
       trackingUrl: null,
+      shippingCostCents: null,
       atMs: Date.parse('2026-10-07T12:00:00.000Z'),
       state: 'pending',
       message: null,
@@ -87,6 +88,35 @@ describe('order events (AGL-3638)', () => {
     expect(stored.shipments['old']).toEqual({ state: 'confirmed' })
     expect(stored).toMatchObject({ active: true, nextRunAtMs: T0 })
     expect(await onOrderFulfilled(d, fulfilled())).toBe('already')
+  })
+
+  it('keeps what the shipment’s label cost, in whole cents, to send where a marketplace takes it (AGL-3693)', async () => {
+    const d = deps()
+    const id = marketplaceOrderDocId(HOST, 'faire', 'bo_1')
+    await d.store.createOrder(id, record({ marketplace: 'faire', externalOrderId: 'bo_1' }))
+    const event = fulfilled()
+    ;(event.payload.fulfillment as Record<string, unknown>).labelCostCents = 845
+    expect(await onOrderFulfilled(d, event)).toBe('queued')
+    expect(d.store.orders.get(id)!.shipments['ful1'].shippingCostCents).toBe(845)
+
+    const other = marketplaceOrderDocId(HOST, 'faire', 'bo_2')
+    await d.store.createOrder(other, record({ marketplace: 'faire', externalOrderId: 'bo_2', recordId: 'rec-2' }))
+    const fractional = fulfilled('marketplace', 'rec-2')
+    ;(fractional.payload.fulfillment as Record<string, unknown>).labelCostCents = 8.45
+    await onOrderFulfilled(d, fractional)
+    expect(d.store.orders.get(other)!.shipments['ful1'].shippingCostCents).toBeNull()
+  })
+
+  it('keeps a hand-entered shipping cost, free shipping included, for Faire (AGL-3705)', async () => {
+    // The console's fulfill dialog stores what the merchant typed in the same
+    // field a label's cost goes in, so it arrives here the same way.
+    const d = deps()
+    const id = marketplaceOrderDocId(HOST, 'faire', 'bo_3')
+    await d.store.createOrder(id, record({ marketplace: 'faire', externalOrderId: 'bo_3', recordId: 'rec-3' }))
+    const free = fulfilled('marketplace', 'rec-3')
+    ;(free.payload.fulfillment as Record<string, unknown>).labelCostCents = 0
+    expect(await onOrderFulfilled(d, free)).toBe('queued')
+    expect(d.store.orders.get(id)!.shipments['ful1'].shippingCostCents).toBe(0)
   })
 
   it('ignores an order no marketplace sold', async () => {

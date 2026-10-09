@@ -271,3 +271,68 @@ const TRACKING_STATUS_LABELS: Readonly<Record<string, string>> = {
 export function trackingStatusLabel(status: string | undefined | null): string {
   return status ? TRACKING_STATUS_LABELS[status] ?? status : ''
 }
+
+/**
+ * The most a shipment's hand-entered shipping cost may be, in minor units of
+ * the store's currency (AGL-3705): $10,000.00, or ¥1,000,000. A typo guard,
+ * not a policy — a parcel that costs more is freight, not a shipment.
+ */
+export const SHIPPING_COST_MAX_CENTS = 1_000_000
+
+/**
+ * How many minor units a currency has (2 for USD, 0 for JPY), from the
+ * platform's own currency data; 2 for a code it does not know.
+ */
+export function currencyMinorDigits(currency: string | null | undefined): number {
+  try {
+    const format = new Intl.NumberFormat('en-US', { style: 'currency', currency: String(currency || 'USD').toUpperCase() })
+    return format.resolvedOptions().maximumFractionDigits ?? 2
+  } catch {
+    return 2
+  }
+}
+
+/**
+ * Why a shipping cost a door was handed cannot be stored (AGL-3705), or null
+ * when it can. Absent (`undefined`, `null`, `''`) is fine — it means "not
+ * known", which is not zero. A present cost is whole minor units, from zero
+ * (free shipping, which is said) to {@link SHIPPING_COST_MAX_CENTS}.
+ */
+export function shippingCostCentsProblem(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    return 'Shipping cost must be a whole number of cents'
+  }
+  if (value < 0) return 'Shipping cost cannot be negative'
+  if (value > SHIPPING_COST_MAX_CENTS) return 'Shipping cost is too large'
+  return null
+}
+
+/**
+ * What a merchant typed in the fulfill dialog's Shipping cost field, read in
+ * the store's currency (AGL-3705): `12`, `12.5`, `$12.50` and `1,250.00` are
+ * amounts; an empty field is no cost at all (`cents: null`), which is not 0.
+ * More decimals than the currency has, a negative or a word is an error.
+ */
+export function parseShippingCostInput(
+  input: string,
+  currency: string | null | undefined,
+): { cents: number | null } | { error: string } {
+  const digits = currencyMinorDigits(currency)
+  const cleaned = String(input ?? '')
+    .trim()
+    .replace(/^[^\d.-]+/, '')
+    .replace(/,/g, '')
+  if (!String(input ?? '').trim()) return { cents: null }
+  if (cleaned.startsWith('-')) return { error: 'Shipping cost cannot be negative' }
+  const pattern = digits > 0 ? new RegExp(`^\\d*(\\.\\d{0,${digits}})?$`) : /^\d+$/
+  if (!cleaned || cleaned === '.' || !pattern.test(cleaned)) {
+    return {
+      error: digits > 0 ? `Enter an amount like 8.45` : 'Enter a whole amount, like 850',
+    }
+  }
+  const [whole, fraction = ''] = cleaned.split('.')
+  const cents = Number(whole || '0') * 10 ** digits + Number(fraction.padEnd(digits, '0') || '0')
+  const problem = shippingCostCentsProblem(cents)
+  return problem ? { error: problem } : { cents }
+}

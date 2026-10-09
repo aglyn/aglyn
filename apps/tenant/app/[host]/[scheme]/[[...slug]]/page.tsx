@@ -30,6 +30,7 @@ import {
 } from '@aglyn/aglyn/app-utils/seo-locale'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import { packNodesForWire } from '@aglyn/aglyn/app-utils/wire-nodes'
+import { consentAnalyticsVendorsOf } from '@aglyn/aglyn/plugin-manager/site-page-hooks'
 import { isFirstPartySite } from '@aglyn/tenant-data-admin/server/first-party-hosts'
 import { FIRST_TOUCH_ROUTE_PATH } from '@aglyn/tenant-data-admin/server/first-touch-route'
 import {
@@ -1288,7 +1289,8 @@ function buildJsonLd(props: Props): string[] {
               description?: string
               mediaUrls?: string[]
               variants?: Array<{
-                priceUsd: number
+                /** `null` while the product is listed before it has a price (AGL-3676). */
+                priceUsd: number | null
                 soldOut?: boolean
                 sku?: string
               }>
@@ -1300,9 +1302,11 @@ function buildJsonLd(props: Props): string[] {
   )?.commerce
   const seededProduct = seededCommerce?.product
   if (seededProduct && canonicalBase) {
+    // A variant with no price yet (AGL-3676) is no offer: `Number(null)` is
+    // 0, which would advertise the product as free.
     const prices = (seededProduct.variants ?? [])
-      .map((variant) => Number(variant.priceUsd))
-      .filter((price) => Number.isFinite(price))
+      .map((variant) => variant.priceUsd)
+      .filter((price): price is number => typeof price === 'number' && Number.isFinite(price))
     const low = prices.length ? Math.min(...prices) : undefined
     const high = prices.length ? Math.max(...prices) : undefined
     // Out of stock only when EVERY variant is — one available size still
@@ -1592,6 +1596,7 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
       <SiteAnalytics
         host={result.props.data?.host as any}
         screenId={(result.props.data?.screen?.data as any)?.$id}
+        analyticsVendors={consentAnalyticsVendorsOf(result.props)}
       />
       {firstTouch ? (
         // Same origin, so the site's `connect-src` needs nothing new. Pending,

@@ -89,7 +89,7 @@ function harness(options: { provider?: NetworkProviderId; record?: PluginShippab
     orders: new Map<string, NetworkOrder>(),
     created: [] as NetworkOrderRequest[],
     createError: null as unknown,
-    cancelOutcome: 'canceled' as 'canceled' | 'too_late',
+    cancelOutcome: 'canceled' as 'canceled' | 'too_late' | 'requested',
     tracking: null as { status: 'delivered' | 'in_transit'; detail: string | null } | null,
   }
   const recordedLabels = new Set<string>()
@@ -128,7 +128,7 @@ function harness(options: { provider?: NetworkProviderId; record?: PluginShippab
       skus.filter((sku) => state.stock.has(sku)).map((sku) => ({ sku, fulfillable: state.stock.get(sku) ?? 0 })),
     ),
     allStock: jest.fn(async () => [...state.stock].map(([sku, fulfillable]) => ({ sku, fulfillable }))),
-    ...(providerId === 'amazon-mcf' ? { tracking: jest.fn(async () => state.tracking) } : {}),
+    ...(providerId === 'amazon-mcf' || providerId === 'shipmonk' ? { tracking: jest.fn(async () => state.tracking) } : {}),
   }
   const engine = createEngine({
     now: () => nowMs,
@@ -566,5 +566,79 @@ describe('the address a network ships to (AGL-3634)', () => {
     expect(referenceFor(HOST, ORDER, 1)).toMatch(/^ag[0-9a-f]{30}$/)
     expect(referenceFor(HOST, ORDER, 2)).toBe(`${referenceFor(HOST, ORDER, 1)}-2`)
     expect(referenceFor(HOST, ORDER, 12).length).toBeLessThanOrEqual(40)
+  })
+})
+
+describe('ShipMonk through the engine (AGL-3697)', () => {
+  it('needs the store id before it sends', async () => {
+    const h = harness({ provider: 'shipmonk' })
+    await h.connect({ storeId: null })
+    await h.queue()
+    await expect(h.engine.runRouting(h.routingId)).resolves.toBe('failed')
+    expect(h.routing().note).toMatch(/store id/)
+    expect(h.provider.createOrder).not.toHaveBeenCalled()
+  })
+
+  it('sends once under our reference, and a retried run adopts the order rather than sending it again', async () => {
+    const h = harness({ provider: 'shipmonk' })
+    await h.connect({ storeId: '11364' })
+    await h.queue()
+    await expect(h.engine.runRouting(h.routingId)).resolves.toBe('sent')
+    const reference = referenceFor(HOST, ORDER, 1)
+    expect(h.state.created.map((request) => request.reference)).toEqual([reference])
+    // The same hand-off queued again (a redelivered event finds it already there).
+    await h.queue()
+    await h.store.patchRouting(h.routingId, { status: 'queued', nextRunAtMs: h.now() })
+    await h.engine.runRouting(h.routingId)
+    expect(h.provider.createOrder).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes a partial shipment as part of the order, and the rest when it ships', async () => {
+    const h = harness({ provider: 'shipmonk' })
+    await h.connect({ storeId: '11364' })
+    await h.queue()
+    await h.engine.runRouting(h.routingId)
+    const reference = referenceFor(HOST, ORDER, 1)
+    const order = h.state.orders.get(reference) as NetworkOrder
+    order.shipments = [parcel({ id: 'SM-1:1', items: [{ sku: 'TEE-S', quantity: 2, lineIndex: 0 }], packageNumber: reference })]
+    h.advance(16 * 60 * 1000)
+    await h.engine.runRouting(h.routingId)
+    expect(h.routing().status).toBe('partially_shipped')
+    expect(h.writes).toEqual([expect.objectContaining({ labelRef: 'shipmonk:SM-1:1', lines: [{ lineIndex: 0, quantity: 2 }] })])
+    order.shipments.push(parcel({ id: 'SM-1-2:1', trackingNumber: '9402', items: [{ sku: 'MUG', quantity: 1, lineIndex: 2 }] }))
+    order.state = 'shipped'
+    h.state.tracking = { status: 'in_transit', detail: null }
+    h.advance(16 * 60 * 1000)
+    await h.engine.runRouting(h.routingId)
+    expect(h.routing()).toMatchObject({ status: 'shipped', active: true })
+    expect(h.writes).toHaveLength(2)
+  })
+
+  it('reads back until the warehouse confirms a requested cancel', async () => {
+    const h = harness({ provider: 'shipmonk' })
+    await h.connect({ storeId: '11364' })
+    await h.queue()
+    await h.engine.runRouting(h.routingId)
+    await h.store.patchRouting(h.routingId, { cancelRequested: true, nextRunAtMs: h.now() })
+    h.state.cancelOutcome = 'requested'
+    await expect(h.engine.runRouting(h.routingId)).resolves.toBe('read')
+    expect(h.routing()).toMatchObject({ status: 'accepted', cancelRequested: false, active: true, note: expect.stringMatching(/requested at ShipMonk/) })
+    ;(h.state.orders.get(referenceFor(HOST, ORDER, 1)) as NetworkOrder).state = 'canceled'
+    h.advance(16 * 60 * 1000)
+    await h.engine.runRouting(h.routingId)
+    expect(h.routing()).toMatchObject({ status: 'canceled', active: false })
+  })
+
+  it('reads an order back when its webhook names it, and ignores an order that is not ours', async () => {
+    const h = harness({ provider: 'shipmonk' })
+    await h.connect({ storeId: '11364' })
+    await h.queue()
+    await h.engine.runRouting(h.routingId)
+    const providerOrderId = h.routing().providerOrderId as string
+    await expect(h.engine.applyOrderWebhook(h.connectionId, 'someone-else')).resolves.toBe('unknown_order')
+    await expect(h.engine.applyOrderWebhook(h.connectionId, null)).resolves.toBe('unknown_order')
+    expect(h.provider.getOrder).not.toHaveBeenCalled()
+    await expect(h.engine.applyOrderWebhook(h.connectionId, providerOrderId)).resolves.toBe('applied')
+    expect(h.provider.getOrder).toHaveBeenCalledTimes(1)
   })
 })

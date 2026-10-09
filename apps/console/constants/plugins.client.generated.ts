@@ -174,6 +174,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-post-purchase'),
   },
   {
+    id: 'review-platforms',
+    apiPrefixes: ["review-platforms"],
+    register: {"console":"registerReviewPlatformsConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
+    load: () => import('@aglyn/plugins-review-platforms'),
+  },
+  {
     id: 'loyalty',
     apiPrefixes: ["loyalty"],
     register: {"console":"registerLoyaltyConsole"},
@@ -195,6 +202,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms'),
   },
   {
+    id: 'ad-conversions',
+    apiPrefixes: ["ad-conversions"],
+    register: {"console":"registerAdConversionsConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-ad-conversions'),
+  },
+  {
     id: 'zapier',
     apiPrefixes: ["zapier"],
     register: {"console":"registerZapierConsole"},
@@ -207,6 +221,13 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerFulfillmentNetworksConsole"},
     contributes: {"console":{"slots":["commerceSettings","orderDetail"]}},
     load: () => import('@aglyn/plugins-fulfillment-networks'),
+  },
+  {
+    id: 'couriers',
+    apiPrefixes: ["couriers"],
+    register: {"console":"registerCouriersConsole"},
+    contributes: {"console":{"slots":["commerceSettings","orderDetail","localDeliveryRow"]}},
+    load: () => import('@aglyn/plugins-couriers'),
   },
   {
     id: 'marketplaces',
@@ -249,5 +270,21 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerFunnelsConsole"},
     contributes: {"console":{"slots":["hostAnalytics"]}},
     load: () => import('@aglyn/plugins-funnels'),
+  },
+  {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"site":"registerLiveChatSite","console":"registerLiveChatConsole"},
+    contributes: {"console":{"slots":["hostSettings"]}},
+    load: () => import('@aglyn/plugins-live-chat'),
+    loads: {
+      site: () => import('@aglyn/plugins-live-chat/site'),
+    },
+  },
+  {
+    id: 'weglot',
+    register: {"site":"registerWeglotSite"},
+    contributes: {},
+    load: () => import('@aglyn/plugins-weglot/site'),
   },
 ]

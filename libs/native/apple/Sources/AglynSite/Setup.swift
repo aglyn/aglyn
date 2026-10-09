@@ -311,6 +311,23 @@ public struct ThemeCatalog: Equatable, Sendable {
   }
 }
 
+/// One of the built-in themes a site can start from (`ThemePresetSummary`): its id, name, one line and swatches.
+public struct ThemePreset: Equatable, Identifiable, Sendable {
+  public let id: String
+  public let name: String
+  public let description: String
+  public let swatches: [String]
+}
+
+public func themePresets(of json: JSONValue?) -> [ThemePreset] {
+  json?.arrayValue?.compactMap { row in
+    guard let id = row["id"]?.stringValue else { return nil }
+    return ThemePreset(
+      id: id, name: row["name"]?.stringValue ?? id, description: row["description"]?.stringValue ?? "",
+      swatches: row["swatches"]?.arrayValue?.compactMap(\.stringValue) ?? [])
+  } ?? []
+}
+
 /// What each control shows (`readThemeEditorValues`).
 public struct ThemeValues: Equatable, Sendable {
   public var colors: [String: [String: String?]]
@@ -404,6 +421,22 @@ public func themeEdits(from before: ThemeValues, to after: ThemeValues) -> [Them
   return edits
 }
 
+/// The font categories the browser filters by, in the order the console lists them (`HostThemeFontCategory`).
+public let fontCategories: [(value: String, label: String)] = [
+  ("sans-serif", "Sans serif"), ("serif", "Serif"), ("display", "Display"), ("handwriting", "Handwriting"),
+  ("monospace", "Monospace"),
+]
+
+/// The fonts the browser lists: those whose name has every typed word, in the picked category (nil: all).
+public func filterFonts(_ fonts: [ThemeFontOption], search: String, category: String?) -> [ThemeFontOption] {
+  let words = search.lowercased().split(whereSeparator: { $0.isWhitespace })
+  return fonts.filter { font in
+    if let category, font.category != category { return false }
+    let name = font.family.lowercased()
+    return words.allSatisfy { name.contains($0) }
+  }
+}
+
 /// A number control's text as the editor shows it: whole numbers without a decimal point.
 public func formatThemeNumber(_ value: Double?) -> String {
   guard let value else { return "" }
@@ -452,10 +485,10 @@ public struct HostSettingsAPI: Sendable {
     try await api.request("/api/hosts/theme", method: .post, body: jsonBody(["hostId": hostID].merging(body) { _, new in new }))
   }
 
-  /// The editor's controls and what they show now.
-  public func themeEditor() async throws -> (ThemeCatalog, ThemeValues) {
+  /// The editor's controls, what they show now and the built-in themes on offer.
+  public func themeEditor() async throws -> (ThemeCatalog, ThemeValues, [ThemePreset]) {
     let answer = try await theme(["action": "values"])
-    return (themeCatalog(of: answer?["catalog"]), themeValues(of: answer?["values"]))
+    return (themeCatalog(of: answer?["catalog"]), themeValues(of: answer?["values"]), themePresets(of: answer?["presets"]))
   }
 
   /// Saves the changed controls as the site's theme edits; answers what they show now.

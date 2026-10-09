@@ -30,6 +30,7 @@ import {
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   Chip,
   MenuItem,
@@ -46,7 +47,13 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  DOCS_HELP_ANCHORS,
+  DOCS_HELP_TOPICS,
+  type DocsHelpTopicKey,
+} from '../constants/docs-help.generated'
 import { docsHelp } from '../constants/docs-links'
+import { revalidateLivePages } from '../utils/revalidate-live-pages'
 
 /**
  * Generic per-plugin settings form (AGL-428), at either scope.
@@ -282,6 +289,17 @@ function SchemaForm({
         // can retry rather than discover later that nothing was stored.
         return void enqueueSnackbar(verdict.message, { variant: 'warning' })
       }
+      /**
+       * Settings a published page reads (AGL-3700) reach it through the page
+       * cache, so a site save drops that site's cached pages — best effort
+       * and not awaited, exactly as a publish does: the save has succeeded,
+       * and the cache window is still the backstop if this does not land.
+       */
+      if (siteScoped && hostId && schema.affectsPublishedPages) {
+        void revalidateLivePages({ user, hostId, entireHost: true }).catch(
+          () => undefined,
+        )
+      }
       setDirty(false)
       enqueueSnackbar('Settings saved', { variant: 'success' })
     } catch {
@@ -418,18 +436,22 @@ function SchemaForm({
   return (
     <CardDisplay
       header={`${label} settings`}
-      help={docsHelp('plugins', {
-        anchor: '#configure',
-        excerpt: siteScoped
-          ? 'Settings this plugin exposes for this site — each one either ' +
-            'follows the workspace or is answered here for this site alone.'
-          : 'Settings this plugin exposes for your workspace — saved per ' +
-            'organization and read by the plugin wherever it runs.',
-      })}
+      help={
+        pluginSettingsHelp(schema.help) ??
+        docsHelp('plugins', {
+          anchor: '#configure',
+          excerpt: siteScoped
+            ? 'Settings this plugin exposes for this site — each one either ' +
+              'follows the workspace or is answered here for this site alone.'
+            : 'Settings this plugin exposes for your workspace — saved per ' +
+              'organization and read by the plugin wherever it runs.',
+        })
+      }
       contentGutterX
       contentGutterY
     >
       <Stack spacing={2} sx={{ maxWidth: 480 }}>
+        {schema.notice ? <Alert severity="info">{schema.notice}</Alert> : null}
         {siteScoped ? (
           <Typography variant="body2" color="text.secondary">
             {'This site follows the workspace until you answer a field here. ' +
@@ -549,4 +571,23 @@ export default function PluginConfigCards({
       ))}
     </>
   )
+}
+
+/**
+ * A plugin's own settings heading (AGL-3700), when its schema names one that
+ * the docs really have: every card's `?` says something of its own, so a
+ * plugin that documents its settings gets that section rather than the
+ * generic one. A topic or anchor the registry does not know falls back
+ * (`null`) instead of linking a heading that is not there.
+ */
+export function pluginSettingsHelp(
+  help: { topic: string; anchor: `#${string}` } | undefined,
+): ReturnType<typeof docsHelp> | null {
+  if (!help || !Object.prototype.hasOwnProperty.call(DOCS_HELP_TOPICS, help.topic)) return null
+  const topic = help.topic as DocsHelpTopicKey
+  const anchors = (DOCS_HELP_ANCHORS as Partial<
+    Record<DocsHelpTopicKey, readonly string[]>
+  >)[topic]
+  if (!anchors?.includes(help.anchor)) return null
+  return docsHelp(topic, { anchor: help.anchor as never })
 }

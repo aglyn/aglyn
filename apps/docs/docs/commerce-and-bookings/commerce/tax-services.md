@@ -8,7 +8,9 @@ description: Connect your own Avalara AvaTax or TaxJar account so checkout and t
 
 If you already calculate sales tax in an **Avalara AvaTax** or **TaxJar**
 account, connect it and Aglyn asks it for the tax on every sale — at your
-storefront's checkout and at the register — instead of using a flat rate. Your
+storefront's checkout and at the register — instead of using a flat rate,
+while your store's **Taxes** are set to **Manual rates**. Under Stripe Tax it
+is not used. Your
 paid orders and refunds are recorded in that account, so its reports and
 filings start from what you actually sold.
 
@@ -25,10 +27,12 @@ You need your own AvaTax or TaxJar account; Aglyn does not sell one.
 
 ## Before you start
 
-- Set your store's **Taxes** to collect at **your own rates** (Commerce →
-  Settings → Taxes), with a rate for where you sell. A tax service is used only
-  in that mode. Your own rates stay as the **fallback**: when the service does
-  not answer, the sale is taxed at them instead.
+- Set your store's **Taxes** to **Manual rates** (the **Taxes** card in
+  the store's settings), with a rate for where you sell, and leave **Prices include tax**
+  off. A tax service is used only then — see
+  [When the service is not used](#when-the-service-is-not-used). Your own rates
+  stay as the **fallback**: when the service does not answer, the sale is taxed
+  at them instead.
 - **Avalara AvaTax:** your account id (a number) and a license key, from
   AvaTax → Settings → License and API keys. If your AvaTax account has more than
   one company, the company code to file under.
@@ -40,7 +44,7 @@ sandbox first, place a test order, then connect your production account.
 
 ## Connect
 
-1. Go to **Commerce → Settings** and find the **Tax service** card.
+1. Open the store's settings and find the **Tax service** card.
 2. Choose **Avalara AvaTax** or **TaxJar**, and **Sandbox** or **Production**.
 3. Enter your credentials and select **Connect**. Aglyn tests them with the
    vendor first and stores nothing they refuse. The credentials are encrypted
@@ -52,6 +56,21 @@ sandbox first, place a test order, then connect your production account.
 Only an **admin** of the site can connect, test or disconnect a service and
 change its address. **Test connection** checks the stored credentials again
 whenever you like; the card shows the answer.
+
+## When the service is not used
+
+A connected service applies only when **Taxes** is set to **Manual rates**
+with **Prices include tax** off. With any other setting it is not asked for the
+tax on any sale, and new orders are not recorded in it:
+
+- **Stripe Tax (automatic):** Stripe Tax calculates the tax instead.
+- **Prices include tax:** your prices already include the tax.
+- **Don't collect sales tax:** no tax is added.
+- **Not chosen yet:** checkout is off until you choose.
+
+The **Tax service** card says so while it is the case, with **Go to Taxes** to
+change the setting. Your connection, product tax codes and exempt customers are
+kept, and the service is used again as soon as Taxes is back on Manual rates.
 
 ## How sales are taxed
 

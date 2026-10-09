@@ -122,7 +122,7 @@ const AdminMaintenance: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Maintenance', href: buildRoute(Route.ADMIN_MAINTENANCE) },
       ]}
-      help="maintenance"
+      help={{ topic: 'maintenance', anchor: '#maintenance-page' }}
       header={{
         children: 'Maintenance',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },

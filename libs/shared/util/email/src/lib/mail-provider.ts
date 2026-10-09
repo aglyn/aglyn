@@ -67,6 +67,8 @@ export interface MailProviderMessage {
   /** Attribution the delivery feed hands back, e.g. `context`, `campaignId`. */
   tags?: EmailTag[]
   replyTo?: string | string[]
+  /** Blind copies (AGL-3699); never on the message's own headers. */
+  bcc?: string[]
 }
 
 /** What the provider said about one message. */

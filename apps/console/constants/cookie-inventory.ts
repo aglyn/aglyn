@@ -512,9 +512,27 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
   'Meta Pixel': {
     names: ['_fbp', '_fbc'],
     loaderToken: 'META_PIXEL_VENDOR',
-    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site, gated by \`isPlatformMarketingHost\`; ${CONSOLE_HOST} and the docs site, each gated on that surface's own advertising grant; a Host operator may enable their own tag on their site`,
+    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site, gated by \`isPlatformMarketingHost\`; ${CONSOLE_HOST} and the docs site, each gated on that surface's own advertising grant; and customer sites whose owner configured their own Meta pixel id and enabled the advertising question (AGL-3694)`,
     purpose:
       'Shows you our ads on other sites, and measures whether they worked',
+  },
+  /*
+   * A SITE OWNER's own tags (AGL-3694): mounted only on a customer's site
+   * whose owner set the id on Setup → Tracking and turned the advertising
+   * question on, and only for a visitor whose record grants advertising.
+   * Aglyn runs neither on its own surfaces.
+   */
+  'TikTok Pixel': {
+    names: ['_ttp', '_tt_enable_cookie', 'ttcsid', 'ttcsid_<pixel>'],
+    loaderToken: 'TIKTOK_PIXEL_VENDOR',
+    surface: 'customer sites whose owner configured their own TikTok pixel id and enabled the advertising question',
+    purpose: "Shows you the site's ads on TikTok, and measures whether they worked",
+  },
+  'Pinterest Tag': {
+    names: ['_pin_unauth', '_pinterest_ct_ua', '_pinterest_ct_rt', '_epik', '_derived_epik'],
+    loaderToken: 'PINTEREST_TAG_VENDOR',
+    surface: 'customer sites whose owner configured their own Pinterest tag id and enabled the advertising question',
+    purpose: "Shows you the site's ads on Pinterest, and measures whether they worked",
   },
   'LinkedIn Insight Tag': {
     names: [
@@ -542,5 +560,53 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     loaderToken: 'ReCaptchaEnterpriseProvider',
     surface: `${CONSOLE_HOST}, set on google.com by Firebase App Check`,
     purpose: 'Bot protection',
+  },
+  /**
+   * Weglot (AGL-3700), on a customer site whose owner switched the Weglot
+   * plugin on with their own Weglot account. Read out of `weglot.min.js`
+   * rather than Weglot's cookie page alone: the chosen language is kept in
+   * `localStorage` under `wglang` (a cookie of that name only where storage
+   * is unavailable), beside `wg-translations` and `wg-slugs`, the cache of
+   * translations the page fetched. `WG_CHOOSE_ORIGINAL` is a cookie, set for
+   * a month when a visitor picks the original language on a project whose
+   * Weglot settings redirect by browser language. Weglot also lists
+   * `wg-search-form`, which only its search translation sets — off here.
+   *
+   * Not consent-gated, and why: each serves the translation the visitor asked
+   * for (their language, and the text already fetched for it). That is
+   * preference and function storage, which sits with the cart and the consent
+   * record in the strictly necessary group; none of it measures or
+   * advertises.
+   */
+  Weglot: {
+    names: ['wglang', 'wg-translations', 'wg-slugs', 'WG_CHOOSE_ORIGINAL'],
+    loaderToken: 'WEGLOT_SCRIPT_SRC',
+    surface: `customer sites whose owner switched on Weglot translation with their own Weglot account (*.${TENANT_DOMAIN} and custom domains)`,
+    purpose:
+      'Remembers the language you chose and keeps the translations already loaded for it',
+  },
+  /**
+   * A merchant's own live chat (AGL-3698). FUNCTIONAL, not advertising:
+   * neither vendor uses this storage for ads, it keeps the visitor's chat and
+   * identifies them to the merchant's agents. It is set only after the
+   * visitor presses the chat button, which is the visitor asking for the
+   * service — or, on a site that chose to load the chat with the page, only
+   * for a visitor whose recorded consent grants analytics, the rule the
+   * Video element's "Load the player with the page" follows. Tidio keeps
+   * most of it in local storage rather than cookies.
+   */
+  Tidio: {
+    names: ['tidio_state_<public key>', 'tidio_token'],
+    loaderToken: 'TIDIO_CHAT_PROVIDER',
+    surface: `customer sites (*.${TENANT_DOMAIN} and custom domains) whose owner turned on Live chat with Tidio`,
+    purpose:
+      'Keeps your chat with the site and recognizes you when you return to it',
+  },
+  LiveChat: {
+    names: ['__lc_cid', '__lc_cst', '__lc2_cid', '__lc2_cst'],
+    loaderToken: 'LIVECHAT_CHAT_PROVIDER',
+    surface: `customer sites (*.${TENANT_DOMAIN} and custom domains) whose owner turned on Live chat with LiveChat`,
+    purpose:
+      'Keeps your chat with the site and recognizes you when you return to it',
   },
 }

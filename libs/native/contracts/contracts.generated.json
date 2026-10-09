@@ -4,6 +4,16 @@
     "Values from the pure modules tools/scripts/native-contracts.json names."
   ],
   "AREA_SERVED_MAX": 20,
+  "ARTIFACT_TYPE_LABELS": {
+    "component": "Component",
+    "datasetSchema": "Dataset schema",
+    "emailStarter": "Email starter",
+    "emailTemplate": "Email template",
+    "layout": "Layout",
+    "plugin": "Plugin",
+    "template": "Site template",
+    "theme": "Theme"
+  },
   "BOOKING_FIELD_ASKS": [
     "off",
     "optional",
@@ -40,6 +50,20 @@
     "Fri",
     "Sat"
   ],
+  "BROWSE_SORTS": {
+    "installed": {
+      "direction": "desc",
+      "path": "installCount"
+    },
+    "newest": {
+      "direction": "desc",
+      "path": "createdAt"
+    },
+    "rated": {
+      "direction": "desc",
+      "path": "ratingAverage"
+    }
+  },
   "CAMPAIGN_EMAILS_QUERY": {
     "fields": [
       {
@@ -579,6 +603,45 @@
     "todo": "To-do"
   },
   "CROSS_MAX_DEPTH": 3,
+  "DATASET_AUTHORABLE_FIELD_TYPES": [
+    "text",
+    "bool",
+    "int32",
+    "float",
+    "timestamp",
+    "coordinates",
+    "sorted",
+    "reference"
+  ],
+  "DATASET_FIELD_TYPE_LABELS": {
+    "bool": "Boolean",
+    "bytes": "Bytes",
+    "coordinates": "Coordinates",
+    "float": "Number",
+    "int32": "Integer",
+    "int64": "Big integer",
+    "map": "Map",
+    "nil": "Null",
+    "reference": "Reference",
+    "sorted": "List",
+    "text": "Text",
+    "timestamp": "Date & time"
+  },
+  "DATASET_FIELD_TYPES": [
+    "text",
+    "bool",
+    "int32",
+    "int64",
+    "float",
+    "timestamp",
+    "coordinates",
+    "map",
+    "sorted",
+    "bytes",
+    "nil",
+    "reference"
+  ],
+  "DATASET_FILTER_PREFIX_MAX": 12,
   "DEAL_LIST_DECLARATION": {
     "fields": [
       {
@@ -1066,6 +1129,321 @@
       }
     ]
   },
+  "FIRST_PARTY_PLUGINS": [
+    {
+      "alwaysOn": true,
+      "description": "The base component and theme library every site builds on.",
+      "id": "mui",
+      "label": "Components"
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Forms on the site and the catalog that owns them.",
+      "id": "forms",
+      "label": "Forms",
+      "siteOff": {
+        "confirm": true,
+        "keeps": "Submissions already received, the workspace’s form catalog and the CRM leads its forms created are kept, and forms keep working on the workspace’s other sites.",
+        "pages": {
+          "heading": "These published pages carry a form. Their forms stop rendering and stop accepting submissions:",
+          "none": "No published page on this site carries a form."
+        },
+        "stops": "Switching Forms off for this site stops forms rendering on its published pages, refuses every submission sent to it, and blocks publishing a form, or a page that carries one, until Forms is back on."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "The assistant, generative building and automation, and the AI add-on.",
+      "id": "ai",
+      "label": "AI",
+      "siteOff": {
+        "keeps": "It does not stop the workspace’s AI add-on, credits, allotments or overage billing, and AI keeps working on the workspace’s other sites.",
+        "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Built-in themes to pick from on Setup → Theme: Bootstrap, Minimal and Material 3.",
+      "id": "theme-presets",
+      "label": "Themes",
+      "siteOff": {
+        "keeps": "A site already using one keeps it, with every edit made to it: picking a theme copies it onto the site, so nothing on the published site changes.",
+        "stops": "Switching Themes off for this site removes its built-in themes from the theme picker."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Step-by-step conversion on a site's Analytics page: visits at each step, drop-off and time between steps.",
+      "id": "funnels",
+      "label": "Funnels",
+      "siteOff": {
+        "keeps": "Saved funnels are kept, and visits keep being recorded while the site has one; delete the funnels to stop recording.",
+        "stops": "Switching Funnels off for this site removes the Funnels card from its Analytics page."
+      }
+    },
+    {
+      "defaultOffPerSite": true,
+      "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. On for a new site; a site created before that stays off until you turn it on.",
+      "id": "accounts",
+      "label": "User Accounts",
+      "releaseFlag": "release_member_accounts",
+      "requires": [
+        "commerce"
+      ]
+    },
+    {
+      "description": "Services, open slots, and paid bookings.",
+      "id": "bookings",
+      "label": "Bookings",
+      "releaseFlag": "release_bookings"
+    },
+    {
+      "description": "Products, carts, checkout, orders, POS.",
+      "id": "commerce",
+      "label": "Commerce",
+      "releaseFlag": "release_commerce_v2"
+    },
+    {
+      "description": "Marketplace listings, templates, and installs.",
+      "id": "marketplace",
+      "label": "Marketplace",
+      "releaseFlag": "release_marketplace"
+    },
+    {
+      "description": "Leads, contacts, companies, deals, tasks and reports.",
+      "id": "crm",
+      "label": "CRM",
+      "releaseFlag": "release_crm"
+    },
+    {
+      "description": "One-to-one email sequences sent from connected mailboxes.",
+      "id": "outreach",
+      "label": "Sequences",
+      "releaseFlag": "release_outreach"
+    },
+    {
+      "description": "Datasets, records, and CSV import/export.",
+      "id": "data",
+      "label": "Data",
+      "releaseFlag": "release_data_store"
+    },
+    {
+      "description": "Designed emails and campaign sending.",
+      "id": "email",
+      "label": "Email",
+      "releaseFlag": "release_email"
+    },
+    {
+      "description": "Event lists and calendars.",
+      "id": "events-calendar",
+      "label": "Events Calendar",
+      "releaseFlag": "release_events"
+    },
+    {
+      "description": "Form submissions and lead inbox.",
+      "id": "inbox",
+      "label": "Inbox",
+      "releaseFlag": "release_inbox"
+    },
+    {
+      "description": "Variables, functions, and reference health.",
+      "id": "logic",
+      "label": "Logic",
+      "releaseFlag": "release_logic"
+    },
+    {
+      "description": "Overlays, campaigns, and experiments.",
+      "id": "marketing",
+      "label": "Marketing",
+      "releaseFlag": "release_marketing"
+    },
+    {
+      "description": "URL redirect rules.",
+      "id": "redirects",
+      "label": "Redirects",
+      "releaseFlag": "release_redirects"
+    },
+    {
+      "description": "Workflows, actions, webhooks, and run logs.",
+      "id": "workflows",
+      "label": "Automation",
+      "releaseFlag": "release_workflows"
+    },
+    {
+      "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
+      "id": "accounting",
+      "label": "Accounting",
+      "releaseFlag": "release_accounting"
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Carrier rates at checkout, shipping labels and tracking for physical orders, where the platform has connected a carrier provider.",
+      "id": "shipping",
+      "label": "Shipping",
+      "siteOff": {
+        "keeps": "Labels already bought, their tracking and their charges are kept, and Shipping keeps working on the workspace’s other sites.",
+        "stops": "Switching Shipping off for this site stops live carrier rates at its checkout, which falls back to the site’s own shipping rates, and removes label buying from its orders."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Sales tax from your own Avalara AvaTax or TaxJar account at checkout and the register.",
+      "id": "tax-engines",
+      "label": "Tax services",
+      "siteOff": {
+        "keeps": "The connection, product tax codes and exempt customers are kept, and orders already recorded stay recorded.",
+        "stops": "Switching Tax services off for this site stops checkout and the register asking its connected tax service, which then use the site’s own tax rates, and stops recording its paid orders there."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Product feeds for Google, YouTube, Facebook, Instagram, TikTok, Pinterest, Snapchat and Microsoft Shopping.",
+      "id": "sales-channels",
+      "label": "Sales channels",
+      "siteOff": {
+        "keeps": "Each feed's address, its switch and the store's defaults are kept, so switching it back on resumes the same feeds.",
+        "stops": "Switching Sales channels off for this site stops every product feed it publishes, including the Google Merchant Center address set up before sales channels existed, so channels stop receiving updates."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Two-way contact and unsubscribe sync with your own Mailchimp, Klaviyo or Omnisend account, and order events for their flows.",
+      "id": "marketing-platforms",
+      "label": "Email platforms",
+      "siteOff": {
+        "keeps": "The connections and everything already synced are kept, and an unsubscribe already read back stays on the site’s list.",
+        "stops": "Switching Email platforms off for this site stops its contacts, unsubscribes and order events syncing with the email platforms it connected."
+      }
+    },
+    {
+      "alwaysOn": true,
+      "description": "Upload your own fonts and pick from the Google Fonts catalog for your site's theme.",
+      "id": "fonts",
+      "label": "Fonts"
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Order tracking and package protection.",
+      "id": "post-purchase",
+      "label": "Tracking and protection",
+      "siteOff": {
+        "keeps": "Bought protection stays in force.",
+        "stops": "Stops protection and tracking for new orders."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Paid orders shipped by your own ShipBob or Amazon Multi-Channel Fulfillment account, with tracking back on the order and stock counts in step.",
+      "id": "fulfillment-networks",
+      "label": "Fulfillment networks",
+      "siteOff": {
+        "keeps": "The connections and every order already sent are kept, and what a network already shipped stays on the order.",
+        "stops": "Switching Fulfillment networks off for this site stops its paid orders going to ShipBob or Amazon, and stops their shipments and stock counts coming back."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Sell on Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire from one stock count: their orders come in as yours, and tracking goes back.",
+      "id": "marketplaces",
+      "label": "Marketplaces",
+      "siteOff": {
+        "keeps": "The connections and every order already imported are kept, and switching it back on resumes from where the orders were last read.",
+        "stops": "Switching Marketplaces off for this site stops importing its marketplace orders, sending tracking to the marketplaces, and keeping their listings in step with its stock."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Sell products your own Printful or Printify account makes and ships, with orders sent and tracking returned automatically.",
+      "id": "print-on-demand",
+      "label": "Print on demand",
+      "siteOff": {
+        "keeps": "The connections, the imported products and the orders already sent are kept, and parcels already on their way still reach the orders.",
+        "stops": "Switching Print on demand off for this site stops new paid orders being sent to Printful or Printify, and stops imported products updating."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+      "id": "inventory-sync",
+      "label": "Inventory sync",
+      "siteOff": {
+        "keeps": "The connection and its settings are kept, and everything already synced stays on both sides.",
+        "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Take DoorDash, Uber Eats and Grubhub orders at your register: accept, make and hand them over, with their items off the same shelf.",
+      "id": "delivery-apps",
+      "label": "Delivery apps",
+      "siteOff": {
+        "keeps": "The linked stores, their item matches and every order already taken are kept, and switching it back on takes new orders again.",
+        "stops": "Switching Delivery apps off for this site stops its DoorDash, Uber Eats and Grubhub orders reaching the register; the services are told the store is not connected."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Points, referrals and store credit for your store.",
+      "id": "loyalty",
+      "label": "Rewards",
+      "siteOff": {
+        "keeps": "Members keep their points and store credit.",
+        "stops": "Stops new points, rewards at checkout and at the register, and referral credit."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Send a DoorDash courier for your own local deliveries, from your own DoorDash Drive account, with its tracking on the order.",
+      "id": "couriers",
+      "label": "Couriers",
+      "siteOff": {
+        "keeps": "The connection is kept, and a courier already on its way still finishes, with its progress on the order.",
+        "stops": "Switching Couriers off for this site stops members sending DoorDash couriers for its local deliveries."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "defaultOffPerSite": true,
+      "description": "Chat with visitors through your own Tidio or LiveChat account.",
+      "id": "live-chat",
+      "label": "Live chat",
+      "siteOff": {
+        "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account.",
+        "stops": "Switching Live chat off for this site removes the chat from its pages."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Trustpilot and Yotpo review invitations.",
+      "id": "review-platforms",
+      "label": "Review platforms",
+      "siteOff": {
+        "keeps": "Reviews already collected stay in your Trustpilot and Yotpo accounts.",
+        "stops": "Stops review invitations for new orders."
+      }
+    },
+    {
+      "defaultOffPerSite": true,
+      "description": "Translate your published site with your own Weglot account.",
+      "id": "weglot",
+      "label": "Weglot translation",
+      "releaseFlag": "release_weglot",
+      "siteOff": {
+        "keeps": "Your Weglot settings and your Weglot account's translations are kept.",
+        "stops": "Stops loading Weglot and its language switcher on this site's pages."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
+      "id": "ad-conversions",
+      "label": "Ad conversions",
+      "siteOff": {
+        "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected.",
+        "stops": "Switching Ad conversions off for this site stops its purchases and leads being sent to the Meta, TikTok and Pinterest accounts it connected."
+      }
+    }
+  ],
   "FORM_IN_USE": {
     "op": "==",
     "path": "retired",
@@ -1399,6 +1777,24 @@
     "page": "Viewed a page"
   },
   "FUNNELS_MAX_PER_SITE": 20,
+  "HELD_LICENCE_QUERY": {
+    "fields": [
+      {
+        "column": "buyerUid",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "buyerUid"
+      }
+    ],
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
   "HOST_EVENTS": [
     {
       "label": "Form submitted",
@@ -1740,6 +2136,42 @@
       "type": "funnelLeft"
     }
   ],
+  "HOST_VARIABLE_TYPE_LABELS": {
+    "boolean": "True/false (boolean)",
+    "collection": "Collection list (values)",
+    "date": "Date",
+    "dictionary": "Dictionary (key: value)",
+    "number": "Number",
+    "text": "Plain text",
+    "time": "Time"
+  },
+  "INSTALL_TARGETS": {
+    "component": [
+      "host"
+    ],
+    "datasetSchema": [
+      "org"
+    ],
+    "emailStarter": [
+      "host"
+    ],
+    "emailTemplate": [
+      "host"
+    ],
+    "layout": [
+      "host"
+    ],
+    "plugin": [
+      "org",
+      "host"
+    ],
+    "template": [
+      "host"
+    ],
+    "theme": [
+      "host"
+    ]
+  },
   "LAYOUT_LIST_QUERY": {
     "fields": [
       {
@@ -2175,6 +2607,20 @@
   },
   "LIST_QUERY_DISJUNCTIONS": 30,
   "LIST_QUERY_ID_PATH": "__name__",
+  "LISTING_CATEGORIES": [
+    "analytics",
+    "automation",
+    "commerce",
+    "communication",
+    "content",
+    "design",
+    "forms",
+    "integrations",
+    "marketing",
+    "productivity",
+    "seo",
+    "security"
+  ],
   "LOCAL_BUSINESS_TYPE_OPTIONS": [
     {
       "label": "Local business (general)",
@@ -2312,6 +2758,39 @@
       "method": "local_delivery"
     }
   ],
+  "MARKETPLACE_BROWSE_QUERY": {
+    "fields": [
+      {
+        "column": "category",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "category"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "browseTokens"
+      },
+      "tokensPath": "browseTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "path": "createdAt"
+      },
+      {
+        "direction": "desc",
+        "path": "installCount"
+      },
+      {
+        "direction": "desc",
+        "path": "ratingAverage"
+      }
+    ]
+  },
   "MEDIA_ALT_MAX_LENGTH": 300,
   "MEDIA_ALT_OPTIONS": [
     {
@@ -2947,6 +3426,17 @@
       "value": "marketplace"
     }
   ],
+  "ORDER_COURIER_STATE_LABELS": {
+    "assigned": "Courier on the way to the store",
+    "at_dropoff": "Courier arriving",
+    "at_pickup": "Courier at the store",
+    "cancelled": "Courier canceled",
+    "delivered": "Delivered",
+    "picked_up": "On its way",
+    "requested": "Courier requested",
+    "returned": "Returned to the store",
+    "returning": "Coming back to the store"
+  },
   "ORDER_DISPUTE_OPTIONS": [
     {
       "label": "Open dispute",
@@ -3574,6 +4064,12 @@
   "OUTREACH_SEQUENCE_NAME_MAX": 120,
   "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "POS_CASH_EVENT_LABELS": {
+    "drop": "Safe drop",
+    "paid_in": "Paid in",
+    "paid_out": "Paid out",
+    "refund": "Cash refund"
+  },
   "POS_KIOSK_CATALOG_LIMIT": 200,
   "POS_KIOSK_DONE_SECONDS": 15,
   "POS_KIOSK_IDLE_SECONDS_DEFAULT": 90,
@@ -3615,6 +4111,15 @@
   "POS_OFFLINE_SALE_MAX_LINES": 100,
   "POS_OFFLINE_SYNC_BATCH_MAX": 25,
   "POS_OFFLINE_SYNC_ROUTE": "/api/commerce/pos-offline-sync",
+  "POS_TENDER_LABELS": {
+    "card_keyed": "Card (keyed)",
+    "card_link": "Card (payment link)",
+    "card_present": "Card",
+    "cash": "Cash",
+    "credit": "Store credit",
+    "folio": "Room charge",
+    "gift_card": "Gift card"
+  },
   "PRICE_RANGE_MAX_LENGTH": 100,
   "PRODUCT_LIST_BASE": [
     {

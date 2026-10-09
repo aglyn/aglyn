@@ -473,6 +473,7 @@ function TopUsersSection({ users }: { users: StaffOrgAiUser[] }) {
           quick={{
             icon: mdiOpenInNew.path,
             label: 'View account',
+            newTab: true,
             to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
           }}
           items={[]}

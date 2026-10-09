@@ -17,10 +17,12 @@
 
 import {
   getSystemEmailTemplate,
+  retentionDocsMergeValues,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { AuthActionKind } from '../../app/api/_lib/auth-action-url'
+import { DOCS_BASE_URL } from '../../constants/docs-links'
 
 /**
  * WHAT STAFF MAY SEND ONE ACCOUNT BY HAND (AGL-3691).
@@ -61,11 +63,13 @@ export const ACTION_LINK_SYSTEM_EMAILS: Readonly<
   'email-verification': { kind: 'verifyEmail', token: 'verifyUrl' },
   'password-reset': { kind: 'resetPassword', token: 'resetUrl' },
   'admin-password-reset': { kind: 'resetPassword', token: 'resetUrl' },
+  'retention-verify-reminder': { kind: 'verifyEmail', token: 'verifyUrl' },
 }
 
 /** Emails that only mean something to an account that has not verified. */
 const VERIFICATION_ONLY_SYSTEM_EMAILS: ReadonlySet<string> = new Set([
   'email-verification',
+  'retention-verify-reminder',
 ])
 
 /** Stands in for an action link in a preview. */
@@ -138,10 +142,15 @@ export function autoMergeValues(
     'user.email': target.email,
     'org.name': orgName,
     consoleUrl: slug ? `${origin}/${slug}` : origin,
+    // The getting-started emails' button (AGL-3692): the workspace, which
+    // offers its site and the AI start. Staff can point it anywhere.
+    ctaUrl: slug ? `${origin}/${slug}` : `${origin}/signin`,
     signInUrl: `${origin}/signin`,
     billingUrl: slug ? `${origin}/${slug}/billing` : '',
     settingsUrl: `${origin}/manage/notifications/settings`,
     preferencesUrl: `${origin}/manage/user/emails`,
+    // The getting-started emails' docs links (AGL-3692), as the sweep fills them.
+    ...retentionDocsMergeValues(DOCS_BASE_URL),
   }
   const action = ACTION_LINK_SYSTEM_EMAILS[definition.key]
   if (action) known[action.token] = ACTION_LINK_PREVIEW_PLACEHOLDER

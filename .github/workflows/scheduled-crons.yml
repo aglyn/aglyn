@@ -307,6 +307,11 @@ on:
           # the last twelve hours is read from the cache, and a held page's
           # row is keyed on its signals, so a second run files nothing new.
           - /api/admin/web-risk-recheck
+          # The getting-started emails (AGL-3692), the same as the hourly
+          # `consoleRetentionEmails` job. A GET reports who is owed which
+          # email and sends nothing; the POST sends. Safe by hand — each
+          # crossing is recorded on the account after its send.
+          - /api/admin/retention-emails
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

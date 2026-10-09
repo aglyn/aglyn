@@ -58,21 +58,12 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import { DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
+import { DATASET_AUTHORABLE_FIELD_TYPES, DATASET_FIELD_TYPES, DATASET_FIELD_TYPE_LABELS, type DatasetFieldDefinition, type DatasetFieldType, type DatasetModel, effectiveDatasetModel } from '../model/dataset-models'
 import { datasetDisplayName, defaultDatasetFieldId, validateDatasetFieldId } from '../model/datasets'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE, isRecordAddressField } from '../record-pages/record-pages'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
-const AUTHORABLE_TYPES: DatasetFieldType[] = [
-  'text',
-  'bool',
-  'int32',
-  'float',
-  'timestamp',
-  'coordinates',
-  'sorted',
-  'reference',
-]
+const AUTHORABLE_TYPES = DATASET_AUTHORABLE_FIELD_TYPES
 
 export interface DatasetSchemaDialogProps {
   /** Host context; resolves the owning org for the data scope. */

@@ -1421,12 +1421,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               children: (
                 <CardDisplay
                   header={'Current plan'}
-                  help={docsHelp('billing', {
-                    anchor: '#tiers--entitlements',
-                    excerpt:
-                      'Your subscription tier and its headline limits — ' +
-                      'every plan\'s full entitlements are in the docs.',
-                  })}
+                  help={docsHelp('billing', { anchor: '#current-plan' })}
                   HeaderProps={
                     canUpdatePaymentMethod
                       ? {
@@ -1669,8 +1664,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                               }
                               help={docsHelp('billing', {
                                 anchor: '#outstanding',
-                                excerpt:
-                                  'Paying an invoice that failed, including when the subscription has already been cancelled.',
                               })}
                               contentGutterX
                               contentGutterY
@@ -1700,9 +1693,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'What you will pay'}
                       help={docsHelp('billing', {
-                        anchor: '#plan-total',
-                        excerpt:
-                          'How the plan total is quoted with tax, and what a zero tax means.',
+                        anchor: '#what-you-will-pay',
                       })}
                       subheader={
                         'The total for the plan you are looking at, tax included, ' +

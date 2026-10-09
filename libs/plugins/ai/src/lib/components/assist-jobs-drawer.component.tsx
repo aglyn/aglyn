@@ -25,7 +25,8 @@ import {
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
-import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { AppLink, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Box,
@@ -439,6 +440,13 @@ export function AssistJobsDrawer({
             />
           ))}
         </Typography>
+        <HelpTip
+          {...pluginDocsHelp('aiJobs', {
+            anchor: '#ai-jobs-in-assist',
+            excerpt:
+              'Every AI job in this workspace, newest first: where it stands, the credits it used, and its plan to confirm, cancel or try again.',
+          })}
+        />
         {/* A question about the page's figures (AGL-2915). */}
         {insight && (
           <Button size="small" onClick={() => setInsightOpen('ask')}>

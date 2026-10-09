@@ -83,6 +83,10 @@ proposed discounts are created switched off. See [Products with AI](../../ai/pro
 
 ## Categories and tags
 
+The **Categories & collections** card, in the products hub's catalog, organizes
+your products into categories and collections that storefront pages and filters
+use.
+
 **Categories** are hierarchical (each may have a parent) and slugged for
 URLs. **Tags** are free-form labels. Both drive storefront filtering and
 smart collections.
@@ -111,6 +115,22 @@ rules and a price *below* keeps every control. A price *below* rule is a price r
 that collection's grid is in price order — high to low if that is the sort chosen, low to
 high otherwise.
 
+## Product reviews {#product-reviews}
+
+The **Review moderation** card, in the products hub's **Promotions** section,
+holds the reviews shoppers leave on your products until you approve or reject
+them. Pro plan and above.
+
+1. Add a **Product reviews** block to your product page template, so shoppers
+   can rate a product from 1 to 5 and write a review with their email address.
+2. Each new review waits on the card under **Show: Pending**. A **Verified**
+   label means that email has a paid order for the product.
+3. Select **Approve** to publish a review, or **Reject** to keep it off your
+   site. **Reply** adds your answer under it.
+
+Only approved reviews show on your site, with the product's average rating.
+Switch **Show** to **Approved**, **Rejected** or **All** to look back.
+
 ## Slugs
 
 Products, categories, and collections each have a host-unique slug used in
@@ -121,8 +141,8 @@ lowercase letters, numbers, and dashes.
 
 Your catalog is published as a product feed for Google Merchant Center, and
 for Meta, TikTok, Pinterest, Snapchat and Microsoft Shopping too. Each
-channel has its own feed address and setup steps under **Products → Settings
-→ Sales channels**; see [Sales channels](./sales-channels.md).
+channel has its own feed address and setup steps in the store's settings,
+under **Sales channels**; see [Sales channels](./sales-channels.md).
 
 ## Related
 

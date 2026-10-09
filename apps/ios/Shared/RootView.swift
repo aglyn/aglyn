@@ -62,11 +62,21 @@ enum DebugLaunch {
   static func autoSignIn(_ model: AppModel) async {
     #if DEBUG
       guard UserDefaults.standard.bool(forKey: "AglynAutoSignIn"),
-        model.config?.authEmulatorHost != nil, model.auth?.user == nil,
-        let email = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_EMAIL") as? String,
-        let password = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_PASSWORD") as? String,
+        let config = model.config, config.authEmulatorHost != nil,
+        var email = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_EMAIL") as? String,
+        var password = Bundle.main.object(forInfoDictionaryKey: "AGLYN_DEBUG_PASSWORD") as? String,
         !email.isEmpty, !password.isEmpty
       else { return }
+      // `-AglynDebugAccount staff`: the seeded staff account
+      // (tools/scripts/seed-native/account.mjs), to see the staff section.
+      if UserDefaults.standard.string(forKey: "AglynDebugAccount") == "staff" {
+        email = "mobile-staff@example.test"
+        password = "seed-\(config.firebase.projectID)-staff"
+      }
+      if let current = model.auth?.user {
+        guard current.email != email else { return }
+        await model.signOut()
+      }
       do {
         try await model.auth?.signIn(email: email, password: password)
       } catch {

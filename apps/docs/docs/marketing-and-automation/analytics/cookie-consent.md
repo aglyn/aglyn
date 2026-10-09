@@ -38,9 +38,12 @@ on.** By default Aglyn asks your visitors about analytics and nothing else, and
 tells Google that advertising storage is denied for every visitor, in both
 directions. If you have Google Ads linked to your GA4 property and you need a
 basis for advertising storage, turn on **Also ask visitors about advertising
-storage** in **Site setup → SEO → Cookie consent**. The switch needs a Google
-tag of some kind — a measurement ID or a container ID — to do anything; there is
-no advertising storage to ask about without one.
+storage** in **Site setup → SEO → Cookie consent**. The switch needs a tag
+to ask about — a Google measurement ID or container ID, or one of your own
+advertising tags (a Meta, TikTok or Pinterest tag, Google Ads or LinkedIn) set
+on the Tracking tab. Your advertising tags load only for visitors who say yes
+to this question, so a site running one needs it on; see
+[Ad tracking](./ad-tracking.md).
 
 Turning it on **grants nothing by itself**. It adds a second question, with its
 own checkbox, to the banner and to the preferences panel, so that a visitor has
@@ -99,6 +102,12 @@ page filed under a campaign is counted the same way.
   - Switch the question back off and any advertising grants already on file
     stop counting immediately; they are re-derived on every read, not trusted
     as stored.
+- **A live chat loaded with the page.** On a site whose [Live chat](../../building-sites/live-chat.md)
+  is set to **Load the chat with the page**, Tidio or LiveChat loads before anyone
+  presses the chat button only for a visitor whose state grants analytics, and the
+  banner names the chat service beside Google Analytics. A press on the chat button
+  loads it for any visitor, because they asked for it — see
+  [Privacy and cookies](../../building-sites/live-chat.md#privacy-and-cookies).
 
 **Always on (strictly necessary)** — these keep working regardless of the choice,
 because the site cannot function without them:
@@ -107,6 +116,9 @@ because the site cannot function without them:
 - Popup and announcement "don't show this again" stamps (stored locally, never
   transmitted).
 - The stored consent state itself.
+- On a site that switched on [Weglot translation](../../building-sites/multilingual/weglot.md#cookies-and-privacy),
+  Weglot's record of the language a visitor chose and its cache of the translations
+  already loaded.
 
 ## The campaign a visitor came from {#campaign-touch}
 
@@ -172,7 +184,10 @@ a visitor's question about it:
 **Withdrawing consent removes the cookies too.** When a visitor opts out or
 declines, Aglyn deletes the Google analytics and advertising cookies it can
 reach (`_ga`, `_gid`, `_gcl` and their variants) across your domain and its
-parent, and tells any tag still resident on the page to stop measuring. A
+parent — and, for the advertising tags you set on the Tracking tab, removes the
+tag and deletes its cookies too (`_fbp`, `_fbc`, `_ttp`, `_pin_unauth`, `_epik`
+and the others listed in [Ad tracking](./ad-tracking.md#consent)) — and tells
+any tag still resident on the page to stop measuring. A
 visitor who checks their cookie list after opting out sees them gone, which is
 the behavior to describe if one asks.
 

@@ -55,7 +55,8 @@ live page in place and never sends anything, so a generated page has no address
 on your live site until you publish it yourself.
 
 What each door does, what it costs in credits and who can use it is in
-**[Aglyn AI](../ai/overview.md)**.
+**[Aglyn AI](../ai/overview.md)**. To build several things from one chat
+message, see [Build from Assist chat](../ai/assist-builds.md).
 
 ## Answers for beginners and developers
 
@@ -174,8 +175,8 @@ If a quoted page did not cover what you meant, just ask again with more detail
   assistant and AI generation together. The credits belong to the person who
   owns the workspace, so several Free workspaces owned by one account share
   them; when they are used, AI pauses until next month or an upgrade, and
-  nothing is ever billed. A new account waits a short while after signing up
-  before it can generate, and free requests are capped per day.
+  nothing is ever billed. Free requests are capped per day. See
+  [AI credits](../ai/ai-credits.md#free-plan).
 - **Paid plans** include their own monthly AI credits for the assistant and AI
   generation together, rising with the plan, and sell credits past the band rather
   than stopping at it — so the assistant keeps working and the month's overage is

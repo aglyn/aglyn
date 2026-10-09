@@ -2357,7 +2357,7 @@ written, with money in integer cents in `order.currency`.
 | Event | Raised | Payload beside `order` |
 | --- | --- | --- |
 | `order.paid` | An order was paid: storefront checkout, buy-now, payment link, POS sale (card or cash) or subscription renewal. | — |
-| `order.fulfilled` | Once per shipment recorded, partial or whole. | `fulfillment`: `{ id, lines: [{ lineItemId, quantity }], carrier, trackingNumber, trackingUrl, labelUrl, at }` |
+| `order.fulfilled` | Once per shipment recorded, partial or whole. | `fulfillment`: `{ id, lines: [{ lineItemId, quantity }], carrier, trackingNumber, trackingUrl, labelUrl, labelCostCents, at }` — `labelCostCents` is what a label a shipping plugin bought cost, in integer cents of the order's currency, or `null` |
 | `order.delivered` | The order was marked delivered. | — |
 | `order.refunded` | Once per refund, partial or full. | `refund`: `{ id, amountCents, lineItemIds, full }` — what this refund moved |
 | `order.cancelled` | The order was canceled and its stock returned. | — |

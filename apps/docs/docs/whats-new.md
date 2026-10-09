@@ -28,7 +28,61 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — a self-service kiosk (newest)
+## October 2026 — translate your site with Weglot (newest)
+
+- **[Weglot translation](building-sites/multilingual/weglot.md)** — already use
+  Weglot? Switch it on for a site, paste your Weglot API key and choose your
+  languages. Visitors get a language switcher that matches your theme (or Weglot's
+  own), and the script never holds up the page's first view. Translations are for
+  visitors: they are not indexed as separate pages, so use locale variants for
+  languages that need to rank. Business and above.
+
+<!--
+AGL-3694: held unpublished until the deployment sets AD_CONVERSIONS_TOKEN_KEY on
+the console, like the guide it links (`unlisted: true`). Once the key is set on
+aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
+"Rolling out" note from marketing-and-automation/analytics/connect-conversions-api.md.
+
+## October 2026 — server-side ad conversions
+
+- **[Server-side ad conversions](marketing-and-automation/analytics/connect-conversions-api.md)** —
+  connect the Meta Conversions API, the TikTok Events API or the Pinterest
+  Conversions API and purchases and leads are also sent from the server, for
+  visitors who allow advertising, paired with the browser tag so each is counted once.
+-->
+
+## October 2026 — your own TikTok and Pinterest tags
+
+- **[Ad tracking](marketing-and-automation/analytics/ad-tracking.md)** — your Meta
+  pixel, TikTok pixel, Pinterest tag, Google Ads and LinkedIn tags now run on your
+  site, for visitors who allow advertising, and report product views, add-to-carts,
+  checkouts, purchases and leads.
+
+## October 2026 — Trustpilot review invitations
+
+- **[Trustpilot](commerce-and-bookings/commerce/review-platforms.md#trustpilot)** —
+  paste your Trustpilot invitation address and each customer who agreed to your
+  marketing email is invited to review your store once their order ships, or once
+  it arrives: one order email is blind-copied to Trustpilot, once per order, never
+  for a test, canceled or refunded order. Your store's own product reviews stay on
+  your product pages.
+
+## October 2026 — live chat with Tidio or LiveChat
+
+- **[Live chat](building-sites/live-chat.md)** — chat with your visitors through your
+  own Tidio or LiveChat account. Paste the key from its install code, choose the pages
+  it shows on, and a chat button appears on your site. The chat loads only when a
+  visitor presses the button, so it never slows your pages; you can also have it load
+  with the page for visitors who allowed analytics. Included on every plan.
+
+## October 2026 — shipping cost on a hand-entered shipment
+
+- **[Shipping cost](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  the Fulfill items panel takes an optional shipping cost for a shipment you enter by
+  hand, in your store's currency, one per shipment. A Faire order sends it to Faire as
+  the shipping you paid, the same way a label bought in Aglyn already does.
+
+## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
   pair a tablet to a register and let customers order themselves: products by
@@ -142,7 +196,7 @@ for the how-to.
 
 <!--
   AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
-  deployment has its Intuit or Xero app credentials. This entry is held unpublished, like
+  deployment has its Intuit or Xero app credentials, or a Codat API key (AGL-3636, AGL-3701). This entry is held unpublished, like
   the two guides it links (`unlisted: true`): when the flag is switched on, remove this
   comment's markers, move "(newest)" here from the heading below, and delete
   `unlisted: true` from commerce-and-bookings/commerce/connect-quickbooks-online.md and
@@ -151,7 +205,8 @@ for the how-to.
 ## October 2026 — accounting sync
 
 - **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
-  or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,
+  or [Xero](commerce-and-bookings/commerce/connect-xero.md) — or, where offered, QuickBooks
+  Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave — and every paid order, refund,
   Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
   choose: a sales receipt (or invoice and payment) per order, or one summary journal a
   day. Set a start date to bring in earlier sales; anything the ledger refuses waits
@@ -228,18 +283,35 @@ for the how-to.
 -->
 
 <!--
+  AGL-3695 — Couriers are built and hidden until a deployment sets
+  COURIERS_TOKEN_KEY on the console. This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once it is set on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/couriers.md.
+
+## October 2026 — send a DoorDash courier for your local deliveries
+
+- **[Couriers](commerce-and-bookings/commerce/couriers.md)** — connect your own
+  DoorDash Drive account and send a DoorDash courier for any local delivery from the
+  Pickup & delivery queue or the order. Get a quote, send the courier, and follow its
+  progress, tracking link and arrival time on the order and your buyer's status page.
+  DoorDash bills your own account; your buyers pay your delivery zone's fee as before.
+-->
+
+<!--
   AGL-3634 — Fulfillment networks are built and hidden until a deployment holds a
-  ShipBob developer app or an Amazon selling-partner app and sets
-  FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,
+  ShipBob developer app or an Amazon selling-partner app, or sets SHIPMONK_ENABLED
+  (AGL-3697), and sets FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,
   like the guide it links (`unlisted: true`): once a network is configured on
   aglyn.com, remove this comment's markers, move "(newest)" here from the top
   heading, and delete `unlisted: true` and the "Rolling out" note from
   commerce-and-bookings/commerce/fulfillment-networks.md.
 
-## October 2026 — ShipBob and Amazon ship your orders
+## October 2026 — ShipBob, ShipMonk and Amazon ship your orders
 
 - **[Fulfillment networks](commerce-and-bookings/commerce/fulfillment-networks.md)** —
-  connect your own ShipBob or Amazon Multi-Channel Fulfillment account and paid orders
+  connect your own ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account and paid orders
   go to it to pick, pack and ship. Items it does not stock stay with you, each parcel
   it ships comes back to the order with its tracking, canceling an order cancels it
   there, and your stock counts can follow the warehouse's.

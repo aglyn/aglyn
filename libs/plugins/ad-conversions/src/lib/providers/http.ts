@@ -1,0 +1,183 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The one door every vendor call goes through (AGL-3694): `fetch`, a timeout,
+ * a short in-call retry for a blip, and every failure turned into a
+ * {@link ProviderError} whose `kind` decides what the delivery does next.
+ *
+ * - `auth` — the vendor refused the token (401/403, or Meta's Graph error
+ *   190). Retrying cannot help; the connection waits for a new token.
+ * - `rate-limit` — 429. Retried in the call when the vendor asks for a short
+ *   wait; otherwise the event waits for a later tick.
+ * - `transient` — 5xx, a timeout, a dropped connection. Retried in the call,
+ *   then the event backs off.
+ * - `invalid` — any other 4xx: the vendor read the event and refused it. The
+ *   event is given up with the vendor's reason, never retried into the same
+ *   refusal.
+ *
+ * Nothing here logs a request body or a header: both carry a token or a
+ * person's hashed data.
+ */
+
+export type ProviderErrorKind = 'auth' | 'rate-limit' | 'transient' | 'invalid'
+
+export class ProviderError extends Error {
+  readonly kind: ProviderErrorKind
+  readonly status: number | null
+  /** How long the provider asked us to wait, when it said. */
+  readonly retryAfterMs: number | null
+
+  constructor(kind: ProviderErrorKind, message: string, options: { status?: number | null; retryAfterMs?: number | null } = {}) {
+    super(message)
+    this.name = 'ProviderError'
+    this.kind = kind
+    this.status = options.status ?? null
+    this.retryAfterMs = options.retryAfterMs ?? null
+  }
+}
+
+export function isProviderError(error: unknown): error is ProviderError {
+  return error instanceof ProviderError
+}
+
+export interface ProviderHttp {
+  fetch: typeof fetch
+  /** Waits between in-call retries. Injectable so specs do not sleep. */
+  sleep: (ms: number) => Promise<void>
+}
+
+export const defaultProviderHttp = (): ProviderHttp => ({
+  fetch: (input, init) => fetch(input, init),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+})
+
+export interface ProviderRequest {
+  /** The provider's name, for messages. */
+  provider: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  url: string
+  headers?: Record<string, string>
+  /** JSON-encoded unless it is already a string (a form body). */
+  body?: unknown
+  timeoutMs?: number
+}
+
+/** Attempts for a transient failure or a short rate limit, the first included. */
+export const PROVIDER_ATTEMPTS = 3
+
+/** A rate limit asking for longer than this ends the run instead of waiting in it. */
+export const IN_CALL_RETRY_AFTER_MAX_MS = 5_000
+
+const DEFAULT_TIMEOUT_MS = 20_000
+
+/** `Retry-After` in seconds or as a date, in ms; `null` when absent or unreadable. */
+export function readRetryAfterMs(value: string | null, nowMs = Date.now()): number | null {
+  if (!value) return null
+  const seconds = Number(value)
+  if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1000))
+  const at = Date.parse(value)
+  return Number.isFinite(at) ? Math.max(0, at - nowMs) : null
+}
+
+/** The provider's own words for a refusal, trimmed, from the shapes the three vendors use. */
+function providerMessage(payload: any, fallback: string): string {
+  const candidates = [
+    // Meta's Graph API: `{ error: { message, error_user_msg } }`.
+    payload?.error?.error_user_msg,
+    payload?.error?.message,
+    payload?.detail,
+    payload?.title,
+    payload?.errors?.[0]?.detail,
+    payload?.errors?.[0]?.title,
+    payload?.error_description,
+    typeof payload?.error === 'string' ? payload.error : null,
+    payload?.message,
+  ]
+  const found = candidates.find((value) => typeof value === 'string' && value.trim())
+  return String(found ?? fallback).trim().slice(0, 300)
+}
+
+async function readBody(response: Response): Promise<any> {
+  const text = await response.text().catch(() => '')
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { message: text.slice(0, 300) }
+  }
+}
+
+/**
+ * Sends one request and answers the parsed JSON body (or `null` for an empty
+ * one). Throws a {@link ProviderError} for every failure.
+ */
+export async function providerRequest(http: ProviderHttp, request: ProviderRequest): Promise<any> {
+  let lastError: ProviderError | null = null
+  for (let attempt = 1; attempt <= PROVIDER_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) {
+      const wait = lastError?.retryAfterMs ?? 500 * 2 ** (attempt - 2)
+      await http.sleep(wait)
+    }
+    let response: Response
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    try {
+      response = await http.fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body:
+          request.body === undefined
+            ? undefined
+            : typeof request.body === 'string'
+              ? request.body
+              : JSON.stringify(request.body),
+        signal: controller.signal,
+      })
+    } catch {
+      lastError = new ProviderError('transient', `${request.provider} could not be reached`)
+      continue
+    } finally {
+      clearTimeout(timer)
+    }
+    if (response.ok) return readBody(response)
+    const payload = await readBody(response)
+    const message = providerMessage(payload, `${request.provider} answered ${response.status}`)
+    // Meta refuses a token with 400 and Graph error code 190 (an invalid or
+    // expired access token), not 401: the same "connect again" as a 401.
+    if (response.status === 401 || response.status === 403 || payload?.error?.code === 190) {
+      throw new ProviderError('auth', `${request.provider} refused the connection: ${message}`, { status: response.status })
+    }
+    if (response.status === 429) {
+      const retryAfterMs = readRetryAfterMs(response.headers.get('retry-after'))
+      lastError = new ProviderError('rate-limit', `${request.provider} asked us to slow down`, {
+        status: 429,
+        retryAfterMs: retryAfterMs ?? 60_000,
+      })
+      if (retryAfterMs !== null && retryAfterMs <= IN_CALL_RETRY_AFTER_MAX_MS) continue
+      throw lastError
+    }
+    if (response.status >= 500) {
+      lastError = new ProviderError('transient', `${request.provider} had a problem (${response.status})`, {
+        status: response.status,
+      })
+      continue
+    }
+    throw new ProviderError('invalid', message, { status: response.status })
+  }
+  throw lastError ?? new ProviderError('transient', `${request.provider} could not be reached`)
+}

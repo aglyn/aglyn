@@ -67,6 +67,18 @@ describe('what the deployment offers (AGL-3634)', () => {
     expect(amazon.searchParams.get('version')).toBe('beta')
   })
 
+  it('offers ShipMonk only where the deployment opts in, with the token key (AGL-3697)', () => {
+    expect(offeredNetworks(readFulfillmentNetworksConfig({ [FULFILLMENT_NETWORKS_ENV.shipmonkEnabled]: 'true' }))).toEqual([])
+    const config = readFulfillmentNetworksConfig({
+      [FULFILLMENT_NETWORKS_ENV.tokenKey]: KEY,
+      [FULFILLMENT_NETWORKS_ENV.shipmonkEnabled]: 'TRUE',
+      [FULFILLMENT_NETWORKS_ENV.shipmonkEnvironment]: 'sandbox',
+    })
+    expect(offeredNetworks(config)).toEqual(['shipmonk'])
+    expect(config.shipmonk).toEqual({ sandbox: true })
+    expect(offeredNetworks(readFulfillmentNetworksConfig({ ...ENV, [FULFILLMENT_NETWORKS_ENV.shipmonkEnabled]: 'yes' }))).not.toContain('shipmonk')
+  })
+
   it('sends a member back only to a path on the console', () => {
     expect(safeReturnTo('/acme/store?tab=settings')).toBe('/acme/store?tab=settings')
     expect(safeReturnTo('//evil.example/x')).toBe('/')
@@ -96,7 +108,7 @@ describe('opening a grant (AGL-3634)', () => {
     const store = await stored(10_000_000)
     const { http, calls } = mockHttp([])
     const open = createCredentialOpener({ store, config, http, now: () => 1_000_000 })
-    await expect(open(id, (await store.getConnection(id))!)).resolves.toEqual({ accessToken: 'old-access', channelId: 'ch-5', marketplaceId: null })
+    await expect(open(id, (await store.getConnection(id))!)).resolves.toEqual({ accessToken: 'old-access', channelId: 'ch-5', marketplaceId: null, storeId: null })
     expect(calls).toHaveLength(0)
   })
 
@@ -132,5 +144,28 @@ describe('opening a grant (AGL-3634)', () => {
     const moved = { ...(await store.getConnection(id))! }
     const open = createCredentialOpener({ store, config, http: mockHttp([]).http, now: () => 0 })
     await expect(open(networkConnectionId('host-2', 'shipbob'), moved)).rejects.toMatchObject({ kind: 'auth' })
+  })
+})
+
+describe('opening a pasted API key (AGL-3697)', () => {
+  it('opens a ShipMonk key as-is, with its store, never refreshing it', async () => {
+    const config = readFulfillmentNetworksConfig({ [FULFILLMENT_NETWORKS_ENV.tokenKey]: KEY, [FULFILLMENT_NETWORKS_ENV.shipmonkEnabled]: 'true' })
+    const keyring = config.keyring as NonNullable<typeof config.keyring>
+    const id = networkConnectionId('host-1', 'shipmonk')
+    const store = createMemoryNetworkStore()
+    const connection = {
+      ...emptyConnection({ orgId: 'org-1', hostId: 'host-1', provider: 'shipmonk', sandbox: false, nowMs: 0 }),
+      status: 'active' as const,
+      storeId: '11364',
+      sealedAccessToken: sealGrant('sm-key-abcdef', id, 'access', keyring),
+      sealedWebhookSecret: sealGrant('whsec', id, 'webhook', keyring),
+    }
+    const { http, calls } = mockHttp([])
+    const open = createCredentialOpener({ store, config: () => config, http, now: () => 10 ** 13 })
+    await expect(open(id, connection)).resolves.toEqual({ accessToken: 'sm-key-abcdef', channelId: null, marketplaceId: null, storeId: '11364' })
+    expect(calls).toHaveLength(0)
+    // A secret sealed for the webhook does not open as the key, nor the other way round.
+    expect(() => openGrant(connection.sealedWebhookSecret, id, 'access', keyring)).toThrow()
+    await expect(open(id, { ...connection, sealedAccessToken: connection.sealedWebhookSecret })).rejects.toMatchObject({ kind: 'auth' })
   })
 })

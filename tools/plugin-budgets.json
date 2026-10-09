@@ -142,5 +142,25 @@
   "loyalty": {
     "baseline": 9161,
     "budget": 12288
+  },
+  "weglot": {
+    "baseline": 6494,
+    "budget": 8192
+  },
+  "ad-conversions": {
+    "baseline": 4837,
+    "budget": 6144
+  },
+  "review-platforms": {
+    "baseline": 5110,
+    "budget": 7168
+  },
+  "couriers": {
+    "baseline": 4638,
+    "budget": 6144
+  },
+  "live-chat": {
+    "baseline": 7342,
+    "budget": 9216
   }
 }

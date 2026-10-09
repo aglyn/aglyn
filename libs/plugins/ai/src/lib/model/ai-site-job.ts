@@ -24,6 +24,7 @@ import {
 } from './ai-build-plan'
 import { AI_JOB_CREATE_KINDS } from './ai-job-creations'
 import { AI_PAGE_CREATE_KINDS } from './ai-page-job'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 
 /**
  * What a site scaffold is (AGL-2911): the inputs a `site` job is admitted
@@ -194,26 +195,24 @@ export function aiFreeSiteSectionsWithin(
   return Math.min(AI_FREE_SITE_MAX_SECTIONS, pages * AI_SITE_MAX_SECTIONS, paid)
 }
 
-/** Sections a Free site's page is assumed to hold before its plan names them. */
-export const AI_FREE_SITE_NOMINAL_SECTIONS = 4
-
 /**
- * About what a Free site start of this many pages costs at its worst, in
- * credits, for the dialog that asks for one: the plan, its look, the layout
- * and form a new site builds, each page's answer and listing, and its
- * sections at the nominal count, from the figures the wall is proven with
- * rather than the nominal credits a paid estimate counts. No retry room: the
- * dialog says what a start costs, not what the wall holds back.
+ * What a Free site start of this many pages can cost at its worst, in
+ * credits (AGL-3660), for the dialog that asks for one and the door that
+ * admits it: `aiFreeSiteWorstCaseCredits` for an empty site — the plan, its
+ * look, the layout and form a guided start builds, each page's answer and
+ * listing, the sections its plan is held to (`aiFreeSiteSectionsWithin` at
+ * the month's whole taste, which is what the plan step allows) and the room
+ * for one retried page. The pre-start check asks for all of it, so a Free
+ * start is never let begin a job what is left cannot finish: a figure that
+ * left out any of those items let one pause between its form and its pages.
  */
 export function aiFreeSiteCreditEstimate(
   pages: number,
   credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
 ): number {
-  const count = Math.max(1, Math.floor(pages))
-  return (
-    aiFreeSiteWorstCaseCredits({ layouts: 1, forms: 1, pages: count }, count * AI_FREE_SITE_NOMINAL_SECTIONS, credits) -
-    credits.retry
-  )
+  const creations: AiFreeSiteCreations = { layouts: 1, forms: 1, pages: Math.max(1, Math.floor(pages)) }
+  const sections = aiFreeSiteSectionsWithin(creations, FREE_AI_TASTE_CREDITS_PER_MONTH, credits)
+  return aiFreeSiteWorstCaseCredits(creations, sections, credits)
 }
 
 /**
@@ -323,6 +322,33 @@ export function aiSiteBlogNavPage(screens: ReadonlyArray<{ slug: string }>): {
   return { id: AI_SITE_BLOG_NAV_ID, label: AI_SITE_BLOG_NAME, slug: `/${slug}`, href: `/${slug}` }
 }
 
+/**
+ * Whether a planned page stands in for the blog a start writes (AGL-3660):
+ * its address is one of the blog's, or its name says it lists posts. The
+ * home page never does.
+ */
+export function aiSiteIsBlogStandIn(screen: { slug: string; title: string }): boolean {
+  if (aiSitePlanIsHome(screen)) return false
+  return (AI_SITE_BLOG_SLUGS as readonly string[]).includes(firstSegment(screen.slug)) || BLOG_PAGE_WORDS.test(screen.title)
+}
+
+/**
+ * A start that writes posts, with its plan's stand-in pages taken out
+ * (AGL-3676): the plan step asks once for a plan without one and keeps a
+ * second answer that still has one, so the scaffold merges it into the blog
+ * instead — the page is not built, its links go to the blog, and the blog
+ * takes the address it left free. The kept screens hold their plan index,
+ * which a page unit's slot is named by.
+ */
+export function aiSitePlanWithoutBlogStandIns<T extends { slug: string; title: string }>(
+  screens: readonly T[],
+): { screens: T[]; standIns: T[] } {
+  return {
+    screens: screens.filter((screen) => !aiSiteIsBlogStandIn(screen)),
+    standIns: screens.filter((screen) => aiSiteIsBlogStandIn(screen)),
+  }
+}
+
 /** The code a planned page that stands in for the written blog is re-asked under. */
 export const AI_SITE_BLOG_PAGE_CODE = 'plan-blog-page-duplicate'
 
@@ -339,12 +365,7 @@ const BLOG_PAGE_WORDS = /\b(blog|posts?|articles?|journal|writing|stories|news)\
 export function aiSiteBlogStandInViolations(
   plan: Pick<AiBuildPlan, 'screens'>,
 ): Array<{ rule: null; code: string; message: string; paths: string[] }> {
-  const blogSlugs = new Set<string>(AI_SITE_BLOG_SLUGS)
-  const standIns = plan.screens.flatMap((screen, index) => {
-    if (aiSitePlanIsHome(screen)) return []
-    const segment = firstSegment(screen.slug)
-    return blogSlugs.has(segment) || BLOG_PAGE_WORDS.test(screen.title) ? [{ screen, index }] : []
-  })
+  const standIns = plan.screens.flatMap((screen, index) => (aiSiteIsBlogStandIn(screen) ? [{ screen, index }] : []))
   if (!standIns.length) return []
   const names = standIns.map(({ screen }) => `"${screen.title}" at ${screen.slug}`).join(', ')
   return [

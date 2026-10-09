@@ -91,7 +91,6 @@ import {
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_FREE_SITE_MAX_SECTIONS,
-  AI_FREE_SITE_NOMINAL_SECTIONS,
   AI_SITE_FREE_PAGES,
   AI_SITE_HOME_MIN_SECTIONS,
   AI_SITE_MAX_SECTIONS,
@@ -1087,12 +1086,20 @@ describe('a Free two-page site fits the Free taste, end to end', () => {
     expect(aiPlanSiteLines(yogaJob(), empty, free).join('\n')).toContain('at least 5 sections')
   })
 
-  it('quotes the dialog an estimate from the same figures, inside the wall', () => {
+  it('quotes the dialog and holds the door to the WHOLE worst case — layout, form, the sections the plan may hold and the retry — inside the wall (AGL-3660)', () => {
     const credits = AI_FREE_SITE_WORST_CASE_CREDITS
-    expect(aiFreeSiteCreditEstimate(2)).toBe(
-      credits.plan + credits.look + credits.layout + credits.form + 2 * (credits.page + credits.listing) + 2 * AI_FREE_SITE_NOMINAL_SECTIONS * credits.section,
-    )
-    expect(aiFreeSiteCreditEstimate(2)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    for (const pages of [1, 2]) {
+      const creations = { layouts: 1, pages, forms: 1 }
+      const sections = aiFreeSiteSectionsWithin(creations, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      expect(aiFreeSiteCreditEstimate(pages)).toBe(aiFreeSiteWorstCaseCredits(creations, sections))
+      // Nothing the job may spend is left out: the layout, the form and the retry are in it.
+      expect(aiFreeSiteCreditEstimate(pages)).toBeGreaterThanOrEqual(
+        aiFreeSiteWorstCaseCredits({ layouts: 0, pages, forms: 0 }, sections) + credits.layout + credits.form,
+      )
+      expect(aiFreeSiteCreditEstimate(pages)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    }
+    // The two-page figure is the one the notes quote for the wall.
+    expect(aiFreeSiteCreditEstimate(2)).toBe(aiFreeSiteWorstCaseCredits({ layouts: 1, pages: 2, forms: 1 }, AI_FREE_SITE_MAX_SECTIONS))
     expect(aiFreeSiteCreditEstimate(1)).toBeLessThan(aiFreeSiteCreditEstimate(2))
   })
 

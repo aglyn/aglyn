@@ -310,6 +310,36 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'review-platforms',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "invite.trustpilot.com",
+        disposition: "not-a-subprocessor",
+        reason: "The Trustpilot invitation address the merchant pasted from their own Trustpilot account (`libs/plugins/review-platforms/src/lib/server/invitations.ts`): blind-copied on one buyer email per order so Trustpilot invites the buyer to review the store. Customer-chosen: the merchant chose Trustpilot and the copy lands in the merchant's account.",
+        dataReceived: "A copy of one order email (shipped, delivered or picked up, as the merchant chose) with a data block naming the buyer's name, email and the order number. Only for a buyer the site may market to.",
+      },
+      {
+        host: "api.trustpilot.com",
+        disposition: "not-a-subprocessor",
+        reason: "The Trustpilot adapter (`libs/plugins/review-platforms/src/lib/providers/trustpilot.ts`), with the API key and secret the merchant connected from their own Trustpilot account: exchanges them for an access token. Customer-chosen: the merchant chose Trustpilot.",
+        dataReceived: "The merchant's own Trustpilot API key and secret. No buyer data.",
+      },
+      {
+        host: "invitations-api.trustpilot.com",
+        disposition: "not-a-subprocessor",
+        reason: "The Trustpilot adapter (`libs/plugins/review-platforms/src/lib/providers/trustpilot.ts`), with the merchant's own API key: creates one service-review invitation per order. Customer-chosen: the merchant chose Trustpilot and the data lands in the merchant's account.",
+        dataReceived: "For each invited order: the buyer's name and email and the order number. Only for a buyer the site may market to. No address, phone or payment detail.",
+      },
+      {
+        host: "api.yotpo.com",
+        disposition: "not-a-subprocessor",
+        reason: "The Yotpo Reviews adapter (`libs/plugins/review-platforms/src/lib/providers/yotpo.ts`), with the app key and secret key the merchant connected from their own Yotpo account: sends each fulfilled order so Yotpo sends the buyer its review request. Customer-chosen: the merchant chose Yotpo and the data lands in the merchant's account.",
+        dataReceived: "For each invited order: its id, date, currency and total, the buyer's name and email, the items (product id, name, SKU, quantity, price) and the fulfillment date. Only for a buyer the site may market to. No address, phone or payment detail.",
+      },
+    ],
+  },
+  {
     pluginId: 'loyalty',
     subprocessors: [],
     hosts: [
@@ -402,6 +432,31 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "no-request",
         reason: "Attentive's consent page, built by `authorizeUrl` in `libs/plugins/marketing-platforms/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own account. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the OAuth client id, the scopes, the redirect address and a single-use state.",
+      },
+    ],
+  },
+  {
+    pluginId: 'ad-conversions',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "business-api.tiktok.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Events API of the TikTok ad account a site's owner or admin connects on the site's setup page, reached only from the ad-conversions plugin's adapter (`libs/plugins/ad-conversions/src/lib/providers/tiktok.ts`) with the merchant's own access token, to report the site's purchases and leads server-side alongside the site's own TikTok browser tag.",
+        dataReceived: "For a site visitor who allowed advertising on that site, and only then: a purchase (its order id, value excluding tax, currency, and each item's product id, name, quantity and price) or a submitted form (no field values), each with the event's id and time and the page it happened on. The visitor's details are sent as SHA-256 hashes of the normalized values — email address, phone number, first and last name, city, state, postal code and country, whichever the order or form holds — together, unhashed as each vendor requires, the visitor's IP address and browser user agent and the vendor's own first-party browser ids (Meta's _fbp and _fbc, TikTok's _ttp and ttclid, Pinterest's _epik). No payment details. Also the merchant's own access token, which authenticates each call.",
+      },
+      {
+        host: "api.pinterest.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Conversions API of the Pinterest ad account a site's owner or admin connects on the site's setup page, reached only from the ad-conversions plugin's adapter (`libs/plugins/ad-conversions/src/lib/providers/pinterest.ts`) with the merchant's own access token, to report the site's purchases and leads server-side alongside the site's own Pinterest browser tag.",
+        dataReceived: "For a site visitor who allowed advertising on that site, and only then: a purchase (its order id, value excluding tax, currency, and each item's product id, name, quantity and price) or a submitted form (no field values), each with the event's id and time and the page it happened on. The visitor's details are sent as SHA-256 hashes of the normalized values — email address, phone number, first and last name, city, state, postal code and country, whichever the order or form holds — together, unhashed as each vendor requires, the visitor's IP address and browser user agent and the vendor's own first-party browser ids (Meta's _fbp and _fbc, TikTok's _ttp and ttclid, Pinterest's _epik). No payment details. Also the merchant's own access token, which authenticates each call.",
+      },
+    ],
+    uses: [
+      {
+        host: "graph.facebook.com",
+        reason: "Customer-chosen destination. The Conversions API of the Meta ad account a site's owner or admin connects on the site's setup page, reached only from the ad-conversions plugin's adapter (`libs/plugins/ad-conversions/src/lib/providers/meta.ts`) with the merchant's own access token, to report the site's purchases and leads server-side alongside the site's own Meta browser tag.",
+        dataReceived: "For a site visitor who allowed advertising on that site, and only then: a purchase (its order id, value excluding tax, currency, and each item's product id, name, quantity and price) or a submitted form (no field values), each with the event's id and time and the page it happened on. The visitor's details are sent as SHA-256 hashes of the normalized values — email address, phone number, first and last name, city, state, postal code and country, whichever the order or form holds — together, unhashed as each vendor requires, the visitor's IP address and browser user agent and the vendor's own first-party browser ids (Meta's _fbp and _fbc, TikTok's _ttp and ttclid, Pinterest's _epik). No payment details. Also the merchant's own access token, which authenticates each call.",
       },
     ],
   },
@@ -504,6 +559,37 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "no-request",
         reason: "Amazon Seller Central's app consent page, built by `networkAuthorizeUrl` in `libs/plugins/fulfillment-networks/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
+      },
+      {
+        host: "api.shipmonk.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipMonk API of the store whose own API key a site's admin pastes in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts` with that key, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox.shipmonk.dev",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`. Used only by a deployment pointed at the sandbox (`SHIPMONK_ENVIRONMENT=sandbox`), where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
+    ],
+  },
+  {
+    pluginId: 'couriers',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "developer.doordash.com",
+        disposition: "no-request",
+        reason: "DoorDash's developer portal, linked from the Couriers card (`libs/plugins/couriers/src/lib/model/couriers.ts`) so the merchant can create their own DoorDash Drive keys. Opened by the merchant's own browser; no platform server requests it.",
+        dataReceived: "Nothing. No request is made.",
+      },
+    ],
+    uses: [
+      {
+        host: "openapi.doordash.com",
+        reason: "Also customer-chosen: DoorDash Drive's API, reached only from `libs/plugins/couriers/src/lib/providers/doordash.ts` with the merchant's own developer keys (live, or test for DoorDash's sandbox) when a member of the site asks for a courier's quote, books one, cancels one or checks one, and from the console job that follows open deliveries. DoorDash bills the delivery to the merchant's own account.",
+        dataReceived: "For each order a courier is sent for: the order's number and value, the store's name, pickup address, phone and pickup note, and the buyer's name, delivery address and phone number. Read back: the delivery's status, fee, pickup and drop-off estimates, tracking link and any cancellation reason. Each request carries a short-lived token signed with the merchant's signing secret; the secret itself is never sent. No payment details are sent.",
       },
     ],
   },
@@ -880,6 +966,48 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "not-a-subprocessor",
         reason: "Pixabay's image CDN, one of the two hosts the stock-photos plugin's client (`libs/plugins/stock-photos/src/lib/providers/pixabay.ts`) will download a chosen photo's bytes from, on the console's server, before storing them in the site's own media library.",
         dataReceived: "Nothing beyond the request for the image.",
+      },
+    ],
+  },
+  {
+    pluginId: 'live-chat',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "code.tidio.co",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. Tidio’s widget loader for the merchant’s own Tidio account, named by the public key a site admin saves in the Live chat card, added to that site’s published pages by `libs/plugins/live-chat/src/lib/loader.ts` only when a visitor asks for the chat (or, where the merchant chose it, once the visitor’s consent grants analytics). The widget then reaches Tidio’s own hosts, which the tenant policy admits for that site alone.",
+        dataReceived: "Nothing from the platform’s servers. The site visitor’s browser loads the vendor’s widget, which then sends the vendor what the visitor types into the chat, the page they are on and the browser’s technical details (IP address, user agent, language), and stores the vendor’s own visitor identifier in the browser. No account, payment or order data the platform holds is sent.",
+      },
+      {
+        host: "cdn.livechatinc.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. LiveChat’s widget loader for the merchant’s own LiveChat account, named by the license number a site admin saves in the Live chat card, added to that site’s published pages by `libs/plugins/live-chat/src/lib/loader.ts` only when a visitor asks for the chat (or, where the merchant chose it, once the visitor’s consent grants analytics). The widget then reaches LiveChat’s own hosts, which the tenant policy admits for that site alone.",
+        dataReceived: "Nothing from the platform’s servers. The site visitor’s browser loads the vendor’s widget, which then sends the vendor what the visitor types into the chat, the page they are on and the browser’s technical details (IP address, user agent, language), and stores the vendor’s own visitor identifier in the browser. No account, payment or order data the platform holds is sent.",
+      },
+    ],
+  },
+  {
+    pluginId: 'weglot',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "cdn.weglot.com",
+        disposition: "not-a-subprocessor",
+        reason: "Weglot’s CDN: the `weglot.min.js` script, its stylesheet, the project settings (`/projects-settings/{key}.json`) and the switcher’s flag images. Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not the platform, and no platform server calls it.",
+        dataReceived: "From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from the platform’s servers, and no workspace data beyond what the published page already shows.",
+      },
+      {
+        host: "cdn-api-weglot.com",
+        disposition: "not-a-subprocessor",
+        reason: "Weglot’s translation API (`/translate`, `/translations/slugs`), which answers the translations for the page the visitor is reading. Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not the platform, and no platform server calls it.",
+        dataReceived: "From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from the platform’s servers, and no workspace data beyond what the published page already shows.",
+      },
+      {
+        host: "api.weglot.com",
+        disposition: "not-a-subprocessor",
+        reason: "Weglot’s API (`/project-settings`, and `/pageviews` when the merchant’s Weglot project counts page views). Reached only from a visitor’s browser on a published site whose admin switched the Weglot plugin on and entered their own Weglot project key (the runtime in `libs/plugins/weglot/src/lib/weglot-loader.ts`); the merchant engaged Weglot, not the platform, and no platform server calls it.",
+        dataReceived: "From the visitor’s browser: the merchant’s public project key, the text of the page being translated, the page address, the language chosen and the browser’s language, with the request metadata any website load carries (IP address, user agent). Nothing from the platform’s servers, and no workspace data beyond what the published page already shows.",
       },
     ],
   },

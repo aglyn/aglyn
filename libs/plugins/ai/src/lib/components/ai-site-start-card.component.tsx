@@ -44,10 +44,10 @@ import {
   mdiViewGridOutline,
   mdiWrench,
   mdiYoga,
-  mdiInformationOutline,
   mdiPageLayoutHeaderFooter,
 } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -74,7 +74,6 @@ import {
   Stepper,
   TextField,
   Toolbar,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
@@ -198,13 +197,13 @@ import { publishAiJob } from './ai-jobs-store'
  * the reader's `ai.generate` first. A lockdown is the start door's to say,
  * here, in its own words.
  *
- * ── It asks, it does not build ───────────────────────────────────────────
+ * ── It builds and publishes for you ──────────────────────────────────────
  *
  * "Plan my site" starts a `site` job, which PLANS first: the pages, their
- * addresses, the navigation, the layout, the contact form and a palette, with
- * an estimated cost beside the button that confirms it. Nothing is built
- * until the person confirms that plan, and everything it then builds is an
- * unpublished draft.
+ * addresses, the navigation, the layout, the contact form and a palette. The
+ * guided start confirms its own plan (AGL-3594), so the build follows with no
+ * approval to make, and the site is published, indexable, when it is done.
+ * The person edits or unpublishes it afterwards.
  *
  * ── It stays with the job (AGL-3593) ─────────────────────────────────────
  *
@@ -329,11 +328,46 @@ function ChoiceCard({
 }
 
 /** A small label above a group of questions. */
-function SectionLabel({ children }: { children: ReactNode }) {
+/**
+ * Each part of the guided start links its own section of the Start with AI
+ * guide (AGL-3660), so a `?` says what that one group of answers changes.
+ */
+const START_HELP = {
+  choose: pluginDocsHelp('aiStart', {
+    anchor: '#how-do-you-want-to-start',
+    excerpt:
+      'The starter site gives you a ready-made home page to edit. Start with AI asks a few questions, then plans, writes and publishes your pages.',
+  }),
+  business: pluginDocsHelp('aiStart', {
+    anchor: '#your-business',
+    excerpt:
+      'What kind of site it is picks its style and pages; who it is for is who every page and the contact form are written for.',
+  }),
+  style: pluginDocsHelp('aiSiteLooks', {
+    anchor: '#choose-a-style',
+    excerpt:
+      'The style decides the look — theme, colors, fonts, buttons — and which pages the site usually has. Every site gets its own variation.',
+  }),
+  details: pluginDocsHelp('aiStart', {
+    anchor: '#details',
+    excerpt:
+      'Where contact form messages go, how many pages to write, and on paid plans whether to draft a welcome email. All can be changed later.',
+  }),
+  estimate: pluginDocsHelp('aiCredits', {
+    anchor: '#before-a-job-starts',
+    excerpt:
+      'The most this start can cost. What it really costs is what each step spends, and you can watch that add up while it runs.',
+  }),
+}
+
+function SectionLabel({ children, help }: { children: ReactNode; help?: ReturnType<typeof pluginDocsHelp> }) {
   return (
-    <Typography variant="overline" color="text.secondary" component="h2" sx={{ display: 'block' }}>
-      {children}
-    </Typography>
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+      <Typography variant="overline" color="text.secondary" component="h2" sx={{ display: 'block' }}>
+        {children}
+      </Typography>
+      {help ? <HelpTip {...help} /> : null}
+    </Stack>
   )
 }
 
@@ -619,6 +653,7 @@ export function AiSiteStartCard({
                 {choosing ? 'How do you want to start?' : 'Tell us about your site'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
+                {choosing ? <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} /> : null}
                 {choosing
                   ? 'You can change everything later.'
                   : `A few answers and ${PLATFORM_BRAND_NAME} AI plans and writes your pages, then publishes your site.`}
@@ -683,8 +718,8 @@ export function AiSiteStartCard({
                   orgSlug={orgSlug}
                   user={user}
                   intro={
-                    'Your site is being planned. Review the plan here or in AI jobs, and confirm ' +
-                    'it to build — nothing is built, and nothing is published, until you do.'
+                    'Your site is being planned. It is then built and published for you, with ' +
+                    'nothing to approve. You can edit or unpublish it afterwards.'
                   }
                   // Full screen: AI jobs opens in the panel this dialog covers.
                   onOpenJobs={exit}
@@ -693,7 +728,7 @@ export function AiSiteStartCard({
             ) : (
               <>
                 <Stack spacing={2} component="section" aria-label="Your business">
-                  <SectionLabel>{'Your business'}</SectionLabel>
+                  <SectionLabel help={START_HELP.business}>{'Your business'}</SectionLabel>
                   <TextField
                     fullWidth
                     required
@@ -725,7 +760,7 @@ export function AiSiteStartCard({
                   />
                 </Stack>
                 <Stack spacing={2} component="section" aria-label="Style">
-                  <SectionLabel>{'Style'}</SectionLabel>
+                  <SectionLabel help={START_HELP.style}>{'Style'}</SectionLabel>
                   <Typography variant="body2" color="text.secondary">
                     {answers.kind
                       ? 'This decides how your site looks and which pages it usually has.'
@@ -744,7 +779,7 @@ export function AiSiteStartCard({
                   />
                 </Stack>
                 <Stack spacing={2} component="section" aria-label="Details">
-                  <SectionLabel>{'Details'}</SectionLabel>
+                  <SectionLabel help={START_HELP.details}>{'Details'}</SectionLabel>
                   {/*
                     The one setting a new site owner has to make, asked where
                     they are already answering: a contact form nobody routed
@@ -822,16 +857,7 @@ export function AiSiteStartCard({
             <Typography variant="body2" color="text.secondary">
               {`${estimateText}.`}
             </Typography>
-            <Tooltip title="What it really costs is what each step spends, and you can watch that add up while it runs.">
-              <Box
-                component="span"
-                tabIndex={0}
-                aria-label="How the estimate works"
-                sx={{ display: 'inline-flex', color: 'text.secondary' }}
-              >
-                <MdiIcon path={mdiInformationOutline.path} fontSize="small" />
-              </Box>
-            </Tooltip>
+            <HelpTip {...START_HELP.estimate} ariaLabel="How the estimate works" />
           </Stack>
           {refusal && (
             <Typography variant="body2" color="text.secondary">

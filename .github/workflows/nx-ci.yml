@@ -444,6 +444,10 @@ jobs:
       # and the list planner's cases) come from the pure TypeScript modules; a
       # change to one of them stales the Swift and Kotlin it generates.
       - run: npm run test:native-contracts
+      # Which changed paths run the native Kotlin and Swift tests in
+      # native-tests.yml (AGL-3704): a path it misses is a native break that
+      # fast-passes.
+      - run: npm run test:native-ci-changed
       - run: npm run generate:native-contracts:check
       - run: npm run generate:native-derived-values:check
       # And the notification catalog the app's push settings list (AGL-3620):
