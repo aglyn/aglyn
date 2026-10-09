@@ -3793,6 +3793,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        emptyTitle: {
+          type: 'string',
+          maxLength: 200,
+        },
+        emptyActionLabel: {
+          type: 'string',
+          maxLength: 200,
+        },
+        emptyActionHref: {
+          type: 'string',
+          maxLength: 200,
+        },
         showFilters: {
           type: 'boolean',
         },
@@ -3830,6 +3842,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       columns: 'text',
       maxItems: 'text',
       emptyText: 'text',
+      emptyTitle: 'text',
+      emptyActionLabel: 'text',
+      emptyActionHref: 'text',
       pageSize: 'text',
     },
     propFields: {
@@ -3841,6 +3856,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       columns: 'text-field',
       maxItems: 'text-field',
       emptyText: 'text-field',
+      emptyTitle: 'text-field',
+      emptyActionLabel: 'text-field',
+      emptyActionHref: 'text-field',
       showFilters: 'checkbox',
       showSearch: 'checkbox',
       showCategories: 'checkbox',
@@ -3857,6 +3875,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       columns: 200,
       maxItems: 200,
       emptyText: 200,
+      emptyTitle: 200,
+      emptyActionLabel: 200,
+      emptyActionHref: 200,
       pageSize: 200,
     },
     presets: ['Product grid', 'Shop catalog'],

@@ -1427,6 +1427,15 @@ nothing itself.
   a blog's home features its posts through Collection Entries (cover, date,
   byline, title, excerpt, each linking its post), any group the model drew
   for them left out; and a selling site's header carries the Cart button.
+  A STORE's Shop page is its storefront whatever its first products came to
+  (live Hearth & Wick, 2026-10-09: the products step failed and /shop was six
+  cards naming kinds of candle): a `siteKind: 'store'` start always lists the
+  catalog on its Shop page (sort and category chips) and its home, and with
+  nothing in it the grid opens as "New pieces are on the way" with a Get in
+  touch button to the contact page — never placeholder products. Its plan is
+  told to plan /shop with a "Product grid" section and is re-asked once for a
+  missing Shop page (`plan-store-shop-page`); a store whose products were
+  skipped or failed carries no cart until it sells.
   Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent

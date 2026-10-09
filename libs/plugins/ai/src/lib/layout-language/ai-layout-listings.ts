@@ -77,6 +77,17 @@ export interface AiLayoutListing {
   href?: string
   /** The content collection a posts listing repeats, by its slug. */
   collectionSlug?: string
+  /**
+   * Where a visitor goes from a store with nothing listed yet (AGL-3676): the
+   * site's contact page, by its path. The empty state names it as its one
+   * action, so a shop that opens empty still answers a visitor.
+   */
+  emptyAction?: { label: string; href: string }
+  /**
+   * `false` for a store that lists its catalog but cannot sell yet (its first
+   * products were skipped or failed, AGL-3676): the header carries no cart.
+   */
+  cart?: boolean
   placements: AiLayoutListingPlacement[]
 }
 
@@ -105,6 +116,9 @@ const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts']
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
+/** A path on the site, as a listing's links are kept. */
+const SITE_PATH = /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
+
 /** A site's listings as its unit inputs carry them; nothing that does not read is kept. */
 export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutListing[] {
   const raw = inputs?.[AI_LAYOUT_LISTINGS_INPUT]
@@ -116,6 +130,9 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     const kind = record['kind'] as AiLayoutListingKind
     if (!KINDS.includes(kind) || listings.some((listing) => listing.kind === kind)) continue
     const href = text(record['href'])
+    const action = (record['emptyAction'] ?? {}) as Record<string, unknown>
+    const actionLabel = text(action['label']).slice(0, 40)
+    const actionHref = text(action['href'])
     const collectionSlug = text(record['collectionSlug'])
     // A posts listing with no collection to repeat shows nothing.
     if (kind === 'posts' && !/^[a-z0-9-]{1,100}$/.test(collectionSlug)) continue
@@ -133,8 +150,10 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
       kind,
       name: text(record['name']) || (kind === 'products' ? 'the shop' : 'the blog'),
       records: (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
-      ...(/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(href) ? { href } : {}),
+      ...(SITE_PATH.test(href) ? { href } : {}),
       ...(kind === 'posts' ? { collectionSlug } : {}),
+      ...(kind === 'products' && record['cart'] === false ? { cart: false } : {}),
+      ...(kind === 'products' && actionLabel && SITE_PATH.test(actionHref) ? { emptyAction: { label: actionLabel, href: actionHref } } : {}),
       placements,
     })
   }
@@ -162,13 +181,36 @@ export interface AiLayoutListingScreen {
   id?: string | null
   title: string
   slug: string
-  sections: ReadonlyArray<{ name: string; items: number }>
+  sections: ReadonlyArray<{ name: string; items: number; uses?: readonly string[] }>
 }
 
 const PRODUCT_PAGE = /\b(shop|store|products?|catalog(?:ue)?|collections?|range|browse)\b/i
 const PRODUCT_SECTION =
   /\b(shop|store|products?|catalog(?:ue)?|collections?|range|bestsellers?|best[- ]sellers?|new arrivals|arrivals|featured|favou?rites|signature)\b/i
 const POST_SECTION = /\b(blog|posts?|articles?|writing|journal|stories|essays?|latest|recent|news|featured)\b/i
+
+/**
+ * The section of a shop's own page the whole catalog fills (AGL-3676): the
+ * first after its opening whose name says products ("Product grid", "The
+ * range"), else the section planned with the most items, else its second.
+ * The live Hearth & Wick start (2026-10-09) planned "Product range image
+ * cards" — six cards naming kinds of candle, with no product, price or cart.
+ */
+export function aiLayoutShopGridSection(sections: ReadonlyArray<{ name: string; items: number }>): number {
+  const named = sections.findIndex((section, index) => index > 0 && PRODUCT_SECTION.test(section.name) && !SHOP_FRAMING.test(section.name))
+  if (named !== -1) return named
+  const most = Math.max(0, ...sections.map((section) => section.items))
+  const byItems = most > 0 ? sections.findIndex((section) => section.items === most) : -1
+  return byItems !== -1 ? byItems : sections.length > 1 ? 1 : 0
+}
+
+/** A section of a shop page that only opens or closes it: "Shop intro heading", "Gift help call to action". */
+const SHOP_FRAMING = /\b(hero|intro(?:duction)?|heading|banner|cta|call to action|contact)\b/i
+
+/** Whether a planned page is the store's own Shop page: its address or its name says it sells. */
+export function aiLayoutIsShopPage(screen: { slug: string; title: string }): boolean {
+  return !isHome(screen.slug) && PRODUCT_PAGE.test(`${firstSegment(screen.slug)} ${screen.title}`)
+}
 
 const firstSegment = (slug: string) => slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()
 const isHome = (slug: string) => firstSegment(slug) === ''
@@ -208,11 +250,8 @@ export function aiLayoutListingPlacements(
         place(screen, named !== -1 ? named : afterHero(screen, (_name, items) => items > 0), 'featured')
         continue
       }
-      if (!PRODUCT_PAGE.test(`${firstSegment(screen.slug)} ${screen.title}`)) continue
-      const most = Math.max(0, ...screen.sections.map((section) => section.items))
-      const byItems = most > 0 ? screen.sections.findIndex((section) => section.items === most) : -1
-      const index = byItems !== -1 ? byItems : screen.sections.length > 1 ? 1 : 0
-      place(screen, index, 'index')
+      if (!aiLayoutIsShopPage(screen)) continue
+      place(screen, aiLayoutShopGridSection(screen.sections), 'index')
     }
     return placements
   }

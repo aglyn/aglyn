@@ -195,7 +195,7 @@ export function aiLayoutFrameCheck(input: {
         navPages: input.pages,
         closesDark: input.design ? aiLayoutDesignChoices(input.design).coverClose : false,
         // A site that sells carries its cart in the header (AGL-3676).
-        cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products'),
+        cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products' && listing.cart !== false),
       },
       input.targets,
     )

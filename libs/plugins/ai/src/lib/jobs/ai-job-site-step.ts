@@ -75,6 +75,7 @@ import {
 } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import {
@@ -646,6 +647,9 @@ export function aiSiteUnitJob(
       outputs: job.outputs ?? [],
       screens: merged.screens,
       sells: aiSiteSellsProducts(job),
+      // A store lists its catalog on its Shop page even when its first
+      // products could not be written, or on the Free taste (AGL-3676).
+      store: aiSiteKindOfInputs(job.inputs)?.id === 'store',
     })
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }

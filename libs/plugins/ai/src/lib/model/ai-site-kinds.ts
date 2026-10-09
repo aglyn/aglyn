@@ -257,8 +257,8 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['store', 'shop', 'market', 'product', 'sell', 'selling', 'buy', 'order', 'brand', 'handmade', 'goods', 'gifts', 'collection', 'shipping'],
     starter: 'physical-shop',
     look: { bases: ['minimal', 'cupertino', 'material3'], chroma: 'balanced', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['inter', 'outfit', 'manrope', 'dmserif', 'syne'], corners: ['soft', 'sharp', 'round'], buttons: 'pill', headingScale: 1, density: 'regular' },
-    design: 'Product-grid first: a short opening with one strong image, then the product range as a grid of image cards, what makes the products different, and care, shipping or returns answers only as the brief gives them. Keep copy short and let images lead.',
-    pages: 'Home, Shop presenting the range as image cards, About, and Contact. Products, a cart and checkout are added in Commerce, so plan no checkout page.',
+    design: 'Product-grid first: a short opening with one strong image, then the store\'s own products, which the platform lists with their photos, names, prices and cart, what makes the products different, and care, shipping or returns answers only as the brief gives them. Keep copy short and let images lead; never draw the products or the range as cards of your own.',
+    pages: 'Home with a featured products section, Shop at /shop whose second section is the product grid (the platform lists the real products there, with photos, prices and the cart), About, and Contact. Plan no checkout or cart page.',
   },
   {
     id: 'portfolio',

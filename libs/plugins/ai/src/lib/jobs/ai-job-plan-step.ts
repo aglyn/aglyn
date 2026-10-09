@@ -60,6 +60,7 @@ import {
   aiSiteEmptyGalleryViolations,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
+import { aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -291,6 +292,9 @@ export function aiPlanSiteLines(
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
+  // A store's Shop page IS its storefront (AGL-3676): the platform lists the
+  // real products there, so the plan names the section and draws no range.
+  if (kind?.id === 'store') lines.push(AI_SITE_STORE_SHOP_SENTENCE)
   lines.push(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
@@ -331,6 +335,43 @@ export function aiSiteThinHomeCheck(
     answers += 1
     if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
     return aiSiteThinHomeViolations(plan, rule)
+  }
+}
+
+/** What a store's plan is told about its Shop page (AGL-3676). */
+export const AI_SITE_STORE_SHOP_SENTENCE =
+  'Plan a Shop page at /shop: a short intro, then a section named "Product grid", where the platform lists the store\'s real products with their photos, prices and cart, then at most one or two short sections (care, shipping, gifting help). Never plan the products, the range or its categories as cards of your own.'
+
+/** The code a store plan with no Shop page is re-asked under. */
+export const AI_SITE_STORE_SHOP_CODE = 'plan-store-shop-page'
+
+/**
+ * A store plan of two or more pages with no Shop page (AGL-3676): the page
+ * the platform lists the catalog on is the one a shopper looks for. A
+ * one-page Free taste lists its products on the home instead.
+ */
+export function aiSiteStoreShopPageViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  if (plan.screens.length < 2 || plan.screens.some((screen) => aiLayoutIsShopPage(screen))) return []
+  return [
+    {
+      rule: null,
+      code: AI_SITE_STORE_SHOP_CODE,
+      message:
+        'This store has no Shop page. Plan one at /shop, its second section named "Product grid": the platform lists the real products there.',
+      paths: ['screens'],
+    },
+  ]
+}
+
+/** A store plan's missing Shop page, asked about on the FIRST answer only, like a thin home. */
+export function aiSiteStoreShopCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSiteStoreShopPageViolations(plan)
   }
 }
 
@@ -441,8 +482,10 @@ function planViolations(
   home: { min: number; across: number | null } | null = null,
   blog = false,
   site = false,
+  store = false,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   const thinHome = home && home.min > 0 ? aiSiteThinHomeCheck(home) : null
+  const storeShop = store ? aiSiteStoreShopCheck() : null
   const blogStandIn = blog ? aiSiteBlogStandInCheck() : null
   const emptyGallery = site ? aiSiteEmptyGalleryCheck() : null
   return (plan) => {
@@ -458,6 +501,7 @@ function planViolations(
       ...(thinHome ? thinHome(plan) : []),
       ...(blogStandIn ? blogStandIn(plan) : []),
       ...(emptyGallery ? emptyGallery(plan) : []),
+      ...(storeShop ? storeShop(plan) : []),
     ]
   }
 }
@@ -854,6 +898,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         site ? aiSitePlanHomeRule(inventory, capabilities) : null,
         site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
         site,
+        site && aiSiteKindOfInputs(job.inputs)?.id === 'store',
       ),
     })
     const spent: AiJobStepOutcome = {

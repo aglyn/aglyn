@@ -654,16 +654,28 @@ export function aiSiteListings(input: {
   screens: readonly AiLayoutListingScreen[]
   /** The ledger owes a store's first products: a layout built before them carries the cart. */
   sells?: boolean
+  /**
+   * The site is a store (`siteKind: 'store'`, AGL-3676): its Shop page and
+   * its home list the catalog whatever its first products came to — the
+   * live Hearth & Wick start's products step failed, and its Shop page was
+   * six cards naming kinds of candle. An empty catalog says so in the grid.
+   */
+  store?: boolean
 }): AiLayoutListing[] {
   const listings: AiLayoutListing[] = []
   const products = input.outputs.filter((output) => output.resource === 'product' && !output.proposal)
-  if (products.length || input.sells) {
+  if (products.length || input.sells || input.store) {
+    const contact = aiSiteContactPath(input.screens)
     listings.push({
       id: aiLayoutListingId('products'),
       kind: 'products',
       name: 'the shop',
       records: products.map((product) => product.label),
-      placements: products.length ? aiLayoutListingPlacements('products', input.screens) : [],
+      ...(contact ? { emptyAction: { label: 'Get in touch', href: contact } } : {}),
+      // A store whose first products were skipped or failed lists its
+      // (empty) catalog, but its header carries no cart until it sells.
+      ...(products.length || input.sells ? {} : { cart: false }),
+      placements: aiLayoutListingPlacements('products', input.screens),
     })
   }
   const posts = input.outputs.filter((output) => output.resource === 'entry')
@@ -680,6 +692,16 @@ export function aiSiteListings(input: {
     })
   }
   return listings
+}
+
+/** The page a visitor gets in touch on, by its path: one whose address or name says contact, else the one placing a form. */
+function aiSiteContactPath(screens: readonly AiLayoutListingScreen[]): string | null {
+  const path = (slug: string) => `/${slug.trim().replace(/^\/+|\/+$/g, '')}`
+  const isPath = (slug: string) => /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(path(slug))
+  const named = screens.find((screen) => isPath(screen.slug) && /\b(contact|get in touch|enquir|inquir)/i.test(`${screen.slug} ${screen.title}`))
+  if (named) return path(named.slug)
+  const form = screens.find((screen) => isPath(screen.slug) && screen.sections.some((section) => (section.uses ?? []).some((use) => /form/i.test(use))))
+  return form ? path(form.slug) : null
 }
 
 /**
