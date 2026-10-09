@@ -2995,7 +2995,7 @@
       },
       "apiPrefixes": ["review-platforms"],
       "catalog": {
-        "order": 32,
+        "order": 37,
         "$comment": "Trustpilot and Yotpo Reviews invitations for the commerce plugin's orders (AGL-3699), each with the merchant's own account, through core's order-email-copies seam and commerce's order events by name; it never imports commerce, and commerce's built-in product reviews stay the reviews a store shows. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). On for every workspace, off for a site only when that site says so, and no release flag: Trustpilot's BCC invitation address needs nothing of the deployment, and the API connections hide themselves until it sets REVIEW_PLATFORMS_TOKEN_KEY.",
         "label": "Review platforms",
         "alwaysOnForWorkspace": true,
