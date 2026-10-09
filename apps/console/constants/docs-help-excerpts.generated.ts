@@ -238,6 +238,7 @@ export const DOCS_HELP_EXCERPTS = {
   video: 'The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the fields a video search result reads.',
   views: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   webhooks: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
+  weglot: 'Translate your published site in the visitor\'s browser with your own Weglot account, and what that does and does not do for search.',
   whiteLabel: 'Replace the Aglyn brand across the console, your published sites, and transactional email — product name, logo, colors, support URL, and email from-name.',
   workflows: 'Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.',
   yourFirstApiCall: 'Create an API key in the console, make your first request, read the response, handle the four errors you will actually hit, and page through a whole dataset.',
@@ -1040,6 +1041,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   webhooks: {
     '#outbound-webhooks': 'R feature. ::.',
+  },
+  weglot: {
+    '#settings': 'Weglot\'s own switcher.',
   },
   whiteLabel: {
     '#fields': 'An information notice instead of the editor: "White-labeling the platform is included on the Agency plan — see Billing to upgrade.',

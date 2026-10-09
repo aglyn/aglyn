@@ -116,6 +116,9 @@ because the site cannot function without them:
 - Popup and announcement "don't show this again" stamps (stored locally, never
   transmitted).
 - The stored consent state itself.
+- On a site that switched on [Weglot translation](../../building-sites/multilingual/weglot.md#cookies-and-privacy),
+  Weglot's record of the language a visitor chose and its cache of the translations
+  already loaded.
 
 ## The campaign a visitor came from {#campaign-touch}
 

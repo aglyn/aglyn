@@ -329,6 +329,17 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "weglot",
+    "label": "Weglot translation",
+    "description": "Translate your published site with your own Weglot account.",
+    "releaseFlag": "release_weglot",
+    "defaultOffPerSite": true,
+    "siteOff": {
+      "stops": "Stops loading Weglot and its language switcher on this site's pages.",
+      "keeps": "Your Weglot settings and your Weglot account's translations are kept."
+    }
+  },
+  {
     "id": "ad-conversions",
     "label": "Ad conversions",
     "alwaysOnForWorkspace": true,
@@ -376,6 +387,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "couriers": "console-only",
   "live-chat": "elements",
   "review-platforms": "console-only",
+  "weglot": "elements",
   "ad-conversions": "console-only",
 }
 
@@ -2898,6 +2910,22 @@ export const PLUGIN_SITE_CSP_DECLARED: readonly PluginSiteCspDeclaration[] = [
         "font": [
           "cdn.livechatinc.com",
           "secure.livechatinc.com"
+        ]
+      }
+    }
+  },
+  {
+    "pluginId": "weglot",
+    "switchField": "enabled",
+    "variants": {
+      "default": {
+        "connect": [
+          "cdn.weglot.com",
+          "cdn-api-weglot.com",
+          "api.weglot.com"
+        ],
+        "img": [
+          "cdn.weglot.com"
         ]
       }
     }

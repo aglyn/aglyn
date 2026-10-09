@@ -26,6 +26,7 @@ export type PluginReleaseFlagKey =
   | 'release_redirects'
   | 'release_workflows'
   | 'release_accounting'
+  | 'release_weglot'
 
 export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
   {
@@ -129,5 +130,11 @@ export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
     "description": "QuickBooks Online and Xero sync for commerce, and through Codat QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614, AGL-3636). OFF by default; needs the deployment's Intuit or Xero app credentials or Codat API key, and the accounting token key, on the console.",
     "defaultEnabled": false,
     "navTabId": "nav-tab-org-accounting"
+  },
+  {
+    "key": "release_weglot",
+    "label": "Weglot translation",
+    "description": "Weglot's JavaScript translation on published sites, with the merchant's own Weglot key (AGL-3700). Platform-wide kill switch; each site still switches it on itself.",
+    "defaultEnabled": true
   }
 ]

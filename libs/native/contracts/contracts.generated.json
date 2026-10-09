@@ -1393,6 +1393,16 @@
     },
     {
       "alwaysOnForWorkspace": true,
+      "description": "Send a DoorDash courier for your own local deliveries, from your own DoorDash Drive account, with its tracking on the order.",
+      "id": "couriers",
+      "label": "Couriers",
+      "siteOff": {
+        "keeps": "The connection is kept, and a courier already on its way still finishes, with its progress on the order.",
+        "stops": "Switching Couriers off for this site stops members sending DoorDash couriers for its local deliveries."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
       "defaultOffPerSite": true,
       "description": "Chat with visitors through your own Tidio or LiveChat account.",
       "id": "live-chat",
@@ -1400,6 +1410,37 @@
       "siteOff": {
         "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account.",
         "stops": "Switching Live chat off for this site removes the chat from its pages."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Trustpilot and Yotpo review invitations.",
+      "id": "review-platforms",
+      "label": "Review platforms",
+      "siteOff": {
+        "keeps": "Reviews already collected stay in your Trustpilot and Yotpo accounts.",
+        "stops": "Stops review invitations for new orders."
+      }
+    },
+    {
+      "defaultOffPerSite": true,
+      "description": "Translate your published site with your own Weglot account.",
+      "id": "weglot",
+      "label": "Weglot translation",
+      "releaseFlag": "release_weglot",
+      "siteOff": {
+        "keeps": "Your Weglot settings and your Weglot account's translations are kept.",
+        "stops": "Stops loading Weglot and its language switcher on this site's pages."
+      }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, for visitors who allowed advertising.",
+      "id": "ad-conversions",
+      "label": "Ad conversions",
+      "siteOff": {
+        "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected.",
+        "stops": "Switching Ad conversions off for this site stops its purchases and leads being sent to the Meta, TikTok and Pinterest accounts it connected."
       }
     }
   ],
@@ -3385,6 +3426,17 @@
       "value": "marketplace"
     }
   ],
+  "ORDER_COURIER_STATE_LABELS": {
+    "assigned": "Courier on the way to the store",
+    "at_dropoff": "Courier arriving",
+    "at_pickup": "Courier at the store",
+    "cancelled": "Courier canceled",
+    "delivered": "Delivered",
+    "picked_up": "On its way",
+    "requested": "Courier requested",
+    "returned": "Returned to the store",
+    "returning": "Coming back to the store"
+  },
   "ORDER_DISPUTE_OPTIONS": [
     {
       "label": "Open dispute",

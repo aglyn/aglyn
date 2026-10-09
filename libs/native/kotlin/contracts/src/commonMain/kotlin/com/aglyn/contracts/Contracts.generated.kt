@@ -1251,6 +1251,24 @@ data class OrderChannelSourceLinesItem(
     val lineIndex: Double,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderCourierStateSerializer::class)
+enum class OrderCourierState(val raw: String) {
+    ASSIGNED("assigned"),
+    AT_DROPOFF("at_dropoff"),
+    AT_PICKUP("at_pickup"),
+    CANCELLED("cancelled"),
+    DELIVERED("delivered"),
+    PICKED_UP("picked_up"),
+    REQUESTED("requested"),
+    RETURNED("returned"),
+    RETURNING("returning"),
+    UNKNOWN(""),
+}
+
+internal object OrderCourierStateSerializer :
+    RawEnumSerializer<OrderCourierState>("com.aglyn.contracts.OrderCourierState", OrderCourierState.entries, OrderCourierState.UNKNOWN, { it.raw })
+
 @Serializable
 data class OrderCredit(
     val amountCents: Double,
@@ -1403,6 +1421,7 @@ data class OrderLineModifier(
 @Serializable
 data class OrderLocalDelivery(
     val addressOutsideZone: Boolean? = null,
+    val courier: OrderLocalDeliveryCourier? = null,
     val deliveredAtMs: Double? = null,
     val failedAtMs: Double? = null,
     val failedReason: String? = null,
@@ -1417,6 +1436,20 @@ data class OrderLocalDelivery(
     val windowStartMs: Double? = null,
     val zoneId: String? = null,
     val zoneName: String? = null,
+)
+
+@Serializable
+data class OrderLocalDeliveryCourier(
+    val deliveryRef: String? = null,
+    val etaMs: Double? = null,
+    val pickupEtaMs: Double? = null,
+    val provider: String? = null,
+    val providerLabel: String? = null,
+    val reason: String? = null,
+    val state: OrderCourierState? = null,
+    val testMode: Boolean? = null,
+    val trackingUrl: String? = null,
+    val updatedAtMs: Double? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -2417,6 +2450,7 @@ internal data class ContractValuesPart3(
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
+    @SerialName("ORDER_COURIER_STATE_LABELS") val orderCourierStateLabels: Map<String, String>,
     @SerialName("ORDER_DISPUTE_OPTIONS") val orderDisputeOptions: List<ListFilterOption>,
     @SerialName("ORDER_FULFILLMENT_METHOD_LABELS") val orderFulfillmentMethodLabels: Map<String, String>,
     @SerialName("ORDER_LIST_HEADERS") val orderListHeaders: Map<String, String>,
@@ -2439,11 +2473,11 @@ internal data class ContractValuesPart3(
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
-    @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
     @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
     @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
@@ -2491,11 +2525,11 @@ internal data class ContractValuesPart4(
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
-    @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )
@@ -2633,6 +2667,7 @@ class ContractValues internal constructor(
     val openDisputeClause: ListFilterClause get() = part3.openDisputeClause
     val orderChannelLabels: Map<String, String> get() = part3.orderChannelLabels
     val orderChannelOptions: List<ListFilterOption> get() = part3.orderChannelOptions
+    val orderCourierStateLabels: Map<String, String> get() = part3.orderCourierStateLabels
     val orderDisputeOptions: List<ListFilterOption> get() = part3.orderDisputeOptions
     val orderFulfillmentMethodLabels: Map<String, String> get() = part3.orderFulfillmentMethodLabels
     val orderListHeaders: Map<String, String> get() = part3.orderListHeaders
@@ -2655,7 +2690,7 @@ class ContractValues internal constructor(
     val outreachSequenceNameMax: Long get() = part3.outreachSequenceNameMax
     val outreachTaskTitleMax: Long get() = part3.outreachTaskTitleMax
     val paymentAcceptedMaxLength: Long get() = part3.paymentAcceptedMaxLength
-    val posCashEventLabels: Map<String, String> get() = part3.posCashEventLabels
+    val posCashEventLabels: Map<String, String> get() = part4.posCashEventLabels
     val posKioskCatalogLimit: Long get() = part4.posKioskCatalogLimit
     val posKioskDoneSeconds: Long get() = part4.posKioskDoneSeconds
     val posKioskIdleSecondsDefault: Long get() = part4.posKioskIdleSecondsDefault
@@ -2703,7 +2738,7 @@ class ContractValues internal constructor(
     val templateKindOptions: List<ListFilterOption> get() = part4.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part4.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part4.templateListQuery
-    val tenantEmailCollection: String get() = part4.tenantEmailCollection
+    val tenantEmailCollection: String get() = part5.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part5.tenantEmails
     val workflowMaxSteps: Long get() = part5.workflowMaxSteps
 

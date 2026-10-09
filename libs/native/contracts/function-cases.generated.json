@@ -17528,7 +17528,11 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
-            "live-chat"
+            "couriers",
+            "live-chat",
+            "review-platforms",
+            "weglot",
+            "ad-conversions"
           ]
         },
         {
@@ -17568,7 +17572,11 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
-            "live-chat"
+            "couriers",
+            "live-chat",
+            "review-platforms",
+            "weglot",
+            "ad-conversions"
           ]
         },
         {
@@ -17595,7 +17603,10 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
-            "live-chat"
+            "couriers",
+            "live-chat",
+            "review-platforms",
+            "ad-conversions"
           ]
         },
         {
@@ -17626,7 +17637,10 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "live-chat",
+            "review-platforms",
+            "ad-conversions",
             "crm",
             "commerce"
           ]
@@ -17659,7 +17673,10 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
             "live-chat",
+            "review-platforms",
+            "ad-conversions",
             "accounts",
             "commerce",
             "bookings"
@@ -17706,7 +17723,10 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "review-platforms",
+            "ad-conversions"
           ]
         },
         {
@@ -17738,6 +17758,9 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "review-platforms",
+            "ad-conversions",
             "commerce",
             "crm"
           ]
@@ -17775,6 +17798,9 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "review-platforms",
+            "ad-conversions",
             "commerce",
             "accounts",
             "crm"
@@ -17817,6 +17843,9 @@
             "inventory-sync",
             "delivery-apps",
             "loyalty",
+            "couriers",
+            "review-platforms",
+            "ad-conversions",
             "commerce",
             "accounts"
           ]
@@ -17864,7 +17893,10 @@
             "print-on-demand",
             "inventory-sync",
             "delivery-apps",
-            "loyalty"
+            "loyalty",
+            "couriers",
+            "review-platforms",
+            "ad-conversions"
           ]
         }
       ]

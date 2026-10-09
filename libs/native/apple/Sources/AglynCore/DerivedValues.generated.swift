@@ -38,6 +38,7 @@ public enum ReleaseFlagDefaults {
     "release_redirects": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_workflows": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_accounting": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_weglot": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_addon_store": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_native_checkout": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_edit_bar": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),

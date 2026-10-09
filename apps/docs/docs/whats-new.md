@@ -28,6 +28,15 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
+## October 2026 — translate your site with Weglot (newest)
+
+- **[Weglot translation](building-sites/multilingual/weglot.md)** — already use
+  Weglot? Switch it on for a site, paste your Weglot API key and choose your
+  languages. Visitors get a language switcher that matches your theme (or Weglot's
+  own), and the script never holds up the page's first view. Translations are for
+  visitors: they are not indexed as separate pages, so use locale variants for
+  languages that need to rank. Business and above.
+
 <!--
 AGL-3694: held unpublished until the deployment sets AD_CONVERSIONS_TOKEN_KEY on
 the console, like the guide it links (`unlisted: true`). Once the key is set on
@@ -42,7 +51,7 @@ aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
   visitors who allow advertising, paired with the browser tag so each is counted once.
 -->
 
-## October 2026 — your own TikTok and Pinterest tags (newest)
+## October 2026 — your own TikTok and Pinterest tags
 
 - **[Ad tracking](marketing-and-automation/analytics/ad-tracking.md)** — your Meta
   pixel, TikTok pixel, Pinterest tag, Google Ads and LinkedIn tags now run on your

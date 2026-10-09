@@ -44,6 +44,17 @@ describe("a plugin's site feature widens its site's policy only while on (AGL-36
     expect(pluginSiteCspHostsFor(CHAT, { enabled: true, provider: 'b', publicKey: 'k' })).toEqual(CHAT.variants['b'])
   })
 
+  it('admits a single-variant plugin by its switch alone (AGL-3700)', () => {
+    const SINGLE: PluginSiteCspDeclaration = {
+      pluginId: 'single',
+      switchField: 'enabled',
+      variants: { default: { connect: ['api.s.test'], img: ['cdn.s.test'] } },
+    }
+    expect(pluginSiteCspHostsFor(SINGLE, { enabled: true })).toEqual(SINGLE.variants['default'])
+    expect(pluginSiteCspHostsFor(SINGLE, { enabled: 'true' })).toEqual({})
+    expect(pluginSiteCspHostsFor(SINGLE, null)).toEqual({})
+  })
+
   it('fails closed on every malformed setting', () => {
     for (const settings of [
       null,

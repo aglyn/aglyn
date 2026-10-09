@@ -135,6 +135,8 @@
       "@aglyn/plugins-stock-photos/*": ["./libs/plugins/stock-photos/src/lib/*"],
       "@aglyn/plugins-video-delivery": ["./libs/plugins/video-delivery/src/index.ts"],
       "@aglyn/plugins-video-delivery/*": ["./libs/plugins/video-delivery/src/lib/*"],
+      "@aglyn/plugins-weglot": ["./libs/plugins/weglot/src/index.ts"],
+      "@aglyn/plugins-weglot/*": ["./libs/plugins/weglot/src/lib/*"],
       "@aglyn/shared-data-enums": ["./libs/shared/data/enums/src/index.ts"],
       "@aglyn/shared-data-enums/*": ["./libs/shared/data/enums/src/lib/*"],
       "@aglyn/shared-data-forms": ["./libs/shared/data/forms/src/index.ts"],

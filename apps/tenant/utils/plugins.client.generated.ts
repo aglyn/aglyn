@@ -59,4 +59,9 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"site":"registerLiveChatSite"},
     load: () => import('@aglyn/plugins-live-chat/site'),
   },
+  {
+    id: 'weglot',
+    register: {"site":"registerWeglotSite"},
+    load: () => import('@aglyn/plugins-weglot/site'),
+  },
 ]

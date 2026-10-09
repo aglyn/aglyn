@@ -63,8 +63,11 @@ export interface PluginSiteCspDeclaration {
   pluginId: string
   /** The settings field that must be exactly `true` for anything to be admitted. */
   switchField: string
-  /** The settings field whose value names the variant. */
-  variantField: string
+  /**
+   * The settings field whose value names the variant. Absent for a plugin
+   * with one set of hosts, which declares a single `default` variant.
+   */
+  variantField?: string
   /** A settings field that must hold a non-empty string, or nothing loads. */
   requiredField?: string
   /** The hosts each variant needs, by directive. */
@@ -93,7 +96,9 @@ export function pluginSiteCspHostsFor(
     const required = settings[declaration.requiredField]
     if (typeof required !== 'string' || !required.trim()) return {}
   }
-  const variant = settings[declaration.variantField]
+  const variant = declaration.variantField
+    ? settings[declaration.variantField]
+    : 'default'
   if (typeof variant !== 'string') return {}
   if (!Object.prototype.hasOwnProperty.call(declaration.variants, variant)) {
     return {}

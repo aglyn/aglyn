@@ -845,6 +845,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
   },
+  weglot: {
+    path: '/building-sites/multilingual/weglot',
+    title: 'Translate with Weglot',
+  },
   whiteLabel: {
     path: '/workspace-and-billing/white-label',
     title: 'White-label',
@@ -1066,6 +1070,7 @@ export const DOCS_HELP_ANCHORS = {
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
   views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   webhooks: ['#outbound-webhooks', '#slack', '#inbound-webhooks', '#tips', '#related'],
+  weglot: ['#seo', '#before-you-start', '#turn-it-on', '#settings', '#what-visitors-see', '#page-speed', '#cookies-and-privacy', '#security', '#turn-it-off', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#email-footer', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#org-automations', '#run-history', '#related'],
   yourFirstApiCall: ['#step-1-create-a-key', '#step-2-check-the-key', '#step-3-your-first-request', '#in-javascript', '#step-4-write-something', '#idempotency', '#step-5-page-through-everything', '#the-four-errors-you-will-hit', '#mcp', '#where-to-go-next', '#related'],
@@ -1868,6 +1873,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   webhooks: {
     '#outbound-webhooks': 'Outbound webhooks',
+  },
+  weglot: {
+    '#settings': 'Weglot translation settings',
   },
   whiteLabel: {
     '#fields': 'The fields',

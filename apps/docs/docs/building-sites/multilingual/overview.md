@@ -48,6 +48,8 @@ Add a **language switcher** so visitors can move between locales themselves.
 :::tip How-tos
 - [Add a locale](add-a-locale.md)
 - [Add a language switcher](language-switcher.md)
+- [Translate with Weglot](weglot.md) — your own Weglot account translates pages in
+  the visitor's browser (for visitors, not for search ranking)
 
 This is **multilingual v1**.
 :::

@@ -69,6 +69,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-stock-photos/declarations.console-server')).registerStockPhotosConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.server')).registerFunnelsServerDeclarations()
     ;(await import('@aglyn/plugins-funnels/declarations.console-server')).registerFunnelsConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-weglot/declarations')).registerWeglotDeclarations()
   })()
   return done
 }

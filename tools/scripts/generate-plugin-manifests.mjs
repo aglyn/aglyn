@@ -3357,9 +3357,15 @@ function siteCspRows() {
     if (Object.keys(rest).length) throw new Error(`${what}: unknown key(s) ${Object.keys(rest).join(', ')}`)
     if (!plugin.register?.site) throw new Error(`${what}: only a plugin with a site surface loads anything on a page`)
     for (const [name, value] of [['switchField', switchField], ['variantField', variantField]]) {
+      // `variantField` is optional: a plugin with one set of hosts (no
+      // provider choice) omits it and declares a single "default" variant.
+      if (name === 'variantField' && value === undefined) continue
       if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(value)) {
         throw new Error(`${what}: "${name}" names a settings field`)
       }
+    }
+    if (variantField === undefined && (Object.keys(variants ?? {}).length !== 1 || !variants?.default)) {
+      throw new Error(`${what}: without "variantField", "variants" holds exactly one variant, "default"`)
     }
     if (requiredField !== undefined && (typeof requiredField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(requiredField))) {
       throw new Error(`${what}: "requiredField" names a settings field`)
@@ -3390,7 +3396,7 @@ function siteCspRows() {
     rows.push({
       pluginId: plugin.id,
       switchField,
-      variantField,
+      ...(variantField ? { variantField } : {}),
       ...(requiredField ? { requiredField } : {}),
       variants: compiled,
     })
