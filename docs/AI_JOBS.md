@@ -1406,12 +1406,14 @@ nothing itself.
   its pages (publish role and byline, as the entry editor's Publish requires) and
   drops the blog's cached addresses. A site whose kind is Online store gets
   "Adding your first products": the `products` step's catalog asked for 3 to 6,
-  each written by the commerce plugin's `product` draft writer with NO price,
-  since no price is ever invented — and, since the 2026-10-08 Ember & Wick
-  start showed no product at all, LISTED before it has one (`comingSoon`):
-  `active`, shown on the storefront as "Price coming soon" with no Add to
-  cart, sold by no door (`variantHasPrice`) and in no feed until the owner
-  prices it; the row and the Products card say "Set prices to start selling".
+  each written by the commerce plugin's `product` draft writer at the
+  store's default price (`COMMERCE_DEFAULT_PRICE_USD`, $25 — the catalog
+  proposes none; Zach 2026-10-08, AGL-3676), for the owner to change — and,
+  since the 2026-10-08 Ember & Wick start showed no product at all, LISTED at
+  once (`comingSoon`: `active`); the row says the price is a starting one. An
+  owner who clears a price keeps the product: the storefront shows "Price
+  coming soon" with no Add to cart, sold by no door (`variantHasPrice`) and
+  in no feed until it is priced again.
   Each gets a photo in its slot: a stock photo of its own words where the
   deployment has a library, else a starter, for the owner to replace. The
   pages then LIST the real records (`layout-language/ai-layout-listings.ts`):

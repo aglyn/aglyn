@@ -51,6 +51,21 @@ import type { PickupLocationSettings } from './order-local-fulfillment'
 /** Product price ceiling (whole USD). */
 export const COMMERCE_MAX_PRICE_USD = 10000
 
+/**
+ * The price a new product starts with (AGL-3676), in the store's currency —
+ * USD, the only one a catalog prices in (`priceUsd`). Zach, 2026-10-08:
+ * "product without price is ok, but default a price". So every create path
+ * (the editor's New product, an accepted AI proposal, a guided start's
+ * products) fills this in, where nothing states one, for the owner to
+ * change; an owner may still clear it on purpose, and the storefront then
+ * says "Price coming soon" and sells it nowhere (`variantHasPrice`).
+ *
+ * $25: a plain round number in the middle of what small shops list a
+ * typical item at, above every payment method's floor but Affirm's ($50),
+ * and never $0 — a default of nothing would sell the product for free.
+ */
+export const COMMERCE_DEFAULT_PRICE_USD = 25
+
 export type ProductType = 'physical' | 'digital' | 'service'
 export type ProductStatus = 'draft' | 'active' | 'archived'
 
@@ -781,6 +796,24 @@ export function unpricedProductDraft(
   }
 }
 
+/**
+ * A proposed product as a new product is created from it (AGL-3676): the
+ * draft `unpricedProductDraft` builds, with `priceUsd` on every variant —
+ * the default price unless the caller states one — and the search keys
+ * worked out again for that price. `null` leaves it unpriced on purpose.
+ */
+export function defaultPricedProductDraft(
+  proposal: ProposedProduct,
+  takenSlugs: ReadonlySet<string>,
+  nowMs: number,
+  priceUsd: number | null = COMMERCE_DEFAULT_PRICE_USD,
+): UnpricedProductDraft | HostProduct {
+  const draft = unpricedProductDraft(proposal, takenSlugs, nowMs)
+  if (priceUsd === null) return draft
+  const variants = draft.variants.map((variant) => ({ ...variant, priceUsd })) as ProductVariant[]
+  return { ...draft, ...productSearchFields({ name: draft.name, variants }), variants }
+}
+
 /** Variant whose option selections match exactly; undefined if none. */
 export function findVariant(
   product: Pick<HostProduct, 'variants'>,
@@ -1316,8 +1349,15 @@ export function validateProduct(product: HostProduct): string | null {
     if (!variant.id) return 'Variants need stable ids'
     if (ids.has(variant.id)) return 'Variant ids must be unique'
     ids.add(variant.id)
+    // A variant with no price is storable (AGL-3676): the owner may list a
+    // product before pricing it, the storefront says "Price coming soon",
+    // and no sale door sells it (`variantHasPrice`).
     if (variant.priceUsd === undefined || variant.priceUsd === null) {
-      return 'Set a price for every variant'
+      if (variant.sku) {
+        if (skus.has(variant.sku)) return 'Variant SKUs must be unique'
+        skus.add(variant.sku)
+      }
+      continue
     }
     const price = Number(variant.priceUsd)
     if (!Number.isFinite(price) || price < 0) {
