@@ -98,6 +98,8 @@ interface UserDetail {
     displayNameSource?: 'auth' | 'profile' | 'provider' | 'idp' | null
     photoUrlSource?: 'auth' | 'profile' | 'provider' | 'idp' | null
     disabled: boolean
+    /** Whether the account's address is verified; absent from an older deploy. */
+    emailVerified?: boolean
     staff: boolean
     staffRole: string | null
     /**
@@ -481,6 +483,25 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 ) : (
                                   <Chip size="small" color="success" label="Active" />
                                 )}
+                                {/* Verified or not, at a glance: an unverified
+                                    password account is held at /verify-email
+                                    and cannot use a workspace yet. */}
+                                {detail.user.email && detail.user.emailVerified !== undefined ? (
+                                  detail.user.emailVerified ? (
+                                    <Chip
+                                      size="small"
+                                      color="success"
+                                      variant="outlined"
+                                      label="Email verified"
+                                    />
+                                  ) : (
+                                    <Chip
+                                      size="small"
+                                      color="warning"
+                                      label="Email not verified"
+                                    />
+                                  )
+                                ) : null}
                                 {detail.user.staff ? (
                                   <Chip
                                     size="small"

@@ -396,6 +396,11 @@ async function handler(request: Request): Promise<Response> {
         authDisplayName: record.displayName ?? null,
         authPhotoUrl: record.photoURL ?? null,
         disabled: record.disabled,
+        // Whether the address has been proven (AGL-3706). An
+        // unverified password account cannot use a workspace yet, and the
+        // identity card said nothing either way, so staff read "stuck at
+        // verification" off an account that had already verified.
+        emailVerified: record.emailVerified === true,
         // Phone + do-not-contact state (AGL-1569). See `readPhoneDisclosure`
         // for why this is the profile's field and not the Auth record's, and
         // why the opt-out answer is inseparable from the number.
