@@ -474,8 +474,10 @@ describe('the gates, each forced on its own', () => {
     // under 1.3 — refused as `ambiguous`, never reaching the gate this test
     // is about. Then "how do I take bookings from my site", until the
     // card-level setup sections (AGL-3707) rewrote the bookings overview's
-    // openers and its first turn fell to `low-coverage`.
-    const question = 'how do I build a form'
+    // openers and its first turn fell to `low-coverage`. Then "how do I build
+    // a form", until the AI feature guides (AGL-3660) added a form section to
+    // Create with AI and its first-turn margin fell to 1.07 — `ambiguous`.
+    const question = 'how do I add a page'
     expect(questionStandsAlone(question)).toBe(true)
     const first = verdictFor(question, false)
     expect(first.answered).toBe(true)

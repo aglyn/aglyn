@@ -84,6 +84,18 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BindingRefVia: String, Codable, CaseIterable, Hashable, Sendable {
+  case id = "id"
+  case name = "name"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct BookingActions: Codable, Hashable, Sendable {
   public var cancel: Bool
   public var checkIn: Bool
@@ -333,6 +345,114 @@ public enum CrmForecastCategory: String, Codable, CaseIterable, Hashable, Sendab
   }
 }
 
+public struct DatasetFieldDefinition: Codable, Hashable, Sendable {
+  public var customType: String?
+  public var `default`: ContractJSON?
+  public var description: String?
+  public var name: String?
+  public var reference: DatasetFieldDefinitionReference?
+  public var required: Bool?
+  public var slugFrom: String?
+  public var type: DatasetFieldType?
+  public var validation: DatasetFieldValidation?
+
+  public init(customType: String? = nil, `default`: ContractJSON? = nil, description: String? = nil, name: String? = nil, reference: DatasetFieldDefinitionReference? = nil, required: Bool? = nil, slugFrom: String? = nil, type: DatasetFieldType? = nil, validation: DatasetFieldValidation? = nil) {
+    self.customType = customType
+    self.default = `default`
+    self.description = description
+    self.name = name
+    self.reference = reference
+    self.required = required
+    self.slugFrom = slugFrom
+    self.type = type
+    self.validation = validation
+  }
+}
+
+public struct DatasetFieldDefinitionReference: Codable, Hashable, Sendable {
+  public var datasetId: String
+  public var displayFieldId: String?
+  public var multiple: Bool?
+  public var onDelete: DatasetFieldDefinitionReferenceOnDelete?
+
+  public init(datasetId: String, displayFieldId: String? = nil, multiple: Bool? = nil, onDelete: DatasetFieldDefinitionReferenceOnDelete? = nil) {
+    self.datasetId = datasetId
+    self.displayFieldId = displayFieldId
+    self.multiple = multiple
+    self.onDelete = onDelete
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum DatasetFieldDefinitionReferenceOnDelete: String, Codable, CaseIterable, Hashable, Sendable {
+  case restrict = "restrict"
+  case setNull = "setNull"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct DatasetFieldEntry: Codable, Hashable, Sendable {
+  public var id: String
+  public var name: String
+
+  public init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum DatasetFieldType: String, Codable, CaseIterable, Hashable, Sendable {
+  case bool = "bool"
+  case bytes = "bytes"
+  case coordinates = "coordinates"
+  case float = "float"
+  case int32 = "int32"
+  case int64 = "int64"
+  case map = "map"
+  case `nil` = "nil"
+  case reference = "reference"
+  case sorted = "sorted"
+  case text = "text"
+  case timestamp = "timestamp"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct DatasetFieldValidation: Codable, Hashable, Sendable {
+  public var max: Double?
+  public var min: Double?
+  public var options: [String]?
+  public var regex: String?
+  public var required: Bool?
+
+  public init(max: Double? = nil, min: Double? = nil, options: [String]? = nil, regex: String? = nil, required: Bool? = nil) {
+    self.max = max
+    self.min = min
+    self.options = options
+    self.regex = regex
+    self.required = required
+  }
+}
+
+public struct DatasetModel: Codable, Hashable, Sendable {
+  public var fields: [String: DatasetFieldDefinition]?
+  public var order: [String]?
+
+  public init(fields: [String: DatasetFieldDefinition]? = nil, order: [String]? = nil) {
+    self.fields = fields
+    self.order = order
+  }
+}
+
 public struct DeviceSplitEntry: Codable, Hashable, Sendable {
   public var count: Int
   public var device: String
@@ -520,6 +640,71 @@ public struct FormStatusOptionsItem: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum FunctionComparator: String, Codable, CaseIterable, Hashable, Sendable {
+  case notEqual = "!="
+  case lessThan = "<"
+  case lessThanOrEqual = "<="
+  case equal = "=="
+  case greaterThan = ">"
+  case greaterThanOrEqual = ">="
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct FunctionConditionalOperation: Codable, Hashable, Sendable {
+  public var `if`: FunctionConditionalOperationIf?
+  public var otherwise: [FunctionSetOperation]?
+  public var then: [FunctionSetOperation]?
+
+  public init(`if`: FunctionConditionalOperationIf? = nil, otherwise: [FunctionSetOperation]? = nil, then: [FunctionSetOperation]? = nil) {
+    self.if = `if`
+    self.otherwise = otherwise
+    self.then = then
+  }
+}
+
+public struct FunctionConditionalOperationIf: Codable, Hashable, Sendable {
+  public var comparator: FunctionComparator
+  public var left: String
+  public var right: String
+
+  public init(comparator: FunctionComparator, left: String, right: String) {
+    self.comparator = comparator
+    self.left = left
+    self.right = right
+  }
+}
+
+public struct FunctionSetOperation: Codable, Hashable, Sendable {
+  public var expression: String?
+  public var set: String?
+  public var workflow: String?
+
+  public init(expression: String? = nil, set: String? = nil, workflow: String? = nil) {
+    self.expression = expression
+    self.set = set
+    self.workflow = workflow
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum FunctionValueType: String, Codable, CaseIterable, Hashable, Sendable {
+  case boolean = "boolean"
+  case number = "number"
+  case text = "text"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct FunnelDefinition: Codable, Hashable, Sendable {
   public var name: String
   public var steps: [FunnelStep]
@@ -658,6 +843,60 @@ public struct HostEventDeclaration: Codable, Hashable, Sendable {
     self.payloadKeys = payloadKeys
     self.pluginId = pluginId
     self.recipientActed = recipientActed
+    self.type = type
+  }
+}
+
+public struct HostFunction: Codable, Hashable, Sendable {
+  public var name: String?
+  public var operations: [FunctionConditionalOperation]?
+  public var parameters: [HostFunctionParameter]?
+  public var returnValue: String?
+  public var variables: [HostFunctionVariable]?
+
+  public init(name: String? = nil, operations: [FunctionConditionalOperation]? = nil, parameters: [HostFunctionParameter]? = nil, returnValue: String? = nil, variables: [HostFunctionVariable]? = nil) {
+    self.name = name
+    self.operations = operations
+    self.parameters = parameters
+    self.returnValue = returnValue
+    self.variables = variables
+  }
+}
+
+public struct HostFunctionParameter: Codable, Hashable, Sendable {
+  public var defaultValue: String?
+  public var label: String?
+  public var name: String?
+  public var options: [HostFunctionParameterOption]?
+  public var required: Bool?
+  public var type: FunctionValueType?
+
+  public init(defaultValue: String? = nil, label: String? = nil, name: String? = nil, options: [HostFunctionParameterOption]? = nil, required: Bool? = nil, type: FunctionValueType? = nil) {
+    self.defaultValue = defaultValue
+    self.label = label
+    self.name = name
+    self.options = options
+    self.required = required
+    self.type = type
+  }
+}
+
+public struct HostFunctionParameterOption: Codable, Hashable, Sendable {
+  public var label: String?
+  public var value: String
+
+  public init(label: String? = nil, value: String) {
+    self.label = label
+    self.value = value
+  }
+}
+
+public struct HostFunctionVariable: Codable, Hashable, Sendable {
+  public var name: String?
+  public var type: FunctionValueType?
+
+  public init(name: String? = nil, type: FunctionValueType? = nil) {
+    self.name = name
     self.type = type
   }
 }
@@ -1006,6 +1245,35 @@ public enum HostRedirectKind: String, Codable, CaseIterable, Hashable, Sendable 
   case exact = "exact"
   case prefix = "prefix"
   case regex = "regex"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum HostVariableType: String, Codable, CaseIterable, Hashable, Sendable {
+  case boolean = "boolean"
+  case collection = "collection"
+  case date = "date"
+  case dictionary = "dictionary"
+  case number = "number"
+  case text = "text"
+  case time = "time"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum InstallTarget: String, Codable, CaseIterable, Hashable, Sendable {
+  case host = "host"
+  case org = "org"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -3170,9 +3438,38 @@ public struct TenantEmailEntry: Codable, Hashable, Sendable {
   }
 }
 
+public struct WhereUsedDependent: Codable, Hashable, Sendable {
+  public var id: String?
+  public var name: String?
+  public var type: String?
+  public var versionId: String?
+  public var via: [BindingRefVia]?
+
+  public init(id: String? = nil, name: String? = nil, type: String? = nil, versionId: String? = nil, via: [BindingRefVia]? = nil) {
+    self.id = id
+    self.name = name
+    self.type = type
+    self.versionId = versionId
+    self.via = via
+  }
+}
+
+public struct WhereUsedResult: Codable, Hashable, Sendable {
+  public var dependents: [WhereUsedDependent]?
+  public var legacyCount: Int?
+  public var total: Int?
+
+  public init(dependents: [WhereUsedDependent]? = nil, legacyCount: Int? = nil, total: Int? = nil) {
+    self.dependents = dependents
+    self.legacyCount = legacyCount
+    self.total = total
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let areaServedMax: Int
+  public let artifactTypeLabels: [String: String]
   public let bookingFieldAsks: [BookingFieldAsk]
   public let bookingInPersonMaxCents: Int
   public let bookingInPersonMinCents: Int
@@ -3183,6 +3480,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingServiceNameMax: Int
   public let bookingStateLabels: [String: String]
   public let bookingWeekdays: [String]
+  public let browseSorts: [String: ListQuerySort]
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
@@ -3200,6 +3498,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
   public let crossMaxDepth: Int
+  public let datasetAuthorableFieldTypes: [DatasetFieldType]
+  public let datasetFieldTypeLabels: [String: String]
+  public let datasetFieldTypes: [DatasetFieldType]
+  public let datasetFilterPrefixMax: Int
   public let dealListDeclaration: ListQueryDeclaration
   public let defaultDealStages: [CrmDealStage]
   public let defaultTitlePattern: String
@@ -3236,7 +3538,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let funnelNameMax: Int
   public let funnelStepTypeLabels: [String: String]
   public let funnelsMaxPerSite: Int
+  public let heldLicenceQuery: ListQueryDeclaration
   public let hostEvents: [HostEventDeclaration]
+  public let hostVariableTypeLabels: [String: String]
+  public let installTargets: [String: [InstallTarget]]
   public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
   public let leadListQuery: ListQueryDeclaration
@@ -3244,11 +3549,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let listMemberQuery: ListQueryDeclaration
   public let listQueryDisjunctions: Int
   public let listQueryIdPath: String
+  public let listingCategories: [String]
   public let localBusinessTypeOptions: [LocalBusinessTypeOptionsItem]
   public let localFulfillmentOpenStatuses: [String]
   public let localFulfillmentQueueFields: LocalFulfillmentQueueFields
   public let localFulfillmentQueueLimit: Int
   public let localFulfillmentQueueTabs: [LocalFulfillmentQueueTab]
+  public let marketplaceBrowseQuery: ListQueryDeclaration
   public let mediaAltMaxLength: Int
   public let mediaAltOptions: [ListFilterOption]
   public let mediaDisjunctionLimit: Int
@@ -3358,6 +3665,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
 
   enum CodingKeys: String, CodingKey {
     case areaServedMax = "AREA_SERVED_MAX"
+    case artifactTypeLabels = "ARTIFACT_TYPE_LABELS"
     case bookingFieldAsks = "BOOKING_FIELD_ASKS"
     case bookingInPersonMaxCents = "BOOKING_IN_PERSON_MAX_CENTS"
     case bookingInPersonMinCents = "BOOKING_IN_PERSON_MIN_CENTS"
@@ -3368,6 +3676,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case bookingServiceNameMax = "BOOKING_SERVICE_NAME_MAX"
     case bookingStateLabels = "BOOKING_STATE_LABELS"
     case bookingWeekdays = "BOOKING_WEEKDAYS"
+    case browseSorts = "BROWSE_SORTS"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
@@ -3385,6 +3694,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
     case crossMaxDepth = "CROSS_MAX_DEPTH"
+    case datasetAuthorableFieldTypes = "DATASET_AUTHORABLE_FIELD_TYPES"
+    case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"
+    case datasetFieldTypes = "DATASET_FIELD_TYPES"
+    case datasetFilterPrefixMax = "DATASET_FILTER_PREFIX_MAX"
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
@@ -3421,7 +3734,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case funnelNameMax = "FUNNEL_NAME_MAX"
     case funnelStepTypeLabels = "FUNNEL_STEP_TYPE_LABELS"
     case funnelsMaxPerSite = "FUNNELS_MAX_PER_SITE"
+    case heldLicenceQuery = "HELD_LICENCE_QUERY"
     case hostEvents = "HOST_EVENTS"
+    case hostVariableTypeLabels = "HOST_VARIABLE_TYPE_LABELS"
+    case installTargets = "INSTALL_TARGETS"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
     case leadListQuery = "LEAD_LIST_QUERY"
@@ -3429,11 +3745,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case listMemberQuery = "LIST_MEMBER_QUERY"
     case listQueryDisjunctions = "LIST_QUERY_DISJUNCTIONS"
     case listQueryIdPath = "LIST_QUERY_ID_PATH"
+    case listingCategories = "LISTING_CATEGORIES"
     case localBusinessTypeOptions = "LOCAL_BUSINESS_TYPE_OPTIONS"
     case localFulfillmentOpenStatuses = "LOCAL_FULFILLMENT_OPEN_STATUSES"
     case localFulfillmentQueueFields = "LOCAL_FULFILLMENT_QUEUE_FIELDS"
     case localFulfillmentQueueLimit = "LOCAL_FULFILLMENT_QUEUE_LIMIT"
     case localFulfillmentQueueTabs = "LOCAL_FULFILLMENT_QUEUE_TABS"
+    case marketplaceBrowseQuery = "MARKETPLACE_BROWSE_QUERY"
     case mediaAltMaxLength = "MEDIA_ALT_MAX_LENGTH"
     case mediaAltOptions = "MEDIA_ALT_OPTIONS"
     case mediaDisjunctionLimit = "MEDIA_DISJUNCTION_LIMIT"

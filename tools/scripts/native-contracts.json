@@ -10,10 +10,17 @@
         "ListQuerySort",
         "ListQueryOp"
       ],
-      "values": ["LIST_QUERY_ID_PATH", "LIST_QUERY_DISJUNCTIONS"]
+      "values": [
+        "LIST_QUERY_ID_PATH",
+        "LIST_QUERY_DISJUNCTIONS"
+      ]
     },
     "libs/shared/util/tools/src/lib/list-query/list-filter.ts": {
-      "types": ["ListFilterField", "ListFilterKind", "ListFilterRequest"]
+      "types": [
+        "ListFilterField",
+        "ListFilterKind",
+        "ListFilterRequest"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/name-search.ts": {
       "values": [
@@ -43,7 +50,11 @@
       ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-orders.ts": {
-      "types": ["OrderStatus", "OrderChannel", "HostOrder"],
+      "types": [
+        "OrderStatus",
+        "OrderChannel",
+        "HostOrder"
+      ],
       "values": [
         "ORDER_STATUS_LABELS",
         "ORDER_CHANNEL_LABELS",
@@ -59,16 +70,29 @@
       ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-receipt.ts": {
-      "types": ["ReceiptData", "ReceiptLine", "ReceiptTender"]
+      "types": [
+        "ReceiptData",
+        "ReceiptLine",
+        "ReceiptTender"
+      ]
     },
     "libs/plugins/redirects/src/lib/model/redirects.ts": {
-      "types": ["HostRedirect"]
+      "types": [
+        "HostRedirect"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/mobile-push.ts": {
-      "types": ["MobileDevice", "MobilePushData", "AccountPushSettings"]
+      "types": [
+        "MobileDevice",
+        "MobilePushData",
+        "AccountPushSettings"
+      ]
     },
     "libs/plugins/commerce/src/lib/model/commerce.ts": {
-      "types": ["HostProduct", "ProductVariant"]
+      "types": [
+        "HostProduct",
+        "ProductVariant"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/site-list-query.ts": {
       "values": [
@@ -93,13 +117,22 @@
       ]
     },
     "libs/aglyn/src/lib/app-utils/media-metadata.ts": {
-      "values": ["MEDIA_KINDS", "MEDIA_TAG_MAX_COUNT", "MEDIA_TAG_MAX_LENGTH"]
+      "values": [
+        "MEDIA_KINDS",
+        "MEDIA_TAG_MAX_COUNT",
+        "MEDIA_TAG_MAX_LENGTH"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/media-alt.ts": {
-      "values": ["MEDIA_ALT_MAX_LENGTH"]
+      "values": [
+        "MEDIA_ALT_MAX_LENGTH"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/media-folders.ts": {
-      "values": ["MEDIA_FOLDER_MAX_DEPTH", "MEDIA_FOLDER_NAME_MAX_LENGTH"]
+      "values": [
+        "MEDIA_FOLDER_MAX_DEPTH",
+        "MEDIA_FOLDER_NAME_MAX_LENGTH"
+      ]
     },
     "libs/plugins/forms/src/lib/components/form-list-query.ts": {
       "values": [
@@ -123,23 +156,48 @@
       ]
     },
     "libs/plugins/bookings/src/lib/model/booking-manage.ts": {
-      "types": ["ManagedBooking", "BookingState", "BookingActions"],
-      "values": ["BOOKING_STATE_LABELS"]
+      "types": [
+        "ManagedBooking",
+        "BookingState",
+        "BookingActions"
+      ],
+      "values": [
+        "BOOKING_STATE_LABELS"
+      ]
     },
     "libs/plugins/bookings/src/lib/model/booking-in-person.ts": {
-      "types": ["BookingInPersonPayment", "BookingInPersonState"],
-      "values": ["BOOKING_IN_PERSON_MAX_CENTS", "BOOKING_IN_PERSON_MIN_CENTS"]
+      "types": [
+        "BookingInPersonPayment",
+        "BookingInPersonState"
+      ],
+      "values": [
+        "BOOKING_IN_PERSON_MAX_CENTS",
+        "BOOKING_IN_PERSON_MIN_CENTS"
+      ]
     },
     "libs/plugins/bookings/src/lib/model/booking-price.ts": {
-      "types": ["BookingPriceDisplay"],
-      "values": ["BOOKING_PRICE_DISPLAYS", "BOOKING_PRICE_LABELS"]
+      "types": [
+        "BookingPriceDisplay"
+      ],
+      "values": [
+        "BOOKING_PRICE_DISPLAYS",
+        "BOOKING_PRICE_LABELS"
+      ]
     },
     "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts": {
-      "types": ["BookingFieldAsk"],
-      "values": ["BOOKING_FIELD_ASKS"]
+      "types": [
+        "BookingFieldAsk"
+      ],
+      "values": [
+        "BOOKING_FIELD_ASKS"
+      ]
     },
     "libs/plugins/bookings/src/lib/model/booking-service-form.ts": {
-      "types": ["BookingServiceDraft", "BookingServiceFields", "BookingWindow"],
+      "types": [
+        "BookingServiceDraft",
+        "BookingServiceFields",
+        "BookingWindow"
+      ],
       "values": [
         "BOOKING_WEEKDAYS",
         "BOOKING_SERVICE_NAME_MAX",
@@ -171,20 +229,44 @@
       ]
     },
     "libs/aglyn/src/lib/app-utils/analytics-summary.ts": {
-      "types": ["DeviceSplitEntry"]
+      "types": [
+        "DeviceSplitEntry"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts": {
-      "types": ["ScreenTrafficRow"]
+      "types": [
+        "ScreenTrafficRow"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/functions.ts": {
-      "values": ["FUNCTION_BUILTIN_NAMES", "FUNCTION_MAX_OPERATIONS"]
+      "values": [
+        "FUNCTION_MAX_OPERATIONS",
+        "FUNCTION_BUILTIN_NAMES"
+      ],
+      "types": [
+        "HostFunction",
+        "HostFunctionParameter",
+        "HostFunctionVariable",
+        "HostFunctionParameterOption",
+        "FunctionConditionalOperation",
+        "FunctionSetOperation",
+        "FunctionComparator",
+        "FunctionValueType"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/host-events.ts": {
-      "types": ["HostEventDeclaration"],
-      "values": ["HOST_EVENTS"]
+      "types": [
+        "HostEventDeclaration"
+      ],
+      "values": [
+        "HOST_EVENTS"
+      ]
     },
     "libs/plugins/workflows/src/lib/model/workflows.ts": {
-      "values": ["WORKFLOW_MAX_STEPS", "CROSS_MAX_DEPTH"]
+      "values": [
+        "WORKFLOW_MAX_STEPS",
+        "CROSS_MAX_DEPTH"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/artifact-list-queries.ts": {
       "values": [
@@ -203,7 +285,10 @@
       ]
     },
     "libs/aglyn/src/lib/app-utils/content-schema-type.ts": {
-      "values": ["CONTENT_SCHEMA_TYPE_OPTIONS", "CONTENT_SCHEMA_TYPE_DEFAULT"]
+      "values": [
+        "CONTENT_SCHEMA_TYPE_OPTIONS",
+        "CONTENT_SCHEMA_TYPE_DEFAULT"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/local-business.ts": {
       "values": [
@@ -220,11 +305,19 @@
       ]
     },
     "libs/aglyn/src/lib/app-utils/seo-title-variables.ts": {
-      "values": ["DEFAULT_TITLE_PATTERN"]
+      "values": [
+        "DEFAULT_TITLE_PATTERN"
+      ]
     },
     "libs/shared/util/email/src/lib/tenant-email-catalog.ts": {
-      "types": ["TenantEmailEntry", "TenantEmailControl"],
-      "values": ["TENANT_EMAILS", "TENANT_EMAIL_COLLECTION"]
+      "types": [
+        "TenantEmailEntry",
+        "TenantEmailControl"
+      ],
+      "values": [
+        "TENANT_EMAILS",
+        "TENANT_EMAIL_COLLECTION"
+      ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts": {
       "types": [
@@ -254,10 +347,16 @@
       ]
     },
     "libs/plugins/inbox/src/lib/model/reply-policy.ts": {
-      "values": ["REPLY_SUBJECT_MAX", "REPLY_BODY_MAX"]
+      "values": [
+        "REPLY_SUBJECT_MAX",
+        "REPLY_BODY_MAX"
+      ]
     },
     "libs/aglyn/src/lib/app-utils/crm.ts": {
-      "types": ["CrmDealStage", "CrmForecastCategory"],
+      "types": [
+        "CrmDealStage",
+        "CrmForecastCategory"
+      ],
       "values": [
         "CONTACT_LIFECYCLE_STAGE_LABELS",
         "DEFAULT_DEAL_STAGES",
@@ -272,25 +371,39 @@
       ]
     },
     "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
-      "values": ["CONTACT_LIST_DECLARATION"]
+      "values": [
+        "CONTACT_LIST_DECLARATION"
+      ]
     },
     "libs/plugins/crm/src/lib/constants/company-filters.ts": {
-      "values": ["COMPANY_LIST_DECLARATION"]
+      "values": [
+        "COMPANY_LIST_DECLARATION"
+      ]
     },
     "libs/plugins/crm/src/lib/constants/deal-filters.ts": {
-      "values": ["DEAL_LIST_DECLARATION"]
+      "values": [
+        "DEAL_LIST_DECLARATION"
+      ]
     },
     "libs/plugins/crm/src/lib/model/lead-filters.ts": {
-      "values": ["LEAD_LIST_DECLARATION"]
+      "values": [
+        "LEAD_LIST_DECLARATION"
+      ]
     },
     "libs/plugins/crm/src/lib/model/task-views.ts": {
-      "values": ["TASK_LIST_DECLARATION"]
+      "values": [
+        "TASK_LIST_DECLARATION"
+      ]
     },
     "libs/plugins/crm/src/lib/model/crm-reports.ts": {
-      "values": ["CRM_REPORT_PERIOD_LABELS"]
+      "values": [
+        "CRM_REPORT_PERIOD_LABELS"
+      ]
     },
     "libs/plugins/crm/src/lib/model/native-vocabulary.ts": {
-      "types": ["NativeCrmPicklist"],
+      "types": [
+        "NativeCrmPicklist"
+      ],
       "values": [
         "NATIVE_CRM_LEAD_STATUSES",
         "NATIVE_CRM_LEAD_OPEN_STATUSES",
@@ -319,19 +432,29 @@
       ]
     },
     "libs/plugins/marketing/src/lib/model/campaign-list-query.ts": {
-      "values": ["CAMPAIGN_EMAILS_QUERY"]
+      "values": [
+        "CAMPAIGN_EMAILS_QUERY"
+      ]
     },
     "libs/plugins/marketing/src/lib/model/experiment-list-query.ts": {
-      "values": ["EXPERIMENT_LIST_QUERY"]
+      "values": [
+        "EXPERIMENT_LIST_QUERY"
+      ]
     },
     "libs/plugins/outreach/src/lib/model/sequence-list-query.ts": {
-      "values": ["OUTREACH_SEQUENCE_LIST_QUERY"]
+      "values": [
+        "OUTREACH_SEQUENCE_LIST_QUERY"
+      ]
     },
     "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts": {
-      "values": ["OUTREACH_ENROLLMENT_LIST_QUERY"]
+      "values": [
+        "OUTREACH_ENROLLMENT_LIST_QUERY"
+      ]
     },
     "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts": {
-      "values": ["OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"]
+      "values": [
+        "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
+      ]
     },
     "libs/plugins/outreach/src/lib/model/outreach.types.ts": {
       "values": [
@@ -343,7 +466,10 @@
       ]
     },
     "libs/plugins/outreach/src/lib/engine/sequence-validation.ts": {
-      "values": ["OUTREACH_SEQUENCE_NAME_MAX", "OUTREACH_TASK_TITLE_MAX"]
+      "values": [
+        "OUTREACH_SEQUENCE_NAME_MAX",
+        "OUTREACH_TASK_TITLE_MAX"
+      ]
     },
     "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts": {
       "types": [
@@ -362,7 +488,9 @@
       ]
     },
     "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts": {
-      "types": ["LocalFulfillmentQueueTab"],
+      "types": [
+        "LocalFulfillmentQueueTab"
+      ],
       "values": [
         "LOCAL_FULFILLMENT_QUEUE_TABS",
         "LOCAL_FULFILLMENT_OPEN_STATUSES",
@@ -398,8 +526,12 @@
       ]
     },
     "libs/aglyn/src/lib/app-utils/site-journey-steps.ts": {
-      "types": ["SiteJourneyStepType"],
-      "values": ["SITE_JOURNEY_KEY_MAX"]
+      "types": [
+        "SiteJourneyStepType"
+      ],
+      "values": [
+        "SITE_JOURNEY_KEY_MAX"
+      ]
     },
     "libs/plugins/funnels/src/lib/model/funnels.types.ts": {
       "types": [
@@ -421,13 +553,21 @@
       ]
     },
     "libs/plugins/funnels/src/lib/model/funnel-definition.ts": {
-      "values": ["FUNNEL_STEP_TYPE_LABELS", "FUNNEL_EMAIL_KEY_LABELS"]
+      "values": [
+        "FUNNEL_STEP_TYPE_LABELS",
+        "FUNNEL_EMAIL_KEY_LABELS"
+      ]
     },
     "libs/plugins/funnels/src/lib/model/funnel-inventory.ts": {
-      "types": ["FunnelInventory", "FunnelInventoryItem"]
+      "types": [
+        "FunnelInventory",
+        "FunnelInventoryItem"
+      ]
     },
     "libs/plugins/funnels/src/lib/model/drop-off.ts": {
-      "types": ["DropOffAction"],
+      "types": [
+        "DropOffAction"
+      ],
       "values": [
         "DROP_OFF_WAIT_HOURS",
         "DROP_OFF_MAX_HOURS",
@@ -435,8 +575,12 @@
       ]
     },
     "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts": {
-      "types": ["FirstPartyPlugin"],
-      "values": ["FIRST_PARTY_PLUGINS"]
+      "types": [
+        "FirstPartyPlugin"
+      ],
+      "values": [
+        "FIRST_PARTY_PLUGINS"
+      ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts": {
       "types": [
@@ -446,10 +590,58 @@
         "PosCashEventType",
         "PosTenderMethod"
       ],
-      "values": ["POS_CASH_EVENT_LABELS", "POS_TENDER_LABELS"]
+      "values": [
+        "POS_CASH_EVENT_LABELS",
+        "POS_TENDER_LABELS"
+      ]
+    },
+    "libs/plugins/data/src/lib/model/dataset-model-core.ts": {
+      "types": [
+        "DatasetModel",
+        "DatasetFieldDefinition",
+        "DatasetFieldType",
+        "DatasetFieldValidation",
+        "DatasetFieldEntry"
+      ],
+      "values": [
+        "DATASET_FIELD_TYPES",
+        "DATASET_FIELD_TYPE_LABELS",
+        "DATASET_FILTER_PREFIX_MAX",
+        "DATASET_AUTHORABLE_FIELD_TYPES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/variables.ts": {
+      "types": [
+        "HostVariableType"
+      ],
+      "values": [
+        "HOST_VARIABLE_TYPE_LABELS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/where-used-summary.ts": {
+      "types": [
+        "WhereUsedResult",
+        "WhereUsedDependent"
+      ]
+    },
+    "libs/plugins/marketplace/src/lib/model/listing-query.ts": {
+      "values": [
+        "MARKETPLACE_BROWSE_QUERY",
+        "BROWSE_SORTS",
+        "HELD_LICENCE_QUERY"
+      ]
+    },
+    "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts": {
+      "values": [
+        "ARTIFACT_TYPE_LABELS",
+        "INSTALL_TARGETS",
+        "LISTING_CATEGORIES"
+      ]
     }
   },
   "ints": [
+    "WhereUsedResult.total",
+    "WhereUsedResult.legacyCount",
     "BookingActions.refundCents",
     "BookingWindow.start",
     "BookingWindow.end",
@@ -491,7 +683,11 @@
     "FunnelResult.journeysRead",
     "FunnelResult.computedAt"
   ],
-  "json": ["ListQueryFilter.value", "ListQueryRefusal.clause"],
+  "json": [
+    "ListQueryFilter.value",
+    "ListQueryRefusal.clause",
+    "DatasetFieldDefinition.default"
+  ],
   "omit": [
     "HostProduct.deletedAt",
     "TenantEmailEntry.mergeTokens",
@@ -503,6 +699,16 @@
     "HostProduct",
     "ProductVariant",
     "TenantEmailEntry",
+    "DatasetFieldDefinition",
+    "DatasetFieldValidation",
+    "DatasetModel",
+    "HostFunction",
+    "HostFunctionParameter",
+    "HostFunctionVariable",
+    "FunctionSetOperation",
+    "FunctionConditionalOperation",
+    "WhereUsedResult",
+    "WhereUsedDependent",
     "OrderPickup",
     "OrderLocalDelivery",
     "PickupLocationSettings",
@@ -525,7 +731,8 @@
     "TEMPLATE_LIST_QUERY": {
       "base": "TEMPLATE_LIST_BASE"
     },
-    "ENTRY_LIST_QUERY": {}
+    "ENTRY_LIST_QUERY": {},
+    "MARKETPLACE_BROWSE_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -542,19 +749,36 @@
           },
           "ignoredDocId"
         ],
-        [{}, "aBcDeF123456"],
-        [{}]
+        [
+          {},
+          "aBcDeF123456"
+        ],
+        [
+          {}
+        ]
       ]
     },
     "orderChannelLabel": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "args": [
-        ["online"],
-        ["pos"],
-        ["draft"],
-        ["subscription"],
-        ["kiosk"],
-        [null]
+        [
+          "online"
+        ],
+        [
+          "pos"
+        ],
+        [
+          "draft"
+        ],
+        [
+          "subscription"
+        ],
+        [
+          "kiosk"
+        ],
+        [
+          null
+        ]
       ]
     },
     "canTransitionOrder": {
@@ -664,45 +888,134 @@
             "amountCents": 900
           }
         ],
-        [{}]
+        [
+          {}
+        ]
       ]
     },
     "apportionCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "args": [
-        [[1000, 1000, 1000], 10],
-        [[300, 700], 1000],
-        [[2500, 2500], 10],
-        [[100, 200], 10],
-        [[0, 0], 50],
-        [[5], 7],
-        [[], 10]
+        [
+          [
+            1000,
+            1000,
+            1000
+          ],
+          10
+        ],
+        [
+          [
+            300,
+            700
+          ],
+          1000
+        ],
+        [
+          [
+            2500,
+            2500
+          ],
+          10
+        ],
+        [
+          [
+            100,
+            200
+          ],
+          10
+        ],
+        [
+          [
+            0,
+            0
+          ],
+          50
+        ],
+        [
+          [
+            5
+          ],
+          7
+        ],
+        [
+          [],
+          10
+        ]
       ]
     },
     "formatReceiptMoney": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "args": [
-        [1250, "usd"],
-        [-300, "eur"],
-        [123456789, "USD"],
-        [1250, "jpy"],
-        [12345, "kwd"],
-        [1250, ""],
-        [1250, "zzz"]
+        [
+          1250,
+          "usd"
+        ],
+        [
+          -300,
+          "eur"
+        ],
+        [
+          123456789,
+          "USD"
+        ],
+        [
+          1250,
+          "jpy"
+        ],
+        [
+          12345,
+          "kwd"
+        ],
+        [
+          1250,
+          ""
+        ],
+        [
+          1250,
+          "zzz"
+        ]
       ]
     },
     "formatReceiptTime": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "args": [
-        [1791900240000],
-        [1791900240000, "America/Chicago"],
-        [1791900240000, "Asia/Kolkata"],
-        [1791900240000, "Not/AZone"]
+        [
+          1791900240000
+        ],
+        [
+          1791900240000,
+          "America/Chicago"
+        ],
+        [
+          1791900240000,
+          "Asia/Kolkata"
+        ],
+        [
+          1791900240000,
+          "Not/AZone"
+        ]
       ]
     },
     "formatOrderMoney": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
-      "args": [[1250], [1250, "eur"], [-99, "usd"], [1250, "zzz"]]
+      "args": [
+        [
+          1250
+        ],
+        [
+          1250,
+          "eur"
+        ],
+        [
+          -99,
+          "usd"
+        ],
+        [
+          1250,
+          "zzz"
+        ]
+      ]
     },
     "orderPaidCents": {
       "module": "libs/plugins/commerce/src/lib/model/order-figures.ts",
@@ -726,8 +1039,18 @@
     "accountPushSwitch": {
       "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
       "args": [
-        [null, "content.order", "content", true],
-        [null, "content.order", "content", false],
+        [
+          null,
+          "content.order",
+          "content",
+          true
+        ],
+        [
+          null,
+          "content.order",
+          "content",
+          false
+        ],
         [
           {},
           "content.order",
@@ -866,7 +1189,9 @@
     "orderLineFulfillmentStates": {
       "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "args": [
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "lineItems": [
@@ -913,7 +1238,9 @@
               {
                 "id": "f1",
                 "atMs": 1,
-                "lineItemIds": [0]
+                "lineItemIds": [
+                  0
+                ]
               }
             ]
           }
@@ -938,7 +1265,9 @@
               {
                 "id": "f1",
                 "atMs": 1,
-                "lineItemIds": [0],
+                "lineItemIds": [
+                  0
+                ],
                 "lines": [
                   {
                     "lineItemId": 0,
@@ -953,7 +1282,9 @@
               {
                 "id": "f2",
                 "atMs": 2,
-                "lineItemIds": [0],
+                "lineItemIds": [
+                  0
+                ],
                 "lines": [
                   {
                     "lineItemId": 0,
@@ -978,13 +1309,17 @@
               {
                 "id": "f1",
                 "atMs": 1,
-                "lineItemIds": [0],
+                "lineItemIds": [
+                  0
+                ],
                 "status": "cancelled"
               },
               {
                 "id": "f2",
                 "atMs": 2,
-                "lineItemIds": [0],
+                "lineItemIds": [
+                  0
+                ],
                 "lines": [
                   {
                     "lineItemId": 0,
@@ -1009,7 +1344,9 @@
               {
                 "id": "f1",
                 "atMs": 1,
-                "lineItemIds": [0],
+                "lineItemIds": [
+                  0
+                ],
                 "lines": [
                   {
                     "lineItemId": 0,
@@ -1046,7 +1383,10 @@
               {
                 "id": "f1",
                 "atMs": 1,
-                "lineItemIds": [9, 1]
+                "lineItemIds": [
+                  9,
+                  1
+                ]
               },
               {
                 "id": "f2",
@@ -1071,7 +1411,9 @@
     "orderDisputeBlocksRefund": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-dispute.ts",
       "args": [
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "dispute": {
@@ -1169,7 +1511,9 @@
     "liftLegacyOrder": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "args": [
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "amountCents": 1200,
@@ -1219,7 +1563,9 @@
     "orderIsTestMode": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "args": [
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "livemode": false
@@ -1750,7 +2096,11 @@
           8000,
           9000
         ],
-        [[], 0, 1]
+        [
+          [],
+          0,
+          1
+        ]
       ]
     },
     "productSales": {
@@ -1873,7 +2223,9 @@
             }
           ]
         ],
-        [[]]
+        [
+          []
+        ]
       ]
     },
     "productPriceRange": {
@@ -1912,7 +2264,9 @@
             ]
           }
         ],
-        [{}]
+        [
+          {}
+        ]
       ]
     },
     "productInventory": {
@@ -2116,40 +2470,99 @@
             "link": "/x"
           }
         ],
-        [null],
-        ["text"]
+        [
+          null
+        ],
+        [
+          "text"
+        ]
       ]
     },
     "resolveStaffRoleGate": {
       "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
       "args": [
-        [null, ["super"]],
-        ["super", ["super"]],
-        ["support", ["super"]],
-        ["billing", ["super", "billing"]],
-        ["support", ["super", "billing"]],
-        ["", ["super"]],
-        ["super", []]
+        [
+          null,
+          [
+            "super"
+          ]
+        ],
+        [
+          "super",
+          [
+            "super"
+          ]
+        ],
+        [
+          "support",
+          [
+            "super"
+          ]
+        ],
+        [
+          "billing",
+          [
+            "super",
+            "billing"
+          ]
+        ],
+        [
+          "support",
+          [
+            "super",
+            "billing"
+          ]
+        ],
+        [
+          "",
+          [
+            "super"
+          ]
+        ],
+        [
+          "super",
+          []
+        ]
       ]
     },
     "mediaSearchToken": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "args": [
-        ["Hero-Banner_2024.final.JPG"],
-        ["  café  à la carte "],
-        ["IMG_0042.png"],
-        [""],
-        ["Ünïcødé—name (copy)"]
+        [
+          "Hero-Banner_2024.final.JPG"
+        ],
+        [
+          "  café  à la carte "
+        ],
+        [
+          "IMG_0042.png"
+        ],
+        [
+          ""
+        ],
+        [
+          "Ünïcødé—name (copy)"
+        ]
       ]
     },
     "mediaKindOf": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "args": [
-        ["image/png"],
-        ["VIDEO/MP4"],
-        ["application/pdf"],
-        ["application/zip"],
-        [""]
+        [
+          "image/png"
+        ],
+        [
+          "VIDEO/MP4"
+        ],
+        [
+          "application/pdf"
+        ],
+        [
+          "application/zip"
+        ],
+        [
+          ""
+        ]
       ]
     },
     "messageSender": {
@@ -2182,7 +2595,10 @@
         ],
         [
           {
-            "name": ["Ada", "L"],
+            "name": [
+              "Ada",
+              "L"
+            ],
             "email": 42
           }
         ],
@@ -2191,8 +2607,12 @@
             "message": "no sender"
           }
         ],
-        [{}],
-        [null],
+        [
+          {}
+        ],
+        [
+          null
+        ],
         [
           {
             "name": "Priya Shah",
@@ -2221,7 +2641,10 @@
         [
           {
             "contact-name": "Bo",
-            "email": ["a@example.com", "b@example.com"]
+            "email": [
+              "a@example.com",
+              "b@example.com"
+            ]
           }
         ]
       ]
@@ -2229,7 +2652,10 @@
     "bookingState": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "args": [
-        [{}, 1800000000000],
+        [
+          {},
+          1800000000000
+        ],
         [
           {
             "status": "canceled",
@@ -2294,7 +2720,10 @@
     "bookingActions": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "args": [
-        [{}, 1800000000000],
+        [
+          {},
+          1800000000000
+        ],
         [
           {
             "status": "canceled",
@@ -2359,7 +2788,9 @@
     "bookingOutstandingCents": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "args": [
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "status": "canceled",
@@ -2417,8 +2848,16 @@
     "checkInRefusal": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "args": [
-        [{}, true, 1800000000000],
-        [{}, false, 1800000000000],
+        [
+          {},
+          true,
+          1800000000000
+        ],
+        [
+          {},
+          false,
+          1800000000000
+        ],
         [
           {
             "status": "canceled",
@@ -2556,8 +2995,16 @@
     "rescheduleRefusal": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "args": [
-        [{}, 1800010800000, 1800000000000],
-        [{}, 1799996400000, 1800000000000],
+        [
+          {},
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {},
+          1799996400000,
+          1800000000000
+        ],
         [
           {
             "status": "canceled",
@@ -2695,8 +3142,14 @@
     "bookingDurationMs": {
       "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
       "args": [
-        [{}, 45],
-        [{}, 0],
+        [
+          {},
+          45
+        ],
+        [
+          {},
+          0
+        ],
         [
           {
             "status": "canceled",
@@ -2780,8 +3233,12 @@
     "bookingPriceText": {
       "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
       "args": [
-        [null],
-        [{}],
+        [
+          null
+        ],
+        [
+          {}
+        ],
         [
           {
             "priceUsd": 45
@@ -2825,8 +3282,12 @@
     "bookingChargeUsd": {
       "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
       "args": [
-        [null],
-        [{}],
+        [
+          null
+        ],
+        [
+          {}
+        ],
         [
           {
             "priceUsd": 45
@@ -2869,12 +3330,34 @@
     },
     "bookingPriceDisplay": {
       "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
-      "args": [["fixed"], ["varies"], ["estimate"], ["contact"], ["x"], [null]]
+      "args": [
+        [
+          "fixed"
+        ],
+        [
+          "varies"
+        ],
+        [
+          "estimate"
+        ],
+        [
+          "contact"
+        ],
+        [
+          "x"
+        ],
+        [
+          null
+        ]
+      ]
     },
     "bookingInPersonState": {
       "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
       "args": [
-        [{}, 1800000000000],
+        [
+          {},
+          1800000000000
+        ],
         [
           {
             "status": "canceled",
@@ -2963,13 +3446,39 @@
     },
     "bookingInPersonAmountProblem": {
       "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
-      "args": [[null], [49], [50], [1000000], [1000001], ["abc"], [2500.5]]
+      "args": [
+        [
+          null
+        ],
+        [
+          49
+        ],
+        [
+          50
+        ],
+        [
+          1000000
+        ],
+        [
+          1000001
+        ],
+        [
+          "abc"
+        ],
+        [
+          2500.5
+        ]
+      ]
     },
     "bookingSuggestedCents": {
       "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
       "args": [
-        [null],
-        [{}],
+        [
+          null
+        ],
+        [
+          {}
+        ],
         [
           {
             "priceUsd": 45
@@ -2997,10 +3506,18 @@
     "parseBookingWindows": {
       "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
       "args": [
-        ["09:00-12:00, 13:00-17:30"],
-        ["9:00 - 10:00, nonsense, 18:00-17:00, 23:00-24:30"],
-        [""],
-        ["00:00-24:00"]
+        [
+          "09:00-12:00, 13:00-17:30"
+        ],
+        [
+          "9:00 - 10:00, nonsense, 18:00-17:00, 23:00-24:30"
+        ],
+        [
+          ""
+        ],
+        [
+          "00:00-24:00"
+        ]
       ]
     },
     "formatBookingWindows": {
@@ -3018,18 +3535,31 @@
             }
           ]
         ],
-        [null],
-        [[]]
+        [
+          null
+        ],
+        [
+          []
+        ]
       ]
     },
     "newBookingServiceDraft": {
       "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
-      "args": [["America/Chicago"], [""]]
+      "args": [
+        [
+          "America/Chicago"
+        ],
+        [
+          ""
+        ]
+      ]
     },
     "bookingServiceDraftFrom": {
       "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
       "args": [
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "name": "Color",
@@ -3194,7 +3724,10 @@
           },
           1800000000000
         ],
-        [{}, 1800000000000]
+        [
+          {},
+          1800000000000
+        ]
       ]
     },
     "eventWrite": {
@@ -3318,26 +3851,75 @@
     "eventEndsAtMs": {
       "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
       "args": [
-        [1800000000000, 1800000000005],
-        [1800000000000, 1800000000000],
-        [1800000000000, null],
-        [1800000000000, 0],
-        [1800000000000, 1799999999990]
+        [
+          1800000000000,
+          1800000000005
+        ],
+        [
+          1800000000000,
+          1800000000000
+        ],
+        [
+          1800000000000,
+          null
+        ],
+        [
+          1800000000000,
+          0
+        ],
+        [
+          1800000000000,
+          1799999999990
+        ]
       ]
     },
     "eventStatusOf": {
       "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
-      "args": [["draft"], [" Published "], ["deleted"], [null], [3]]
+      "args": [
+        [
+          "draft"
+        ],
+        [
+          " Published "
+        ],
+        [
+          "deleted"
+        ],
+        [
+          null
+        ],
+        [
+          3
+        ]
+      ]
     },
     "trafficDeltaPct": {
       "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "args": [
-        [120, 100],
-        [100, 120],
-        [5, 0],
-        [0, 7],
-        [1, 3],
-        [333, 1000]
+        [
+          120,
+          100
+        ],
+        [
+          100,
+          120
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          0,
+          7
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          333,
+          1000
+        ]
       ]
     },
     "deviceSplit": {
@@ -3356,7 +3938,9 @@
             "tablet": 1
           }
         ],
-        [{}],
+        [
+          {}
+        ],
         [
           {
             "mobile": 0,
@@ -3389,7 +3973,9 @@
             }
           ]
         ],
-        [[]]
+        [
+          []
+        ]
       ]
     },
     "deviceSplitValue": {
@@ -3409,7 +3995,9 @@
             }
           ]
         ],
-        [[]]
+        [
+          []
+        ]
       ]
     },
     "rollUp": {
@@ -3452,7 +4040,26 @@
     },
     "formatDwell": {
       "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
-      "args": [[0], [4400], [65000], [3600000], [3725000], [-5]]
+      "args": [
+        [
+          0
+        ],
+        [
+          4400
+        ],
+        [
+          65000
+        ],
+        [
+          3600000
+        ],
+        [
+          3725000
+        ],
+        [
+          -5
+        ]
+      ]
     },
     "aggregateScreenDays": {
       "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
@@ -3507,7 +4114,9 @@
             }
           ]
         ],
-        [[]]
+        [
+          []
+        ]
       ]
     },
     "topDevice": {
@@ -3561,11 +4170,26 @@
     "evaluateExpression": {
       "module": "libs/aglyn/src/lib/app-utils/functions.ts",
       "args": [
-        ["1 + 2 * 3", {}],
-        ["(1 + 2) * 3", {}],
-        ["10 / 4", {}],
-        ["-3 + 5", {}],
-        ["- -2", {}],
+        [
+          "1 + 2 * 3",
+          {}
+        ],
+        [
+          "(1 + 2) * 3",
+          {}
+        ],
+        [
+          "10 / 4",
+          {}
+        ],
+        [
+          "-3 + 5",
+          {}
+        ],
+        [
+          "- -2",
+          {}
+        ],
         [
           "price * qty",
           {
@@ -3573,14 +4197,20 @@
             "qty": 4
           }
         ],
-        ["'a' + 1", {}],
+        [
+          "'a' + 1",
+          {}
+        ],
         [
           "\"x\" + name",
           {
             "name": "y"
           }
         ],
-        ["1 + true", {}],
+        [
+          "1 + true",
+          {}
+        ],
         [
           "flag",
           {
@@ -3593,16 +4223,46 @@
             "n": "41"
           }
         ],
-        ["min(3, 1, 2)", {}],
-        ["max(1, 7)", {}],
-        ["round(2.345, 2)", {}],
-        ["round(2.5)", {}],
-        ["floor(2.9)", {}],
-        ["ceil(2.1)", {}],
-        ["abs(-4)", {}],
-        ["format(1234.5, 2)", {}],
-        ["format(1234567)", {}],
-        ["format(0.125, 2)", {}],
+        [
+          "min(3, 1, 2)",
+          {}
+        ],
+        [
+          "max(1, 7)",
+          {}
+        ],
+        [
+          "round(2.345, 2)",
+          {}
+        ],
+        [
+          "round(2.5)",
+          {}
+        ],
+        [
+          "floor(2.9)",
+          {}
+        ],
+        [
+          "ceil(2.1)",
+          {}
+        ],
+        [
+          "abs(-4)",
+          {}
+        ],
+        [
+          "format(1234.5, 2)",
+          {}
+        ],
+        [
+          "format(1234567)",
+          {}
+        ],
+        [
+          "format(0.125, 2)",
+          {}
+        ],
         [
           "plan.monthly * 12",
           {
@@ -3627,34 +4287,86 @@
             "min": 3
           }
         ],
-        [".5 + 1", {}],
-        ["1.5 * 2", {}],
-        ["7 - 2 - 1", {}],
-        ["8 / 2 / 2", {}],
-        ["round(1.005, 2)", {}],
-        ["round(-2.5)", {}]
+        [
+          ".5 + 1",
+          {}
+        ],
+        [
+          "1.5 * 2",
+          {}
+        ],
+        [
+          "7 - 2 - 1",
+          {}
+        ],
+        [
+          "8 / 2 / 2",
+          {}
+        ],
+        [
+          "round(1.005, 2)",
+          {}
+        ],
+        [
+          "round(-2.5)",
+          {}
+        ]
       ]
     },
     "expressionSyntaxError": {
       "module": "libs/aglyn/src/lib/app-utils/functions.ts",
       "args": [
-        ["subscribe"],
-        ["a + b"],
-        ["(a + b"],
-        ["a +"],
-        ["a b"],
-        ["'open"],
-        ["a == b"],
-        ["nope(1)"],
-        ["min(1,)"],
-        ["min()"],
-        ["1 # 2"],
-        ["a.b.c"],
-        ["a."],
-        [""],
-        ["max(1, (2 + 3))"],
-        [")"],
-        ["a,b"]
+        [
+          "subscribe"
+        ],
+        [
+          "a + b"
+        ],
+        [
+          "(a + b"
+        ],
+        [
+          "a +"
+        ],
+        [
+          "a b"
+        ],
+        [
+          "'open"
+        ],
+        [
+          "a == b"
+        ],
+        [
+          "nope(1)"
+        ],
+        [
+          "min(1,)"
+        ],
+        [
+          "min()"
+        ],
+        [
+          "1 # 2"
+        ],
+        [
+          "a.b.c"
+        ],
+        [
+          "a."
+        ],
+        [
+          ""
+        ],
+        [
+          "max(1, (2 + 3))"
+        ],
+        [
+          ")"
+        ],
+        [
+          "a,b"
+        ]
       ]
     },
     "evaluateHostFunction": {
@@ -4194,12 +4906,16 @@
             "steps": [
               {
                 "functionName": "double",
-                "args": ["base"],
+                "args": [
+                  "base"
+                ],
                 "resultName": "d"
               },
               {
                 "functionName": "double",
-                "args": ["d + 1"]
+                "args": [
+                  "d + 1"
+                ]
               }
             ]
           },
@@ -4327,7 +5043,10 @@
             "steps": [
               {
                 "functionName": "price",
-                "args": ["3", "flag"]
+                "args": [
+                  "3",
+                  "flag"
+                ]
               }
             ],
             "returnValue": "step1"
@@ -4584,7 +5303,9 @@
             "steps": [
               {
                 "functionName": "double",
-                "args": ["nope"]
+                "args": [
+                  "nope"
+                ]
               }
             ]
           },
@@ -4712,7 +5433,9 @@
             "steps": [
               {
                 "functionName": "double",
-                "args": ["qty"],
+                "args": [
+                  "qty"
+                ],
                 "resultName": "r"
               }
             ],
@@ -4946,12 +5669,16 @@
             "steps": [
               {
                 "functionName": "double",
-                "args": ["1"],
+                "args": [
+                  "1"
+                ],
                 "resultName": "a"
               },
               {
                 "functionName": "double",
-                "args": ["a"],
+                "args": [
+                  "a"
+                ],
                 "resultName": "b"
               }
             ],
@@ -5069,55 +5796,117 @@
     "hostEventLabel": {
       "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
       "args": [
-        ["formSubmission"],
-        ["pageView"],
-        ["booking"],
-        ["dealWon"],
-        ["orderRefunded"],
-        ["returnRequested"],
-        ["funnelLeft"],
-        ["myCustom"],
-        [""],
-        [null]
+        [
+          "formSubmission"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "dealWon"
+        ],
+        [
+          "orderRefunded"
+        ],
+        [
+          "returnRequested"
+        ],
+        [
+          "funnelLeft"
+        ],
+        [
+          "myCustom"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
       ]
     },
     "hostEventPayloadHint": {
       "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
       "args": [
-        ["formSubmission"],
-        ["pageView"],
-        ["booking"],
-        ["lead"],
-        ["dealWon"],
-        ["myCustom"]
+        [
+          "formSubmission"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "lead"
+        ],
+        [
+          "dealWon"
+        ],
+        [
+          "myCustom"
+        ]
       ]
     },
     "hostEventRecipientActed": {
       "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
       "args": [
-        ["formSubmission"],
-        ["booking"],
-        ["memberSignUp"],
-        ["lead"],
-        ["pageView"],
-        ["dealWon"]
+        [
+          "formSubmission"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "memberSignUp"
+        ],
+        [
+          "lead"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "dealWon"
+        ]
       ]
     },
     "extractSearchEngineVerificationToken": {
       "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
       "args": [
-        ["abc_DEF-123"],
-        ["  token-with-space  "],
-        ["<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"],
+        [
+          "abc_DEF-123"
+        ],
+        [
+          "  token-with-space  "
+        ],
+        [
+          "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+        ],
         [
           "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
         ],
-        ["<meta name=google-site-verification content=bare>"],
-        ["content=\"only-content\""],
-        ["<meta name=\"other\">"],
-        ["has spaces inside"],
-        [""],
-        [null],
+        [
+          "<meta name=google-site-verification content=bare>"
+        ],
+        [
+          "content=\"only-content\""
+        ],
+        [
+          "<meta name=\"other\">"
+        ],
+        [
+          "has spaces inside"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         ]
@@ -5126,18 +5915,36 @@
     "isSearchEngineVerificationToken": {
       "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
       "args": [
-        ["abc_DEF-123"],
-        ["  token-with-space  "],
-        ["<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"],
+        [
+          "abc_DEF-123"
+        ],
+        [
+          "  token-with-space  "
+        ],
+        [
+          "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+        ],
         [
           "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
         ],
-        ["<meta name=google-site-verification content=bare>"],
-        ["content=\"only-content\""],
-        ["<meta name=\"other\">"],
-        ["has spaces inside"],
-        [""],
-        [null],
+        [
+          "<meta name=google-site-verification content=bare>"
+        ],
+        [
+          "content=\"only-content\""
+        ],
+        [
+          "<meta name=\"other\">"
+        ],
+        [
+          "has spaces inside"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         ]
@@ -5157,8 +5964,13 @@
             "email": "priya@lumen.co"
           }
         ],
-        [{}, "Contact form"],
-        [{}],
+        [
+          {},
+          "Contact form"
+        ],
+        [
+          {}
+        ],
         [
           {
             "name": "cher"
@@ -5174,7 +5986,9 @@
     "routingChips": {
       "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
       "args": [
-        [null],
+        [
+          null
+        ],
         [
           {
             "dataset": {
@@ -5213,10 +6027,22 @@
     "defaultReplySubject": {
       "module": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
       "args": [
-        ["Lumen Studio", "Contact"],
-        [null, "Contact"],
-        ["", ""],
-        [null, null],
+        [
+          "Lumen Studio",
+          "Contact"
+        ],
+        [
+          null,
+          "Contact"
+        ],
+        [
+          "",
+          ""
+        ],
+        [
+          null,
+          null
+        ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
           null
@@ -5226,7 +6052,10 @@
     "consentGroupForHost": {
       "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
       "args": [
-        [null, "h1"],
+        [
+          null,
+          "h1"
+        ],
         [
           {
             "hosts": {
@@ -5238,14 +6067,22 @@
             "consentGroups": {
               "brand": {
                 "name": "Brand",
-                "hostIds": ["h2", "h1"]
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
               },
               "solo": {
                 "name": "Solo",
-                "hostIds": ["h3"]
+                "hostIds": [
+                  "h3"
+                ]
               },
               "bad": {
-                "hostIds": ["h4", "h5"]
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
               }
             }
           },
@@ -5262,14 +6099,22 @@
             "consentGroups": {
               "brand": {
                 "name": "Brand",
-                "hostIds": ["h2", "h1"]
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
               },
               "solo": {
                 "name": "Solo",
-                "hostIds": ["h3"]
+                "hostIds": [
+                  "h3"
+                ]
               },
               "bad": {
-                "hostIds": ["h4", "h5"]
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
               }
             }
           },
@@ -5286,14 +6131,22 @@
             "consentGroups": {
               "brand": {
                 "name": "Brand",
-                "hostIds": ["h2", "h1"]
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
               },
               "solo": {
                 "name": "Solo",
-                "hostIds": ["h3"]
+                "hostIds": [
+                  "h3"
+                ]
               },
               "bad": {
-                "hostIds": ["h4", "h5"]
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
               }
             }
           },
@@ -5304,11 +6157,17 @@
             "consentGroups": {
               "a": {
                 "name": "A",
-                "hostIds": ["h1", "h2"]
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
               },
               "b": {
                 "name": "B",
-                "hostIds": ["h2", "h3"]
+                "hostIds": [
+                  "h2",
+                  "h3"
+                ]
               }
             }
           },
@@ -5319,7 +6178,10 @@
             "consentGroups": {
               "h1": {
                 "name": "X",
-                "hostIds": ["h1", "h2"]
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
               }
             }
           },
@@ -5336,7 +6198,9 @@
             "hostId": "h1",
             "groupId": "h1",
             "name": null,
-            "hostIds": ["h1"],
+            "hostIds": [
+              "h1"
+            ],
             "declared": false,
             "awaitsConfirmation": false
           }
@@ -5351,7 +6215,10 @@
             "hostId": "h1",
             "groupId": "brand",
             "name": "Brand",
-            "hostIds": ["h1", "h2"],
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
             "declared": true,
             "awaitsConfirmation": false
           }
@@ -5366,7 +6233,10 @@
             "hostId": "h1",
             "groupId": "brand",
             "name": "Brand",
-            "hostIds": ["h1", "h2"],
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
             "declared": true,
             "awaitsConfirmation": false
           }
@@ -5379,7 +6249,9 @@
             "hostId": "h1",
             "groupId": "h1",
             "name": null,
-            "hostIds": ["h1"],
+            "hostIds": [
+              "h1"
+            ],
             "declared": false,
             "awaitsConfirmation": false
           }
@@ -5394,7 +6266,9 @@
             "hostId": "h1",
             "groupId": "h1",
             "name": null,
-            "hostIds": ["h1"],
+            "hostIds": [
+              "h1"
+            ],
             "declared": false,
             "awaitsConfirmation": false
           }
@@ -5404,7 +6278,10 @@
             "hostId": "h1",
             "groupId": "brand",
             "name": "Brand",
-            "hostIds": ["h1", "h2"],
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
             "declared": true,
             "awaitsConfirmation": false
           }
@@ -5554,13 +6431,17 @@
             }
           ]
         ],
-        [[]]
+        [
+          []
+        ]
       ]
     },
     "campaignSendDisplay": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
       "args": [
-        [null],
+        [
+          null
+        ],
         [
           {
             "status": "draft"
@@ -5646,7 +6527,9 @@
     "campaignReport": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
       "args": [
-        [null],
+        [
+          null
+        ],
         [
           {
             "sent": 1000,
@@ -5679,7 +6562,9 @@
     "sendLinkReport": {
       "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
       "args": [
-        [null],
+        [
+          null
+        ],
         [
           {
             "links": {
@@ -6000,7 +6885,9 @@
     "describeVariantComparison": {
       "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
       "args": [
-        [null],
+        [
+          null
+        ],
         [
           {
             "lift": 0.6,
@@ -6041,7 +6928,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6066,7 +6955,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6091,7 +6982,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6116,7 +7009,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6131,7 +7026,9 @@
             "steps": [],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6210,7 +7107,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6271,7 +7170,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6305,7 +7206,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6339,7 +7242,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6364,7 +7269,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6389,7 +7296,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6423,7 +7332,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6457,7 +7368,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6482,7 +7395,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6507,7 +7422,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6532,7 +7449,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6557,7 +7476,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6582,7 +7503,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6605,7 +7528,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6628,7 +7553,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6651,7 +7578,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6683,7 +7612,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6708,7 +7639,9 @@
             ],
             "settings": {
               "window": null,
-              "allowedCountries": ["US"],
+              "allowedCountries": [
+                "US"
+              ],
               "allowCustomers": false,
               "trackClicks": true,
               "countOpens": false,
@@ -6805,41 +7738,88 @@
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "args": [
-        [4763, 5000],
-        [4763, 4763],
-        [4763, 4000]
+        [
+          4763,
+          5000
+        ],
+        [
+          4763,
+          4763
+        ],
+        [
+          4763,
+          4000
+        ]
       ]
     },
     "posOfflineSaleKeyIsValid": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "args": [
-        ["off8f2f9807c22c4fe3b1ed9042c497949d"],
-        ["short"],
-        ["../orders/abcdefghijklmnop"],
-        ["__abcdefghijklmnop__"]
+        [
+          "off8f2f9807c22c4fe3b1ed9042c497949d"
+        ],
+        [
+          "short"
+        ],
+        [
+          "../orders/abcdefghijklmnop"
+        ],
+        [
+          "__abcdefghijklmnop__"
+        ]
       ]
     },
     "posOfflineSoldAt": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "args": [
-        [1799999000000, 1800000000000],
-        [1800000300000, 1800000000000],
-        [1800001000000, 1800000000000],
-        [1797000000000, 1800000000000]
+        [
+          1799999000000,
+          1800000000000
+        ],
+        [
+          1800000300000,
+          1800000000000
+        ],
+        [
+          1800001000000,
+          1800000000000
+        ],
+        [
+          1797000000000,
+          1800000000000
+        ]
       ]
     },
     "canTransitionPickup": {
       "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
       "argsProduct": [
-        ["preparing", "ready", "picked_up"],
-        ["preparing", "ready", "picked_up"]
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ],
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ]
       ]
     },
     "canTransitionLocalDelivery": {
       "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
       "argsProduct": [
-        ["scheduled", "out_for_delivery", "delivered", "failed"],
-        ["scheduled", "out_for_delivery", "delivered", "failed"]
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ],
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ]
       ]
     },
     "orderLocalFulfillmentListFields": {
@@ -6876,12 +7856,22 @@
             "createdAtMs": 1000
           }
         ],
-        [{}]
+        [
+          {}
+        ]
       ]
     },
     "localFulfillmentQueueQuery": {
       "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
-      "args": [["pickup_ready"], ["delivery_scheduled", "loc1"]]
+      "args": [
+        [
+          "pickup_ready"
+        ],
+        [
+          "delivery_scheduled",
+          "loc1"
+        ]
+      ]
     },
     "funnelStepTitle": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
@@ -6966,26 +7956,92 @@
     },
     "waitLabel": {
       "module": "libs/plugins/funnels/src/lib/model/drop-off.ts",
-      "args": [[1], [2], [24], [48], [72], [168], [36]]
+      "args": [
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          24
+        ],
+        [
+          48
+        ],
+        [
+          72
+        ],
+        [
+          168
+        ],
+        [
+          36
+        ]
+      ]
     },
     "formatShare": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
-      "args": [[null], [0], [1], [0.5], [0.3333], [0.12345], [0.0004]]
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          0.5
+        ],
+        [
+          0.3333
+        ],
+        [
+          0.12345
+        ],
+        [
+          0.0004
+        ]
+      ]
     },
     "formatDuration": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
       "args": [
-        [null],
-        [0],
-        [999],
-        [45000],
-        [59600],
-        [60000],
-        [185000],
-        [3600000],
-        [7800000],
-        [172800000],
-        [190000000]
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          999
+        ],
+        [
+          45000
+        ],
+        [
+          59600
+        ],
+        [
+          60000
+        ],
+        [
+          185000
+        ],
+        [
+          3600000
+        ],
+        [
+          7800000
+        ],
+        [
+          172800000
+        ],
+        [
+          190000000
+        ]
       ]
     },
     "normalizeFunnelDefinition": {
@@ -7204,7 +8260,11 @@
             "match": "exact"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7233,7 +8293,11 @@
             "match": "exact"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7262,7 +8326,11 @@
             "match": "prefix"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7291,7 +8359,11 @@
             "match": "prefix"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7320,7 +8392,11 @@
             "match": "prefix"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7348,7 +8424,11 @@
             "key": "f1"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7376,7 +8456,11 @@
             "key": "f2"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7404,7 +8488,11 @@
             "key": ""
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7432,7 +8520,11 @@
             "key": "s9"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7460,7 +8552,11 @@
             "key": "p1"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7488,7 +8584,11 @@
             "key": "o1"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7516,7 +8616,11 @@
             "key": "sign_up"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7544,7 +8648,11 @@
             "key": ""
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7577,7 +8685,11 @@
             "key": "f1"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7606,7 +8718,11 @@
             "label": "Mine"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7634,7 +8750,11 @@
             "key": "zz"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7662,7 +8782,11 @@
             "key": "s1"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7691,7 +8815,11 @@
             "match": "exact"
           },
           {
-            "pages": ["/", "/about", "/blog/post"],
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
             "forms": [
               {
                 "id": "f1",
@@ -7718,8 +8846,12 @@
     "resolveEnabledPlugins": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "args": [
-        [null],
-        [{}],
+        [
+          null
+        ],
+        [
+          {}
+        ],
         [
           {
             "enabledPlugins": []
@@ -7727,12 +8859,20 @@
         ],
         [
           {
-            "enabledPlugins": ["crm", "commerce", "crm"]
+            "enabledPlugins": [
+              "crm",
+              "commerce",
+              "crm"
+            ]
           }
         ],
         [
           {
-            "enabledPlugins": ["accounts", "commerce", "bookings"]
+            "enabledPlugins": [
+              "accounts",
+              "commerce",
+              "bookings"
+            ]
           }
         ]
       ]
@@ -7740,35 +8880,62 @@
     "resolveHostEnabledPlugins": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "args": [
-        [null, null],
+        [
+          null,
+          null
+        ],
         [
           {
-            "enabledPlugins": ["commerce", "accounts", "crm"]
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
           },
           null
         ],
         [
           {
-            "enabledPlugins": ["commerce", "accounts", "crm"]
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
           },
           {
-            "enabledPlugins": ["accounts"]
+            "enabledPlugins": [
+              "accounts"
+            ]
           }
         ],
         [
           {
-            "enabledPlugins": ["commerce", "accounts", "crm"]
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
           },
           {
-            "disabledPlugins": ["crm", "mui", "forms"],
-            "enabledPlugins": ["accounts"]
+            "disabledPlugins": [
+              "crm",
+              "mui",
+              "forms"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
           }
         ],
         [
           null,
           {
-            "disabledPlugins": ["accounts"],
-            "enabledPlugins": ["accounts"]
+            "disabledPlugins": [
+              "accounts"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
           }
         ]
       ]
@@ -7779,58 +8946,157 @@
         [
           null,
           {
-            "enabledPlugins": ["commerce", "accounts"]
+            "enabledPlugins": [
+              "commerce",
+              "accounts"
+            ]
           }
         ],
         [
           null,
           {
-            "disabledPlugins": ["crm"]
+            "disabledPlugins": [
+              "crm"
+            ]
           },
           {
-            "enabledPlugins": ["accounts"]
+            "enabledPlugins": [
+              "accounts"
+            ]
           },
           {
-            "disabledPlugins": ["accounts"]
+            "disabledPlugins": [
+              "accounts"
+            ]
           }
         ],
-        ["mui", "forms", "crm", "accounts", "commerce"]
+        [
+          "mui",
+          "forms",
+          "crm",
+          "accounts",
+          "commerce"
+        ]
       ]
     },
     "resolveDisableCascade": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "args": [
-        ["commerce", ["commerce", "accounts", "crm"]],
-        ["commerce", ["commerce", "crm"]],
-        ["crm", ["crm"]],
-        ["mui", ["mui", "commerce", "accounts"]]
+        [
+          "commerce",
+          [
+            "commerce",
+            "accounts",
+            "crm"
+          ]
+        ],
+        [
+          "commerce",
+          [
+            "commerce",
+            "crm"
+          ]
+        ],
+        [
+          "crm",
+          [
+            "crm"
+          ]
+        ],
+        [
+          "mui",
+          [
+            "mui",
+            "commerce",
+            "accounts"
+          ]
+        ]
       ]
     },
     "pluginRequirements": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [["accounts"], ["commerce"], ["nope"]]
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "commerce"
+        ],
+        [
+          "nope"
+        ]
+      ]
     },
     "pluginDependents": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [["commerce"], ["accounts"], ["crm"]]
+      "args": [
+        [
+          "commerce"
+        ],
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
     },
     "isLockedOnForWorkspace": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [["mui"], ["forms"], ["crm"], ["fonts"]]
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "crm"
+        ],
+        [
+          "fonts"
+        ]
+      ]
     },
     "isLockedOnForSite": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [["mui"], ["forms"], ["fonts"], ["crm"]]
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "fonts"
+        ],
+        [
+          "crm"
+        ]
+      ]
     },
     "isDefaultOffPerSite": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [["accounts"], ["crm"]]
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
     },
     "buyerNotificationEnabled": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "args": [
-        [null, "texts"],
-        [{}, "texts"],
+        [
+          null,
+          "texts"
+        ],
+        [
+          {},
+          "texts"
+        ],
         [
           {
             "texts": false
@@ -7868,8 +9134,14 @@
           },
           "texts"
         ],
-        ["off", "texts"],
-        [[], "texts"],
+        [
+          "off",
+          "texts"
+        ],
+        [
+          [],
+          "texts"
+        ],
         [
           {
             "texts": null
@@ -7949,7 +9221,9 @@
             "flaggedAtMs": 1000
           },
           {
-            "refundedLineItemIds": [0]
+            "refundedLineItemIds": [
+              0
+            ]
           }
         ],
         [
@@ -7986,7 +9260,9 @@
             "flaggedAtMs": 1000
           },
           {
-            "refundedLineItemIds": [0]
+            "refundedLineItemIds": [
+              0
+            ]
           }
         ],
         [
@@ -8013,7 +9289,9 @@
             "flaggedAtMs": 1000
           },
           {
-            "refundedLineItemIds": [0]
+            "refundedLineItemIds": [
+              0
+            ]
           }
         ],
         [
@@ -8039,13 +9317,21 @@
     "expandVariantMatrix": {
       "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
       "args": [
-        [null],
-        [[]],
+        [
+          null
+        ],
+        [
+          []
+        ],
         [
           [
             {
               "name": "Size",
-              "values": ["S", "M", "L"]
+              "values": [
+                "S",
+                "M",
+                "L"
+              ]
             }
           ]
         ],
@@ -8053,11 +9339,18 @@
           [
             {
               "name": "Size",
-              "values": ["S", "M"]
+              "values": [
+                "S",
+                "M"
+              ]
             },
             {
               "name": "Color",
-              "values": ["Red", "Blue", "Green"]
+              "values": [
+                "Red",
+                "Blue",
+                "Green"
+              ]
             }
           ]
         ],
@@ -8065,15 +9358,24 @@
           [
             {
               "name": "Size",
-              "values": ["S", "M"]
+              "values": [
+                "S",
+                "M"
+              ]
             },
             {
               "name": "Color",
-              "values": ["Red", "Blue"]
+              "values": [
+                "Red",
+                "Blue"
+              ]
             },
             {
               "name": "Fit",
-              "values": ["Slim", "Regular"]
+              "values": [
+                "Slim",
+                "Regular"
+              ]
             }
           ]
         ],
@@ -8081,11 +9383,16 @@
           [
             {
               "name": "Size",
-              "values": ["S", "M"]
+              "values": [
+                "S",
+                "M"
+              ]
             },
             {
               "name": "",
-              "values": ["x"]
+              "values": [
+                "x"
+              ]
             },
             {
               "name": "Color",
@@ -8093,7 +9400,9 @@
             },
             {
               "name": "Fit",
-              "values": ["Slim"]
+              "values": [
+                "Slim"
+              ]
             }
           ]
         ],
@@ -8101,15 +9410,33 @@
           [
             {
               "name": "A",
-              "values": ["a1", "a2", "a3", "a4", "a5"]
+              "values": [
+                "a1",
+                "a2",
+                "a3",
+                "a4",
+                "a5"
+              ]
             },
             {
               "name": "B",
-              "values": ["b1", "b2", "b3", "b4", "b5"]
+              "values": [
+                "b1",
+                "b2",
+                "b3",
+                "b4",
+                "b5"
+              ]
             },
             {
               "name": "C",
-              "values": ["c1", "c2", "c3", "c4", "c5"]
+              "values": [
+                "c1",
+                "c2",
+                "c3",
+                "c4",
+                "c5"
+              ]
             }
           ]
         ],
@@ -8211,7 +9538,12 @@
             },
             {
               "name": "B",
-              "values": ["b1", "b2", "b3", "b4"]
+              "values": [
+                "b1",
+                "b2",
+                "b3",
+                "b4"
+              ]
             }
           ]
         ]
@@ -8225,11 +9557,17 @@
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8271,18 +9609,27 @@
               }
             ]
           },
-          ["Size", "Colour"]
+          [
+            "Size",
+            "Colour"
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8324,18 +9671,27 @@
               }
             ]
           },
-          ["Fit", "Colour"]
+          [
+            "Fit",
+            "Colour"
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8377,18 +9733,27 @@
               }
             ]
           },
-          ["Size", null]
+          [
+            "Size",
+            null
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8430,18 +9795,27 @@
               }
             ]
           },
-          ["Size", "Size"]
+          [
+            "Size",
+            "Size"
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8483,18 +9857,27 @@
               }
             ]
           },
-          [null, null]
+          [
+            null,
+            null
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8536,18 +9919,26 @@
               }
             ]
           },
-          ["Fit"]
+          [
+            "Fit"
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S", "M"]
+                "values": [
+                  "S",
+                  "M"
+                ]
               },
               {
                 "name": "Color",
-                "values": ["Red", "Blue"]
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
               }
             ],
             "variants": [
@@ -8569,14 +9960,19 @@
               }
             ]
           },
-          ["Size", "Color"]
+          [
+            "Size",
+            "Color"
+          ]
         ],
         [
           {
             "options": [
               {
                 "name": "Size",
-                "values": ["S"]
+                "values": [
+                  "S"
+                ]
               }
             ],
             "variants": [
@@ -8591,7 +9987,9 @@
               }
             ]
           },
-          ["Fit"]
+          [
+            "Fit"
+          ]
         ],
         [
           {
@@ -8611,30 +10009,2188 @@
     "posPinProblem": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
       "args": [
-        ["4821"],
-        ["1234"],
-        ["4321"],
-        ["1111"],
-        ["123"],
-        ["1234567"],
-        ["12a4"],
-        [""],
-        ["735190"],
-        ["9876"],
-        ["246810"],
-        ["0000"],
-        ["abcd"],
-        [null]
+        [
+          "4821"
+        ],
+        [
+          "1234"
+        ],
+        [
+          "4321"
+        ],
+        [
+          "1111"
+        ],
+        [
+          "123"
+        ],
+        [
+          "1234567"
+        ],
+        [
+          "12a4"
+        ],
+        [
+          ""
+        ],
+        [
+          "735190"
+        ],
+        [
+          "9876"
+        ],
+        [
+          "246810"
+        ],
+        [
+          "0000"
+        ],
+        [
+          "abcd"
+        ],
+        [
+          null
+        ]
       ]
     },
     "posCashVarianceCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
       "args": [
-        [21240, 21240],
-        [20000, 21240],
-        [22000, 21240],
-        [0, 0],
-        [100.4, 200.6]
+        [
+          21240,
+          21240
+        ],
+        [
+          20000,
+          21240
+        ],
+        [
+          22000,
+          21240
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          100.4,
+          200.6
+        ]
+      ]
+    },
+    "formatDatasetValue": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          "Sourdough"
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          ""
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          null
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          true
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          false
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          "maybe"
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1767225600000
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1700000000123
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          "soon"
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          {
+            "latitude": 45.52,
+            "longitude": -122.68
+          }
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          "x"
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          [
+            "a",
+            "b c"
+          ]
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          "one"
+        ],
+        [
+          {
+            "name": "M",
+            "type": "map"
+          },
+          {
+            "a": 1,
+            "b": "two"
+          }
+        ],
+        [
+          {
+            "name": "N",
+            "type": "float"
+          },
+          8.5
+        ],
+        [
+          {
+            "name": "I",
+            "type": "int32"
+          },
+          12
+        ],
+        [
+          {
+            "name": "R",
+            "type": "reference"
+          },
+          "rec-1"
+        ]
+      ]
+    },
+    "datasetValueToInput": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          "Sourdough"
+        ],
+        [
+          {
+            "name": "T",
+            "type": "text"
+          },
+          null
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          true
+        ],
+        [
+          {
+            "name": "B",
+            "type": "bool"
+          },
+          false
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1767225600000
+        ],
+        [
+          {
+            "name": "D",
+            "type": "timestamp"
+          },
+          1700000000123
+        ],
+        [
+          {
+            "name": "C",
+            "type": "coordinates"
+          },
+          {
+            "latitude": 45.52,
+            "longitude": -122.68
+          }
+        ],
+        [
+          {
+            "name": "L",
+            "type": "sorted"
+          },
+          [
+            "a",
+            "b"
+          ]
+        ],
+        [
+          {
+            "name": "M",
+            "type": "map"
+          },
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "name": "N",
+            "type": "float"
+          },
+          8.5
+        ],
+        [
+          {
+            "name": "R",
+            "type": "reference",
+            "reference": {
+              "datasetId": "d",
+              "multiple": true
+            }
+          },
+          [
+            "x",
+            "y"
+          ]
+        ]
+      ]
+    },
+    "parseDatasetFieldEntries": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Title, Unit price"
+        ],
+        [
+          "roast_preference\nOrigin country, origin-country"
+        ],
+        [
+          "  , 123, Ünïcode name, a-b"
+        ],
+        [
+          ""
+        ],
+        [
+          "name, Name, NAME, email_2"
+        ]
+      ]
+    },
+    "slugifyDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Roast preference"
+        ],
+        [
+          "  Unit-price  "
+        ],
+        [
+          "2nd place"
+        ],
+        [
+          "__x__"
+        ],
+        [
+          "Ünïcode"
+        ],
+        [
+          "already_ok"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "datasetDisplayName": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "displayName": " Menu "
+          }
+        ],
+        [
+          {
+            "name": "Legacy"
+          }
+        ],
+        [
+          {
+            "displayName": "  ",
+            "name": "Old"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "effectiveDatasetModel": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          {
+            "model": {
+              "order": [
+                "name",
+                "price",
+                "inStock",
+                "category",
+                "tags",
+                "launched",
+                "where",
+                "ref"
+              ],
+              "fields": {
+                "name": {
+                  "name": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                "price": {
+                  "name": "Price",
+                  "type": "float"
+                },
+                "inStock": {
+                  "name": "In stock",
+                  "type": "bool"
+                },
+                "category": {
+                  "name": "Category",
+                  "type": "text",
+                  "validation": {
+                    "options": [
+                      "Bread",
+                      "Pastry",
+                      "Cake"
+                    ]
+                  }
+                },
+                "tags": {
+                  "name": "Tags",
+                  "type": "sorted"
+                },
+                "launched": {
+                  "name": "Launched",
+                  "type": "timestamp"
+                },
+                "where": {
+                  "name": "Where",
+                  "type": "coordinates"
+                },
+                "ref": {
+                  "name": "Supplier",
+                  "type": "reference",
+                  "reference": {
+                    "datasetId": "ds",
+                    "multiple": true
+                  }
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "fields": [
+              "city",
+              "roast_preference"
+            ]
+          }
+        ],
+        [
+          {
+            "model": {
+              "fields": {},
+              "order": []
+            },
+            "fields": [
+              "a"
+            ]
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "planDatasetRecordQuery": {
+      "module": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
+      "args": [
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "sour"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "Sourdough loaf"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.category",
+              "op": "equals",
+              "value": "Bread"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.category",
+              "op": "isAnyOf",
+              "value": "Bread,Cake"
+            }
+          ],
+          [
+            "rye"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.inStock",
+              "op": "equals",
+              "value": "true"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.price",
+              "op": "=",
+              "value": "8.5"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "Seeded rye bread"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "rye"
+            }
+          ],
+          [
+            "seeded"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.name",
+              "op": "equals",
+              "value": "Seeded Rye"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.tags",
+              "op": "contains",
+              "value": "vegan"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.tags",
+              "op": "contains",
+              "value": "vegan"
+            },
+            {
+              "field": "values.name",
+              "op": "contains",
+              "value": "rye"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [
+            {
+              "field": "values.launched",
+              "op": "after",
+              "value": "2026-01-01"
+            }
+          ],
+          []
+        ],
+        [
+          {
+            "order": [
+              "name",
+              "price",
+              "inStock",
+              "category",
+              "tags",
+              "launched",
+              "where",
+              "ref"
+            ],
+            "fields": {
+              "name": {
+                "name": "Name",
+                "type": "text",
+                "required": true
+              },
+              "price": {
+                "name": "Price",
+                "type": "float"
+              },
+              "inStock": {
+                "name": "In stock",
+                "type": "bool"
+              },
+              "category": {
+                "name": "Category",
+                "type": "text",
+                "validation": {
+                  "options": [
+                    "Bread",
+                    "Pastry",
+                    "Cake"
+                  ]
+                }
+              },
+              "tags": {
+                "name": "Tags",
+                "type": "sorted"
+              },
+              "launched": {
+                "name": "Launched",
+                "type": "timestamp"
+              },
+              "where": {
+                "name": "Where",
+                "type": "coordinates"
+              },
+              "ref": {
+                "name": "Supplier",
+                "type": "reference",
+                "reference": {
+                  "datasetId": "ds",
+                  "multiple": true
+                }
+              }
+            }
+          },
+          [],
+          [
+            "supercalifragilistic"
+          ]
+        ],
+        [
+          {
+            "order": [
+              "a.b"
+            ],
+            "fields": {
+              "a.b": {
+                "name": "Dotted",
+                "type": "text"
+              }
+            }
+          },
+          [
+            {
+              "field": "values.a.b",
+              "op": "contains",
+              "value": "x"
+            }
+          ],
+          []
+        ]
+      ]
+    },
+    "validateDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "",
+          []
+        ],
+        [
+          "  ",
+          []
+        ],
+        [
+          "2nd",
+          []
+        ],
+        [
+          "ok_id",
+          []
+        ],
+        [
+          "Has Space",
+          []
+        ],
+        [
+          "name",
+          [
+            "Name"
+          ]
+        ],
+        [
+          "email_2",
+          [
+            "name",
+            "email"
+          ]
+        ],
+        [
+          "Über",
+          []
+        ]
+      ]
+    },
+    "defaultDatasetFieldId": {
+      "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
+      "args": [
+        [
+          "Roast preference",
+          []
+        ],
+        [
+          "Name",
+          [
+            "name"
+          ]
+        ],
+        [
+          "Name",
+          [
+            "NAME",
+            "name_2"
+          ]
+        ],
+        [
+          "123",
+          []
+        ],
+        [
+          "Unit-price",
+          [
+            "unit_price",
+            "Unit_Price_2"
+          ]
+        ]
+      ]
+    },
+    "describeScope": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          [
+            "org"
+          ],
+          {}
+        ],
+        [
+          [
+            "host:a"
+          ],
+          {
+            "a": "Bakery"
+          }
+        ],
+        [
+          [
+            "host:a"
+          ],
+          {}
+        ],
+        [
+          [
+            "host:a",
+            "host:b"
+          ],
+          {}
+        ],
+        [
+          [],
+          {}
+        ],
+        [
+          null,
+          {}
+        ],
+        [
+          [
+            "org",
+            "host:a"
+          ],
+          {}
+        ]
+      ]
+    },
+    "scopeToStore": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          [
+            "org"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "host:b"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "org"
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ],
+        [
+          [
+            "bogus"
+          ]
+        ],
+        [
+          [
+            "host:h0",
+            "host:h1",
+            "host:h2",
+            "host:h3",
+            "host:h4",
+            "host:h5",
+            "host:h6",
+            "host:h7",
+            "host:h8",
+            "host:h9",
+            "host:h10",
+            "host:h11",
+            "host:h12",
+            "host:h13",
+            "host:h14",
+            "host:h15",
+            "host:h16",
+            "host:h17",
+            "host:h18",
+            "host:h19",
+            "host:h20",
+            "host:h21",
+            "host:h22",
+            "host:h23",
+            "host:h24",
+            "host:h25",
+            "host:h26",
+            "host:h27",
+            "host:h28",
+            "host:h29",
+            "host:h30"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "host:a"
+          ]
+        ]
+      ]
+    },
+    "narrowsScope": {
+      "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
+      "args": [
+        [
+          [
+            "org"
+          ],
+          [
+            "org"
+          ]
+        ],
+        [
+          [
+            "org"
+          ],
+          [
+            "host:a"
+          ]
+        ],
+        [
+          [
+            "host:a"
+          ],
+          [
+            "org"
+          ]
+        ],
+        [
+          [
+            "host:a",
+            "host:b"
+          ],
+          [
+            "host:a"
+          ]
+        ],
+        [
+          [
+            "host:a"
+          ],
+          [
+            "host:a",
+            "host:b"
+          ]
+        ],
+        [
+          [],
+          [
+            "host:a"
+          ]
+        ],
+        [
+          null,
+          [
+            "org"
+          ]
+        ]
+      ]
+    },
+    "listFilterOperatorLabel": {
+      "module": "libs/shared/util/tools/src/lib/list-query/list-filter-sentence.ts",
+      "args": [
+        [
+          "contains"
+        ],
+        [
+          "doesNotContain"
+        ],
+        [
+          "equals"
+        ],
+        [
+          "is"
+        ],
+        [
+          "="
+        ],
+        [
+          "doesNotEqual"
+        ],
+        [
+          "!="
+        ],
+        [
+          "startsWith"
+        ],
+        [
+          "endsWith"
+        ],
+        [
+          "isAnyOf"
+        ],
+        [
+          "isEmpty"
+        ],
+        [
+          "isNotEmpty"
+        ],
+        [
+          "after"
+        ],
+        [
+          "onOrAfter"
+        ],
+        [
+          "before"
+        ],
+        [
+          "onOrBefore"
+        ],
+        [
+          ">"
+        ],
+        [
+          ">="
+        ],
+        [
+          "<"
+        ],
+        [
+          "<="
+        ],
+        [
+          "whatever"
+        ]
+      ]
+    },
+    "formatVariableValue": {
+      "module": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "args": [
+        [
+          {
+            "name": "a",
+            "type": "text",
+            "value": "Hello"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "boolean",
+            "value": "true"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "boolean",
+            "value": "yes"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "number",
+            "value": "12.50"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "number",
+            "value": "abc"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "date",
+            "value": "2026-03-01"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "date",
+            "value": "not a date"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "time",
+            "value": "09:30"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "collection",
+            "value": "[\"a\",\"b\",3]"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "dictionary",
+            "value": "{\"city\":\"Portland\",\"open\":true}"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "dictionary",
+            "value": "{oops"
+          }
+        ],
+        [
+          {
+            "name": "a",
+            "type": "text"
+          }
+        ]
+      ]
+    },
+    "isVariableName": {
+      "module": "libs/aglyn/src/lib/app-utils/variables.ts",
+      "args": [
+        [
+          "tax_rate"
+        ],
+        [
+          "_x"
+        ],
+        [
+          "2fast"
+        ],
+        [
+          "has space"
+        ],
+        [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          ""
+        ],
+        [
+          "Ünï"
+        ]
+      ]
+    },
+    "parseFunctionParameterOptions": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          "small: Small, large: Large"
+        ],
+        [
+          "a, a, b"
+        ],
+        [
+          "x:x, y: "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          " basic : Basic plan , plus"
+        ]
+      ]
+    },
+    "formatFunctionParameterOptions": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          [
+            {
+              "value": "small",
+              "label": "Small"
+            },
+            {
+              "value": "x"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "value": "a",
+              "label": "a"
+            }
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "summarizeDependents": {
+      "module": "libs/aglyn/src/lib/app-utils/where-used-summary.ts",
+      "args": [
+        [
+          {
+            "dependents": [
+              {
+                "type": "screen",
+                "id": "s1",
+                "name": "Home",
+                "via": [
+                  "id"
+                ]
+              },
+              {
+                "type": "screen",
+                "id": "s2",
+                "name": "About",
+                "via": [
+                  "id"
+                ]
+              },
+              {
+                "type": "workflow",
+                "id": "w",
+                "name": "W",
+                "via": [
+                  "name"
+                ]
+              }
+            ],
+            "total": 3,
+            "legacyCount": 1
+          }
+        ],
+        [
+          {
+            "dependents": [
+              {
+                "type": "layout",
+                "id": "l",
+                "name": "L",
+                "via": [
+                  "id"
+                ]
+              }
+            ],
+            "total": 1,
+            "legacyCount": 0
+          }
+        ],
+        [
+          {
+            "dependents": [],
+            "total": 0,
+            "legacyCount": 0
+          }
+        ]
+      ]
+    },
+    "browseBase": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          "org1"
+        ],
+        [
+          "org1",
+          "pub9"
+        ],
+        [
+          null,
+          "pub9"
+        ]
+      ]
+    },
+    "listingArtifactType": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
+      "args": [
+        [
+          {
+            "artifactType": "theme"
+          }
+        ],
+        [
+          {
+            "kind": "template"
+          }
+        ],
+        [
+          {
+            "type": "plugin"
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "isListingBrowsable": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-visibility.ts",
+      "args": [
+        [
+          {
+            "artifactType": "plugin",
+            "reviewStatus": "listed"
+          }
+        ],
+        [
+          {
+            "artifactType": "plugin",
+            "reviewStatus": "submitted"
+          }
+        ],
+        [
+          {
+            "artifactType": "plugin"
+          }
+        ],
+        [
+          {
+            "artifactType": "component",
+            "reviewStatus": "rejected"
+          }
+        ],
+        [
+          {
+            "artifactType": "theme",
+            "hiddenAt": 1
+          }
+        ],
+        [
+          {
+            "visibility": "private"
+          }
+        ],
+        [
+          {
+            "workspaceLockedAt": 2
+          }
+        ],
+        [
+          {
+            "type": "plugin",
+            "reviewStatus": "verified"
+          }
+        ]
+      ]
+    },
+    "resolvePluginInstallState": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.2.0",
+          null,
+          null
+        ],
+        [
+          "1.2.0",
+          {
+            "version": "1.2.0"
+          },
+          null
+        ],
+        [
+          "1.3.0",
+          null,
+          {
+            "version": "1.2.0"
+          }
+        ],
+        [
+          "2",
+          {
+            "version": 2
+          },
+          {
+            "version": 1
+          }
+        ],
+        [
+          null,
+          {
+            "version": "1"
+          },
+          null
+        ]
+      ]
+    },
+    "marketplaceInstallEndpoint": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "plugin"
+        ],
+        [
+          "component"
+        ],
+        [
+          "template"
+        ],
+        [
+          "layout"
+        ],
+        [
+          "theme"
+        ],
+        [
+          "datasetSchema"
+        ],
+        [
+          "emailTemplate"
+        ],
+        [
+          "emailStarter"
+        ],
+        [
+          "other"
+        ]
+      ]
+    },
+    "marketplaceLandingMessage": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "plugin",
+          "X"
+        ],
+        [
+          "template",
+          "Hero"
+        ],
+        [
+          "layout",
+          "L"
+        ],
+        [
+          "emailTemplate",
+          "Welcome"
+        ],
+        [
+          "emailStarter",
+          "Promo"
+        ],
+        [
+          "datasetSchema",
+          "Menu"
+        ],
+        [
+          "theme",
+          "Bold"
+        ],
+        [
+          "component",
+          "C"
+        ]
       ]
     }
   }

@@ -203,6 +203,7 @@ export function AiProductCopyCard(props: ConsoleProductEditorZoneProps) {
   const running = isAiJobMoving(job)
   const unnamed = !product.name.trim()
   const help = pluginDocsHelp('aiProducts', {
+    anchor: '#write-a-products-copy',
     excerpt:
       'Write a product’s description, search listing and tags from what it says and shows. It is put in the fields as unsaved changes; nothing is saved until you save.',
   })

@@ -4,6 +4,16 @@
     "Values from the pure modules tools/scripts/native-contracts.json names."
   ],
   "AREA_SERVED_MAX": 20,
+  "ARTIFACT_TYPE_LABELS": {
+    "component": "Component",
+    "datasetSchema": "Dataset schema",
+    "emailStarter": "Email starter",
+    "emailTemplate": "Email template",
+    "layout": "Layout",
+    "plugin": "Plugin",
+    "template": "Site template",
+    "theme": "Theme"
+  },
   "BOOKING_FIELD_ASKS": [
     "off",
     "optional",
@@ -40,6 +50,20 @@
     "Fri",
     "Sat"
   ],
+  "BROWSE_SORTS": {
+    "installed": {
+      "direction": "desc",
+      "path": "installCount"
+    },
+    "newest": {
+      "direction": "desc",
+      "path": "createdAt"
+    },
+    "rated": {
+      "direction": "desc",
+      "path": "ratingAverage"
+    }
+  },
   "CAMPAIGN_EMAILS_QUERY": {
     "fields": [
       {
@@ -579,6 +603,45 @@
     "todo": "To-do"
   },
   "CROSS_MAX_DEPTH": 3,
+  "DATASET_AUTHORABLE_FIELD_TYPES": [
+    "text",
+    "bool",
+    "int32",
+    "float",
+    "timestamp",
+    "coordinates",
+    "sorted",
+    "reference"
+  ],
+  "DATASET_FIELD_TYPE_LABELS": {
+    "bool": "Boolean",
+    "bytes": "Bytes",
+    "coordinates": "Coordinates",
+    "float": "Number",
+    "int32": "Integer",
+    "int64": "Big integer",
+    "map": "Map",
+    "nil": "Null",
+    "reference": "Reference",
+    "sorted": "List",
+    "text": "Text",
+    "timestamp": "Date & time"
+  },
+  "DATASET_FIELD_TYPES": [
+    "text",
+    "bool",
+    "int32",
+    "int64",
+    "float",
+    "timestamp",
+    "coordinates",
+    "map",
+    "sorted",
+    "bytes",
+    "nil",
+    "reference"
+  ],
+  "DATASET_FILTER_PREFIX_MAX": 12,
   "DEAL_LIST_DECLARATION": {
     "fields": [
       {
@@ -1673,6 +1736,24 @@
     "page": "Viewed a page"
   },
   "FUNNELS_MAX_PER_SITE": 20,
+  "HELD_LICENCE_QUERY": {
+    "fields": [
+      {
+        "column": "buyerUid",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "buyerUid"
+      }
+    ],
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
   "HOST_EVENTS": [
     {
       "label": "Form submitted",
@@ -2014,6 +2095,42 @@
       "type": "funnelLeft"
     }
   ],
+  "HOST_VARIABLE_TYPE_LABELS": {
+    "boolean": "True/false (boolean)",
+    "collection": "Collection list (values)",
+    "date": "Date",
+    "dictionary": "Dictionary (key: value)",
+    "number": "Number",
+    "text": "Plain text",
+    "time": "Time"
+  },
+  "INSTALL_TARGETS": {
+    "component": [
+      "host"
+    ],
+    "datasetSchema": [
+      "org"
+    ],
+    "emailStarter": [
+      "host"
+    ],
+    "emailTemplate": [
+      "host"
+    ],
+    "layout": [
+      "host"
+    ],
+    "plugin": [
+      "org",
+      "host"
+    ],
+    "template": [
+      "host"
+    ],
+    "theme": [
+      "host"
+    ]
+  },
   "LAYOUT_LIST_QUERY": {
     "fields": [
       {
@@ -2449,6 +2566,20 @@
   },
   "LIST_QUERY_DISJUNCTIONS": 30,
   "LIST_QUERY_ID_PATH": "__name__",
+  "LISTING_CATEGORIES": [
+    "analytics",
+    "automation",
+    "commerce",
+    "communication",
+    "content",
+    "design",
+    "forms",
+    "integrations",
+    "marketing",
+    "productivity",
+    "seo",
+    "security"
+  ],
   "LOCAL_BUSINESS_TYPE_OPTIONS": [
     {
       "label": "Local business (general)",
@@ -2586,6 +2717,39 @@
       "method": "local_delivery"
     }
   ],
+  "MARKETPLACE_BROWSE_QUERY": {
+    "fields": [
+      {
+        "column": "category",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "category"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "browseTokens"
+      },
+      "tokensPath": "browseTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "path": "createdAt"
+      },
+      {
+        "direction": "desc",
+        "path": "installCount"
+      },
+      {
+        "direction": "desc",
+        "path": "ratingAverage"
+      }
+    ]
+  },
   "MEDIA_ALT_MAX_LENGTH": 300,
   "MEDIA_ALT_OPTIONS": [
     {
