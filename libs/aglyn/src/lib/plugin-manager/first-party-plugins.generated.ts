@@ -318,6 +318,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The chat settings are kept, and your conversations stay in your Tidio or LiveChat account."
     }
   },
+  {
+    "id": "review-platforms",
+    "label": "Review platforms",
+    "alwaysOnForWorkspace": true,
+    "description": "Trustpilot and Yotpo review invitations.",
+    "siteOff": {
+      "stops": "Stops review invitations for new orders.",
+      "keeps": "Reviews already collected stay in your Trustpilot and Yotpo accounts."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -355,6 +365,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "loyalty": "console-only",
   "couriers": "console-only",
   "live-chat": "elements",
+  "review-platforms": "console-only",
 }
 
 /**
