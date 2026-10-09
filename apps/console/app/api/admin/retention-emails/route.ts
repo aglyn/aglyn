@@ -31,6 +31,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { hostOrigin } from '@aglyn/tenant-data-admin/server/held-page-subject'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
@@ -58,7 +59,8 @@ import {
  * sends, and records the crossing on `users/{uid}.lifecycleEmails`.
  *
  * - A GET reports the plan and sends nothing; the scheduled POST sends.
- *   `?dryRun=1` on a POST reports too.
+ *   `?dryRun=1` on a POST reports too. A staff ID token may read the plan
+ *   (always a dry run) but never send.
  * - Suppressed addresses, disabled and staff accounts are never mailed. The
  *   product tips skip anyone who answered No to product email. The
  *   verification reminder is account mail and is governed by the suppression
@@ -268,21 +270,52 @@ async function sendOne(
   return 'sent'
 }
 
+/** True for a verified staff ID token, else the refusal to return. */
+async function isStaffCaller(
+  headers: Partial<Record<string, string>>,
+): Promise<true | Response> {
+  const authorization = headers.authorization ?? ''
+  if (!authorization.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+  try {
+    const decoded = await firebaseAdmin
+      .app()
+      .auth()
+      .verifyIdToken(authorization.slice('Bearer '.length))
+    if (!decoded.email_verified || !decoded['staff']) {
+      return Response.json({ error: 'Staff only' }, { status: 403 })
+    }
+    return true
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993); anything else is ours.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    throw error
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
-  if (!isCronAuthorized(headers)) {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  // The scheduler sends; a staff member may only READ the plan. This route
+  // lists accounts, so anything else is refused (AGL-1881).
+  const cron = isCronAuthorized(headers)
+  if (!cron) {
+    const staff = await isStaffCaller(headers)
+    if (staff !== true) return staff
   }
-  const dryRun = isCronDryRun({
-    method,
-    body,
-    query: query as Record<string, string | string[] | undefined>,
-  })
-  if (method === 'POST') await recordCronBeat(RETENTION_EMAILS_JOB_ID)
+  const dryRun =
+    !cron ||
+    isCronDryRun({
+      method,
+      body,
+      query: query as Record<string, string | string[] | undefined>,
+    })
+  if (cron && method === 'POST') await recordCronBeat(RETENTION_EMAILS_JOB_ID)
   if (!dryRun && !isEmailConfigured()) {
     return Response.json({ ok: true, skipped: 'email-unconfigured' }, { status: 200 })
   }

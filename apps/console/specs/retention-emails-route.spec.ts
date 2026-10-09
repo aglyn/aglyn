@@ -30,6 +30,7 @@
 export {}
 
 const mockListUsers = jest.fn()
+const mockVerifyIdToken = jest.fn()
 const mockSendEmail = jest.fn()
 const mockRender = jest.fn()
 const mockMintLink = jest.fn()
@@ -41,6 +42,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
+      auth: () => ({ verifyIdToken: (token: string) => mockVerifyIdToken(token) }),
       firestore: () => ({
         collection: (name: string) => ({
           doc: (id: string) => ({
@@ -156,6 +158,24 @@ describe('/api/admin/retention-emails', () => {
     const response = await POST(call('POST', false))
     expect(response.status).toBe(401)
     expect(mockListUsers).not.toHaveBeenCalled()
+  })
+
+  it('refuses a signed-in customer — the route lists accounts', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'c', email_verified: true })
+    const response = await POST(
+      new Request(ROUTE, { method: 'POST', headers: { Authorization: 'Bearer customer' }, body: '{}' }),
+    )
+    expect(response.status).toBe(403)
+    expect(mockListUsers).not.toHaveBeenCalled()
+  })
+
+  it('lets staff read the plan, and never send, even on a POST', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 's', email_verified: true, staff: true })
+    const response = await POST(
+      new Request(ROUTE, { method: 'POST', headers: { Authorization: 'Bearer staff' }, body: '{}' }),
+    )
+    expect(await response.json()).toMatchObject({ dryRun: true })
+    expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
   it('a GET plans and sends nothing', async () => {
