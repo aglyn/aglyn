@@ -19,6 +19,7 @@
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import { RowActionsMenu } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -273,235 +274,248 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             spacing={3}
             items={[
               {
-                size: { xs: 12, md: 6 },
+                /*
+                 * Balanced columns (AGL-3660), as on the staff org and
+                 * account pages: three half-width cards in a flex grid drew
+                 * each row as tall as its tallest card and left the third
+                 * alone with a half-width hole beside it.
+                 */
+                size: { xs: 12 },
                 children: (
-                  <CardDisplay
-                    header={'Site'}
-                    help={docsHelp('architectureMultiTenancy', {
-                      anchor: '#workspace-subdomains',
-                      excerpt:
-                        "The site's live URL, custom domain, and publish state. Retargeting the subdomain is audited and takes effect within a minute.",
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <Stack spacing={1}>
-                      <Typography variant="body2">
-                        {host?.displayName ?? '—'}
-                      </Typography>
-                      {liveUrl ? (
-                        <MuiLink
-                          href={liveUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          color="primary"
-                          underline="hover"
-                        >
-                          {liveUrl}
-                        </MuiLink>
-                      ) : (
-                        <Typography variant="caption" color="text.secondary">
-                          {'Not published'}
-                        </Typography>
-                      )}
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontFamily: 'monospace' }}
-                      >
-                        {`host id ${hostId}`}
-                      </Typography>
-                      <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                        {/*
-                          The custom domain moved to its own card below
-                          (AGL-2011). It used to be a bare `domain: {cname}`
-                          chip here — the domain, with no verdict and no
-                          attachment flag, so a broken domain and a working one
-                          rendered identically on the page support looks at.
-                        */}
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          label={publishedPages ? 'published' : 'unpublished'}
-                        />
-                        {site?.suspended ? (
-                          <Chip size="small" color="error" label="suspended" />
-                        ) : null}
-                        {host?.maintenance ? (
-                          <Chip size="small" color="warning" label="maintenance" />
-                        ) : null}
-                        {leavingNoticeUntil ? (
-                          <Chip
-                            size="small"
-                            color="info"
-                            variant="outlined"
-                            label="leaving notice"
-                          />
-                        ) : null}
-                      </Stack>
-                      {/*
-                        The leaving notice (AGL-3452): a new free workspace's
-                        sites send links to other domains through a "You're
-                        leaving" page for their first two weeks. Stated either
-                        way once the row has loaded, so "off" is an answer
-                        rather than a missing line.
-                      */}
-                      {site ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {staffLeavingNoticeLabel(leavingNoticeUntil)}
-                        </Typography>
-                      ) : null}
-                      {/* Subdomain edit (AGL-390). */}
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'flex-start', mt: 1 }}
-                      >
-                        <TextField
-                          size="small"
-                          label="Subdomain"
-                          value={subdomain}
-                          onChange={(event) =>
-                            setSubdomain(event.target.value.toLowerCase())
-                          }
-                          helperText={`${subdomain || '…'}.${TENANT_ROOT}`}
-                          sx={{ flex: 1 }}
-                        />
-                        {/* Retargeting a subdomain is super-only at
-                            /api/admin/host (AGL-2131). Support staff saw a
-                            live Save and got a raw 403. */}
-                        <SuperStaffOnly>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={
-                              busy ||
-                              !subdomain.trim() ||
-                              subdomain === (host?.subdomain ?? '')
-                            }
-                            onClick={() => void handleSubdomainSave()}
-                            sx={{ mt: 0.5 }}
+                  <CardColumns
+                    spacing={3}
+                    items={[
+                      {
+                        children: (
+                          <CardDisplay
+                            header={'Site'}
+                            help={docsHelp('architectureMultiTenancy', {
+                              anchor: '#workspace-subdomains',
+                              excerpt:
+                                "The site's live URL, custom domain, and publish state. Retargeting the subdomain is audited and takes effect within a minute.",
+                            })}
+                            contentGutterX
+                            contentGutterY
                           >
-                            {'Save'}
-                          </Button>
-                        </SuperStaffOnly>
-                      </Stack>
-                    </Stack>
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 6 },
-                children: (
-                  <CardDisplay
-                    header={'Ownership'}
-                    help={docsHelp('staffConsole', {
-                      anchor: '#site-ownership',
-                      excerpt:
-                        'The organization this site belongs to and who owns it. Ownership moves with the organization: transferring it here hands every site of the organization to the new owner.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <Stack spacing={1.5}>
-                      <Stack>
-                        <Typography variant="caption" color="text.secondary">
-                          {'Organization'}
-                        </Typography>
-                        {/* An anchor either way: one without an href is
-                            the placeholder link, not a different element. */}
-                        <AppLink
-                          href={orgId ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }) : undefined}
-                        >
-                          {orgId ? (site?.org?.name ?? orgId) : '—'}
-                        </AppLink>
-                        {site?.org?.plan ? (
-                          <Typography variant="caption" color="text.secondary">
-                            {`stored plan: ${site.org.plan}`}
-                          </Typography>
-                        ) : null}
-                      </Stack>
-                      <Stack>
-                        <Typography variant="caption" color="text.secondary">
-                          {'Owner'}
-                        </Typography>
-                        <AppLink
-                          href={
-                            site?.owner
-                              ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
-                              : undefined
-                          }
-                        >
-                          {site?.owner
-                            ? (site.owner.email ?? site.owner.displayName ?? site.owner.uid)
-                            : '—'}
-                        </AppLink>
-                      </Stack>
-                      {orgId ? (
-                        <StaffOrgOwnershipTransfer
-                          orgId={orgId}
-                          orgName={site?.org?.name}
-                          ownerUid={site?.org?.ownerUid}
-                          onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
-                        />
-                      ) : null}
-                      {/* Handing the workspace to the client the site was
-                          built for, and later asking them to upgrade, are
-                          the same two acts as on the organization page
-                          (AGL-3466). */}
-                      {orgId ? (
-                        <StaffOrgOwnerHandoff
-                          orgId={orgId}
-                          orgName={site?.org?.name}
-                          onSent={() => setSiteNonce((nonce) => nonce + 1)}
-                        />
-                      ) : null}
-                      {orgId ? (
-                        <StaffOrgUpgradeProposal
-                          orgId={orgId}
-                          org={(site?.org ?? null) as never}
-                          onChanged={() => setSiteNonce((nonce) => nonce + 1)}
-                        />
-                      ) : null}
-                      {/* Moving the site itself to another organization
-                          (AGL-3381) is super-only at /api/admin/site-transfer. */}
-                      <SuperStaffOnly>
-                        <StaffSiteTransfer
-                          hostId={hostId}
-                          currentOrgId={orgId || null}
-                          onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
-                        />
-                      </SuperStaffOnly>
-                    </Stack>
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 6 },
-                children: (
-                  <CardDisplay
-                    header={'Usage'}
-                    help={docsHelp('billing', {
-                      anchor: '#usage-meters',
-                      excerpt:
-                        "Live counts for this site — published and total pages, media, members, and storage — the figures metered against the org's entitlements.",
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <Stack
-                      useFlexGap
-                      direction="row"
-                      spacing={3}
-                      sx={{ flexWrap: 'wrap', gap: 2 }}
-                    >
-                      {stat('Published pages', publishedPages)}
-                      {stat('All pages', counts.screens)}
-                      {stat('Media files (organization)', counts.media)}
-                      {stat('Site members', counts.members)}
-                      {stat('Storage (MB)', storageMb)}
-                    </Stack>
-                  </CardDisplay>
+                            <Stack spacing={1}>
+                              <Typography variant="body2">
+                                {host?.displayName ?? '—'}
+                              </Typography>
+                              {liveUrl ? (
+                                <MuiLink
+                                  href={liveUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  color="primary"
+                                  underline="hover"
+                                >
+                                  {liveUrl}
+                                </MuiLink>
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">
+                                  {'Not published'}
+                                </Typography>
+                              )}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontFamily: 'monospace' }}
+                              >
+                                {`host id ${hostId}`}
+                              </Typography>
+                              <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+                                {/*
+                                  The custom domain moved to its own card below
+                                  (AGL-2011). It used to be a bare `domain: {cname}`
+                                  chip here — the domain, with no verdict and no
+                                  attachment flag, so a broken domain and a working one
+                                  rendered identically on the page support looks at.
+                                */}
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label={publishedPages ? 'published' : 'unpublished'}
+                                />
+                                {site?.suspended ? (
+                                  <Chip size="small" color="error" label="suspended" />
+                                ) : null}
+                                {host?.maintenance ? (
+                                  <Chip size="small" color="warning" label="maintenance" />
+                                ) : null}
+                                {leavingNoticeUntil ? (
+                                  <Chip
+                                    size="small"
+                                    color="info"
+                                    variant="outlined"
+                                    label="leaving notice"
+                                  />
+                                ) : null}
+                              </Stack>
+                              {/*
+                                The leaving notice (AGL-3452): a new free workspace's
+                                sites send links to other domains through a "You're
+                                leaving" page for their first two weeks. Stated either
+                                way once the row has loaded, so "off" is an answer
+                                rather than a missing line.
+                              */}
+                              {site ? (
+                                <Typography variant="caption" color="text.secondary">
+                                  {staffLeavingNoticeLabel(leavingNoticeUntil)}
+                                </Typography>
+                              ) : null}
+                              {/* Subdomain edit (AGL-390). */}
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: 'flex-start', mt: 1 }}
+                              >
+                                <TextField
+                                  size="small"
+                                  label="Subdomain"
+                                  value={subdomain}
+                                  onChange={(event) =>
+                                    setSubdomain(event.target.value.toLowerCase())
+                                  }
+                                  helperText={`${subdomain || '…'}.${TENANT_ROOT}`}
+                                  sx={{ flex: 1 }}
+                                />
+                                {/* Retargeting a subdomain is super-only at
+                                    /api/admin/host (AGL-2131). Support staff saw a
+                                    live Save and got a raw 403. */}
+                                <SuperStaffOnly>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    disabled={
+                                      busy ||
+                                      !subdomain.trim() ||
+                                      subdomain === (host?.subdomain ?? '')
+                                    }
+                                    onClick={() => void handleSubdomainSave()}
+                                    sx={{ mt: 0.5 }}
+                                  >
+                                    {'Save'}
+                                  </Button>
+                                </SuperStaffOnly>
+                              </Stack>
+                            </Stack>
+                          </CardDisplay>
+                        ),
+                      },
+                      {
+                        children: (
+                          <CardDisplay
+                            header={'Ownership'}
+                            help={docsHelp('staffConsole', {
+                              anchor: '#site-ownership',
+                              excerpt:
+                                'The organization this site belongs to and who owns it. Ownership moves with the organization: transferring it here hands every site of the organization to the new owner.',
+                            })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <Stack spacing={1.5}>
+                              <Stack>
+                                <Typography variant="caption" color="text.secondary">
+                                  {'Organization'}
+                                </Typography>
+                                {/* An anchor either way: one without an href is
+                                    the placeholder link, not a different element. */}
+                                <AppLink
+                                  href={orgId ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }) : undefined}
+                                >
+                                  {orgId ? (site?.org?.name ?? orgId) : '—'}
+                                </AppLink>
+                                {site?.org?.plan ? (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {`stored plan: ${site.org.plan}`}
+                                  </Typography>
+                                ) : null}
+                              </Stack>
+                              <Stack>
+                                <Typography variant="caption" color="text.secondary">
+                                  {'Owner'}
+                                </Typography>
+                                <AppLink
+                                  href={
+                                    site?.owner
+                                      ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
+                                      : undefined
+                                  }
+                                >
+                                  {site?.owner
+                                    ? (site.owner.email ?? site.owner.displayName ?? site.owner.uid)
+                                    : '—'}
+                                </AppLink>
+                              </Stack>
+                              {orgId ? (
+                                <StaffOrgOwnershipTransfer
+                                  orgId={orgId}
+                                  orgName={site?.org?.name}
+                                  ownerUid={site?.org?.ownerUid}
+                                  onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
+                                />
+                              ) : null}
+                              {/* Handing the workspace to the client the site was
+                                  built for, and later asking them to upgrade, are
+                                  the same two acts as on the organization page
+                                  (AGL-3466). */}
+                              {orgId ? (
+                                <StaffOrgOwnerHandoff
+                                  orgId={orgId}
+                                  orgName={site?.org?.name}
+                                  onSent={() => setSiteNonce((nonce) => nonce + 1)}
+                                />
+                              ) : null}
+                              {orgId ? (
+                                <StaffOrgUpgradeProposal
+                                  orgId={orgId}
+                                  org={(site?.org ?? null) as never}
+                                  onChanged={() => setSiteNonce((nonce) => nonce + 1)}
+                                />
+                              ) : null}
+                              {/* Moving the site itself to another organization
+                                  (AGL-3381) is super-only at /api/admin/site-transfer. */}
+                              <SuperStaffOnly>
+                                <StaffSiteTransfer
+                                  hostId={hostId}
+                                  currentOrgId={orgId || null}
+                                  onTransferred={() => setSiteNonce((nonce) => nonce + 1)}
+                                />
+                              </SuperStaffOnly>
+                            </Stack>
+                          </CardDisplay>
+                        ),
+                      },
+                      {
+                        children: (
+                          <CardDisplay
+                            header={'Usage'}
+                            help={docsHelp('billing', {
+                              anchor: '#usage-meters',
+                              excerpt:
+                                "Live counts for this site — published and total pages, media, members, and storage — the figures metered against the org's entitlements.",
+                            })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <Stack
+                              useFlexGap
+                              direction="row"
+                              spacing={3}
+                              sx={{ flexWrap: 'wrap', gap: 2 }}
+                            >
+                              {stat('Published pages', publishedPages)}
+                              {stat('All pages', counts.screens)}
+                              {stat('Media files (organization)', counts.media)}
+                              {stat('Site members', counts.members)}
+                              {stat('Storage (MB)', storageMb)}
+                            </Stack>
+                          </CardDisplay>
+                        ),
+                      },
+                    ]}
+                  />
                 ),
               },
               {

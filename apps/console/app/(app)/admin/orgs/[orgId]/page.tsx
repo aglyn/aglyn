@@ -1632,18 +1632,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </CardDisplay>
                   ),
                 },
-                // Plugin cards among the staff cards (AGL-2940), where a
-                // plugin's own staff view of the org sits beside the
-                // platform's. No column at all when nothing registered.
-                ...(staffOrgWidgets.length
-                  ? [
-                      {
-                        children: (
-                          <PluginWidgetSlot slot="staffOrg" orgId={orgId} />
-                        ),
-                      },
-                    ]
-                  : []),
                 {
                   children: (
                     // Metered usage (AGL-939): consumption alongside the
@@ -2230,20 +2218,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 },
                 {
                   children: (
-                    <StaffOrgAdminActionsCard
-                      entries={orgAudit}
-                      ready={orgReady}
-                      people={people}
-                      help={docsHelp('staffConsole', {
-                        anchor: '#whats-there',
-                        excerpt:
-                          'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
-                      })}
-                    />
-                  ),
-                },
-                {
-                  children: (
                     <CardDisplay
                       header={'Success manager'}
                       help={docsHelp('staffConsole', {
@@ -2408,34 +2382,49 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </CardDisplay>
                   ),
                 },
-                {
-                  children: (
-                    /*
-                     * The organization's own activity log.
-                     *
-                     * Staff had the audit of what STAFF did to this org and
-                     * no view of what the org itself did — the invites, the
-                     * role changes, the billing edits its own members made.
-                     * `/api/orgs/activity` already answers a staff caller,
-                     * so this is the same feed the owner reads, on the page
-                     * staff are already on.
-                     */
-                    <OrgActivityCard
-                      orgId={orgId}
-                      header={'Organization activity'}
-                      // The org's SITES too. Without it a
-                      // brand-new organization reads as having done nothing
-                      // on the day it published three pages, because the org
-                      // collection holds only invites, roles and billing.
-                      orgWide
-                      staff
-                    />
-                  ),
-                },
               ]}
             />
-            {/* Full width below the columns: a wide table. */}
-            <Stack sx={{ mt: 3 }}>
+            {/*
+              FULL WIDTH BELOW THE COLUMNS (AGL-3660): the wide tables and the
+              plugins' cards. Multicol cannot break a card, so one card much
+              taller than its share of the flow — a table of activity, the AI
+              plugin's list of requests — took a column to itself and ended
+              the other one early over a screen of empty space. Each of these
+              is a table a reader scans across, and full width is its shape.
+            */}
+            <Stack spacing={3} sx={{ mt: 3 }}>
+              <StaffOrgAdminActionsCard
+                entries={orgAudit}
+                ready={orgReady}
+                people={people}
+                help={docsHelp('staffConsole', {
+                  anchor: '#whats-there',
+                  excerpt:
+                    'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
+                })}
+              />
+              {/*
+                The organization's own activity log. Staff had the audit of
+                what STAFF did to this org and no view of what the org itself
+                did — the invites, the role changes, the billing edits its own
+                members made. `/api/orgs/activity` already answers a staff
+                caller, so this is the same feed the owner reads.
+              */}
+              <OrgActivityCard
+                orgId={orgId}
+                header={'Organization activity'}
+                // The org's SITES too. Without it a
+                // brand-new organization reads as having done nothing
+                // on the day it published three pages, because the org
+                // collection holds only invites, roles and billing.
+                orgWide
+                staff
+              />
+              {/* Plugin cards (AGL-2940): a plugin's own staff view of the
+                  org. Nothing is drawn when nothing registered. */}
+              {staffOrgWidgets.length ? (
+                <PluginWidgetSlot slot="staffOrg" orgId={orgId} />
+              ) : null}
               <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
             </Stack>
           </>
