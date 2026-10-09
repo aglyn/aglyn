@@ -52,6 +52,7 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
+import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
@@ -517,6 +518,11 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
               {
                 size: { xs: 12 },
                 children: <StaffEmailDeliveriesCard hostId={hostId} />,
+              },
+              {
+                size: { xs: 12 },
+                // The site's own media library, read-only and audited.
+                children: <StaffMediaLibraryCard hostId={hostId} />,
               },
               // What a plugin holds for this site — its automations, its
               // sends — shown by the plugin that owns it (AGL-3379).
