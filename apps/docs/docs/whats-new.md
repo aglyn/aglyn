@@ -28,7 +28,14 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — a self-service kiosk (newest)
+## October 2026 — shipping cost on a hand-entered shipment (newest)
+
+- **[Shipping cost](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  the Fulfill items panel takes an optional shipping cost for a shipment you enter by
+  hand, in your store's currency, one per shipment. A Faire order sends it to Faire as
+  the shipping you paid, the same way a label bought in Aglyn already does.
+
+## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
   pair a tablet to a register and let customers order themselves: products by
