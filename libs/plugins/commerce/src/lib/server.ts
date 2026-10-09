@@ -434,6 +434,15 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/products/stock', async (req, res) =>
     (await import('./server/products-write')).productStockHandler(req, res),
   )
+  // The order dialog's note and restock answer for the native apps
+  // (AGL-3651, AGL-3652): the console's own timeline computation, in one
+  // transaction on the stored order. Loaded on first call.
+  registerPluginApiRoute('commerce/order-note', async (req, res) =>
+    (await import('./server/order-annotations')).orderNoteHandler(req, res),
+  )
+  registerPluginApiRoute('commerce/order-restock-answer', async (req, res) =>
+    (await import('./server/order-annotations')).orderRestockAnswerHandler(req, res),
+  )
   // Issue / void store credit (AGL-2226). Server-side because the host
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.

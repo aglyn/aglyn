@@ -186,6 +186,10 @@
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "why": "The order record shape and its pure helpers, read by the Commerce app order and sales screens (AGL-3621)."
     },

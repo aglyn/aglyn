@@ -61,9 +61,17 @@ final class FunctionCasesTests: XCTestCase {
     for name in [
       "formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel",
       "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents",
-      "apportionCents", "expandVariantMatrix", "renameProductOptions",
+      "apportionCents", "describeRestockCheck", "expandVariantMatrix", "renameProductOptions",
     ] {
       XCTAssertNotNil(functions[name], name)
+    }
+  }
+
+  func testTheRestockQuestionIsWordedAsTheConsoleWordsIt() throws {
+    for item in cases("describeRestockCheck") {
+      let data = try JSONSerialization.data(withJSONObject: item.args[0])
+      let check = try JSONDecoder().decode(OrderRestockCheck.self, from: data)
+      XCTAssertEqual(describeRestockCheck(check, order: try order(item.args[1])), item.result as? String, item.label)
     }
   }
 

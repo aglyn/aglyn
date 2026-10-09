@@ -717,29 +717,17 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           const current = CommerceModel.liftLegacyOrder(
             (snapshot.data() ?? {}) as never,
           )
-          const fresh = current.restockCheck
-          if (!fresh || fresh.resolution) return 'answered'
-          if (fresh.flaggedAtMs !== check.flaggedAtMs) return 'changed'
-          const resolvedAtMs = Date.now()
-          const uid = String((user as any)?.uid ?? '')
-          transaction.update(reference, {
-            restockCheck: {
-              ...fresh,
-              resolution,
-              resolvedAtMs,
-              ...(uid ? { resolvedBy: uid } : {}),
-            } satisfies CommerceModel.OrderRestockCheck,
-            // The SERVER's timeline, not the dialog's — a note landed from
-            // another tab must survive the append.
-            timeline: CommerceModel.appendOrderEvent(
-              current,
-              'restock-check',
-              resolution === 'restocked'
-                ? 'answered — restocked'
-                : 'answered — no restock',
-              resolvedAtMs,
-            ),
-          })
+          const answer = CommerceModel.restockAnswer(
+            current,
+            check.flaggedAtMs,
+            resolution,
+            String((user as any)?.uid ?? ''),
+          )
+          if (answer.verdict !== 'recorded') return answer.verdict
+          // The SERVER's timeline, not the dialog's — a note landed from
+          // another tab must survive the append (`restockAnswer` appends to
+          // `current`).
+          transaction.update(reference, answer.update)
           return 'recorded'
         })
         if (verdict === 'recorded') {
@@ -784,10 +772,9 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   )
 
   const handleNote = useCallback(async () => {
-    if (!order || !note.trim()) return
-    await write({
-      timeline: CommerceModel.appendOrderEvent(order, 'note', note.trim().slice(0, 500)),
-    })
+    const update = order ? CommerceModel.orderNoteUpdate(order, note) : null
+    if (!update) return
+    await write(update)
     setNote('')
   }, [order, note, write])
 
@@ -858,15 +845,6 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const fulfilledByLine = CommerceModel.orderLineFulfillmentStates(order).map(
     (state) => state.fulfilledQuantity,
   )
-  const restockLinesNamed = Boolean(
-    restock?.lines?.length &&
-      restock.lines.every(
-        (line) =>
-          line.lineIndex != null &&
-          CommerceModel.orderLineRefunded(order, line.lineIndex),
-      ),
-  )
-
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
@@ -1034,25 +1012,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             <Stack spacing={0.5}>
               <Typography variant="subtitle2">{'Restock check'}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {`${restock.units} ${
-                  restock.units === 1 ? 'unit' : 'units'
-                } may need restocking after this ${
-                  restock.kind === 'chargeback' ? 'chargeback' : 'refund'
-                }.` +
-                  // The chargeback default is NO, same as the timeline's
-                  // wording: the shopper kept the item and took the money.
-                  (restock.kind === 'chargeback'
-                    ? ' The shopper kept the goods unless they actually came back.'
-                    : '') +
-                  // On a partial the flagged units are the MOST it could be —
-                  // UNLESS the refund named its lines (AGL-2325), in which
-                  // case the question is scoped to exactly those and the
-                  // merchant is only being asked whether the goods came back.
-                  (restock.fullyReversed
-                    ? ''
-                    : restockLinesNamed
-                      ? ' Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back.'
-                      : ' Only part of the money came back, so these units are an upper bound — only you know which goods returned.')}
+                {CommerceModel.describeRestockCheck(restock, order)}
               </Typography>
               {restock.lines.map((line, index) => (
                 <Typography key={index} variant="caption" color="text.secondary">
