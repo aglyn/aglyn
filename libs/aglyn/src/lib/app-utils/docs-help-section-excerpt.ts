@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { lazy, Suspense } from 'react'
+import { createElement, lazy, Suspense } from 'react'
 import type { PluginDocsSectionExcerptProps } from './docs-help-section-excerpt-text'
 
 const PluginDocsSectionExcerptText = lazy(
@@ -31,11 +31,14 @@ const PluginDocsSectionExcerptText = lazy(
  * chunk loads then; the page's own description stands in for the moment it
  * takes.
  */
+// Written with createElement, not JSX: docs-help.ts imports this module and
+// server.ts re-exports docs-help, so plain-TS loaders (jiti in the ops scripts,
+// ts-jest under `jsx: preserve`) must be able to parse it.
 export function PluginDocsSectionExcerpt(props: PluginDocsSectionExcerptProps) {
-  return (
-    <Suspense fallback={props.fallback}>
-      <PluginDocsSectionExcerptText {...props} />
-    </Suspense>
+  return createElement(
+    Suspense,
+    { fallback: props.fallback },
+    createElement(PluginDocsSectionExcerptText, props),
   )
 }
 

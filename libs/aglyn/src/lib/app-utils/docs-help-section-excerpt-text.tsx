@@ -26,7 +26,7 @@ export interface PluginDocsSectionExcerptProps {
 
 /**
  * One section's tooltip prose. The static import of the section registry
- * belongs to this module alone: `docs-help-section-excerpt.tsx` reaches it
+ * belongs to this module alone: `docs-help-section-excerpt.ts` reaches it
  * through `lazy()`, so the prose is the payload of that chunk (AGL-3707).
  */
 export function PluginDocsSectionExcerptText({
