@@ -103,7 +103,7 @@ export function fontFaceSrc(hostId: string, mediaId: string): string | undefined
  */
 export function installCustomFontFace(
   theme: HostTheme,
-  face: PreparedFontFace,
+  face: Pick<PreparedFontFace, 'family' | 'weight' | 'weightMax' | 'style' | 'category' | 'metrics' | 'unicodeRange'>,
   stored: { src: string; version: string },
   options: { category?: HostThemeFontCategory } = {},
 ): HostTheme {

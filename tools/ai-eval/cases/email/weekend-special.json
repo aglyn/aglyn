@@ -43,14 +43,14 @@
   ],
   "controls": [
     {
-      "why": "Heading text in a green the brand does not have (rule 6).",
+      "why": "Heading text in a pale green the brand does not have, which would settle to the band's own cream and vanish, so it is refused rather than settled (rule 6, AGL-3676).",
       "answer": {
         "tree": {
           "rootId": "_@_",
           "nodes": {
             "_@_": { "componentId": "div", "nodes": ["band"] },
             "band": { "componentId": "emailSection", "props": { "backgroundColor": "#f4e3c1" }, "nodes": ["headline"] },
-            "headline": { "componentId": "emailText", "props": { "variant": "heading", "children": "This weekend: cardamom buns", "color": "#00ff00" } }
+            "headline": { "componentId": "emailText", "props": { "variant": "heading", "children": "This weekend: cardamom buns", "color": "#e8f5e0" } }
           }
         }
       },

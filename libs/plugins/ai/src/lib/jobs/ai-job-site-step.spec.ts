@@ -51,10 +51,17 @@ import type {
   AiJobPlan,
 } from '../model/ai-jobs.types'
 import {
+  AI_SITE_BLOG_NAV_ID,
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
+  aiSiteBlogNavPage,
+  aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfallText,
 } from '../model/ai-site-job'
+import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSiteAliases, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutPageTargets } from './ai-job-page-language'
+import { aiLayoutRenamedLabel, aiLayoutResolveLink } from '../layout-language/ai-layout-links'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -69,6 +76,7 @@ import type {
   AiJobStepRunner,
 } from './ai-job-text-step'
 import {
+  AI_SITE_BLOG_MERGED_NOTE,
   AI_SITE_MAX_PASSES,
   AI_SITE_NO_PAGE_STEP_COPY,
   AI_SITE_NO_PLAN_COPY,
@@ -83,15 +91,20 @@ import {
   aiSiteLedgerUnits,
   aiSitePendingUnits,
   aiSiteUnitJob,
+  aiSiteWritesPosts,
   createAiJobSiteStep,
+  createAiSiteJobAdmission,
   registerAiSiteJob,
+  type AiSiteUnit,
 } from './ai-job-site-step'
 import {
   AI_SITE_POST_BUDGET,
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
+  AI_SITE_PRODUCTS_PRICE_NOTE,
 } from './ai-job-site-content'
+import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -339,6 +352,103 @@ describe('the units a plan owes', () => {
     ])
     // A palette change is a proposal with no record to reference.
     expect(built.has('palette')).toBe(false)
+  })
+})
+
+describe('a site start that writes its posts links its blog (AGL-3660)', () => {
+  // The Slow Roads plan as the stand-in check leaves it: Home, About, Contact.
+  const plan = confirmedPlan({
+    create: [LAYOUT],
+    screens: [
+      planScreen({ title: 'Home', slug: '/', id: 'drftHomePg' }),
+      planScreen({ title: 'About', slug: '/about', id: 'drftAbout0' }),
+      planScreen({ title: 'Contact', slug: '/contact', id: 'drftContPg' }),
+    ],
+  })
+  const units = aiSiteJobUnits(plan, { content: 'posts' })
+  const layout = units.find((unit) => unit.kind === 'layout') as AiSiteUnit
+  const ledger = (status: string) =>
+    units.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: unit.slot === 'posts' ? status : 'pending' }))
+  const sitePagesOf = (job: AiJob) =>
+    aiSiteUnitJob(job, layout, aiSiteBuiltRefs(units, [])).inputs?.[AI_LAYOUT_SITE_PAGES_INPUT] as Array<Record<string, unknown>>
+
+  it('hands the layout the blog by its path, second after Home, while the posts are owed', () => {
+    const job = siteJob({ plan, items: ledger('pending') as never })
+    expect(aiSiteWritesPosts(job)).toBe(true)
+    expect(sitePagesOf(job).map((page) => [page['label'], page['href'] ?? page['slug']])).toEqual([
+      ['Home', '/'],
+      ['Blog', '/blog'],
+      ['About', '/about'],
+      ['Contact', '/contact'],
+    ])
+    expect(sitePagesOf(job)[1]).toEqual({ id: AI_SITE_BLOG_NAV_ID, label: 'Blog', slug: '/blog', href: '/blog' })
+  })
+
+  it('reads the blog back off the layout unit’s inputs, and links it in the frame and in the raw header', () => {
+    const job = siteJob({ plan, items: ledger('pending') as never })
+    const unitJob = aiSiteUnitJob(job, layout, aiSiteBuiltRefs(units, []))
+    expect(aiLayoutSitePages(unitJob.inputs).find((page) => page.id === AI_SITE_BLOG_NAV_ID)?.href).toBe('/blog')
+    // The raw layout path writes a Page Link by path.
+    const tree = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'muiBox', nodes: ['bar', 'slot'] },
+        bar: { componentId: 'muiToolbar', nodes: [] },
+        slot: { componentId: 'layoutSlot' },
+      },
+    }
+    const written = aiLayoutWithSitePages(tree, aiLayoutSitePages(unitJob.inputs)) as { nodes: Record<string, { props?: Record<string, unknown> }> }
+    const links = Object.values(written.nodes).filter((node) => node.props?.['renderAs'] === 'link')
+    expect(links.map((node) => node.props?.['href'] ?? node.props?.['screenId'])).toEqual(['drftHomePg', '/blog', 'drftAbout0', 'drftContPg'])
+  })
+
+  it('takes the next free address when a kept plan still holds a page at /blog, and links that', () => {
+    const kept = confirmedPlan({ ...plan, screens: [...plan.screens, planScreen({ title: 'Blog', slug: '/blog', id: 'drftBlogPg' })] })
+    expect(aiSiteBlogNavPage(kept.screens).href).toBe('/posts')
+  })
+
+  /*
+   * The plan step asks once for a plan with no page standing in for the blog,
+   * and keeps a second answer that still has one (#1264). The Slow Roads
+   * render linked both "Blog" and "Articles", and its hero said "Read the
+   * articles". The scaffold merges such a page into the blog (AGL-3676).
+   */
+  it('merges a kept page standing in for the blog into it: unlinked, its links the blog’s, its row skipped', async () => {
+    const kept = confirmedPlan({
+      ...plan,
+      screens: [...plan.screens, planScreen({ title: 'Articles', slug: '/articles', id: 'drftArticl' })],
+    })
+    const keptUnits = aiSiteJobUnits(kept, { content: 'posts' })
+    const keptLayout = keptUnits.find((unit) => unit.kind === 'layout') as AiSiteUnit
+    const items = keptUnits.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: 'pending' }))
+    const job = siteJob({ plan: kept, items: items as never })
+    const unitJob = aiSiteUnitJob(job, keptLayout, aiSiteBuiltRefs(keptUnits, []))
+    const pages = aiLayoutSitePages(unitJob.inputs)
+    expect(pages.map((page) => page.label)).toEqual(['Home', 'Blog', 'About', 'Contact'])
+    expect(aiLayoutSiteAliases(unitJob.inputs)).toEqual([
+      { id: 'drftArticl', label: 'Blog', slug: '/blog', href: '/blog', standsInFor: 'Articles' },
+    ])
+    // A link to the merged page goes to the blog, under words that name it.
+    const targets = aiLayoutPageTargets({ job: unitJob, inventory: null, own: [] })
+    const destination = aiLayoutResolveLink('page:drftArticl', 'Read the articles', { sections: [], from: 0, formSection: null }, targets)
+    expect(destination).toMatchObject({ kind: 'path', href: '/blog' })
+    expect(aiLayoutRenamedLabel('Read the articles', destination as never)).toBe('Read the blog')
+    expect(aiLayoutRenamedLabel('Browse Articles', destination as never)).toBe('Browse Blog')
+    // Its page is not built while the posts are written.
+    const slot = keptUnits.find((unit) => unit.kind === 'page' && unit.screen?.id === 'drftArticl')?.slot
+    const page = jest.fn()
+    const step = stepWith({ page }, { contentRefusal: async () => null })
+    const ahead = items.map((row) => (row.slot === slot || row.op === 'posts' ? row : { ...row, status: 'succeeded' }))
+    const outcome = await step(
+      context(siteJob({ plan: kept, items: ahead.map((row) => (row.op === 'posts' ? { ...row, status: 'succeeded' } : row)) as never })),
+    )
+    expect(page).not.toHaveBeenCalled()
+    expect(outcome.item).toEqual({ slot, status: 'skipped', note: AI_SITE_BLOG_MERGED_NOTE })
+  })
+
+  it('links no blog where the posts are not owed, or the part was skipped', () => {
+    expect(sitePagesOf(siteJob({ plan })).some((page) => page['id'] === AI_SITE_BLOG_NAV_ID)).toBe(false)
+    expect(aiSiteWritesPosts(siteJob({ plan, items: ledger('skipped') as never }))).toBe(false)
   })
 })
 
@@ -912,6 +1022,41 @@ describe('what a scaffold is admitted with', () => {
     })
   })
 
+  it('refuses a Free start what is left of the month cannot pay for, before it spends, with what is left and when it resets (AGL-3660)', async () => {
+    const seen: unknown[] = []
+    const admission = (left: number) =>
+      createAiSiteJobAdmission({
+        freeCreditsLeft: async (_firestore, input) => {
+          seen.push(input.orgId)
+          return { left, total: 300, resetsOn: '2026-11-01' }
+        },
+      })
+    const context = (pages: number, extra: Record<string, unknown> = {}) => ({
+      firestore: {} as unknown as FirebaseFirestore.Firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { ...good, pages },
+      org: { plan: 'free' },
+      ...extra,
+    })
+    const refused = await admission(70)(context(2))
+    expect(refused).toEqual({ status: 429, error: aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, '2026-11-01') })
+    expect(refused?.error).toMatch(/up to about 218 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
+    expect(seen).toEqual(['org-1'])
+    // Enough left for the figure the dialog quotes: admitted.
+    await expect(admission(aiFreeSiteCreditEstimate(2))(context(2))).resolves.toBeNull()
+    await expect(admission(aiFreeSiteCreditEstimate(1))(context(1))).resolves.toBeNull()
+    // Nothing known about what is left: admitted, and the reservation decides.
+    await expect(createAiSiteJobAdmission({ freeCreditsLeft: async () => null })(context(2))).resolves.toBeNull()
+    // A resume carries on the same job: not asked again.
+    seen.length = 0
+    await expect(admission(0)(context(2, { plan: { screens: [], create: [], reuse: [], status: 'confirmed' } }))).resolves.not.toMatchObject({ status: 429 })
+    expect(seen).toEqual([])
+    // A paid workspace is never asked.
+    await expect(admission(0)({ ...context(AI_SITE_PAGES.min), org: { plan: 'pro' } })).resolves.toBeNull()
+    expect(seen).toEqual([])
+  })
+
   it('refuses a site of another workspace', async () => {
     mockOwners.set('host-1', 'org-2')
     await expect(ask(good)).resolves.toEqual({
@@ -1284,6 +1429,27 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     expect(seen[0]).toMatchObject({ $id: 'job-1-products', kind: 'products', inputs: { target: 'catalog' } })
     expect(seen[0].brief.split('\n').pop()).toBe("Propose between 3 and 6 products: the store's first ones.")
     expect(outcome.item).toMatchObject({ slot: 'products', status: 'succeeded', outputs: ['job-1-products-0'] })
+    // The row says what is left before the store sells (AGL-3676).
+    expect(outcome.item?.note).toBe(AI_SITE_PRODUCTS_PRICE_NOTE)
+  })
+
+  it('hands each page the store’s catalog and the blog to list, and a selling site’s layout its cart (AGL-3676)', () => {
+    const plan = confirmedPlan({ create: [LAYOUT] })
+    const units = aiSiteJobUnits(plan, { content: 'products' })
+    const page = units.find((unit) => unit.kind === 'page')
+    const layout = units.find((unit) => unit.kind === 'layout')
+    if (!page || !layout) throw new Error('a page and a layout are units')
+    const listingsOf = (job: AiJob) => aiLayoutListingsOf(job.inputs)
+    const store = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, outputs: [LOOK, output('product', 'p0', 'Fig candle')] }), page, new Map())
+    expect(listingsOf(store)).toEqual([expect.objectContaining({ kind: 'products', records: ['Fig candle'] })])
+    const blog = aiSiteUnitJob(siteJob({ plan, inputs: blogInputs, outputs: [LOOK, entry('a', 'Centering clay')] }), page, new Map())
+    expect(listingsOf(blog)).toEqual([expect.objectContaining({ kind: 'posts', href: '/blog', collectionSlug: 'blog' })])
+    // Built before the products, the layout is told the store sells while its ledger owes them.
+    const owed = units.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: 'pending' }))
+    const sells = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: owed as never }), layout, aiSiteBuiltRefs(units, []))
+    expect(listingsOf(sells).map((listing) => listing.kind)).toEqual(['products'])
+    const skipped = owed.map((row) => (row.slot === 'products' ? { ...row, status: 'skipped' } : row))
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
   })
 
   it('tells each page the posts and the products built before it, by name', () => {
@@ -1319,6 +1485,35 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     publish.mockResolvedValueOnce({ liveUrl: null, published: [], drafts: [] })
     await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items })))
     expect(publishPosts).not.toHaveBeenCalled()
+  })
+
+  it('tells the publish the blog went unwritten when its posts part failed, so its links come out (AGL-3660)', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const ledger = (posts: Record<string, unknown>) =>
+      aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) => (row.slot === 'posts' ? { ...row, ...posts } : row))
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts: jest.fn(async () => null) as never, dropCache: jest.fn(async () => ({ complete: true })) as never },
+    )
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...pages], items: ledger({ status: 'failed', outputs: [] }) as never })))
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ blogUnwritten: true }))
+    const posts = [entry('job-1-posts-0', 'One')]
+    await step(
+      context(
+        siteJob({
+          inputs: { ...blogInputs, autoConfirm: true },
+          outputs: [LOOK, ...posts, ...pages],
+          items: ledger({ status: 'succeeded', outputs: posts.map((post) => post.id) }) as never,
+        }),
+      ),
+    )
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ blogUnwritten: false }))
+    // A site that owes no posts says nothing about a blog.
+    const plain = aiSiteInitialLedger(aiSiteJobUnits(confirmedPlan()), [LOOK, ...pages])
+    await step(context(siteJob({ inputs: { ...siteJob().inputs, autoConfirm: true }, outputs: [LOOK, ...pages], items: plain })))
+    expect(publish).toHaveBeenLastCalledWith(expect.anything(), expect.not.objectContaining({ blogUnwritten: expect.anything() }))
   })
 
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {

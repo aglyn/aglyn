@@ -53,6 +53,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   EMAIL_LIST_FILTER_HEADERS,
@@ -69,6 +71,8 @@ export interface OrgListsCardProps {
 }
 
 /** The Membership filter's choices are picked, so the panel shows a select. */
+/** The page-sorted header, for its notice (AGL-3680). */
+const LIST_SORT_HEADERS = { subscribers: 'Subscribers' }
 const LIST_SELECT_FIELDS = ['kind']
 
 /**
@@ -125,6 +129,14 @@ export function OrgListsCard(props: OrgListsCardProps) {
    * (AGL-3321), so a page is a page of the matches — see `EMAIL_LIST_QUERY`.
    */
   const gridFilter = useListGridFilter({ selectFields: LIST_SELECT_FIELDS })
+  /*
+   * EVERY HEADER SORTS (AGL-3680). List and Membership order the QUERY (see
+   * `EMAIL_LIST_QUERY`); Subscribers is counted per row after the page
+   * loads, so it sorts the page on screen and says so.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    EMAIL_LIST_QUERY.sorts[0],
+  )
   const {
     rows: lists,
     hasMore,
@@ -136,7 +148,11 @@ export function OrgListsCard(props: OrgListsCardProps) {
   } = useListQuery<any>({
     collection: scope ? collection(firestore, scope[0], scope[1], 'lists') : null,
     declaration: EMAIL_LIST_QUERY,
-    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort: askedSort,
+    },
     deps: [firestore, scope?.[0], scope?.[1]],
     idField: '$id',
   })
@@ -183,6 +199,20 @@ export function OrgListsCard(props: OrgListsCardProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, scope, JSON.stringify(lists.map((l: any) => l.$id))])
+  const pageSorts = useMemo(
+    () => ({ subscribers: (row: any) => counts[row.$id] }),
+    [counts],
+  )
+  const columnSort = useListColumnSort<any>({
+    sorts: EMAIL_LIST_QUERY.sorts,
+    defaultSort: EMAIL_LIST_QUERY.sorts[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: lists,
+    pageSorts,
+    headers: LIST_SORT_HEADERS,
+  })
 
   /*
    * Creating is a DRAWER, and the drawer is the shared one.
@@ -427,10 +457,14 @@ export function OrgListsCard(props: OrgListsCardProps) {
               onChange={gridFilter.setClauses}
               options={EMAIL_LIST_FILTER_OPTIONS}
             />
-            <ListQueryNotices refused={refusals} notices={plan.notices} />
+            <ListQueryNotices
+              refused={refusals}
+              notices={[...plan.notices, ...columnSort.notices]}
+            />
             <ListTable
               aria-label="Email lists"
-              rows={lists}
+              rows={columnSort.rows}
+              columnSort={columnSort}
               columns={listFilterGridColumns(
                 columns,
                 EMAIL_LIST_QUERY.fields,
@@ -441,13 +475,12 @@ export function OrgListsCard(props: OrgListsCardProps) {
               onOpen={(_id, row) => router.push(listHref(row))}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search go to the query; the grid neither
-              // filters nor sorts the page it holds.
+              // The panel, the search and the headers go to the query
+              // (Subscribers sorts the page, and says so).
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
-              disableColumnSorting
               noRowsLabel="No lists match these filters"
             />
             <ListPagination

@@ -401,9 +401,11 @@ export function registerAiJobPauseReader(reader: AiJobPauseReader | null): void 
 
 /**
  * A change a person is told about: the job's plan waits for them (or a step
- * stopped for their decision), the job finished, or it stopped.
+ * stopped for their decision), the job finished, it stopped, or it PAUSED
+ * because the meter refused its next step (AGL-3660) — out of credits, at a
+ * cap — which a person resolves by getting more and resuming the same job.
  */
-export type AiJobTransition = 'needs-review' | 'done' | 'failed'
+export type AiJobTransition = 'needs-review' | 'done' | 'failed' | 'paused'
 
 /**
  * Why a job failed, for staff only (never shown to the customer): whether
@@ -427,7 +429,8 @@ export type AiJobTransitionListener = (input: {
 let transitionListener: AiJobTransitionListener | null = null
 
 /**
- * The listener told each time a job ENTERS `needs_review`, `done` or `failed`
+ * The listener told each time a job ENTERS `needs_review`, `done` or `failed`,
+ * or is paused by the meter (`needs_input`, once per reason)
  * — once per entry, from the write that made it, so a stream that re-reads
  * the job or a beat that sees it again tells nobody twice. Registered by its
  * own module (`ai-jobs-notify.ts`) from the console's server surface, as the
@@ -1669,7 +1672,8 @@ export async function retryAiBuildJob(
 
 /**
  * Resume a job that stopped for a person (AGL-2935): confirm its plan, or
- * try again the step whose answer broke a building rule. One transaction,
+ * try again the step whose answer broke a building rule — or carry on a job
+ * the meter paused, from its paused step (AGL-3660). One transaction,
  * so two confirmations land once; anything but a `needs_review` job comes
  * back unchanged. The pending step's attempts start over — a person asking
  * again is not a provider failing again — and a confirmed plan with no step
@@ -1694,6 +1698,13 @@ export async function resumeAiJob(
   } = {},
 ): Promise<{ job: AiJob; changed: boolean }> {
   return transition(firestore, orgId, jobId, (current) => {
+    // A job the meter paused (AGL-3660) carries on from the step it paused
+    // on: that step is already pending, so it is queued again with nothing
+    // else changed. Whether the credits are there now is the reservation's
+    // to say, at the door and again at the step.
+    if (current.status === 'needs_input') {
+      return { status: 'queued', error: null, lease: null, updatedAt: now }
+    }
     if (current.status !== 'needs_review') return null
     const steps = current.steps.map((step) =>
       step.status === 'pending' ? { ...step, attempts: 0 } : step,
@@ -2057,6 +2068,9 @@ export async function runAiJobStep(
         kind: job.kind,
         reason: reservation.refusedBy,
       })
+      // The person is told once per pause (AGL-3660), not once an hour: a
+      // job the beat re-queues and the meter refuses again keeps its reason.
+      await announceAiJobTransition(parked, 'paused')
     }
     return { outcome: 'needs_input', job: parked }
   }

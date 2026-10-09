@@ -23,7 +23,8 @@ import {
   aiHomeScreenIds,
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
-import { aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
+import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
+import { aiLayoutListingAt, aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
   AI_LAYOUT_PAGE_TOOL,
@@ -53,11 +54,14 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
-import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
+import { aiSiteKindDesignLines, aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { aiSiteSeed } from '../model/ai-site-look'
+import type { AiLayoutDesign } from '../layout-language/ai-layout-design'
+import { aiOriginJobId } from './ai-job-draft-ids'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
-import { aiLayoutSitePages } from './ai-job-layout-site-pages'
+import { aiLayoutIsHomeSlug, aiLayoutSiteAliases, aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
 
 /**
@@ -121,6 +125,13 @@ export const AI_LAYOUT_FRAME_THINKING_TOKENS = 4_000
  * keeps a page small.
  */
 export const AI_JOB_PAGE_LANGUAGE_TOKENS = 3_000 + AI_LAYOUT_PAGE_THINKING_TOKENS
+
+/**
+ * The most one section of a page is written in, its copy included: the top of
+ * the 120 to 250 tokens a section runs to. The Free site wall prices each
+ * planned section at it (AGL-3660).
+ */
+export const AI_LAYOUT_SECTION_MOST_TOKENS = 250
 
 /**
  * The time a language page pass needs: its lookup rounds, its answer and its
@@ -195,6 +206,8 @@ export function aiLayoutPageTargets(input: {
   const planned = aiLayoutSitePages(job.inputs)
   const pages: AiLayoutPage[] = [
     ...planned,
+    // Planned pages merged into the blog (AGL-3676): a link to one goes to the blog.
+    ...aiLayoutSiteAliases(job.inputs).filter((alias) => !planned.some((page) => page.id === alias.id)),
     ...(inventory?.screens ?? [])
       .filter(
         (row) => !row.template && !planned.some((page) => page.id === row.id),
@@ -218,7 +231,26 @@ export function aiLayoutPageTargets(input: {
       props: component.props,
     })),
     facts: aiLayoutFacts(job),
+    // The site's catalog and blog, and the sections that list them (AGL-3676).
+    listings: aiLayoutListingsOf(job.inputs),
   }
+}
+
+/**
+ * The page check's context with what a section listing the blog's posts
+ * binds (AGL-3676): each post's card links its post and shows its cover by
+ * the tokens the page fills per post, which a page's store admits whole only
+ * where a listing places them.
+ */
+export function aiLayoutListingContext(
+  context: AiDoctrineTreeContext,
+  targets: AiLayoutTargets,
+): AiDoctrineTreeContext {
+  const listsPosts = (targets.listings ?? []).some(
+    (listing) => listing.kind === 'posts' && listing.placements.some((placement) => placement.screenId === targets.pageId),
+  )
+  if (!listsPosts) return context
+  return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...AI_LAYOUT_POST_ADDRESS_TOKENS])] }
 }
 
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */
@@ -236,10 +268,17 @@ export function aiLayoutPagePrompt(input: {
     const places = section.uses.length
       ? `; places ${section.uses.join(', ')}`
       : ''
+    // A section the site's records fill (AGL-3676): the platform places them,
+    // so the design writes the words around them and no group for them.
+    const listed = aiLayoutListingAt(targets.listings ?? [], targets.pageId, index)
+    if (listed) {
+      return `${index + 1}. "${section.name}"${places}; the platform lists ${listed.listing.name}'s ${listed.listing.kind} here itself, with their photos and links: write only its heading and a line about them, and no cards, list or images for them`
+    }
     const items = section.items ? `; shows ${section.items} items` : ''
     return `${index + 1}. "${section.name}"${places}${items}`
   })
-  const pages = targets.pages.map((page) => `${page.label} (page:${page.id})`)
+  // A page merged into the blog is not offered: the blog is, by its own entry.
+  const pages = targets.pages.filter((page) => !page.standsInFor).map((page) => `${page.label} (page:${page.id})`)
   const components = targets.components.map(
     (component) =>
       `${component.name} (${component.id}; props ${Object.keys(component.props).join(', ') || 'none'})`,
@@ -269,6 +308,20 @@ export function aiLayoutPagePrompt(input: {
   ].join('\n')
 }
 
+/**
+ * The site a page is designed for (AGL-3660): the kind its job names, the
+ * seed its look was drawn with — the same for every page of the site, so the
+ * site reads as one design — and whether the page is its home. `null` for a
+ * job that names no kind of site, which compiles the compiler's first way.
+ */
+export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: string): AiLayoutDesign | null {
+  const kind = aiSiteKindOfInputs(job.inputs)
+  if (!kind) return null
+  const style = job.inputs?.['siteStyle'] as Record<string, unknown> | undefined
+  const seed = typeof style?.['seed'] === 'number' && Number.isFinite(style['seed']) ? (style['seed'] as number) >>> 0 : aiSiteSeed(aiOriginJobId(job))
+  return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug) }
+}
+
 /** A validated language page, stored as the page keeps it. */
 export interface AiLayoutPageBuilt {
   nodes: NodesMap
@@ -293,6 +346,8 @@ export interface AiLayoutPageCheckInput {
   kept?: Array<AiLayoutSection | null>
   /** The plan indices this answer's sections fill, in order; absent, every section. */
   only?: readonly number[]
+  /** The site the page is drawn for (`aiLayoutDesignOf`); absent, the compiler's first design. */
+  design?: AiLayoutDesign | null
 }
 
 /**
@@ -349,8 +404,11 @@ export function aiLayoutShownItems(
 export function aiLayoutEmptyItemSections(
   screen: Pick<AiBuildPlanScreen, 'sections'>,
   items: readonly number[],
+  /** Sections whose only items were customer quotes, which no answer may give (AGL-3676). */
+  quotesOnly: readonly number[] = [],
 ): AiDoctrineViolation[] {
   return screen.sections.flatMap((section, index): AiDoctrineViolation[] => {
+    if (quotesOnly.includes(index)) return []
     const least = leastItems(section.items)
     if (!least) return []
     const shown = items[index] ?? 0
@@ -377,6 +435,7 @@ export function aiLayoutPageCheck(
 ): AiGenerationCheck<AiLayoutPageBuilt> {
   const kept: Array<AiLayoutSection | null> = input.kept ?? input.screen.sections.map(() => null)
   const fills = input.only ?? input.screen.sections.map((_, index) => index)
+  const context = aiLayoutListingContext(input.context, input.targets)
   let answers = 0
   return (answer) => {
     // The last answer a generation takes has its gaps taken out rather than asked about again.
@@ -416,12 +475,13 @@ export function aiLayoutPageCheck(
       {
         reusableComponents: input.reusableComponents,
         sectionIds: input.sectionIds,
+        ...(input.design ? { design: input.design } : {}),
       },
     )
     const stored = aiLayoutStoredTree(
       compiled.tree,
       'screen',
-      input.context,
+      context,
       input.sectionIds,
     )
     if (stored.ok === false) {
@@ -463,8 +523,10 @@ export function aiLayoutPageCheck(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
       {
-        ...input.context,
+        ...context,
         scrollTargetIds: input.sectionIds,
+        // The layout language draws its own picture cards (AGL-3660).
+        repeatsCompiled: true,
       },
     )
     // Each section's items as they are stored, after anything the gaps took out.
@@ -475,7 +537,7 @@ export function aiLayoutPageCheck(
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
       ...copy.violations,
-      ...aiLayoutEmptyItemSections(input.screen, items),
+      ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly),
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
@@ -564,6 +626,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           context: input.context,
           reusableComponents: input.reusableComponents,
           kept,
+          design: aiLayoutDesignOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
         }),
       ),

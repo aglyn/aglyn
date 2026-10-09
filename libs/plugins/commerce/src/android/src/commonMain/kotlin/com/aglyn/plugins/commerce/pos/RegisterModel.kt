@@ -17,12 +17,18 @@ import com.aglyn.hardware.Peripherals
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 internal fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
+
+/** How often an offline register tries the console again. */
+internal const val RECONNECT_MS = 10_000L
 
 /** One load of something the register reads. */
 sealed interface Load<out T> {
@@ -47,6 +53,8 @@ class RegisterModel(
   deviceStore: KeyValueStore,
   val peripherals: Peripherals,
   private val scope: CoroutineScope,
+  /** How long the register waits between tries to reach the console again while it is out of reach. */
+  private val reconnectMs: Long = RECONNECT_MS,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -114,7 +122,28 @@ class RegisterModel(
     scope.launch { loadStore() }
     scope.launch { loadCategories() }
     scope.launch { loadContext() }
+    scope.launch { reconnectWhileOffline() }
     loadGrid()
+  }
+
+  /**
+   * The register's one read of the console (readers, tax, receipts) happens
+   * at launch. If it was lost then, the register would stay "offline" for
+   * the whole shift: no smart readers, no emailed receipts, even after the
+   * console answered again (a cold dev server or a flaky link both lose that
+   * first call). So while it is out of reach the register asks again on a
+   * steady beat, and [reconnect] asks at once.
+   */
+  private suspend fun reconnectWhileOffline() {
+    while (currentCoroutineContext().isActive) {
+      delay(reconnectMs)
+      if (!online) loadContext()
+    }
+  }
+
+  /** Asks the console again now, as the banner's Retry does. */
+  fun reconnect() {
+    scope.launch { loadContext() }
   }
 
   private suspend fun loadStore() {

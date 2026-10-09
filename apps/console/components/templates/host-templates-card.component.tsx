@@ -32,6 +32,8 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { artifactDeleteListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
@@ -84,7 +86,17 @@ import {
   TEMPLATE_LIST_BASE,
   TEMPLATE_LIST_HEADERS,
   TEMPLATE_LIST_QUERY,
+  TEMPLATE_LIST_SORTS,
 } from '../../utils/artifact-list-queries'
+
+/**
+ * The one column no stored field orders (AGL-3680): a starter's row shows the
+ * STARTER's description, which lives on `source`, so it sorts the page.
+ */
+const TEMPLATE_PAGE_SORTS = {
+  description: (row: { description?: string | null }) => row.description ?? null,
+}
+const TEMPLATE_PAGE_SORT_HEADERS = { description: 'Description' }
 import createPageFromTemplate, {
   templateScreenAddressRefusal,
   withBundleRootScreen,
@@ -195,15 +207,18 @@ export function HostTemplatesCard({
    * library ROWS — `TEMPLATE_LIST_BASE` — and pages them, with every clause
    * and the search on it, and a starter is one row wherever its pages fall.
    * The rows run in the walk's order (the document id; `hostArtifactQuery`
-   * says why) and are never re-sorted.
+   * says why) unless a header asks the query for another (AGL-3680,
+   * `TEMPLATE_LIST_SORTS`); Description sorts the page.
    */
   const gridFilter = useListGridFilter({ selectFields: TEMPLATE_SELECT_FIELDS })
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
   const templateList = useListQuery<any>({
     collection: hostId ? collection(firestore, 'hosts', hostId, 'templates') : null,
     declaration: TEMPLATE_LIST_QUERY,
     request: {
       clauses: gridFilter.clauses,
       search: gridFilter.searchWords,
+      sort: askedSort,
       base: TEMPLATE_LIST_BASE,
     },
     deps: [firestore, hostId],
@@ -288,6 +303,15 @@ export function HostTemplatesCard({
       }),
     [heads, starterPages],
   )
+  const columnSort = useListColumnSort({
+    sorts: TEMPLATE_LIST_SORTS,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: templateList.plan.orderBy,
+    rows,
+    pageSorts: TEMPLATE_PAGE_SORTS,
+    headers: TEMPLATE_PAGE_SORT_HEADERS,
+  })
 
   /**
    * The pages a row stands for, read FRESH when it is acted on (AGL-3321):
@@ -579,7 +603,6 @@ export function HostTemplatesCard({
       field: 'source',
       headerName: 'Source',
       minWidth: 150,
-      sortable: false,
       renderCell: ({ row }: any) => {
         const badge = templateSourceBadge(row.template.source, {
           editedAt: row.template.editedAt,
@@ -796,7 +819,10 @@ export function HostTemplatesCard({
         onChange={gridFilter.setClauses}
         options={TEMPLATE_FILTER_OPTIONS}
       />
-      <ListQueryNotices refused={templateRefusals} notices={templateList.plan.notices} />
+      <ListQueryNotices
+        refused={templateRefusals}
+        notices={[...templateList.plan.notices, ...columnSort.notices]}
+      />
       <ListTable
         aria-label="Templates"
         rowHeight={TABLE_ROW_HEIGHT}
@@ -833,14 +859,15 @@ export function HostTemplatesCard({
                   </Stack>
                 ) : null,
             })}
-        rows={rows}
-        // The panel and the search are the grid's; the QUERY answers them
-        // (AGL-3321), so the grid filters and sorts nothing.
+        rows={columnSort.rows}
+        columnSort={columnSort}
+        // The panel, the search and the header sorts are the grid's; the
+        // QUERY answers them (AGL-3321, AGL-3680), so the grid filters and
+        // sorts nothing itself — Description sorts the page and says so.
         filterMode="server"
         filterModel={gridFilter.filterModel}
         onFilterModelChange={gridFilter.onFilterModelChange}
         quickFilter
-        disableColumnSorting
         onOpen={(_id, row) =>
           router.push(
             buildRoute(Route.TEMPLATE_DETAILS, {

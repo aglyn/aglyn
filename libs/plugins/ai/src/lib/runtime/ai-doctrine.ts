@@ -48,6 +48,7 @@ import {
   aiDoctrineViolationText,
   detectPublishIntent,
   aiSettleCutHeadings,
+  aiSettleOffBrandEmailColors,
   aiSettleDisagreeingNodes,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
@@ -614,8 +615,10 @@ export function aiDoctrineTreeCheck(
   return (answer) => {
     // A child named and never written, an element held by nothing, a heading
     // whose first clause fits its ceiling and a Grid container's unsized items
-    // are settled where each has one reading before the tree is read (AGL-3596).
-    const input = aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer))))
+    // are settled where each has one reading before the tree is read (AGL-3596),
+    // and so is an email's color outside the brand (AGL-3676).
+    const settled = aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer))))
+    const input = kind === 'email' ? aiSettleOffBrandEmailColors(settled, context.brand) : settled
     const report = validateAiDoctrineTree(input, kind, context, otherPages)
     if (!report.tree || !report.score) {
       return { value: null, violations: report.violations }

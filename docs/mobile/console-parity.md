@@ -17,16 +17,16 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Redirects | `redirects` | leads | [x] | [x] |
 | Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `sales-channels` | next lane | [ ] | [ ] |
 | Sites, pages and their versions | `hosts/[host]/screens/*` (opening a page = Besigner) | AGL-3668 | [x] | [ ] |
-| Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [ ] | [ ] |
-| Site setup | `hosts/[host]/setup/{details,emails,seo,theme,tracking}`, `theme` | AGL-3668 | [ ] | [ ] |
-| Content collections | `hosts/[host]/content/*` | AGL-3668 | [ ] | [ ] |
+| Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [x] | [ ] |
+| Site setup | `hosts/[host]/setup/{details,emails,seo,theme,tracking}`, `theme` | AGL-3668 | [x] | [ ] |
+| Content collections | `hosts/[host]/content/*` | AGL-3668 | [x] | [ ] |
 | Media | `hosts/[host]/media`, `[orgSlug]/media`, `video-delivery` | AGL-3668 | [x] | [ ] |
 | Forms and submissions | `forms` | AGL-3668 | [x] | [ ] |
 | Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [ ] | [ ] |
 | Fonts, theme presets, plugin marketplace, logic | `fonts`, `theme-presets`, `marketplace`, `logic` | AGL-3668 | [ ] | [ ] |
 | CRM | `crm` | AGL-3669 | [x] | [x] |
 | Inbox | `inbox` | AGL-3669 | [x] | [x] |
-| Emails, campaigns, funnels, texts | `email`, `marketing`, `funnels`, `sms` (email design = Besigner) | AGL-3669 | [ ] | [ ] |
+| Emails, campaigns, funnels, texts | `email`, `marketing`, `funnels`, `sms` (email design = Besigner) | AGL-3669 | [ ] | [x] |
 | Sequences (internal only) | `outreach`, where the console shows it | AGL-3669 | [x] | [x] |
 | Bookings, events calendar | `bookings`, `events-calendar` | AGL-3670 | [x] | [x] |
 | Analytics | `hosts/[host]/analytics` | AGL-3670 | [x] | [x] |
@@ -40,6 +40,16 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [ ] | [ ] |
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [ ] | [ ] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [ ] | [ ] |
+
+Texts (`sms`): the plugin is infrastructure with no console page of its own.
+The console's texts surfaces are the Commerce settings card's "Also send as
+texts" switch (native: `sms.texts`, Customer texts) and the order dialog's
+"Resend receipt" Text channel. Kotlin orders have it. Apple is left open: its
+order detail (PR #1226, the commerce lane's) resends a receipt by email only,
+so the Text channel there is the one thing keeping the Apple box above
+unticked. The card's per-moment email
+switches belong to the Commerce settings and are not part of this row. A
+funnel has no page design of its own, so it has no Besigner entry.
 
 Not screens: `signin`, `signup`, `signout`, `sso`, `reset-password`,
 `verify-email`, `account-recovery`, `auth/handoff/*` and `edit-access` are the

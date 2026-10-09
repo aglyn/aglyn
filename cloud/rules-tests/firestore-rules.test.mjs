@@ -7396,6 +7396,34 @@ describe("the deliverability store is server-written: staff read the platform ha
   })
 })
 
+describe("the stock photo search cache is the server's alone (AGL-3660)", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'stockPhotoSearches', 'k1'), {
+        photos: [{ provider: 'pixabay', id: '1' }],
+        expiresAt: new Date(Date.now() + 86_400_000),
+      })
+    })
+  })
+
+  it('nobody reads or writes it from a client, staff included', async () => {
+    const principals = [
+      ['the owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['super staff', authed(STAFF, { staff: true, staffRole: 'super' })],
+      ['anonymous', anon()],
+    ]
+    for (const [who, db] of principals) {
+      await mustDeny(`${who} reading a cached search`, getDoc(doc(db, 'stockPhotoSearches', 'k1')))
+      // A client that could write an entry could hand every site build the photo of its choosing.
+      await mustDeny(
+        `${who} planting a search answer`,
+        setDoc(doc(db, 'stockPhotoSearches', 'k2'), { photos: [{ provider: 'pixabay', id: '2' }] }),
+      )
+    }
+  })
+})
+
 /**
  * The host half of AGL-1501 (AGL-1507): `suspendedAt`/`suspendedReasonCode`/
  * `suspendedMessage`/`suspendedUntilMs` on `hosts/{hostId}` are the STAFF
@@ -14051,6 +14079,9 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
     ['fulfillmentNetworkConnections', `${HOST}_shipbob`],
     ['fulfillmentNetworkConnections', `${HOST}_shipbob`, 'log', 'entry-1'],
     ['fulfillmentNetworkOrders', `${HOST}_order-1_shipbob`],
+    // ShipMonk (AGL-3697): the same collections, holding a sealed API key and webhook secret.
+    ['fulfillmentNetworkConnections', `${HOST}_shipmonk`],
+    ['fulfillmentNetworkOrders', `${HOST}_order-1_shipmonk`],
   ]
   const PRINCIPALS = [
     ['owner', () => authed(OWNER)],

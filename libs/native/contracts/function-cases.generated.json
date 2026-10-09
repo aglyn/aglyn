@@ -1455,6 +1455,103 @@
         }
       ]
     },
+    "buyerNotificationEnabled": {
+      "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {},
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": false
+            },
+            "texts"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "texts": true
+            },
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": "no"
+            },
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": false
+            },
+            "receipt"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "receipt": false
+            },
+            "receipt"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "receipt": false,
+              "texts": true
+            },
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "off",
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [],
+            "texts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "texts": null
+            },
+            "texts"
+          ],
+          "result": true
+        }
+      ]
+    },
     "campaignReport": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
       "cases": [
@@ -4901,6 +4998,77 @@
         }
       ]
     },
+    "formatDuration": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "—"
+        },
+        {
+          "args": [
+            0
+          ],
+          "result": "0s"
+        },
+        {
+          "args": [
+            999
+          ],
+          "result": "1s"
+        },
+        {
+          "args": [
+            45000
+          ],
+          "result": "45s"
+        },
+        {
+          "args": [
+            59600
+          ],
+          "result": "1m 00s"
+        },
+        {
+          "args": [
+            60000
+          ],
+          "result": "1m 00s"
+        },
+        {
+          "args": [
+            185000
+          ],
+          "result": "3m 05s"
+        },
+        {
+          "args": [
+            3600000
+          ],
+          "result": "1h 0m"
+        },
+        {
+          "args": [
+            7800000
+          ],
+          "result": "2h 10m"
+        },
+        {
+          "args": [
+            172800000
+          ],
+          "result": "2d 0h"
+        },
+        {
+          "args": [
+            190000000
+          ],
+          "result": "2d 4h"
+        }
+      ]
+    },
     "formatDwell": {
       "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "cases": [
@@ -5092,6 +5260,170 @@
             "Not/AZone"
           ],
           "result": "Oct 13, 2026, 2:04 PM"
+        }
+      ]
+    },
+    "formatShare": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "—"
+        },
+        {
+          "args": [
+            0
+          ],
+          "result": "0%"
+        },
+        {
+          "args": [
+            1
+          ],
+          "result": "100%"
+        },
+        {
+          "args": [
+            0.5
+          ],
+          "result": "50%"
+        },
+        {
+          "args": [
+            0.3333
+          ],
+          "result": "33.3%"
+        },
+        {
+          "args": [
+            0.12345
+          ],
+          "result": "12.3%"
+        },
+        {
+          "args": [
+            0.0004
+          ],
+          "result": "0%"
+        }
+      ]
+    },
+    "funnelStepTitle": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/pricing",
+              "match": "exact"
+            }
+          ],
+          "result": "Viewed a page: /pricing"
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/blog",
+              "match": "prefix"
+            }
+          ],
+          "result": "Viewed a page: /blog and below"
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/pricing",
+              "match": "exact",
+              "label": "Pricing page"
+            }
+          ],
+          "result": "Pricing page"
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": ""
+            }
+          ],
+          "result": "Submitted a form (any)"
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": "f1"
+            }
+          ],
+          "result": "Submitted a form: f1"
+        },
+        {
+          "args": [
+            {
+              "type": "booking",
+              "key": ""
+            }
+          ],
+          "result": "Made a booking (any)"
+        },
+        {
+          "args": [
+            {
+              "type": "cart",
+              "key": "p9"
+            }
+          ],
+          "result": "Added a product to the cart: p9"
+        },
+        {
+          "args": [
+            {
+              "type": "order",
+              "key": ""
+            }
+          ],
+          "result": "Placed an order"
+        },
+        {
+          "args": [
+            {
+              "type": "overlay",
+              "key": ""
+            }
+          ],
+          "result": "Clicked a bar or popup (any)"
+        },
+        {
+          "args": [
+            {
+              "type": "event",
+              "key": "sign_up"
+            }
+          ],
+          "result": "Custom event: sign_up"
+        },
+        {
+          "args": [
+            {
+              "type": "email",
+              "key": "opened"
+            }
+          ],
+          "result": "Email from the site: opened"
+        },
+        {
+          "args": [
+            {
+              "type": "email",
+              "key": "clicked"
+            }
+          ],
+          "result": "Email from the site: link clicked"
         }
       ]
     },
@@ -5353,6 +5685,81 @@
         }
       ]
     },
+    "isDefaultOffPerSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isLockedOnForSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "mui"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "forms"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "fonts"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isLockedOnForWorkspace": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "mui"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "forms"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "fonts"
+          ],
+          "result": true
+        }
+      ]
+    },
     "isLowStock": {
       "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
       "cases": [
@@ -5514,6 +5921,207 @@
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           ],
           "result": false
+        }
+      ]
+    },
+    "labelStepFromInventory": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": "f1"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "key": "f1",
+            "label": "Contact",
+            "type": "form"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": "f1",
+              "label": "Mine"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "key": "f1",
+            "label": "Mine",
+            "type": "form"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": "zz"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "key": "zz",
+            "type": "form"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "booking",
+              "key": "s1"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "key": "s1",
+            "label": "Intro call",
+            "type": "booking"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/about",
+              "match": "exact"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "key": "/about",
+            "match": "exact",
+            "type": "page"
+          }
         }
       ]
     },
@@ -6169,6 +6777,357 @@
               "09:00-17:00",
               ""
             ]
+          }
+        }
+      ]
+    },
+    "normalizeFunnelDefinition": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "name": "Signup",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "pricing/?x=1#h",
+                  "match": "prefix"
+                },
+                {
+                  "type": "form",
+                  "key": "f1",
+                  "label": "Contact"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "funnel": {
+              "name": "Signup",
+              "steps": [
+                {
+                  "key": "/pricing",
+                  "match": "prefix",
+                  "type": "page"
+                },
+                {
+                  "key": "f1",
+                  "label": "Contact",
+                  "type": "form"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "  ",
+              "steps": []
+            }
+          ],
+          "result": {
+            "error": "Name the funnel."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "One",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "error": "A funnel has 2 to 8 steps."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Many",
+              "steps": [
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                },
+                {
+                  "type": "order"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "error": "A funnel has 2 to 8 steps."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "No type",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "key": "x"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "error": "Step 2: Pick what the step is."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "No path",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": ""
+                },
+                {
+                  "type": "order"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "error": "Step 1: A page step needs a path."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Email",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "type": "email",
+                  "key": "bounced"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "error": "Step 2: An email step is an email opened or a link in it clicked."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Email ok",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "type": "email",
+                  "key": "opened"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "funnel": {
+              "name": "Email ok",
+              "steps": [
+                {
+                  "key": "/a",
+                  "match": "exact",
+                  "type": "page"
+                },
+                {
+                  "key": "opened",
+                  "type": "email"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Event",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "type": "event",
+                  "key": "Bad Name"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "error": "Step 2: A custom event step needs the event’s name, as the interaction sends it."
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Event ok",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "type": "event",
+                  "key": "sign_up",
+                  "label": "Signed up"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "funnel": {
+              "name": "Event ok",
+              "steps": [
+                {
+                  "key": "/a",
+                  "match": "exact",
+                  "type": "page"
+                },
+                {
+                  "key": "sign_up",
+                  "label": "Signed up",
+                  "type": "event"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Order key dropped",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "type": "order",
+                  "key": "zzz"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "funnel": {
+              "name": "Order key dropped",
+              "steps": [
+                {
+                  "key": "/a",
+                  "match": "exact",
+                  "type": "page"
+                },
+                {
+                  "key": "",
+                  "type": "order"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Cart needs one",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "/a"
+                },
+                {
+                  "type": "cart"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "funnel": {
+              "name": "Cart needs one",
+              "steps": [
+                {
+                  "key": "/a",
+                  "match": "exact",
+                  "type": "page"
+                },
+                {
+                  "key": "",
+                  "type": "cart"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Dup slashes",
+              "steps": [
+                {
+                  "type": "page",
+                  "key": "//a//b//"
+                },
+                {
+                  "type": "booking",
+                  "key": "s1"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "funnel": {
+              "name": "Dup slashes",
+              "steps": [
+                {
+                  "key": "/a/b",
+                  "match": "exact",
+                  "type": "page"
+                },
+                {
+                  "key": "s1",
+                  "type": "booking"
+                }
+              ]
+            }
           }
         }
       ]
@@ -7705,6 +8664,56 @@
         }
       ]
     },
+    "pluginDependents": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "commerce"
+          ],
+          "result": [
+            "accounts"
+          ]
+        },
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "crm"
+          ],
+          "result": []
+        }
+      ]
+    },
+    "pluginRequirements": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "accounts"
+          ],
+          "result": [
+            "commerce"
+          ]
+        },
+        {
+          "args": [
+            "commerce"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "nope"
+          ],
+          "result": []
+        }
+      ]
+    },
     "posOfflineChangeCents": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -8484,6 +9493,975 @@
             1800000000000
           ],
           "result": "Pick a time that has not passed"
+        }
+      ]
+    },
+    "resolveDisableCascade": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            "commerce",
+            [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          ],
+          "result": [
+            "accounts"
+          ]
+        },
+        {
+          "args": [
+            "commerce",
+            [
+              "commerce",
+              "crm"
+            ]
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "crm",
+            [
+              "crm"
+            ]
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "mui",
+            [
+              "mui",
+              "commerce",
+              "accounts"
+            ]
+          ],
+          "result": []
+        }
+      ]
+    },
+    "resolveEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "accounts",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "accounts",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": []
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "crm",
+                "commerce",
+                "crm"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "crm",
+            "commerce"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "accounts",
+                "commerce",
+                "bookings"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "accounts",
+            "commerce",
+            "bookings"
+          ]
+        }
+      ]
+    },
+    "resolveHostEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            null
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts",
+                "crm"
+              ]
+            },
+            null
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "commerce",
+            "crm"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts",
+                "crm"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "commerce",
+            "accounts",
+            "crm"
+          ]
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts",
+                "crm"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm",
+                "mui",
+                "forms"
+              ],
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "commerce",
+            "accounts"
+          ]
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ],
+              "enabledPlugins": [
+                "accounts"
+              ]
+            }
+          ],
+          "result": [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty"
+          ]
+        }
+      ]
+    },
+    "resolvePluginSiteState": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            null,
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "crm"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            null,
+            null,
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-site"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "off-for-site"
+        },
+        {
+          "args": [
+            null,
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            null,
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "awaiting-opt-in"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "crm"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "enabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "mui"
+          ],
+          "result": "always-on"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "forms"
+          ],
+          "result": "runs-here"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "crm"
+          ],
+          "result": "off-for-workspace"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "accounts"
+          ],
+          "result": "off-for-site"
+        },
+        {
+          "args": [
+            {
+              "enabledPlugins": [
+                "commerce",
+                "accounts"
+              ]
+            },
+            {
+              "disabledPlugins": [
+                "accounts"
+              ]
+            },
+            "commerce"
+          ],
+          "result": "runs-here"
         }
       ]
     },
@@ -9675,6 +11653,471 @@
             "truncated": true,
             "unattributedClicks": 1
           }
+        }
+      ]
+    },
+    "stepInventoryProblem": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/about",
+              "match": "exact"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/nope",
+              "match": "exact"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": "This site has no page at /nope."
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/blog",
+              "match": "prefix"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/shop",
+              "match": "prefix"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": "No page on this site is at or under /shop."
+        },
+        {
+          "args": [
+            {
+              "type": "page",
+              "key": "/",
+              "match": "prefix"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": "f1"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": "f2"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": "Submitted a form: f2 is not on this site."
+        },
+        {
+          "args": [
+            {
+              "type": "form",
+              "key": ""
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "booking",
+              "key": "s9"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": "Made a booking: s9 is not on this site."
+        },
+        {
+          "args": [
+            {
+              "type": "cart",
+              "key": "p1"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": "Added a product to the cart: p1 is not on this site."
+        },
+        {
+          "args": [
+            {
+              "type": "overlay",
+              "key": "o1"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "event",
+              "key": "sign_up"
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "order",
+              "key": ""
+            },
+            {
+              "pages": [
+                "/",
+                "/about",
+                "/blog/post"
+              ],
+              "forms": [
+                {
+                  "id": "f1",
+                  "name": "Contact"
+                }
+              ],
+              "services": [
+                {
+                  "id": "s1",
+                  "name": "Intro call"
+                }
+              ],
+              "products": [],
+              "overlays": [
+                {
+                  "id": "o1",
+                  "name": "Promo"
+                }
+              ]
+            }
+          ],
+          "result": null
         }
       ]
     },
@@ -11022,6 +13465,53 @@
               "severity": "error"
             }
           ]
+        }
+      ]
+    },
+    "waitLabel": {
+      "module": "libs/plugins/funnels/src/lib/model/drop-off.ts",
+      "cases": [
+        {
+          "args": [
+            1
+          ],
+          "result": "1 hour"
+        },
+        {
+          "args": [
+            2
+          ],
+          "result": "2 hours"
+        },
+        {
+          "args": [
+            24
+          ],
+          "result": "1 day"
+        },
+        {
+          "args": [
+            48
+          ],
+          "result": "2 days"
+        },
+        {
+          "args": [
+            72
+          ],
+          "result": "3 days"
+        },
+        {
+          "args": [
+            168
+          ],
+          "result": "7 days"
+        },
+        {
+          "args": [
+            36
+          ],
+          "result": "36 hours"
         }
       ]
     }

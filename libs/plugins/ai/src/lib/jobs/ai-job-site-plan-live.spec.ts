@@ -25,8 +25,9 @@
  * in a row failed on plans no spec had seen: an empty nav region, then a
  * layout whose regions came as one string. This one sends each brief below
  * through the real plan step — the real prompt, provider, re-ask and plan
- * rules — on a Free workspace's empty site, as production creates it, and
- * holds every brief to a plan the rules keep.
+ * rules — on a site as provisioning creates it (AGL-3497: its header and
+ * footer layout and its untouched starter home), and holds every brief to a
+ * plan the rules keep.
  *
  * It calls the provider and costs real money (about 19 credits a brief), so
  * it runs only when asked: `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set.
@@ -50,6 +51,45 @@
  */
 
 jest.mock('../runtime/site-inventory', () => ({ __esModule: true, readSiteInventory: jest.fn() }))
+/**
+ * Each plan answer the step reads, by brief (AGL-3660): the home's section
+ * count and what the step's own checks found in it — so a run says how often
+ * the first answer passed and how often the thin-home re-ask fired. A
+ * pass-through: the real doctrine runs, only its `extend` is observed.
+ */
+const mockAnswers = new Map<string, Array<{ home: number | null; codes: string[] }>>()
+/** What each brief's plan generation came to: its model calls and how it ended. */
+const mockGenerations = new Map<string, { attempts: number; status: string; violations: string[] }>()
+jest.mock('../runtime/ai-doctrine', () => {
+  const actual = jest.requireActual('../runtime/ai-doctrine')
+  return {
+    ...actual,
+    runValidatedGeneration: (kind: string, input: Record<string, unknown>) => {
+      const extend = input['extend'] as ((plan: { screens: Array<{ slug: string; sections: unknown[] }> }, answer: unknown) => Array<{ code: string }>) | undefined
+      if (kind !== 'plan' || !extend) return actual.runValidatedGeneration(kind, input)
+      const messages = input['messages'] as Array<{ content: unknown }>
+      const key = String(messages[0]?.content ?? '')
+      const answers: Array<{ home: number | null; codes: string[] }> = []
+      mockAnswers.set(key, answers)
+      return actual.runValidatedGeneration(kind, {
+        ...input,
+        extend: (plan: { screens: Array<{ slug: string; sections: unknown[] }> }, answer: unknown) => {
+          const found = extend(plan, answer)
+          const home = plan.screens.find((screen) => ['/', ''].includes(screen.slug.trim()))
+          answers.push({ home: home ? home.sections.length : null, codes: found.map((violation) => violation.code) })
+          return found
+        },
+      }).then((result: { attempts: number; status: string; violations?: Array<{ code: string }> }) => {
+        mockGenerations.set(key, {
+          attempts: result.attempts,
+          status: result.status,
+          violations: (result.violations ?? []).map((violation) => violation.code),
+        })
+        return result
+      })
+    },
+  }
+})
 jest.mock('./ai-jobs', () => ({
   __esModule: true,
   AI_JOBS_COLLECTION: 'aiJobs',
@@ -58,8 +98,9 @@ jest.mock('./ai-jobs', () => ({
 }))
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import type { AiJob } from '../model/ai-jobs.types'
-import { emptyAiSiteInventory } from '../model/ai-site-inventory'
+import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
+import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiSitePlanIsHome } from '../model/ai-site-job'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
@@ -115,17 +156,27 @@ function siteJob(inputs: Record<string, unknown>, index: number): AiJob {
   } as unknown as AiJob
 }
 
+/** A site as provisioning leaves it (AGL-3497): its layout and its untouched starter home. */
+const PROVISIONED: AiSiteInventory = {
+  ...emptyAiSiteInventory('host-live'),
+  layouts: [{ id: 'laySite', name: 'Site layout', parentId: null }],
+  screens: [{ id: 'scrStarter', name: 'Home', slug: '/', layoutId: 'laySite', template: false, replaceable: true }],
+}
+
 const describeLive = LIVE ? describe : describe.skip
 
 describeLive("a guided start's plan from the real model", () => {
   jest.setTimeout(10 * 60_000)
 
-  it(`keeps the plan rules for every brief, on a ${ORG_PLAN} workspace’s empty site`, async () => {
-    const capabilities = aiPlanCapabilitiesFrom(ORG, { layout: [], template: [] })
+  it(`keeps the plan rules for every brief, on a ${ORG_PLAN} workspace’s provisioned site`, async () => {
+    const capabilities = aiPlanCapabilitiesFrom(ORG, {
+      layout: PROVISIONED.layouts.map((row) => ({ id: row.id, kind: undefined, sourceType: undefined, deletedAt: undefined })),
+      template: [],
+    })
     const results = await Promise.all(
       BRIEFS.map(async (brief, index) => {
         const outcome = (await createAiJobPlanStep({
-          readInventory: async () => emptyAiSiteInventory('host-live'),
+          readInventory: async () => PROVISIONED,
           findPlansByKey: null,
           readCapabilities: async () => capabilities,
           admissionRefusal: async () => null,
@@ -145,6 +196,13 @@ describeLive("a guided start's plan from the real model", () => {
           estCostUsd: Number(outcome['estCostUsd'] ?? 0),
           // Reported, not held: whether the plan's own words carry the name (AGL-3596).
           named: JSON.stringify(outcome['plan'] ?? null).includes(brief.businessName),
+          // Reported, not held: how many sections the home at / was planned with (AGL-3660).
+          home:
+            (outcome['plan'] as AiJobPlan | undefined)?.screens.find((screen) => aiSitePlanIsHome(screen))?.sections
+              .length ?? null,
+          // Every answer the step read: its home's sections and what the step's checks found.
+          answers: [...mockAnswers.entries()].find(([turn]) => turn.includes(brief.businessType))?.[1] ?? [],
+          generation: [...mockGenerations.entries()].find(([turn]) => turn.includes(brief.businessType))?.[1] ?? null,
         }
       }),
     )

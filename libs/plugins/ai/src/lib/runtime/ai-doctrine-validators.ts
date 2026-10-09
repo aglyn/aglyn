@@ -59,7 +59,7 @@ import {
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiFreeSiteSectionsWithin } from '../model/ai-site-job'
+import { aiFreeSiteSectionsWithin, aiSiteHomeMinSections, aiSitePlanIsHome } from '../model/ai-site-job'
 import {
   AI_INSTANCE_REF_PROP,
   validateAiNodeTree,
@@ -220,6 +220,17 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * every plan, counted against `formsPerHost`, or none (AGL-3596).
    */
   reusableComponents?: boolean
+  /**
+   * A page the layout language compiled (AGL-3660), whose picture cards — a
+   * picture over its title and words, one to a cell of a grid — the compiler
+   * draws from the site's design. Rule 1 asks no component of those cards;
+   * every other repeat on the page is still held to it. The page half of the
+   * plan capability of the same name (`AiPlanCapabilities.repeatsCompiled`,
+   * AGL-3616), which spares a build's plan a component for a section's items:
+   * the plan leaves them to the compiler, and this lets the page it compiles
+   * draw them.
+   */
+  repeatsCompiled?: boolean
   /**
    * The site's home screens, by id (AGL-3056): the screen a link falls back
    * to when the site has none for what it promises. Absent: none is known.
@@ -482,10 +493,25 @@ function aiRepeatFrameOrSection(tree: AiDoctrineTree): (visit: Visit) => boolean
 export function detectRepeatedSubtrees(
   tree: AiDoctrineTree,
   otherPages: readonly AiDoctrineTree[] = [],
-  context: Pick<AiDoctrineTreeContext, 'reusableComponents'> = {},
+  context: Pick<AiDoctrineTreeContext, 'reusableComponents' | 'repeatsCompiled'> = {},
 ): AiDoctrineViolation[] {
   if (context.reusableComponents === false) return []
   const index = indexShapes(tree)
+  /**
+   * A compiled picture card (AGL-3660): a Stack that opens with its picture,
+   * in a cell of a grid — or that cell, holding only the card.
+   */
+  const card = (id: string | undefined): boolean => {
+    const node = id === undefined ? undefined : tree.nodes[id]
+    const first = node?.nodes?.[0]
+    return node?.componentId === 'muiStack' && first !== undefined && tree.nodes[first]?.componentId === 'image'
+  }
+  const pictureCard = (id: string): boolean => {
+    const node = tree.nodes[id]
+    if (node?.componentId === 'muiGrid' && node.props?.['container'] !== true) return node.nodes?.length === 1 && card(node.nodes[0])
+    const parentId = index.visits.find((visit) => visit.id === id)?.ancestors.at(-1)
+    return card(id) && parentId !== undefined && tree.nodes[parentId]?.componentId === 'muiGrid'
+  }
   const violations: AiDoctrineViolation[] = repeatedShapes(
     tree,
     index,
@@ -496,7 +522,9 @@ export function detectRepeatedSubtrees(
     // the Services band are two parts of two stories, not one block placed twice.
     (visit) => [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'section') ?? tree.rootId,
     aiRepeatFrameOrSection(tree),
-  ).map(({ ids }) => {
+  )
+    .filter(({ ids }) => !(context.repeatsCompiled && ids.every(pictureCard)))
+    .map(({ ids }) => {
     const name = displayName(tree.nodes[ids[0]].componentId)
     return {
       rule: 1,
@@ -944,6 +972,191 @@ export function detectOffBrandEmail(
       nodeIds: unique(offBrand),
     },
   ]
+}
+
+/** The props an email block is colored by, the ones rule 6 reads. */
+const EMAIL_COLOR_PROPS = ['color', 'backgroundColor'] as const
+
+interface Rgb {
+  r: number
+  g: number
+  b: number
+}
+
+/**
+ * A color as opaque RGB: hex of 3, 4, 6 or 8 digits, or `rgb()`/`rgba()`. A
+ * translucent value is laid over white, the page an email is read on. `null`
+ * for anything else, a name or a token included.
+ */
+function emailRgbOf(value: string): (Rgb & { alpha: number }) | null {
+  const text = value.trim().toLowerCase()
+  const hex = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(text)?.[1]
+  let r: number
+  let g: number
+  let b: number
+  let alpha = 1
+  if (hex) {
+    const full = hex.length <= 4 ? [...hex].map((digit) => digit + digit).join('') : hex
+    r = parseInt(full.slice(0, 2), 16)
+    g = parseInt(full.slice(2, 4), 16)
+    b = parseInt(full.slice(4, 6), 16)
+    if (full.length === 8) alpha = parseInt(full.slice(6, 8), 16) / 255
+  } else {
+    const fn = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(text)
+    if (!fn) return null
+    r = Number(fn[1])
+    g = Number(fn[2])
+    b = Number(fn[3])
+    if (fn[4] !== undefined) alpha = Number(fn[4])
+    if (![r, g, b, alpha].every(Number.isFinite) || r > 255 || g > 255 || b > 255 || alpha > 1) return null
+  }
+  const over = (channel: number) => Math.round(channel * alpha + 255 * (1 - alpha))
+  return { r: over(r), g: over(g), b: over(b), alpha }
+}
+
+/** How far apart two colors look: the weighted "redmean" RGB distance. */
+function emailColorDistance(a: Rgb, b: Rgb): number {
+  const mean = (a.r + b.r) / 2
+  const dr = a.r - b.r
+  const dg = a.g - b.g
+  const db = a.b - b.b
+  return Math.sqrt((2 + mean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - mean) / 256) * db * db)
+}
+
+/**
+ * An email's off-brand colors, settled where each has one reading (AGL-3676).
+ * Rule 6 holds an email to the brand's own values, and the guided start's
+ * welcome email kept writing tints of them — a pale wash of the primary color
+ * behind a section — and stopped on rule 6 after its re-ask. Before the tree
+ * is checked, each `color` and `backgroundColor` outside the brand is:
+ *
+ *  - a palette path the brand lists, such as `primary.main`: its value;
+ *  - a color that parses: the NEAREST opaque brand color, so a pale tint
+ *    becomes the brand's pale surface and a deep one its deep color;
+ *  - with no brand color recorded at all: dropped, leaving the block's own
+ *    default, which is what rule 6 asks of an email with no brand.
+ *
+ * A value that does not parse (a name, a CSS variable) is left for the
+ * re-ask, and so is the whole tree when a snapped color would leave words
+ * below 3:1 against what they sit on. Nothing is relaxed: the settled tree
+ * is the one rule 6 checks.
+ * Reads and returns the tree as the model wrote it.
+ */
+export function aiSettleOffBrandEmailColors(
+  input: unknown,
+  brand: AiDoctrineTreeContext['brand'],
+): unknown {
+  if (!isRecord(input) || !isRecord(input['nodes'])) return input
+  const entries = Object.entries(brand?.colors ?? {}).filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '',
+  )
+  const allowed = new Set(entries.map(([, value]) => normalizeHex(value)))
+  const byPath = new Map(entries.map(([path, value]) => [path.toLowerCase(), value.trim()]))
+  const targets = entries.flatMap(([, value]) => {
+    const rgb = emailRgbOf(value)
+    return rgb && rgb.alpha === 1 ? [{ value: value.trim(), rgb }] : []
+  })
+  const settle = (value: string): string | null | undefined => {
+    if (!entries.length) return null
+    const named = byPath.get(value.trim().toLowerCase())
+    if (named) return named
+    const rgb = emailRgbOf(value)
+    if (!rgb || !targets.length) return undefined
+    let best = targets[0]
+    for (const target of targets) {
+      if (emailColorDistance(rgb, target.rgb) < emailColorDistance(rgb, best.rgb)) best = target
+    }
+    return best.value
+  }
+  let nodes: Record<string, unknown> | null = null
+  for (const [id, node] of Object.entries(input['nodes'])) {
+    if (!isRecord(node) || !isRecord(node['props'])) continue
+    let props: Record<string, unknown> | null = null
+    for (const name of EMAIL_COLOR_PROPS) {
+      const value = node['props'][name]
+      if (typeof value !== 'string' || !value.trim() || allowed.has(normalizeHex(value))) continue
+      const settled = settle(value)
+      if (settled === undefined) continue
+      props ??= { ...node['props'] }
+      if (settled === null) delete props[name]
+      else props[name] = settled
+    }
+    if (!props) continue
+    nodes ??= { ...input['nodes'] }
+    nodes[id] = { ...node, props }
+  }
+  if (!nodes || !targets.length) return nodes ? { ...input, nodes } : input
+  // Two colors snapped onto one brand value can leave words the color of what
+  // they sit on — a pale green heading on a cream band both become the cream.
+  // A settle that leaves any color it touched unreadable is not one reading,
+  // so the tree goes back as written and rule 6 asks the model.
+  return emailSettleKeepsContrast(input['nodes'], nodes) ? { ...input, nodes } : input
+}
+
+/** The least contrast words keep on what they sit on once settled: WCAG's large-text floor. */
+const EMAIL_SETTLED_MIN_CONTRAST = 3
+
+function emailLuminance({ r, g, b }: Rgb): number {
+  const channel = (value: number) => {
+    const c = value / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+function emailContrast(a: Rgb, b: Rgb): number {
+  const [light, dark] = [emailLuminance(a), emailLuminance(b)].sort((x, y) => y - x)
+  return (light + 0.05) / (dark + 0.05)
+}
+
+/**
+ * Whether every block whose words or ground the settle changed can still be
+ * read: its `color` against its own `backgroundColor` (a button's fill), else
+ * the nearest enclosing one, else the white an email is read on. A button
+ * with no fill of its own is left out: its fill is the block's default.
+ */
+function emailSettleKeepsContrast(
+  written: Record<string, unknown>,
+  settled: Record<string, unknown>,
+): boolean {
+  const parentOf = new Map<string, string>()
+  for (const [id, node] of Object.entries(settled)) {
+    if (!isRecord(node) || !Array.isArray(node['nodes'])) continue
+    for (const child of node['nodes']) if (typeof child === 'string') parentOf.set(child, id)
+  }
+  const propOf = (nodes: Record<string, unknown>, id: string, name: string): unknown => {
+    const node = nodes[id]
+    return isRecord(node) && isRecord(node['props']) ? node['props'][name] : undefined
+  }
+  /** The id whose background a node's words sit on, or `null` for the email's white. */
+  const groundOf = (id: string): string | null | undefined => {
+    if (typeof propOf(settled, id, 'backgroundColor') === 'string') return id
+    const node = settled[id]
+    if (isRecord(node) && node['componentId'] === 'emailButton') return undefined
+    const seen = new Set<string>([id])
+    for (let at = parentOf.get(id); at && !seen.has(at); at = parentOf.get(at)) {
+      seen.add(at)
+      if (typeof propOf(settled, at, 'backgroundColor') === 'string') return at
+    }
+    return null
+  }
+  const WHITE: Rgb = { r: 255, g: 255, b: 255 }
+  for (const id of Object.keys(settled)) {
+    const color = propOf(settled, id, 'color')
+    if (typeof color !== 'string') continue
+    const ground = groundOf(id)
+    if (ground === undefined) continue
+    const touched =
+      color !== propOf(written, id, 'color') ||
+      (ground !== null &&
+        propOf(settled, ground, 'backgroundColor') !== propOf(written, ground, 'backgroundColor'))
+    if (!touched) continue
+    const text = emailRgbOf(color)
+    const background = ground === null ? WHITE : emailRgbOf(String(propOf(settled, ground, 'backgroundColor')))
+    if (!text || !background) continue
+    if (emailContrast(text, background) < EMAIL_SETTLED_MIN_CONTRAST) return false
+  }
+  return true
 }
 
 /**
@@ -4049,18 +4262,38 @@ export function detectPlanOverFreeWall(
       },
     ]
   }
+  // A site start's saved form is a step of its own (AGL-3596), counted on the wall since AGL-3660.
+  const forms =
+    plan.create.filter((entry) => entry.kind === 'form').length -
+    aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'form').length
   const fits =
     sitePages !== undefined
-      ? aiFreeSiteSectionsWithin({ layouts, pages }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      ? aiFreeSiteSectionsWithin({ layouts, pages, forms: Math.max(0, forms) }, FREE_AI_TASTE_CREDITS_PER_MONTH)
       : aiFreePageSectionsWithin({ layouts, pages })
   if (asked <= fits) return []
   const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'
   const beside = layouts ? ` that creates ${layouts > 1 ? `${layouts} layouts` : 'its layout'}` : ''
+  // A site start's home keeps its full five (AGL-3660): told only "plan at
+  // most 8", the live yoga start of 2026-10-08 cut a home of 6 to 4 and kept
+  // its other page, so the redo names where the sections come from.
+  const homeMin =
+    sitePages !== undefined && plan.screens.some(aiSitePlanIsHome)
+      ? aiSiteHomeMinSections({ pages, across: fits })
+      : 0
+  const keepHome = homeMin
+    ? ` Keep the home page at / at ${homeMin} or more sections, and take the rest from the other ${pages > 2 ? 'pages' : 'page'}.`
+    : ''
+  // A site start's redo keeps the plan full (AGL-3660): the wall's sections
+  // are its budget to use, and a redo told only "at most" cuts far under it.
+  const redo =
+    sitePages !== undefined && fits >= 2
+      ? `Plan ${fits - 1} to ${fits}: the ${fits} are the budget to use, not a ceiling to stay under. Draw a list's repeated items in one section, and take out only the sections the brief needs least.`
+      : `Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`
   return [
     {
       rule: null,
       code: 'plan-over-free-wall',
-      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`,
+      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. ${redo}${keepHome}`,
       paths: plan.screens.map((_, index) => `screens[${index}].sections`),
     },
   ]

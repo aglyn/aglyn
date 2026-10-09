@@ -64,6 +64,7 @@ export function fulfillmentEventView(
     trackingNumber: fulfillment.trackingNumber ?? null,
     trackingUrl: fulfillmentTrackingUrl(fulfillment),
     labelUrl: fulfillment.labelUrl ?? null,
+    labelCostCents: fulfillment.labelCostCents ?? null,
     at: new Date(fulfillment.atMs).toISOString(),
   }
 }

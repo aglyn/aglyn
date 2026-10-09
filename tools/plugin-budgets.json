@@ -135,6 +135,10 @@
     "baseline": 3724,
     "budget": 5120
   },
+  "stock-photos": {
+    "baseline": 5902,
+    "budget": 8192
+  },
   "loyalty": {
     "baseline": 9161,
     "budget": 12288

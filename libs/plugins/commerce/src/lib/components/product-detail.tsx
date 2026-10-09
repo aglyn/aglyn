@@ -79,11 +79,15 @@ export interface ProductDetailProps {
 interface DetailVariant {
   id: string
   options?: Record<string, string>
-  priceUsd: number
+  /** `null` while the product is listed before it has a price (AGL-3676). */
+  priceUsd: number | null
   compareAtPriceUsd?: number
   soldOut: boolean
   imageUrl?: string
 }
+
+/** What the page says where a variant with no price yet would show one (AGL-3676). */
+const PRICE_COMING_SOON_LABEL = 'Price coming soon'
 
 interface Detail {
   id: string
@@ -133,7 +137,7 @@ function buyItem(
   return {
     item_id: product.id,
     item_name: product.name,
-    price: variant?.priceUsd,
+    price: variant?.priceUsd ?? undefined,
     quantity,
   }
 }
@@ -520,6 +524,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const subscribing =
       Boolean(subscription) &&
       (!resolved.subscriptionOptional || billing === 'subscribe')
+    // Listed before it has a price (AGL-3676): no price to show and nothing
+    // to buy; every sale door would refuse it anyway.
+    const priced = typeof variant?.priceUsd === 'number'
 
     // schema.org Product/Offer (AGL-299). Kept ONLY for the case where this
     // block renders without server-seeded page data — the besigner preview,
@@ -538,14 +545,19 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             ...(resolved.mediaUrls.length
               ? { image: resolved.mediaUrls }
               : {}),
-            offers: {
-              '@type': 'Offer',
-              priceCurrency: 'USD',
-              price: String(variant?.priceUsd ?? 0),
-              availability: variant?.soldOut
-                ? 'https://schema.org/OutOfStock'
-                : 'https://schema.org/InStock',
-            },
+            // No offer without a price: a price of 0 would read as free.
+            ...(priced
+              ? {
+                  offers: {
+                    '@type': 'Offer',
+                    priceCurrency: 'USD',
+                    price: String(variant?.priceUsd),
+                    availability: variant?.soldOut
+                      ? 'https://schema.org/OutOfStock'
+                      : 'https://schema.org/InStock',
+                  },
+                }
+              : {}),
           }
         : null
 
@@ -642,7 +654,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-              {`$${variant?.priceUsd ?? 0}${subscribing ? intervalSuffix : ''}`}
+              {priced
+                ? `$${variant?.priceUsd}${subscribing ? intervalSuffix : ''}`
+                : PRICE_COMING_SOON_LABEL}
             </Typography>
             {subscribing && subscription?.trialDays ? (
               <Typography variant="caption" color="text.secondary">
@@ -688,10 +702,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2 }}
             >
               <ToggleButton value="once">
-                {`One-time $${variant?.priceUsd ?? 0}`}
+                {priced ? `One-time $${variant?.priceUsd}` : 'One-time'}
               </ToggleButton>
               <ToggleButton value="subscribe">
-                {`Subscribe $${variant?.priceUsd ?? 0}${intervalSuffix}`}
+                {priced ? `Subscribe $${variant?.priceUsd}${intervalSuffix}` : 'Subscribe'}
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
@@ -727,7 +741,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2, display: 'block' }}
             />
           ) : null}
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
+          {!priced ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {'Not on sale yet — check back soon.'}
+            </Typography>
+          ) : null}
+          <Box sx={{ display: priced ? 'flex' : 'none', gap: 1.5, alignItems: 'center', mb: 2 }}>
             <TextField
               label="Qty"
               value={quantity}
@@ -747,7 +766,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               variant="outlined"
               color="primary"
               size="large"
-              disabled={!hostId || variant?.soldOut}
+              disabled={!hostId || !priced || variant?.soldOut}
               onClick={handleAddToCart}
             >
               {added ? 'Added ✓' : 'Add to cart'}
@@ -758,6 +777,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               size="large"
               disabled={
                 !hostId ||
+                !priced ||
                 status === 'sending' ||
                 variant?.soldOut ||
                 // No payments on this deployment: the same 501 every time, so
@@ -807,7 +827,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               />
             </Suspense>
           ) : null}
-          {fulfillment.offered ? (
+          {fulfillment.offered && priced ? (
             <Box sx={{ mb: 2 }}>
               <CartFulfillmentChoice
                 state={fulfillment}
@@ -815,7 +835,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               />
             </Box>
           ) : null}
-          {shipCountries && fulfillment.method === 'shipping' ? (
+          {shipCountries && fulfillment.method === 'shipping' && priced ? (
             <TextField
               select
               label="Ship to"
@@ -833,7 +853,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               ))}
             </TextField>
           ) : null}
-          {askPostal && fulfillment.method === 'shipping' ? (
+          {askPostal && fulfillment.method === 'shipping' && priced ? (
             <TextField
               label="Postal code"
               value={shipPostal}

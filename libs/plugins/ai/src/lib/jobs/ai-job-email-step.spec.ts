@@ -95,6 +95,7 @@ import {
   type AiEmailType,
   AI_JOB_EMAIL_MAX_TOKENS,
   aiJobEmailPrompt,
+  aiSettleEmailHeaderLine,
   createAiJobEmailStep,
   runAiJobEmailStep,
   registerAiEmailJob,
@@ -441,7 +442,7 @@ describe('the email step', () => {
     expect(AI_PALETTE_CATALOG['email']).not.toContain('emailRichtext')
   })
 
-  it.each(['twoSubjects', 'repeatedSubjects', 'tokenInSubject'])(
+  it.each(['twoSubjects', 'repeatedSubjects', 'tokenOnlySubject'])(
     'refuses the %s copy control',
     async (name) => {
       const control = GOLDENS['copyControls'][name]
@@ -478,6 +479,151 @@ describe('the email step', () => {
       message: 'This site has all the screens its plan allows',
       findings: [],
     })
+  })
+})
+
+describe('what the email step settles rather than refuses (AGL-3676)', () => {
+  /** The welcome golden with one node's props replaced. */
+  const withProps = (patch: Record<string, Record<string, unknown>>) => {
+    const tree = JSON.parse(JSON.stringify(GOLDENS['welcome'].tree))
+    for (const [id, props] of Object.entries(patch)) {
+      tree.nodes[id].props = { ...tree.nodes[id].props, ...props }
+    }
+    return tree
+  }
+  /** The stored props of the golden's node, found by what it is: the store mints its own ids. */
+  const storedProps = (id: 'band-a' | 'hello' | 'cta') => {
+    const nodes = Object.values(
+      designs[0].content['nodes'] as Record<string, { componentId: string; props?: Record<string, unknown> }>,
+    )
+    const node = nodes.find(({ componentId, props }) =>
+      id === 'band-a'
+        ? componentId === 'emailSection' && props?.['padding'] === '32px 24px'
+        : id === 'hello'
+          ? componentId === 'emailText' && props?.['variant'] === 'heading'
+          : componentId === 'emailButton',
+    )
+    if (!node) throw new Error(`no stored ${id}`)
+    return node.props ?? {}
+  }
+
+  it('keeps the guided start’s welcome email whose subject greets by name, the token taken out', async () => {
+    // The shape of the prod answer (job 85u_o2U_Ra, 2026-10-08) refused after its re-ask.
+    mockRunAiRequest.mockResolvedValueOnce(
+      emailAnswer({
+        ...GOLDENS['welcome'],
+        subjects: [
+          'Welcome, {{contact.firstName}}!',
+          '{{contact.firstName}}, your first loaf is waiting',
+          'A warm hello from Brightside, {{ contact.firstName }}',
+        ],
+        preheaders: [
+          'Thanks for joining us, {{contact.firstName}}. Here is this week’s menu.',
+          'Everything is baked the same morning for {{contact.name}}.',
+          'One thing worth knowing: Saturday mornings sell out early.',
+        ],
+      }),
+    )
+    const outcome = await run()
+    expect(outcome.review).toBeUndefined()
+    expect(outcome.failure).toBeUndefined()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    const [design] = designs
+    expect(design.content['subject']).toBe('Welcome!')
+    expect(design.content['subjectVariants']).toEqual([
+      'Welcome!',
+      'Your first loaf is waiting',
+      'A warm hello from Brightside',
+    ])
+    expect(design.content['preheaderVariants']).toEqual([
+      'Thanks for joining us. Here is this week’s menu.',
+      'Everything is baked the same morning.',
+      'One thing worth knowing: Saturday mornings sell out early.',
+    ])
+    expect(JSON.stringify(design.content['subjectVariants'])).not.toContain('{{')
+  })
+
+  it('keeps the tokenInSubject control, settled to "Hello"', async () => {
+    const control = GOLDENS['copyControls']['tokenInSubject']
+    mockRunAiRequest.mockResolvedValueOnce(
+      emailAnswer({ ...GOLDENS['welcome'], subjects: control.subjects, preheaders: control.preheaders }),
+    )
+    await run()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(designs[0].content['subjectVariants']).toEqual(['Hello', 'Two', 'Three'])
+  })
+
+  it('keeps an email painted in tints of the brand, each snapped to the nearest brand color', async () => {
+    mockReadInventory.mockResolvedValue({
+      ...INVENTORY,
+      theme: {
+        summary: [],
+        colors: {
+          'primary.main': '#1E5AA8',
+          'primary.light': '#E8F0FB',
+          'primary.contrastText': '#FFFFFF',
+          'text.primary': '#1A1A1A',
+          'text.secondary': 'rgba(0, 0, 0, 0.6)',
+        },
+        fonts: ['Inter'],
+      },
+    })
+    mockRunAiRequest.mockResolvedValueOnce(
+      emailAnswer({
+        ...GOLDENS['welcome'],
+        tree: withProps({
+          'band-a': { backgroundColor: '#EEF4FC' },
+          hello: { color: '#222222' },
+          cta: { backgroundColor: '#2563EB', color: 'primary.contrastText' },
+        }),
+      }),
+    )
+    const outcome = await run()
+    expect(outcome.review).toBeUndefined()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(storedProps('band-a')['backgroundColor']).toBe('#E8F0FB')
+    expect(storedProps('hello')['color']).toBe('#1A1A1A')
+    expect(storedProps('cta')).toMatchObject({ backgroundColor: '#1E5AA8', color: '#FFFFFF' })
+  })
+
+  it('leaves a block its own default color when the site records no brand color', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(
+      emailAnswer({ ...GOLDENS['welcome'], tree: withProps({ 'band-a': { backgroundColor: '#EEF4FC' } }) }),
+    )
+    const outcome = await run()
+    expect(outcome.review).toBeUndefined()
+    expect(storedProps('band-a')).not.toHaveProperty('backgroundColor')
+  })
+
+  it('writes a recipient token’s other spelling as the one the send fills, and a site-address link as its page', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(
+      emailAnswer({
+        ...GOLDENS['welcome'],
+        tree: withProps({
+          hello: { children: 'Welcome, {{firstName}}' },
+          cta: { href: '{{site.url}}/menu' },
+        }),
+      }),
+    )
+    const outcome = await run()
+    expect(outcome.review).toBeUndefined()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(storedProps('hello')['children']).toBe('Welcome, {{contact.firstName}}')
+    expect(storedProps('cta')['href']).toBe(`${AI_EMAIL_SITE_URL_TOKEN}/menu`)
+  })
+
+  it.each([
+    ['Welcome, {{contact.firstName}}!', 'Welcome!'],
+    ['Hello {{contact.firstName}}', 'Hello'],
+    ['{{contact.firstName}}, your table is ready', 'Your table is ready'],
+    ['Welcome to {{business.name}}!', 'Welcome!'],
+    ['Thanks, {{contact.firstName}}, for reaching out', 'Thanks, for reaching out'],
+    ['{{contact.firstName}}’s welcome gift', 'Welcome gift'],
+    ['A note for you — {{contact.firstName}}', 'A note for you'],
+    ['No token here, {friend}', 'No token here, {friend}'],
+    ['{{contact.firstName}}', ''],
+  ])('settles the header line %j to %j', (line, settled) => {
+    expect(aiSettleEmailHeaderLine(line)).toBe(settled)
   })
 })
 

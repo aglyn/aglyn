@@ -167,8 +167,11 @@ const COMPONENT_EXTRA_IDS = ['icon']
  * Menu Button, which a model writing nodes was never offered.
  */
 const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
-  screen: ['icon'],
-  layout: ['icon', 'muiDrawer', 'muiDrawerToggle'],
+  // The store's Product grid, which a page lists the site's catalog with
+  // (AGL-3676): bound to the catalog by code, never written by a model.
+  screen: ['icon', 'product-grid'],
+  // And a selling site's cart button in its header (AGL-3676).
+  layout: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
 }
 
 /**
@@ -446,10 +449,23 @@ const CATALOG_PROPS: Readonly<Record<string, readonly string[]>> = {
   videoEmbed: ['url'],
 }
 
+/**
+ * Props the platform's own code sets and a model is never shown (AGL-3660):
+ * kept in the props schema, so a compiled tree stores them unrepaired, and
+ * left out of every catalog line, so no prompt a model reads changes. The
+ * layout language marks a photo cover that runs under the header, and the
+ * frame offers its header to sit over one.
+ */
+const CODE_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
+  section: ['underHeader'],
+  muiAppBar: ['overHero'],
+}
+
 function catalogProps(id: string, entry: Dict, max = 5): string {
   const properties = entry.propsSchema.properties as Record<string, Dict>
   const only = CATALOG_PROPS[id]
-  const names = Object.keys(properties).filter((name) => !only || only.includes(name))
+  const hidden = CODE_ONLY_PROPS[id] ?? []
+  const names = Object.keys(properties).filter((name) => (!only || only.includes(name)) && !hidden.includes(name))
   const rank = (name: string): number => {
     const schema = properties[name]
     if (entry.propsSchema.required.includes(name)) return 0
@@ -785,6 +801,8 @@ async function main(): Promise<void> {
     `export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = ${JSON.stringify(surfaces, null, 2)}\n\n` +
     `/** Theme vocabulary an \`sx\` value may name. */\n` +
     `export const AI_SX_TOKENS: AiSxTokens = ${JSON.stringify(sxTokens, null, 2)}\n\n` +
+    `/** Props only the platform's code sets (AGL-3660): stored, never described to a model. */\n` +
+    `export const AI_CODE_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = ${JSON.stringify(CODE_ONLY_PROPS, null, 2)}\n\n` +
     `/** The prompt catalog of each surface. */\n` +
     `export const AI_PALETTE_CATALOG: Record<AiSurface, string> = ${JSON.stringify(catalog, null, 2)}\n`
   const prettierConfig = (await prettier.resolveConfig(OUT)) ?? {}

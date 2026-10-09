@@ -505,6 +505,18 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         reason: "Amazon Seller Central's app consent page, built by `networkAuthorizeUrl` in `libs/plugins/fulfillment-networks/src/lib/server/oauth.ts` and opened by the merchant's own browser to connect their own seller account. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the app id, the redirect address and a single-use state.",
       },
+      {
+        host: "api.shipmonk.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipMonk API of the store whose own API key a site's admin pastes in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts` with that key, to send the orders the merchant routes to it and read their shipments and stock back.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "sandbox.shipmonk.dev",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`. Used only by a deployment pointed at the sandbox (`SHIPMONK_ENVIRONMENT=sandbox`), where nothing real ships.",
+        dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
     ],
   },
   {
@@ -862,6 +874,24 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         host: "www.facebook.com",
         reason: "Since AGL-3637 also Facebook Login's consent dialog for a merchant's catalog grant, built by `metaAuthorizeUrl` and opened by the admin's own browser. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the app id, the `catalog_management` and `business_management` scopes, the redirect address and a signed state.",
+      },
+    ],
+  },
+  {
+    pluginId: 'stock-photos',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "pixabay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Pixabay's image search API (`https://pixabay.com/api/`), asked by the stock-photos plugin's client (`libs/plugins/stock-photos/src/lib/providers/pixabay.ts`) from the console's server while an AI job builds a site's pages, to find photos for the page's picture slots; answers are cached for 24 hours. Also the host of `largeImageURL`, from which a chosen photo's bytes are downloaded once and stored in the site's own media library, so no page ever loads an image from Pixabay. A photo's page and its contributor's page on this host are recorded on the asset as its credit.",
+        dataReceived: "The platform's API key and the search words: a few words naming the kind of business (from the site's business type) and the section's subject (from the picture's description), with the platform's fixed filters (photos only, orientation, minimum size, safe search). No customer data: no name, email address, phone number or other personal data of a customer or a visitor, and no workspace or site identifier. The image download sends no data beyond the request for the image.",
+      },
+      {
+        host: "cdn.pixabay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Pixabay's image CDN, one of the two hosts the stock-photos plugin's client (`libs/plugins/stock-photos/src/lib/providers/pixabay.ts`) will download a chosen photo's bytes from, on the console's server, before storing them in the site's own media library.",
+        dataReceived: "Nothing beyond the request for the image.",
       },
     ],
   },

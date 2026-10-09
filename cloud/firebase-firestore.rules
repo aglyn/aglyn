@@ -5022,6 +5022,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The stock photo search cache (AGL-3660): what a photo library answered
+    // a search, kept 24 hours (TTL on `expiresAt`) because Pixabay's terms
+    // ask every request cached that long. Platform-wide and holding no
+    // workspace's data. Written and read by the stock-photos plugin's server
+    // half through the Admin SDK only. Deny ALL client access, staff
+    // included: a client that could write an entry could hand every site
+    // build the photo of its choosing.
+    match /stockPhotoSearches/{key} {
+      allow read, write: if false;
+    }
+
     // The per-recipient DELIVERY LOG: one document per message we sent an
     // address, carrying its subject, its lifecycle timestamps and its open
     // and click counts. Keyed by the same `sha256(address)` the suppression

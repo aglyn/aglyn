@@ -476,11 +476,15 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
       expect(response.status).toBe(200)
       const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
       expect(stored).not.toHaveProperty('$id')
-      // The caller's soft delete is never stored. A product and a screen
-      // are born live, said with the explicit `null` their lists' queries
-      // scope on (AGL-3321): the products table, a campaign's screens.
-      if (resource === 'product' || resource === 'screen') expect(stored['deletedAt']).toBeNull()
-      else expect(stored).not.toHaveProperty('deletedAt')
+      // The caller's soft delete is never stored. A product, a screen and a
+      // layout are born live, said with the explicit `null` their lists'
+      // queries scope on (AGL-3321, AGL-3680): the products table, a
+      // campaign's screens, the layouts list.
+      if (resource === 'product' || resource === 'screen' || resource === 'layout') {
+        expect(stored['deletedAt']).toBeNull()
+      } else {
+        expect(stored).not.toHaveProperty('deletedAt')
+      }
       expect(stored).not.toHaveProperty('staff')
       expect(stored).not.toHaveProperty('role')
       // Stamped, never taken from the body — a client clock is not a fact

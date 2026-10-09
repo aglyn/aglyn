@@ -22,6 +22,7 @@ import type {
   ListQueryDeclaration,
   ListQueryFilter,
   ListQueryRequest,
+  ListQuerySort,
 } from '@aglyn/shared-util-tools/list-query/list-query-plan'
 
 /*
@@ -34,6 +35,20 @@ import type {
  * holds `cloud/firebase-firestore.indexes.json` to `listQueryIndexes` of each
  * declaration.
  */
+
+/**
+ * The header orders of a newest-first contacts list (AGL-3680): newest first
+ * as the default, then oldest first and the address either way, each
+ * `alone` — served while nothing narrows the list past its scope, so they
+ * cost a composite only beside a scope clause. Both fields are on every row
+ * (see each list below).
+ */
+const contactSorts = (createdLabel: string): ListQuerySort[] => [
+  { path: 'createdAt', direction: 'desc', column: 'createdAt', label: createdLabel },
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: createdLabel, alone: true },
+  { path: 'email', direction: 'asc', column: 'email', label: 'Email', alone: true },
+  { path: 'email', direction: 'desc', column: 'email', label: 'Email', alone: true },
+]
 
 /*==========================================
  * SITE MEMBERS — `hosts/{hostId}/siteMembers`, newest first.
@@ -58,7 +73,7 @@ export const SITE_MEMBER_LIST_QUERY: ListQueryDeclaration = {
       operators: ['equals'],
     },
   ],
-  sorts: [{ path: 'createdAt', direction: 'desc' }],
+  sorts: contactSorts('Joined'),
   search: { tokensPath: 'searchTokens' },
 }
 
@@ -97,7 +112,7 @@ const LEAD_EMAIL_FIELD: ListFilterField = {
 
 export const LEAD_LIST_QUERY: ListQueryDeclaration = {
   fields: [LEAD_EMAIL_FIELD],
-  sorts: [{ path: 'createdAt', direction: 'desc' }],
+  sorts: contactSorts('Captured'),
   search: { tokensPath: 'searchTokens', scoped: scopedSearch('scopedSearchTokens') },
 }
 
@@ -269,7 +284,18 @@ const SITE_FIELD: ListFilterField = {
   operators: ['equals', 'isAnyOf'],
 }
 
-const SUBMISSION_SORTS = [{ path: 'createdAt', direction: 'desc' as const }]
+/*
+ * Received orders the query either way, and Read either way — unread first
+ * (AGL-3680); both are on every row (see above). The headers past the
+ * default are `alone`, served while nothing narrows the list past its scope.
+ * From, Site and Message are drawn from the message, so they sort the page.
+ */
+const SUBMISSION_SORTS: ListQuerySort[] = [
+  { path: 'createdAt', direction: 'desc', column: 'createdAt', label: 'Received' },
+  { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Received', alone: true },
+  { path: 'read', direction: 'asc', column: 'read', label: 'Read', alone: true },
+  { path: 'read', direction: 'desc', column: 'read', label: 'Read', alone: true },
+]
 const SUBMISSION_SEARCH = { tokensPath: 'searchTokens' }
 
 /** A site's Inbox. */
