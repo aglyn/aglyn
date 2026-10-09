@@ -123,7 +123,8 @@ export default function StaffChurnReportCard() {
     <CardDisplay
       header={'Why people leave'}
       help={docsHelp('staffConsole', {
-        anchor: '#whats-there',
+        anchor: '#staff-overview-signups',
+        title: 'Why people leave',
         excerpt:
           'Answers to the cancellation and account-deletion survey, counted ' +
           'by reason, by which flow they came from, and by the plan the ' +

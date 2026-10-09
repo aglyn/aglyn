@@ -6,11 +6,25 @@ description: Shipping zones and rates, local pickup, and the postal address each
 
 # Shipping
 
-Shipping is set up under **Products → Settings → Shipping**. Every order that
-ships is priced from the zones and rates you save there, at the storefront's
-cart, on a product's Buy button, and on a draft order's payment link.
+Shipping is set up in the store's settings, on the **Shipping** card. Every
+order that ships is priced from the zones and rates you save there, at the
+storefront's cart, on a product's Buy button, and on a draft order's payment
+link.
 
 ## Zones and rates
+
+The **Shipping** card, in the store's settings, prices every parcel: group the
+countries you ship to into zones, then give each zone one or more rates.
+
+1. Under **Zones**, select **Add zone**, enter a **Zone name** and its
+   **Countries** as two-letter codes, such as `US, CA`, or `*` for everywhere
+   else.
+2. Under **Rates**, select **Add rate**, choose its **Zone**, give it a
+   **Name** buyers see (a rate without one is dropped at checkout), and choose
+   its **Type** and price.
+3. Optionally turn on **Offer free local pickup**.
+4. Check the **Coverage** line, which names any destination no rate reaches,
+   then select **Save shipping settings**.
 
 A **zone** owns countries; `*` is the rest of the world. A **rate** belongs to
 one zone and prices a parcel in one of four ways:
@@ -35,8 +49,8 @@ rules explain what your zones make checkout ask and refuse.
 
 ## Where parcels ship from
 
-Each **inventory location** (Products → Settings → Inventory locations) can
-carry a postal address: choose **Add address** on its row, or **Edit address**
+Each **inventory location** (the **Inventory locations** card in the store's
+settings) can carry a postal address: choose **Add address** on its row, or **Edit address**
 once it has one. The address is the street, an optional apartment or suite,
 city, state or region, postal code, the two-letter country code and a phone
 number, saved beside the location's name.

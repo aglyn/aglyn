@@ -14301,3 +14301,54 @@ describe('delivery-app records are the server’s alone (AGL-3644)', () => {
     }
   })
 })
+
+describe("a site's live chat settings are written by their route alone (AGL-3698)", () => {
+  /*
+   * `hosts/{hostId}/pluginSettings/live-chat` decides which vendor script a
+   * published page loads and which hosts the site's policy admits, so no
+   * member of the site writes it — the owner included. `/api/live-chat/settings`
+   * parses every field and writes it with the Admin SDK. Staff keep the host
+   * catch-all's staff write, as for every subcollection. Members still READ
+   * it, like every other plugin's site settings, and the generic document
+   * beside it keeps its admin write: both halves asserted, so a rule that
+   * closed every plugin's settings would fail here too.
+   */
+  const LIVE_CHAT = ['hosts', HOST, 'pluginSettings', 'live-chat']
+  const settings = {
+    enabled: true,
+    provider: 'tidio',
+    publicKey: 'abcdefghijklmnopqrstuvwxyz123456',
+    pages: 'all',
+    paths: [],
+    position: 'right',
+    loadWithPage: false,
+  }
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), ...LIVE_CHAT), settings)
+    })
+  })
+
+  it("refuses every write by the site's own members, the admin included", async () => {
+    for (const [who, client] of [
+      ['the owner', () => authed(OWNER)],
+      ['an editor', () => authed(EDITOR)],
+      ['a viewer', () => authed(VIEWER)],
+    ]) {
+      await mustDeny(
+        `${who} pointing the chat at another key`,
+        setDoc(doc(client(), ...LIVE_CHAT), { ...settings, publicKey: 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz' }),
+      )
+      await mustDeny(`${who} deleting the chat settings`, deleteDoc(doc(client(), ...LIVE_CHAT)))
+    }
+  })
+
+  it('still lets a member read them, and the owner write another plugin’s', async () => {
+    await mustAllow('the owner reading the chat settings', getDoc(doc(authed(OWNER), ...LIVE_CHAT)))
+    await mustAllow(
+      "the owner writing another plugin's site settings",
+      setDoc(doc(authed(OWNER), 'hosts', HOST, 'pluginSettings', 'marketing'), { fromName: 'Acme' }),
+    )
+  })
+})

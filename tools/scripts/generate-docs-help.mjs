@@ -54,6 +54,10 @@ const BESIGNER_OUT = join(
   'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
 )
 const PLUGIN_OUT = join(ROOT, 'libs/aglyn/src/lib/app-utils/docs-help.generated.ts')
+const PLUGIN_SECTIONS_OUT = join(
+  ROOT,
+  'libs/aglyn/src/lib/app-utils/docs-help-sections.generated.ts',
+)
 
 // Docs pages that are not feature topics (chrome / internal-only routes).
 const EXCLUDE = [/^operations\//, /^intro$/, /^whats-new$/]
@@ -155,6 +159,8 @@ const PLUGIN_TOPICS = {
   shipStation: '/commerce-and-bookings/commerce/use-shipstation',
   // The ShippingEasy card under the store's Settings (AGL-3633).
   shippingEasy: '/commerce-and-bookings/commerce/use-shippingeasy',
+  // The Local delivery card under the store's Settings (AGL-3707).
+  pickupAndDelivery: '/commerce-and-bookings/commerce/pickup-and-local-delivery',
   companies: '/content-and-data/crm/companies',
   consoleTour: '/getting-started/console-tour',
   contactActivities: '/content-and-data/crm/activities',
@@ -223,6 +229,8 @@ const PLUGIN_TOPICS = {
   // Fulfillment, returns, invoices and order webhooks (AGL-3611): the
   // Returns section, the Returns settings card and the Order webhooks card.
   ordersAndReturns: '/commerce-and-bookings/commerce/orders-and-returns',
+  // The Customer notifications card under the store's Settings (AGL-3707).
+  orderNotifications: '/commerce-and-bookings/commerce/order-notifications',
   // The organization's automations, on the org Automation hub and the site
   // Actions section's panel (AGL-3302).
   orgAutomations: '/marketing-and-automation/workflows-and-actions/org-automations',
@@ -266,6 +274,8 @@ const PLUGIN_TOPICS = {
   salesChannels: '/commerce-and-bookings/commerce/sales-channels',
   sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
+  // The Live chat card on a site's setup page (AGL-3698).
+  liveChat: '/building-sites/live-chat',
   // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
   // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
   zapier: '/marketing-and-automation/workflows-and-actions/zapier',
@@ -332,6 +342,9 @@ function stripQuotes(value) {
 }
 
 /** Read one markdown file → { title, excerpt, anchors[] } or null. */
+/** An HTML comment: Docusaurus renders nothing of it. */
+const HTML_COMMENT = /<!--[\s\S]*?-->/g
+
 function readDocPage(absPath) {
   const source = readFileSync(absPath, 'utf8')
   const fm = source.match(/^---\n([\s\S]*?)\n---/)
@@ -345,8 +358,12 @@ function readDocPage(absPath) {
   if (!title || !excerpt) return null
 
   const anchors = []
+  const sections = new Map()
   const seen = new Set()
-  for (const match of source.matchAll(/^#{2,4}\s+(.+?)\s*$/gm)) {
+  // A heading inside an HTML comment is not published: a section held back
+  // until its feature is configured (AGL-3696) must not become a help link.
+  const body = source.slice(fm[0].length).replace(HTML_COMMENT, '')
+  for (const match of body.matchAll(/^#{2,4}\s+(.+?)\s*$/gm)) {
     const explicit = match[1].match(/\{#([^}]+)\}\s*$/)
     const slug = explicit
       ? explicit[1]
@@ -354,9 +371,83 @@ function readDocPage(absPath) {
     if (slug && !seen.has(slug)) {
       seen.add(slug)
       anchors.push(`#${slug}`)
+      const section = readSection(source, match)
+      if (section) sections.set(`#${slug}`, section)
     }
   }
-  return { title, excerpt, anchors, unlisted }
+  return { title, excerpt, anchors, sections, unlisted }
+}
+
+/**
+ * Markdown → the plain text a tooltip prints: link text without its target,
+ * no emphasis markers, no backticks, no inline HTML, one line.
+ */
+function plainText(markdown) {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|__/g, '')
+    .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s.,;:!?)]|$)/g, '$1$2')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** The opening sentence of a passage, capped at a tooltip's two lines. */
+function firstSentence(text) {
+  let sentence = text.match(/^(.{40,}?[.!?])(?=\s|$)/)?.[1] ?? text
+  // "Sign in to the console." is a step, not an explanation — a short
+  // opener brings the sentence after it.
+  if (sentence.length < 60 && sentence.length < text.length) {
+    sentence = text.match(/^(.{40,}?[.!?]\s+.+?[.!?])(?=\s|$)/)?.[1] ?? sentence
+  }
+  // A section that opens on a `value` in backticks starts lowercase.
+  sentence = sentence.charAt(0).toUpperCase() + sentence.slice(1)
+  const capped =
+    sentence.length > 220
+      ? `${sentence.slice(0, 217).replace(/\s+\S*$/, '')}…`
+      : sentence
+  // "…what visitors see and what is submitted:" introduces a list the
+  // tooltip does not carry, so the colon would point at nothing.
+  return capped.replace(/:$/, '.')
+}
+
+/**
+ * A heading's tooltip: the heading itself and the opening sentence of the
+ * prose under it (AGL-3707). An `anchor` used to change only where "Open
+ * documentation" landed — the tooltip still printed the PAGE's title and
+ * description, so twenty cards linking twenty sections of one page all
+ * showed the same blurb. Null when the heading opens straight into a
+ * sub-heading, a table or a code block: the page's own text stands in.
+ */
+function readSection(source, match) {
+  const title = plainText(match[1].replace(/\{#[^}]+\}\s*$/, ''))
+  const start = match.index + match[0].length
+  const next = source.slice(start).search(/^#{1,4}\s/m)
+  const body = (next === -1 ? source.slice(start) : source.slice(start, start + next))
+    .replace(/```[\s\S]*?```/g, '')
+  const blocks = body
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter((part) => part && !/^(!\[|:::|<|\||import |export )/.test(part))
+  if (!title || !blocks.length) return null
+  // A list's first item, not the list run together.
+  const firstItem = (block) =>
+    plainText(
+      block
+        .split(/\n(?=\s*(?:[-*]|\d+\.)\s)/)[0]
+        .replace(/^\s*(?:[-*]|\d+\.)\s+/, ''),
+    )
+  let lead = firstItem(blocks[0])
+  // "Opening a deal shows:" says nothing until the list it opens — so a lead
+  // that ends on its colon carries the list's first item with it.
+  // A one-line opener ("Sign in to the console.") borrows the next block too.
+  if ((lead.endsWith(':') || lead.length < 60) && lead.length < 120 && blocks[1]) {
+    lead = `${lead} ${firstItem(blocks[1])}`
+  }
+  const excerpt = firstSentence(lead)
+  return excerpt ? { title, excerpt } : null
 }
 
 /** Walk apps/docs/docs → Map<urlPath, {title, excerpt, anchors}>. */
@@ -382,6 +473,92 @@ function collectDocs() {
 /** The listed pages: every registry but the plugin subset reads only these. */
 function listedDocs(pages) {
   return new Map([...pages].filter(([, page]) => !page.unlisted))
+}
+
+// ── Linked sections ─────────────────────────────────────────────────────────
+
+// Where help call sites live. Read as files rather than through git so the
+// pre-commit check can run this generator in a scratch tree built from the
+// index (check-staged-docs-registries.mjs).
+const SOURCE_ROOTS = ['apps/console', 'libs']
+const SOURCE_SKIP = new Set(['node_modules', '.next', 'dist', 'out', 'coverage'])
+// Only a file that spells an anchor literal can link a section. The
+// pre-commit check copies the indexed files matching the same pattern into
+// its scratch tree — keep the two in step.
+const ANCHOR_LITERAL = /['"`]#[a-z0-9]/
+// How far past a topic key an anchor literal may sit and still be that
+// topic's: a call's override object, with a title and an excerpt before it.
+const LINK_REACH = 600
+
+/**
+ * The section tooltips worth carrying: every `(topic, '#anchor')` pair that a
+ * console or plugin source file names together (AGL-3707).
+ *
+ * All 2,400 headings' prose would be ~260 KB, and the plugin subset is
+ * imported synchronously by every plugin console — so only the sections
+ * something links to are emitted. The match is a file-level pair rather than
+ * a parse of each call shape (`docsHelp`, `pluginDocsHelp`, `help={{…}}`,
+ * `DocsHelpTip`, the notification-section table…): it can only over-include,
+ * which costs a few bytes, and a pair it misses still shows the page's text.
+ */
+function linkedSections(topicPaths, pages) {
+  const linked = new Map()
+  const visit = (file) => {
+    const source = readFileSync(file, 'utf8')
+    if (!ANCHOR_LITERAL.test(source)) return
+    const anchors = [
+      ...source.matchAll(/['"`](#[a-z0-9][a-z0-9-]*)['"`]/g),
+    ].map((m) => ({ anchor: m[1], at: m.index }))
+    for (const [key, path] of topicPaths) {
+      const page = pages.get(path)
+      for (const named of source.matchAll(new RegExp(`['"\`]${key}['"\`]`, 'g'))) {
+        // An anchor belongs to the topic named just before it — the shape of
+        // every call: `docsHelp('topic', { anchor: '#x' })`.
+        for (const { anchor, at } of anchors) {
+          if (at < named.index || at - named.index > LINK_REACH) continue
+          if (!page?.sections.has(anchor)) continue
+          if (!linked.has(key)) linked.set(key, new Set())
+          linked.get(key).add(anchor)
+        }
+      }
+    }
+  }
+  const walk = (dir) => {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (SOURCE_SKIP.has(entry.name)) continue
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (
+        /\.tsx?$/.test(entry.name) &&
+        !/\.(spec|test)\.tsx?$/.test(entry.name) &&
+        !entry.name.endsWith('.generated.ts')
+      ) {
+        visit(full)
+      }
+    }
+  }
+  for (const root of SOURCE_ROOTS) walk(join(ROOT, root))
+  return linked
+}
+
+/** `{ topic: { '#anchor': render(section) } }`, keys sorted for stable diffs. */
+function emitSectionMap(linked, topicPaths, pages, render) {
+  return [...linked.keys()]
+    .sort((a, b) => a.localeCompare(b))
+    .map((key) => {
+      const page = pages.get(topicPaths.get(key))
+      const rows = [...linked.get(key)]
+        .sort((a, b) => a.localeCompare(b))
+        .map((anchor) => `    ${tsString(anchor)}: ${render(page.sections.get(anchor))},`)
+      return `  ${key}: {\n${rows.join('\n')}\n  },`
+    })
+    .join('\n')
 }
 
 // ── Key derivation ──────────────────────────────────────────────────────────
@@ -456,7 +633,7 @@ function tsString(value) {
   return `'${escaped}'`
 }
 
-function emitConsole(pages, pathToKey) {
+function emitConsole(pages, pathToKey, linked) {
   const entries = [...pages.entries()]
     .map(([path, page]) => [pathToKey.get(path), path, page])
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -475,6 +652,11 @@ function emitConsole(pages, pathToKey) {
         `  ${key}: [${page.anchors.map(tsString).join(', ')}],`,
     )
     .join('\n')
+
+  const keyToPath = new Map(entries.map(([key, path]) => [key, path]))
+  const sectionTitles = emitSectionMap(linked, keyToPath, pages, (section) =>
+    tsString(section.title),
+  )
 
   return `${LICENSE}
 ${GENERATED_NOTE}
@@ -503,6 +685,16 @@ ${anchors}
   Record<DocsHelpTopicKey, readonly \`#\${string}\`[]>
 >
 
+// The heading each linked anchor opens on — the tooltip's title when a call
+// names an anchor and no title of its own (AGL-3707). Synchronous, like the
+// page titles, because it is the help button's accessible name. Only the
+// anchors something links to; see linkedSections() in the generator.
+export const DOCS_HELP_SECTION_TITLES: {
+  readonly [K in DocsHelpTopicKey]?: { readonly [anchor: \`#\${string}\`]: string }
+} = {
+${sectionTitles}
+}
+
 type AnchorMap = typeof DOCS_HELP_ANCHORS
 
 /** Valid heading anchors for a topic (\`never\` when the page has none). */
@@ -511,7 +703,7 @@ export type DocsHelpAnchor<K extends DocsHelpTopicKey> =
 `
 }
 
-function emitConsoleExcerpts(pages, pathToKey) {
+function emitConsoleExcerpts(pages, pathToKey, linked) {
   const entries = [...pages.entries()]
     .map(([path, page]) => [pathToKey.get(path), page])
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -519,6 +711,13 @@ function emitConsoleExcerpts(pages, pathToKey) {
   const excerpts = entries
     .map(([key, page]) => `  ${key}: ${tsString(page.excerpt)},`)
     .join('\n')
+
+  const keyToPath = new Map(
+    [...pages.keys()].map((path) => [pathToKey.get(path), path]),
+  )
+  const sectionExcerpts = emitSectionMap(linked, keyToPath, pages, (section) =>
+    tsString(section.excerpt),
+  )
 
   return `${LICENSE}
 ${GENERATED_NOTE}
@@ -541,6 +740,18 @@ import type { DocsHelpTopicKey } from './docs-help.generated'
 export const DOCS_HELP_EXCERPTS = {
 ${excerpts}
 } as const satisfies Record<DocsHelpTopicKey, string>
+
+/**
+ * The opening sentence under each linked heading — the tooltip's prose when a
+ * call names an anchor and no excerpt of its own (AGL-3707). Without it every
+ * anchor on a page printed that page's description, so one blurb stood in for
+ * twenty different cards.
+ */
+export const DOCS_HELP_SECTION_EXCERPTS: {
+  readonly [K in DocsHelpTopicKey]?: { readonly [anchor: \`#\${string}\`]: string }
+} = {
+${sectionExcerpts}
+}
 `
 }
 
@@ -592,7 +803,7 @@ export type BesignerDocsAnchor<K extends BesignerDocsKey> =
 `
 }
 
-function emitPlugins(pages) {
+function emitPlugins(pages, linked) {
   const entries = Object.entries(PLUGIN_TOPICS).sort((a, b) =>
     a[0].localeCompare(b[0]),
   )
@@ -624,6 +835,10 @@ function emitPlugins(pages) {
     )
     .join('\n')
 
+  const sectionTitles = emitSectionMap(linked, new Map(entries), pages, (section) =>
+    tsString(section.title),
+  )
+
   return `${LICENSE}
 ${GENERATED_NOTE}
 
@@ -650,6 +865,18 @@ export const PLUGIN_DOCS_ANCHORS = {
 ${anchors}
 } as const satisfies Partial<Record<PluginDocsKey, readonly \`#\${string}\`[]>>
 
+/**
+ * The heading each linked anchor opens on — the tooltip's title when a call
+ * names an anchor and no title of its own (AGL-3707). Synchronous because it
+ * is the help button's accessible name; the section's prose is in
+ * \`docs-help-sections.generated.ts\`, fetched when a tooltip opens.
+ */
+export const PLUGIN_DOCS_SECTION_TITLES: {
+  readonly [K in PluginDocsKey]?: { readonly [anchor: \`#\${string}\`]: string }
+} = {
+${sectionTitles}
+}
+
 type PluginAnchorMap = typeof PLUGIN_DOCS_ANCHORS
 
 /** Valid heading anchors for a plugin docs page (\`never\` when none). */
@@ -658,16 +885,51 @@ export type PluginDocsAnchor<K extends PluginDocsKey> =
 `
 }
 
+function emitPluginSectionExcerpts(pages, linked) {
+  const excerpts = emitSectionMap(
+    linked,
+    new Map(Object.entries(PLUGIN_TOPICS)),
+    pages,
+    (section) => tsString(section.excerpt),
+  )
+  return `${LICENSE}
+${GENERATED_NOTE}
+
+import type { PluginDocsKey } from './docs-help.generated'
+
+/**
+ * The opening sentence under each heading a plugin card links — that card's
+ * tooltip prose (AGL-3707).
+ *
+ * A module of its own because the plugin help subset is imported by every
+ * plugin console up front, and four hundred sections of prose are ~30 KB
+ * gzipped that no page needs until someone opens a tooltip.
+ * \`PluginDocsSectionExcerpt\` fetches this module when one does.
+ */
+export const PLUGIN_DOCS_SECTION_EXCERPTS: {
+  readonly [K in PluginDocsKey]?: { readonly [anchor: \`#\${string}\`]: string }
+} = {
+${excerpts}
+}
+`
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 
 const allPages = collectDocs()
 const pages = listedDocs(allPages)
 const pathToKey = assignKeys(pages)
+const consoleLinked = linkedSections(
+  new Map([...pages.keys()].map((path) => [pathToKey.get(path), path])),
+  pages,
+)
+const pluginLinked = linkedSections(new Map(Object.entries(PLUGIN_TOPICS)), allPages)
 const outputs = [
-  [CONSOLE_OUT, emitConsole(pages, pathToKey)],
-  [CONSOLE_EXCERPTS_OUT, emitConsoleExcerpts(pages, pathToKey)],
+  [CONSOLE_OUT, emitConsole(pages, pathToKey, consoleLinked)],
+  [CONSOLE_EXCERPTS_OUT, emitConsoleExcerpts(pages, pathToKey, consoleLinked)],
   [BESIGNER_OUT, emitBesigner(pages)],
-  [PLUGIN_OUT, emitPlugins(allPages)],
+  [PLUGIN_OUT, emitPlugins(allPages, pluginLinked)],
+  [PLUGIN_SECTIONS_OUT, emitPluginSectionExcerpts(allPages, pluginLinked)],
 ]
 
 const check = process.argv.includes('--check')

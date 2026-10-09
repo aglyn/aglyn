@@ -348,7 +348,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Health', href: buildRoute(Route.ADMIN_HEALTH) },
       ]}
-      help="platformHealth"
+      help={{ topic: 'platformHealth', anchor: '#health-board' }}
       header={{
         children: 'Platform Health',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },

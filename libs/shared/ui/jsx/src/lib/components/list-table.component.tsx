@@ -77,6 +77,12 @@ import {
  * and templates render inside something else and have no address to open, so
  * theirs is a **Preview** into the console's own canvas render.
  *
+ * **A preview or view quick action opens in a NEW TAB** (AGL-3660). It shows
+ * the reader something beside the list, not instead of it, so it must not
+ * take the list's tab — that is `href` (always a new tab) or `to` with
+ * `newTab: true`. `apps/console/specs/preview-links-open-in-new-tab.spec.ts`
+ * holds every eye-icon / Preview / View quick action to it.
+ *
  * The quick action is ALSO the menu's first entry — see
  * {@link quickActionMenuItem}. The icon alone is a glyph with a tooltip; the
  * menu is where every action on the row is spelled out, and an action missing
@@ -87,7 +93,8 @@ import {
  * The single trailing icon beside the overflow menu.
  *
  * Three shapes, because the destinations genuinely differ: an EXTERNAL live
- * page (new tab), an IN-APP preview route, and a plain handler for the rare
+ * page (always a new tab), an IN-APP route (a new tab with `newTab`, which a
+ * preview or view route always sets), and a plain handler for the rare
  * action that opens a dialog. `unavailableReason` is the fourth state and the
  * one most easily got wrong — a screen with no single live page (a collection
  * template renders under routes it does not own) must still show the control,
@@ -100,8 +107,15 @@ export interface ListQuickAction {
   label: string
   /** A live, external URL — opened in a new tab. */
   href?: string
-  /** An in-app route — a normal client navigation. */
+  /** An in-app route — a client navigation, or a new tab with `newTab`. */
   to?: string
+  /**
+   * Open `to` in a new tab (AGL-3660). Required on every Preview / View
+   * quick action: the reader is glancing at something beside the list, and
+   * taking the list's tab throws away their place in it. `href` is always a
+   * new tab and does not need it.
+   */
+  newTab?: boolean
   onClick?: () => void
   /**
    * Why this row cannot use the action. Renders it DISABLED with the reason as
@@ -135,13 +149,19 @@ function quickActionMenuItem(
     key: 'quick',
     label: quick.label,
     icon: <MdiIcon path={quick.icon} size={0.8} />,
-    // `href` is off-site and opens a new tab; `to` is an in-app route.
+    // `href` is off-site and opens a new tab; `to` is an in-app route,
+    // which a preview opens in a new tab too.
     href: quick.href ?? quick.to,
-    external: Boolean(quick.href),
+    external: opensInNewTab(quick),
     onClick: quick.href || quick.to ? undefined : quick.onClick,
     disabled: Boolean(quick.unavailableReason),
     disabledReason: quick.unavailableReason,
   }
+}
+
+/** Whether a quick action's destination opens in a tab of its own. */
+export function opensInNewTab(quick: ListQuickAction): boolean {
+  return Boolean(quick.href || (quick.to && quick.newTab))
 }
 
 /** The trailing cluster: one quick action, then the overflow menu. */
@@ -197,30 +217,16 @@ function ListQuickButton(props: {
       </Tooltip>
     )
   }
-  if (action.href) {
+  const destination = action.href ?? action.to
+  if (destination) {
     return (
       <Tooltip title={action.label}>
         <AppLink
           componentVariant="icon-button"
           size="small"
           aria-label={name}
-          href={action.href}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {icon}
-        </AppLink>
-      </Tooltip>
-    )
-  }
-  if (action.to) {
-    return (
-      <Tooltip title={action.label}>
-        <AppLink
-          componentVariant="icon-button"
-          size="small"
-          aria-label={name}
-          href={action.to}
+          href={destination}
+          newTab={opensInNewTab(action)}
         >
           {icon}
         </AppLink>

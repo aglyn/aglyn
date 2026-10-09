@@ -37,7 +37,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AI_JOB_PHASE_LABELS, aiJobKindNoun, aiJobPhase, type AiJobPhase } from '../model/ai-job-activity'
-import type { AiJobSummary } from '../model/ai-jobs.types'
+import { AI_JOB_KINDS, type AiJobSummary } from '../model/ai-jobs.types'
 import { publishAiJob } from './ai-jobs-store'
 import { useAiJobSite } from './ai-job-site'
 
@@ -85,6 +85,20 @@ export function aiJobNetCredits(job: Pick<AiJobSummary, 'creditsSpent' | 'refund
 export function aiJobKindLabel(kind: AiJobSummary['kind']): string {
   const noun = aiJobKindNoun(kind)
   return noun === 'AI job' ? noun : noun.charAt(0).toUpperCase() + noun.slice(1)
+}
+
+/**
+ * Every kind a row can name, in the kinds registry's order: the labels the
+ * rows' chips read, so the empty state never falls behind a new kind.
+ */
+export function aiJobKindLabels(): string[] {
+  const labels = AI_JOB_KINDS.map(aiJobKindLabel).filter((label) => label !== 'AI job')
+  return [...new Set(labels)]
+}
+
+/** `A, B and C`. */
+function listOf(items: readonly string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 type ListState =
@@ -199,13 +213,13 @@ export function AiJobsListPage({ hostId, basePath }: ConsolePluginPageProps) {
                 {'No AI jobs on this site yet'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {`An AI job is ${PLATFORM_BRAND_NAME} AI building something for this site from a short ` +
-                  'description you write: a page, a page template, a layout, a form or a reusable component. ' +
-                  'Each one gets a page here that shows its progress and what it built.'}
+                {`An AI job is ${PLATFORM_BRAND_NAME} AI making something for this site from a short ` +
+                  `description you write. Each job is one of these kinds: ${listOf(aiJobKindLabels())}. ` +
+                  'Each one gets a page here that shows its progress and what it made.'}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {'To start one, choose Create with AI on this site’s Pages, Templates, Layouts, Forms or ' +
-                  'Components page. A new site can also be built with AI when it is created.'}
+                {'To start one, choose Create with AI on any list that offers it, such as this site’s ' +
+                  'Pages or Forms. A new site can also be built with AI when it is created.'}
               </Typography>
             </Stack>
           </Card>

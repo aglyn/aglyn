@@ -190,4 +190,10 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     register: {"consoleApi":"registerFunnelsConsoleApi"},
     load: () => import('@aglyn/plugins-funnels/server'),
   },
+  {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"consoleApi":"registerLiveChatConsoleApi"},
+    load: () => import('@aglyn/plugins-live-chat/server'),
+  },
 ]

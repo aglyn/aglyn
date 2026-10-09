@@ -279,7 +279,7 @@ export function LocationsCard(props: LocationsCardProps) {
   return (
     <CardDisplay
       header={'Inventory locations'}
-      help={pluginDocsHelp('commerce', { anchor: '#inventory' })}
+      help={pluginDocsHelp('commerce', { anchor: '#inventory-locations' })}
       contentGutterX
       contentGutterY
     >

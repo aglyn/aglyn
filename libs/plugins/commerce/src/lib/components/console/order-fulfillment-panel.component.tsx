@@ -23,6 +23,7 @@ import {
   Chip,
   FormControlLabel,
   IconButton,
+  InputAdornment,
   Link,
   Stack,
   TextField,
@@ -58,7 +59,25 @@ export interface FulfillItemsSubmission {
   trackingNumber: string
   trackingUrl?: string
   labelUrl?: string
+  /**
+   * What sending the shipment cost, typed by hand (AGL-3705): integer minor
+   * units of the store's currency, 0 for free. Absent when the field was
+   * left empty (not known) or a label was applied, whose own cost is kept.
+   */
+  shippingCostCents?: number
   notify: boolean
+}
+
+/** The currency's symbol as the merchant reads it (`$`, `€`, `¥`), or its code. */
+function currencySymbol(currency: string): string {
+  try {
+    const part = new Intl.NumberFormat('en-US', { style: 'currency', currency })
+      .formatToParts(0)
+      .find((entry) => entry.type === 'currency')
+    return part?.value ?? currency
+  } catch {
+    return currency
+  }
 }
 
 /** The order a widget reads: the dialog's order in the zone's words. */
@@ -244,6 +263,8 @@ export interface FulfillItemsPanelProps {
   busy: boolean
   onSubmit: (submission: FulfillItemsSubmission) => Promise<boolean>
   onCancel: () => void
+  /** The store's currency (ISO 4217), which a hand-entered shipping cost is in. Default USD. */
+  currency?: string
   /** Draws the `orderFulfillment` zone with the panel's current selection. */
   renderZone?: (
     selection: ReadonlyArray<{ lineItemId: number; quantity: number }>,
@@ -257,6 +278,7 @@ export interface FulfillItemsPanelProps {
  */
 export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
   const { order, busy, onSubmit, onCancel, renderZone } = props
+  const currency = String(props.currency || 'USD').toUpperCase()
   const states = useMemo(() => CommerceModel.orderLineFulfillmentStates(order), [order])
   const [quantities, setQuantities] = useState<Record<number, number>>(() =>
     Object.fromEntries(
@@ -275,6 +297,12 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
   )
   const [tracking, setTracking] = useState({ carrier: '', trackingNumber: '', trackingUrl: '', labelUrl: '' })
   const [notify, setNotify] = useState(true)
+  const [shippingCost, setShippingCost] = useState('')
+  // A label applied by a widget carries its own cost, recorded where it was
+  // bought; the hand-entered field is for a shipment sent some other way.
+  const handEntered = !tracking.labelUrl
+  const cost = useMemo(() => CommerceModel.parseShippingCostInput(shippingCost, currency), [shippingCost, currency])
+  const costError = handEntered && 'error' in cost ? cost.error : null
   const [zoneKey, setZoneKey] = useState(0)
 
   const selection = useMemo(
@@ -320,6 +348,7 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
       trackingNumber: tracking.trackingNumber.trim(),
       ...(tracking.trackingUrl.trim() ? { trackingUrl: tracking.trackingUrl.trim() } : {}),
       ...(tracking.labelUrl ? { labelUrl: tracking.labelUrl } : {}),
+      ...(handEntered && 'cents' in cost && cost.cents !== null ? { shippingCostCents: cost.cents } : {}),
       notify,
     })
   }
@@ -388,6 +417,21 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
           {'Shipping label'}
         </Link>
       ) : null}
+      {handEntered ? (
+        <TextField
+          label="Shipping cost"
+          value={shippingCost}
+          onChange={(event) => setShippingCost(event.target.value)}
+          size="small"
+          sx={{ width: 220 }}
+          error={Boolean(costError)}
+          helperText={costError ?? `Optional. What sending this shipment cost you, in ${currency}.`}
+          slotProps={{
+            input: { startAdornment: <InputAdornment position="start">{currencySymbol(currency)}</InputAdornment> },
+            htmlInput: { inputMode: 'decimal' },
+          }}
+        />
+      ) : null}
       {renderZone ? renderZone(selection, applyTracking) : null}
       <FormControlLabel
         control={<Checkbox checked={notify} onChange={(event) => setNotify(event.target.checked)} />}
@@ -401,7 +445,7 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
           size="small"
           variant="contained"
           color="primary"
-          disabled={busy || selection.length === 0}
+          disabled={busy || selection.length === 0 || Boolean(costError)}
           onClick={submit}
         >
           {'Fulfill'}

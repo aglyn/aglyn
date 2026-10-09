@@ -20,7 +20,7 @@ import { createResourceUid, pluginDocsHelp } from '@aglyn/aglyn'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   mdiDeleteOutline,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -312,7 +312,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
     {
       key: 'details',
       label: 'Open details',
-      icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+      icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
       href: listHref(list),
     },
     {

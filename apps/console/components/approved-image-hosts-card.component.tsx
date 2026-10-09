@@ -39,7 +39,7 @@ import {
   APPROVED_IMAGE_HOSTS_MAX,
   normalizeApprovedImageHost,
 } from '../../../security-origins'
-import { docsHelp } from '../constants/docs-links'
+import { docsHelp, type DocsHelpAnchor } from '../constants/docs-links'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 /**
@@ -97,6 +97,21 @@ export type ApprovedImageHostsCardProps = ApprovedHostsCardProps
  * copy of the hostname rules here is how the promise and the policy drift, and
  * the visible symptom would be an entry that looks accepted and never works.
  */
+/**
+ * Each list's own docs section (AGL-3707). They used to share one anchor and
+ * one sentence about images, so the font, form, embed and connection cards
+ * all explained the image list.
+ */
+const FIELD_HELP_ANCHOR: Record<ApprovedHostsField, DocsHelpAnchor<'media'>> =
+  {
+    approvedImageHosts: '#approved-image-hosts',
+    approvedMediaHosts: '#approved-media-hosts',
+    approvedFontHosts: '#approved-font-hosts',
+    approvedFormActions: '#approved-form-destinations',
+    approvedFrameHosts: '#approved-embeds',
+    approvedConnectHosts: '#approved-connections',
+  }
+
 export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
   const {
     hostId,
@@ -191,17 +206,16 @@ export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
   return (
     <CardDisplay
       header={header}
-      help={docsHelp('media', {
-        title: header,
-        excerpt:
-          'Images loaded from another site are blocked unless you approve the host here. Your own uploads always work.',
-        // The renamed tooltip has to open the SECTION, not the top of a page
-        // about the media library generally (AGL-1918).
-        // Every one of these cards points at the same docs section: there is
-        // one page about approving hosts, and inventing per-directive anchors
-        // that do not exist would open the docs at the top instead (AGL-1918).
-        anchor: '#approved-image-hosts',
-      })}
+      help={
+        field === 'approvedImageHosts'
+          ? docsHelp('media', {
+              anchor: FIELD_HELP_ANCHOR[field],
+              excerpt:
+                'Images loaded from another site are blocked unless you ' +
+                'approve the host here. Your own uploads always work.',
+            })
+          : docsHelp('media', { anchor: FIELD_HELP_ANCHOR[field] })
+      }
       contentGutterX
       contentGutterY
     >

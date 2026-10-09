@@ -60,6 +60,21 @@ class ConsoleApiClientTest {
   }
 
   @Test
+  fun sendsARawBodyAsItsBytesWithItsOwnContentType() = runTest {
+    var seenType: String? = null
+    var seenBytes: ByteArray? = null
+    val engine = MockEngine { request ->
+      seenType = (request.body.contentType ?: io.ktor.http.ContentType.parse(request.headers["Content-Type"].orEmpty())).toString()
+      seenBytes = (request.body as io.ktor.http.content.OutgoingContent.ByteArrayContent).bytes()
+      respond("""{"ok":true}""", HttpStatusCode.OK, json)
+    }
+    val api = ConsoleApiClient(origin = "https://app.example.com/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    api.request("/api/fonts/prepare", ApiMethod.POST, query = mapOf("hostId" to "h"), rawBody = RawBody(byteArrayOf(1, 2, 3), "application/octet-stream"))
+    assertEquals("application/octet-stream", seenType)
+    assertEquals(listOf<Byte>(1, 2, 3), seenBytes!!.toList())
+  }
+
+  @Test
   fun refreshesTheTokenOnceOnA401() = runTest {
     val harness = Harness(mutableListOf({ _ -> 401 to "{}" }, { _ -> 200 to "{}" }))
     client(harness).request("/api/things")

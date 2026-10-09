@@ -94,14 +94,6 @@
         "ProductVariant"
       ]
     },
-    "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts": {
-      "types": [
-        "FirstPartyPlugin"
-      ],
-      "values": [
-        "FIRST_PARTY_PLUGINS"
-      ]
-    },
     "libs/aglyn/src/lib/app-utils/site-list-query.ts": {
       "values": [
         "SITE_LIST_DECLARATION",
@@ -573,6 +565,14 @@
         "DROP_OFF_WAIT_HOURS",
         "DROP_OFF_MAX_HOURS",
         "DROP_OFF_WATCHES_MAX"
+      ]
+    },
+    "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts": {
+      "types": [
+        "FirstPartyPlugin"
+      ],
+      "values": [
+        "FIRST_PARTY_PLUGINS"
       ]
     }
   },
@@ -2402,246 +2402,50 @@
         ]
       ]
     },
-    "resolveEnabledPlugins": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          null
-        ],
-        [
-          {}
-        ],
-        [
-          {
-            "enabledPlugins": []
-          }
-        ],
-        [
-          {
-            "enabledPlugins": [
-              "crm",
-              "commerce",
-              "crm"
-            ]
-          }
-        ],
-        [
-          {
-            "enabledPlugins": [
-              "accounts",
-              "commerce",
-              "bookings"
-            ]
-          }
-        ]
-      ]
-    },
-    "resolveHostEnabledPlugins": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+    "resolveStaffRoleGate": {
+      "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
       "args": [
         [
           null,
-          null
-        ],
-        [
-          {
-            "enabledPlugins": [
-              "commerce",
-              "accounts",
-              "crm"
-            ]
-          },
-          null
-        ],
-        [
-          {
-            "enabledPlugins": [
-              "commerce",
-              "accounts",
-              "crm"
-            ]
-          },
-          {
-            "enabledPlugins": [
-              "accounts"
-            ]
-          }
-        ],
-        [
-          {
-            "enabledPlugins": [
-              "commerce",
-              "accounts",
-              "crm"
-            ]
-          },
-          {
-            "disabledPlugins": [
-              "crm",
-              "mui",
-              "forms"
-            ],
-            "enabledPlugins": [
-              "accounts"
-            ]
-          }
-        ],
-        [
-          null,
-          {
-            "disabledPlugins": [
-              "accounts"
-            ],
-            "enabledPlugins": [
-              "accounts"
-            ]
-          }
-        ]
-      ]
-    },
-    "resolvePluginSiteState": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "argsProduct": [
-        [
-          null,
-          {
-            "enabledPlugins": [
-              "commerce",
-              "accounts"
-            ]
-          }
-        ],
-        [
-          null,
-          {
-            "disabledPlugins": [
-              "crm"
-            ]
-          },
-          {
-            "enabledPlugins": [
-              "accounts"
-            ]
-          },
-          {
-            "disabledPlugins": [
-              "accounts"
-            ]
-          }
-        ],
-        [
-          "mui",
-          "forms",
-          "crm",
-          "accounts",
-          "commerce"
-        ]
-      ]
-    },
-    "resolveDisableCascade": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          "commerce",
           [
-            "commerce",
-            "accounts",
-            "crm"
+            "super"
           ]
         ],
         [
-          "commerce",
+          "super",
           [
-            "commerce",
-            "crm"
+            "super"
           ]
         ],
         [
-          "crm",
+          "support",
           [
-            "crm"
+            "super"
           ]
         ],
         [
-          "mui",
+          "billing",
           [
-            "mui",
-            "commerce",
-            "accounts"
+            "super",
+            "billing"
           ]
-        ]
-      ]
-    },
-    "pluginRequirements": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          "accounts"
         ],
         [
-          "commerce"
+          "support",
+          [
+            "super",
+            "billing"
+          ]
         ],
         [
-          "nope"
-        ]
-      ]
-    },
-    "pluginDependents": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          "commerce"
+          "",
+          [
+            "super"
+          ]
         ],
         [
-          "accounts"
-        ],
-        [
-          "crm"
-        ]
-      ]
-    },
-    "isLockedOnForWorkspace": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          "mui"
-        ],
-        [
-          "forms"
-        ],
-        [
-          "crm"
-        ],
-        [
-          "fonts"
-        ]
-      ]
-    },
-    "isLockedOnForSite": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          "mui"
-        ],
-        [
-          "forms"
-        ],
-        [
-          "fonts"
-        ],
-        [
-          "crm"
-        ]
-      ]
-    },
-    "isDefaultOffPerSite": {
-      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "args": [
-        [
-          "accounts"
-        ],
-        [
-          "crm"
+          "super",
+          []
         ]
       ]
     },
@@ -8963,6 +8767,249 @@
         ]
       ]
     },
+    "resolveEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "enabledPlugins": []
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "crm",
+              "commerce",
+              "crm"
+            ]
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "accounts",
+              "commerce",
+              "bookings"
+            ]
+          }
+        ]
+      ]
+    },
+    "resolveHostEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          null,
+          null
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          null
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          {
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          {
+            "disabledPlugins": [
+              "crm",
+              "mui",
+              "forms"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "disabledPlugins": [
+              "accounts"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ]
+      ]
+    },
+    "resolvePluginSiteState": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "argsProduct": [
+        [
+          null,
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "disabledPlugins": [
+              "crm"
+            ]
+          },
+          {
+            "enabledPlugins": [
+              "accounts"
+            ]
+          },
+          {
+            "disabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          "mui",
+          "forms",
+          "crm",
+          "accounts",
+          "commerce"
+        ]
+      ]
+    },
+    "resolveDisableCascade": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "commerce",
+          [
+            "commerce",
+            "accounts",
+            "crm"
+          ]
+        ],
+        [
+          "commerce",
+          [
+            "commerce",
+            "crm"
+          ]
+        ],
+        [
+          "crm",
+          [
+            "crm"
+          ]
+        ],
+        [
+          "mui",
+          [
+            "mui",
+            "commerce",
+            "accounts"
+          ]
+        ]
+      ]
+    },
+    "pluginRequirements": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "commerce"
+        ],
+        [
+          "nope"
+        ]
+      ]
+    },
+    "pluginDependents": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "commerce"
+        ],
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "isLockedOnForWorkspace": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "crm"
+        ],
+        [
+          "fonts"
+        ]
+      ]
+    },
+    "isLockedOnForSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "fonts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "isDefaultOffPerSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
     "buyerNotificationEnabled": {
       "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
       "args": [
@@ -9024,6 +9071,170 @@
             "texts": null
           },
           "texts"
+        ]
+      ]
+    },
+    "describeRestockCheck": {
+      "module": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "args": [
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": true,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": true,
+            "units": 1,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "chargeback",
+            "fullyReversed": true,
+            "units": 1,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "chargeback",
+            "fullyReversed": false,
+            "units": 3,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {
+            "refundedLineItemIds": [
+              0
+            ]
+          }
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug"
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 1,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {
+            "refundedLineItemIds": [
+              0
+            ]
+          }
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              },
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 1
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {
+            "refundedLineItemIds": [
+              0
+            ]
+          }
+        ],
+        [
+          {
+            "kind": "refund",
+            "fullyReversed": false,
+            "units": 2,
+            "lines": [
+              {
+                "productId": "p1",
+                "variantId": "v1",
+                "quantity": 1,
+                "name": "Mug",
+                "lineIndex": 0
+              }
+            ],
+            "flaggedAtMs": 1000
+          },
+          {}
         ]
       ]
     },

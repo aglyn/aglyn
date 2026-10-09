@@ -3169,6 +3169,194 @@
         }
       ]
     },
+    "describeRestockCheck": {
+      "module": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": true,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "2 units may need restocking after this refund."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": true,
+              "units": 1,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "1 unit may need restocking after this refund."
+        },
+        {
+          "args": [
+            {
+              "kind": "chargeback",
+              "fullyReversed": true,
+              "units": 1,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "1 unit may need restocking after this chargeback. The shopper kept the goods unless they actually came back."
+        },
+        {
+          "args": [
+            {
+              "kind": "chargeback",
+              "fullyReversed": false,
+              "units": 3,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {
+              "refundedLineItemIds": [
+                0
+              ]
+            }
+          ],
+          "result": "3 units may need restocking after this chargeback. The shopper kept the goods unless they actually came back. Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug"
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "2 units may need restocking after this refund. Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 1,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {
+              "refundedLineItemIds": [
+                0
+              ]
+            }
+          ],
+          "result": "1 unit may need restocking after this refund. Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                },
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 1
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {
+              "refundedLineItemIds": [
+                0
+              ]
+            }
+          ],
+          "result": "2 units may need restocking after this refund. Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+        },
+        {
+          "args": [
+            {
+              "kind": "refund",
+              "fullyReversed": false,
+              "units": 2,
+              "lines": [
+                {
+                  "productId": "p1",
+                  "variantId": "v1",
+                  "quantity": 1,
+                  "name": "Mug",
+                  "lineIndex": 0
+                }
+              ],
+              "flaggedAtMs": 1000
+            },
+            {}
+          ],
+          "result": "2 units may need restocking after this refund. Only part of the money came back, so these units are an upper bound — only you know which goods returned."
+        }
+      ]
+    },
     "describeVariantComparison": {
       "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
       "cases": [
@@ -13004,6 +13192,106 @@
             "commerce"
           ],
           "result": "runs-here"
+        }
+      ]
+    },
+    "resolveStaffRoleGate": {
+      "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": false,
+            "ready": false
+          }
+        },
+        {
+          "args": [
+            "super",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": true,
+            "blocked": false,
+            "ready": true
+          }
+        },
+        {
+          "args": [
+            "support",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "billing",
+            [
+              "super",
+              "billing"
+            ]
+          ],
+          "result": {
+            "admitted": true,
+            "blocked": false,
+            "ready": true
+          }
+        },
+        {
+          "args": [
+            "support",
+            [
+              "super",
+              "billing"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super or billing staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "",
+            [
+              "super"
+            ]
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the super staff role. Ask someone who holds it."
+          }
+        },
+        {
+          "args": [
+            "super",
+            []
+          ],
+          "result": {
+            "admitted": false,
+            "blocked": true,
+            "ready": true,
+            "reason": "This action requires the  staff role. Ask someone who holds it."
+          }
         }
       ]
     },

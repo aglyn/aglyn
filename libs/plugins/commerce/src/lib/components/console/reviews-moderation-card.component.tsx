@@ -50,12 +50,7 @@ export interface ReviewsModerationCardProps {
  * moderation queue whose approvals the renderer would never honour.
  */
 
-const reviewsHelp = pluginDocsHelp('catalog', {
-  anchor: '#products-options-and-variants',
-  excerpt:
-    'Customer reviews left on your products, waiting for you to ' +
-    'publish or reject them.',
-})
+const reviewsHelp = pluginDocsHelp('catalog', { anchor: '#product-reviews' })
 
 export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props

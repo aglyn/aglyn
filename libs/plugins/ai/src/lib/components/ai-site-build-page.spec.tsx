@@ -57,6 +57,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
   AI_SITE_ITEM_HINT,
+  AI_SITE_LOOK_HINT,
   AI_SITE_PAGE_HINT,
   AI_SITE_PLAN_HINT,
   aiJobPageCopy,
@@ -554,6 +555,46 @@ describe('a guided start, snapshot by snapshot (AGL-3596)', () => {
     expect(await screen.findByText(AI_SITE_PAGE_HINT)).toBeTruthy()
     expect(screen.getByText('Writing: hero, services')).toBeTruthy()
     expect(screen.getAllByRole('img', { name: 'Waiting' })).toHaveLength(2)
+  })
+
+  it('shows the look as the active row while it is designed, before the ledger exists, and done once it does (AGL-3660)', () => {
+    // The scaffold writes its ledger only with the look's own outcome, so
+    // while the look is designed the job has a plan and no items.
+    const designing = aiSiteBuildRows(SNAPSHOTS[4][1])
+    expect(designing.map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Designing your look', 'active'],
+      ['Building the header and footer: Main Layout', 'waiting'],
+      ['Building the form: Contact Request Form', 'waiting'],
+      ['Writing page 1 of 2: Home', 'waiting'],
+      ['Writing page 2 of 2: Contact', 'waiting'],
+      ['Publishing your site', 'waiting'],
+    ])
+    expect(designing[1]).toMatchObject({ id: 'look', hint: AI_SITE_LOOK_HINT, startedAt: '2026-10-07T17:12:08.000Z' })
+    // Confirmed and queued for its first pass: the look is next, and still the one shown as in progress.
+    expect(aiSiteBuildRows(SNAPSHOTS[3][1])[1]).toMatchObject({ label: 'Designing your look', state: 'active' })
+    // Once its pass writes the ledger, the look is done and the layout is on.
+    const after = aiSiteBuildRows(
+      job({
+        ...(SNAPSHOTS[6][1] as object),
+        items: [item('t', 'theme', 'Your look', 'succeeded', { settledAt: '2026-10-07T17:12:20.000Z' }), ...ledger('pending').map((one) => (one.slot === 'l' || one.slot === 'f' ? { ...one, status: 'pending', settledAt: undefined } : one))],
+      } as never),
+    )
+    expect(after.slice(0, 3).map((row) => [row.label, row.state])).toEqual([
+      ['Planning your pages', 'done'],
+      ['Designing your look', 'done'],
+      ['Building the header and footer: Main Layout', 'active'],
+    ])
+    // A job paused by the meter before its look reads paused there, not waiting.
+    const paused = aiSiteBuildRows(job({ ...(SNAPSHOTS[4][1] as object), status: 'needs_input', running: false } as never))
+    expect(paused[1]).toMatchObject({ label: 'Designing your look', state: 'paused' })
+  })
+
+  it('draws the look’s row as in progress, with its hint', async () => {
+    await open(SNAPSHOTS[4][1])
+    expect(await screen.findByText(AI_SITE_LOOK_HINT)).toBeTruthy()
+    const row = screen.getByText('Designing your look').closest('li') as HTMLElement
+    expect(row.querySelector('[aria-label="In progress"]')).toBeTruthy()
   })
 
   it('reads a plan parked past the confirmation’s grace as what it is', () => {

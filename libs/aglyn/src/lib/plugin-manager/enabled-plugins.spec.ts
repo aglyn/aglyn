@@ -22,6 +22,7 @@ import {
   DEFAULT_ENABLED_PLUGINS,
   FIRST_PARTY_PLUGINS,
   filterPluginsByReleaseFlags,
+  isDefaultOffPerSite,
   isFirstPartyPlugin,
   isHostPluginEnabled,
   isLockedOnForSite,
@@ -121,13 +122,11 @@ describe('resolveHostEnabledPlugins (AGL-1014)', () => {
   })
 
   it('defaults to the full org set: absent deny-list disables nothing', () => {
+    // Nothing but the default-off ids (AGL-2486), which a site opts into.
     const org = { enabledPlugins: ['bookings', 'acme-widgets'] }
-    expect(resolveHostEnabledPlugins(org, undefined)).toEqual(
-      resolveEnabledPlugins(org),
-    )
-    expect(resolveHostEnabledPlugins(org, {})).toEqual(
-      resolveEnabledPlugins(org),
-    )
+    const expected = resolveEnabledPlugins(org).filter((id) => !isDefaultOffPerSite(id))
+    expect(resolveHostEnabledPlugins(org, undefined)).toEqual(expected)
+    expect(resolveHostEnabledPlugins(org, {})).toEqual(expected)
   })
 
   it('is narrow-only: a host id outside the org set cannot widen it', () => {
@@ -177,8 +176,11 @@ describe('resolveHostEnabledPlugins (AGL-1014)', () => {
  * existed has no such entry, so nothing needs migrating and nothing turns off.
  */
 describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-3029)', () => {
+  // A plugin on for every workspace and OFF for a site until it opts in (live
+  // chat, AGL-3698) has its own block below: every case here is about the
+  // site switch defaulting on.
   const WORKSPACE_LOCKED = FIRST_PARTY_PLUGINS.filter(
-    (plugin) => plugin.alwaysOnForWorkspace,
+    (plugin) => plugin.alwaysOnForWorkspace && !plugin.defaultOffPerSite,
   ).map((plugin) => plugin.id)
 
   it('is exactly the plugins whose workspace half carries no site', () => {
@@ -379,5 +381,38 @@ describe('classifyEnabledPlugins / isFirstPartyPlugin (AGL-777)', () => {
 
   it('handles the empty list', () => {
     expect(classifyEnabledPlugins([])).toEqual({ bundles: [], listings: [] })
+  })
+})
+
+/**
+ * On for every workspace, and OFF for a site until that site turns it on
+ * (AGL-3698): live chat. No workspace switch to find, and nothing reaches a
+ * site that did not ask — its page enricher and the policy verdict read no
+ * settings for any other site.
+ */
+describe('a plugin on for every workspace and opt-in per site (AGL-3698)', () => {
+  const OPT_IN = FIRST_PARTY_PLUGINS.filter(
+    (plugin) => plugin.alwaysOnForWorkspace && plugin.defaultOffPerSite,
+  ).map((plugin) => plugin.id)
+
+  it('is live chat alone', () => {
+    expect(OPT_IN).toEqual(['live-chat'])
+  })
+
+  it('runs for every workspace, whatever list it stored', () => {
+    expect(resolveEnabledPlugins({ enabledPlugins: [] })).toContain('live-chat')
+    expect(isLockedOnForWorkspace('live-chat')).toBe(true)
+    expect(isLockedOnForSite('live-chat')).toBe(false)
+  })
+
+  it('is off for a site that never asked, on for one that did, and a deny still wins', () => {
+    const org = { enabledPlugins: ['mui'] }
+    for (const host of [undefined, null, {}, { enabledPlugins: [] }, { disabledPlugins: [] }]) {
+      expect(isHostPluginEnabled(org, host, 'live-chat')).toBe(false)
+    }
+    expect(isHostPluginEnabled(org, { enabledPlugins: ['live-chat'] }, 'live-chat')).toBe(true)
+    expect(
+      isHostPluginEnabled(org, { enabledPlugins: ['live-chat'], disabledPlugins: ['live-chat'] }, 'live-chat'),
+    ).toBe(false)
   })
 })

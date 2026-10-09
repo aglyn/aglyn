@@ -75,6 +75,74 @@ the console suggests an available variation.
   they see the light mode logo.
 - **Billing** — the plan and usage meters that gate features and quotas.
 
+## Your site's details {#site-details}
+
+A site's **Setup** page opens on its details: what the site is called, where it is
+served from, and how it presents itself. The cards below are the ones to fill in first.
+
+### Basic details {#basic-details}
+
+The **Basic details** card names your site, sets its Aglyn address and picks the time
+zone its dates are read in — fill in a display name and a subdomain, then press
+**Update**.
+
+- **Display name** — what the site is called in the console. See [below](#display-name).
+- **Subdomain** — the site's address on Aglyn. See [below](#subdomain).
+- **Time zone** — the day a published post is dated on this site. Leave it unset and the
+  site follows your workspace's time zone; clear it with the **✕** to go back to that.
+
+### Display name {#display-name}
+
+The **Display name** is what the site is called inside the console — the site switcher,
+breadcrumbs, the Sites list and notifications — up to 30 characters. Visitors never see
+it: the title in their browser tab is your site's SEO **Title**, set under
+**Setup → SEO**.
+
+### Subdomain {#subdomain}
+
+The **Subdomain** is your site's free address, up to 15 characters, and it works from
+the moment the site exists. On aglyn.com it is the `name` in `name.aglyn.app`. It keeps
+working after you [connect your own domain](../building-sites/custom-domains/connect-a-domain.md).
+Changing it changes that address, so links to the old one stop working.
+
+### Site logo {#site-logo}
+
+The **Site logo** card sets your brand mark: pick a **Light mode** logo from your media
+library — an SVG, or a PNG at least 400px wide — and add a **Dark mode** one if yours is
+hard to see on a dark background. Your live site shows it on the loading overlay between
+pages, and on error pages; without a logo it shows the site name instead, and dark-mode
+visitors see the light logo when no dark one is set.
+
+### Emails this site sends {#site-emails}
+
+**Setup → Emails** lists the emails your site sends its own customers, grouped by the
+feature that sends them. Press **Design** to make one your own in the Besigner, **Edit** to change one you
+have customized, and **Reset to default** to go back to the built-in design. A group
+marked *Not enabled on this site* sends nothing until that feature is switched on.
+
+## Site Admin {#site-admin}
+
+**Site Admin** holds the controls only a site's owners and admins should touch, kept
+apart from Setup so a collaborator never trips over them. Open it from the site
+navigation; its sections are:
+
+- **General** — the site's basic details.
+- **Plugins** — which of the workspace's plugins run on this site. See
+  [Plugins on one site](../guides/install-your-first-plugin.md#site-plugins).
+- **Custom Domain** — [connect your own domain](../building-sites/custom-domains/connect-a-domain.md).
+- **Security** — who can reach the site.
+- **Error pages** — the [pages shown when something goes wrong](../building-sites/site-protection/error-screens.md).
+- **Activity** — the full log of changes made to the site.
+- **Backup & template** — [download a backup or import a package](../building-sites/site-backup-and-packages.md).
+- **Danger zone** — deleting the site.
+
+### Who can open Site Admin {#who-can-open-site-admin}
+
+Only a site's **admins** can open Site Admin; anyone else who follows a link to it is
+told so instead of seeing the sections. To get in, ask a site admin or a workspace owner
+to raise your role on this site — see
+[Teams & roles](../workspace-and-billing/teams-and-roles/overview.md).
+
 ## Switching between sites
 
 Use the site switcher in the app bar at any time. It lists your most recently used sites

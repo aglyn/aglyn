@@ -28,7 +28,22 @@ for the how-to.
   the account could not take waits on the card with a Send again button.
 -->
 
-## October 2026 — a self-service kiosk (newest)
+## October 2026 — live chat with Tidio or LiveChat (newest)
+
+- **[Live chat](building-sites/live-chat.md)** — chat with your visitors through your
+  own Tidio or LiveChat account. Paste the key from its install code, choose the pages
+  it shows on, and a chat button appears on your site. The chat loads only when a
+  visitor presses the button, so it never slows your pages; you can also have it load
+  with the page for visitors who allowed analytics. Included on every plan.
+
+## October 2026 — shipping cost on a hand-entered shipment
+
+- **[Shipping cost](commerce-and-bookings/commerce/orders-and-returns.md#fulfillment)** —
+  the Fulfill items panel takes an optional shipping cost for a shipment you enter by
+  hand, in your store's currency, one per shipment. A Faire order sends it to Faire as
+  the shipping you paid, the same way a label bought in Aglyn already does.
+
+## October 2026 — a self-service kiosk
 
 - **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
   pair a tablet to a register and let customers order themselves: products by
@@ -142,7 +157,7 @@ for the how-to.
 
 <!--
   AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
-  deployment has its Intuit or Xero app credentials. This entry is held unpublished, like
+  deployment has its Intuit or Xero app credentials, or a Codat API key (AGL-3636, AGL-3701). This entry is held unpublished, like
   the two guides it links (`unlisted: true`): when the flag is switched on, remove this
   comment's markers, move "(newest)" here from the heading below, and delete
   `unlisted: true` from commerce-and-bookings/commerce/connect-quickbooks-online.md and
@@ -151,7 +166,8 @@ for the how-to.
 ## October 2026 — accounting sync
 
 - **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
-  or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,
+  or [Xero](commerce-and-bookings/commerce/connect-xero.md) — or, where offered, QuickBooks
+  Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave — and every paid order, refund,
   Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
   choose: a sales receipt (or invoice and payment) per order, or one summary journal a
   day. Set a start date to bring in earlier sales; anything the ledger refuses waits

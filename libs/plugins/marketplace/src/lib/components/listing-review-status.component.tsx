@@ -216,10 +216,7 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
     <CardDisplay
       header={'Review status'}
       help={pluginDocsHelp('publisherHandbook', {
-        anchor: '#review-what-happens-after-you-publish',
-        excerpt:
-          'What state each version is in, which one installs today, and why ' +
-          'anything was sent back.',
+        anchor: '#watching-your-own-submission',
       })}
       contentGutterX
       contentGutterY

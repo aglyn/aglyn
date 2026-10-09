@@ -43,7 +43,7 @@ export function registerAccountingConsoleServerDeclarations(): void {
       id: ACCOUNTING_SYNC_JOB_ID,
       label: 'Accounting sync',
       drives:
-        'Posts each connected workspace’s sales, refunds, fees and payouts to QuickBooks Online or Xero, keeps each ledger grant from expiring, and runs backfills. If it stops, nothing reaches the books and an idle grant lapses after 60 days (Xero) or 100 (QuickBooks).',
+        'Posts each connected workspace’s sales, refunds, fees and payouts to QuickBooks Online, Xero or the accounting software it reaches through Codat, keeps each ledger grant from expiring, and runs backfills. If it stops, nothing reaches the books and an idle grant lapses after 60 days (Xero) or 100 (QuickBooks).',
       run: async (context) => {
         const [{ runAccountingSyncJob }, { defaultAccountingJobDeps }] = await Promise.all([
           import('./server/sync-job'),

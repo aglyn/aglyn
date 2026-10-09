@@ -170,6 +170,12 @@
       "@aglyn/plugins-couriers/*": [
         "../../libs/plugins/couriers/src/lib/*"
       ],
+      "@aglyn/plugins-live-chat": [
+        "../../libs/plugins/live-chat/src/index.ts"
+      ],
+      "@aglyn/plugins-live-chat/*": [
+        "../../libs/plugins/live-chat/src/lib/*"
+      ],
       "@aglyn/plugins-fulfillment-networks": [
         "../../libs/plugins/fulfillment-networks/src/index.ts"
       ],
