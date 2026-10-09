@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.236 — 2026-10-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/99362d865...v1.0.0-beta.236)
+
+### Fixed
+
+- **auth:** no workspace claim starts while the console is leaving ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **canary:** a missing workspace reports the held name and the page trace ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+
 ## v1.0.0-beta.235 — 2026-10-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.234...v1.0.0-beta.235)

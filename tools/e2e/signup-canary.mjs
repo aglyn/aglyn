@@ -738,6 +738,22 @@ async function walk(page, db, auth, identity, created) {
   }
   const url = page.url()
   if (!orgs || orgs.size === 0) {
+    // Whether the held name was claimed (null) or never touched (still set)
+    // separates "the claim never ran" from "the create lost it" (AGL-3690).
+    const held = await db
+      .collection('users')
+      .doc(created.uid)
+      .get()
+      .then((snap) =>
+        snap.exists
+          ? JSON.stringify(snap.get('pendingSignUpWorkspace') ?? null).slice(0, 120)
+          : 'no user doc',
+      )
+      .catch((error) => `unreadable: ${String(error).slice(0, 60)}`)
+    console.log(`\n    held name at failure: ${held}`)
+    for (const line of (page.walkTrace ?? []).slice(-40)) {
+      console.log(`    trace: ${line}`)
+    }
     const title = await page.title().catch(() => '(unreadable)')
     const seen = (await page.innerText('body').catch(() => ''))
       .replace(/\s+/g, ' ')
@@ -1029,6 +1045,30 @@ async function main() {
         self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
       }, debugToken)
       const page = await context.newPage()
+      /**
+       * What the page did, kept for the no-workspace failure (AGL-3690): the
+       * workspace create's answer, and the console's own errors. A failed
+       * walk that says only "0 workspaces" cannot tell a claim that never ran
+       * from a create that was refused.
+       */
+      page.walkTrace = []
+      page.on('console', (message) => {
+        if (message.type() === 'error' || message.type() === 'warning') {
+          page.walkTrace.push(`console.${message.type()}: ${message.text().slice(0, 160)}`)
+        }
+      })
+      page.on('response', (response) => {
+        const u = new URL(response.url())
+        if (u.pathname === '/api/orgs/create' || u.pathname.startsWith('/api/edit-hint/')) {
+          page.walkTrace.push(`${response.request().method()} ${u.host}${u.pathname} → ${response.status()}`)
+        }
+      })
+      page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame()) {
+          const u = new URL(frame.url())
+          page.walkTrace.push(`nav ${u.host}${u.pathname}`)
+        }
+      })
       done()
 
       outcome = await walk(page, db, auth, identity, created)
