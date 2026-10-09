@@ -155,7 +155,7 @@ export async function resolvePluginOrderEmailCopies(
         if (answer === 'late') {
           // It may still claim something after the deadline: tell it the
           // message went without it once it does.
-          void pending.then((copy) => copy?.settle?.(false).catch(() => undefined))
+          void pending.then((copy): void => void copy?.settle?.(false).catch((): undefined => undefined))
           return null
         }
         return answer

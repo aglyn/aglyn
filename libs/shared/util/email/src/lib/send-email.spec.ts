@@ -288,7 +288,7 @@ describe('sendEmail', () => {
         subject: 'Hi',
         text: 'Body',
         bcc: 'copy@example.com',
-        marketing: { hostId: 'host_1', siteBase: 'https://shop.example.com' },
+        marketing: { hostId: 'host_1', siteBase: 'https://shop.example.com', consentHostIds: ['host_1'], consentAwaitsConfirmation: false },
       })
       expect(result).toMatchObject({ sent: false, reason: 'no-recipient' })
       expect(fetchMock).not.toHaveBeenCalled()
