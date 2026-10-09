@@ -20,6 +20,7 @@ import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.marketplace.registerMarketplaceNative
 import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
+import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
 
 object NativePluginManifest {
@@ -93,6 +94,11 @@ object NativePluginManifest {
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "sms",
+            contributes = mapOf("screens" to listOf("sms.texts"), "quickActions" to listOf("sms.open")),
+            register = ::registerSmsNative,
         ),
         NativePluginManifestEntry(
             id = "workflows",

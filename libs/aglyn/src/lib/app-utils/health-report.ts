@@ -2413,6 +2413,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Looks up every live page’s outside links against Google Web Risk again, and holds a page whose link has been listed since it went live; a new workspace’s page also gets its security hold (AGL-3451, AGL-3450). If it stops, a page that linked to a harvester before the harvester was listed keeps serving until somebody publishes it again or a render after the cache expires catches it.',
   },
   {
+    id: 'retention-emails',
+    label: 'Getting-started emails',
+    // Hourly at twenty past (AGL-3692): the verification reminder is due an
+    // hour after sign-up, so a daily run would send it a day late. The
+    // dailies' ninety-minute grace.
+    cron: '20 * * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/retention-emails',
+    graceMinutes: 90,
+    drives:
+      'Sends each new account the getting-started email its stage owes it, once per crossing: confirm your email, build your site, publish your changes, your site is live, pick up where you left off (AGL-3692). If it stops, an account that stalls hears nothing after the welcome email.',
+  },
+  {
     id: 'firestore-export',
     label: 'Weekly Firestore export',
     cron: '0 5 * * 1',

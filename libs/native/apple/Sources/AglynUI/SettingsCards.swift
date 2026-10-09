@@ -244,3 +244,11 @@ public struct AglynSwitchRow: View {
     }
   }
 }
+
+extension View {
+  /// A task tied to this one view, for a screen whose root is several form
+  /// sections: `.task` on the sections themselves would start once per row.
+  public func aglynTask<ID: Equatable>(id: ID, _ action: @escaping @Sendable () async -> Void) -> some View {
+    background(Color.clear.task(id: id, action))
+  }
+}

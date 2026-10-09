@@ -10889,6 +10889,70 @@
           }
         ]
       ]
+    },
+    "buyerNotificationEnabled": {
+      "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "args": [
+        [
+          null,
+          "texts"
+        ],
+        [
+          {},
+          "texts"
+        ],
+        [
+          {
+            "texts": false
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": true
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": "no"
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": false
+          },
+          "receipt"
+        ],
+        [
+          {
+            "receipt": false
+          },
+          "receipt"
+        ],
+        [
+          {
+            "receipt": false,
+            "texts": true
+          },
+          "texts"
+        ],
+        [
+          "off",
+          "texts"
+        ],
+        [
+          [],
+          "texts"
+        ],
+        [
+          {
+            "texts": null
+          },
+          "texts"
+        ]
+      ]
     }
   }
 }

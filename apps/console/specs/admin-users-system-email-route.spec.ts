@@ -42,10 +42,12 @@ const mockAuditAdd = jest.fn()
 const mockSuppressed = jest.fn()
 const mockRateLimit = jest.fn()
 const mockMeter = jest.fn()
+let mockProfile: Record<string, unknown> = { firstName: 'Maks' }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const snapshot = (data: Record<string, unknown> | null) => ({
     exists: Boolean(data),
+    data: () => data,
     get: (field: string) => data?.[field],
   })
   return {
@@ -61,7 +63,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
               get: async () =>
                 name === 'orgs'
                   ? snapshot({ name: 'Hydro', slug: 'hydro' })
-                  : snapshot({ firstName: 'Maks' }),
+                  : snapshot(mockProfile),
               collection: () => ({
                 limit: () => ({ get: async () => ({ docs: [{ id: 'org-1' }] }) }),
               }),
@@ -143,6 +145,7 @@ function unverifiedTarget() {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockProfile = { firstName: 'Maks' }
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
     email: 'ops@aglyn.com',
@@ -329,5 +332,28 @@ describe('/api/admin/users/system-email — written follow-up', () => {
       'staff-follow-up',
       expect.objectContaining({ 'sender.name': 'Zach', name: 'Maks' }),
     )
+  })
+})
+
+describe('/api/admin/users/system-email — getting-started tips (AGL-3692)', () => {
+  it('lists the retention emails too', async () => {
+    const response = await GET(new Request(`${ROUTE}?uid=target`, { headers: { Authorization: 'Bearer tok' } }))
+    const keys = (await response.json()).emails.map((entry: { key: string }) => entry.key)
+    expect(keys).toEqual(expect.arrayContaining(['retention-build-site', 'retention-verify-reminder']))
+  })
+
+  it('refuses a product tip to an account that turned product email off', async () => {
+    mockProfile = { firstName: 'Maks', marketingConsent: false }
+    const response = await POST(post({ uid: 'target', templateKey: 'retention-build-site', send: true }))
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ declinedProductEmail: true })
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('sends a product tip with List-Unsubscribe pointing at the switch', async () => {
+    const response = await POST(post({ uid: 'target', templateKey: 'retention-build-site', send: true }))
+    expect(response.status).toBe(200)
+    const [[sent]] = mockSendEmail.mock.calls as Array<[Record<string, any>]>
+    expect(sent.headers['List-Unsubscribe']).toContain('/manage/user/emails')
   })
 })
