@@ -159,10 +159,10 @@ const PLUGIN_TOPICS = {
   aiStart: '/ai/start-with-ai',
   aiTemplate: '/building-sites/site-templates/templates-library',
   aiMarketing: '/ai/marketing-with-ai',
-  // The Tracking tab's TikTok and Pinterest fields, and the Ad conversions
-  // card on a site's setup page (AGL-3694), whose guide is unlisted until
-  // AD_CONVERSIONS_TOKEN_KEY is set.
-  adTracking: '/marketing-and-automation/analytics/ad-tracking',
+  // The Ad conversions card on a site's setup page (AGL-3694), whose guide
+  // is unlisted until AD_CONVERSIONS_TOKEN_KEY is set. The Tracking tab's
+  // TikTok and Pinterest fields are console core, so `adTracking` is a
+  // console topic (derived from its path), not a plugin one.
   adConversions: '/marketing-and-automation/analytics/connect-conversions-api',
   aiInsights: '/marketing-and-automation/analytics/insights',
   aiLogic: '/ai/logic-with-ai',
