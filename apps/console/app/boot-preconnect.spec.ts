@@ -21,10 +21,8 @@ import { join } from 'node:path'
 import { bootPreconnects } from './boot-preconnect'
 
 describe('bootPreconnects (AGL-3660)', () => {
-  it('names the reCAPTCHA, Auth and Firestore origins a signed-in load waits on', () => {
+  it('names the Auth and Firestore origins a signed-in load waits on', () => {
     expect(bootPreconnects(false).map((one) => one.href)).toEqual([
-      'https://www.google.com',
-      'https://www.gstatic.com',
       'https://identitytoolkit.googleapis.com',
       'https://firestore.googleapis.com',
     ])
