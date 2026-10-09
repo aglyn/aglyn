@@ -41,8 +41,10 @@
  * A member whose fields already equal what their `displayName` and `email`
  * make is never written, so a re-run is a no-op and an interrupted run is
  * finished by the next. A member with no display name gets `searchTokens`
- * alone — the address still finds them, and the writers stamp no name keys
- * for one either. Writes touch only these fields, in batches of 400.
+ * and `displayNameLower: null` — the address still finds them, and the Site
+ * users list's Name sort (AGL-3680) is an `orderBy` on `displayNameLower`,
+ * which drops a document that lacks the field; sign-up stores the same
+ * `null` for a nameless member. Writes touch only these fields, in batches of 400.
  * Nothing is deleted.
  *
  * Only `hosts/{hostId}/siteMembers/{id}` is touched: the scan is a
@@ -69,8 +71,8 @@ import { nameSearchKey, nameSearchTokens, sameSearchTokens } from './lib/name-se
 const args = parseDeployArgs({
   command: 'backfill-site-member-search',
   summary:
-    'Stamp `displayNameLower`, `displayNameTokens` and `searchTokens` onto ' +
-    'site members written before them. Writes to the live project with --apply.',
+    'Stamp `displayNameLower` (null for a nameless member), `displayNameTokens` and ' +
+    '`searchTokens` onto site members written before them. Writes to the live project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
   flags: [
     { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },
@@ -88,15 +90,16 @@ const PAGE = 1000
  * keys (for a named member) and `memberSearchTokens`.
  *
  * @param {Record<string, unknown>} data the member document
- * @returns {{ displayNameLower?: string, displayNameTokens?: string[], searchTokens: string[] }}
+ * @returns {{ displayNameLower: string | null, displayNameTokens?: string[], searchTokens: string[] }}
  */
 export function memberSearchFields(data) {
   const name = typeof data.displayName === 'string' ? data.displayName : ''
   return {
-    // The writers stamp the name keys only for a truthy name, and so does this.
+    // The writers stamp the name keys only for a truthy name, and so does
+    // this — but the sort key as `null` for a nameless member (AGL-3680).
     ...(name
       ? { displayNameLower: nameSearchKey(name), displayNameTokens: nameSearchTokens(name) }
-      : {}),
+      : { displayNameLower: null }),
     searchTokens: nameSearchTokens([...addressSearchWords(data.email), name].join(' ')),
   }
 }
@@ -116,7 +119,7 @@ export function planSiteMember(path, data) {
   }
   const wanted = memberSearchFields(data)
   const update = {}
-  if ('displayNameLower' in wanted && data.displayNameLower !== wanted.displayNameLower) {
+  if (data.displayNameLower !== wanted.displayNameLower) {
     update.displayNameLower = wanted.displayNameLower
   }
   if ('displayNameTokens' in wanted && !sameSearchTokens(data.displayNameTokens, wanted.displayNameTokens)) {
@@ -148,7 +151,8 @@ function selfTest() {
     check(`search finds Ada by "${typed}"`, ADA.searchTokens.includes(typed), true)
   }
   const NAMELESS = memberSearchFields({ email: 'ops@acme.io' })
-  check('a nameless member has no name keys', 'displayNameLower' in NAMELESS, false)
+  check('a nameless member has no name tokens', 'displayNameTokens' in NAMELESS, false)
+  check('a nameless member sorts by a null name key', NAMELESS.displayNameLower, null)
   check('a nameless member is found by the address', NAMELESS.searchTokens.includes('acme'), true)
 
   const cases = [
@@ -160,7 +164,12 @@ function selfTest() {
       { displayName: 'Ada Lovelace', email: 'ada@example.com', ...ADA, displayNameTokens: ['x'] },
       { update: { displayNameTokens: ADA.displayNameTokens } }],
     ['a member with no name', 'hosts/h1/siteMembers/m4', { email: 'ops@acme.io' },
-      { update: { searchTokens: NAMELESS.searchTokens } }],
+      { update: { displayNameLower: null, searchTokens: NAMELESS.searchTokens } }],
+    ['a nameless member stamped before the sort key', 'hosts/h1/siteMembers/m5',
+      { email: 'ops@acme.io', searchTokens: NAMELESS.searchTokens },
+      { update: { displayNameLower: null } }],
+    ['a nameless member already sortable', 'hosts/h1/siteMembers/m8',
+      { email: 'ops@acme.io', ...NAMELESS }, { skip: 'current' }],
     ['another collection', 'orgs/o1/siteMembers/m6', { displayName: 'Ada' }, { skip: 'not-a-site-member' }],
     ['a subcollection below a member', 'hosts/h1/siteMembers/m7/notes/n1', { displayName: 'Ada' },
       { skip: 'not-a-site-member' }],

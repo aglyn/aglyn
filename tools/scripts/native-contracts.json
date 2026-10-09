@@ -94,6 +94,14 @@
         "ProductVariant"
       ]
     },
+    "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts": {
+      "types": [
+        "FirstPartyPlugin"
+      ],
+      "values": [
+        "FIRST_PARTY_PLUGINS"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/site-list-query.ts": {
       "values": [
         "SITE_LIST_DECLARATION",
@@ -148,24 +156,488 @@
         "SUBMISSION_LIST_QUERY",
         "FORM_SCOPED_SUBMISSION_LIST_QUERY",
         "ORG_SUBMISSION_LIST_QUERY",
+        "SITE_MEMBER_LIST_QUERY",
+        "LEAD_LIST_QUERY",
         "SUBMISSION_READ_OPTIONS",
+        "LEAD_SOURCE_OPTIONS",
         "SUBMISSION_FILTER_HEADERS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-manage.ts": {
+      "types": [
+        "ManagedBooking",
+        "BookingState",
+        "BookingActions"
+      ],
+      "values": [
+        "BOOKING_STATE_LABELS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-in-person.ts": {
+      "types": [
+        "BookingInPersonPayment",
+        "BookingInPersonState"
+      ],
+      "values": [
+        "BOOKING_IN_PERSON_MAX_CENTS",
+        "BOOKING_IN_PERSON_MIN_CENTS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-price.ts": {
+      "types": [
+        "BookingPriceDisplay"
+      ],
+      "values": [
+        "BOOKING_PRICE_DISPLAYS",
+        "BOOKING_PRICE_LABELS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts": {
+      "types": [
+        "BookingFieldAsk"
+      ],
+      "values": [
+        "BOOKING_FIELD_ASKS"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/booking-service-form.ts": {
+      "types": [
+        "BookingServiceDraft",
+        "BookingServiceFields",
+        "BookingWindow"
+      ],
+      "values": [
+        "BOOKING_WEEKDAYS",
+        "BOOKING_SERVICE_NAME_MAX",
+        "BOOKING_SERVICE_DESCRIPTION_MAX"
+      ]
+    },
+    "libs/plugins/bookings/src/lib/model/bookings.ts": {
+      "values": [
+        "REMINDER_WINDOW_START_HOURS",
+        "REMINDER_WINDOW_END_HOURS",
+        "BOOKING_MAX_DAYS_AHEAD"
+      ]
+    },
+    "libs/plugins/events-calendar/src/lib/model/event-write.ts": {
+      "types": [
+        "EventWriteInput",
+        "EventStoredFields",
+        "EventWrite",
+        "EventStatus",
+        "EventRemovableField"
+      ],
+      "values": [
+        "EVENT_TITLE_MAX_LENGTH",
+        "EVENT_LOCATION_MAX_LENGTH",
+        "EVENT_ORGANIZER_MAX_LENGTH",
+        "EVENT_DESCRIPTION_MAX_LENGTH",
+        "EVENT_COVER_ALT_MAX_LENGTH",
+        "EVENT_DEFAULT_DURATION_MS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/analytics-summary.ts": {
+      "types": [
+        "DeviceSplitEntry"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts": {
+      "types": [
+        "ScreenTrafficRow"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/functions.ts": {
+      "values": [
+        "FUNCTION_BUILTIN_NAMES",
+        "FUNCTION_MAX_OPERATIONS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/host-events.ts": {
+      "types": [
+        "HostEventDeclaration"
+      ],
+      "values": [
+        "HOST_EVENTS"
+      ]
+    },
+    "libs/plugins/workflows/src/lib/model/workflows.ts": {
+      "values": [
+        "WORKFLOW_MAX_STEPS",
+        "CROSS_MAX_DEPTH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/artifact-list-queries.ts": {
+      "values": [
+        "LAYOUT_LIST_QUERY",
+        "COMPONENT_LIST_QUERY",
+        "TEMPLATE_LIST_BASE",
+        "TEMPLATE_LIST_QUERY",
+        "TEMPLATE_KIND_OPTIONS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts": {
+      "values": [
+        "ENTRY_LIST_QUERY",
+        "ENTRY_STATUS_OPTIONS",
+        "ENTRY_LIST_FILTER_HEADERS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/content-schema-type.ts": {
+      "values": [
+        "CONTENT_SCHEMA_TYPE_OPTIONS",
+        "CONTENT_SCHEMA_TYPE_DEFAULT"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/local-business.ts": {
+      "values": [
+        "LOCAL_BUSINESS_TYPE_OPTIONS",
+        "AREA_SERVED_MAX",
+        "PRICE_RANGE_MAX_LENGTH",
+        "PAYMENT_ACCEPTED_MAX_LENGTH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/search-engine-verification.ts": {
+      "values": [
+        "SEARCH_ENGINE_VERIFICATION_LABELS",
+        "SEARCH_ENGINE_VERIFICATION_META_NAMES"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/seo-title-variables.ts": {
+      "values": [
+        "DEFAULT_TITLE_PATTERN"
+      ]
+    },
+    "libs/shared/util/email/src/lib/tenant-email-catalog.ts": {
+      "types": [
+        "TenantEmailEntry",
+        "TenantEmailControl"
+      ],
+      "values": [
+        "TENANT_EMAILS",
+        "TENANT_EMAIL_COLLECTION"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts": {
+      "types": [
+        "PosOfflineSaleLine",
+        "PosOfflineSaleCustomer",
+        "PosOfflineSale",
+        "PosOfflineFlag",
+        "PosOfflineStockConflict",
+        "PosOfflineOrderStamp",
+        "PosOfflineRefusal",
+        "PosOfflineOutcomeStatus",
+        "PosOfflineSaleOutcome",
+        "PosOfflineSyncRequest",
+        "PosOfflineSyncResponse",
+        "PosOfflineKitRegister",
+        "PosOfflineKit"
+      ],
+      "values": [
+        "POS_OFFLINE_SYNC_ROUTE",
+        "POS_OFFLINE_SYNC_BATCH_MAX",
+        "POS_OFFLINE_SALE_MAX_LINES",
+        "POS_OFFLINE_LATE_SYNC_MS",
+        "POS_OFFLINE_MAX_AGE_MS",
+        "POS_OFFLINE_CLOCK_SKEW_MS",
+        "POS_OFFLINE_DISABLED_TENDERS",
+        "POS_OFFLINE_FLAG_LABELS"
+      ]
+    },
+    "libs/plugins/inbox/src/lib/model/reply-policy.ts": {
+      "values": [
+        "REPLY_SUBJECT_MAX",
+        "REPLY_BODY_MAX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/crm.ts": {
+      "types": [
+        "CrmDealStage",
+        "CrmForecastCategory"
+      ],
+      "values": [
+        "CONTACT_LIFECYCLE_STAGE_LABELS",
+        "DEFAULT_DEAL_STAGES",
+        "CRM_TASK_KIND_LABELS",
+        "CRM_ACTIVITY_KIND_LABELS",
+        "CRM_ACTIVITY_DIRECTION_LABELS",
+        "CRM_FIELD_OBJECT_LABELS",
+        "CRM_LEAD_STATUS_LABELS",
+        "CRM_ACTIVITIES_PER_RECORD_CEILING",
+        "CRM_EMAIL_SUBJECT_MAX",
+        "CRM_EMAIL_BODY_MAX"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
+      "values": [
+        "CONTACT_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/company-filters.ts": {
+      "values": [
+        "COMPANY_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/deal-filters.ts": {
+      "values": [
+        "DEAL_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/lead-filters.ts": {
+      "values": [
+        "LEAD_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/task-views.ts": {
+      "values": [
+        "TASK_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/crm-reports.ts": {
+      "values": [
+        "CRM_REPORT_PERIOD_LABELS"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/native-vocabulary.ts": {
+      "types": [
+        "NativeCrmPicklist"
+      ],
+      "values": [
+        "NATIVE_CRM_LEAD_STATUSES",
+        "NATIVE_CRM_LEAD_OPEN_STATUSES",
+        "NATIVE_CONTACT_LIFECYCLE_STAGES",
+        "NATIVE_CRM_TASK_KINDS",
+        "NATIVE_CRM_FIELD_OBJECTS",
+        "NATIVE_CRM_REPORT_PERIODS",
+        "NATIVE_CRM_ACTIVITY_DIRECTIONS",
+        "NATIVE_CRM_PICKLISTS",
+        "NATIVE_CRM_ACTIVITY_KINDS"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/native-vocabulary.ts": {
+      "values": [
+        "NATIVE_SITE_EMAILS_QUERY",
+        "NATIVE_SITE_CAMPAIGNS_QUERY",
+        "NATIVE_CAMPAIGN_SEND_STATUSES"
+      ]
+    },
+    "libs/plugins/email/src/lib/constants/list-queries.ts": {
+      "values": [
+        "EMAIL_LIST_QUERY",
+        "LIST_MEMBER_QUERY",
+        "EMAIL_TEMPLATE_QUERY",
+        "SUPPRESSION_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/campaign-list-query.ts": {
+      "values": [
+        "CAMPAIGN_EMAILS_QUERY"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/experiment-list-query.ts": {
+      "values": [
+        "EXPERIMENT_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/sequence-list-query.ts": {
+      "values": [
+        "OUTREACH_SEQUENCE_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts": {
+      "values": [
+        "OUTREACH_ENROLLMENT_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts": {
+      "values": [
+        "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/outreach.types.ts": {
+      "values": [
+        "OUTREACH_MAX_STEPS",
+        "OUTREACH_MAX_EMAIL_STEPS",
+        "OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS",
+        "OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS",
+        "OUTREACH_DEFAULT_ALLOWED_COUNTRIES"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/engine/sequence-validation.ts": {
+      "values": [
+        "OUTREACH_SEQUENCE_NAME_MAX",
+        "OUTREACH_TASK_TITLE_MAX"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts": {
+      "types": [
+        "OrderFulfillmentMethod",
+        "OrderPickupStatus",
+        "OrderLocalDeliveryStatus",
+        "OrderPickup",
+        "OrderLocalDelivery",
+        "OrderFulfillmentKey",
+        "PickupLocationSettings"
+      ],
+      "values": [
+        "ORDER_PICKUP_STATUS_LABELS",
+        "ORDER_LOCAL_DELIVERY_STATUS_LABELS",
+        "ORDER_FULFILLMENT_METHOD_LABELS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts": {
+      "types": [
+        "LocalFulfillmentQueueTab"
+      ],
+      "values": [
+        "LOCAL_FULFILLMENT_QUEUE_TABS",
+        "LOCAL_FULFILLMENT_OPEN_STATUSES",
+        "LOCAL_FULFILLMENT_QUEUE_LIMIT",
+        "LOCAL_FULFILLMENT_QUEUE_FIELDS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-kiosk.ts": {
+      "types": [
+        "PosDeviceMode",
+        "PosKioskProduct",
+        "PosKioskVariant",
+        "PosKioskCategory",
+        "PosKioskCatalog",
+        "PosKioskContext",
+        "PosKioskLine",
+        "PosKioskSaleLine",
+        "PosKioskSaleStatus",
+        "PosKioskSale"
+      ],
+      "values": [
+        "POS_KIOSK_IDLE_SECONDS_DEFAULT",
+        "POS_KIOSK_IDLE_SECONDS_MIN",
+        "POS_KIOSK_IDLE_SECONDS_MAX",
+        "POS_KIOSK_IDLE_WARNING_SECONDS",
+        "POS_KIOSK_DONE_SECONDS",
+        "POS_KIOSK_MAX_LINES",
+        "POS_KIOSK_MAX_QUANTITY",
+        "POS_KIOSK_CATALOG_LIMIT",
+        "POS_KIOSK_UNLOCK_MAX_ATTEMPTS",
+        "POS_KIOSK_UNLOCK_LOCKOUT_MS",
+        "POS_KIOSK_UNLOCK_TTL_MS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/site-journey-steps.ts": {
+      "types": [
+        "SiteJourneyStepType"
+      ],
+      "values": [
+        "SITE_JOURNEY_KEY_MAX"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnels.types.ts": {
+      "types": [
+        "FunnelPageMatch",
+        "FunnelStep",
+        "FunnelDefinition",
+        "FunnelStepResult",
+        "FunnelSourceResult",
+        "FunnelResult"
+      ],
+      "values": [
+        "FUNNEL_FEATURE",
+        "FUNNEL_MIN_STEPS",
+        "FUNNEL_MAX_STEPS",
+        "FUNNELS_MAX_PER_SITE",
+        "FUNNEL_NAME_MAX",
+        "FUNNEL_LABEL_MAX",
+        "FUNNEL_MAX_RANGE_DAYS"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnel-definition.ts": {
+      "values": [
+        "FUNNEL_STEP_TYPE_LABELS",
+        "FUNNEL_EMAIL_KEY_LABELS"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnel-inventory.ts": {
+      "types": [
+        "FunnelInventory",
+        "FunnelInventoryItem"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/drop-off.ts": {
+      "types": [
+        "DropOffAction"
+      ],
+      "values": [
+        "DROP_OFF_WAIT_HOURS",
+        "DROP_OFF_MAX_HOURS",
+        "DROP_OFF_WATCHES_MAX"
       ]
     }
   },
-  "ints": [],
+  "ints": [
+    "BookingActions.refundCents",
+    "BookingWindow.start",
+    "BookingWindow.end",
+    "BookingServiceFields.durationMinutes",
+    "BookingServiceFields.priceUsd",
+    "BookingInPersonPayment.amountCents",
+    "BookingInPersonPayment.serviceCents",
+    "BookingInPersonPayment.taxCents",
+    "BookingInPersonPayment.feeCents",
+    "BookingInPersonPayment.startedAtMs",
+    "BookingInPersonPayment.paidAtMs",
+    "EventWriteInput.startsAtMs",
+    "EventWriteInput.endsAtMs",
+    "EventStoredFields.startsAtMs",
+    "EventStoredFields.endsAtMs",
+    "DeviceSplitEntry.count",
+    "DeviceSplitEntry.percent",
+    "ScreenTrafficRow.total",
+    "PosKioskContext.idleSeconds",
+    "PosKioskLine.quantity",
+    "PosKioskSale.discountCents",
+    "PosKioskSale.dueCents",
+    "PosKioskSale.itemsCents",
+    "PosKioskSale.number",
+    "PosKioskSale.paidCents",
+    "PosKioskSale.taxCents",
+    "PosKioskSale.tipCents",
+    "PosKioskSale.totalCents",
+    "PosKioskSaleLine.amountCents",
+    "PosKioskSaleLine.quantity",
+    "PosKioskVariant.priceCents",
+    "FunnelStepResult.index",
+    "FunnelStepResult.visitors",
+    "FunnelStepResult.dropOff",
+    "FunnelSourceResult.entered",
+    "FunnelSourceResult.completed",
+    "FunnelResult.entered",
+    "FunnelResult.completed",
+    "FunnelResult.journeysRead",
+    "FunnelResult.computedAt"
+  ],
   "json": [
     "ListQueryFilter.value",
     "ListQueryRefusal.clause"
   ],
   "omit": [
-    "HostProduct.deletedAt"
+    "HostProduct.deletedAt",
+    "TenantEmailEntry.mergeTokens",
+    "TenantEmailEntry.defaultBody"
   ],
   "optional": [
     "HostOrder",
     "OrderTotals",
     "HostProduct",
-    "ProductVariant"
+    "ProductVariant",
+    "TenantEmailEntry",
+    "OrderPickup",
+    "OrderLocalDelivery",
+    "PickupLocationSettings",
+    "PosKioskProduct.description",
+    "PosKioskProduct.imageUrl",
+    "PosKioskLine.variantId",
+    "PosKioskLine.modifiers",
+    "PosKioskSaleLine.variantLabel"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -174,7 +646,13 @@
     },
     "SITE_LIST_DECLARATION": {},
     "FORM_LIST_QUERY": {},
-    "SUBMISSION_LIST_QUERY": {}
+    "SUBMISSION_LIST_QUERY": {},
+    "LAYOUT_LIST_QUERY": {},
+    "COMPONENT_LIST_QUERY": {},
+    "TEMPLATE_LIST_QUERY": {
+      "base": "TEMPLATE_LIST_BASE"
+    },
+    "ENTRY_LIST_QUERY": {}
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -1920,6 +2398,249 @@
         ]
       ]
     },
+    "resolveEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "enabledPlugins": []
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "crm",
+              "commerce",
+              "crm"
+            ]
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "accounts",
+              "commerce",
+              "bookings"
+            ]
+          }
+        ]
+      ]
+    },
+    "resolveHostEnabledPlugins": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          null,
+          null
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          null
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          {
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts",
+              "crm"
+            ]
+          },
+          {
+            "disabledPlugins": [
+              "crm",
+              "mui",
+              "forms"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "disabledPlugins": [
+              "accounts"
+            ],
+            "enabledPlugins": [
+              "accounts"
+            ]
+          }
+        ]
+      ]
+    },
+    "resolvePluginSiteState": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "argsProduct": [
+        [
+          null,
+          {
+            "enabledPlugins": [
+              "commerce",
+              "accounts"
+            ]
+          }
+        ],
+        [
+          null,
+          {
+            "disabledPlugins": [
+              "crm"
+            ]
+          },
+          {
+            "enabledPlugins": [
+              "accounts"
+            ]
+          },
+          {
+            "disabledPlugins": [
+              "accounts"
+            ]
+          }
+        ],
+        [
+          "mui",
+          "forms",
+          "crm",
+          "accounts",
+          "commerce"
+        ]
+      ]
+    },
+    "resolveDisableCascade": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "commerce",
+          [
+            "commerce",
+            "accounts",
+            "crm"
+          ]
+        ],
+        [
+          "commerce",
+          [
+            "commerce",
+            "crm"
+          ]
+        ],
+        [
+          "crm",
+          [
+            "crm"
+          ]
+        ],
+        [
+          "mui",
+          [
+            "mui",
+            "commerce",
+            "accounts"
+          ]
+        ]
+      ]
+    },
+    "pluginRequirements": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "commerce"
+        ],
+        [
+          "nope"
+        ]
+      ]
+    },
+    "pluginDependents": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "commerce"
+        ],
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "isLockedOnForWorkspace": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "crm"
+        ],
+        [
+          "fonts"
+        ]
+      ]
+    },
+    "isLockedOnForSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "mui"
+        ],
+        [
+          "forms"
+        ],
+        [
+          "fonts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
+    "isDefaultOffPerSite": {
+      "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "args": [
+        [
+          "accounts"
+        ],
+        [
+          "crm"
+        ]
+      ]
+    },
     "mediaSearchToken": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "args": [
@@ -1965,6 +2686,51 @@
       "args": [
         [
           {
+            "Full Name": "Ada Lovelace",
+            "Email Address": "ada@example.com",
+            "message": "Hi"
+          }
+        ],
+        [
+          {
+            "first_name": "Grace",
+            "email": "grace@example.com"
+          }
+        ],
+        [
+          {
+            "email": "only@example.com"
+          }
+        ],
+        [
+          {
+            "Your Name": "  ",
+            "name": "Alan",
+            "E-mail": "x"
+          }
+        ],
+        [
+          {
+            "name": [
+              "Ada",
+              "L"
+            ],
+            "email": 42
+          }
+        ],
+        [
+          {
+            "message": "no sender"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ],
+        [
+          {
             "name": "Priya Shah",
             "email": "priya@example.com",
             "message": "Hi"
@@ -1984,11 +2750,6 @@
         ],
         [
           {
-            "message": "no sender"
-          }
-        ],
-        [
-          {
             "name": "  ",
             "email": "x@example.com"
           }
@@ -2001,9 +2762,6264 @@
               "b@example.com"
             ]
           }
+        ]
+      ]
+    },
+    "bookingState": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800000000000
+        ]
+      ]
+    },
+    "bookingActions": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800000000000
+        ]
+      ]
+    },
+    "bookingOutstandingCents": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          }
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          }
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          }
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          }
+        ]
+      ]
+    },
+    "checkInRefusal": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          true,
+          1800000000000
+        ],
+        [
+          {},
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          false,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          true,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          false,
+          1800000000000
+        ]
+      ]
+    },
+    "rescheduleRefusal": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {},
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1799996400000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800010800000,
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1799996400000,
+          1800000000000
+        ]
+      ]
+    },
+    "bookingDurationMs": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-manage.ts",
+      "args": [
+        [
+          {},
+          45
+        ],
+        [
+          {},
+          0
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          45
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          0
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          45
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          0
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          45
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          0
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          45
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          0
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          45
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          0
+        ]
+      ]
+    },
+    "bookingPriceText": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceUsd": 45
+          }
+        ],
+        [
+          {
+            "priceUsd": 45,
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "estimate"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "contact",
+            "priceUsd": 10
+          }
+        ],
+        [
+          {
+            "priceUsd": -3
+          }
+        ],
+        [
+          {
+            "priceUsd": "12.5"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "weird",
+            "priceUsd": 20
+          }
+        ]
+      ]
+    },
+    "bookingChargeUsd": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceUsd": 45
+          }
+        ],
+        [
+          {
+            "priceUsd": 45,
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "estimate"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "contact",
+            "priceUsd": 10
+          }
+        ],
+        [
+          {
+            "priceUsd": -3
+          }
+        ],
+        [
+          {
+            "priceUsd": "12.5"
+          }
+        ],
+        [
+          {
+            "priceDisplay": "weird",
+            "priceUsd": 20
+          }
+        ]
+      ]
+    },
+    "bookingPriceDisplay": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-price.ts",
+      "args": [
+        [
+          "fixed"
+        ],
+        [
+          "varies"
+        ],
+        [
+          "estimate"
+        ],
+        [
+          "contact"
+        ],
+        [
+          "x"
         ],
         [
           null
+        ]
+      ]
+    },
+    "bookingInPersonState": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "args": [
+        [
+          {},
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1800000060000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "expiresAtMs": 1799999940000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799992800000,
+            "endsAtMs": 1799996400000,
+            "paidAmountCents": 4500,
+            "refundedCents": 1000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800003600000,
+            "endsAtMs": 1800007200000,
+            "checkedInAtMs": 1799999999000,
+            "paidAmountCents": 4500
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1799998200000.0,
+            "endsAtMs": 1800001800000.0,
+            "paidAmountCents": 4500.4,
+            "refundedCents": -5
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "inPersonPayment": {
+              "status": "pending"
+            }
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "inPersonPayment": {
+              "status": "paid"
+            }
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "paymentIntentId": "pi_1"
+          },
+          1800000000000
+        ]
+      ]
+    },
+    "bookingInPersonAmountProblem": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          49
+        ],
+        [
+          50
+        ],
+        [
+          1000000
+        ],
+        [
+          1000001
+        ],
+        [
+          "abc"
+        ],
+        [
+          2500.5
+        ]
+      ]
+    },
+    "bookingSuggestedCents": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-in-person.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "priceUsd": 45
+          }
+        ],
+        [
+          {
+            "priceUsd": 0.4
+          }
+        ],
+        [
+          {
+            "priceUsd": 45,
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "priceUsd": 12.345,
+            "priceDisplay": "fixed"
+          }
+        ]
+      ]
+    },
+    "parseBookingWindows": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          "09:00-12:00, 13:00-17:30"
+        ],
+        [
+          "9:00 - 10:00, nonsense, 18:00-17:00, 23:00-24:30"
+        ],
+        [
+          ""
+        ],
+        [
+          "00:00-24:00"
+        ]
+      ]
+    },
+    "formatBookingWindows": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          [
+            {
+              "start": 540,
+              "end": 720
+            },
+            {
+              "start": 780,
+              "end": 1050
+            }
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "newBookingServiceDraft": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          "America/Chicago"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "bookingServiceDraftFrom": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "name": "Color",
+            "durationMinutes": 45,
+            "priceUsd": 60,
+            "timezone": "Europe/Paris",
+            "description": "Hi",
+            "windows": {
+              "2": [
+                {
+                  "start": 600,
+                  "end": 660
+                }
+              ]
+            },
+            "priceDisplay": "nope",
+            "askPhone": "required",
+            "crmMeetingActivity": false,
+            "crmFollowUpTask": true
+          }
+        ]
+      ]
+    },
+    "bookingServiceFields": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          {
+            "name": "  Haircut  ",
+            "durationMinutes": "1000",
+            "priceUsd": "19.6",
+            "timezone": " ",
+            "description": "  Trim  ",
+            "windowText": [
+              "",
+              "09:00-17:00",
+              "bad",
+              "10:00-11:00, 12:00-13:00",
+              "",
+              "",
+              ""
+            ],
+            "crmMeetingActivity": true,
+            "crmFollowUpTask": false,
+            "askPhone": "optional",
+            "askAddress": "off",
+            "priceDisplay": "varies"
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "durationMinutes": "abc",
+            "priceUsd": "-3",
+            "timezone": "UTC",
+            "description": "",
+            "windowText": [
+              "",
+              "09:00-17:00",
+              "bad",
+              "10:00-11:00, 12:00-13:00",
+              "",
+              "",
+              ""
+            ],
+            "crmMeetingActivity": true,
+            "crmFollowUpTask": false,
+            "askPhone": "optional",
+            "askAddress": "off",
+            "priceDisplay": "varies"
+          }
+        ]
+      ]
+    },
+    "bookingServiceDraftProblem": {
+      "module": "libs/plugins/bookings/src/lib/model/booking-service-form.ts",
+      "args": [
+        [
+          {
+            "name": "  "
+          }
+        ],
+        [
+          {
+            "name": "Cut"
+          }
+        ]
+      ]
+    },
+    "isBookingReminderDue": {
+      "module": "libs/plugins/bookings/src/lib/model/bookings.ts",
+      "args": [
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800082800000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800090000000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800090000001
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800079200000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "canceled",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "pendingPayment",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "startsAtMs": 1800086400000
+          },
+          1800000000000
+        ],
+        [
+          {
+            "status": "confirmed",
+            "email": "a@b.c",
+            "startsAtMs": 1800086400000,
+            "reminderSentAt": 123
+          },
+          1800000000000
+        ],
+        [
+          {},
+          1800000000000
+        ]
+      ]
+    },
+    "eventWrite": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          {
+            "title": "  Launch party  ",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1800007200000,
+            "location": " Hall ",
+            "organizer": "Ada",
+            "description": "Bring a friend",
+            "coverImage": "/api/media/cdn/h1/m1",
+            "coverImageAlt": " A crowd ",
+            "status": "published"
+          }
+        ],
+        [
+          {
+            "title": "Talk",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": null,
+            "location": "",
+            "organizer": null,
+            "description": "  ",
+            "coverImage": "",
+            "coverImageAlt": "orphan",
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "title": "Talk",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": null,
+            "location": "",
+            "organizer": null,
+            "description": "  ",
+            "coverImage": "",
+            "coverImageAlt": "orphan",
+            "status": "draft"
+          },
+          {
+            "clearBlank": true
+          }
+        ],
+        [
+          {
+            "title": "Talk",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1799999999000,
+            "location": "",
+            "organizer": null,
+            "description": "  ",
+            "coverImage": "",
+            "coverImageAlt": "orphan",
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1800000000001,
+            "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+            "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+            "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "coverImage": "c",
+            "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "status": "published"
+          }
+        ],
+        [
+          {
+            "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "startsAtMs": 1800000000000,
+            "endsAtMs": 1800000000001,
+            "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+            "organizer": "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+            "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "coverImage": "c",
+            "coverImageAlt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "status": "published"
+          },
+          {
+            "clearBlank": true
+          }
+        ]
+      ]
+    },
+    "eventWriteProblem": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          {
+            "title": "",
+            "startsAtMs": 1800000000000
+          }
+        ],
+        [
+          {
+            "title": "  ",
+            "startsAtMs": 1800000000000
+          }
+        ],
+        [
+          {
+            "title": "x",
+            "startsAtMs": 0
+          }
+        ],
+        [
+          {
+            "title": "x",
+            "startsAtMs": 1800000000000
+          }
+        ]
+      ]
+    },
+    "eventEndsAtMs": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          1800000000000,
+          1800000000005
+        ],
+        [
+          1800000000000,
+          1800000000000
+        ],
+        [
+          1800000000000,
+          null
+        ],
+        [
+          1800000000000,
+          0
+        ],
+        [
+          1800000000000,
+          1799999999990
+        ]
+      ]
+    },
+    "eventStatusOf": {
+      "module": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
+      "args": [
+        [
+          "draft"
+        ],
+        [
+          " Published "
+        ],
+        [
+          "deleted"
+        ],
+        [
+          null
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    "trafficDeltaPct": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          120,
+          100
+        ],
+        [
+          100,
+          120
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          0,
+          7
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          333,
+          1000
+        ]
+      ]
+    },
+    "deviceSplit": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          {
+            "mobile": 61,
+            "desktop": 39
+          }
+        ],
+        [
+          {
+            "desktop": 1,
+            "mobile": 1,
+            "tablet": 1
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "mobile": 0,
+            "desktop": -2
+          }
+        ],
+        [
+          {
+            "desktop": 2,
+            "mobile": 5,
+            "tablet": 3
+          }
+        ]
+      ]
+    },
+    "deviceSplitLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          [
+            {
+              "device": "mobile",
+              "count": 61,
+              "percent": 61
+            },
+            {
+              "device": "desktop",
+              "count": 39,
+              "percent": 39
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "deviceSplitValue": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          [
+            {
+              "device": "mobile",
+              "count": 61,
+              "percent": 61
+            },
+            {
+              "device": "desktop",
+              "count": 39,
+              "percent": 39
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "rollUp": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          [
+            {
+              "paths": {
+                "/": 3,
+                "/a": 1
+              }
+            },
+            {
+              "paths": {
+                "/a": 5
+              }
+            },
+            {}
+          ],
+          "paths"
+        ],
+        [
+          [
+            {
+              "referrers": {
+                "google.com": 2
+              }
+            },
+            {
+              "referrers": {
+                "bing.com": 2,
+                "google.com": 1
+              }
+            }
+          ],
+          "referrers"
+        ]
+      ]
+    },
+    "formatDwell": {
+      "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
+      "args": [
+        [
+          0
+        ],
+        [
+          4400
+        ],
+        [
+          65000
+        ],
+        [
+          3600000
+        ],
+        [
+          3725000
+        ],
+        [
+          -5
+        ]
+      ]
+    },
+    "aggregateScreenDays": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          [
+            {
+              "screenId": "home",
+              "day": "2026-10-01",
+              "total": 5,
+              "devices": {
+                "mobile": 3,
+                "desktop": 2
+              },
+              "referrers": {
+                "google.com": 2
+              }
+            },
+            {
+              "screenId": "home",
+              "day": "2026-10-02",
+              "total": 4,
+              "devices": {
+                "mobile": 1
+              },
+              "referrers": {
+                "bing.com": 3
+              }
+            },
+            {
+              "screenId": "about",
+              "total": 2,
+              "devices": {
+                "desktop": 2
+              }
+            },
+            {
+              "screenId": "",
+              "total": 9
+            },
+            {
+              "screenId": "x",
+              "total": 0
+            },
+            {
+              "screenId": "y",
+              "total": "3",
+              "devices": {
+                "tablet": "2",
+                "bad": -1
+              }
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "topDevice": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          {
+            "screenId": "a",
+            "total": 3,
+            "devices": {
+              "mobile": 1,
+              "desktop": 2
+            },
+            "referrers": {}
+          }
+        ],
+        [
+          {
+            "screenId": "a",
+            "total": 0,
+            "devices": {},
+            "referrers": {}
+          }
+        ]
+      ]
+    },
+    "topReferrer": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "args": [
+        [
+          {
+            "screenId": "a",
+            "total": 3,
+            "devices": {},
+            "referrers": {
+              "x.com": 1,
+              "y.com": 4
+            }
+          }
+        ],
+        [
+          {
+            "screenId": "a",
+            "total": 0,
+            "devices": {},
+            "referrers": {}
+          }
+        ]
+      ]
+    },
+    "evaluateExpression": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          "1 + 2 * 3",
+          {}
+        ],
+        [
+          "(1 + 2) * 3",
+          {}
+        ],
+        [
+          "10 / 4",
+          {}
+        ],
+        [
+          "-3 + 5",
+          {}
+        ],
+        [
+          "- -2",
+          {}
+        ],
+        [
+          "price * qty",
+          {
+            "price": 2.5,
+            "qty": 4
+          }
+        ],
+        [
+          "'a' + 1",
+          {}
+        ],
+        [
+          "\"x\" + name",
+          {
+            "name": "y"
+          }
+        ],
+        [
+          "1 + true",
+          {}
+        ],
+        [
+          "flag",
+          {
+            "flag": true
+          }
+        ],
+        [
+          "n + 1",
+          {
+            "n": "41"
+          }
+        ],
+        [
+          "min(3, 1, 2)",
+          {}
+        ],
+        [
+          "max(1, 7)",
+          {}
+        ],
+        [
+          "round(2.345, 2)",
+          {}
+        ],
+        [
+          "round(2.5)",
+          {}
+        ],
+        [
+          "floor(2.9)",
+          {}
+        ],
+        [
+          "ceil(2.1)",
+          {}
+        ],
+        [
+          "abs(-4)",
+          {}
+        ],
+        [
+          "format(1234.5, 2)",
+          {}
+        ],
+        [
+          "format(1234567)",
+          {}
+        ],
+        [
+          "format(0.125, 2)",
+          {}
+        ],
+        [
+          "plan.monthly * 12",
+          {
+            "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+          }
+        ],
+        [
+          "plan.name",
+          {
+            "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+          }
+        ],
+        [
+          "plan.on",
+          {
+            "plan": "{\"monthly\": 29, \"annual\": 290, \"name\": \"Pro\", \"on\": true, \"nested\": {\"x\": 1}}"
+          }
+        ],
+        [
+          "min",
+          {
+            "min": 3
+          }
+        ],
+        [
+          ".5 + 1",
+          {}
+        ],
+        [
+          "1.5 * 2",
+          {}
+        ],
+        [
+          "7 - 2 - 1",
+          {}
+        ],
+        [
+          "8 / 2 / 2",
+          {}
+        ],
+        [
+          "round(1.005, 2)",
+          {}
+        ],
+        [
+          "round(-2.5)",
+          {}
+        ]
+      ]
+    },
+    "expressionSyntaxError": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          "subscribe"
+        ],
+        [
+          "a + b"
+        ],
+        [
+          "(a + b"
+        ],
+        [
+          "a +"
+        ],
+        [
+          "a b"
+        ],
+        [
+          "'open"
+        ],
+        [
+          "a == b"
+        ],
+        [
+          "nope(1)"
+        ],
+        [
+          "min(1,)"
+        ],
+        [
+          "min()"
+        ],
+        [
+          "1 # 2"
+        ],
+        [
+          "a.b.c"
+        ],
+        [
+          "a."
+        ],
+        [
+          ""
+        ],
+        [
+          "max(1, (2 + 3))"
+        ],
+        [
+          ")"
+        ],
+        [
+          "a,b"
+        ]
+      ]
+    },
+    "evaluateHostFunction": {
+      "module": "libs/aglyn/src/lib/app-utils/functions.ts",
+      "args": [
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {
+            "qty": 3
+          }
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {
+            "qty": "6",
+            "vip": "true"
+          }
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {}
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "total"
+          },
+          {
+            "qty": "abc"
+          }
+        ],
+        [
+          {
+            "name": "price",
+            "parameters": [
+              {
+                "name": "qty",
+                "type": "number",
+                "required": true
+              },
+              {
+                "name": "vip",
+                "type": "boolean"
+              },
+              {
+                "name": "note",
+                "type": "text",
+                "defaultValue": "hi"
+              }
+            ],
+            "variables": [
+              {
+                "name": "total",
+                "type": "number"
+              },
+              {
+                "name": "label",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "vip",
+                  "comparator": "==",
+                  "right": "true"
+                },
+                "then": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 8"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "total",
+                    "expression": "qty * 10"
+                  }
+                ]
+              },
+              {
+                "if": {
+                  "left": "total",
+                  "comparator": ">=",
+                  "right": "50"
+                },
+                "then": [
+                  {
+                    "set": "label",
+                    "expression": "'big ' + note"
+                  }
+                ],
+                "otherwise": [
+                  {
+                    "set": "label",
+                    "expression": "note"
+                  }
+                ]
+              }
+            ],
+            "returnValue": "label"
+          },
+          {
+            "qty": 10,
+            "note": "x"
+          }
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "<",
+                  "right": "2"
+                },
+                "then": [
+                  {
+                    "set": "rate",
+                    "expression": "1"
+                  }
+                ],
+                "otherwise": []
+              }
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [
+              {
+                "name": "v",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "==",
+                  "right": "1"
+                },
+                "then": [
+                  {
+                    "set": "v",
+                    "expression": "rate * 2"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": "v"
+          },
+          {},
+          {
+            "globals": {
+              "rate": 21
+            }
+          }
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "==",
+                  "right": "1"
+                },
+                "then": [
+                  {
+                    "set": "rate",
+                    "expression": "1"
+                  }
+                ],
+                "otherwise": []
+              }
+            ]
+          },
+          {},
+          {
+            "globals": {
+              "rate": 21
+            }
+          }
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [
+              {
+                "name": "v",
+                "type": "number"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "1",
+                  "comparator": "==",
+                  "right": "1"
+                },
+                "then": [
+                  {
+                    "set": "v",
+                    "workflow": "w"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": "v"
+          },
+          {}
+        ],
+        [
+          {
+            "name": "g",
+            "parameters": [],
+            "variables": [
+              {
+                "name": "v",
+                "type": "text"
+              }
+            ],
+            "operations": [
+              {
+                "if": {
+                  "left": "'a'",
+                  "comparator": "!=",
+                  "right": "'b'"
+                },
+                "then": [
+                  {
+                    "set": "v",
+                    "expression": "bad +"
+                  }
+                ],
+                "otherwise": []
+              }
+            ],
+            "returnValue": "v"
+          },
+          {}
+        ]
+      ]
+    },
+    "runWorkflow": {
+      "module": "libs/plugins/workflows/src/lib/model/workflows.ts",
+      "args": [
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "base"
+                ],
+                "resultName": "d"
+              },
+              {
+                "functionName": "double",
+                "args": [
+                  "d + 1"
+                ]
+              }
+            ]
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "price",
+                "args": [
+                  "3",
+                  "flag"
+                ]
+              }
+            ],
+            "returnValue": "step1"
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "missing",
+                "args": []
+              }
+            ]
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "nope"
+                ]
+              }
+            ]
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {
+            "v1": {
+              "name": "base",
+              "type": "number",
+              "value": "5"
+            },
+            "v2": {
+              "name": "flag",
+              "type": "boolean",
+              "value": "true"
+            }
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "qty"
+                ],
+                "resultName": "r"
+              }
+            ],
+            "returnValue": "r"
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {},
+          {
+            "qty": 7
+          }
+        ],
+        [
+          {
+            "name": "w",
+            "steps": []
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {}
+        ],
+        [
+          {
+            "name": "w",
+            "steps": [
+              {
+                "functionName": "double",
+                "args": [
+                  "1"
+                ],
+                "resultName": "a"
+              },
+              {
+                "functionName": "double",
+                "args": [
+                  "a"
+                ],
+                "resultName": "b"
+              }
+            ],
+            "returnValue": "a"
+          },
+          {
+            "price": {
+              "name": "price",
+              "parameters": [
+                {
+                  "name": "qty",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "vip",
+                  "type": "boolean"
+                },
+                {
+                  "name": "note",
+                  "type": "text",
+                  "defaultValue": "hi"
+                }
+              ],
+              "variables": [
+                {
+                  "name": "total",
+                  "type": "number"
+                },
+                {
+                  "name": "label",
+                  "type": "text"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "vip",
+                    "comparator": "==",
+                    "right": "true"
+                  },
+                  "then": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 8"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "total",
+                      "expression": "qty * 10"
+                    }
+                  ]
+                },
+                {
+                  "if": {
+                    "left": "total",
+                    "comparator": ">=",
+                    "right": "50"
+                  },
+                  "then": [
+                    {
+                      "set": "label",
+                      "expression": "'big ' + note"
+                    }
+                  ],
+                  "otherwise": [
+                    {
+                      "set": "label",
+                      "expression": "note"
+                    }
+                  ]
+                }
+              ],
+              "returnValue": "total"
+            },
+            "double": {
+              "name": "double",
+              "parameters": [
+                {
+                  "name": "x",
+                  "type": "number",
+                  "required": true
+                }
+              ],
+              "variables": [
+                {
+                  "name": "out",
+                  "type": "number"
+                }
+              ],
+              "operations": [
+                {
+                  "if": {
+                    "left": "1",
+                    "comparator": "==",
+                    "right": "1"
+                  },
+                  "then": [
+                    {
+                      "set": "out",
+                      "expression": "x * 2"
+                    }
+                  ],
+                  "otherwise": []
+                }
+              ],
+              "returnValue": "out"
+            }
+          },
+          {}
+        ]
+      ]
+    },
+    "hostEventLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "args": [
+        [
+          "formSubmission"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "dealWon"
+        ],
+        [
+          "orderRefunded"
+        ],
+        [
+          "returnRequested"
+        ],
+        [
+          "funnelLeft"
+        ],
+        [
+          "myCustom"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "hostEventPayloadHint": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "args": [
+        [
+          "formSubmission"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "lead"
+        ],
+        [
+          "dealWon"
+        ],
+        [
+          "myCustom"
+        ]
+      ]
+    },
+    "hostEventRecipientActed": {
+      "module": "libs/aglyn/src/lib/app-utils/host-events.ts",
+      "args": [
+        [
+          "formSubmission"
+        ],
+        [
+          "booking"
+        ],
+        [
+          "memberSignUp"
+        ],
+        [
+          "lead"
+        ],
+        [
+          "pageView"
+        ],
+        [
+          "dealWon"
+        ]
+      ]
+    },
+    "extractSearchEngineVerificationToken": {
+      "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "args": [
+        [
+          "abc_DEF-123"
+        ],
+        [
+          "  token-with-space  "
+        ],
+        [
+          "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+        ],
+        [
+          "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
+        ],
+        [
+          "<meta name=google-site-verification content=bare>"
+        ],
+        [
+          "content=\"only-content\""
+        ],
+        [
+          "<meta name=\"other\">"
+        ],
+        [
+          "has spaces inside"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "isSearchEngineVerificationToken": {
+      "module": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
+      "args": [
+        [
+          "abc_DEF-123"
+        ],
+        [
+          "  token-with-space  "
+        ],
+        [
+          "<meta name=\"google-site-verification\" content=\"g00gleTok_en\" />"
+        ],
+        [
+          "<meta name='msvalidate.01' content='B1NGHEX0123456789ABCDEF0123456789'>"
+        ],
+        [
+          "<meta name=google-site-verification content=bare>"
+        ],
+        [
+          "content=\"only-content\""
+        ],
+        [
+          "<meta name=\"other\">"
+        ],
+        [
+          "has spaces inside"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "submissionSender": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "args": [
+        [
+          {
+            "name": "Ada Lovelace",
+            "email": "ada@example.com"
+          }
+        ],
+        [
+          {
+            "email": "priya@lumen.co"
+          }
+        ],
+        [
+          {},
+          "Contact form"
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "name": "cher"
+          }
+        ],
+        [
+          {
+            "name": "Jean-Luc Picard"
+          }
+        ]
+      ]
+    },
+    "routingChips": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "dataset": {
+              "id": "d",
+              "name": "Leads",
+              "recordId": "r"
+            }
+          }
+        ],
+        [
+          {
+            "dataset": {
+              "id": "d",
+              "recordId": "r"
+            }
+          }
+        ],
+        [
+          {
+            "datasetRefused": {
+              "name": "Leads",
+              "errors": {
+                "a": "Email is not valid",
+                "b": "Phone is too long"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "datasetRefused": {}
+          }
+        ]
+      ]
+    },
+    "defaultReplySubject": {
+      "module": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
+      "args": [
+        [
+          "Lumen Studio",
+          "Contact"
+        ],
+        [
+          null,
+          "Contact"
+        ],
+        [
+          "",
+          ""
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          null
+        ]
+      ]
+    },
+    "consentGroupForHost": {
+      "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "args": [
+        [
+          null,
+          "h1"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h1"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h3"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h4"
+        ],
+        [
+          {
+            "consentGroups": {
+              "a": {
+                "name": "A",
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
+              },
+              "b": {
+                "name": "B",
+                "hostIds": [
+                  "h2",
+                  "h3"
+                ]
+              }
+            }
+          },
+          "h1"
+        ],
+        [
+          {
+            "consentGroups": {
+              "h1": {
+                "name": "X",
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
+              }
+            }
+          },
+          "h2"
+        ]
+      ]
+    },
+    "crmScopeTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null,
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "defaultResourceScope": "org"
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmReadTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmFieldListFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "key": "shoe_size",
+            "label": "Shoe size",
+            "required": true,
+            "object": "contact"
+          }
+        ],
+        [
+          {
+            "key": "tier",
+            "label": "Tier",
+            "object": "company"
+          }
+        ],
+        [
+          {
+            "key": "a.b-c",
+            "label": ""
+          }
+        ]
+      ]
+    },
+    "pipelineTotals": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "args": [
+        [
+          [
+            {
+              "status": "open",
+              "stageId": "s1",
+              "amountCents": 1000
+            },
+            {
+              "status": "open",
+              "stageId": "s2",
+              "amountCents": 2001,
+              "probability": 75
+            },
+            {
+              "status": "won",
+              "stageId": "won",
+              "amountCents": 500
+            },
+            {
+              "status": "open",
+              "stageId": "gone",
+              "amountCents": 300
+            },
+            {
+              "status": "open",
+              "stageId": "s2"
+            }
+          ],
+          {
+            "stages": [
+              {
+                "id": "s1",
+                "name": "One",
+                "order": 0,
+                "probability": 10,
+                "kind": "open"
+              },
+              {
+                "id": "s2",
+                "name": "Two",
+                "order": 1,
+                "probability": 50,
+                "kind": "open"
+              },
+              {
+                "id": "won",
+                "name": "Won",
+                "order": 2,
+                "probability": 100,
+                "kind": "won"
+              }
+            ]
+          }
+        ],
+        [
+          [],
+          {
+            "stages": [
+              {
+                "id": "s1",
+                "name": "One",
+                "order": 0,
+                "probability": 10,
+                "kind": "open"
+              },
+              {
+                "id": "s2",
+                "name": "Two",
+                "order": 1,
+                "probability": 50,
+                "kind": "open"
+              },
+              {
+                "id": "won",
+                "name": "Won",
+                "order": 2,
+                "probability": 100,
+                "kind": "won"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "leadFunnel": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "args": [
+        [
+          [
+            {
+              "status": "new"
+            },
+            {
+              "status": "working"
+            },
+            {
+              "status": "unqualified",
+              "unqualifiedReason": "Too small"
+            },
+            {
+              "status": "unqualified",
+              "unqualifiedReason": "too  small"
+            },
+            {
+              "status": "unqualified"
+            },
+            {
+              "status": "bogus"
+            },
+            {
+              "status": "qualified"
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "campaignSendDisplay": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "status": "scheduled",
+            "staffReview": {
+              "state": "held"
+            }
+          }
+        ],
+        [
+          {
+            "status": "scheduled"
+          }
+        ],
+        [
+          {
+            "status": "scheduled",
+            "stats": {
+              "sent": 1200,
+              "audienceSize": 5000
+            },
+            "resume": {
+              "remaining": 3800,
+              "batch": 2,
+              "nextAtMs": 1790000000000
+            }
+          }
+        ],
+        [
+          {
+            "status": "canceled",
+            "stats": {
+              "sent": 10,
+              "audienceSize": 40
+            },
+            "resume": {
+              "remaining": 30
+            }
+          }
+        ],
+        [
+          {
+            "status": "failed",
+            "stats": {
+              "sent": 10
+            },
+            "resume": {
+              "remaining": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "sent",
+            "stats": {
+              "sent": 2400,
+              "audienceSize": 2400
+            },
+            "resume": {
+              "batch": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "sent",
+            "stats": {
+              "sent": 12
+            }
+          }
+        ],
+        [
+          {
+            "status": "sending"
+          }
+        ]
+      ]
+    },
+    "campaignReport": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "sent": 1000,
+            "recipients": 1100,
+            "delivered": 980,
+            "opens": 700,
+            "uniqueOpens": 420,
+            "clicks": 90,
+            "uniqueClicks": 60,
+            "bounced": 20,
+            "complained": 1,
+            "unsubscribes": 4,
+            "clickTracked": true,
+            "audienceSize": 1200,
+            "consented": 1150,
+            "suppressed": 30,
+            "deferred": 5
+          }
+        ],
+        [
+          {
+            "sent": 50,
+            "recipients": 50,
+            "opens": 3,
+            "audienceSizeTruncated": true
+          }
+        ]
+      ]
+    },
+    "sendLinkReport": {
+      "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://x.test/b",
+                "clicks": 3
+              },
+              "b": {
+                "url": "https://x.test/a",
+                "clicks": 3
+              },
+              "c": {
+                "url": "https://x.test/c",
+                "clicks": 10
+              }
+            },
+            "overflowClicks": 2,
+            "unattributedClicks": 1
+          }
+        ]
+      ]
+    },
+    "emailDesignStarterNodes": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "args": [
+        [
+          {
+            "sectionId": "section-1",
+            "textId": "text-1"
+          }
+        ]
+      ]
+    },
+    "emailDesignDocuments": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "args": [
+        [
+          {
+            "screenId": "screen-1",
+            "versionId": "version-1",
+            "displayName": "Untitled email",
+            "nodes": {
+              "a": {
+                "$id": "a"
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "validateExperiment": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          {
+            "name": "",
+            "status": "draft",
+            "target": "screen",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "section",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "autoWinner": {
+              "minExposures": 0,
+              "confidence": 0.95
+            }
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "autoWinner": {
+              "minExposures": 200,
+              "confidence": 1
+            }
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "email",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "experimentResultRows": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "winnerVariantId": "b"
+          },
+          {
+            "a": {
+              "exposures": 1000,
+              "conversions": 50
+            },
+            "b": {
+              "exposures": 1000,
+              "conversions": 80
+            }
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              },
+              {
+                "id": "c",
+                "name": "C"
+              }
+            ]
+          },
+          {
+            "a": {
+              "exposures": 10,
+              "conversions": 0
+            },
+            "b": {
+              "exposures": 10,
+              "conversions": 1
+            },
+            "c": {
+              "exposures": 0
+            }
+          }
+        ]
+      ]
+    },
+    "describeVariantComparison": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "lift": 0.6,
+            "confidence": 0.987
+          }
+        ],
+        [
+          {
+            "lift": null,
+            "confidence": null
+          }
+        ],
+        [
+          {
+            "lift": -0.125,
+            "confidence": 0.2
+          }
+        ]
+      ]
+    },
+    "validateOutreachSequence": {
+      "module": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
+      "args": [
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t0",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t2",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t3",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t4",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t5",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t6",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t7",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t8",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s3",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s4",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s5",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 31,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "",
+                "replyInThread": false,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": "tpl"
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "",
+                "templateId": "tpl"
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "fax",
+                "title": "Call",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 1.5,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ]
+      ]
+    },
+    "posOfflineSaleTotals": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              },
+              {
+                "unitAmountCents": 2500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 10,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": true
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 999,
+                "quantity": 3
+              }
+            ],
+            "discountPct": 12.5,
+            "tax": {
+              "pct": 7.25,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 100,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1999,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": null,
+              "pricesIncludeTax": false
+            }
+          }
+        ]
+      ]
+    },
+    "posOfflineChangeCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          4763,
+          5000
+        ],
+        [
+          4763,
+          4763
+        ],
+        [
+          4763,
+          4000
+        ]
+      ]
+    },
+    "posOfflineSaleKeyIsValid": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          "off8f2f9807c22c4fe3b1ed9042c497949d"
+        ],
+        [
+          "short"
+        ],
+        [
+          "../orders/abcdefghijklmnop"
+        ],
+        [
+          "__abcdefghijklmnop__"
+        ]
+      ]
+    },
+    "posOfflineSoldAt": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          1799999000000,
+          1800000000000
+        ],
+        [
+          1800000300000,
+          1800000000000
+        ],
+        [
+          1800001000000,
+          1800000000000
+        ],
+        [
+          1797000000000,
+          1800000000000
+        ]
+      ]
+    },
+    "canTransitionPickup": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ],
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ]
+      ]
+    },
+    "canTransitionLocalDelivery": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ],
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ]
+      ]
+    },
+    "orderLocalFulfillmentListFields": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "args": [
+        [
+          {
+            "fulfillmentMethod": "pickup",
+            "pickup": {
+              "locationId": "loc1",
+              "locationName": "Main",
+              "status": "ready"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "local_delivery",
+            "localDelivery": {
+              "zoneId": "z",
+              "zoneName": "Z",
+              "feeCents": 500,
+              "windowStartMs": 5000,
+              "windowEndMs": 9000,
+              "status": "out_for_delivery"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "shipping",
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "localFulfillmentQueueQuery": {
+      "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "args": [
+        [
+          "pickup_ready"
+        ],
+        [
+          "delivery_scheduled",
+          "loc1"
+        ]
+      ]
+    },
+    "funnelStepTitle": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "args": [
+        [
+          {
+            "type": "page",
+            "key": "/pricing",
+            "match": "exact"
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/blog",
+            "match": "prefix"
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/pricing",
+            "match": "exact",
+            "label": "Pricing page"
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "cart",
+            "key": "p9"
+          }
+        ],
+        [
+          {
+            "type": "order",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "overlay",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "event",
+            "key": "sign_up"
+          }
+        ],
+        [
+          {
+            "type": "email",
+            "key": "opened"
+          }
+        ],
+        [
+          {
+            "type": "email",
+            "key": "clicked"
+          }
+        ]
+      ]
+    },
+    "waitLabel": {
+      "module": "libs/plugins/funnels/src/lib/model/drop-off.ts",
+      "args": [
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          24
+        ],
+        [
+          48
+        ],
+        [
+          72
+        ],
+        [
+          168
+        ],
+        [
+          36
+        ]
+      ]
+    },
+    "formatShare": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          0.5
+        ],
+        [
+          0.3333
+        ],
+        [
+          0.12345
+        ],
+        [
+          0.0004
+        ]
+      ]
+    },
+    "formatDuration": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          999
+        ],
+        [
+          45000
+        ],
+        [
+          59600
+        ],
+        [
+          60000
+        ],
+        [
+          185000
+        ],
+        [
+          3600000
+        ],
+        [
+          7800000
+        ],
+        [
+          172800000
+        ],
+        [
+          190000000
+        ]
+      ]
+    },
+    "normalizeFunnelDefinition": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "args": [
+        [
+          {
+            "name": "Signup",
+            "steps": [
+              {
+                "type": "page",
+                "key": "pricing/?x=1#h",
+                "match": "prefix"
+              },
+              {
+                "type": "form",
+                "key": "f1",
+                "label": "Contact"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "  ",
+            "steps": []
+          }
+        ],
+        [
+          {
+            "name": "One",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Many",
+            "steps": [
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "No type",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "key": "x"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "No path",
+            "steps": [
+              {
+                "type": "page",
+                "key": ""
+              },
+              {
+                "type": "order"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Email",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "email",
+                "key": "bounced"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Email ok",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "email",
+                "key": "opened"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Event",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "event",
+                "key": "Bad Name"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Event ok",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "event",
+                "key": "sign_up",
+                "label": "Signed up"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Order key dropped",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "order",
+                "key": "zzz"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Cart needs one",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "cart"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Dup slashes",
+            "steps": [
+              {
+                "type": "page",
+                "key": "//a//b//"
+              },
+              {
+                "type": "booking",
+                "key": "s1"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "stepInventoryProblem": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "args": [
+        [
+          {
+            "type": "page",
+            "key": "/about",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/nope",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/blog",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/shop",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f2"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": ""
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": "s9"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "cart",
+            "key": "p1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "overlay",
+            "key": "o1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "event",
+            "key": "sign_up"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "order",
+            "key": ""
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "labelStepFromInventory": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "args": [
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1",
+            "label": "Mine"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "zz"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": "s1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/about",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "buyerNotificationEnabled": {
+      "module": "libs/plugins/commerce/src/lib/model/buyer-notifications.ts",
+      "args": [
+        [
+          null,
+          "texts"
+        ],
+        [
+          {},
+          "texts"
+        ],
+        [
+          {
+            "texts": false
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": true
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": "no"
+          },
+          "texts"
+        ],
+        [
+          {
+            "texts": false
+          },
+          "receipt"
+        ],
+        [
+          {
+            "receipt": false
+          },
+          "receipt"
+        ],
+        [
+          {
+            "receipt": false,
+            "texts": true
+          },
+          "texts"
+        ],
+        [
+          "off",
+          "texts"
+        ],
+        [
+          [],
+          "texts"
+        ],
+        [
+          {
+            "texts": null
+          },
+          "texts"
         ]
       ]
     }

@@ -1,0 +1,730 @@
+{
+  "$comment": "Billing: the console's [orgSlug]/billing sections. Plan and usage show natively; choosing a plan, paying and payment methods open Stripe's hosted Checkout and Customer Portal in the platform's secure in-app browser, as the console opens them in a tab. No purchase happens in the app. Routes: /api/billing/subscription, /api/billing/checkout, /api/billing/invoices, /api/billing/profile, /api/billing/host-usage, /api/billing/usage-budget, /api/billing/storage-overage. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.billing",
+      "title": "Billing",
+      "subtitle": "Plan, usage and invoices",
+      "icon": "creditcard|credit_card",
+      "scope": "org",
+      "group": "workspace",
+      "order": 20,
+      "links": [
+        "/billing",
+        "/billing/plans"
+      ],
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}"
+        },
+        "billing": {
+          "doc": "orgs/{org.id}/billing/stripe",
+          "optional": true
+        },
+        "usage": {
+          "url": "/api/billing/host-usage?orgId={org.id}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.billing.subscription.status == past_due,unpaid,incomplete",
+          "text": "The last payment did not go through. Update the payment method to keep the plan."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.billing.subscription.pendingDowngrade",
+          "text": "Moving to {data.billing.subscription.pendingDowngrade.plan:title} at the end of this period."
+        },
+        {
+          "type": "fields",
+          "title": "Plan",
+          "rows": [
+            {
+              "label": "Plan",
+              "value": "{data.billing.plan|data.org.plan|'Free':title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Status",
+              "value": "{data.billing.subscription.status|data.org.subscription.status:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Trialing": "info",
+                "Past due": "error",
+                "Unpaid": "error",
+                "Canceled": "warning",
+                "*": "neutral"
+              },
+              "when": "data.billing.subscription.status || data.org.subscription.status"
+            },
+            {
+              "label": "Billed",
+              "value": "{data.billing.subscription.interval|data.org.subscription.interval}ly",
+              "when": "data.billing.subscription.interval || data.org.subscription.interval"
+            },
+            {
+              "label": "Renews",
+              "value": "{data.billing.subscription.currentPeriodEnd|data.org.subscription.currentPeriodEnd:date}",
+              "when": "data.billing.subscription.currentPeriodEnd || data.org.subscription.currentPeriodEnd"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "This month",
+          "when": "data.usage",
+          "rows": [
+            {
+              "label": "Page views",
+              "value": "{data.usage.monthPageViews:number}"
+            },
+            {
+              "label": "Bandwidth",
+              "value": "{data.usage.bandwidthGb:number} GB"
+            },
+            {
+              "label": "Media delivered",
+              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Manage",
+          "when": "org.manager",
+          "footer": "Plans, payment methods and cancellations open on Stripe's secure pages.",
+          "items": [
+            {
+              "id": "portal",
+              "label": "Manage subscription",
+              "icon": "creditcard|credit_card",
+              "when": "data.billing.subscription || data.org.subscription",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "portal"
+              },
+              "open": "url"
+            },
+            {
+              "id": "card",
+              "label": "Update payment method",
+              "icon": "creditcard.and.123|add_card",
+              "when": "data.billing.subscription || data.org.subscription",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "portal",
+                "flow": "payment_method_update"
+              },
+              "open": "url"
+            },
+            {
+              "id": "resume",
+              "label": "Keep my plan",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "data.billing.subscription.cancelAtPeriodEnd",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "resume"
+              },
+              "success": "Your plan continues"
+            },
+            {
+              "id": "plans",
+              "label": "Choose a plan",
+              "icon": "sparkles|workspace_premium",
+              "navigate": {
+                "screen": "core.billing.plans"
+              }
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Usage",
+              "subtitle": "Spend limits and storage",
+              "icon": "chart.bar|bar_chart",
+              "screen": "core.billing.usage"
+            },
+            {
+              "title": "Invoices",
+              "subtitle": "Every invoice and receipt",
+              "icon": "doc.text|receipt_long",
+              "screen": "core.billing.invoices"
+            },
+            {
+              "title": "Billing details",
+              "subtitle": "Email, address, tax IDs, cards",
+              "icon": "building.columns|account_balance",
+              "screen": "core.billing.settings",
+              "when": "org.manager"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "name": "orgBillingUsage",
+          "title": "Add-ons and usage"
+        }
+      ]
+    },
+    {
+      "id": "core.billing.plans",
+      "title": "Choose a plan",
+      "icon": "sparkles|workspace_premium",
+      "scope": "org",
+      "requires": "org.manager",
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Pick a plan to continue on Stripe's secure checkout, where the price and terms are shown. A workspace already on a paid plan changes it under Manage subscription."
+        },
+        {
+          "type": "list",
+          "items": "const.plans",
+          "primary": "{item.label}",
+          "secondary": "{item.blurb}",
+          "icon": "sparkles|workspace_premium",
+          "actions": [
+            {
+              "id": "monthly",
+              "label": "Continue, billed monthly",
+              "icon": "calendar|event",
+              "url": "/api/billing/checkout",
+              "body": {
+                "orgId": "{org.id}",
+                "plan": "{item.id}",
+                "interval": "month"
+              },
+              "open": "url",
+              "reload": false
+            },
+            {
+              "id": "yearly",
+              "label": "Continue, billed yearly",
+              "icon": "calendar.badge.clock|event",
+              "url": "/api/billing/checkout",
+              "body": {
+                "orgId": "{org.id}",
+                "plan": "{item.id}",
+                "interval": "year"
+              },
+              "open": "url",
+              "reload": false
+            }
+          ]
+        }
+      ],
+      "constants": {
+        "plans": [
+          {
+            "id": "starter",
+            "label": "Starter",
+            "blurb": "One site, the essentials"
+          },
+          {
+            "id": "pro",
+            "label": "Pro",
+            "blurb": "More sites, store and forms"
+          },
+          {
+            "id": "business",
+            "label": "Business",
+            "blurb": "Teams and higher limits"
+          },
+          {
+            "id": "agency",
+            "label": "Agency",
+            "blurb": "Client workspaces and white-label"
+          }
+        ]
+      }
+    },
+    {
+      "id": "core.billing.invoices",
+      "title": "Invoices",
+      "icon": "doc.text|receipt_long",
+      "scope": "org",
+      "links": [
+        "/billing/invoices"
+      ],
+      "load": {
+        "invoices": {
+          "url": "/api/billing/invoices?orgId={org.id}",
+          "cursor": "nextCursor",
+          "items": "invoices"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "invoices",
+          "items": "data.invoices.invoices",
+          "primary": "{item.number|item.id}",
+          "secondary": "{item.created:date}",
+          "trailing": "{item.totalCents:cents/item.currency}",
+          "icon": "doc.text|receipt_long",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Paid": "success",
+                "Open": "warning",
+                "Uncollectible": "error",
+                "Void": "neutral",
+                "*": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "pay",
+              "label": "Pay on Stripe",
+              "icon": "creditcard|credit_card",
+              "when": "item.status == open && item.hostedInvoiceUrl",
+              "link": "{item.hostedInvoiceUrl}"
+            },
+            {
+              "id": "view",
+              "label": "View invoice",
+              "icon": "doc.richtext|description",
+              "when": "item.hostedInvoiceUrl",
+              "link": "{item.hostedInvoiceUrl}"
+            },
+            {
+              "id": "pdf",
+              "label": "Download PDF",
+              "icon": "arrow.down.doc|download",
+              "when": "item.invoicePdf",
+              "link": "{item.invoicePdf}"
+            },
+            {
+              "id": "receipt",
+              "label": "Receipt",
+              "icon": "doc.plaintext|receipt",
+              "when": "item.receiptUrl",
+              "link": "{item.receiptUrl}"
+            }
+          ],
+          "empty": "No invoices yet."
+        }
+      ]
+    },
+    {
+      "id": "core.billing.usage",
+      "title": "Usage",
+      "icon": "chart.bar|bar_chart",
+      "scope": "org",
+      "links": [
+        "/billing/usage"
+      ],
+      "load": {
+        "usage": {
+          "url": "/api/billing/host-usage?orgId={org.id}",
+          "optional": true
+        },
+        "budget": {
+          "url": "/api/billing/usage-budget",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "storage": {
+          "url": "/api/billing/storage-overage",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "This month",
+          "rows": [
+            {
+              "label": "Page views",
+              "value": "{data.usage.monthPageViews:number}"
+            },
+            {
+              "label": "Bandwidth",
+              "value": "{data.usage.bandwidthGb:number} GB"
+            },
+            {
+              "label": "Media delivered",
+              "value": "{data.usage.monthMediaBandwidthBytes:bytes}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Metered usage",
+          "when": "data.budget.spend.lines",
+          "items": "data.budget.spend.lines",
+          "primary": "{item.label|item.key:title}",
+          "trailing": "{item.units:number} {item.unitLabel}",
+          "count": false,
+          "empty": "Nothing metered this month."
+        },
+        {
+          "type": "form",
+          "title": "Monthly spend limit",
+          "id": "budget",
+          "when": "data.budget",
+          "footer": "We email the billing contacts as usage nears the limit.",
+          "fields": [
+            {
+              "key": "amountUsd",
+              "label": "Limit in US dollars",
+              "kind": "number",
+              "initial": "{data.budget.amountUsd}",
+              "placeholder": "No limit"
+            }
+          ],
+          "submit": {
+            "label": "Save limit",
+            "when": "org.manager",
+            "url": "/api/billing/usage-budget",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "setBudget",
+              "amountUsd": "{form.amountUsd}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "fields",
+          "title": "Storage over the plan",
+          "when": "data.storage",
+          "rows": [
+            {
+              "label": "Metered this month",
+              "value": "{data.storage.metered:yesno}"
+            },
+            {
+              "label": "Monthly cap",
+              "value": "{data.storage.monthlyCapUsd|data.storage.defaultCapUsd:dollars}"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "storageCap",
+          "when": "data.storage && org.manager",
+          "fields": [
+            {
+              "key": "capUsd",
+              "label": "Storage overage cap (USD)",
+              "kind": "number",
+              "initial": "{data.storage.monthlyCapUsd}"
+            }
+          ],
+          "submit": {
+            "label": "Save cap",
+            "url": "/api/billing/storage-overage",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "setCap",
+              "capUsd": "{form.capUsd}"
+            },
+            "success": "Saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.billing.settings",
+      "title": "Billing details",
+      "icon": "building.columns|account_balance",
+      "scope": "org",
+      "requires": "org.manager",
+      "links": [
+        "/billing/settings"
+      ],
+      "load": {
+        "profile": {
+          "url": "/api/billing/profile",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "title": "Billing email",
+          "id": "email",
+          "footer": "Invoices and receipts go here.",
+          "fields": [
+            {
+              "key": "email",
+              "label": "Email",
+              "kind": "email",
+              "required": true,
+              "initial": "{data.profile.customer.email}"
+            }
+          ],
+          "submit": {
+            "label": "Save email",
+            "url": "/api/billing/profile",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "set-billing-email",
+              "email": "{form.email}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
+          "title": "Billing address",
+          "id": "address",
+          "object": "data.profile.customer.address",
+          "fields": [
+            {
+              "key": "name",
+              "label": "Name on invoices",
+              "kind": "text",
+              "initial": "{data.profile.customer.name}"
+            },
+            {
+              "key": "line1",
+              "label": "Address",
+              "kind": "text",
+              "required": true,
+              "initial": "{item.line1}"
+            },
+            {
+              "key": "line2",
+              "label": "Address line 2",
+              "kind": "text",
+              "initial": "{item.line2}"
+            },
+            {
+              "key": "city",
+              "label": "City",
+              "kind": "text",
+              "initial": "{item.city}"
+            },
+            {
+              "key": "state",
+              "label": "State or region",
+              "kind": "text",
+              "initial": "{item.state}"
+            },
+            {
+              "key": "postalCode",
+              "label": "Postal code",
+              "kind": "text",
+              "initial": "{item.postalCode}"
+            },
+            {
+              "key": "country",
+              "label": "Country (2 letters)",
+              "kind": "text",
+              "required": true,
+              "initial": "{item.country}",
+              "placeholder": "US"
+            }
+          ],
+          "submit": {
+            "label": "Save address",
+            "url": "/api/billing/profile",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "set-billing-address",
+              "name": "{form.name}",
+              "line1": "{form.line1}",
+              "line2": "{form.line2}",
+              "city": "{form.city}",
+              "state": "{form.state}",
+              "postalCode": "{form.postalCode}",
+              "country": "{form.country}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "list",
+          "title": "Payment methods",
+          "items": "data.profile.paymentMethods",
+          "primary": "{item.brand|item.type:title} •••• {item.last4}",
+          "secondary": "Expires {item.expMonth}/{item.expYear}",
+          "icon": "creditcard|credit_card",
+          "badges": [
+            {
+              "text": "Default",
+              "when": "item.isDefault",
+              "tone": "success"
+            }
+          ],
+          "actions": [
+            {
+              "id": "default",
+              "label": "Make default",
+              "icon": "checkmark.circle|check_circle",
+              "when": "!item.isDefault",
+              "url": "/api/billing/profile",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "set-default-card",
+                "paymentMethodId": "{item.id}"
+              },
+              "success": "Default updated"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "!item.isDefault",
+              "confirm": "Remove this payment method?",
+              "url": "/api/billing/profile",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "remove-card",
+                "paymentMethodId": "{item.id}"
+              },
+              "success": "Removed"
+            }
+          ],
+          "empty": "No payment method on file."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "addCard",
+              "label": "Add a payment method on Stripe",
+              "icon": "plus|add_card",
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "portal",
+                "flow": "payment_method_update"
+              },
+              "open": "url"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Tax IDs",
+          "items": "data.profile.taxIds",
+          "primary": "{item.value}",
+          "secondary": "{item.type:upper}",
+          "icon": "number|tag",
+          "badges": [
+            {
+              "text": "{item.verification:title}",
+              "tones": {
+                "Verified": "success",
+                "Pending": "warning",
+                "Unverified": "error",
+                "*": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove {item.value}?",
+              "url": "/api/billing/profile",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "remove-tax-id",
+                "taxIdId": "{item.id}"
+              },
+              "success": "Removed"
+            }
+          ],
+          "empty": "No tax IDs."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "addTaxId",
+              "label": "Add a tax ID",
+              "icon": "plus|add",
+              "url": "/api/billing/profile",
+              "prompt": [
+                {
+                  "key": "type",
+                  "label": "Type",
+                  "kind": "select",
+                  "initial": "eu_vat",
+                  "options": [
+                    {
+                      "value": "eu_vat",
+                      "label": "EU VAT"
+                    },
+                    {
+                      "value": "gb_vat",
+                      "label": "UK VAT"
+                    },
+                    {
+                      "value": "au_abn",
+                      "label": "Australian ABN"
+                    },
+                    {
+                      "value": "ca_bn",
+                      "label": "Canadian BN"
+                    },
+                    {
+                      "value": "us_ein",
+                      "label": "US EIN"
+                    },
+                    {
+                      "value": "in_gst",
+                      "label": "Indian GST"
+                    },
+                    {
+                      "value": "nz_gst",
+                      "label": "New Zealand GST"
+                    }
+                  ]
+                },
+                {
+                  "key": "value",
+                  "label": "Number",
+                  "kind": "text",
+                  "required": true
+                }
+              ],
+              "body": {
+                "orgId": "{org.id}",
+                "action": "add-tax-id",
+                "taxIdType": "{form.type}",
+                "taxIdValue": "{form.value}"
+              },
+              "success": "Added"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

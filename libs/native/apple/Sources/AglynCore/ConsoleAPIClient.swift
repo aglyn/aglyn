@@ -66,8 +66,8 @@ public final class ConsoleAPIClient: Sendable {
   public typealias Sleep = @Sendable (_ milliseconds: UInt64) async throws -> Void
 
   public let origin: String
-  private let getIDToken: TokenSource
-  private let transport: HTTPTransport
+  let getIDToken: TokenSource
+  let transport: HTTPTransport
   private let sleep: Sleep
   private let maxAttempts: Int
 
@@ -85,6 +85,23 @@ public final class ConsoleAPIClient: Sendable {
     self.transport = transport
     self.sleep = sleep ?? { ms in try await Task.sleep(nanoseconds: ms * 1_000_000) }
     self.maxAttempts = max(1, maxAttempts)
+  }
+
+  /// The signed-in member's ID token claims (its payload, decoded; never verified here, since the
+  /// routes and rules verify the token itself). A screen reads a claim the console reads the same
+  /// way, such as `staff` for a staff preview.
+  public func claims() async -> [String: Any] {
+    guard let token = try? await getIDToken(false) else { return [:] }
+    return Self.jwtPayload(token)
+  }
+
+  static func jwtPayload(_ token: String) -> [String: Any] {
+    let parts = token.split(separator: ".")
+    guard parts.count >= 2 else { return [:] }
+    var base64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    while base64.count % 4 != 0 { base64 += "=" }
+    guard let data = Data(base64Encoded: base64), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+    return object
   }
 
   /// `encodeURIComponent`'s unreserved set.
@@ -121,7 +138,8 @@ public final class ConsoleAPIClient: Sendable {
     query: [(String, String?)] = [],
     body: JSONValue? = nil,
     idempotencyKey: String? = nil,
-    anonymous: Bool = false
+    anonymous: Bool = false,
+    rawBody: (data: Data, contentType: String)? = nil
   ) async throws -> JSONValue? {
     let retryable = method == .get || idempotencyKey != nil
     var forceRefresh = false
@@ -141,6 +159,10 @@ public final class ConsoleAPIClient: Sendable {
       if let body {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try body.encoded()
+      } else if let rawBody {
+        // A route that takes the file itself as the body (`/api/fonts/prepare`).
+        request.setValue(rawBody.contentType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = rawBody.data
       }
       if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
 

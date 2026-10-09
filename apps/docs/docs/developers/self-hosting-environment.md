@@ -388,7 +388,7 @@ enforcement on.
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `AUTH_ACTION_ALLOWED_ORIGINS` | Optional | Runtime | Comma-separated extra origins a password-reset or verify-email link may be built on when the request supplies one. Empty — the default — means request-supplied origins are always ignored and the link is built on `NEXT_PUBLIC_CONSOLE_URL`, which is the safe state. **This is a security boundary:** a wrong entry lets a request-supplied host receive a live reset code. Intended for preview deployments. |
-| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `60`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
+| `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES` | Optional | Build | Idle window before the console signs a user out. Default `120`. A non-numeric value makes the comparison `NaN`, so the idle logout **silently never fires** — there is no clamping and no warning. |
 
 ---
 
@@ -918,7 +918,7 @@ with its `AGLYN_API_URL` environment variable there.
 | --- | --- | --- | --- |
 | `ZAPIER_APP_URL` | Optional | Runtime, console | The `https://` link to your published Zapier app (its public page or invite link). Set it once the app is published; the card's **Open in Zapier** button goes there. |
 
-### Fulfillment networks: ShipBob and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
+### Fulfillment networks: ShipBob, ShipMonk and Amazon Multi-Channel Fulfillment {#fulfillment-networks}
 
 A store can send its paid orders to the merchant's **own** ShipBob or Amazon
 Multi-Channel Fulfillment account, read the shipments and tracking back onto
@@ -942,11 +942,17 @@ never opens a grant.
 | `AMAZON_SP_API_REGION` | Optional | Runtime, console | `na` (default), `eu` or `fe`: the Selling Partner API region the deployment's sellers are in. |
 | `AMAZON_SP_API_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to Amazon's sandbox. Unset is production. |
 | `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
+| `SHIPMONK_ENABLED` | Optional | Runtime, console | `true` offers ShipMonk. It needs no app: each merchant pastes their own ShipMonk API key and store id, sealed with the token key. |
+| `SHIPMONK_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipMonk's sandbox (`sandbox.shipmonk.dev`), which takes test orders only and needs sandbox keys. Unset is production. |
 
 Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
 redirect URI in both apps. ShipBob's webhooks are subscribed for each
 connection at `https://<console>/api/fulfillment-networks/webhooks/shipbob`
-with a token of their own; nothing needs registering for them.
+with a token of their own; nothing needs registering for them. ShipMonk's
+webhooks are set up by each merchant in their ShipMonk account, at the
+address and with the signing secret the card shows once, and are answered at
+`https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
+verified by its HMAC-SHA512 `X-Sm-Signature`.
 
 ### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
 
@@ -1214,9 +1220,10 @@ Config.
 | `AI_PROVIDER` | Optional | Runtime | Which registered adapter is the platform default: `anthropic` or `openai-compatible`, or the id of a provider another plugin registers. Unset, the first ready adapter is the default. A workspace's `pluginSettings/ai` may pick its own. |
 | `AI_DEFAULT_MODEL` | Optional | Runtime | A model id, served by the default provider, for every step kind. Unset, each step kind takes its catalog tier on that provider. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
 | `AI_IMAGE_VERTEX_PROJECT` | Feature | Runtime | The Google Cloud project Media's photo mode bills to, through Google's image models on Vertex AI. Unset, no photos are made and the door says so; illustrations are unaffected. The platform's Firebase service account needs the Vertex AI User role there, and the project needs the Vertex AI API enabled. Google becomes a recipient of the descriptions users type, so list it as a subprocessor before you set this. |
-| `AI_IMAGE_VERTEX_LOCATION` | Optional | Runtime | The Vertex AI location photos are made in: `global` (the default) or a region that serves the model. |
+| `AI_IMAGE_VERTEX_LOCATION` | Optional | Runtime | The Vertex AI location images are made in: `global` (the default), the `us` or `eu` multi-region, or a single region that serves the model. Google's global endpoint makes no promise about where a request is processed; `us` or `eu` keeps processing inside that jurisdiction, for the models that offer it, and lists about 10% higher. |
 | `AI_IMAGE_MODEL` | Optional | Runtime | The image model photos are made with. Default `gemini-3.1-flash-image`. An id absent from the built-in image rate table is priced at the dearest known image rate. |
-| `NEXT_PUBLIC_AI_IMAGE_PHOTOS` | Optional | Build | `on` offers the **Photo** mode in Media's Create with AI window. Set it with `AI_IMAGE_VERTEX_PROJECT`; without it the window offers illustrations only. |
+| `NEXT_PUBLIC_AI_IMAGE_PHOTOS` | Optional | Build | `on` offers the Photo, Art and Design kinds in Media's Create with AI window. Set it with `AI_IMAGE_VERTEX_PROJECT`; without it the window offers the Vector kinds only. |
+| `PIXABAY_API_KEY` | Optional *(console)* | Runtime | A Pixabay API key, free from [pixabay.com/api/docs](https://pixabay.com/api/docs/) once signed in. With it, the pictures on a page an AI job builds are searched on Pixabay by the site's kind and each section's subject, and each chosen photo is copied into the site's own media library with its photographer and Pixabay page recorded; searches are cached 24 hours, as Pixabay's terms ask. Unset, pages use the starter photos every new site ships with. Costs no AI credits. Pixabay receives the search words and the key, never a customer's data. |
 | `ASSIST_MODEL` | Optional | Runtime | The assistant's own override, above `AI_DEFAULT_MODEL` for the chat door alone — the incident-response lever the assistant has always honored. |
 | `ASSIST_FREE_DAILY_LIMIT` | Optional | Runtime | Messages per free workspace per UTC day. Default **10**. |
 | `ASSIST_ENTITLED_MONTHLY_LIMIT` | Optional | Runtime | Messages per entitled workspace per month. Default **1000**. |

@@ -94,6 +94,23 @@ export interface AiPlanCapabilities {
    * SITE plan's worst case leaves room for. Absent for every other job.
    */
   freeSitePages?: number
+  /**
+   * Whether this job's pages are written in the compact layout language
+   * (AGL-3660), whose compiler draws a section's repeated items itself: as
+   * instances of a component the plan places there, or, with none, in their
+   * compact form, a title over its text, which is smaller than a block rule 1
+   * calls a repeat. A plan is then not asked for a component for a section's
+   * repeated items (AGL-3616); a section two pages share still is one. The
+   * plan step sets it for a `build` job. Absent is `false`.
+   *
+   * It is the plan half of one rule. The page half is the tree check's
+   * `AiDoctrineTreeContext.repeatsCompiled`, which every page the layout
+   * language compiles is checked with: where the site's design draws a
+   * section's items as picture cards — larger than the compact form, and so
+   * a block rule 1 would count — those cards are the compiler's, not a block
+   * typed out twice, and rule 1 asks no component of them (AGL-3660).
+   */
+  repeatsCompiled?: boolean
 }
 
 /** What a job of one kind builds from its own plan, where it builds only some creations. */
@@ -153,6 +170,14 @@ export function aiCreationNoun(kind: AiBuildPlanCreateKind): string {
  */
 export const AI_PLAN_INLINE_SENTENCE =
   "This workspace keeps no reusable components: draw a list's repeated items in one section."
+
+/**
+ * The sentence a build's request states (AGL-3616): its pages are written in
+ * the layout language, which draws a section's repeated items itself, so the
+ * plan counts them in the section's `items` and needs no component for them.
+ */
+export const AI_PLAN_COMPILED_REPEATS_SENTENCE =
+  "A section's repeated items need no component here: count them in its items and the page draws them. A section two pages share is still one component."
 
 /**
  * The sentence a request states when the site has no saved form and this job

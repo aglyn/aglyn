@@ -1,0 +1,807 @@
+{
+  "$comment": "Your account and support: the console's manage/user sections, manage/report-issue, and [orgSlug]/support (tickets, forum). Routes: /api/account/emails, /api/account/devices, /api/account/devices/revoke, /api/account/export, /api/account/close, /api/auth/send-password-reset, /api/auth/passkeys/remove, /api/auth/marketing-consent, /api/issue-reports, /api/support/tickets, /api/support/forum; the profile is the person's own users/{uid} document, written under its owner-only rule as the console writes it. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.account.profile",
+      "title": "Profile",
+      "subtitle": "Name, phone and photo",
+      "icon": "person.crop.circle|account_circle",
+      "scope": "account",
+      "group": "account",
+      "order": 10,
+      "links": [
+        "/manage/user",
+        "/manage/user/basic",
+        "/manage/user/profile"
+      ],
+      "load": {
+        "me": {
+          "doc": "users/{user.uid}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "object": "data.me",
+          "fields": [
+            {
+              "key": "firstName",
+              "label": "First name",
+              "kind": "text",
+              "initial": "{item.firstName}"
+            },
+            {
+              "key": "lastName",
+              "label": "Last name",
+              "kind": "text",
+              "initial": "{item.lastName}"
+            },
+            {
+              "key": "phoneNumber",
+              "label": "Phone",
+              "kind": "text",
+              "initial": "{item.phoneNumber}"
+            },
+            {
+              "key": "photoURL",
+              "label": "Photo URL",
+              "kind": "url",
+              "initial": "{item.photoURL}",
+              "placeholder": "https://"
+            }
+          ],
+          "submit": {
+            "label": "Save profile",
+            "write": {
+              "doc": "users/{user.uid}",
+              "fields": {
+                "firstName": "{form.firstName}",
+                "lastName": "{form.lastName}",
+                "phoneNumber": "{form.phoneNumber}",
+                "photoURL": "{form.photoURL}"
+              }
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "fields",
+          "title": "Sign-in",
+          "rows": [
+            {
+              "label": "Email",
+              "value": "{user.email}"
+            },
+            {
+              "label": "Account ID",
+              "value": "{user.uid}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.account.emails",
+      "title": "Email addresses",
+      "subtitle": "Addresses on your account, product updates",
+      "icon": "envelope|mail",
+      "scope": "account",
+      "group": "account",
+      "order": 20,
+      "links": [
+        "/manage/user/emails"
+      ],
+      "load": {
+        "emails": "/api/account/emails",
+        "consent": {
+          "url": "/api/auth/marketing-consent",
+          "optional": true
+        }
+      },
+      "actions": [
+        {
+          "id": "add",
+          "label": "Add an address",
+          "icon": "plus|add",
+          "url": "/api/account/emails",
+          "prompt": [
+            {
+              "key": "address",
+              "label": "Email",
+              "kind": "email",
+              "required": true
+            }
+          ],
+          "body": {
+            "action": "add",
+            "address": "{form.address}"
+          },
+          "success": "Check {form.address} for a confirmation link"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.emails.emails",
+          "primary": "{item.address|item.email}",
+          "icon": "envelope|mail",
+          "badges": [
+            {
+              "text": "Primary",
+              "when": "item.primary",
+              "tone": "info"
+            },
+            {
+              "text": "Confirmed",
+              "when": "item.verified",
+              "tone": "success"
+            },
+            {
+              "text": "Unconfirmed",
+              "when": "!item.verified",
+              "tone": "warning"
+            }
+          ],
+          "actions": [
+            {
+              "id": "primary",
+              "label": "Make primary",
+              "icon": "star|star",
+              "when": "item.verified && !item.primary",
+              "url": "/api/account/emails",
+              "body": {
+                "action": "primary",
+                "address": "{item.address}"
+              },
+              "success": "{item.address} is your primary address"
+            },
+            {
+              "id": "resend",
+              "label": "Resend confirmation",
+              "icon": "paperplane|send",
+              "when": "!item.verified",
+              "url": "/api/account/emails",
+              "body": {
+                "action": "resend",
+                "address": "{item.address}"
+              },
+              "success": "Sent"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "!item.primary",
+              "confirm": "Remove {item.address}?",
+              "method": "DELETE",
+              "url": "/api/account/emails",
+              "body": {
+                "address": "{item.address}"
+              },
+              "success": "Removed"
+            }
+          ],
+          "empty": "Only your sign-in address."
+        },
+        {
+          "type": "fields",
+          "title": "Product updates",
+          "when": "data.consent",
+          "rows": [
+            {
+              "label": "Product news by email",
+              "value": "{data.consent.decision|'Not chosen':title}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "data.consent",
+          "items": [
+            {
+              "id": "optIn",
+              "label": "Send me product updates",
+              "icon": "bell|notifications",
+              "when": "data.consent.decision != granted",
+              "url": "/api/auth/marketing-consent",
+              "body": {
+                "decision": "granted",
+                "source": "account-settings",
+                "textVersion": "{data.consent.currentTextVersion}"
+              },
+              "success": "Subscribed"
+            },
+            {
+              "id": "optOut",
+              "label": "Stop product updates",
+              "icon": "bell.slash|unsubscribe",
+              "when": "data.consent.decision == granted",
+              "url": "/api/auth/marketing-consent",
+              "body": {
+                "decision": "denied",
+                "source": "account-settings",
+                "textVersion": "{data.consent.currentTextVersion}"
+              },
+              "success": "Unsubscribed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.account.security",
+      "title": "Security",
+      "subtitle": "Password, passkeys and recent sign-ins",
+      "icon": "lock.shield|security",
+      "scope": "account",
+      "group": "account",
+      "order": 30,
+      "links": [
+        "/manage/user/security",
+        "/manage/user/account"
+      ],
+      "load": {
+        "devices": "/api/account/devices",
+        "passkeys": {
+          "query": {
+            "collection": "users/{user.uid}/passkeys",
+            "limit": 20
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "title": "Password",
+          "items": [
+            {
+              "id": "reset",
+              "label": "Email me a password reset link",
+              "icon": "key|password",
+              "url": "/api/auth/send-password-reset",
+              "body": {
+                "email": "{user.email}"
+              },
+              "success": "Check {user.email} for the link"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Passkeys",
+          "items": "data.passkeys.items",
+          "primary": "{item.name|item.label|'Passkey'}",
+          "secondary": "Added {item.createdAt:date}",
+          "tertiary": "Last used {item.lastUsedAt|'never':datetime}",
+          "icon": "person.badge.key|key",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove passkey",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Remove this passkey?",
+              "url": "/api/auth/passkeys/remove",
+              "body": {
+                "credentialId": "{item.$id}"
+              },
+              "success": "Removed"
+            }
+          ],
+          "empty": "No passkeys. Add one from a browser that supports them."
+        },
+        {
+          "type": "list",
+          "title": "Recent sign-ins",
+          "items": "data.devices.devices",
+          "primary": "{item.deviceName|item.userAgent|'Unknown device'}",
+          "secondary": "{item.location|'Unknown location'}",
+          "tertiary": "Last used {item.lastSeenMs:datetime}",
+          "icon": "laptopcomputer.and.iphone|devices",
+          "badges": [
+            {
+              "text": "Signed out",
+              "when": "item.revokedAt",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [
+            {
+              "id": "revoke",
+              "label": "Sign this device out",
+              "icon": "rectangle.portrait.and.arrow.right|logout",
+              "destructive": true,
+              "when": "!item.revokedAt",
+              "confirm": "Sign out everywhere this account is signed in, including here? You sign back in with your password.",
+              "url": "/api/account/devices/revoke",
+              "body": {
+                "deviceId": "{item.id}"
+              },
+              "success": "Signed out"
+            }
+          ],
+          "empty": "No sign-ins recorded."
+        }
+      ]
+    },
+    {
+      "id": "core.account.close",
+      "title": "Close account",
+      "subtitle": "Export your data or close the account",
+      "icon": "person.crop.circle.badge.xmark|person_off",
+      "scope": "account",
+      "group": "account",
+      "order": 90,
+      "links": [
+        "/manage/user/close"
+      ],
+      "blocks": [
+        {
+          "type": "actions",
+          "title": "Your data",
+          "items": [
+            {
+              "id": "export",
+              "label": "Email me a copy of my data",
+              "icon": "arrow.down.doc|download",
+              "url": "/api/account/export",
+              "body": {},
+              "success": "The export is on its way to {user.email}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Closing the account deletes your sign-in and removes you from every workspace. Workspaces you own must be handed over or deleted first."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "close",
+              "label": "Close my account",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "url": "/api/account/close",
+              "prompt": [
+                {
+                  "key": "confirm",
+                  "label": "Type DELETE to confirm",
+                  "kind": "text",
+                  "required": true,
+                  "mustMatch": "DELETE"
+                }
+              ],
+              "body": {
+                "confirm": "{form.confirm}"
+              },
+              "success": "Your account is closed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.support",
+      "title": "Support",
+      "subtitle": "Tickets, forum and bug reports",
+      "icon": "questionmark.bubble|support",
+      "scope": "account",
+      "group": "account",
+      "order": 40,
+      "links": [
+        "/support",
+        "/manage/report-issue"
+      ],
+      "blocks": [
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Tickets",
+              "subtitle": "Talk to the support team",
+              "icon": "lifepreserver|support",
+              "screen": "core.support.tickets",
+              "when": "org.id"
+            },
+            {
+              "title": "Community forum",
+              "subtitle": "Ask other builders",
+              "icon": "bubble.left.and.bubble.right|forum",
+              "screen": "core.support.forum",
+              "when": "org.id"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Report an issue",
+          "items": [
+            {
+              "id": "report",
+              "label": "Report a bug, idea or question",
+              "icon": "ladybug|bug_report",
+              "url": "/api/issue-reports",
+              "prompt": [
+                {
+                  "key": "kind",
+                  "label": "What is it",
+                  "kind": "select",
+                  "initial": "bug",
+                  "options": [
+                    {
+                      "value": "bug",
+                      "label": "Something is broken"
+                    },
+                    {
+                      "value": "idea",
+                      "label": "An idea"
+                    },
+                    {
+                      "value": "question",
+                      "label": "A question"
+                    }
+                  ]
+                },
+                {
+                  "key": "summary",
+                  "label": "Summary",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "details",
+                  "label": "Details",
+                  "kind": "multiline",
+                  "help": "What you did, what you expected, what happened."
+                }
+              ],
+              "body": {
+                "kind": "{form.kind}",
+                "summary": "{form.summary}",
+                "answers": {
+                  "steps": "{form.details}",
+                  "problem": "{form.details}",
+                  "question": "{form.details}"
+                },
+                "skipDeflection": true,
+                "orgId": "{org.id}",
+                "hostId": "{site.id}",
+                "route": "app",
+                "contactConsent": true
+              },
+              "success": "Thanks — we have it"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.support.tickets",
+      "title": "Tickets",
+      "icon": "lifepreserver|support",
+      "scope": "org",
+      "links": [
+        "/support/tickets"
+      ],
+      "load": {
+        "tickets": "/api/support/tickets?orgId={org.id}"
+      },
+      "actions": [
+        {
+          "id": "new",
+          "label": "New ticket",
+          "icon": "plus|add",
+          "url": "/api/support/tickets",
+          "prompt": [
+            {
+              "key": "subject",
+              "label": "Subject",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "body",
+              "label": "How can we help",
+              "kind": "multiline",
+              "required": true
+            }
+          ],
+          "body": {
+            "orgId": "{org.id}",
+            "subject": "{form.subject}",
+            "body": "{form.body}"
+          },
+          "success": "Ticket opened",
+          "navigate": {
+            "screen": "core.support.ticket",
+            "params": {
+              "ticketId": "{response.ticketId}"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.tickets.tickets",
+          "split": true,
+          "primary": "{item.subject}",
+          "secondary": "Updated {item.updatedAt|item.createdAt:datetime}",
+          "icon": "lifepreserver|support",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Open": "warning",
+                "Closed": "neutral",
+                "*": "info"
+              }
+            }
+          ],
+          "open": {
+            "screen": "core.support.ticket",
+            "params": {
+              "ticketId": "{item.$id}"
+            }
+          },
+          "empty": "No tickets yet."
+        }
+      ]
+    },
+    {
+      "id": "core.support.ticket",
+      "title": "{data.ticket.ticket.subject|'Ticket'}",
+      "label": "Ticket",
+      "icon": "lifepreserver|support",
+      "scope": "org",
+      "links": [
+        "/support/tickets/:ticketId"
+      ],
+      "load": {
+        "ticket": "/api/support/tickets?orgId={org.id}&ticketId={params.ticketId}"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.ticket.ticket",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{item.status:title}",
+              "chip": true,
+              "tones": {
+                "Open": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Opened",
+              "value": "{item.createdAt:datetime}"
+            },
+            {
+              "label": "Reply expected by",
+              "value": "{item.responseDueAt:datetime}",
+              "when": "item.responseDueAt && item.status == open"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Conversation",
+          "items": "data.ticket.messages",
+          "primary": "{item.body}",
+          "secondary": "{item.authorName|item.authorEmail|item.from:title} · {item.createdAt:datetime}",
+          "count": false,
+          "empty": "No messages."
+        },
+        {
+          "type": "form",
+          "id": "reply",
+          "fields": [
+            {
+              "key": "body",
+              "label": "Reply",
+              "kind": "multiline",
+              "required": true
+            }
+          ],
+          "submit": {
+            "label": "Send reply",
+            "method": "PATCH",
+            "url": "/api/support/tickets",
+            "body": {
+              "orgId": "{org.id}",
+              "ticketId": "{params.ticketId}",
+              "body": "{form.body}"
+            },
+            "success": "Sent"
+          }
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "close",
+              "label": "Close ticket",
+              "icon": "checkmark.circle|check_circle",
+              "when": "data.ticket.ticket.status == open",
+              "method": "PATCH",
+              "url": "/api/support/tickets",
+              "body": {
+                "orgId": "{org.id}",
+                "ticketId": "{params.ticketId}",
+                "status": "closed"
+              },
+              "success": "Closed"
+            },
+            {
+              "id": "reopen",
+              "label": "Reopen ticket",
+              "icon": "arrow.uturn.backward|undo",
+              "when": "data.ticket.ticket.status == closed",
+              "method": "PATCH",
+              "url": "/api/support/tickets",
+              "body": {
+                "orgId": "{org.id}",
+                "ticketId": "{params.ticketId}",
+                "status": "open"
+              },
+              "success": "Reopened"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.support.forum",
+      "title": "Community forum",
+      "icon": "bubble.left.and.bubble.right|forum",
+      "scope": "org",
+      "links": [
+        "/support/forum"
+      ],
+      "load": {
+        "forum": "/api/support/forum"
+      },
+      "actions": [
+        {
+          "id": "new",
+          "label": "New thread",
+          "icon": "plus|add",
+          "url": "/api/support/forum",
+          "prompt": [
+            {
+              "key": "category",
+              "label": "Category",
+              "kind": "select",
+              "initial": "General",
+              "options": [
+                "General",
+                "Building",
+                "Showcase",
+                "Feedback"
+              ]
+            },
+            {
+              "key": "title",
+              "label": "Title",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "body",
+              "label": "Post",
+              "kind": "multiline",
+              "required": true
+            }
+          ],
+          "body": {
+            "orgId": "{org.id}",
+            "category": "{form.category}",
+            "title": "{form.title}",
+            "body": "{form.body}"
+          },
+          "success": "Posted",
+          "navigate": {
+            "screen": "core.support.thread",
+            "params": {
+              "threadId": "{response.threadId}"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.forum.threads",
+          "split": true,
+          "primary": "{item.title}",
+          "secondary": "{item.category} · {item.replyCount|'0'} replies",
+          "tertiary": "{item.updatedAt|item.createdAt:datetime}",
+          "icon": "bubble.left|forum",
+          "open": {
+            "screen": "core.support.thread",
+            "params": {
+              "threadId": "{item.$id}"
+            }
+          },
+          "empty": "No threads yet."
+        }
+      ]
+    },
+    {
+      "id": "core.support.thread",
+      "title": "{data.thread.thread.title|'Thread'}",
+      "label": "Thread",
+      "icon": "bubble.left|forum",
+      "scope": "org",
+      "links": [
+        "/support/forum/:threadId"
+      ],
+      "load": {
+        "thread": "/api/support/forum?threadId={params.threadId}"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.thread.thread",
+          "rows": [
+            {
+              "label": "Category",
+              "value": "{item.category}"
+            },
+            {
+              "label": "Posted",
+              "value": "{item.createdAt:datetime}"
+            },
+            {
+              "label": "By",
+              "value": "{item.authorName|item.authorEmail}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "neutral",
+          "text": "{data.thread.thread.body}"
+        },
+        {
+          "type": "list",
+          "title": "Replies",
+          "items": "data.thread.replies",
+          "primary": "{item.body}",
+          "secondary": "{item.authorName|item.authorEmail} · {item.createdAt:datetime}",
+          "count": false,
+          "empty": "No replies yet."
+        },
+        {
+          "type": "form",
+          "id": "reply",
+          "fields": [
+            {
+              "key": "body",
+              "label": "Reply",
+              "kind": "multiline",
+              "required": true
+            }
+          ],
+          "submit": {
+            "label": "Post reply",
+            "method": "PATCH",
+            "url": "/api/support/forum",
+            "body": {
+              "orgId": "{org.id}",
+              "threadId": "{params.threadId}",
+              "body": "{form.body}"
+            },
+            "success": "Posted"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -31,7 +31,11 @@ import type { CrmViewFilterClause } from '@aglyn/aglyn/app-utils/crm'
 import { SCOPED_SEARCH_JOIN } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterField, ListFilterRequest } from '@aglyn/shared-util-tools/list-query/list-filter'
 import { type ListGridFilterCodec, listSelectCodec } from '@aglyn/shared-util-tools/list-query/list-filter-codecs'
-import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-util-tools/list-query/list-query-plan'
+import type {
+  ListQueryDeclaration,
+  ListQueryFilter,
+  ListQuerySort,
+} from '@aglyn/shared-util-tools/list-query/list-query-plan'
 import {
   CRM_LIST_SEARCH,
   type CrmClauseAsked,
@@ -309,8 +313,30 @@ export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> =
  * folds into it for a reader who may drop it).
  *=========================================*/
 
-/** The one order the Leads list takes: newest seen first. */
-export const LEAD_LIST_SORTS: readonly ListQuerySort[] = [{ path: 'lastSeenAtMs', direction: 'desc' }]
+/**
+ * The Leads list's orders: newest seen first, then each header the query can
+ * order by (AGL-3680) — Last seen the other way, the lead's name or address
+ * (`nameSortKey`), its company and title (`companyLower`, `jobTitleLower`)
+ * and its address verdict (`emailStatus`), each stored on every lead. Each
+ * is `alone`: served with no filter or search on beyond the Status the list
+ * always asks (`leadStatusBase`), by one `(visibleTo, field)` and one
+ * `(status, field)` composite per direction. The other columns — Status and
+ * Lead source, Industry and Rating in the org's picklist order, the owner's
+ * and campaigns' names, the sites, sources, tags and custom values — sort
+ * the page.
+ */
+export const LEAD_LIST_SORTS: readonly ListQuerySort[] = [
+  { path: 'lastSeenAtMs', direction: 'desc', column: 'lastSeenAtMs', label: 'Last seen' },
+  { path: 'lastSeenAtMs', direction: 'asc', column: 'lastSeenAtMs', label: 'Last seen', alone: true },
+  { path: 'nameSortKey', direction: 'asc', column: 'name', label: 'Lead', alone: true },
+  { path: 'nameSortKey', direction: 'desc', column: 'name', label: 'Lead', alone: true },
+  { path: 'companyLower', direction: 'asc', column: 'company', label: 'Company', alone: true },
+  { path: 'companyLower', direction: 'desc', column: 'company', label: 'Company', alone: true },
+  { path: 'jobTitleLower', direction: 'asc', column: 'jobTitle', label: 'Title', alone: true },
+  { path: 'jobTitleLower', direction: 'desc', column: 'jobTitle', label: 'Title', alone: true },
+  { path: 'emailStatus', direction: 'asc', column: 'emailState', label: 'Email', alone: true },
+  { path: 'emailStatus', direction: 'desc', column: 'emailState', label: 'Email', alone: true },
+]
 
 /** The fields the Leads query asks — each a stored field, as named. */
 export const LEAD_QUERY_FIELDS: readonly ListFilterField[] = [
@@ -459,6 +485,32 @@ export function leadQueryClause(
       return { refused: 'this list does not filter by that' }
   }
 }
+
+/*------------------------------------------
+ * THE STATUS IS THE LIST'S BASE (AGL-3680).
+ *
+ * The Leads list always asks a Status — Open unless the reader picks
+ * another, or All — so a header order served only with no filter on (an
+ * `alone` order) would never be served. The Status clause is therefore put
+ * on the query as part of its BASE, beside the scope clause, the way a task
+ * view's status is: an `alone` order pairs with it through one
+ * `(status, field)` composite, and every other clause still counts as a
+ * filter. The clause stays the reader's — the chip, the view and the
+ * refusals read it as they always did.
+ *-----------------------------------------*/
+
+/** The asked Status clause as the base predicate it stands for, or none. */
+export function leadStatusBase(clause: ListFilterRequest | undefined): ListQueryFilter[] {
+  if (!clause || clause.field !== 'status') return []
+  const values = crmClauseValues(clause)
+  if (!values.length) return []
+  return values.length === 1
+    ? [{ path: 'status', op: '==', value: values[0] }]
+    : [{ path: 'status', op: 'in', value: values }]
+}
+
+/** The base's shape for `listQueryIndexes`: the status equality. */
+export const LEAD_LIST_STATUS_BASE_INDEX = [{ path: 'status' }] as const
 
 /**
  * The query shape the Leads list can send beyond its own declaration, for

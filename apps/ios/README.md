@@ -57,6 +57,8 @@ Debug launch arguments, for screenshots and UI tests:
 | `-AglynAutoSignIn YES` | signs in with `AGLYN_DEBUG_*` (emulator builds only) |
 | `-AglynSection notifications\|settings\|more` | opens that section |
 | `-AglynDemoRoute redirects.list` | pushes a plugin screen |
+| `-AglynDemoParams uid=…,orgId=…` | the pushed screen's params |
+| `-AglynDebugAccount staff` | signs in as the seeded staff account (`staff: true`, `staffRole: super`) to see the staff section |
 | `-AglynShowSwitcher YES` | opens the workspace and site switcher |
 | `-AglynNoPushPrompt YES` | skips the notification permission prompt |
 | `-AglynAuthTransport rest\|sdk` | forces how the app signs in (see below) |

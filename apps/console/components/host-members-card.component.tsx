@@ -35,6 +35,8 @@ import {
   type ListFilterOption,
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -67,6 +69,7 @@ import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
   HOST_MEMBER_FILTER_FIELDS,
   HOST_MEMBER_FILTER_HEADERS,
+  HOST_MEMBER_LIST_COLUMN_SORTS,
   HOST_MEMBER_LIST_QUERY,
   hostMemberListRequest,
 } from '../utils/host-member-filters'
@@ -116,9 +119,6 @@ const ROLE_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>>
 
 /** The owner's row, drawn above the roster; no roster document has this id. */
 const OWNER_ROW_ID = '__owner__'
-
-/** A plugin column's header sorts nothing here: the roster keeps its order. */
-const NO_PLUGIN_SORT = () => undefined
 
 /** Keys typed into a cell's picker are the picker's, not the grid's. */
 const stopGridKeys = (event: { stopPropagation: () => void }) =>
@@ -204,9 +204,20 @@ export function HostMembersCard(props: HostMembersCardProps) {
    * filter is a new walk, and the pager starts over.
    */
   const gridFilter = useListGridFilter({ selectFields: ['role'] })
+  /*
+   * ## Every header orders the QUERY (AGL-3680)
+   *
+   * Member and Site access ask the roster's query for their order — the
+   * whole roster in it, not the page re-sorted — and a plugin column orders
+   * the page through its own header, saying so. See
+   * `HOST_MEMBER_LIST_COLUMN_SORTS` for which hold under the search.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    HOST_MEMBER_LIST_COLUMN_SORTS[0],
+  )
   const listRequest = useMemo(
-    () => hostMemberListRequest(gridFilter.clauses, gridFilter.searchWords),
-    [gridFilter.clauses, gridFilter.searchWords],
+    () => hostMemberListRequest(gridFilter.clauses, gridFilter.searchWords, askedSort),
+    [gridFilter.clauses, gridFilter.searchWords, askedSort],
   )
   const {
     rows: members,
@@ -223,6 +234,15 @@ export function HostMembersCard(props: HostMembersCardProps) {
     deps: [firestore, hostId],
     idField: '$id',
   })
+  const columnSort = useListColumnSort<any>({
+    sorts: HOST_MEMBER_LIST_COLUMN_SORTS,
+    defaultSort: HOST_MEMBER_LIST_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: members,
+  })
+  const { pageSortedBy: pluginSortedBy, sortPage: onPluginSort } = columnSort
   /**
    * SEATS USED is a server aggregate, not the length of the page window
    * (AGL-1716, the AGL-1706 shape).
@@ -470,13 +490,18 @@ export function HostMembersCard(props: HostMembersCardProps) {
     }
     return false
   })
+  // The owner stays on top under every order: the hook sorts the roster's
+  // rows only, and the owner's is drawn before them.
   const rows = useMemo(
     () => [
       ...(ownerShown ? [{ $id: OWNER_ROW_ID, owner: true }] : []),
-      ...members,
+      ...columnSort.rows,
     ],
-    [ownerShown, members],
+    [ownerShown, columnSort.rows],
   )
+  // `ListTable` draws the sort's rows, so it is handed the ones with the
+  // owner on top — the order below it is still the hook's.
+  const tableSort = useMemo(() => ({ ...columnSort, rows }), [columnSort, rows])
 
   /*
    * Columns a plugin contributes to this table (AGL-2940), between the role
@@ -488,8 +513,10 @@ export function HostMembersCard(props: HostMembersCardProps) {
     () =>
       pluginGridColumns<any>(stablePluginColumns, {
         slotProps: { orgId, hostId, canManage },
-        sortedBy: null,
-        onSort: NO_PLUGIN_SORT,
+        // A plugin column orders the PAGE by the comparator its header hands
+        // over — its figures are the plugin's, not on the roster document.
+        sortedBy: pluginSortedBy,
+        onSort: onPluginSort,
         rowProps: (row) =>
           row.owner
             ? { member: { $id: ownerUid, uid: ownerUid, role: 'owner' } }
@@ -500,7 +527,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
         renderCell: (params: any) =>
           params.row.owner && !ownerUid ? null : column.renderCell?.(params),
       })),
-    [stablePluginColumns, orgId, hostId, canManage, ownerUid],
+    [stablePluginColumns, orgId, hostId, canManage, ownerUid, pluginSortedBy, onPluginSort],
   )
 
   const columns = useMemo(
@@ -791,17 +818,16 @@ export function HostMembersCard(props: HostMembersCardProps) {
             headers: HOST_MEMBER_FILTER_HEADERS,
             options: ROLE_FILTER_OPTIONS,
           })}
-          notices={plan.notices}
+          notices={[...plan.notices, ...columnSort.notices]}
         />
         <ListTable
           aria-label="Site collaborators"
           rows={rows}
           columns={columns}
+          // Every header orders the query; the owner's row stays on top.
+          columnSort={tableSort}
           // A row holds a role picker, so it is as tall as what it holds.
           rowHeight={TABLE_ROW_HEIGHT}
-          // The roster's own order (by address); the grid's sort would be a
-          // second order over one page of it.
-          disableColumnSorting
           // The query answers the panel and the search; see its comment.
           filterMode="server"
           filterModel={gridFilter.filterModel}

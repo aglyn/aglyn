@@ -24,6 +24,7 @@ import {
   type ListQueryFilter,
   type ListQueryPlan,
   type ListQueryRefusal,
+  type ListQuerySort,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { applyListQuery } from './list-filter'
@@ -98,6 +99,8 @@ export interface ActorActivityPage extends ActivityQueryAnswer {
 export interface ActivityListRequest {
   clauses?: readonly ListFilterRequest[]
   search?: readonly string[]
+  /** A header order (AGL-3680); served only when the declaration offers it. */
+  sort?: ListQuerySort | null
 }
 
 /** A declaration, a request and a base, as the one query they make. */
@@ -108,7 +111,7 @@ export function planActivityQuery(
 ): ListQueryPlan {
   return planListQuery(
     declaration,
-    { clauses: request.clauses ?? [], search: request.search ?? [], base },
+    { clauses: request.clauses ?? [], search: request.search ?? [], sort: request.sort ?? null, base },
     nameSearchNormalizers,
   )
 }

@@ -37,7 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.FirestoreOrder
@@ -66,8 +68,28 @@ internal fun WorkspaceChip(workspace: WorkspaceState, onClick: () -> Unit) {
     onClick = onClick,
     label = { Text(workspace.site?.name ?: workspace.org?.name ?: "Workspace", maxLines = 1) },
     leadingIcon = { Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp)) },
-    modifier = Modifier.padding(end = 8.dp),
+    modifier = Modifier.padding(end = 8.dp).testTag("workspace-chip"),
   )
+}
+
+/** The workspace and site at the foot of the permanent drawer; opens the switcher. */
+@Composable
+internal fun WorkspaceFooter(workspace: WorkspaceState, onClick: () -> Unit) {
+  androidx.compose.material3.Surface(
+    onClick = onClick,
+    modifier = Modifier.fillMaxWidth().padding(10.dp).testTag("sidebar-switcher").semantics { contentDescription = "Switch workspace or site" },
+    shape = RoundedCornerShape(10.dp),
+    color = MaterialTheme.colorScheme.surface,
+  ) {
+    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      Icon(AglynIcons.named("workspaces"), null, tint = MaterialTheme.colorScheme.primary)
+      Column(Modifier.weight(1f)) {
+        Text(workspace.org?.name ?: "No workspace", style = MaterialTheme.typography.titleSmall, maxLines = 1)
+        Text(workspace.site?.name ?: "Pick a site", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+      }
+      Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
 }
 
 /** The workspace and site picker. */
@@ -171,6 +193,11 @@ data class FeedNotification(
   val level: String?,
   val type: String? = null,
   val createdAt: com.aglyn.core.FirestoreTimestamp? = null,
+  /** The workspace and site it is about, which opening it switches to. */
+  val orgId: String? = null,
+  val hostId: String? = null,
+  /** The invitee's own invitation: opening it answers the invite instead of following [link]. */
+  val inviteId: String? = null,
 )
 
 /** The AGL-3437 levels as intents; unknown or absent reads as info. */
@@ -183,40 +210,53 @@ fun levelIntent(level: String?): String = when (level) {
 }
 
 @Composable
-internal fun NotificationsScreen(services: ShellServices, uid: String, context: ShellPluginContext) {
-  when (val feed = notificationFeed(services, uid, 50)) {
-    Live.Loading -> SkeletonList(rows = 5)
-    is Live.Failed -> EmptyState("Could not load notifications", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
-    is Live.Ready -> if (feed.value.isEmpty()) {
-      EmptyState("You're all caught up", body = "New orders, form entries and alerts show up here.", icon = AglynIcons.named("notifications"))
-    } else {
-      val now = remember(feed) { com.aglyn.core.nowMillis() }
-      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(
-          Modifier.widthIn(max = 840.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(1f)),
-        ) { NotificationRows(feed.value, now, context) }
-      }
-    }
-  }
-}
-
-@Composable
-internal fun SettingsScreen(services: ShellServices, onNotificationSettings: () -> Unit = {}) {
+internal fun SettingsScreen(
+  services: ShellServices,
+  context: NativePluginContext? = null,
+  staff: Boolean = false,
+  onNotificationSettings: () -> Unit = {},
+) {
   val auth by services.auth.state.collectAsState()
   val user = (auth as? com.aglyn.core.AuthState.SignedIn)?.user
   val scope = rememberCoroutineScope()
+  val workspace by services.workspace.state.collectAsState()
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
     SectionHeader("Account")
     AglynListItem(
       title = user?.displayName ?: user?.email ?: "Signed in",
       supporting = user?.email,
-      icon = AglynIcons.named("settings"),
+      icon = AglynIcons.named("account_circle"),
     )
+    // The console's own areas, as core screens (libs/native/screens), by group.
+    if (context != null) {
+      val groups = buildList {
+        add("workspace" to (workspace.org?.name ?: "Workspace"))
+        if (workspace.site != null) add("site" to "Site · ${workspace.site?.name}")
+        add("account" to "Your account")
+        if (staff) add("staff" to "Staff")
+      }
+      for ((group, heading) in groups) {
+        val screens = com.aglyn.screens.ScreenCatalog.group(group)
+        if (screens.isEmpty()) continue
+        HorizontalDivider()
+        SectionHeader(heading)
+        for (screen in screens) {
+          AglynListItem(
+            title = screen.label,
+            supporting = screen.subtitle,
+            icon = AglynIcons.named(screen.icon),
+            trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+            onClick = { context.navigate(screen.id) },
+            modifier = Modifier.testTag("settings-${screen.id}"),
+          )
+        }
+      }
+    }
     HorizontalDivider()
     SectionHeader("Preferences")
     AglynListItem(
       title = "Notifications",
-      supporting = "Choose what is sent as push",
+      supporting = "What reaches you in the app, by email and as push",
       icon = AglynIcons.named("notifications"),
       trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
       onClick = onNotificationSettings,

@@ -65,8 +65,13 @@ import { observer } from 'mobx-react-lite'
 import { isNamespacedComponentId } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
 import { RealmElementsContext } from '@aglyn/aglyn/app-utils/realm-elements-context'
 import {
+  Children,
+  cloneElement,
   forwardRef,
   type HTMLAttributes,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
   Suspense,
   use,
   useContext,
@@ -91,6 +96,77 @@ function withoutChildren<T extends Record<string, unknown>>(
 ): Omit<T, 'children'> {
   const { children: _children, ...rest } = props
   return rest
+}
+
+type AnyNode = { $id?: unknown; children?: unknown[] } | null | undefined
+
+/**
+ * The node `kid` renders the subtree of, when `kid` is the `<Branch>` for
+ * the node with `$id` — matched by id, not identity, because a leaf
+ * component may render a resolved COPY of the node (the besigner's does)
+ * while the Branch carries the original.
+ */
+function ownBranchNode(
+  kid: unknown,
+  $id: unknown,
+  BranchComponent: unknown,
+): AnyNode {
+  if (!isValidElement(kid) || kid.type !== BranchComponent) return undefined
+  const branchNode = (kid.props as { node?: AnyNode })?.node
+  return branchNode?.$id === $id ? branchNode : undefined
+}
+
+/**
+ * A positional component's children: one React child per node child, in the
+ * place the `<Branch>` would have taken, with everything else a leaf
+ * component put beside it kept (AGL-3660).
+ *
+ * The published page hands `Leaf` the Branch alone, so this is exactly the
+ * per-child Stems. The besigner hands it the Branch plus what it draws around
+ * the element's own children — a repeat's preview copies and badge — and,
+ * for a repeat, the Branch inside a context provider. Dropping those (which
+ * is what this path did before) erased a repeat's preview from any
+ * positional element; keeping the Branch whole would undo the very split
+ * this path exists for. So a wrapper around the Branch is applied to each
+ * child instead, and the extras follow.
+ *
+ * The children are read off the node the BRANCH carries. The besigner's
+ * render copy is a spread of its canvas node, and a canvas node's `children`
+ * is a getter on its class that a spread drops — read off the copy, a
+ * positional element inside a repeat, or on a record page, had no children.
+ *
+ * A leaf rendered with no Branch among its children gets its own node's
+ * children, as it always did.
+ */
+function spreadPositionalChildren(
+  children: unknown,
+  node: AnyNode,
+  toStems: (childNodes: unknown[]) => ReactElement[],
+  BranchComponent: unknown,
+): ReactNode[] {
+  let placed = false
+  const out = Children.toArray(children as ReactNode).flatMap((kid) => {
+    const own = ownBranchNode(kid, node?.$id, BranchComponent)
+    if (own) {
+      placed = true
+      return toStems(own.children ?? [])
+    }
+    const wrapped = isValidElement(kid)
+      ? ownBranchNode(
+          (kid.props as { children?: unknown })?.children,
+          node?.$id,
+          BranchComponent,
+        )
+      : undefined
+    if (wrapped) {
+      placed = true
+      return toStems(wrapped.children ?? []).map((stem) =>
+        cloneElement(kid as ReactElement, { key: stem.key }, stem),
+      )
+    }
+    return [kid]
+  })
+  return placed ? out : toStems(node?.children ?? [])
 }
 
 export interface LeafProps extends HTMLAttributes<any> {
@@ -212,6 +288,11 @@ export const Leaf = observer(
     // re-targets viewport media queries at the artboard device width.
     // Undefined everywhere else, keeping the tenant path unchanged.
     const transformSx = useContext(LeafSxTransformContext)
+    // The Stem and Branch this tree renders with, for a positional element's
+    // children below. Read here rather than through a Consumer so the node's
+    // `children` are read in THIS observer's render and tracked by it: a
+    // child added on the canvas has to re-render the element it went into.
+    const { StemComponent, BranchComponent } = useContext(RendererComponents)
     // Scheme-scoped styles (AGL-588): sites swap a single-mode theme for
     // light/dark (tenant HostThemeProvider, canvas useAglynSiteTheme), so
     // '@scheme dark' sx slices resolve here against the ACTIVE theme's
@@ -367,11 +448,23 @@ export const Leaf = observer(
     // by index — MUI's Accordion is `[summary, ...rest]` — must receive one
     // React child per node child. The default single `<Branch>` element reads
     // as ONE child to `Children.toArray`, so the first slot swallowed the
-    // whole subtree and every later slot got nothing.
+    // whole subtree and every later slot got nothing. MUI's Stack counts its
+    // children the same way to place its divider between them (AGL-3660).
     const positional = Boolean(
       (schema?.flags?.positionalChildren ?? 0) & FEATURE_FLAG.ENABLED,
     )
-    const childNodes = positional ? (node?.children ?? []) : null
+    const positionalChildren =
+      positional && !holdServerHtml && !selfClosing
+        ? spreadPositionalChildren(
+            children,
+            node as AnyNode,
+            (childNodes) =>
+              childNodes.map((child: any, key: number) => (
+                <StemComponent key={child?.$id ?? key} node={child} />
+              )),
+            BranchComponent,
+          )
+        : null
 
     const element = holdServerHtml ? (
       // The root hydrates; its contents stay the server's until released.
@@ -383,18 +476,12 @@ export const Leaf = observer(
     ) : selfClosing ? (
       <Component {...leafProps} />
     ) : positional ? (
-      <RendererComponents.Consumer>
-        {({ StemComponent }) => (
-          <Component {...leafProps}>
-            {childNodes!.map((child: any, key: number) => (
-              <StemComponent key={child?.$id ?? key} node={child} />
-            ))}
-            {textContent != null && (
-              <AglynText>{textContent as any}</AglynText>
-            )}
-          </Component>
+      <Component {...leafProps}>
+        {positionalChildren}
+        {textContent != null && (
+          <AglynText>{textContent as any}</AglynText>
         )}
-      </RendererComponents.Consumer>
+      </Component>
     ) : (
       <Component {...leafProps}>
         {children}

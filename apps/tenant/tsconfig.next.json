@@ -230,6 +230,12 @@
       "@aglyn/plugins-redirects/*": [
         "../../libs/plugins/redirects/src/lib/*"
       ],
+      "@aglyn/plugins-loyalty": [
+        "../../libs/plugins/loyalty/src/index.ts"
+      ],
+      "@aglyn/plugins-loyalty/*": [
+        "../../libs/plugins/loyalty/src/lib/*"
+      ],
       "@aglyn/plugins-post-purchase": [
         "../../libs/plugins/post-purchase/src/index.ts"
       ],
@@ -259,6 +265,12 @@
       ],
       "@aglyn/plugins-tax-engines/*": [
         "../../libs/plugins/tax-engines/src/lib/*"
+      ],
+      "@aglyn/plugins-stock-photos": [
+        "../../libs/plugins/stock-photos/src/index.ts"
+      ],
+      "@aglyn/plugins-stock-photos/*": [
+        "../../libs/plugins/stock-photos/src/lib/*"
       ],
       "@aglyn/plugins-video-delivery": [
         "../../libs/plugins/video-delivery/src/index.ts"

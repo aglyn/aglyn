@@ -303,8 +303,10 @@ back afterwards, so Aglyn asks first.
   still use them. While the pause lasts, the library shows a **Video uploads paused**
   chip beside **Upload media**.
 - **Create images with AI.** **Create with AI**, beside **Upload media**, draws an
-  illustration, icon, pattern or logo mark as an SVG from a description, or makes a photo
-  where photos are on, and adds it to the folder you have open with alt text. Each picture
+  illustration, icon, pattern or logo mark as an SVG from a description, or, where photos
+  are on, makes a photo, a piece of art such as a watercolor or a 3D render, or a design
+  asset such as a banner or a social post graphic, and adds it to the folder you have open
+  with alt text. Each picture
   is stored like an upload and costs AI credits — see
   [Create images with AI](../../ai/create-images.md).
 - **Web fonts** (WOFF2) are accepted too. The usual way to add one is

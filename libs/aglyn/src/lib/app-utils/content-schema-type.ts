@@ -72,6 +72,16 @@ export const CONTENT_SCHEMA_TYPES = [
 export type ContentSchemaType = (typeof CONTENT_SCHEMA_TYPES)[number]['value']
 
 /**
+ * {@link CONTENT_SCHEMA_TYPES} as a plain list, for readers that cannot read
+ * a literal tuple: the native apps' contracts (AGL-3668).
+ */
+export const CONTENT_SCHEMA_TYPE_OPTIONS: ReadonlyArray<{
+  value: string
+  label: string
+  description: string
+}> = CONTENT_SCHEMA_TYPES
+
+/**
  * What an unset collection publishes, and what every collection published
  * before this existed.
  *

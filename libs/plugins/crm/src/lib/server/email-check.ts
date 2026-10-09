@@ -21,7 +21,10 @@
  *
  * Body: `{ hostId, email }`, or `{ orgId, hostId?, email }` at the
  * organization level. Answers `{ ok: true, checked, code, message, gateway,
- * chip }` — see `readAddressDeliverability`.
+ * chip, accountLock }` — see `readAddressDeliverability`, and
+ * `accountLockStateFor` for `accountLock` (AGL-3686): whether the address
+ * belongs to a locked or banned Aglyn account, which only the house
+ * workspace's sites can be told.
  *
  * Two surfaces ask it. A record page draws the gateway chip beside the
  * address: which mail gateway stands in front of it, and what that gateway
@@ -62,6 +65,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 // The leaf, so a spec that stands a partial barrel in still reaches it.
 import { readAddressDeliverability } from '@aglyn/tenant-data-admin/server/capture-email-check'
+import { accountLockStateFor } from '@aglyn/tenant-data-admin/server/account-lock-mail'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
@@ -164,8 +168,11 @@ export const crmEmailCheckHandler: PluginApiHandler = async (req, res) => {
       res.status(suite.status).json(suite.body)
       return
     }
-    const answer = await readAddressDeliverability({ email, from: await sendingAddressOf(sendingHostId) })
-    res.status(200).json({ ok: true, ...answer })
+    const [answer, accountLock] = await Promise.all([
+      readAddressDeliverability({ email, from: await sendingAddressOf(sendingHostId) }),
+      sendingHostId ? accountLockStateFor({ hostId: sendingHostId, email }) : null,
+    ])
+    res.status(200).json({ ok: true, ...answer, accountLock })
   } catch (error) {
     console.error('[crm] email-check failed', scope, error)
     res.status(500).json({ error: 'The address could not be checked.' })

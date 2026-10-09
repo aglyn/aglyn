@@ -266,7 +266,18 @@ export async function recordEmailDeliveryEvent(
       // subject, but an `email.opened` payload may carry none at all — and
       // overwriting a known subject with null is how a staff row loses the
       // only thing that identifies it.
-      if (!snapshot.exists) update.firstSeenAtMs = event.at
+      if (!snapshot.exists) {
+        update.firstSeenAtMs = event.at
+        /*
+         * Every message carries the fields the staff Emails sent table sorts
+         * by (AGL-3680) — an `orderBy` drops a document that lacks one. A
+         * subject not known yet is null until an event brings it; the counts
+         * start at zero and the increments below land on top.
+         */
+        update.subject = event.subject || null
+        update.openCount = 0
+        update.clickCount = 0
+      }
       if (event.subject && !existing.subject) update.subject = event.subject
       if (event.context && !existing.context) update.context = event.context
       if (event.tags?.hostId && !existing.hostId)
@@ -374,7 +385,13 @@ export async function recordEmailDeliverySnapshot(
         importedAtMs: Date.now(),
         updatedAt: FieldValue.serverTimestamp(),
       }
-      if (!stored.exists) update.firstSeenAtMs = snapshot.sentAt
+      if (!stored.exists) {
+        update.firstSeenAtMs = snapshot.sentAt
+        // The sorted fields on every message, as the event writer (AGL-3680).
+        update.subject = snapshot.subject || null
+        update.openCount = 0
+        update.clickCount = 0
+      }
       if (snapshot.subject && !existing.subject) update.subject = snapshot.subject
       // Only when the event feed has not already dated the send itself. An
       // imported `created_at` is the provider's, and so is the webhook's, but

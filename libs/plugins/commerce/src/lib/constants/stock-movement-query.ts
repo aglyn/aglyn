@@ -16,7 +16,10 @@
  */
 
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
-import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type {
+  ListQueryDeclaration,
+  ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { InventoryAdjustmentReason } from '../model/commerce'
 
 /*
@@ -39,6 +42,13 @@ import type { InventoryAdjustmentReason } from '../model/commerce'
  * would type lives on the product, so a search could only ever match the
  * names of the rows already loaded. Product is a picked filter instead, and
  * the ids the old search read (order, location) are filters of their own.
+ *
+ * Every header sorts (AGL-3680): When either way, Change and Reason — `delta`
+ * and `reason` every writer stores (`InventoryAdjustment` requires both, and
+ * every ledger write is typed as one). Those are `alone`: served with no
+ * filter on, at no composite cost on this unscoped list. Product (a name
+ * read from the product) and Source (composed from three fields) sort the
+ * page on screen.
  */
 export const STOCK_MOVEMENT_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'productId', kind: 'exact', path: 'productId', operators: ['equals', 'isAnyOf'] },
@@ -48,10 +58,19 @@ export const STOCK_MOVEMENT_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'locationId', kind: 'exact', path: 'locationId', operators: ['equals'] },
 ]
 
-/** The ledger's one order: newest first, the order every writer stamps. */
+/** The ledger's header orders, newest first FIRST: the order every writer stamps. */
+export const STOCK_MOVEMENT_COLUMN_SORTS: readonly ListQuerySort[] = [
+  { path: 'atMs', direction: 'desc', column: 'atMs', label: 'When' },
+  { path: 'atMs', direction: 'asc', column: 'atMs', label: 'When', alone: true },
+  { path: 'delta', direction: 'asc', column: 'delta', label: 'Change', alone: true },
+  { path: 'delta', direction: 'desc', column: 'delta', label: 'Change', alone: true },
+  { path: 'reason', direction: 'asc', column: 'reason', label: 'Reason', alone: true },
+  { path: 'reason', direction: 'desc', column: 'reason', label: 'Reason', alone: true },
+]
+
 export const STOCK_MOVEMENT_QUERY: ListQueryDeclaration = {
   fields: STOCK_MOVEMENT_FILTER_FIELDS,
-  sorts: [{ path: 'atMs', direction: 'desc', column: 'atMs' }],
+  sorts: STOCK_MOVEMENT_COLUMN_SORTS,
 }
 
 export const STOCK_MOVEMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {

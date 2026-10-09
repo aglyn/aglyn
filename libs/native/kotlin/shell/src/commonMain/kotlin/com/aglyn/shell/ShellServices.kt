@@ -46,6 +46,12 @@ class ShellServices(
   val push: com.aglyn.core.PushRegistrar = com.aglyn.core.NoPush,
   /** Writes as the signed-in person, under the same rules as the console's own writes. */
   val writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+  /**
+   * Opens a page someone else hosts (Stripe Checkout, the Customer Portal)
+   * in the platform's secure in-app browser: Custom Tabs on Android, the
+   * system browser on desktop. Never a web view of ours.
+   */
+  val openHostedPage: (url: String) -> Unit = {},
   /** Remote images for every screen ([com.aglyn.ui.LocalImageLoader]). */
   val imageLoader: com.aglyn.ui.ImageLoader? = HttpImageLoader(com.aglyn.core.defaultHttpClient()),
   /** The device's photo, camera and file pickers ([com.aglyn.ui.LocalMediaPicker]); the entry point binds them. */
@@ -65,6 +71,8 @@ sealed interface Route {
   data class Screen(val screenId: String, val params: NativeParams = emptyMap()) : Route
   /** The Besigner on a whole console path that [com.aglyn.pluginhost.BesignerPaths] accepts. */
   data class Besigner(val path: String) : Route
+  /** The site's Analytics page. */
+  data object Analytics : Route
   data object Switcher : Route
   data object NotificationSettings : Route
 }
@@ -74,7 +82,7 @@ sealed interface Route {
  * core rather than a plugin's: loaded before the generated plugin manifest,
  * through the same registrar and declaration check.
  */
-val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = listOf(com.aglyn.site.SitePlatformEntry)
+val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = listOf(com.aglyn.site.SitePlatformEntry, com.aglyn.screens.CoreScreens.manifestEntry)
 
 /** The site's Pages screen, which the site registration (libs/native/kotlin/site) contributes. */
 const val SITE_PAGES_SCREEN_ID = "site.pages"
@@ -151,6 +159,28 @@ internal class ShellPluginContext(
    * screen, the Besigner, or (for a console page nothing answers natively yet)
    * Home. Never a console page.
    */
+  fun showNotifications() = navigator.select(ShellNavigator.NOTIFICATIONS)
+
+  /** The workspace a notification is about, by name, when the person holds it. */
+  fun workspaceName(row: FeedNotification): String? {
+    val org = row.orgId?.let { id -> workspace.orgs.firstOrNull { it.id == id } }
+    val site = row.hostId?.let { id -> workspace.sites.firstOrNull { it.id == id } }
+    return listOfNotNull(org?.name, site?.name).joinToString(" · ").ifEmpty { null }
+  }
+
+  /**
+   * Follows a notification: first onto the workspace and site it is about
+   * (a booking at another site opens that site's bookings), then its link.
+   */
+  fun openNotification(row: FeedNotification) {
+    val link = row.link
+    val orgId = row.orgId ?: workspace.sites.firstOrNull { it.id == row.hostId }?.orgId
+    if (orgId != null && (orgId != workspace.org?.id || (row.hostId != null && row.hostId != workspace.site?.id))) {
+      services.workspace.select(orgId, row.hostId ?: workspace.site?.id?.takeIf { orgId == workspace.org?.id })
+    }
+    if (link != null) openLink(link)
+  }
+
   fun openLink(link: String) {
     when (val target = DeepLinks.resolve(link, services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
@@ -165,7 +195,12 @@ internal class ShellPluginContext(
     val rest = DeepLinks.splitConsoleScope(path.substringBefore('?')).rest
     when {
       rest == "/screens" || rest.startsWith("/screens/") -> navigator.push(Route.Screen(SITE_PAGES_SCREEN_ID))
-      rest.startsWith("/notifications") -> navigator.select(ShellNavigator.NOTIFICATIONS)
+      rest == "/analytics" || rest.startsWith("/analytics/") -> navigator.push(Route.Analytics)
+      rest.startsWith("/manage/notifications/settings") -> {
+        navigator.select(ShellNavigator.SETTINGS)
+        navigator.push(Route.NotificationSettings)
+      }
+      rest.startsWith("/notifications") || rest.startsWith("/manage/notifications") -> navigator.select(ShellNavigator.NOTIFICATIONS)
       rest.startsWith("/settings") -> navigator.select(ShellNavigator.SETTINGS)
       else -> navigator.select(ShellNavigator.HOME)
     }

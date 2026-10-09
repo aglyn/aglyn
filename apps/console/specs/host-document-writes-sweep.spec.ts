@@ -229,6 +229,8 @@ describe("plugins: a console card's write of something a page renders carries th
     formSubmissions: 'The inbox; never on a page.',
     screens: 'The email plugin’s documents are emails, never routed.',
     suppressions: 'Email suppression list; never on a page.',
+    aiMemory:
+      'What Aglyn AI learned from applied edits (AGL-3661); read only by AI jobs, server-side.',
   }
   /** Segments whose writes announce their own addresses instead. */
   const OWN_ANNOUNCE: Record<string, string> = {
@@ -256,6 +258,14 @@ describe("plugins: a console card's write of something a page renders carries th
           'Writes only `settings/store.tax`, which checkout reads per ' +
           'request; no cached page renders the rates.',
       },
+    'libs/plugins/commerce/src/lib/components/console/local-delivery-settings-card.component.tsx':
+      {
+        writes: /\{\s*localDelivery:\s*value\s*\}/,
+        why:
+          'Writes only `settings/store.localDelivery` (AGL-3624), which the ' +
+          'cart asks for at /api/commerce/local-fulfillment-options and ' +
+          'checkout reads per request; no cached page renders it.',
+      },
     'libs/plugins/commerce/src/lib/components/console/customer-notifications-card.component.tsx':
       {
         writes: /\{\s*buyerNotifications:\s*\{\s*\[key\]:\s*on\s*\}\s*\}/,
@@ -270,14 +280,25 @@ describe("plugins: a console card's write of something a page renders carries th
     .filter((path) => !/[/\\]server[/\\]|[/\\]server\.ts$/.test(path))
     .map((path) => ({ path: posix(path), source: readFileSync(path, 'utf8') }))
 
+  /**
+   * Segments a card names by an imported constant rather than a literal. The
+   * parse below reads quoted names; without this a constant segment reads as
+   * a write to the host document itself.
+   */
+  const CONSTANT_SEGMENTS: Record<string, string> = {
+    AI_SITE_MEMORY_SUBCOLLECTION: 'aiMemory',
+  }
+  const segmentOf = (match: RegExpMatchArray): string =>
+    match[1] ?? (match[2] ? (CONSTANT_SEGMENTS[match[2]] ?? match[2]) : '(host)')
+
   /** The first segment under `hosts/{id}` of every document this file writes. */
   function writtenSegments(source: string): Set<string> {
     const flat = source.replace(/\s+/g, ' ')
     const segments = new Set<string>()
     const WRITE = String.raw`(?:\b(?:setDoc|updateDoc|deleteDoc|addDoc)\(|\.(?:set|update|delete)\()\s*`
-    const TARGET = String.raw`(?:doc|collection)\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+(?:\([^()]*\))?\s*(?:,\s*'(\w+)')?`
+    const TARGET = String.raw`(?:doc|collection)\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+(?:\([^()]*\))?\s*(?:,\s*(?:'(\w+)'|([A-Z][A-Z0-9_]+)\b))?`
     for (const match of flat.matchAll(new RegExp(WRITE + TARGET, 'g'))) {
-      segments.add(match[1] ?? '(host)')
+      segments.add(segmentOf(match))
     }
     const held = new RegExp(
       String.raw`const (\w+) = doc\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+\s*(?:,\s*'(\w+)')?`,
@@ -348,11 +369,11 @@ describe("plugins: a console card's write of something a page renders carries th
       .flatMap(({ path, source }) => {
         const flat = source.replace(/\s+/g, ' ')
         const direct = new RegExp(
-          String.raw`\b(?:setDoc|updateDoc|deleteDoc|addDoc)\(\s*(?:doc|collection)\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+(?:\([^()]*\))?\s*(?:,\s*'(\w+)')?`,
+          String.raw`\b(?:setDoc|updateDoc|deleteDoc|addDoc)\(\s*(?:doc|collection)\(\s*[\w.]+\s*,\s*'hosts'\s*,\s*[^,()]+(?:\([^()]*\))?\s*(?:,\s*(?:'(\w+)'|([A-Z][A-Z0-9_]+)\b))?`,
           'g',
         )
         return [...flat.matchAll(direct)]
-          .map((match) => match[1] ?? '(host)')
+          .map(segmentOf)
           .filter((segment) => segment in RENDERED)
           .map((segment) => `${path} → ${segment}`)
       })

@@ -46,7 +46,7 @@ function setup(overrides: Partial<ZapierConsoleDeps> = {}) {
   const memory = memoryZapierHookStore([hook('a'), hook('elsewhere', { hostId: 'h2' })])
   const deps: ZapierConsoleDeps = {
     verifyIdToken: async (token) => {
-      if (token === 'bad') throw new Error('expired')
+      if (token === 'bad') throw Object.assign(new Error('expired'), { code: 'auth/id-token-expired' })
       return { uid: token }
     },
     readMemberRoles: async (hostId) => (hostId === 'h1' || hostId === 'h2' ? { admin1: 'admin', editor1: 'editor' } : null),
@@ -105,6 +105,13 @@ describe('/api/zapier/hooks (AGL-3643)', () => {
     expect((await call('GET', 'stranger', { hostId: 'h1' })).statusCode).toBe(403)
     expect((await call('GET', 'bad', { hostId: 'h1' })).statusCode).toBe(401)
     expect((await call('GET', null, { hostId: 'h1' })).statusCode).toBe(401)
+    // An Auth outage is not a bad credential: it is ours, never a 401 (AGL-2852).
+    const outage = setup({
+      verifyIdToken: async () => {
+        throw new Error('ECONNRESET')
+      },
+    })
+    expect((await outage.call('GET', 'admin1', { hostId: 'h1' })).statusCode).not.toBe(401)
     expect((await call('GET', 'admin1', { hostId: 'nope' })).statusCode).toBe(404)
     expect((await call('GET', 'admin1', { hostId: '../x' })).statusCode).toBe(400)
     expect((await call('PUT', 'admin1', { hostId: 'h1' })).statusCode).toBe(405)

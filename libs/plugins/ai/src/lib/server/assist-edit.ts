@@ -71,6 +71,7 @@ import {
 } from '../runtime/ai-node-tree'
 import type { AiNodeCapability, AiPaletteEntry } from '../runtime/ai-palette'
 import {
+  AI_CODE_ONLY_PROPS,
   AI_NODE_CAPABILITIES,
   AI_PALETTE,
   AI_SX_TOKENS,
@@ -603,7 +604,9 @@ export function editSelectionBlock(context: AssistEditCanvasContext): string {
   for (const componentId of new Set(context.nodes.map((node) => node.componentId))) {
     const entry = AI_PALETTE[componentId]
     if (!entry) continue
-    const names = Object.keys(entry.propsSchema.properties)
+    // A prop only the platform's code sets is never offered as an edit (AGL-3660).
+    const hidden = AI_CODE_ONLY_PROPS[componentId] ?? []
+    const names = Object.keys(entry.propsSchema.properties).filter((name) => !hidden.includes(name))
     if (!names.length) continue
     shapes.push(
       `- ${componentId}: ${names.map((name) => `${name} (${describePropShape(entry, name)})`).join(', ')}`,

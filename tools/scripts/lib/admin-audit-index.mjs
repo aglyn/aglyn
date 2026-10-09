@@ -164,5 +164,6 @@ export function adminAuditIndexFields(entry, fixtures = ADMIN_AUDIT_INDEX_FIXTUR
  * @param {Record<string, unknown>} entry
  */
 export function stampAdminAuditIndex(entry) {
-  return { ...entry, ...adminAuditIndexFields(entry) }
+  // `scope` on every row, null when there is none (AGL-3680), as the library.
+  return { ...entry, scope: entry?.scope ?? null, ...adminAuditIndexFields(entry) }
 }

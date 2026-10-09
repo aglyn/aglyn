@@ -18,6 +18,14 @@
 import type { HostOrder, OrderStatus } from './commerce-orders'
 import { fulfillmentIsActive, fulfillmentLineQuantities } from './order-fulfillment'
 import { carrierLabelFor, fulfillmentTrackingUrl } from './tracking-url'
+import {
+  ORDER_LOCAL_DELIVERY_STATUS_LABELS,
+  ORDER_PICKUP_STATUS_LABELS,
+  orderLocalDeliveryStatus,
+  orderPickupStatus,
+  type OrderLocalDeliveryStatus,
+  type OrderPickupStatus,
+} from './order-local-fulfillment'
 
 /**
  * What the guest order-status page shows (AGL-3610): the ONE projection of an
@@ -49,7 +57,17 @@ export interface OrderStatusShipment {
 }
 
 export interface OrderStatusStep {
-  key: 'placed' | 'paid' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'
+  key:
+    | 'placed'
+    | 'paid'
+    | 'shipped'
+    | 'delivered'
+    | 'cancelled'
+    | 'refunded'
+    // Pickup and the store's own delivery (AGL-3624).
+    | 'ready_for_pickup'
+    | 'picked_up'
+    | 'out_for_delivery'
   label: string
   atMs: number | null
   done: boolean
@@ -93,6 +111,24 @@ export interface OrderStatusView {
   shipments: OrderStatusShipment[]
   steps: OrderStatusStep[]
   actions: OrderStatusAction[]
+  /**
+   * Where to collect a pickup order (AGL-3624) — the location the buyer chose
+   * and its hours, as the ready-for-pickup email states them.
+   */
+  pickup?: {
+    locationName: string
+    address: string | null
+    hours: string | null
+    instructions: string | null
+    status: OrderPickupStatus
+    statusLabel: string
+  }
+  /** When the store's own driver brings it (AGL-3624). */
+  localDelivery?: {
+    windowLabel: string | null
+    status: OrderLocalDeliveryStatus
+    statusLabel: string
+  }
 }
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -124,8 +160,16 @@ export function buildOrderStatusView(input: {
   const { order } = input
   const lineItems = order.lineItems ?? []
   const active = (order.fulfillments ?? []).filter(fulfillmentIsActive)
+  // A handover is not a parcel (AGL-3624): it has no carrier or tracking,
+  // and the pickup or delivery block below says what happened.
+  const parcels = active.filter((fulfillment) => !fulfillment.handover)
   const shippedByLine = new Map<number, number>()
-  const shipments: OrderStatusShipment[] = active
+  for (const fulfillment of active.filter((entry) => entry.handover)) {
+    for (const entry of fulfillmentLineQuantities(order, fulfillment)) {
+      shippedByLine.set(entry.lineItemId, (shippedByLine.get(entry.lineItemId) ?? 0) + entry.quantity)
+    }
+  }
+  const shipments: OrderStatusShipment[] = parcels
     .map((fulfillment) => {
       const quantities = fulfillmentLineQuantities(order, fulfillment)
       for (const entry of quantities) {
@@ -172,8 +216,42 @@ export function buildOrderStatusView(input: {
       done: status !== 'pending' && paidAtMs !== null,
     },
   ]
+  const pickup = order.fulfillmentMethod === 'pickup' ? order.pickup : undefined
+  const delivery = order.fulfillmentMethod === 'local_delivery' ? order.localDelivery : undefined
   if (status === 'cancelled') {
     steps.push({ key: 'cancelled', label: 'Canceled', atMs: eventAt(order, 'cancelled'), done: true })
+  } else if (pickup) {
+    const pickupStatus = orderPickupStatus(pickup.status)
+    steps.push(
+      {
+        key: 'ready_for_pickup',
+        label: 'Ready for pickup',
+        atMs: Number(pickup.readyAtMs) || null,
+        done: pickupStatus !== 'preparing',
+      },
+      {
+        key: 'picked_up',
+        label: 'Picked up',
+        atMs: Number(pickup.pickedUpAtMs) || null,
+        done: pickupStatus === 'picked_up',
+      },
+    )
+  } else if (delivery) {
+    const deliveryStatus = orderLocalDeliveryStatus(delivery.status)
+    steps.push(
+      {
+        key: 'out_for_delivery',
+        label: 'Out for delivery',
+        atMs: Number(delivery.outForDeliveryAtMs) || null,
+        done: deliveryStatus === 'out_for_delivery' || deliveryStatus === 'delivered',
+      },
+      {
+        key: 'delivered',
+        label: 'Delivered',
+        atMs: Number(delivery.deliveredAtMs) || deliveredAt,
+        done: deliveryStatus === 'delivered' || status === 'delivered',
+      },
+    )
   } else {
     steps.push(
       {
@@ -198,7 +276,12 @@ export function buildOrderStatusView(input: {
     storeName: input.storeName,
     number: input.number,
     status,
-    statusLabel: STATUS_LABELS[status] ?? 'Confirmed',
+    statusLabel:
+      pickup && status !== 'refunded' && status !== 'cancelled'
+        ? ORDER_PICKUP_STATUS_LABELS[orderPickupStatus(pickup.status)]
+        : delivery && status !== 'refunded' && status !== 'cancelled'
+          ? ORDER_LOCAL_DELIVERY_STATUS_LABELS[orderLocalDeliveryStatus(delivery.status)]
+          : (STATUS_LABELS[status] ?? 'Confirmed'),
     createdAtMs,
     currency: input.currency || 'USD',
     lines,
@@ -216,5 +299,26 @@ export function buildOrderStatusView(input: {
     shipments,
     steps,
     actions: input.actions ?? [],
+    ...(pickup
+      ? {
+          pickup: {
+            locationName: String(pickup.locationName ?? ''),
+            address: pickup.address ?? null,
+            hours: pickup.hours ?? null,
+            instructions: pickup.instructions ?? null,
+            status: orderPickupStatus(pickup.status),
+            statusLabel: ORDER_PICKUP_STATUS_LABELS[orderPickupStatus(pickup.status)],
+          },
+        }
+      : {}),
+    ...(delivery
+      ? {
+          localDelivery: {
+            windowLabel: delivery.windowLabel ?? null,
+            status: orderLocalDeliveryStatus(delivery.status),
+            statusLabel: ORDER_LOCAL_DELIVERY_STATUS_LABELS[orderLocalDeliveryStatus(delivery.status)],
+          },
+        }
+      : {}),
   }
 }

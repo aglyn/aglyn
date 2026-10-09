@@ -128,6 +128,10 @@ const AI_DOORS = new Map<string, string>([
  */
 const MENTIONS_ONLY = new Map<string, string>([
   [
+    'libs/plugins/ai/src/lib/jobs/ai-job-site-plan-context-live.spec.ts',
+    "The guided start's live plan eval with a business profile (AGL-3661). It checks the key is SET before it runs, and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter above, and what it sends is six fixed sample briefs and profiles written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
     'libs/plugins/ai/src/lib/jobs/ai-job-site-plan-live.spec.ts',
     "The guided start's live plan eval (AGL-3596). It checks the key is SET before it runs, and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter above, and what it sends is ten fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
@@ -138,6 +142,14 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'libs/plugins/ai/src/lib/jobs/ai-job-layout-language-live.spec.ts',
     "The layout language's live eval (AGL-3660). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is the fixed sample briefs written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-build-canonical-request-live.spec.ts',
+    "The build kind's live plan eval (AGL-3616). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is one fixed sample request written in the spec over an in-memory site, never a customer's content. CI never sets the switch, so CI never calls the provider.",
+  ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-job-edit-step-live.spec.ts',
+    "The edit kind's live eval (AGL-3616). Like the live evals above, it checks the key is SET and runs only when a developer sets AGLYN_LIVE_AI=1; the request goes through the adapter, and what it sends is two fixed sample requests over a page and a layout written in the spec, never a customer's content. CI never sets the switch, so CI never calls the provider.",
   ],
   [
     'tools/scripts/lib/emulated-env.mjs',

@@ -248,6 +248,7 @@ export const commerceShipmentRecords: PluginShipmentRecords = {
       ...(write.trackingUrl ? { trackingUrl: write.trackingUrl } : {}),
       ...(write.labelUrl ? { labelUrl: write.labelUrl } : {}),
       ...(write.labelRef ? { labelRef: write.labelRef, idempotencyKey: `label:${write.labelRef}` } : {}),
+      ...(write.labelCostCents ? { labelCostCents: write.labelCostCents } : {}),
     })
     switch (outcome.outcome) {
       case 'recorded':

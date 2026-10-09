@@ -85,12 +85,16 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
     'unpublishes the placeholder home page, a screen that exists (AGL-3408)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
+  'libs/plugins/ai/src/lib/jobs/ai-job-edit-step.ts':
+    'creates a version under a page or layout that exists and updates its fields (AGL-3616)',
   'libs/plugins/ai/src/lib/jobs/ai-site-publish.ts':
     'merge-sets the publish fields of screens the job wrote, and trashes the starter home; creates a layout version (AGL-3596)',
   'libs/plugins/forms/src/lib/server/form-submit.ts':
     'writes submissions and counters; reads the page’s screen for the campaigns it is filed under (AGL-3461)',
   'libs/plugins/data/src/lib/record-pages/record-pages-route.ts':
     'writes a dataset’s record-page binding keyed by a template screen that exists (AGL-3475)',
+  'apps/console/app/api/admin/retention-emails/route.ts':
+    'writes the sent getting-started crossings onto users/{uid}; reads screens to tell own pages from starter ones (AGL-3692)',
   'libs/plugins/marketing/src/lib/server/campaign-manage.ts': 'creates campaigns and sends; reads a design screen',
   'libs/plugins/marketing/src/lib/server/campaign-send.ts': 'writes sends; reads a design screen',
   'libs/plugins/marketing/src/lib/transfer/campaigns-package.server.ts':

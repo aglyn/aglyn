@@ -246,7 +246,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob or Amazon Multi-Channel Fulfillment account (AGL-3634): network, status, account name, ShipBob channel, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens, the webhook token’s hash and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the network.',
+    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account (AGL-3634, AGL-3697): network, status, account name, ShipBob channel, ShipMonk store id, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens (for ShipMonk, the merchant’s own API key, sealed as the access token), the webhook token’s hash and the id of the key that sealed them carry `token` in their names, and ShipMonk’s sealed webhook signing secret carries `secret` in its name; all are redacted (see redactSecrets). The document id is the site id and the network.',
   },
   {
     collection: 'fulfillmentNetworkOrders',
@@ -324,6 +324,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     subjects: ['org'],
     exported: true,
     note: 'Each order a delivery service sent a site’s register (AGL-3644): the service and its order id and short code, the items with their options and instructions, the totals and refunds, where it stood at the counter, and the store order it became. The buyer appears by first name and last initial only. The merchant’s own record of a delivery BUYER’s order, so disclosed to the ORG only.',
+  },
+  {
+    collection: 'zapierHooks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each Zapier REST hook a site’s API key subscribed (AGL-3643): the site, the events, the API key’s public id and name, delivery counts and dates. EXISTENCE ONLY for the URL — `targetUrl` is the capability Zapier minted for the Zap, a bearer URL whose secret is in its path, so it is redacted by name (see redactSecrets).',
+  },
+  {
+    collection: 'zapierHookDeliveries',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Markers that one event reached one Zapier hook, so a retry does not post it twice (AGL-3643): the hook, the status and the time. The document id is a SHA-256 of the event and hook, an identifier rather than a verifier of any credential; no customer data, and a TTL policy removes each row.',
   },
   {
     collection: 'ssoDomains',
@@ -559,6 +573,10 @@ const SECRET_WORD_PAIRS = new Set([
   // A Stripe payment link is a live bearer URL: whoever holds it can pay.
   // Named in the AGL-1443 inventory of what the old dump actually carried.
   'payment link',
+  // A Zapier REST hook's `targetUrl` (AGL-3643) is the same kind of bearer
+  // URL: whoever holds it can post into the Zap, and its secret is in the
+  // path, which the URL scrub does not read.
+  'target url',
   'auth code',
   'recovery code',
   'backup code',

@@ -203,3 +203,33 @@ describe('product grid catalog controls', () => {
     expect(lastUrl()).toContain('sort=newest')
   })
 })
+
+/*
+ * A product listed before it has a price (AGL-3676) — a guided start's — says
+ * so where its price would be, never "$0"; and photo cards lead with the
+ * picture, each still linking its product's page.
+ */
+describe('product grid cards', () => {
+  beforeEach(() => {
+    fetchMock.mockReset()
+    fetchMock.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        items: [
+          { ...item('Soy Candle'), priceUsd: 0, maxPriceUsd: 0, priceComingSoon: true, imageUrl: '/media/candle.jpg' },
+          item('Wax Melts'),
+        ],
+      }),
+    }))
+    ;(global as any).fetch = fetchMock
+  })
+
+  it('says “Price coming soon” for a product with no price yet, and the price for the rest', async () => {
+    render(<ProductGrid cardStyle="photo" />)
+    await screen.findByText('Soy Candle')
+    expect(screen.getByText('Price coming soon')).toBeTruthy()
+    expect(screen.queryByText('$0')).toBeNull()
+    expect(screen.getByText('$10')).toBeTruthy()
+    expect(screen.getByAltText('Soy Candle').closest('a')?.getAttribute('href')).toBe('/products/soy-candle')
+  })
+})

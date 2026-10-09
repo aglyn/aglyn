@@ -62,9 +62,11 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
+  closeSync,
   createWriteStream,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -127,7 +129,10 @@ if (flag('help')) {
   --audience <text>       Who it is for (default "Local dog owners")
   --style <label|id>      Style of site, or "auto" for the one the brief suggests (default auto)
   --submissions <id>      inbox | lead (default inbox)
-  --pages <n>             Pages to plan (default 2, the Free maximum)
+  --pages <n>             Pages to plan (default 2, the Free maximum; 4 on a paid --plan)
+  --plan <id>             The workspace's plan: free (default) or a paid one such as pro,
+                          with the AI add-on, so a run can reach paid-only parts — a
+                          blog's first posts, a store's first products (AGL-3676)
   --site-name <text>      The site's name (default "Hillside Dog Grooming"); " || " as --brief
   --runs <n>              Fresh workspace + site per run (default 1)
   --app-root <checkout>   Serve this checkout's console and tenant (default this one)
@@ -152,8 +157,9 @@ const answers = {
   audience: option('audience', 'Local dog owners'),
   style: option('style', 'auto'),
   submissions: option('submissions', 'inbox'),
-  pages: Number(option('pages', '2')),
+  pages: Number(option('pages', option('plan', 'free') === 'free' ? '2' : '4')),
 }
+const workspacePlan = option('plan', 'free')
 let siteName = siteNames[0]
 const runs = Math.max(1, Number(option('runs', '1')))
 const appRoot = resolve(option('app-root', repoRoot))
@@ -190,15 +196,19 @@ let reuseHint = ''
 
 function startProcess(name, command, args, { cwd, env, onStop, ports }) {
   const logFile = join(outDir, `${name}.log`)
-  const out = createWriteStream(logFile)
+  // The server writes to its log file itself, never to a pipe this run reads
+  // (AGL-3660). Under --keep the servers outlive the run, and a pipe dies with
+  // it: the next line a server logged failed with EPIPE, Next's error handler
+  // logged that failure to the same dead pipe, and the tenant spun at full CPU
+  // answering nothing.
+  const fd = openSync(logFile, 'w')
   const child = spawn(command, args, {
     cwd,
     env,
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', fd, fd],
   })
-  child.stdout.pipe(out)
-  child.stderr.pipe(out)
+  closeSync(fd)
   started.push({ name, child, onStop, ports })
   log(`started ${name} (pid ${child.pid}), log ${logFile}`)
   return child
@@ -681,8 +691,19 @@ async function runOnce(context, index) {
     .collection('orgs')
     .doc(run.orgId)
     .set({ releaseFlags: { release_ai_generative: true } }, { merge: true })
+  // A paid plan, as billing would leave it (AGL-3676): the emulator stack has
+  // no Stripe, so the plan and the AI add-on are written the way staff comp one.
+  if (workspacePlan !== 'free') {
+    await firestore
+      .collection('orgs')
+      .doc(run.orgId)
+      .set(
+        { plan: workspacePlan, seatAddons: { aiAddon: 1 }, releaseFlags: { release_commerce_v2: true } },
+        { merge: true },
+      )
+  }
   log(
-    `run ${index + 1}: workspace ${run.orgSlug} (org ${run.orgId}), owner ${email}`,
+    `run ${index + 1}: workspace ${run.orgSlug} (org ${run.orgId}, ${workspacePlan}), owner ${email}`,
   )
 
   const { browser, page } = await session.openConsole({
@@ -797,6 +818,7 @@ async function runOnce(context, index) {
     let lastShot = 0
     let shots = 0
     let job = null
+    let settledSince = null
     const watchStart = Date.now()
     while (Date.now() - watchStart < timeoutMs) {
       job = (await jobRef.get()).data() ?? null
@@ -814,7 +836,17 @@ async function runOnce(context, index) {
           () => undefined,
         )
       }
-      if (job && AI_JOB_SETTLED_STATUSES.includes(job.status)) break
+      // A guided start passes through `needs_input` while its plan is confirmed
+      // on the person's behalf (`autoConfirm`): a run of 2026-10-09 read that
+      // moment as the end, stopped its beat, and stranded the job. A finished
+      // job ends the watch at once; one asking for input must still be asking
+      // a beat later.
+      if (job && AI_JOB_SETTLED_STATUSES.includes(job.status)) {
+        settledSince ??= Date.now()
+        if (job.status !== 'needs_input' || Date.now() - settledSince >= 30_000) break
+      } else {
+        settledSince = null
+      }
       await page.waitForTimeout(1500)
     }
     // The page's own last word, after the job's.
@@ -964,7 +996,9 @@ async function runOnce(context, index) {
     )
     const plan = job?.plan ?? null
     const planScreens = plan?.screens ?? []
-    const live = host.screens.filter((screen) => screen.data.deletedAt == null)
+    // An email design is a screen with no address; on a paid run the welcome
+    // email's would otherwise answer for the page at "/" (AGL-3676).
+    const live = host.screens.filter((screen) => screen.data.deletedAt == null && screen.data.kind !== 'email')
     const slugOf = (value) =>
       `/${String(value ?? '')
         .trim()
@@ -1106,6 +1140,8 @@ async function runOnce(context, index) {
 
     // 8. The live site, as a visitor sees it.
     await shootLiveSite(context, run, runDir, check, browser)
+    // 9. A blog's first posts and a store's first products (AGL-3676).
+    await checkFirstContent({ context, run, runDir, check, browser, firestore, job })
   } finally {
     if (pump) await pump.stop()
     await browser.close().catch(() => undefined)
@@ -1115,6 +1151,139 @@ async function runOnce(context, index) {
   ).length
   record(run, { verdict: failed === 0 ? 'PASS' : `${failed} FAILED` })
   return run
+}
+
+/**
+ * What a paid guided start wrote into a blog or a store (AGL-3676), and
+ * whether a visitor sees it: the posts published in the site's blog with a
+ * byline, its listing and every post answering 200 with their titles, and
+ * the pages naming the real posts; or 3 to 6 products saved as unpriced
+ * drafts, the pages naming them and no page stating a price. A Free run
+ * checks that neither part was owed.
+ */
+async function checkFirstContent({ context, run, runDir, check, browser, firestore, job }) {
+  const rows = job?.items ?? []
+  const postsRow = rows.find((row) => row.slot === 'posts') ?? null
+  const productsRow = rows.find((row) => row.slot === 'products') ?? null
+  const rowText = (row) =>
+    row ? `${row.status}, ${row.creditsSpent ?? 0} credits${row.note ? `; ${row.note}` : ''}${row.failure?.message ? `; ${row.failure.message}` : ''}` : 'no row'
+  record(run, { firstContent: { posts: postsRow, products: productsRow } })
+  if (workspacePlan === 'free') {
+    check('Free: no posts or products part owed', !postsRow && !productsRow, `posts ${rowText(postsRow)}; products ${rowText(productsRow)}`)
+    return
+  }
+  if (!postsRow && !productsRow) return
+  const tenantPort = new URL(context.tenantUrl).port || '80'
+  const origin = `http://${run.subdomain}.localhost:${tenantPort}`
+  const visitor = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const page = await visitor.newPage()
+  const visit = async (path, shotName) => {
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'load', timeout: 180_000 }).catch(() => null)
+    await page.waitForTimeout(1000)
+    const text = response ? ((await page.locator('body').textContent({ timeout: 5_000 }).catch(() => '')) ?? '') : ''
+    // What a visitor reads: a price is judged here, never in the page's
+    // inline script payloads, where \`$1\`-style references are not prices.
+    const visible = response ? await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '') : ''
+    if (shotName) run.shots.push(await shoot(page, join(runDir, `${shotName}.png`), { fullPage: true }).catch(() => null))
+    return { status: response?.status() ?? 0, text, visible }
+  }
+  const pageTexts = []
+  for (const entry of run.publish?.published ?? []) pageTexts.push({ path: entry.path, ...(await visit(entry.path)) })
+  const hostRef = firestore.collection('hosts').doc(run.hostId)
+  try {
+    if (postsRow) {
+      check('posts row succeeded', postsRow.status === 'succeeded', rowText(postsRow))
+      const posts = (job.outputs ?? []).filter((output) => output.resource === 'entry')
+      const collectionId = posts[0]?.proposal?.collectionId
+      const slug = posts[0]?.proposal?.collectionSlug
+      const entries = collectionId
+        ? (await hostRef.collection('collections').doc(collectionId).collection('entries').get()).docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        : []
+      record(run, { posts: entries.map((entry) => ({ id: entry.id, title: entry.title, slug: entry.slug, status: entry.status, authorName: entry.authorName ?? null, words: String(entry.body ?? '').split(/\s+/).length })) })
+      check(
+        'posts published with a byline',
+        entries.length >= 2 && entries.every((entry) => entry.status === 'published' && entry.authorName),
+        entries.map((entry) => `“${entry.title}” ${entry.status} by ${entry.authorName ?? 'nobody'}`).join('; ') || 'no entries',
+      )
+      if (slug) {
+        const listing = await visit(`/${slug}`, '30-blog-listing')
+        const missing = entries.filter((entry) => !listing.text.includes(entry.title)).map((entry) => entry.title)
+        check(`blog listing /${slug} shows every post`, listing.status === 200 && missing.length === 0, `${listing.status}; missing ${missing.join(', ') || 'none'}`)
+        const statuses = []
+        for (const [index, entry] of entries.entries()) {
+          const post = await visit(`/${slug}/${entry.slug}`, index === 0 ? '31-blog-post' : null)
+          statuses.push(`/${slug}/${entry.slug} ${post.status}${post.text.includes(entry.title) ? '' : ' (title missing)'}`)
+        }
+        check('every post page answers 200 with its title', statuses.every((line) => / 200$/.test(line)), statuses.join('; '))
+      }
+      const named = entries.filter((entry) => pageTexts.some((one) => one.text.includes(entry.title))).map((entry) => entry.title)
+      check('pages feature the real post titles', named.length > 0, `${named.length} of ${entries.length} titles on a page: ${named.join(', ') || 'none'}`)
+      // The home lists the posts themselves, each card linking its post (AGL-3676),
+      // and no planned page stands in for the blog in the header.
+      if (slug) {
+        await page.goto(`${origin}/`, { waitUntil: 'load', timeout: 180_000 }).catch(() => null)
+        await page.waitForTimeout(1000)
+        const hrefs = await page.$$eval('a[href]', (anchors) => anchors.map((anchor) => anchor.getAttribute('href') ?? '')).catch(() => [])
+        const linked = entries.filter((entry) => hrefs.includes(`/${slug}/${entry.slug}`)).map((entry) => entry.title)
+        check('the home links each post it lists', linked.length >= Math.min(2, entries.length), `${linked.length} of ${entries.length} posts linked: ${linked.join(', ') || 'none'}`)
+        const nav = await page.locator('header nav').first().innerText({ timeout: 5_000 }).catch(() => '')
+        const standIns = nav.split(/\n+/).map((line) => line.trim()).filter((line) => /^(articles?|journal|posts?|stories|writing)$/i.test(line))
+        check('no page stands in for the blog in the header', standIns.length === 0 && new RegExp(`\\bBlog\\b`).test(nav), `nav: ${nav.replace(/\n+/g, ' | ')}`)
+        const ctas = await page.$$eval('a', (anchors) => anchors.map((anchor) => anchor.textContent ?? '')).catch(() => [])
+        const named = ctas.filter((text) => /\barticles?\b/i.test(text) && !/^Read the post$/.test(text))
+        check('no call to action names a stand-in page', named.length === 0, named.join('; ') || 'none')
+      }
+    }
+    if (productsRow) {
+      check('products row succeeded', productsRow.status === 'succeeded', rowText(productsRow))
+      const products = (await hostRef.collection('products').get()).docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      record(run, { products: products.map((product) => ({ id: product.id, name: product.name, status: product.status, priceUsd: product.priceUsd ?? null, variants: (product.variants ?? []).map((variant) => variant.priceUsd ?? null) })) })
+      const priced = products.filter((product) => product.priceUsd != null || (product.variants ?? []).some((variant) => variant.priceUsd != null))
+      // Listed before they have a price (AGL-3676): active, unpriced, each with a photo.
+      check(
+        '3 to 6 products listed unpriced, each with a photo',
+        products.length >= 3 &&
+          products.length <= 6 &&
+          products.every((product) => product.status === 'active' && (product.mediaUrls ?? []).length > 0) &&
+          priced.length === 0,
+        `${products.length} products: ${products.map((product) => `${product.name} (${product.status}, ${(product.mediaUrls ?? []).length} photo)`).join(', ')}; priced ${priced.length}`,
+      )
+      check('products row says to set prices', /Set their prices/.test(productsRow.note ?? ''), rowText(productsRow))
+      // The storefront lists them (AGL-3676): the grid on the home and the shop, each card a product page.
+      const store = pageTexts.filter((one) => one.status === 200)
+      const gridOn = []
+      const productLinks = new Set()
+      for (const entry of run.publish?.published ?? []) {
+        await page.goto(`${origin}${entry.path}`, { waitUntil: 'load', timeout: 180_000 }).catch(() => null)
+        await page.waitForTimeout(1500)
+        const links = await page.$$eval('a[href^="/products/"]', (anchors) => anchors.map((anchor) => anchor.getAttribute('href'))).catch(() => [])
+        if (links.length) gridOn.push(`${entry.path} (${links.length})`)
+        for (const link of links) productLinks.add(link)
+        if (entry.path === '/') {
+          const cart = await page.locator('header [aria-label="Cart"]').count().catch(() => 0)
+          check('the header carries the cart', cart > 0, `${cart} cart button(s) in the header`)
+          run.shots.push(await shoot(page, join(runDir, '32-store-home.png'), { fullPage: true }).catch(() => null))
+        } else if (/shop|product|store/i.test(`${entry.path} ${entry.label}`)) {
+          run.shots.push(await shoot(page, join(runDir, '33-store-shop.png'), { fullPage: true }).catch(() => null))
+        }
+      }
+      check('the home and the shop list the products', gridOn.some((line) => line.startsWith('/ ')) && gridOn.length >= 2, gridOn.join('; ') || 'none')
+      const soon = store.filter((one) => one.visible.includes('Price coming soon')).map((one) => one.path)
+      check('cards say “Price coming soon”', soon.length > 0, soon.join(', ') || 'none')
+      const pdps = []
+      for (const [index, link] of [...productLinks].entries()) {
+        const pdp = await visit(link, index === 0 ? '34-product-page' : null)
+        pdps.push(`${link} ${pdp.status}${pdp.visible.includes('Price coming soon') ? '' : ' (no coming-soon)'}${/Add to cart/.test(pdp.visible) ? ' (Add to cart shown)' : ''}`)
+      }
+      check('every product page answers, coming soon, with nothing to buy', pdps.length > 0 && pdps.every((line) => / 200$/.test(line)), pdps.join('; ') || 'none')
+      const named = products.filter((product) => pageTexts.some((one) => one.text.includes(product.name))).map((product) => product.name)
+      check('pages feature the real product names', named.length > 0, `${named.length} of ${products.length} names on a page: ${named.join(', ') || 'none'}`)
+      const prices = pageTexts.flatMap((one) => (one.visible.match(/[$€£]\s?\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((price) => `${one.path} ${price}`))
+      check('no page states a price', prices.length === 0, prices.join('; ') || 'none')
+    }
+  } finally {
+    await visitor.close().catch(() => undefined)
+  }
 }
 
 async function shootLiveSite(context, run, runDir, check, browser) {

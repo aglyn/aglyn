@@ -91,6 +91,10 @@ Walmart Fulfillment Services, Fulfilled by TikTok) are not imported.
   no tracking number is not sent; confirm it on the marketplace yourself. If
   the marketplace refuses one, the section says why: put right what it names
   and select **Send tracking again**.
+- **Shipping cost (Faire).** When you bought the shipment's label in Aglyn,
+  Faire is also sent what the label cost, as the shipping you paid. For a
+  shipment you entered by hand, no cost is sent. The other marketplaces take
+  no shipping cost with a shipment.
 - **Currency.** An order in a currency your store does not sell in is not
   imported; ship it from the marketplace.
 

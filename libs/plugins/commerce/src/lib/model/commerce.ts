@@ -18,6 +18,7 @@
 import { modifierGroupsProblem, type ProductModifierGroup } from './product-modifiers'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { draftProductChannelFacts, type ProductChannelFacts } from './product-channel'
+import type { PickupLocationSettings } from './order-local-fulfillment'
 
 /**
  * Commerce catalog v1 (AGL-276): products with options/variants,
@@ -115,6 +116,8 @@ export interface InventoryLocation {
    * it. Optional: a location written before this has only `address`.
    */
   postalAddress?: PostalAddress
+  /** Whether buyers may collect orders here, and when (AGL-3624). */
+  pickup?: PickupLocationSettings
 }
 
 /** A product's packed size for one unit, when all three sides are known. */

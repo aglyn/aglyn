@@ -106,6 +106,8 @@ interface CatalogItem {
   priceUsd: number
   imageUrl?: string
   soldOut: boolean
+  /** Listed before it has a price (AGL-3676). */
+  priceComingSoon?: boolean
 }
 
 /**
@@ -231,7 +233,11 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
                     {item.name}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {item.soldOut ? 'Sold out' : `$${item.priceUsd}`}
+                    {item.soldOut
+                      ? 'Sold out'
+                      : item.priceComingSoon
+                        ? 'Price coming soon'
+                        : `$${item.priceUsd}`}
                   </Typography>
                 </CardContent>
               </CardActionArea>

@@ -103,6 +103,7 @@
       ],
       "mobile": {
         "$comment": "AGL-3668: a site's forms in the Aglyn app: search, in use or retired, create, duplicate, rename, retire, CRM routing, questions, versions (open in the Besigner, publish) and the form's submissions (the Inbox plugin's screens) with export; list and detail side by side on tablets and desktop.",
+        "ios": { "module": "AglynFormsPlugin", "register": "registerFormsNative" },
         "android": { "package": "com.aglyn.plugins.forms", "register": "registerFormsNative" },
         "contributes": {
           "screens": ["forms.form", "forms.list"],
@@ -280,13 +281,20 @@
         "bookings"
       ],
       "mobile": {
-        "$comment": "AGL-3652: today's bookings at the Aglyn POS counter, paid on the device's own card reader through bookings/in-person-payment.",
+        "$comment": "AGL-3670: the site's bookings on a calendar (day, week, month, upcoming) with each booking's check-in, reschedule, cancel and refund, the services and their hours, Home's card for today and the Bookings page opening natively; in Aglyn POS, today's bookings paid at the counter on the device's own reader (AGL-3652).",
+        "ios": {
+          "module": "AglynBookingsPlugin",
+          "register": "registerBookingsNative"
+        },
         "android": {
           "package": "com.aglyn.plugins.bookings",
           "register": "registerBookingsNative"
         },
         "contributes": {
-          "screens": ["bookings.counter"]
+          "screens": ["bookings.calendar", "bookings.booking", "bookings.services", "bookings.counter"],
+          "widgets": ["bookings.today"],
+          "quickActions": ["bookings.open"],
+          "deepLinks": ["bookings.page"]
         }
       },
       "catalog": {
@@ -691,6 +699,11 @@
           "mediaScanReason": "Register staff PINs (AGL-3609): a salted hash and a lockout counter per member, written only by the staff PIN route. No content field at all."
         },
         {
+          "name": "posOfflineSales",
+          "mediaScan": "none",
+          "mediaScanReason": "The offline register's sync records (AGL-3625): one per cash sale rung offline, holding its order id, flags and stock conflicts, written only by the sync route. No content field, and a busy offline register writes one per sale."
+        },
+        {
           "name": "terminal",
           "mediaScan": "none",
           "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."
@@ -1001,7 +1014,8 @@
             "transferResources"
           ],
           "publicRoutes": [
-            "/pos-display"
+            "/pos-display",
+            "/pos-kiosk"
           ]
         }
       }
@@ -1105,6 +1119,17 @@
       "apiPrefixes": [
         "crm"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the CRM hub natively. Contacts, leads, companies and deals (search, the console's chips, a record beside its list on wide windows; create, edit, delete, lead status, unqualify and convert, contact stage, deal stage moves, won and lost, notes, calls and email on the record), the deals pipeline as a board, tasks by view, reports, custom fields and picklists, and the CRM settings; the glance and tasks-due Home cards.",
+        "ios": { "module": "AglynCrmPlugin", "register": "registerCrmNative" },
+        "android": { "package": "com.aglyn.plugins.crm", "register": "registerCrmNative" },
+        "contributes": {
+          "screens": ["crm.contacts", "crm.leads", "crm.companies", "crm.deals", "crm.tasks", "crm.reports", "crm.fields", "crm.settings", "crm.contact", "crm.lead", "crm.company", "crm.deal"],
+          "widgets": ["crm.glance", "crm.tasks-due"],
+          "quickActions": ["crm.open", "crm.deals-action", "crm.tasks-action"],
+          "deepLinks": ["crm.page", "crm.legacy-contacts", "crm.contacts-page", "crm.leads-page", "crm.companies-page", "crm.deals-page", "crm.tasks-page", "crm.reports-page", "crm.fields-page", "crm.settings-page", "crm.contact-page", "crm.lead-page", "crm.company-page", "crm.deal-page"]
+        }
+      },
       "consoleRedirects": [
         {
           "$comment": "The organization's address book, before it became the contacts section of the organization-level CRM (AGL-2630). Permanent, so a link kept from before — a bookmark, a docs page, an email — is corrected by the browser rather than followed twice; a reader the hub refuses is refused there, with the reason.",
@@ -1436,6 +1461,16 @@
       "apiPrefixes": [
         "outreach"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: Sequences natively, INTERNAL ONLY: shown only where the console shows the Outreach tab (release_outreach, the outreach feature and the outreach.use permission), so no quick action. All sequences (new, edit, activate, pause, archive, delete; enrollments and their pause, resume, stop, do-not-contact; enroll CRM contacts or leads), Mailboxes (connect through the system sign-in sheet on Apple, pause, settings, test, disconnect) and Compliance (sender details, do-not-contact domains, link domains); a Home card drawn only behind the same gates.",
+        "ios": { "module": "AglynOutreachPlugin", "register": "registerOutreachNative" },
+        "android": { "package": "com.aglyn.plugins.outreach", "register": "registerOutreachNative" },
+        "contributes": {
+          "screens": ["outreach.sequences", "outreach.mailboxes", "outreach.compliance"],
+          "widgets": ["outreach.glance"],
+          "deepLinks": ["outreach.page", "outreach.sequences-page", "outreach.mailboxes-page", "outreach.compliance-page", "outreach.sequence-page"]
+        }
+      },
       "activityMutationPaths": [
         "libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts",
         "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
@@ -1708,6 +1743,16 @@
       "apiPrefixes": [
         "email"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the Emails page natively. Messages (a site's sends with their reports; write, edit, test, send, schedule, send to more, stop, rename), Templates (Besigner email designs: new, open in the Besigner, duplicate, delete), Audiences (lists: new, rename, delete; members: search, add people with the consent check, remove), Topics (add, retire, restore), Sending (senders, domains) and Suppressions (add, put back).",
+        "ios": { "module": "AglynEmailPlugin", "register": "registerEmailNative" },
+        "android": { "package": "com.aglyn.plugins.email", "register": "registerEmailNative" },
+        "contributes": {
+          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions"],
+          "quickActions": ["email.open"],
+          "deepLinks": ["email.page", "email.messages-page", "email.templates-page", "email.audiences-page", "email.topics-page", "email.sending-page", "email.suppressions-page", "email.message-page", "email.list-page"]
+        }
+      },
       "transferResources": [
         {
           "$comment": "One list's members (AGL-3529): imported INTO a list and exported FROM one, one list at a time as email.list-members:<listId>, opened from the list's page. Every address goes through the gate a typed one does; the statement of permission is the plugin's own wizard step; 50,000 rows a file is LIST_IMPORT_MAX_ADDRESSES (list-import.ts).",
@@ -1834,6 +1879,22 @@
       "apiPrefixes": [
         "events"
       ],
+      "mobile": {
+        "$comment": "AGL-3670: the site's events, added, edited, published and deleted natively with the Events page's own rule, and the Events page opening natively from a link.",
+        "ios": {
+          "module": "AglynEventsCalendarPlugin",
+          "register": "registerEventsCalendarNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.eventscalendar",
+          "register": "registerEventsCalendarNative"
+        },
+        "contributes": {
+          "screens": ["events-calendar.events"],
+          "quickActions": ["events-calendar.open"],
+          "deepLinks": ["events-calendar.page"]
+        }
+      },
       "catalog": {
         "order": 13,
         "label": "Events Calendar",
@@ -1922,11 +1983,14 @@
         "inbox"
       ],
       "mobile": {
-        "$comment": "AGL-3668: a site's form submissions in the Aglyn app, the site's or one form's (the Forms screens open it with formId): read filter, search, export, and each submission's fields with read or unread, reply and delete; list and detail side by side on tablets and desktop.",
+        "$comment": "AGL-3669, AGL-3668: the site's form submissions natively, the site's or one form's (the Forms screens open it with `formId`): read filter, form pick and search, export, one message as `inbox.submission`, each submission's fields with read or unread, reply, delete and add to a marketing list; list and detail side by side on tablets and desktop. Also the site's members and leads, and a Home card of unread messages.",
+        "ios": { "module": "AglynInboxPlugin", "register": "registerInboxNative" },
         "android": { "package": "com.aglyn.plugins.inbox", "register": "registerInboxNative" },
         "contributes": {
-          "screens": ["inbox.submission", "inbox.submissions"],
-          "deepLinks": ["inbox.submissions-page"]
+          "screens": ["inbox.submissions", "inbox.submission", "inbox.people"],
+          "widgets": ["inbox.glance"],
+          "quickActions": ["inbox.open", "inbox.people"],
+          "deepLinks": ["inbox.page", "inbox.submissions-page", "inbox.people-page"]
         }
       },
       "catalog": {
@@ -2080,6 +2144,16 @@
         "campaigns",
         "experiments"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: the Marketing page natively. Overview; Campaigns (new, edit, delete; a campaign's emails, opening in Emails); Conversions; Overlays (announcement bars and popups: new, edit, on and off, order, delete, each re-rendering the site); A/B testing (new, start, pause, pick a winner, delete, the results against the control). Overlays and A/B testing lock on the plans the console locks them on.",
+        "ios": { "module": "AglynMarketingPlugin", "register": "registerMarketingNative" },
+        "android": { "package": "com.aglyn.plugins.marketing", "register": "registerMarketingNative" },
+        "contributes": {
+          "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments"],
+          "quickActions": ["marketing.open"],
+          "deepLinks": ["marketing.page", "marketing.overview-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.overlays-page", "marketing.experiments-page", "marketing.campaign-page", "marketing.inbox-campaigns-page"]
+        }
+      },
       "analyticsProvider": {
         "module": "analytics-provider",
         "settings": [
@@ -2353,6 +2427,33 @@
         "planEntitlements": "workflowsPlanEntitlements",
         "usageAxes": "workflowsUsageAxes"
       },
+      "mobile": {
+        "$comment": "AGL-3670: Automation natively — the site's workflows, actions and webhooks, each one's run history and test run, the run allowances, the org automations a site runs (paused or resumed here), and the organization's own automations and every site's lists; the Automation pages opening natively from a link.",
+        "ios": {
+          "module": "AglynWorkflowsPlugin",
+          "register": "registerWorkflowsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.workflows",
+          "register": "registerWorkflowsNative"
+        },
+        "contributes": {
+          "screens": [
+            "workflows.automation",
+            "workflows.workflow",
+            "workflows.action",
+            "workflows.webhook",
+            "workflows.runs",
+            "workflows.org-automation"
+          ],
+          "quickActions": [
+            "workflows.open"
+          ],
+          "deepLinks": [
+            "workflows.page"
+          ]
+        }
+      },
       "transferResources": [
         {
           "$comment": "AGL-3548: org automations' plan feature (`actions`) gates both directions, as their section and their create route do.",
@@ -2570,6 +2671,36 @@
     },
     {
       "id": "ai",
+      "mobile": {
+        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json.",
+        "ios": {
+          "module": "AglynAiPlugin",
+          "register": "registerAINative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.ai",
+          "register": "registerAINative"
+        },
+        "contributes": {
+          "screens": [
+            "ai.jobs",
+            "ai.job",
+            "ai.credits",
+            "ai.member",
+            "ai.staffOrg",
+            "ai.staffUser",
+            "ai.signals"
+          ],
+          "quickActions": [
+            "ai.open"
+          ],
+          "deepLinks": [
+            "ai.jobs.link",
+            "ai.job.link",
+            "ai.signals.link"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-ai",
       "register": {
         "console": "registerAiConsole",
@@ -2734,6 +2865,15 @@
         "usageAxes": "smsUsageAxes"
       },
       "apiPrefixes": ["sms"],
+      "mobile": {
+        "$comment": "AGL-3669: the texts switch natively. The plugin is infrastructure with no console page of its own; what a person controls is the Customer notifications card's \"Also send as texts\" switch (offered only when the platform can text), so the app gives that switch a screen and a quick action.",
+        "ios": { "module": "AglynSmsPlugin", "register": "registerSmsNative" },
+        "android": { "package": "com.aglyn.plugins.sms", "register": "registerSmsNative" },
+        "contributes": {
+          "screens": ["sms.texts"],
+          "quickActions": ["sms.open"]
+        }
+      },
       "contributes": {}
     },
     {
@@ -2812,6 +2952,43 @@
         "console": {
           "slots": [
             "commerceSettings",
+            "orderDetail"
+          ]
+        }
+      }
+    },
+    {
+      "id": "loyalty",
+      "package": "@aglyn/plugins-loyalty",
+      "register": {
+        "console": "registerLoyaltyConsole",
+        "consoleApi": "registerLoyaltyConsoleApi",
+        "serverDeclarations": "registerLoyaltyServerDeclarations",
+        "tenantEmails": "loyaltyTenantEmails",
+        "subprocessors": "loyaltySubprocessors"
+      },
+      "apiPrefixes": ["loyalty"],
+      "requiredPersonEraser": true,
+      "activityMutationPaths": [
+        "libs/plugins/loyalty/src/lib/server/routes.ts",
+        "libs/plugins/loyalty/src/lib/server/connection-routes.ts"
+      ],
+      "catalog": {
+        "order": 31,
+        "$comment": "Built-in rewards for the commerce plugin's sales (AGL-3640): points earned on online and register orders, spent at checkout and at the register, referral codes, and store credit beside commerce's gift cards. It never imports commerce: it redeems through core's checkout-credits seam (`core.checkout-credits`), earns and reverses on commerce's order events by name, and draws in commerce's `commercePromotions` and `orderDetail` zones. No outside vendor and no env: every store's program is OFF until its merchant turns it on, and the cart and register draw nothing until then. No `requires` edge, for shipping's reason: a workspace cannot switch it off, so it runs only on a site where commerce is on (site-context.ts). Or a merchant connects their OWN Smile.io or Yotpo Loyalty account in place of the built-in points (AGL-3677): one program at a time, every points movement written to their account through the `loyaltySync` outbox, the built-in program awarding nothing of its own beside it. That half is hidden until the deployment sets LOYALTY_CONNECTORS_TOKEN_KEY, the key merchants' API keys are sealed under; Aglyn holds no account or app with either vendor.",
+        "label": "Rewards",
+        "alwaysOnForWorkspace": true,
+        "description": "Points, referrals and store credit for your store.",
+        "siteOff": {
+          "stops": "Stops new points, rewards at checkout and at the register, and referral credit.",
+          "keeps": "Members keep their points and store credit."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commercePromotions",
             "orderDetail"
           ]
         }
@@ -2961,7 +3138,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN ShipBob or Amazon Multi-Channel Fulfillment account, its grant sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "fulfillmentNetworkConnections",
           "orgField": "orgId"
         },
@@ -3236,6 +3413,16 @@
       "contributes": {}
     },
     {
+      "id": "stock-photos",
+      "$comment": "AGL-3660: stock photo libraries behind core's `core.stock-photos` contract, Pixabay the first. consoleServerDeclarations registers the provider at the console's boot only: the AI site build, which runs on the console, asks the contract for photos for a page's picture slots and copies the chosen one into the site's own media library through core's `core.media-ingest`; it never names Pixabay. The tenant runtime never loads it. Searches are cached 24 hours in the top-level `stockPhotoSearches` collection (no workspace's data; TTL on `expiresAt`). Nothing runs until the console holds PIXABAY_API_KEY; until then the provider answers as absent and pages keep the starter photos. No catalog row: there is nothing for a workspace or a site to switch.",
+      "package": "@aglyn/plugins-stock-photos",
+      "register": {
+        "consoleServerDeclarations": "registerStockPhotosConsoleServerDeclarations",
+        "subprocessors": "stockPhotosSubprocessors"
+      },
+      "contributes": {}
+    },
+    {
       "id": "funnels",
       "package": "@aglyn/plugins-funnels",
       "register": {
@@ -3247,6 +3434,16 @@
       "apiPrefixes": [
         "funnels"
       ],
+      "mobile": {
+        "$comment": "AGL-3669: Funnels natively — the site's funnels with their results over a range, the editor with the site's own pages and records, Create with AI, Activate for a draft and Act on this drop-off; the funnels screen opening natively from a link.",
+        "ios": { "module": "AglynFunnelsPlugin", "register": "registerFunnelsNative" },
+        "android": { "package": "com.aglyn.plugins.funnels", "register": "registerFunnelsNative" },
+        "contributes": {
+          "screens": ["funnels.list"],
+          "quickActions": ["funnels.open"],
+          "deepLinks": ["funnels.page"]
+        }
+      },
       "catalog": {
         "order": 4,
         "$comment": "On for every workspace, off for a site only when that site says so (AGL-3605): funnels are a way of reading the paid analytics tier, so the card needs no switch of its own to be sold, and it records nothing until a site saves its first funnel.",

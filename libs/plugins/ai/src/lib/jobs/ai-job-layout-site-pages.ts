@@ -50,6 +50,8 @@ export interface AiLayoutSitePage {
   id: string
   label: string
   slug: string
+  /** The path of a destination that is no page, such as the blog a start writes (AGL-3660). */
+  href?: string
 }
 
 /** Whether a slug is the site's root, the home page. */
@@ -92,12 +94,47 @@ export function aiLayoutSitePages(inputs: Readonly<Record<string, unknown>> | nu
   const pages: AiLayoutSitePage[] = []
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue
-    const { id, label, slug } = entry as Record<string, unknown>
+    const { id, label, slug, href } = entry as Record<string, unknown>
     if (typeof id !== 'string' || !id || typeof label !== 'string' || !label.trim()) continue
     if (pages.some((page) => page.id === id)) continue
-    pages.push({ id, label: label.trim(), slug: typeof slug === 'string' ? slug : '' })
+    pages.push({
+      id,
+      label: label.trim(),
+      slug: typeof slug === 'string' ? slug : '',
+      // Only a path on this site, never an address elsewhere.
+      ...(typeof href === 'string' && /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(href) ? { href } : {}),
+    })
   }
   return pages.slice(0, AI_LAYOUT_SITE_PAGES_MAX)
+}
+
+/**
+ * The unit input naming the planned pages a start merged into its blog
+ * (AGL-3676): a page that stood in for it, whose links go to the blog.
+ */
+export const AI_LAYOUT_SITE_ALIASES_INPUT = 'siteAliases'
+
+/** A planned page merged into the blog: its id, linked as the blog's path, and the title it had. */
+export interface AiLayoutSiteAlias extends AiLayoutSitePage {
+  href: string
+  standsInFor: string
+}
+
+/** The merged pages a unit's inputs carry; none for any other unit. */
+export function aiLayoutSiteAliases(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutSiteAlias[] {
+  const raw = inputs?.[AI_LAYOUT_SITE_ALIASES_INPUT]
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    const { id, label, slug, href, standsInFor } = (entry ?? {}) as Record<string, unknown>
+    return typeof id === 'string' &&
+      id &&
+      typeof label === 'string' &&
+      typeof href === 'string' &&
+      /^\/[a-z0-9-]+$/.test(href) &&
+      typeof standsInFor === 'string'
+      ? [{ id, label, slug: typeof slug === 'string' ? slug : href, href, standsInFor }]
+      : []
+  })
 }
 
 /**
@@ -205,7 +242,12 @@ export function aiLayoutWithSitePages(
       const id = freshId(`aiNavLink_${page.id.replace(/[^A-Za-z0-9_]/g, '')}`)
       nodes[id] = {
         componentId: 'muiScreenLink',
-        props: { children: page.label.slice(0, 40), screenId: page.id, renderAs: 'link', color: 'inherit' },
+        props: {
+          children: page.label.slice(0, 40),
+          ...(page.href ? { href: page.href } : { screenId: page.id }),
+          renderAs: 'link',
+          color: 'inherit',
+        },
       }
       return id
     })
@@ -214,10 +256,10 @@ export function aiLayoutWithSitePages(
     header
       .map((id) => nodes[id])
       .filter((node) => LINK_COMPONENTS.has(String(node.componentId)))
-      .map((node) => node.props?.['screenId'])
+      .flatMap((node) => [node.props?.['screenId'], node.props?.['href']])
       .filter((value): value is string => typeof value === 'string'),
   )
-  const missing = pages.filter((page) => !linkedInHeader.has(page.id))
+  const missing = pages.filter((page) => !linkedInHeader.has(page.href ?? page.id))
   const navs = order.filter((id) => elementOf(nodes[id]) === 'nav')
   const headerNav = navs.find((id) => header.includes(id)) ?? null
 

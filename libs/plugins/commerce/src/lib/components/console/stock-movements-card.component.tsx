@@ -26,11 +26,13 @@ import {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -41,6 +43,7 @@ import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-quer
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import {
+  STOCK_MOVEMENT_COLUMN_SORTS,
   STOCK_MOVEMENT_FILTER_FIELDS,
   STOCK_MOVEMENT_FILTER_HEADERS,
   STOCK_MOVEMENT_QUERY,
@@ -78,6 +81,27 @@ const REASON_OPTIONS = Object.entries(STOCK_MOVEMENT_REASON_LABEL).map(([value, 
 const VISIBLE_COLUMNS = ['atMs', 'productId', 'delta', 'reason', 'source']
 
 type MovementRow = CommerceModel.InventoryAdjustment & { $id: string }
+
+/** What the Source column reads: the order, the location and who counted. */
+const movementSource = (row: MovementRow): string =>
+  [
+    row.orderId ? `order ${row.orderId}` : null,
+    row.locationId ? `at ${row.locationId}` : null,
+    row.source ? `counted by ${row.source}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+/**
+ * Product (a name read from the product) and Source (composed from three
+ * fields) sort the page on screen (AGL-3680); When, Change and Reason are the
+ * query's order (`STOCK_MOVEMENT_COLUMN_SORTS`).
+ */
+const MOVEMENT_PAGE_SORTS = {
+  productId: (row: MovementRow & { productName?: string }) => row.productName ?? row.productId,
+  source: (row: MovementRow) => movementSource(row) || null,
+}
+const MOVEMENT_PAGE_SORT_HEADERS = { productId: 'Product', source: 'Source' }
 
 /**
  * Stock movements (AGL-2341) — the adjustment history that had no history
@@ -161,6 +185,8 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
   )
 
   const gridFilter = useListGridFilter({ selectFields: STOCK_MOVEMENT_SELECT_FIELDS })
+  // Every header sorts (AGL-3680); newest first until one is clicked.
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(STOCK_MOVEMENT_COLUMN_SORTS[0])
   const {
     rows: movementRows,
     hasMore,
@@ -173,7 +199,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
   } = useListQuery<MovementRow>({
     collection: collection(firestore, 'hosts', hostId, 'inventoryAdjustments'),
     declaration: STOCK_MOVEMENT_QUERY,
-    request: { clauses: gridFilter.clauses },
+    request: { clauses: gridFilter.clauses, sort: askedSort },
     deps: [firestore, hostId],
     idField: '$id',
   })
@@ -185,6 +211,16 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
       })),
     [movementRows, productNames],
   )
+  const columnSort = useListColumnSort({
+    sorts: STOCK_MOVEMENT_COLUMN_SORTS,
+    defaultSort: STOCK_MOVEMENT_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: movements,
+    pageSorts: MOVEMENT_PAGE_SORTS,
+    headers: MOVEMENT_PAGE_SORT_HEADERS,
+  })
 
   const columns = useMemo(
     () =>
@@ -261,13 +297,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
             minWidth: 160,
             renderCell: ({ row }: { row: MovementRow }) => (
               <Typography variant="caption" color="text.secondary">
-                {[
-                  row.orderId ? `order ${row.orderId}` : null,
-                  row.locationId ? `at ${row.locationId}` : null,
-                  row.source ? `counted by ${row.source}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || '—'}
+                {movementSource(row) || '—'}
               </Typography>
             ),
           },
@@ -282,7 +312,12 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
   const filtering = gridFilter.clauses.length > 0
   // The ledger is empty only when an UNFILTERED first page came back empty;
   // a filter that matches nothing keeps the grid, its chips and its panel.
-  const empty = status === 'success' && !filtering && page === 0 && movements.length === 0
+  const empty =
+    status === 'success' &&
+    !filtering &&
+    askedSort === STOCK_MOVEMENT_COLUMN_SORTS[0] &&
+    page === 0 &&
+    movements.length === 0
 
   return (
     <CardDisplay header="Stock movements" help={movementsHelp} contentGutterX contentGutterY>
@@ -307,22 +342,21 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
                 headers: STOCK_MOVEMENT_FILTER_HEADERS,
                 options: filterOptions,
               })}
-              notices={plan.notices}
+              notices={[...plan.notices, ...columnSort.notices]}
             />
             <ListTable
               aria-label="Stock movements"
-              rows={movements}
+              rows={columnSort.rows}
               columns={columns}
               /*
-               * The grid must NOT also filter or sort. The query answers
-               * both, and the ledger has one order — newest first — which
-               * the query already holds.
+               * The grid must NOT also filter or sort on its own. The query
+               * answers the filters, and every header order is the query's
+               * or the page's (`columnSort`).
                */
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
-              sortingMode="server"
-              disableColumnSorting
+              columnSort={columnSort}
               // `ListPagination` below pages the query.
               hideFooter
               noRowsLabel="No stock movements match these filters"

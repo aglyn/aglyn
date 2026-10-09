@@ -280,8 +280,13 @@
       "preheaders": ["A", "B", "C"]
     },
     "tokenInSubject": {
-      "why": "A merge token where no send fills one",
+      "why": "A merge token where no send fills one; settled out, not refused (AGL-3676)",
       "subjects": ["Hello {{contact.firstName}}", "Two", "Three"],
+      "preheaders": ["A", "B", "C"]
+    },
+    "tokenOnlySubject": {
+      "why": "A subject line that is nothing but a merge token: settled, it is empty",
+      "subjects": ["{{contact.firstName}}", "Two", "Three"],
       "preheaders": ["A", "B", "C"]
     }
   }

@@ -47,7 +47,7 @@ export interface FunnelDropOffWatch {
 }
 
 /** The waits the card offers, in hours. */
-export const DROP_OFF_WAIT_HOURS = [1, 24, 72, 168] as const
+export const DROP_OFF_WAIT_HOURS: readonly number[] = [1, 24, 72, 168]
 
 /** The longest wait a watch may hold: a visit is kept 90 days, a follow-up is not that late. */
 export const DROP_OFF_MAX_HOURS = 30 * 24

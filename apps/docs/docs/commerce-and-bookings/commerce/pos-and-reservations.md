@@ -300,6 +300,72 @@ with a **Connected** or **Not connected** status. **Sign out** there
 unpairs a display, and so does removing its register; it then has to be
 paired again with a new code.
 
+## Self-service kiosk
+
+A self-service kiosk is a tablet your customers order from themselves. They
+browse your products by category, choose sizes and modifiers, review the
+total with tax, and pay — or send the order to the counter. It belongs to
+one register, and its orders are register sales: the same prices, tax,
+automatic promotions and stock as a sale you ring up.
+
+To pair one:
+
+1. On the register, tap **Pair display**, then choose **Self-service
+   kiosk**. It shows an address and a 6-digit code that works **once** and
+   expires in **10 minutes**.
+2. On the tablet, open that address — your console address followed by
+   `/kiosk/commerce/pos-kiosk` — and enter the code. No one signs in on the
+   tablet. A customer display code does not pair a kiosk, and a kiosk code
+   does not pair a display.
+
+The kiosk keeps working for as long as the person who paired it can use
+the register. If they are removed from the site or lose access to the
+register, or the plan no longer includes POS, the kiosk stops taking
+orders until someone pairs it again.
+
+A customer's order goes like this:
+
+1. **Start order**, then tap products to add them. A product with sizes,
+   options or modifiers opens its choices first. Sold-out items cannot be
+   added.
+2. **Checkout** shows each line with the subtotal, any discount, the tax
+   and the total. Prices and tax always come from your store, never from
+   the tablet.
+3. The customer pays:
+   - **Pay with card** sends the total to the register's
+     [card reader](#card-readers). It is shown only when card readers are
+     available for your store and one is assigned to the kiosk's register.
+     When **Ask for tips at the register** is on, the kiosk asks for the
+     tip first, so the reader does not ask again.
+   - **Pay at counter** sends the order to the register (see below). It is
+     on by default; turn it off with **Kiosk: let customers pay at the
+     counter**.
+4. After a card payment the customer chooses a receipt: email, text (only
+   when text messages are available for your store), print (only when the
+   register has a [receipt printer](pos-hardware.md#receipt-printers)) or no receipt.
+5. The kiosk shows the **order number** and returns to the start screen.
+
+**Pay at counter orders** appear on the register under **Kiosk orders**,
+oldest first, with their number and total. **Take payment** opens one in
+the register's payment panel, where you take payment with any tender, or
+void it.
+
+**Starting over.** After **Kiosk: start over after (seconds idle)** without
+a touch (90 by default), the kiosk asks **Still there?** and, 20 seconds
+later, clears the order: an unpaid order is canceled, and the cart and any
+email address or phone number the customer typed are forgotten. An order
+sent to the counter is kept for the cashier. Change the start screen's line
+with **Kiosk welcome** (blank shows "Order here").
+
+**Staff unlock.** Tap **Staff** in the corner and enter your register PIN
+(see [staff PINs](pos-operations.md#staff-pins)). The kiosk lists no staff names. After
+the right PIN you can choose the card reader the kiosk uses, reload it, or
+**Exit kiosk mode**, which unpairs it. After five wrong PINs the unlock
+screen locks for 15 minutes.
+
+Paired kiosks are listed with your customer displays under **Commerce →
+Settings → POS devices**, where **Sign out** unpairs one.
+
 ## Reservations
 
 For stays (cabins, rooms, rentals):

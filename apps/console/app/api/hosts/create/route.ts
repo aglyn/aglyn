@@ -42,6 +42,7 @@ import {
   NEW_SITE_ENABLED_PLUGINS,
 } from '../../../../utils/server/provision-host'
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
+import { reportServerError } from '../../../../utils/report-server-error'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
@@ -331,6 +332,22 @@ async function handler(request: Request): Promise<Response> {
     const capped = freeWorkspaceCapRefusalResponse(error)
     if (capped) return capped
     console.error(error)
+    // Reported, not only logged (AGL-1921, AGL-3689). `onRequestError` fires for an
+    // UNCAUGHT throw and this one is caught, and the log drain forwards the
+    // status line but never a `console.error`, so the 2026-10-08 500 reached
+    // the alert as START/END/REPORT with no error in sight. The site can
+    // already exist by the time this runs — a failure after the claim — so
+    // the reason is the one thing triage cannot reconstruct afterwards.
+    await reportServerError(
+      {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        route: '/api/hosts/create',
+        routeType: 'route',
+        method: 'POST',
+      },
+      { service: 'console-web' },
+    )
     return Response.json({ error: 'Site creation failed' }, { status: 500 })
   }
 }

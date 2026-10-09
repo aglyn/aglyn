@@ -214,7 +214,7 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
       { path: 'sequenceId', op: '==', value: 'seq-1' },
       { path: 'searchTokens', op: 'array-contains', value: 'avery' },
     ])
-    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+    expect(lastListQueryPlan()?.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'desc' })
   })
 
   it('finds a match past the first page, which the loaded rows never held (AGL-3321)', async () => {

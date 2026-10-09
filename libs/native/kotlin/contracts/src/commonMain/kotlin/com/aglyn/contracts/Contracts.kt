@@ -9,8 +9,8 @@ val ContractJsonFormat: Json = Json {
   coerceInputValues = true
 }
 
-/** The values in contracts.generated.json (list declarations, label maps), decoded once. */
-val Contracts: ContractValues by lazy { ContractJsonFormat.decodeFromString(ContractValues.serializer(), ContractJson.contracts) }
+/** The values in contracts.generated.json (list declarations, label maps), decoded once, part by part (AGL-3703). */
+val Contracts: ContractValues by lazy { ContractValues.decode(ContractJsonFormat, ContractJson.contracts) }
 
 /** The raw notification catalog (libs/native/contracts/notification-catalog.generated.json). */
 val NotificationCatalogJson: String get() = ContractJson.notificationCatalog

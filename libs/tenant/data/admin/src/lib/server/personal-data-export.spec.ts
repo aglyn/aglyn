@@ -169,6 +169,21 @@ describe('redactSecrets', () => {
     expect(out.nested.clientSecret).toMatchObject({ redacted: true, present: true })
   })
 
+  it('withholds a fulfillment network connection’s sealed key and webhook secret, keeping the store id (AGL-3697)', () => {
+    const out = redactSecrets({
+      provider: 'shipmonk',
+      storeId: '11364',
+      sealedAccessToken: 'v1.k1.sealed-api-key',
+      sealedRefreshToken: null,
+      sealedWebhookSecret: 'v1.k1.sealed-webhook-secret',
+      tokenKeyId: 'k1',
+    }) as any
+    expect(out.storeId).toBe('11364')
+    expect(out.sealedAccessToken).toMatchObject({ redacted: true, present: true })
+    expect(out.sealedWebhookSecret).toMatchObject({ redacted: true, present: true })
+    expect(JSON.stringify(out)).not.toMatch(/sealed-api-key|sealed-webhook-secret/)
+  })
+
   it('distinguishes an absent secret from a held one', () => {
     const out = redactSecrets({ secret: '' }) as any
     expect(out.secret).toEqual({ redacted: true, present: false, reason: 'secret' })
@@ -187,6 +202,15 @@ describe('redactSecrets', () => {
     for (const key of Object.keys(out)) {
       expect([key, out[key].redacted]).toEqual([key, true])
     }
+  })
+
+  it('withholds a Zapier hook’s URL, whose secret is in its path (AGL-3643)', () => {
+    const out = redactSecrets({
+      targetUrl: 'https://hooks.zapier.com/hooks/standard/123456/7a1b2c3d4e5f60718293a4b5c6d7e8f9/',
+      events: ['orderPaid'],
+    }) as any
+    expect(out.targetUrl).toEqual({ redacted: true, present: true, reason: 'secret' })
+    expect(out.events).toEqual(['orderPaid'])
   })
 
   it('renders a Firestore timestamp as a date a human can read', () => {

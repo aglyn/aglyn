@@ -35,6 +35,7 @@ import {
   type CampaignMemberCollection,
 } from './campaign-members-query'
 import { EXPERIMENT_LIST_QUERY } from './experiment-list-query'
+import { CAMPAIGN_CONVERSION_SORTS } from './campaign-conversions'
 
 /**
  * Every shape the Marketing lists' queries can take has its composite index
@@ -85,6 +86,21 @@ describe('the Conversions lists (hosts/{hostId}/campaignAttributions)', () => {
     fields: paths.map((fieldPath) => ({ fieldPath, order: 'ASCENDING' as const })),
   })
 
+  it('has a whole-shape composite for every header order of each list (AGL-3680)', () => {
+    const ordered = (second: string, path: string, direction: 'asc' | 'desc') => ({
+      fields: [
+        { fieldPath: 'kind', order: 'ASCENDING' as const },
+        { fieldPath: second, order: 'ASCENDING' as const },
+        { fieldPath: path, order: direction === 'asc' ? ('ASCENDING' as const) : ('DESCENDING' as const) },
+      ],
+    })
+    const needed = ['channel', 'campaignId'].flatMap((second) =>
+      CAMPAIGN_CONVERSION_SORTS.map((sort) => ordered(second, sort.path, sort.direction)),
+    )
+    expect(needed).toHaveLength(6)
+    expect(missingListQueryIndexes(INDEXES, 'campaignAttributions', needed, 'COLLECTION')).toEqual([])
+  })
+
   it('has the kind + channel and kind + campaign composites its lists read', () => {
     expect(
       missingListQueryIndexes(
@@ -126,9 +142,9 @@ describe('a campaign’s screens and forms (hosts/{hostId}/screens, /forms)', ()
   }
 
   /** The composite a searched plan needs: every predicate, then its order. */
-  const composite = (collection: CampaignMemberCollection) => {
+  const composite = (collection: CampaignMemberCollection, direction: 'asc' | 'desc' = 'asc') => {
     const searched = plan(collection, ['Spring'])
-    const fields: Array<{ fieldPath: string; order?: 'ASCENDING'; arrayConfig?: 'CONTAINS' }> = []
+    const fields: Array<{ fieldPath: string; order?: 'ASCENDING' | 'DESCENDING'; arrayConfig?: 'CONTAINS' }> = []
     for (const filter of searched.filters) {
       if (filter.path === searched.orderBy.path) continue
       if (fields.some((field) => field.fieldPath === filter.path)) continue
@@ -138,7 +154,7 @@ describe('a campaign’s screens and forms (hosts/{hostId}/screens, /forms)', ()
           : { fieldPath: filter.path, order: 'ASCENDING' },
       )
     }
-    fields.push({ fieldPath: searched.orderBy.path, order: 'ASCENDING' })
+    fields.push({ fieldPath: searched.orderBy.path, order: direction === 'asc' ? 'ASCENDING' : 'DESCENDING' })
     return { fields }
   }
 
@@ -154,7 +170,20 @@ describe('a campaign’s screens and forms (hosts/{hostId}/screens, /forms)', ()
     for (const collection of ['screens', 'forms'] as const) {
       const searched = plan(collection, ['Spring', 'sale'])
       expect(searched.refused).toEqual([])
-      expect(searched.orderBy).toEqual({ path: 'nameLower', direction: 'asc' })
+      expect(searched.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
+      // The Name header descending holds under the search: the range leads
+      // with the same field, in the asked direction (AGL-3680).
+      const search = campaignMembersSearchClause(['Spring'])
+      const descending = planListQuery(
+        CAMPAIGN_MEMBERS_QUERY,
+        {
+          clauses: search ? [search] : [],
+          base: campaignMembersBase(collection, 'spring-2026'),
+          sort: { path: 'nameLower', direction: 'desc' },
+        },
+        nameSearchNormalizers,
+      )
+      expect(descending.orderBy).toMatchObject({ path: 'nameLower', direction: 'desc' })
     }
   })
 
@@ -176,16 +205,24 @@ describe('a campaign’s screens and forms (hosts/{hostId}/screens, /forms)', ()
     expect(missingListQueryIndexes(INDEXES, 'forms', [composite('forms')], 'COLLECTION')).toEqual([])
   })
 
-  it('declares nothing listQueryIndexes would add beyond the search range', () => {
-    // No column filter, so the only order a declared field adds is the
-    // search's: the merged pairs are the three this spends two in place of.
+  it('holds the Name header both ways in the same whole-shape composites (AGL-3680)', () => {
+    // Unsearched or searched, a Name order is the base beside `nameLower`:
+    // the same one composite per collection per direction.
+    for (const collection of ['screens', 'forms'] as const) {
+      expect(
+        missingListQueryIndexes(INDEXES, collection, [composite(collection, 'desc')], 'COLLECTION'),
+      ).toEqual([])
+    }
+  })
+
+  it('declares nothing listQueryIndexes would add beyond the name orders', () => {
+    // No column filter, so the only orders are the search's and the Name
+    // header's: the merged pairs are what the whole-shape composites above
+    // serve in fewer indexes.
     const merged = listQueryIndexes(CAMPAIGN_MEMBERS_QUERY, [
       { path: 'campaignIds', array: true },
       { path: 'deletedAt' },
     ])
-    expect(merged.map((index) => index.fields[1])).toEqual([
-      { fieldPath: 'nameLower', order: 'ASCENDING' },
-      { fieldPath: 'nameLower', order: 'ASCENDING' },
-    ])
+    expect(new Set(merged.map((index) => index.fields[1].fieldPath))).toEqual(new Set(['nameLower']))
   })
 })

@@ -61,7 +61,24 @@ export const OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY: ListQueryDeclaration = {
       operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
     },
   ],
-  sorts: [{ path: LIST_QUERY_ID_PATH, direction: 'asc' }],
+  /*
+   * The headers (AGL-3680). A domain IS its document id, so Domain orders by
+   * the id, alphabetical first as the list always was. Why, Added and Detail
+   * are on every entry — the one writer stamps `reason`, `addedAtMs` and
+   * `detail` (null when none) — and order the query `alone`: on this
+   * unscoped collection that costs no composite. Added newest first is also
+   * the order its date range imposes.
+   */
+  sorts: [
+    { path: LIST_QUERY_ID_PATH, direction: 'asc', column: 'domain', label: 'Domain' },
+    { path: LIST_QUERY_ID_PATH, direction: 'desc', column: 'domain', label: 'Domain', alone: true },
+    { path: 'reason', direction: 'asc', column: 'reason', label: 'Why', alone: true },
+    { path: 'reason', direction: 'desc', column: 'reason', label: 'Why', alone: true },
+    { path: 'addedAtMs', direction: 'desc', column: 'addedAtMs', label: 'Added', alone: true },
+    { path: 'addedAtMs', direction: 'asc', column: 'addedAtMs', label: 'Added', alone: true },
+    { path: 'detail', direction: 'asc', column: 'detail', label: 'Detail', alone: true },
+    { path: 'detail', direction: 'desc', column: 'detail', label: 'Detail', alone: true },
+  ],
   search: { tokensPath: OUTREACH_DOMAIN_SEARCH_TOKENS },
 }
 

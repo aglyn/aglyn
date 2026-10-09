@@ -88,10 +88,12 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
+import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   AI_JOB_PAGE_LANGUAGE_BUDGET,
   aiJobUsesLayoutLanguage,
+  aiLayoutListingContext,
   aiLayoutPageTargets,
   aiRunLayoutPage,
 } from './ai-job-page-language'
@@ -428,6 +430,8 @@ export interface AiJobPageStepDeps {
   seoFields?: typeof generateSeoFields
   /** The runners a plan's creations are built by (AGL-3031); the registry's otherwise. */
   runnerFor?: typeof aiJobStepRunnerFor
+  /** The stock photo source of a language page's pictures (AGL-3660); core's provider otherwise. */
+  stockPhotos?: typeof aiLayoutStockPhotoSource
 }
 
 export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunner {
@@ -601,7 +605,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // language and compiled (AGL-3660); a record template keeps the raw tree,
     // since its copy binds fields the language does not name.
     const language = aiJobUsesLayoutLanguage(job) && !record
-    const context = {
+    const checked = {
       ...aiPageCheckContext(inventory, {
         reusableComponents,
         sections,
@@ -609,8 +613,17 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         recordTokens: aiPageRecordTokens(record),
         linkablePages,
       }),
-      ...(language ? { codeBuilt: true } : {}),
+      // The last pass holds a compiled page to what its own check did: the
+      // design's picture cards are the compiler's, not a block rule 1 asks a
+      // component of (AGL-3660). Without it, a Pro store's Shop page passed
+      // its check and was refused at the last pass (live run, 2026-10-09).
+      ...(language ? { codeBuilt: true, repeatsCompiled: true } : {}),
     }
+    // And a post's card in a section listing the blog links its post and shows
+    // its cover by the tokens the page fills per post (AGL-3676), as its check admitted.
+    const context = language
+      ? aiLayoutListingContext(checked, aiLayoutPageTargets({ job, inventory, own: [screen.id, draftId] }))
+      : checked
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
@@ -732,12 +745,24 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       if (result.status === 'refused') return { ...spent, refused: true }
       if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
       // The compiler leaves each picture slot empty; a photo the site serves
-      // itself fills it here, after the page is checked (AGL-3660).
+      // itself fills it here, after the page is checked (AGL-3660): a stock
+      // photo copied into the site's library where the deployment has a
+      // library, else a starter photo. No AI credits; never fails the job.
+      const sectionNames = screen.sections.map((section) => section.name)
+      const seed = `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
-        sectionNames: screen.sections.map((section) => section.name),
-        seed: `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`,
+        sectionNames,
+        seed,
+        source: (deps.stockPhotos ?? aiLayoutStockPhotoSource)({
+          hostId,
+          uid: job.createdBy,
+          seed,
+          business: aiSiteWords(job.inputs).about,
+          sectionNames,
+          ...(signal ? { signal } : {}),
+        }),
       })
       if (!written) {
         const draft = await writeAiDraft(firestore, {

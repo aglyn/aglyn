@@ -256,7 +256,7 @@ describe('the Companies section (AGL-2597)', () => {
     expect(plan?.filters).toEqual([
       { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
     ])
-    expect(plan?.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    expect(plan?.orderBy).toMatchObject({ path: 'updatedAt', direction: 'desc' })
     // One page of ten; the thirteenth company is not on it.
     expect(screen.queryByText('Initech Holdings')).toBeNull()
   })

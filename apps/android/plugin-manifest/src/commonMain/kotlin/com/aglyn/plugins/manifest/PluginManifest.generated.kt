@@ -6,17 +6,31 @@
 package com.aglyn.plugins.manifest
 
 import com.aglyn.pluginhost.NativePluginManifestEntry
+import com.aglyn.plugins.ai.registerAINative
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
+import com.aglyn.plugins.crm.registerCrmNative
+import com.aglyn.plugins.email.registerEmailNative
+import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
+import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
+import com.aglyn.plugins.marketing.registerMarketingNative
+import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
+import com.aglyn.plugins.sms.registerSmsNative
+import com.aglyn.plugins.workflows.registerWorkflowsNative
 
 object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
         NativePluginManifestEntry(
+            id = "ai",
+            contributes = mapOf("screens" to listOf("ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
+            register = ::registerAINative,
+        ),
+        NativePluginManifestEntry(
             id = "bookings",
-            contributes = mapOf("screens" to listOf("bookings.counter")),
+            contributes = mapOf("screens" to listOf("bookings.booking", "bookings.calendar", "bookings.counter", "bookings.services"), "widgets" to listOf("bookings.today"), "quickActions" to listOf("bookings.open"), "deepLinks" to listOf("bookings.page")),
             register = ::registerBookingsNative,
         ),
         NativePluginManifestEntry(
@@ -25,19 +39,59 @@ object NativePluginManifest {
             register = ::registerCommerceNative,
         ),
         NativePluginManifestEntry(
+            id = "crm",
+            contributes = mapOf("screens" to listOf("crm.companies", "crm.company", "crm.contact", "crm.contacts", "crm.deal", "crm.deals", "crm.fields", "crm.lead", "crm.leads", "crm.reports", "crm.settings", "crm.tasks"), "widgets" to listOf("crm.glance", "crm.tasks-due"), "quickActions" to listOf("crm.deals-action", "crm.open", "crm.tasks-action"), "deepLinks" to listOf("crm.companies-page", "crm.company-page", "crm.contact-page", "crm.contacts-page", "crm.deal-page", "crm.deals-page", "crm.fields-page", "crm.lead-page", "crm.leads-page", "crm.legacy-contacts", "crm.page", "crm.reports-page", "crm.settings-page", "crm.tasks-page")),
+            register = ::registerCrmNative,
+        ),
+        NativePluginManifestEntry(
+            id = "email",
+            contributes = mapOf("screens" to listOf("email.audiences", "email.messages", "email.sending", "email.suppressions", "email.templates", "email.topics"), "quickActions" to listOf("email.open"), "deepLinks" to listOf("email.audiences-page", "email.list-page", "email.message-page", "email.messages-page", "email.page", "email.sending-page", "email.suppressions-page", "email.templates-page", "email.topics-page")),
+            register = ::registerEmailNative,
+        ),
+        NativePluginManifestEntry(
+            id = "events-calendar",
+            contributes = mapOf("screens" to listOf("events-calendar.events"), "quickActions" to listOf("events-calendar.open"), "deepLinks" to listOf("events-calendar.page")),
+            register = ::registerEventsCalendarNative,
+        ),
+        NativePluginManifestEntry(
             id = "forms",
             contributes = mapOf("screens" to listOf("forms.form", "forms.list"), "quickActions" to listOf("forms.open"), "deepLinks" to listOf("forms.page", "forms.record")),
             register = ::registerFormsNative,
         ),
         NativePluginManifestEntry(
+            id = "funnels",
+            contributes = mapOf("screens" to listOf("funnels.list"), "quickActions" to listOf("funnels.open"), "deepLinks" to listOf("funnels.page")),
+            register = ::registerFunnelsNative,
+        ),
+        NativePluginManifestEntry(
             id = "inbox",
-            contributes = mapOf("screens" to listOf("inbox.submission", "inbox.submissions"), "deepLinks" to listOf("inbox.submissions-page")),
+            contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
             register = ::registerInboxNative,
+        ),
+        NativePluginManifestEntry(
+            id = "marketing",
+            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
+            register = ::registerMarketingNative,
+        ),
+        NativePluginManifestEntry(
+            id = "outreach",
+            contributes = mapOf("screens" to listOf("outreach.compliance", "outreach.mailboxes", "outreach.sequences"), "widgets" to listOf("outreach.glance"), "deepLinks" to listOf("outreach.compliance-page", "outreach.mailboxes-page", "outreach.page", "outreach.sequence-page", "outreach.sequences-page")),
+            register = ::registerOutreachNative,
         ),
         NativePluginManifestEntry(
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "sms",
+            contributes = mapOf("screens" to listOf("sms.texts"), "quickActions" to listOf("sms.open")),
+            register = ::registerSmsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "workflows",
+            contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
+            register = ::registerWorkflowsNative,
         ),
     )
 }

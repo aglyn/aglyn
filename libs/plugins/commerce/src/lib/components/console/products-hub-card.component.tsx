@@ -22,6 +22,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import {
   PRODUCT_LIST_BASE,
+  PRODUCT_LIST_COLUMN_SORTS,
   PRODUCT_LIST_FIELDS,
   PRODUCT_LIST_HEADERS,
   PRODUCT_LIST_OPTIONS,
@@ -43,10 +44,13 @@ import {
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -106,6 +110,17 @@ export interface ProductsHubCardProps {
 
 type ProductRow = CommerceModel.HostProduct & { $id: string }
 
+/**
+ * Stock and Variants are read from inside `variants`, which no query can
+ * order by, so they sort the page on screen (AGL-3680); Product, Status, Type
+ * and Price are the query's order (`PRODUCT_LIST_COLUMN_SORTS`).
+ */
+const PRODUCT_PAGE_SORTS = {
+  stock: (row: ProductRow) => CommerceModel.productInventory(row),
+  variants: (row: ProductRow) => row.variants.length,
+}
+const PRODUCT_PAGE_SORT_HEADERS = { stock: 'Stock', variants: 'Variants' }
+
 const STATUS_COLOR: Record<string, 'default' | 'success' | 'warning'> = {
   active: 'success',
   draft: 'warning',
@@ -146,6 +161,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const filtering =
     gridFilter.clauses.length > 0 ||
     gridFilter.searchWords.some((word) => word.trim())
+  // Every header sorts (AGL-3680); A to Z until one is clicked.
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(
+    PRODUCT_LIST_COLUMN_SORTS[0],
+  )
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
   const [adjusting, setAdjusting] = useState<{
@@ -210,6 +229,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       clauses: productListRequestClauses(gridFilter.clauses),
       search: gridFilter.searchWords,
       base: PRODUCT_LIST_BASE,
+      sort: askedSort,
     },
     deps: [firestore, hostId],
     idField: '$id',
@@ -279,6 +299,24 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       })),
     [productDocs],
   )
+  // Listed but not yet priced (AGL-3676), among the products on screen.
+  const comingSoon = useMemo(
+    () =>
+      products.filter(
+        (product) => product.status === 'active' && CommerceModel.productPriceMissing(product),
+      ),
+    [products],
+  )
+  const columnSort = useListColumnSort<ProductRow>({
+    sorts: PRODUCT_LIST_COLUMN_SORTS,
+    defaultSort: PRODUCT_LIST_COLUMN_SORTS[0],
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: plan.orderBy,
+    rows: products,
+    pageSorts: PRODUCT_PAGE_SORTS,
+    headers: PRODUCT_PAGE_SORT_HEADERS,
+  })
 
   /**
    * A CLOCK, because a hold lapses without anybody writing anything
@@ -696,7 +734,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         field: 'priceUsd',
         headerName: 'Price',
         width: 130,
-        sortable: false,
         renderCell: ({ row }: { row: ProductRow }) =>
           CommerceModel.productPriceMissing(row) ? (
             <Chip label="Set a price" size="small" color="warning" variant="outlined" />
@@ -708,7 +745,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         field: 'stock',
         headerName: 'Stock',
         width: 150,
-        sortable: false,
         renderCell: ({ row }: { row: ProductRow }) => (
           <span>
             {formatStock(row)}
@@ -724,7 +760,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         field: 'variants',
         headerName: 'Variants',
         width: 100,
-        sortable: false,
         valueGetter: (_value: unknown, row: ProductRow) => row.variants.length,
       },
       listActionsColumn(
@@ -879,6 +914,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             count is `productCount` — the site's products, the same number
             the gate above counts — not `products.length`, which is one page
             of the table's query (AGL-1716). */}
+        {/* Products listed before they have a price (AGL-3676) — a guided
+            start's — show "Price coming soon" on the store and sell nowhere
+            until each is priced: the one step left before the store sells. */}
+        {comingSoon.length ? (
+          <Alert severity="info">
+            {`Set prices to start selling: ${comingSoon.length === 1 ? `${comingSoon[0].name} shows` : `${comingSoon.length} products show`} “Price coming soon” on your store until you set ${comingSoon.length === 1 ? 'its price' : 'their prices'}. Open each one and give every variant a price.`}
+          </Alert>
+        ) : null}
         <QuotaReadoutComponent
           ready={productQuota !== null}
           used={productCount}
@@ -908,11 +951,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             headers: PRODUCT_LIST_HEADERS,
             options: PRODUCT_LIST_OPTIONS,
           })}
-          notices={plan.notices}
+          notices={[...plan.notices, ...columnSort.notices]}
         />
         <ListTable
           aria-label="Products"
-          rows={products}
+          rows={columnSort.rows}
           columns={productColumns}
           loading={productsStatus === 'loading'}
           // One page of the query, turned by the footer below: the grid
@@ -922,9 +965,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           quickFilter
-          // The one order the list offers, by name: the query's.
-          sortingMode="server"
-          disableColumnSorting
+          // Every header order is the query's, or the page's (`columnSort`).
+          columnSort={columnSort}
           initialState={{
             columns: {
               columnVisibilityModel: hiddenFilterVisibility(

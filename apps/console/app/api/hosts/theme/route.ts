@@ -17,7 +17,10 @@
 
 import type { ThemeLibraryAction } from '@aglyn/aglyn/app-utils/theme-library'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
+import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
+import { resolveSiteTheme, themeOverridePatch } from '@aglyn/aglyn/app-utils/site-theme'
+import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import {
   emailUnverifiedResponse,
@@ -28,7 +31,15 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { runThemeLibraryAction } from '@aglyn/tenant-data-admin/server/theme-library-write'
+import {
+  THEME_EDITOR_CATALOG,
+  applyThemeEditorEdits,
+  readThemeEditorEdits,
+  readThemeEditorValues,
+} from '@aglyn/shared-ui-theme/util/theme-editor-edits'
+import { Timestamp } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { presetTargetFromRegistry, summarizeThemePresets } from '../../_lib/theme-presets'
 
 /**
  * A built-in theme arrives in the request, because the plugin contributing it
@@ -61,6 +72,14 @@ function readAction(body: Record<string, unknown>): ThemeLibraryAction | string 
       }
       if (kind === 'preset') {
         const theme = target?.['theme']
+        // An app that does not run the themes plugin's console code sends
+        // only the id (AGL-3668); the server reads the theme from the
+        // presets its plugins registered.
+        if (theme === undefined) {
+          const registered = presetTargetFromRegistry(str(target?.['id']), listServerThemePresets())
+          if (!registered) return 'That built-in theme is not available.'
+          return { action: 'select', target: { kind, ...registered } }
+        }
         if (!theme || typeof theme !== 'object' || Array.isArray(theme)) {
           return 'That theme could not be read.'
         }
@@ -102,6 +121,78 @@ function readAction(body: Record<string, unknown>): ThemeLibraryAction | string 
  * Site editors, the same gate the theme editor's own save has in the rules —
  * picking a theme is editing the theme.
  */
+/**
+ * The theme editor's own two actions (AGL-3668), beside the library's:
+ *
+ * - `values` answers what each control shows (the resolved theme read by the
+ *   editor's readers) and the controls themselves (`THEME_EDITOR_CATALOG`).
+ * - `edit` applies named control edits (`readThemeEditorEdits`) to the
+ *   resolved theme with the editor's own writers and stores the difference
+ *   from the picked theme as the site's override — exactly the console's
+ *   `handleThemeSave`, `setDoc({themeOverride}, {mergeFields})`.
+ *
+ * The console's save is a client write the rules admit for any member who may
+ * write the site (admin, editor, author), so these take the same role rather
+ * than the library's admin-or-editor; a native app sends edits because it
+ * never holds the theme document's diff logic.
+ */
+async function editorAction(
+  request: Request,
+  action: 'values' | 'edit',
+  hostId: string,
+  rawEdits: unknown,
+  decoded: { uid: string; email?: string | null; staff?: unknown },
+): Promise<Response> {
+  const edits = action === 'edit' ? readThemeEditorEdits(rawEdits) : []
+  if (typeof edits === 'string') return Response.json({ error: edits }, { status: 400 })
+  const firestore = firebaseAdmin.app().firestore()
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  const hostSnapshot = await hostRef.get()
+  if (!hostSnapshot.exists) {
+    return Response.json({ error: 'Unknown site' }, { status: 404 })
+  }
+  const staff = decoded.staff === true
+  const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+  if (!staff && !hostRoleCanWrite(memberRole)) {
+    return Response.json({ error: 'Editing the theme requires the editor role' }, { status: 403 })
+  }
+  const host = hostSnapshot.data() as Record<string, any>
+  if (action === 'values') {
+    return Response.json(
+      {
+        values: readThemeEditorValues(resolveSiteTheme(host)),
+        catalog: THEME_EDITOR_CATALOG,
+        presets: summarizeThemePresets(listServerThemePresets()),
+      },
+      { status: 200 },
+    )
+  }
+  const locked = await lockdownRefusal({
+    request,
+    staff,
+    uid: decoded.uid,
+    org: (await getOrgForHost(hostId))?.org,
+    host,
+  })
+  if (locked) return locked
+  const edited = applyThemeEditorEdits((resolveSiteTheme(host) ?? {}) as HostTheme, edits)
+  const installedSha = host['themeInstalledFrom']?.listingId
+    ? (host['themeInstalledFrom']?.sha256 ?? null)
+    : null
+  await hostRef.update({
+    themeOverride: overrideWriteValue(themeOverridePatch(host, edited), installedSha),
+    updatedAt: Timestamp.now(),
+  })
+  await dropPluginSiteCache({ hostIds: [hostId], reason: 'theme editor save' })
+  await logHostActivity(
+    hostId,
+    { uid: decoded.uid, email: decoded.email ?? null },
+    'Updated theme',
+    { type: 'theme' },
+  ).catch(() => undefined)
+  return Response.json({ ok: true, values: readThemeEditorValues(edited) }, { status: 200 })
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -110,7 +201,8 @@ async function handler(request: Request): Promise<Response> {
   }
   const hostId = String(body?.hostId ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
-  const action = readAction((body ?? {}) as Record<string, unknown>)
+  const editor = body?.action === 'values' || body?.action === 'edit' ? (body.action as 'values' | 'edit') : null
+  const action = editor ? null : readAction((body ?? {}) as Record<string, unknown>)
   if (typeof action === 'string') {
     return Response.json({ error: action }, { status: 400 })
   }
@@ -126,6 +218,8 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
+    if (editor) return await editorAction(request, editor, hostId, body?.edits, decoded)
+    if (!action) return Response.json({ error: 'Unknown action.' }, { status: 400 })
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()

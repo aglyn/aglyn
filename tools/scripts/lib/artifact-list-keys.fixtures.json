@@ -89,7 +89,9 @@
           "chrom",
           "chrome"
         ],
-        "nameReversed": "emorhc niam"
+        "nameReversed": "emorhc niam",
+        "deletedAt": null,
+        "description": null
       }
     },
     {
@@ -107,7 +109,8 @@
           "hero"
         ],
         "nameReversed": "oreh",
-        "kind": "site"
+        "kind": "site",
+        "description": null
       }
     },
     {
@@ -127,7 +130,8 @@
           "foote",
           "footer"
         ],
-        "nameReversed": "retoof"
+        "nameReversed": "retoof",
+        "description": null
       }
     },
     {
@@ -145,7 +149,8 @@
           "odd"
         ],
         "nameReversed": "ddo",
-        "kind": "site"
+        "kind": "site",
+        "description": null
       }
     },
     {
@@ -345,6 +350,43 @@
           "listingId": "listing-2"
         },
         "libraryRow": true
+      }
+    },
+    {
+      "name": "a layout that has a description keeps it: only a missing one is stored as null",
+      "collection": "layouts",
+      "doc": {
+        "displayName": "Side",
+        "description": "Left rail"
+      },
+      "expected": {
+        "nameLower": "side",
+        "nameTokens": [
+          "s",
+          "si",
+          "sid",
+          "side"
+        ],
+        "nameReversed": "edis",
+        "deletedAt": null
+      }
+    },
+    {
+      "name": "a deleted layout is never revived: no stored null over its deletedAt",
+      "collection": "layouts",
+      "doc": {
+        "displayName": "Old",
+        "description": "x",
+        "deletedAt": 1
+      },
+      "expected": {
+        "nameLower": "old",
+        "nameTokens": [
+          "o",
+          "ol",
+          "old"
+        ],
+        "nameReversed": "dlo"
       }
     }
   ],

@@ -33,7 +33,7 @@ import {
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
-import { formatDwell } from '../../utils/analytics-summary'
+import { formatDwell } from '@aglyn/aglyn/app-utils/analytics-summary'
 import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'

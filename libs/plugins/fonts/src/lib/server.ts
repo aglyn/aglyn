@@ -16,7 +16,7 @@
  */
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/app-utils/api-plugins'
-import { FONTS_PREPARE_ROUTE } from './installer/constants'
+import { FONTS_PREPARE_ROUTE, FONTS_THEME_ROUTE } from './installer/constants'
 
 /**
  * The fonts plugin's console doors (AGL-3656), named in `plugins.config.json`
@@ -26,7 +26,9 @@ import { FONTS_PREPARE_ROUTE } from './installer/constants'
  * - `/api/fonts/cost` — what a theme's fonts cost a visitor, for the font
  *   picker's cost badge;
  * - `/api/fonts/prepare` — checks, converts and subsets an uploaded font
- *   (harfbuzz's WASM loads with it).
+ *   (harfbuzz's WASM loads with it);
+ * - `/api/fonts/theme` — installs, lists, roles and removes a site's own
+ *   fonts for an app that holds no theme draft (AGL-3668).
  */
 export function registerFontsConsoleApi(): void {
   registerPluginApiRoute('fonts/cost', async (req, res) =>
@@ -34,5 +36,8 @@ export function registerFontsConsoleApi(): void {
   )
   registerPluginApiRoute(FONTS_PREPARE_ROUTE, {
     web: async (request) => (await import('./server/prepare-route')).prepareFontRoute(request),
+  })
+  registerPluginApiRoute(FONTS_THEME_ROUTE, {
+    web: async (request) => (await import('./server/theme-route')).fontsThemeRoute(request),
   })
 }

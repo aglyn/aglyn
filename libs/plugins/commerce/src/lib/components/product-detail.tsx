@@ -43,6 +43,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 import { CART_UPDATED_EVENT } from './cart'
+import { CartFulfillmentChoice, useCartFulfillment } from './cart-fulfillment'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
@@ -78,11 +79,15 @@ export interface ProductDetailProps {
 interface DetailVariant {
   id: string
   options?: Record<string, string>
-  priceUsd: number
+  /** `null` while the product is listed before it has a price (AGL-3676). */
+  priceUsd: number | null
   compareAtPriceUsd?: number
   soldOut: boolean
   imageUrl?: string
 }
+
+/** What the page says where a variant with no price yet would show one (AGL-3676). */
+const PRICE_COMING_SOON_LABEL = 'Price coming soon'
 
 interface Detail {
   id: string
@@ -132,7 +137,7 @@ function buyItem(
   return {
     item_id: product.id,
     item_name: product.name,
-    price: variant?.priceUsd,
+    price: variant?.priceUsd ?? undefined,
     quantity,
   }
 }
@@ -331,6 +336,17 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
      * opening a second one (for a subscription product, a second RECURRING
      * subscription).
      */
+    // Pickup or the store's own delivery (AGL-3624), for a one-time sale; the
+    // server offers nothing for a product with nothing physical to collect.
+    const fulfillment = useCartFulfillment(
+      hostId,
+      resolved?.id ?? '[]',
+      resolved &&
+        variant &&
+        !(resolved.subscription && (!resolved.subscriptionOptional || billing === 'subscribe'))
+        ? { productId: resolved.id, variantId: variant.id, quantity }
+        : null,
+    )
     const attemptKey = useRef('')
     useEffect(() => {
       attemptKey.current = ''
@@ -339,7 +355,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       // key, and the server replays the original full-price session — a quoted
       // number that is not the number charged, which is the whole defect class
       // this path has been cleared of.
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon])
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, shipPostal, coupon, fulfillment.signature])
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -368,8 +384,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // Likewise a request (AGL-1721): the server resolves this
             // country's rates AND restricts the session to addresses in it,
             // so naming a cheap zone here cannot ship a parcel anywhere else.
-            ...(shipTo ? { shippingCountry: shipTo } : {}),
-            ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
+            ...(shipTo && !fulfillment.request ? { shippingCountry: shipTo } : {}),
+            ...(shipPostal.trim() && !fulfillment.request ? { shippingPostalCode: shipPostal.trim() } : {}),
+            // Where and when, never the fee (AGL-3624).
+            ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
             // The server resolves this against the discounts hub first and the
             // legacy coupons second, and refuses a code it cannot apply with a
             // reason — never a silent full-price charge.
@@ -423,6 +441,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         }
         // Buy-now's half of AGL-2019. The server's own 501 wording is not
         // rendered to a visitor; this surface is public.
+        if (payload?.fulfillmentChanged) {
+          fulfillment.reload()
+          setMessage(String(payload?.error ?? ''))
+          setStatus('error')
+          return
+        }
         if (isPaymentsNotConfigured(response.status)) {
           setMessage(storefrontPaymentsNotConfiguredText())
           setStatus('unconfigured')
@@ -500,6 +524,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const subscribing =
       Boolean(subscription) &&
       (!resolved.subscriptionOptional || billing === 'subscribe')
+    // Listed before it has a price (AGL-3676): no price to show and nothing
+    // to buy; every sale door would refuse it anyway.
+    const priced = typeof variant?.priceUsd === 'number'
 
     // schema.org Product/Offer (AGL-299). Kept ONLY for the case where this
     // block renders without server-seeded page data — the besigner preview,
@@ -518,14 +545,19 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             ...(resolved.mediaUrls.length
               ? { image: resolved.mediaUrls }
               : {}),
-            offers: {
-              '@type': 'Offer',
-              priceCurrency: 'USD',
-              price: String(variant?.priceUsd ?? 0),
-              availability: variant?.soldOut
-                ? 'https://schema.org/OutOfStock'
-                : 'https://schema.org/InStock',
-            },
+            // No offer without a price: a price of 0 would read as free.
+            ...(priced
+              ? {
+                  offers: {
+                    '@type': 'Offer',
+                    priceCurrency: 'USD',
+                    price: String(variant?.priceUsd),
+                    availability: variant?.soldOut
+                      ? 'https://schema.org/OutOfStock'
+                      : 'https://schema.org/InStock',
+                  },
+                }
+              : {}),
           }
         : null
 
@@ -622,7 +654,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-              {`$${variant?.priceUsd ?? 0}${subscribing ? intervalSuffix : ''}`}
+              {priced
+                ? `$${variant?.priceUsd}${subscribing ? intervalSuffix : ''}`
+                : PRICE_COMING_SOON_LABEL}
             </Typography>
             {subscribing && subscription?.trialDays ? (
               <Typography variant="caption" color="text.secondary">
@@ -668,10 +702,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2 }}
             >
               <ToggleButton value="once">
-                {`One-time $${variant?.priceUsd ?? 0}`}
+                {priced ? `One-time $${variant?.priceUsd}` : 'One-time'}
               </ToggleButton>
               <ToggleButton value="subscribe">
-                {`Subscribe $${variant?.priceUsd ?? 0}${intervalSuffix}`}
+                {priced ? `Subscribe $${variant?.priceUsd}${intervalSuffix}` : 'Subscribe'}
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
@@ -707,7 +741,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ mb: 2, display: 'block' }}
             />
           ) : null}
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
+          {!priced ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {'Not on sale yet — check back soon.'}
+            </Typography>
+          ) : null}
+          <Box sx={{ display: priced ? 'flex' : 'none', gap: 1.5, alignItems: 'center', mb: 2 }}>
             <TextField
               label="Qty"
               value={quantity}
@@ -727,7 +766,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               variant="outlined"
               color="primary"
               size="large"
-              disabled={!hostId || variant?.soldOut}
+              disabled={!hostId || !priced || variant?.soldOut}
               onClick={handleAddToCart}
             >
               {added ? 'Added ✓' : 'Add to cart'}
@@ -738,6 +777,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               size="large"
               disabled={
                 !hostId ||
+                !priced ||
                 status === 'sending' ||
                 variant?.soldOut ||
                 // No payments on this deployment: the same 501 every time, so
@@ -745,8 +785,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 // cannot succeed (AGL-2019).
                 status === 'unconfigured' ||
                 // Asked but unanswered: the server would only refuse again.
-                (shipCountries !== null && !shipTo) ||
-                (askPostal && !shipPostal.trim())
+                (fulfillment.method === 'shipping' && shipCountries !== null && !shipTo) ||
+                (fulfillment.method === 'shipping' && askPostal && !shipPostal.trim()) ||
+                !fulfillment.ready
               }
               onClick={handleBuy}
               sx={{ flex: 1 }}
@@ -786,7 +827,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               />
             </Suspense>
           ) : null}
-          {shipCountries ? (
+          {fulfillment.offered && priced ? (
+            <Box sx={{ mb: 2 }}>
+              <CartFulfillmentChoice
+                state={fulfillment}
+                formatCents={(cents) => `$${(cents / 100).toFixed(2)}`}
+              />
+            </Box>
+          ) : null}
+          {shipCountries && fulfillment.method === 'shipping' && priced ? (
             <TextField
               select
               label="Ship to"
@@ -804,7 +853,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               ))}
             </TextField>
           ) : null}
-          {askPostal ? (
+          {askPostal && fulfillment.method === 'shipping' && priced ? (
             <TextField
               label="Postal code"
               value={shipPostal}

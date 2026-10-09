@@ -27,6 +27,7 @@
 const calls: string[] = []
 let houseHostId: string | null = 'house-main'
 let failBanFor: string | null = null
+let bannedAddress: string | null = null
 
 jest.mock('./account-addresses', () => ({
   resolveAccountAddresses: async () => ({
@@ -42,7 +43,15 @@ jest.mock('./platform-marketing-consent', () => ({
 jest.mock('./organizations', () => ({
   getOrgForHost: async () => ({ orgId: 'house', org: { hosts: { 'house-main': true, 'house-docs': true, retired: false } } }),
 }))
+jest.mock('./firebase-admin', () => ({
+  __esModule: true,
+  default: { app: () => ({ firestore: () => { throw new Error('use the injected store') } }) },
+}))
 jest.mock('./email-suppression', () => ({
+  emailSuppressionKey: (email: string) => (email.includes('@') ? `key:${email.toLowerCase()}` : null),
+  HOST_ACCOUNT_LOCK_SUPPRESSION_REASON: 'account_lock',
+  HOST_SUPPRESSIONS_SUBCOLLECTION: 'suppressions',
+  isAccountBanSuppression: async (email: string) => email === bannedAddress,
   suppressEmail: async (input: { email: string; reason: string; subjectUid: string }) => {
     if (input.email === failBanFor) throw new Error('write failed')
     calls.push(`ban ${input.email} ${input.reason} ${input.subjectUid}`)
@@ -62,12 +71,13 @@ jest.mock('./email-suppression', () => ({
   },
 }))
 
-import { applyAccountLockToMail, liftAccountLockFromMail } from './account-lock-mail'
+import { accountLockStateFor, applyAccountLockToMail, liftAccountLockFromMail } from './account-lock-mail'
 
 beforeEach(() => {
   calls.length = 0
   houseHostId = 'house-main'
   failBanFor = null
+  bannedAddress = null
 })
 
 it('a lock suppresses every address on every live house site, and files no ban', async () => {
@@ -106,4 +116,51 @@ it('an install with no house site still files a ban, and nothing per site', asyn
   houseHostId = null
   const report = await applyAccountLockToMail({ uid: 'u1', record: null, ban: true })
   expect(report).toMatchObject({ houseSites: 0, houseRows: 0, banRows: 2 })
+})
+
+describe('the lock state a house record page shows (AGL-3686)', () => {
+  /** A store holding one site row: `hosts/{hostId}/suppressions/{key}`. */
+  const storeWith = (rows: Record<string, Record<string, unknown>>) => ({
+    collection: () => ({
+      doc: (hostId: string) => ({
+        collection: () => ({
+          doc: (key: string) => ({
+            get: async () => {
+              const data = rows[`${hostId}/${key}`]
+              return { exists: Boolean(data), get: (field: string) => data?.[field] }
+            },
+          }),
+        }),
+      }),
+    }),
+  })
+
+  it('is banned while a live ban row holds the address, whatever the site row says', async () => {
+    bannedAddress = 'a@x.example'
+    const firestore = storeWith({ 'house-main/key:a@x.example': { reason: 'unsubscribe' } })
+    expect(await accountLockStateFor({ hostId: 'house-main', email: 'a@x.example', firestore })).toBe('banned')
+  })
+
+  it('is locked on the lock’s own site row, and nothing on any other', async () => {
+    const firestore = storeWith({
+      'house-docs/key:a@x.example': { reason: 'account_lock' },
+      'house-main/key:b@y.example': { reason: 'unsubscribe' },
+    })
+    expect(await accountLockStateFor({ hostId: 'house-docs', email: 'a@x.example', firestore })).toBe('locked')
+    expect(await accountLockStateFor({ hostId: 'house-main', email: 'b@y.example', firestore })).toBeNull()
+    expect(await accountLockStateFor({ hostId: 'house-main', email: 'c@z.example', firestore })).toBeNull()
+  })
+
+  it('tells no other workspace, banned or not', async () => {
+    bannedAddress = 'a@x.example'
+    const firestore = storeWith({ 'shop/key:a@x.example': { reason: 'account_lock' } })
+    expect(await accountLockStateFor({ hostId: 'shop', email: 'a@x.example', firestore })).toBeNull()
+    expect(await accountLockStateFor({ hostId: 'retired', email: 'a@x.example', firestore })).toBeNull()
+  })
+
+  it('says nothing when the read fails', async () => {
+    const firestore = { collection: () => { throw new Error('down') } }
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    expect(await accountLockStateFor({ hostId: 'house-main', email: 'a@x.example', firestore })).toBeNull()
+  })
 })

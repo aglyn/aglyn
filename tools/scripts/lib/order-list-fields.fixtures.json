@@ -39,6 +39,7 @@
           "p2"
         ],
         "disputeKey": null,
+        "number": 1042,
         "customerEmailLower": "jane.doe@acme.com",
         "customerEmailTokens": [
           "j",
@@ -172,6 +173,7 @@
           "prod-legacy"
         ],
         "disputeKey": null,
+        "number": null,
         "customerEmailLower": "bob@example.com",
         "customerEmailTokens": [
           "b",
@@ -325,6 +327,7 @@
           "p3"
         ],
         "disputeKey": "open",
+        "number": 7,
         "customerEmailLower": null,
         "customerEmailTokens": [],
         "orderLabelTokens": [
@@ -390,6 +393,7 @@
           "p4"
         ],
         "disputeKey": "lost",
+        "number": 12,
         "customerEmailLower": "ops@shop.example.co.uk",
         "customerEmailTokens": [
           "o",
@@ -528,6 +532,7 @@
         "channel": "draft",
         "productIds": [],
         "disputeKey": "won",
+        "number": 13,
         "customerEmailLower": null,
         "customerEmailTokens": [],
         "orderLabelTokens": [
@@ -565,6 +570,7 @@
         "channel": "subscription",
         "productIds": [],
         "disputeKey": "settled",
+        "number": 14,
         "customerEmailLower": null,
         "customerEmailTokens": [],
         "orderLabelTokens": [

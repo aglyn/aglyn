@@ -123,7 +123,7 @@ export function analyzeProgress(snapshots) {
   // plan, before the header and footer, and its credits stay on it once done.
   const lookRow = (row) => /^Designing your look/i.test(row.label)
   const lookRowSeen = snapshots.some((snapshot) => snapshot.rows.some(lookRow))
-  const lookRowActive = snapshots.some((snapshot) =>
+  const lookRowSeenActive = snapshots.some((snapshot) =>
     snapshot.rows.some((row) => lookRow(row) && row.state === 'active'),
   )
   const lookRowFirst = snapshots
@@ -133,9 +133,14 @@ export function analyzeProgress(snapshots) {
     .reverse()
     .map((snapshot) => snapshot.rows.find(lookRow))
     .find(Boolean)
+  // The row's text runs its label into its credits with no space between
+  // them ("Designing your look4 credits"), so no word boundary leads the number.
   const lookCreditsKept = Boolean(
-    lastLook && lastLook.state === 'done' && /\b\d+\s+credits?\b/i.test(lastLook.text ?? ''),
+    lastLook && lastLook.state === 'done' && /\d+\s*credits?\b/i.test(lastLook.text ?? ''),
   )
+  // A look takes a few seconds, and can go from waiting to done between two
+  // snapshots: a done row that kept its credits ran, seen active or not.
+  const lookRowActive = lookRowSeenActive || lookCreditsKept
   const formRow = (row) => /\bform\b/i.test(row.label)
   const formRowSeen = snapshots.some((snapshot) => snapshot.rows.some(formRow))
   const formRowActive = snapshots.some((snapshot) =>

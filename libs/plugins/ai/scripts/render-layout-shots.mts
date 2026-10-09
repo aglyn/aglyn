@@ -20,7 +20,7 @@
  * sees them (AGL-3596), for judging a generated layout by its looks before it
  * ships.
  *
- *   node libs/plugins/ai/scripts/render-layout-shots.mts --out <dir> <layout.json> [<layout.json>…]
+ *   node libs/plugins/ai/scripts/render-layout-shots.mts --out <dir> [--page-only] <layout.json> [<layout.json>…]
  *
  * Each input is JSON: `{ "name": "Hillside Dog Grooming", "nodes": { …layout
  * node map… }, "theme"?: HostTheme }` — the node map as a layout version
@@ -69,7 +69,9 @@
  *                                    of their own, as dragged in from the drawer: they take the site's look
  *   <key>-short-phone-light.png
  *
- * and logs any width at which the document is wider than its window.
+ * and logs any width at which the document is wider than its window. With
+ * `--page-only`, an input with a `page` is shot whole and nothing else (the
+ * two `page-` shots and its words), for judging pages by the dozen.
  *
  * THE OPEN MENU is the one emulated part. A static render has no click to
  * open the Drawer, so for that shot the Drawer element is swapped for MUI's
@@ -90,12 +92,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const require = createRequire(join(ROOT, 'package.json'))
 type Dict = Record<string, any>
 
-function parseArgs(argv: string[]): { out: string; inputs: string[] } {
+function parseArgs(argv: string[]): { out: string; inputs: string[]; pageOnly: boolean } {
   const out = argv.indexOf('--out')
-  if (out === -1 || !argv[out + 1]) throw new Error('Usage: render-layout-shots.mts --out <dir> <layout.json>…')
-  const inputs = argv.filter((_, index) => index !== out && index !== out + 1)
+  if (out === -1 || !argv[out + 1]) throw new Error('Usage: render-layout-shots.mts --out <dir> [--page-only] <layout.json>…')
+  const inputs = argv.filter((arg, index) => index !== out && index !== out + 1 && arg !== '--page-only')
   if (!inputs.length) throw new Error('Name at least one layout JSON file.')
-  return { out: resolve(argv[out + 1]), inputs: inputs.map((input) => resolve(input)) }
+  return { out: resolve(argv[out + 1]), inputs: inputs.map((input) => resolve(input)), pageOnly: argv.includes('--page-only') }
 }
 
 /**
@@ -188,7 +190,7 @@ const CLOSE_ICON =
   'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'
 
 async function main(): Promise<void> {
-  const { out, inputs } = parseArgs(process.argv.slice(2))
+  const { out, inputs, pageOnly } = parseArgs(process.argv.slice(2))
   loadEmotionForServerRendering()
   installWindow()
   const { pluginBundleEntries } = await import(join(ROOT, 'tools/scripts/lib/plugin-bundle-entries.mjs'))
@@ -211,6 +213,13 @@ async function main(): Promise<void> {
       core.components.registerComponent(entry.component, entry.schema)
     }
   }
+  // The store's elements a page or a layout lists the site's records with (AGL-3676).
+  for (const file of ['libs/plugins/commerce/src/lib/components/product-grid.tsx', 'libs/plugins/commerce/src/lib/components/cart.tsx']) {
+    const mod = await load(file)
+    core.components.registerComponent(mod.default, mod.schema)
+  }
+  const collections = await load('libs/aglyn/src/lib/app-utils/collection-entries.ts')
+  const siteContext = await load('libs/aglyn/src/lib/app-utils/site-context.ts')
   const renderer = await load('libs/aglyn-node-renderer/src/index.ts')
   const siteTheme = await load('libs/aglyn-node-renderer/src/lib/hooks/use-aglyn-site-theme.ts')
   const themes = await load('libs/shared/ui/theme/src/index.ts')
@@ -349,6 +358,14 @@ async function main(): Promise<void> {
         theme?: Dict
         style?: Dict
         forms?: Record<string, { rootId: string; nodes: Dict }>
+        /**
+         * The site's own records a page lists (AGL-3676), as the published
+         * page is handed them: a Product grid's first page, as the commerce
+         * enricher seeds it (`items`, each `{ id, name, slug, priceUsd,
+         * maxPriceUsd, imageUrl?, soldOut, priceComingSoon? }`), and a blog's
+         * entries by its collection slug, as compose expands them.
+         */
+        records?: { products?: Dict[]; posts?: { slug: string; entries: Dict[] } }
       }
       const theme = data.theme ?? (data.style ? themeOfStyle(data.style) : defaults.DEFAULT_SITE_THEME)
       const fonts = ((theme.fonts ?? []) as Dict[])
@@ -357,11 +374,38 @@ async function main(): Promise<void> {
         .join('')
       const render = (screen: Dict, scheme: 'light' | 'dark', menuOpen: boolean): string => {
         core.components.registerComponent(menuOpen ? OpenDrawer : drawer.default, drawerSchema)
-        const composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
+        let composed = tokens.resolveNodesHostTokens(withForms(compose.composeLayoutAndScreenNodes(data.nodes, screen), data.forms), { displayName: data.name })
+        // A blog's posts expanded into each Collection Entries block, as compose expands them.
+        const posts = data.records?.posts
+        if (posts) {
+          composed = collections.expandCollectionEntries(composed, { [posts.slug]: { slug: posts.slug, entries: posts.entries } }, posts.slug, 'UTC')
+        }
         core.canvas.setNodes(composed)
         const root = core.canvas.getNode('_@_')
+        // Each Product grid's first page, seeded as the commerce enricher seeds it.
+        const grids = Object.fromEntries(
+          (Object.entries(composed) as Array<[string, Dict]>)
+            .filter(([, node]) => node?.componentId === 'product-grid')
+            // The first page the grid's own query would return: at most its Max items or its page size.
+            .map(([id, node]) => {
+              const most = Number(node.props?.maxItems ?? node.props?.pageSize) || Infinity
+              return [id, { items: (data.records?.products ?? []).slice(0, most) }]
+            }),
+        )
+        const site = data.records ? { hostId: 'site-shot', pageData: { commerce: { grids } } } : {}
+        // Both schemes' themes, as the tenant's HostThemeProvider gives them, so an
+        // "Always dark" band (a dark band, a photo cover) pins its scheme here too.
+        const schemeThemes = themes.createSiteSchemeThemes((pinned: 'light' | 'dark') => siteTheme.createAglynSiteTheme({ theme, scheme: pinned }))
         const markup = renderToStaticMarkup(
-          h(themes.ThemeProvider, { theme: siteTheme.createAglynSiteTheme({ theme, scheme }) }, h(CssBaseline, null), h(renderer.AglynNodeRenderer, { node: root })),
+          h(
+            siteContext.SiteContext.Provider,
+            { value: site },
+            h(
+              themes.SiteSchemeThemesContext.Provider,
+              { value: schemeThemes },
+              h(themes.ThemeProvider, { theme: schemeThemes(scheme) }, h(CssBaseline, null), h(renderer.AglynNodeRenderer, { node: root })),
+            ),
+          ),
         )
         return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${fonts}<title>${key}</title></head><body>${markup}</body></html>`
       }
@@ -369,6 +413,16 @@ async function main(): Promise<void> {
         html = page
         await tab.setViewportSize({ width, height })
         await tab.goto('https://site.test/', { waitUntil: 'networkidle' })
+        // A whole-page shot never scrolls, so a lazy picture below the window would shoot empty.
+        await tab.evaluate(async () => {
+          document.querySelectorAll('img[loading="lazy"]').forEach((image) => image.setAttribute('loading', 'eager'))
+          for (let y = 0; y < document.documentElement.scrollHeight; y += window.innerHeight / 2) {
+            window.scrollTo(0, y)
+            await new Promise((done) => setTimeout(done, 60))
+          }
+          window.scrollTo(0, 0)
+          await Promise.all([...document.images].map((image) => (image.complete ? null : new Promise((done) => image.addEventListener('load', done, { once: true }) || setTimeout(done, 3000)))))
+        })
         await tab.waitForTimeout(250)
         const overflow = await tab.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
         if (overflow > 0) console.log(`OVERFLOW  ${key} ${name}: ${overflow}px wider than the window`)
@@ -393,6 +447,10 @@ async function main(): Promise<void> {
         // The words the page shows, for a grep that proves what a visitor reads.
         writeFileSync(join(out, `${key}-page.txt`), await tab.evaluate(() => document.body.innerText))
         await shoot(light, 375, 812, 'page-phone-light', ['full'])
+        if (pageOnly) {
+          console.log(`WROTE     ${key} → ${out}`)
+          continue
+        }
       }
       await shoot(light, 1440, 900, 'desktop-light', ['header', 'footer'])
       await shoot(render(home, 'dark', false), 1440, 900, 'desktop-dark', ['header', 'footer'])

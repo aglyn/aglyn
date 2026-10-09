@@ -112,6 +112,8 @@ describe('adminAuditIndexFields', () => {
     const at = new Date(0)
     const row = withAdminAuditIndex({ action: 'org.override', target: 'orgs/o1', at, before: { a: 1 } })
     expect(row).toMatchObject({ action: 'org.override', target: 'orgs/o1', at, before: { a: 1 } })
+    expect(row.scope).toBeNull()
+    expect(withAdminAuditIndex({ action: 'lockdown.set', scope: 'org' }).scope).toBe('org')
     expect(Object.keys(row).sort()).toEqual(
       [
         'action',
@@ -119,6 +121,8 @@ describe('adminAuditIndexFields', () => {
         'at',
         'before',
         'kind',
+        // On every row, null when the writer has none (AGL-3680).
+        'scope',
         'searchTokens',
         'target',
         'targetHostId',

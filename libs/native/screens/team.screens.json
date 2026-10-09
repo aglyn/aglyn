@@ -1,0 +1,736 @@
+{
+  "$comment": "Team and roles: the console's [orgSlug]/team pages over /api/orgs/members, /api/orgs/invites, /api/orgs/roles and /api/orgs/activity. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.team",
+      "title": "Team",
+      "subtitle": "Members, invites and roles",
+      "icon": "person.2|group",
+      "scope": "org",
+      "group": "workspace",
+      "order": 10,
+      "links": [
+        "/team",
+        "/team/members"
+      ],
+      "load": {
+        "members": {
+          "url": "/api/orgs/members?orgId={org.id}"
+        },
+        "invites": {
+          "url": "/api/orgs/invites?orgId={org.id}",
+          "when": "org.manager"
+        },
+        "seats": {
+          "url": "/api/orgs/members?orgId={org.id}&counts=1",
+          "when": "org.manager"
+        }
+      },
+      "actions": [
+        {
+          "id": "invite",
+          "label": "Add or invite",
+          "icon": "person.badge.plus|person_add",
+          "when": "org.manager",
+          "url": "/api/orgs/members",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "upsert",
+            "email": "{form.email}",
+            "role": "{form.role}",
+            "allHosts": "{form.allHosts}"
+          },
+          "prompt": [
+            {
+              "key": "email",
+              "label": "Email",
+              "kind": "email",
+              "required": true,
+              "help": "People with an account are added; anyone else gets an invitation email."
+            },
+            {
+              "key": "role",
+              "label": "Role",
+              "kind": "select",
+              "initial": "editor",
+              "options": [
+                {
+                  "value": "admin",
+                  "label": "Admin — manages the whole workspace"
+                },
+                {
+                  "value": "editor",
+                  "label": "Editor — builds and publishes"
+                },
+                {
+                  "value": "viewer",
+                  "label": "Viewer — reads only"
+                }
+              ]
+            },
+            {
+              "key": "allHosts",
+              "label": "All sites",
+              "kind": "toggle",
+              "initial": "{'true'}"
+            }
+          ],
+          "success": "Added {form.email}",
+          "else": {
+            "label": "Invite",
+            "url": "/api/orgs/invites",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "create",
+              "email": "{form.email}",
+              "role": "{form.role}",
+              "allHosts": "{form.allHosts}"
+            },
+            "success": "Invited {form.email}"
+          }
+        },
+        {
+          "id": "handoff",
+          "label": "Hand the workspace over",
+          "icon": "arrow.left.arrow.right|swap_horiz",
+          "when": "org.owner || staff.is",
+          "url": "/api/orgs/invites",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "create",
+            "email": "{form.email}",
+            "role": "owner",
+            "handoff": {
+              "previousOwner": "{form.previousOwner}"
+            }
+          },
+          "prompt": [
+            {
+              "key": "email",
+              "label": "New owner's email",
+              "kind": "email",
+              "required": true
+            },
+            {
+              "key": "previousOwner",
+              "label": "After the handoff, you",
+              "kind": "select",
+              "initial": "stay",
+              "options": [
+                {
+                  "value": "stay",
+                  "label": "Stay on as an admin"
+                },
+                {
+                  "value": "leave",
+                  "label": "Leave the workspace"
+                }
+              ]
+            }
+          ],
+          "confirm": "They become the owner once they accept. Billing and every site go with the workspace.",
+          "success": "Handoff sent to {form.email}"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Seats",
+          "when": "data.seats",
+          "rows": [
+            {
+              "label": "Manager seats in use",
+              "value": "{data.seats.managerSeats}"
+            },
+            {
+              "label": "Held by pending invites",
+              "value": "{data.seats.pendingManagerSeats}"
+            },
+            {
+              "label": "People on the roster",
+              "value": "{data.seats.memberCount}"
+            }
+          ],
+          "footer": "Extra seats are on the Billing page."
+        },
+        {
+          "type": "list",
+          "title": "Members",
+          "items": "data.members.members",
+          "split": true,
+          "primary": "{item.displayName|item.email|item.$id}",
+          "secondary": "{item.email}",
+          "tertiary": "{item.title}",
+          "icon": "person.crop.circle|account_circle",
+          "badges": [
+            {
+              "text": "{item.role:title}",
+              "tones": {
+                "Owner": "info",
+                "Admin": "info",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Staff",
+              "when": "item.staffSeat",
+              "tone": "warning"
+            }
+          ],
+          "open": {
+            "screen": "core.team.member",
+            "params": {
+              "uid": "{item.$id}"
+            }
+          },
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove from workspace",
+              "icon": "person.badge.minus|person_remove",
+              "destructive": true,
+              "when": "org.manager && item.role != owner",
+              "confirm": "Remove {item.displayName|item.email} from {org.name}?",
+              "url": "/api/orgs/members",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "remove",
+                "uid": "{item.$id}"
+              },
+              "success": "Removed {item.displayName|item.email}"
+            }
+          ],
+          "empty": "No members yet."
+        },
+        {
+          "type": "list",
+          "title": "Pending invites",
+          "when": "org.manager",
+          "items": "data.invites.invites",
+          "primary": "{item.email}",
+          "secondary": "Invited {item.createdAt:date}",
+          "icon": "envelope|mail",
+          "badges": [
+            {
+              "text": "{item.role:title}"
+            },
+            {
+              "text": "Handoff",
+              "when": "item.handoff",
+              "tone": "warning"
+            }
+          ],
+          "actions": [
+            {
+              "id": "resend",
+              "label": "Resend invitation",
+              "icon": "paperplane|send",
+              "url": "/api/orgs/invites",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "resend",
+                "inviteId": "{item.$id}"
+              },
+              "success": "Sent again to {item.email}"
+            },
+            {
+              "id": "revoke",
+              "label": "Revoke",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "confirm": "Revoke the invitation for {item.email}?",
+              "url": "/api/orgs/invites",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "revoke",
+                "inviteId": "{item.$id}"
+              },
+              "success": "Revoked"
+            }
+          ],
+          "empty": "No invitations waiting."
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Roles",
+              "subtitle": "Custom permission sets",
+              "icon": "checkmark.shield|admin_panel_settings",
+              "screen": "core.team.roles"
+            },
+            {
+              "title": "Activity",
+              "subtitle": "What the team did, and when",
+              "icon": "clock.arrow.circlepath|history",
+              "screen": "core.team.activity"
+            },
+            {
+              "title": "Invitations for you",
+              "subtitle": "Workspaces that invited you",
+              "icon": "envelope.open|drafts",
+              "screen": "core.invites.mine"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.team.member",
+      "title": "{data.member.displayName|data.member.email|'Member'}",
+      "icon": "person.crop.circle|account_circle",
+      "scope": "org",
+      "links": [
+        "/team/:uid"
+      ],
+      "load": {
+        "list": {
+          "url": "/api/orgs/members?orgId={org.id}"
+        },
+        "roles": {
+          "url": "/api/orgs/roles?orgId={org.id}"
+        },
+        "activity": {
+          "url": "/api/orgs/activity?orgId={org.id}&actorId={params.uid}&scope=org-wide",
+          "when": "org.manager",
+          "cursor": "nextCursor",
+          "items": "entries"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.list.members[$id=params.uid]",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{item.displayName}"
+            },
+            {
+              "label": "Email",
+              "value": "{item.email}"
+            },
+            {
+              "label": "Title",
+              "value": "{item.title}"
+            },
+            {
+              "label": "Role",
+              "value": "{item.role:title}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Sites",
+              "value": "{item.allHosts:yesno}",
+              "when": "item.role != owner"
+            },
+            {
+              "label": "Joined",
+              "value": "{item.joinedAt|item.createdAt:date}"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "title": "Access",
+          "when": "org.manager",
+          "object": "data.list.members[$id=params.uid]",
+          "fields": [
+            {
+              "key": "role",
+              "label": "Role",
+              "kind": "select",
+              "initial": "{item.role}",
+              "when": "item.role != owner",
+              "options": [
+                {
+                  "value": "admin",
+                  "label": "Admin"
+                },
+                {
+                  "value": "editor",
+                  "label": "Editor"
+                },
+                {
+                  "value": "viewer",
+                  "label": "Viewer"
+                }
+              ]
+            },
+            {
+              "key": "roleId",
+              "label": "Extra permissions",
+              "kind": "select",
+              "initial": "{item.roleId|''}",
+              "when": "item.role != owner",
+              "options": [
+                {
+                  "value": "",
+                  "label": "No extra permissions"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.roles.roles",
+                "value": "{item.$id}",
+                "label": "{item.name}"
+              }
+            },
+            {
+              "key": "title",
+              "label": "Title",
+              "kind": "text",
+              "initial": "{item.title}",
+              "placeholder": "Designer, Marketing lead"
+            },
+            {
+              "key": "allHosts",
+              "label": "All sites",
+              "kind": "toggle",
+              "initial": "{item.allHosts}",
+              "when": "item.role != owner",
+              "help": "Off limits the member to the sites they are added to."
+            }
+          ],
+          "submit": {
+            "label": "Save access",
+            "url": "/api/orgs/members",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "upsert",
+              "uid": "{params.uid}",
+              "role": "{form.role|item.role}",
+              "roleId": "{form.roleId}",
+              "title": "{form.title}",
+              "allHosts": "{form.allHosts}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "actions",
+          "when": "org.manager",
+          "items": [
+            {
+              "id": "remove",
+              "label": "Remove from workspace",
+              "icon": "person.badge.minus|person_remove",
+              "destructive": true,
+              "when": "data.list.members[$id=params.uid].role != owner",
+              "confirm": "Remove this member from {org.name}?",
+              "url": "/api/orgs/members",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "remove",
+                "uid": "{params.uid}"
+              },
+              "success": "Removed",
+              "back": true
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Recent activity",
+          "when": "org.manager",
+          "load": "activity",
+          "items": "data.activity.entries",
+          "primary": "{item.action:title}",
+          "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
+          "tertiary": "{item.createdAt:datetime}",
+          "empty": "Nothing yet."
+        },
+        {
+          "type": "zone",
+          "name": "orgMember",
+          "title": "More",
+          "params": {
+            "uid": "{params.uid}"
+          }
+        }
+      ],
+      "label": "Member"
+    },
+    {
+      "id": "core.team.roles",
+      "title": "Roles",
+      "icon": "checkmark.shield|admin_panel_settings",
+      "scope": "org",
+      "group": "workspace",
+      "order": 11,
+      "links": [
+        "/team/roles"
+      ],
+      "load": {
+        "roles": {
+          "url": "/api/orgs/roles?orgId={org.id}",
+          "cursor": "nextCursor",
+          "items": "roles"
+        }
+      },
+      "actions": [
+        {
+          "id": "new",
+          "label": "New role",
+          "icon": "plus|add",
+          "when": "org.manager",
+          "url": null,
+          "navigate": {
+            "screen": "core.team.role",
+            "params": {
+              "roleId": ""
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Owners and admins manage the whole workspace; editors build and publish; viewers read. A custom role adds permissions on top of a member's role."
+        },
+        {
+          "type": "list",
+          "title": "Custom roles",
+          "load": "roles",
+          "items": "data.roles.roles",
+          "split": true,
+          "primary": "{item.name}",
+          "secondary": "{item.description}",
+          "icon": "checkmark.shield|admin_panel_settings",
+          "open": {
+            "screen": "core.team.role",
+            "params": {
+              "roleId": "{item.$id}"
+            }
+          },
+          "actions": [
+            {
+              "id": "delete",
+              "label": "Delete role",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "org.manager",
+              "confirm": "Delete the role {item.name}? Members holding it keep their base role.",
+              "url": "/api/orgs/roles",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "delete",
+                "roleId": "{item.$id}"
+              },
+              "success": "Deleted {item.name}"
+            }
+          ],
+          "empty": "No custom roles yet."
+        }
+      ]
+    },
+    {
+      "id": "core.team.role",
+      "title": "{data.roles.roles[$id=params.roleId].name|'New role'}",
+      "icon": "checkmark.shield|admin_panel_settings",
+      "scope": "org",
+      "requires": "org.manager",
+      "load": {
+        "roles": {
+          "url": "/api/orgs/roles?orgId={org.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "object": "data.roles.roles[$id=params.roleId]",
+          "fields": [
+            {
+              "key": "name",
+              "label": "Name",
+              "kind": "text",
+              "required": true,
+              "initial": "{item.name}"
+            },
+            {
+              "key": "description",
+              "label": "Description",
+              "kind": "multiline",
+              "initial": "{item.description}"
+            },
+            {
+              "key": "p_settings",
+              "label": "Organization settings",
+              "kind": "toggle",
+              "initial": "{item.permissions[org.settings]}",
+              "help": "Rename the organization, change its slug, transfer it."
+            },
+            {
+              "key": "p_audit",
+              "label": "Activity & audit log",
+              "kind": "toggle",
+              "initial": "{item.permissions[org.auditLog]}"
+            },
+            {
+              "key": "p_billing_view",
+              "label": "View billing",
+              "kind": "toggle",
+              "initial": "{item.permissions[billing.view]}"
+            },
+            {
+              "key": "p_billing_manage",
+              "label": "Manage billing",
+              "kind": "toggle",
+              "initial": "{item.permissions[billing.manage]}"
+            },
+            {
+              "key": "p_members",
+              "label": "Manage members",
+              "kind": "toggle",
+              "initial": "{item.permissions[members.manage]}"
+            },
+            {
+              "key": "p_hosts_create",
+              "label": "Create sites",
+              "kind": "toggle",
+              "initial": "{item.permissions[hosts.create]}"
+            },
+            {
+              "key": "p_hosts_delete",
+              "label": "Delete sites",
+              "kind": "toggle",
+              "initial": "{item.permissions[hosts.delete]}"
+            },
+            {
+              "key": "p_data",
+              "label": "Manage data",
+              "kind": "toggle",
+              "initial": "{item.permissions[data.manage]}"
+            },
+            {
+              "key": "p_marketplace",
+              "label": "Publish to marketplace",
+              "kind": "toggle",
+              "initial": "{item.permissions[marketplace.publish]}"
+            },
+            {
+              "key": "p_plugins",
+              "label": "Install plugins",
+              "kind": "toggle",
+              "initial": "{item.permissions[plugins.install]}"
+            }
+          ],
+          "submit": {
+            "label": "Save role",
+            "url": "/api/orgs/roles",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "save",
+              "roleId": "{params.roleId}",
+              "name": "{form.name}",
+              "description": "{form.description}",
+              "permissions": {
+                "org.settings": "{form.p_settings}",
+                "org.auditLog": "{form.p_audit}",
+                "billing.view": "{form.p_billing_view}",
+                "billing.manage": "{form.p_billing_manage}",
+                "members.manage": "{form.p_members}",
+                "hosts.create": "{form.p_hosts_create}",
+                "hosts.delete": "{form.p_hosts_delete}",
+                "data.manage": "{form.p_data}",
+                "marketplace.publish": "{form.p_marketplace}",
+                "plugins.install": "{form.p_plugins}"
+              }
+            },
+            "success": "Saved {form.name}",
+            "back": true
+          }
+        }
+      ],
+      "label": "Role"
+    },
+    {
+      "id": "core.team.activity",
+      "title": "Activity",
+      "icon": "clock.arrow.circlepath|history",
+      "scope": "org",
+      "group": "workspace",
+      "order": 12,
+      "links": [
+        "/team/activity"
+      ],
+      "load": {
+        "activity": {
+          "url": "/api/orgs/activity?orgId={org.id}&scope=org-wide",
+          "cursor": "nextCursor",
+          "items": "entries"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "load": "activity",
+          "search": true,
+          "items": "data.activity.entries",
+          "primary": "{item.action:title}",
+          "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
+          "tertiary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|'System'} · {item.createdAt:datetime}",
+          "icon": "clock|schedule",
+          "empty": "No activity yet."
+        }
+      ]
+    },
+    {
+      "id": "core.invites.mine",
+      "title": "Invitations",
+      "icon": "envelope.open|drafts",
+      "scope": "account",
+      "load": {
+        "mine": {
+          "url": "/api/orgs/invites?mine=1"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "items": "data.mine.invites",
+          "primary": "{item.orgName|item.orgSlug}",
+          "secondary": "Join as {item.role:title}",
+          "icon": "building.2|domain",
+          "badges": [
+            {
+              "text": "Handoff",
+              "when": "item.handoff",
+              "tone": "warning"
+            }
+          ],
+          "actions": [
+            {
+              "id": "accept",
+              "label": "Accept",
+              "icon": "checkmark.circle|check_circle",
+              "url": "/api/orgs/invites",
+              "body": {
+                "orgId": "{item.orgId}",
+                "action": "accept",
+                "inviteId": "{item.$id}"
+              },
+              "success": "You joined {item.orgName}"
+            },
+            {
+              "id": "decline",
+              "label": "Decline",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "confirm": "Decline the invitation to {item.orgName}?",
+              "url": "/api/orgs/invites",
+              "body": {
+                "orgId": "{item.orgId}",
+                "action": "decline",
+                "inviteId": "{item.$id}"
+              },
+              "success": "Declined"
+            }
+          ],
+          "empty": "No invitations waiting for you."
+        }
+      ]
+    }
+  ]
+}
