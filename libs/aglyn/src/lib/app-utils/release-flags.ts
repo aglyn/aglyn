@@ -126,7 +126,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description:
       'The in-console AI chat helper on every page (AGL-1860): docs-' +
       'grounded answers with deep links, page-context guidance on Pro+. ' +
-      'OFF by default, and blocked on TWO published legal artifacts ' +
+      'ON in production, and gated on TWO published legal artifacts ' +
       '(AGL-1909), neither of which is a repo file — both are live besigner ' +
       'pages, so publication is what satisfies them: (1) the privacy-policy ' +
       'disclosure for stored Q&A, because the data loop records every ' +
@@ -140,7 +140,7 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'all and sends customer site content to Anthropic on the key plus a ' +
       'Pro entitlement alone. Setting the key in production therefore makes ' +
       'Anthropic a subprocessor whether or not this flag is ever flipped.',
-    defaultEnabled: false,
+    defaultEnabled: true,
   },
   // Ingress only, and with no staff preview on the server: a video a staff
   // session uploads into a customer's library serves on that customer's pages
@@ -187,12 +187,12 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description:
       'Generative building and automation behind the AI add-on ' +
       '(AGL-2903): sections, pages and workflows written by a model from ' +
-      'a brief, on the shared Anthropic runtime. OFF by default and staff ' +
-      'preview only; every generative route answers 404 while it is off. ' +
-      'Turning it on sends customer briefs and site content to Anthropic ' +
+      'a brief, on the shared Anthropic runtime. ON for every workspace ' +
+      'since 2026-09-29; every generative route answers 404 while it is ' +
+      'off. On, it sends customer briefs and site content to Anthropic ' +
       'on the same ANTHROPIC_API_KEY and under the same subprocessor ' +
       'disclosure as Assist (AGL-1909).',
-    defaultEnabled: false,
+    defaultEnabled: true,
   },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends
@@ -207,10 +207,10 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'email draft) sends the model provider (AGL-3520). OFF: the ' +
       'disclosed fields, with addresses and numbers in typed text ' +
       'replaced. ON: the whole record, contact details and custom fields ' +
-      'included. Turn on only after Privacy Policy section 2 and the ' +
-      'Subprocessors row are republished; see ' +
+      'included. ON since 2026-10-05, after Privacy Policy section 2 and ' +
+      'the Subprocessors row were republished; see ' +
       'docs/drafts/agl-3520-crm-assistance-whole-record-disclosure.md.',
-    defaultEnabled: false,
+    defaultEnabled: true,
   },
 ]
 

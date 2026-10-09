@@ -149,8 +149,17 @@ describe('a language page fills its picture slots with photos the site serves it
   it('repeats no photo on a page while one is unused, and starts again past the last', () => {
     const slots = Array.from({ length: 7 }, (_, index) => ({ role: index === 0 ? 'hero' : 'gallery' }) as AiLayoutPictureSlot)
     const photos = aiLayoutStarterPhotos(slots, 'seed').map((photo) => photo.src)
-    expect(new Set(photos.slice(0, 5)).size).toBe(5)
-    expect(photos.slice(5).every((src) => STARTER_SRCS.includes(src))).toBe(true)
+    // Four starters are not a person's portrait, and a page without people uses all four first.
+    expect(new Set(photos.slice(0, 4)).size).toBe(4)
+    expect(photos.slice(4).every((src) => STARTER_SRCS.includes(src))).toBe(true)
+  })
+
+  it('never puts the owner’s portrait in a gallery or hero picture, even to avoid a repeat (AGL-3660)', () => {
+    for (let job = 0; job < 40; job += 1) {
+      const slots = Array.from({ length: 8 }, (_, index) => ({ role: index === 0 ? 'hero' : 'gallery' }) as AiLayoutPictureSlot)
+      const photos = aiLayoutStarterPhotos(slots, `job-${job}`).map((photo) => photo.src)
+      expect(photos).not.toContain(AI_LAYOUT_STARTER_PHOTOS.about.src)
+    }
   })
 
   it('serves the about picture the owner before a card takes it, as the live Juniper Clay page did not (AGL-3660)', () => {
