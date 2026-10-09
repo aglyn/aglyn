@@ -167,8 +167,11 @@ const COMPONENT_EXTRA_IDS = ['icon']
  * Menu Button, which a model writing nodes was never offered.
  */
 const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
-  screen: ['icon'],
-  layout: ['icon', 'muiDrawer', 'muiDrawerToggle'],
+  // The store's Product grid, which a page lists the site's catalog with
+  // (AGL-3676): bound to the catalog by code, never written by a model.
+  screen: ['icon', 'product-grid'],
+  // And a selling site's cart button in its header (AGL-3676).
+  layout: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
 }
 
 /**

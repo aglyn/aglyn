@@ -36,7 +36,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true, firebaseAdmin: 
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { productPriceMissing, validateProduct, type HostProduct } from '../model/commerce'
+import { productPriceMissing, validateProduct, variantHasPrice, type HostProduct } from '../model/commerce'
 import {
   checkProductDraftContent,
   createProductDraftWriter,
@@ -224,6 +224,18 @@ describe('the product writer', () => {
     expect(validateProduct(product)).toBeNull()
   })
 
+  it('lists a product before it has a price where asked, with its photo, still sold by no door (AGL-3676)', async () => {
+    const written = await writer.write(
+      request({ content: { ...CONTENT, comingSoon: true, mediaUrls: ['/_static/starter/gallery-craft.jpg'] } }),
+    )
+    expect(written).toMatchObject({ ok: true, facts: { status: 'active', priceMissing: true } })
+    const product = stored()
+    expect(product).toMatchObject({ status: 'active', mediaUrls: ['/_static/starter/gallery-craft.jpg'] })
+    // No price is invented: every variant is still unpriced, and there is no flat price.
+    expect(product.variants.every((variant) => !variantHasPrice(variant))).toBe(true)
+    expect(product).not.toHaveProperty('priceUsd')
+  })
+
   it('takes a slug no product holds, a deleted one included', async () => {
     store.set('hosts/host-1/products/old', { name: 'Sourdough loaf', slug: 'sourdough-loaf', deletedAt: 1 })
     store.set('hosts/host-1/products/old-2', { name: 'Sourdough loaf', slug: 'sourdough-loaf-2', deletedAt: null })
@@ -301,6 +313,15 @@ describe('the check', () => {
     expect(problemsOf({ priceUsd: 1.005 })).toHaveLength(1)
     expect(problemsOf({ priceUsd: 100_000 })).toHaveLength(1)
     expect(problemsOf({ priceUsd: 0 })).toEqual([])
+  })
+
+  it('takes photos only as https addresses or paths on the site, and a coming-soon that is true or false', () => {
+    expect(problemsOf({ mediaUrls: ['https://cdn.example/a.jpg', '/media/b.jpg'] })).toEqual([])
+    expect(problemsOf({ mediaUrls: ['javascript:alert(1)'] })).toEqual(['A photo is an https address or a path on this site'])
+    expect(problemsOf({ mediaUrls: ['data:image/png;base64,AAAA'] })).toEqual(['A photo is an https address or a path on this site'])
+    expect(problemsOf({ mediaUrls: ['/a', '/b', '/c', '/d', '/e'] })).toEqual(['A product is written with at most 4 photos'])
+    expect(problemsOf({ comingSoon: 'yes' })).toEqual(['Coming soon is true or false'])
+    expect(checkProductDraftContent({ ...CONTENT, comingSoon: true })).toMatchObject({ ok: true, facts: { status: 'active', priceMissing: true } })
   })
 
   it('refuses options the editor would refuse, before building any variant', () => {

@@ -31,7 +31,12 @@ export interface PublicProductDetail {
   variants: Array<{
     id: string
     options?: Record<string, string>
-    priceUsd: number
+    /**
+     * `null` for a variant listed before it has a price (AGL-3676): the page
+     * says "Price coming soon" and offers nothing to buy, as no sale door
+     * would sell it.
+     */
+    priceUsd: number | null
     compareAtPriceUsd?: number
     soldOut: boolean
     imageUrl?: string
@@ -79,7 +84,7 @@ export function toPublicProductDetail(
     variants: product.variants.map((variant) => ({
       id: variant.id,
       ...(variant.options ? { options: variant.options } : {}),
-      priceUsd: variant.priceUsd,
+      priceUsd: CommerceModel.variantHasPrice(variant) ? variant.priceUsd : null,
       ...(variant.compareAtPriceUsd
         ? { compareAtPriceUsd: variant.compareAtPriceUsd }
         : {}),

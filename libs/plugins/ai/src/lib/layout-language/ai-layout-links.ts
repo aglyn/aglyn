@@ -16,6 +16,7 @@
  */
 
 import { aiPageLinkSection } from '../runtime/ai-page-links'
+import type { AiLayoutListing } from './ai-layout-listings'
 
 /**
  * Where a link the layout language names goes (AGL-3660), resolved by code to
@@ -37,6 +38,12 @@ export interface AiLayoutPage {
    * no screen. Absent for every page.
    */
   href?: string
+  /**
+   * The title of a planned page merged into this destination (AGL-3676): a
+   * page that stood in for the blog, kept only so links to it go to the blog.
+   * A link to it is named for the blog, not for the page it replaced.
+   */
+  standsInFor?: string
 }
 
 /** Everything a page's links resolve against. */
@@ -59,6 +66,12 @@ export interface AiLayoutTargets {
   }[]
   /** Every word the job was given: the brief, the site's answers, its profile. */
   facts: string
+  /**
+   * The kinds of record the site keeps that its pages show — its catalog,
+   * its blog — and the sections that place each (AGL-3676,
+   * `ai-layout-listings.ts`). Absent or empty, a page shows only its words.
+   */
+  listings?: readonly AiLayoutListing[]
 }
 
 /** Where a link resolved to. */
@@ -66,8 +79,29 @@ export type AiLayoutDestination =
   | { kind: 'page'; screenId: string }
   | { kind: 'section'; index: number }
   | { kind: 'href'; href: string }
-  /** A path on this site that is no page of its own, such as the blog (AGL-3660). */
-  | { kind: 'path'; href: string }
+  /**
+   * A path on this site that is no page of its own, such as the blog
+   * (AGL-3660); reached through a planned page merged into it, the title
+   * that page had and the name it now goes by (AGL-3676).
+   */
+  | { kind: 'path'; href: string; standsInFor?: string; label?: string }
+
+/**
+ * A link's words for where it now goes (AGL-3676): a button that named a
+ * page merged into the blog — "Read the articles" — names the blog instead,
+ * "Read the blog". Words that name neither are kept.
+ */
+export function aiLayoutRenamedLabel(label: string, destination: AiLayoutDestination): string {
+  if (destination.kind !== 'path' || !destination.standsInFor || !destination.label) return label
+  const name = destination.label.toLowerCase()
+  const words = wordsOf(destination.standsInFor)
+  if (!words.length) return label
+  // The page's own name, or its words alone, singular or plural.
+  const stems = words.map((word) => word.replace(/s$/, ''))
+  const pattern = new RegExp(`\\b(?:${stems.map((stem) => stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+')})s?\\b`, 'giu')
+  const renamed = label.replace(pattern, (found) => (found[0] === found[0].toUpperCase() ? destination.label as string : name))
+  return renamed
+}
 
 /** The words of a label or a name, as they are compared. */
 function wordsOf(text: string): string[] {
@@ -113,6 +147,8 @@ function pageNamed(
   const words = wordsOf(value).join(' ')
   return (
     targets.pages.find((page) => wordsOf(page.label).join(' ') === words) ??
+    // A page merged into the blog is still named by the title it had (AGL-3676).
+    targets.pages.find((page) => page.standsInFor && wordsOf(page.standsInFor).join(' ') === words) ??
     null
   )
 }
@@ -131,7 +167,7 @@ function pageDestination(
   )
     return null
   if (isHomeSlug(page.slug) && !HOME_WORDS.test(label)) return null
-  if (page.href) return { kind: 'path', href: page.href }
+  if (page.href) return { kind: 'path', href: page.href, ...(page.standsInFor ? { standsInFor: page.standsInFor, label: page.label } : {}) }
   return { kind: 'page', screenId: page.id }
 }
 
