@@ -156,7 +156,7 @@ export function AiLogicCreateButton({
   upgrade,
 }: ConsoleHostLogicZoneProps & ConsoleWidgetEntitlementProps) {
   const copy = AI_LOGIC_COPY
-  const help = pluginDocsHelp('aiLogic')
+  const help = pluginDocsHelp('aiLogic', { anchor: kind === 'variable' ? '#variable' : '#function' })
   const { data: user } = useUser()
   const run = useAiJobRun(user, copy.failed)
   const { reset } = run

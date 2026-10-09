@@ -399,7 +399,7 @@ export function registerAiConsole(): void {
         label: 'AI jobs',
         href: '/ai-jobs',
         recordTitle: 'Building your site',
-        header: { title: 'AI jobs', docsTopic: 'howAglynAiBuilds', docsAnchor: '#finding-your-ai-jobs' },
+        header: { title: 'AI jobs', docsTopic: 'aiJobsAndActivity', docsAnchor: '#the-ai-jobs-page' },
         unlisted: true,
         ownsSubtree: true,
         permission: 'ai.generate',

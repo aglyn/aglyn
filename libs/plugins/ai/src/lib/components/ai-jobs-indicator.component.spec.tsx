@@ -41,6 +41,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
+  HelpTip: () => null,
   MdiIcon: () => <span />,
 }))
 

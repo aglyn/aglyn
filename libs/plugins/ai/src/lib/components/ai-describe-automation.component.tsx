@@ -89,7 +89,7 @@ export interface AiAutomationBriefDialogProps {
 export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
   const { open, onClose, orgId, hostId, user, openAction } = props
   const copy = AI_AUTOMATION_BRIEF_COPY
-  const help = pluginDocsHelp('aiAutomations')
+  const help = pluginDocsHelp('aiAutomations', { anchor: '#draft' })
   const [brief, setBrief] = useState('')
   const [notListed, setNotListed] = useState(false)
   const run = useAiJobRun(user, copy.failed)

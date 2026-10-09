@@ -311,9 +311,8 @@ The 300 credits are yours as a person, not per workspace: if you own more than o
 workspace, they share the allowance, and the meter on each workspace's billing page shows
 that workspace's share of it. Members you invite to a Free workspace draw on that
 workspace's credits, not on their own account. A few other limits apply only to Free
-workspaces and only to AI generation — a short wait after an account is created before it
-can generate, a daily cap on free requests, and a platform-wide daily limit on free
-generation that, when reached, pauses it for every Free workspace until the next day (UTC).
+workspaces and only to AI generation — a daily cap on free requests, and a platform-wide
+daily limit on free generation that, when reached, pauses it for every Free workspace until the next day (UTC).
 Each one tells you what to do when it applies; none of them can produce a charge.
 
 ### Alerts on the way there {#ai-credit-alerts}

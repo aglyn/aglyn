@@ -184,6 +184,7 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
   const categoriesJob = latest('categories')
   const tooMany = picked.length > AI_PRODUCTS_BULK_MAX
   const help = pluginDocsHelp('aiProducts', {
+    anchor: '#propose-a-first-catalog',
     excerpt:
       'Write product copy, propose a first catalog, or propose categories and discounts from a brief. You review every proposal before anything is saved.',
   })
