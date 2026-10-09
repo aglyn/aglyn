@@ -219,7 +219,11 @@ export function registerAiConsoleApi(): void {
   // The weekly insights (AGL-2915): Monday's digests made for the people who
   // asked for them, and delivered once the beat has written them. Beside the
   // beat under `/api/admin/`, where the console's scheduled sweeps live.
-  registerPluginApiRoute(AI_INSIGHTS_DIGEST_PATH, { web: runAiInsightsDigest })
+  // A machine's route: Cloud Scheduler calls it on the cron secret with no
+  // site and no member, and the route checks that secret and the AI release
+  // flag itself. Unmarked, it was counted in the dispatcher's per-address
+  // write bucket and refused with a 429 at 14:00Z on 2026-10-09.
+  registerPluginApiRoute(AI_INSIGHTS_DIGEST_PATH, { web: runAiInsightsDigest }, { machine: true })
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })
