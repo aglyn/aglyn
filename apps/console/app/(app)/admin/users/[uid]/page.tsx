@@ -79,11 +79,24 @@ import StaffUserProductEmail, {
 import StaffTableHead from '../../../../../components/staff-table-head.component'
 import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
 
+/** Where a resolved name or photo came from, as the page says it. */
+const IDENTITY_SOURCE_LABEL = {
+  auth: 'auth record',
+  profile: 'profile',
+  provider: 'sign-in provider',
+  idp: 'SSO directory',
+} as const
+
 interface UserDetail {
   user: {
     uid: string
     email: string | null
+    /** Resolved through the account-identity resolver (AGL-3721). */
     displayName: string | null
+    photoUrl?: string | null
+    /** Where the resolved name came from; `auth` is the record's own. */
+    displayNameSource?: 'auth' | 'profile' | 'provider' | 'idp' | null
+    photoUrlSource?: 'auth' | 'profile' | 'provider' | 'idp' | null
     disabled: boolean
     staff: boolean
     staffRole: string | null
@@ -441,6 +454,20 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             <Stack spacing={1}>
                               <Typography variant="body2">
                                 {detail.user.displayName ?? '—'}
+                                {/* Say when the name is not the Auth
+                                    record's own (AGL-3721) — an SSO record
+                                    holds none until the sign-in fill. */}
+                                {detail.user.displayName &&
+                                detail.user.displayNameSource &&
+                                detail.user.displayNameSource !== 'auth' ? (
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {` · from the ${IDENTITY_SOURCE_LABEL[detail.user.displayNameSource]}`}
+                                  </Typography>
+                                ) : null}
                               </Typography>
                               <Typography variant="body2">
                                 {detail.user.email ?? 'no email'}

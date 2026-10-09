@@ -117,6 +117,8 @@ import { useDeclareDocumentSubject } from '../../../../../components/document-su
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
+import AccountAvatar from '../../../../../components/account-avatar.component'
+import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 
 /**
  * Organization detail for staff (AGL-207/238): the org's sites, member
@@ -1494,20 +1496,45 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               }}
                             >
                               {/* Member docs are keyed by uid, so the
-                                  roster links straight to the account. */}
-                              <AppLink
-                                variant="body2"
-                                color="inherit"
-                                underline="hover"
-                                noWrap
-                                href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                                  uid: member.$id,
-                                })}
-                              >
-                                {member.email ??
-                                  member.displayName ??
-                                  member.$id}
-                              </AppLink>
+                                  roster links straight to the account. The
+                                  name and face through the one
+                                  account-identity resolver (AGL-3721). */}
+                              {(() => {
+                                const identity = resolveAccountIdentity({
+                                  idp: {
+                                    displayName: member.displayName,
+                                    photoURL: member.photoURL,
+                                  },
+                                  email: member.email,
+                                })
+                                return (
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ alignItems: 'center', minWidth: 0 }}
+                                  >
+                                    <AccountAvatar
+                                      photoUrl={identity.photoUrl}
+                                      name={identity.displayName}
+                                      email={member.email}
+                                      size={24}
+                                    />
+                                    <AppLink
+                                      variant="body2"
+                                      color="inherit"
+                                      underline="hover"
+                                      noWrap
+                                      href={buildRoute(Route.ADMIN_USER_DETAIL, {
+                                        uid: member.$id,
+                                      })}
+                                    >
+                                      {identity.displayName && member.email
+                                        ? `${identity.displayName} · ${member.email}`
+                                        : (identity.label ?? member.$id)}
+                                    </AppLink>
+                                  </Stack>
+                                )
+                              })()}
                               <Stack direction="row" spacing={1}>
                                 <Chip
                                   label={member.role ?? 'viewer'}
