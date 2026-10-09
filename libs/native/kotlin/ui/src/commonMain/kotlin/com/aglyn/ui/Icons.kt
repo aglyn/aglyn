@@ -29,6 +29,16 @@ import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.WebAsset
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -106,6 +116,27 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileCopy
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.ViewKanban
+import androidx.compose.material.icons.outlined.Upload
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.automirrored.outlined.Reply
+import androidx.compose.material.icons.outlined.MarkEmailUnread
+import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Segment
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.CallMerge
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -221,6 +252,39 @@ object AglynIcons {
     "file_copy" to Icons.Outlined.FileCopy,
     "key" to Icons.Outlined.Key,
     "play_arrow" to Icons.Outlined.PlayArrow,
+    // CRM, Inbox and Email (AGL-3669).
+    "business" to Icons.Outlined.Business,
+    "handshake" to Icons.Outlined.Handshake,
+    "person_add" to Icons.Outlined.PersonAdd,
+    "sticky_note" to Icons.AutoMirrored.Outlined.StickyNote2,
+    "call" to Icons.Outlined.Call,
+    "groups" to Icons.Outlined.Groups,
+    "view_kanban" to Icons.Outlined.ViewKanban,
+    "upload" to Icons.Outlined.Upload,
+    "download" to Icons.Outlined.Download,
+    "reply" to Icons.AutoMirrored.Outlined.Reply,
+    "mark_unread" to Icons.Outlined.MarkEmailUnread,
+    "mark_read" to Icons.Outlined.Drafts,
+    "send" to Icons.AutoMirrored.Outlined.Send,
+    "list" to Icons.AutoMirrored.Outlined.List,
+    "label" to Icons.AutoMirrored.Outlined.Label,
+    "timeline" to Icons.Outlined.Timeline,
+    "arrow_forward" to Icons.AutoMirrored.Outlined.ArrowForward,
+    "copy" to Icons.Outlined.ContentCopy,
+    "segment" to Icons.Outlined.Segment,
+    "tag" to Icons.Outlined.Tag,
+    "merge" to Icons.Outlined.CallMerge,
+    "drafts" to Icons.Outlined.Drafts,
+    "play" to Icons.Outlined.PlayCircle,
+    "brush" to Icons.Outlined.Brush,
+    "block" to Icons.Outlined.Block,
+    "verified" to Icons.Outlined.Verified,
+    "hourglass" to Icons.Outlined.HourglassEmpty,
+    "person_remove" to Icons.Outlined.PersonRemove,
+    "science" to Icons.Outlined.Science,
+    "web_asset" to Icons.Outlined.WebAsset,
+    "archive" to Icons.Outlined.Archive,
+    "lock" to Icons.Outlined.Lock,
   )
 
   fun named(name: String?): ImageVector = byName[name] ?: CONTENT_ICONS[name] ?: Icons.Outlined.Extension

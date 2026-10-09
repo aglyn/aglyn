@@ -39,6 +39,14 @@ import {
 } from './promotion-hold'
 import { holdStock, stockHoldKey } from './stock-hold'
 import {
+  appendLocalFulfillmentMetadata,
+  localFulfillmentLocationId,
+  localStockRefusalMessage,
+  planLocalFulfillment,
+  readLocalFulfillmentRequest,
+  readLocalFulfillmentStore,
+} from './local-fulfillment'
+import {
   applyNativeCheckoutParams,
   nativeCheckoutStripeHeaders,
   readCheckoutSessionPayload,
@@ -426,6 +434,31 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       .doc('store')
       .get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
+    // PICKUP OR THE STORE'S OWN DELIVERY (AGL-3624), for a one-time physical
+    // sale, decided from the store's settings exactly as the cart decides it.
+    // Above the claim, so a refusal keeps the key. See `local-fulfillment.ts`.
+    const localRequest = readLocalFulfillmentRequest(body.fulfillment)
+    const localPlan =
+      localRequest && (lifted.type ?? 'physical') === 'physical' && !isSubscription
+        ? await planLocalFulfillment({
+            hostId,
+            request: localRequest,
+            itemsCents: listUnitAmountCents * quantity,
+            hasPhysicalLine: true,
+            store: await readLocalFulfillmentStore({
+              hostRef,
+              storeSettings: (storeSettings.data?.() ?? null) as Record<string, unknown> | null,
+              org: ownerOrg.org as { timeZone?: string },
+              host: (hostSnapshot.data?.() ?? null) as { timeZone?: string } | null,
+            }),
+          })
+        : ({ kind: 'shipping' } as const)
+    if (localPlan.kind === 'refusal') {
+      return res.status(localPlan.status).json({
+        error: localPlan.error,
+        ...(localPlan.changed ? { fulfillmentChanged: localPlan.changed } : {}),
+      })
+    }
     // AGL-1999: an unset tax mode is NOT a decision, and it must not sell.
     // `mode` was `undefined` for every store whose owner never opened the
     // Taxes card — the default state of every new storefront — and each
@@ -573,6 +606,8 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           ? [{ productId, variantId: variant.id, quantity }]
           : [],
         label: `buy-now ${hostId}/${productId}`,
+        // At the pickup location, or the one deliveries leave from (AGL-3624).
+        locationId: localFulfillmentLocationId(localPlan),
       })
       if (!held.ok) {
         // Nothing has been minted yet, so the key goes back and the same
@@ -584,7 +619,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         await claim.release()
         return res.status(409).json({
           error:
-            held.reason === 'sold-out'
+            held.reason === 'sold-out-at-location'
+              ? localStockRefusalMessage(localPlan, String(lifted.name ?? ''))
+              : held.reason === 'sold-out'
               ? CommerceModel.STOCK_HELD_MESSAGE
               : 'Sold out',
         })
@@ -715,7 +752,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       (lifted.type ?? 'physical') === 'physical' && !isSubscription
     // Live carrier rates (AGL-3612) are quoted here, before the session,
     // for the destination the shopper declared; see `carrier-shipping.ts`.
-    const shippingPlan: CarrierShippingPlan = shipsPhysically
+    const shippingPlan: CarrierShippingPlan =
+      // Collected: nothing to price, no address (AGL-3624).
+      localPlan.kind === 'pickup'
+        ? { countries: [], options: [] }
+        : // Driven by the store: its one fee, an address in its country only.
+          localPlan.kind === 'local_delivery'
+          ? { countries: [localPlan.country], options: [localPlan.option] }
+          : shipsPhysically
       ? await planCheckoutShippingWithCarriers({
           hostId,
           settings: shippingSettings,
@@ -731,6 +775,24 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           },
         })
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    // The unnamed `Local pickup` rate gives way to the store's pickup
+    // locations, which the shopper chooses before checkout (AGL-3624).
+    if (
+      localPlan.kind === 'shipping' &&
+      shippingSettings?.localPickup &&
+      shippingPlan.options.some((option) => option.rateId === CommerceModel.LOCAL_PICKUP_RATE_ID)
+    ) {
+      const { pickupLocations } = await readLocalFulfillmentStore({
+        hostRef,
+        storeSettings: (storeSettings.data?.() ?? null) as Record<string, unknown> | null,
+        host: null,
+      })
+      if (pickupLocations.length) {
+        shippingPlan.options = shippingPlan.options.filter(
+          (option) => option.rateId !== CommerceModel.LOCAL_PICKUP_RATE_ID,
+        )
+      }
+    }
     if (shippingPlan.needsPostalCode) {
       await releaseCouponSlot()
       await releaseStock()
@@ -1118,6 +1180,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // to the one this handler built before shipping existed on it. Buy-now has
     // never collected an address, so declaring one unconditionally would put a
     // shipping form in front of every shopper on a store that charges none.
+    // How the order reaches the buyer (AGL-3624): the webhook routes it.
+    if (localPlan.kind === 'pickup' || localPlan.kind === 'local_delivery') {
+      appendLocalFulfillmentMetadata(params, localPlan.metadata)
+    }
     if (shippingPlan.options.length > 0) {
       CommerceModel.appendShippingAddressCollectionParams(
         params,

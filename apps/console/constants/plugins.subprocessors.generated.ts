@@ -310,6 +310,24 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'loyalty',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "api.smile.io",
+        disposition: "not-a-subprocessor",
+        reason: "Smile.io REST API v1, reached only from the rewards plugin’s adapter (`libs/plugins/loyalty/src/lib/connectors/smile.ts`) with the merchant’s own API key: a member’s balance when a buyer or cashier names them, and a points transaction for each sale, refund, redemption and hand adjustment. Customer-chosen: the merchant chose Smile.io and the data lands in the merchant’s own Smile account.",
+        dataReceived: "For each points movement: the buyer’s email address (to find their Smile.io member), the signed number of points, a short description, and a short reference for the movement. No order contents, amounts, addresses or payment details are sent. The merchant’s Smile.io API key authenticates each call.",
+      },
+      {
+        host: "loyalty.yotpo.com",
+        disposition: "not-a-subprocessor",
+        reason: "Yotpo Loyalty & Referrals API v2, reached only from the rewards plugin’s adapter (`libs/plugins/loyalty/src/lib/connectors/yotpo.ts`) with the merchant’s own GUID and API key: a member’s balance when a buyer or cashier names them, enrollment of a buyer Yotpo lacks, and a points adjustment for each sale, refund, redemption and hand adjustment. Customer-chosen: the merchant chose Yotpo and the data lands in the merchant’s own Yotpo account.",
+        dataReceived: "For each points movement: the buyer’s email address, and their name when Yotpo is asked to enroll them, the signed number of points, a short history title with a reference for the movement. No order contents, amounts, addresses or payment details are sent. The merchant’s Yotpo GUID and API key authenticate each call.",
+      },
+    ],
+  },
+  {
     pluginId: 'tax-engines',
     subprocessors: [],
     hosts: [
@@ -844,6 +862,24 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         host: "www.facebook.com",
         reason: "Since AGL-3637 also Facebook Login's consent dialog for a merchant's catalog grant, built by `metaAuthorizeUrl` and opened by the admin's own browser. No server of ours requests it.",
         dataReceived: "Nothing from our servers. The browser carries the app id, the `catalog_management` and `business_management` scopes, the redirect address and a signed state.",
+      },
+    ],
+  },
+  {
+    pluginId: 'stock-photos',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "pixabay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Pixabay's image search API (`https://pixabay.com/api/`), asked by the stock-photos plugin's client (`libs/plugins/stock-photos/src/lib/providers/pixabay.ts`) from the console's server while an AI job builds a site's pages, to find photos for the page's picture slots; answers are cached for 24 hours. Also the host of `largeImageURL`, from which a chosen photo's bytes are downloaded once and stored in the site's own media library, so no page ever loads an image from Pixabay. A photo's page and its contributor's page on this host are recorded on the asset as its credit.",
+        dataReceived: "The platform's API key and the search words: a few words naming the kind of business (from the site's business type) and the section's subject (from the picture's description), with the platform's fixed filters (photos only, orientation, minimum size, safe search). No customer data: no name, email address, phone number or other personal data of a customer or a visitor, and no workspace or site identifier. The image download sends no data beyond the request for the image.",
+      },
+      {
+        host: "cdn.pixabay.com",
+        disposition: "not-a-subprocessor",
+        reason: "Pixabay's image CDN, one of the two hosts the stock-photos plugin's client (`libs/plugins/stock-photos/src/lib/providers/pixabay.ts`) will download a chosen photo's bytes from, on the console's server, before storing them in the site's own media library.",
+        dataReceived: "Nothing beyond the request for the image.",
       },
     ],
   },

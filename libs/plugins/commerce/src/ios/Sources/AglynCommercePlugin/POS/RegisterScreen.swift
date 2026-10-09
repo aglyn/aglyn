@@ -53,6 +53,20 @@ struct RegisterScreen: View {
       }
     }
     .background(AglynColor.page)
+    .safeAreaInset(edge: .top, spacing: 0) {
+      if !model.online {
+        AglynNotice("Offline. Keep ringing up; hold baskets and charge when you are back online.", tone: .warning)
+          .overlay(alignment: .trailing) {
+            Button("Retry") { model.reconnect() }
+              .buttonStyle(.bordered)
+              .padding(.trailing, AglynSpace.one)
+              .accessibilityIdentifier("register-reconnect")
+          }
+          .padding(.horizontal, AglynSpace.two)
+          .padding(.vertical, AglynSpace.one)
+          .accessibilityIdentifier("register-offline")
+      }
+    }
     .navigationTitle(model.storeName)
     .toolbar { toolbar }
     .searchable(text: $query, prompt: "Search products")

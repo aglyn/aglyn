@@ -83,8 +83,11 @@ struct Submission: Identifiable, Hashable {
   let createdAt: Date?
   let repliedAt: Date?
   let sender: Sender
-  /// The lead or contact the submission made, when it made one.
+  /// The lead or contact the submission made, when it made one, and its id.
   let capturedKind: String?
+  let capturedID: String?
+  /// What the site did with it: saved to the Inbox, added to a dataset, or refused by one.
+  let chips: [RoutingChip]
 
   init(_ doc: FirestoreDocument) {
     let raw = (doc.data["fields"] as? [String: Any] ?? [:]).sorted { $0.key < $1.key }
@@ -97,7 +100,10 @@ struct Submission: Identifiable, Hashable {
     createdAt = Self.date(doc.data["createdAt"])
     repliedAt = Self.date(doc.data["repliedAtMs"])
     sender = messageSender(raw.map { (key: $0.key, value: $0.value as Any?) })
-    capturedKind = (doc.data["capturedRecord"] as? [String: Any])?["kind"] as? String
+    let captured = doc.data["capturedRecord"] as? [String: Any]
+    capturedKind = captured?["kind"] as? String
+    capturedID = captured?["id"] as? String
+    chips = routingChips(doc.data["routing"] as? [String: Any])
   }
 
   private static func date(_ value: Any?) -> Date? {
@@ -126,18 +132,23 @@ func readChoices() -> [(value: String?, label: String)] {
   [(nil, "All")] + ContractValues.shared.submissionReadOptions.map { ($0.value, $0.label) }
 }
 
-func submissionsRequest(formID: String?, read: String?, search: String) -> ListQueryRequest {
+/// `formID` is a form's own list (FORM_SCOPED_SUBMISSION_LIST_QUERY: that form is the list's base, which no
+/// clause can widen); `pickedForm` is the Form pick on the site's list, a clause on the one query.
+func submissionsRequest(formID: String?, read: String?, search: String, pickedForm: String? = nil) -> ListQueryRequest {
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
+  var clauses = read.map { [ListFilterRequest(field: "read", op: "equals", value: $0)] } ?? []
+  if formID == nil, let pickedForm, !pickedForm.isEmpty {
+    clauses.append(ListFilterRequest(field: "formId", op: "equals", value: pickedForm))
+  }
   return ListQueryRequest(
     base: formID.map { [ListQueryFilter(op: .equal, path: "formId", value: .string($0))] },
-    clauses: read.map { [ListFilterRequest(field: "read", op: "equals", value: $0)] } ?? [],
-    search: words.isEmpty ? nil : [words])
+    clauses: clauses, search: words.isEmpty ? nil : [words])
 }
 
-func submissionsPlan(formID: String?, read: String?, search: String) -> ListQueryPlan {
+func submissionsPlan(formID: String?, read: String?, search: String, pickedForm: String? = nil) -> ListQueryPlan {
   planListQuery(
     formID != nil ? ContractValues.shared.formScopedSubmissionListQuery : ContractValues.shared.submissionListQuery,
-    submissionsRequest(formID: formID, read: read, search: search))
+    submissionsRequest(formID: formID, read: read, search: search, pickedForm: pickedForm))
 }
 
 /// What an export of the list covers: one form's, the read filter's, or every submission.
@@ -159,6 +170,8 @@ final class SubmissionsModel {
   private(set) var hasMore = false
   private(set) var notice: String?
   var read: String? { didSet { if oldValue != read { restart() } } }
+  /// The Form pick on the site's list; a form's own list (`formID`) offers none.
+  var pickedForm: String? { didSet { if oldValue != pickedForm { restart() } } }
   private(set) var search = ""
   let formID: String?
 
@@ -223,7 +236,7 @@ final class SubmissionsModel {
     listener?.remove()
     failed = false
     guard let reader, let hostID else { return }
-    let plan = submissionsPlan(formID: formID, read: read, search: search)
+    let plan = submissionsPlan(formID: formID, read: read, search: search, pickedForm: pickedForm)
     notice = plan.refused.isEmpty ? plan.notices.first : "This search cannot run with that filter. Clear one of them."
     let window = limit
     listener = reader.listen(plan.firestoreQuery(submissionsPath(hostID), limit: window + 1)) { [weak self] result in

@@ -37,7 +37,9 @@ import {
 import {
   CLAIM_LIST_QUERY,
   CLAIM_PENDING_BASE,
+  CLAIM_COLUMN_SORTS,
   STRANDED_AFTER_MS,
+  claimQuerySort,
   splitClaimTimeClauses,
 } from '../utils/idempotency-claims-list-query'
 
@@ -54,7 +56,7 @@ describe('the claims list has the composites its query shapes need', () => {
     expect(missingListQueryIndexes(INDEX_FILE, 'apiIdempotency', needed)).toEqual([])
   })
 
-  it('names exactly the merged composites, all ordered by createdAtMs ASC', () => {
+  it('names exactly the merged composites, and one per header order beside the base', () => {
     expect(
       listQueryIndexes(CLAIM_LIST_QUERY, BASE)
         .map((index) => index.fields.map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`).join(','))
@@ -64,6 +66,14 @@ describe('the claims list has the composites its query shapes need', () => {
       'orgId:ASCENDING,createdAtMs:ASCENDING',
       'scopeId:ASCENDING,createdAtMs:ASCENDING',
       'status:ASCENDING,createdAtMs:ASCENDING',
+      // The header sorts (AGL-3680): `alone`, so paired with the base only.
+      'status:ASCENDING,createdAtMs:DESCENDING',
+      'status:ASCENDING,kind:ASCENDING',
+      'status:ASCENDING,kind:DESCENDING',
+      'status:ASCENDING,orgId:ASCENDING',
+      'status:ASCENDING,orgId:DESCENDING',
+      'status:ASCENDING,scopeId:ASCENDING',
+      'status:ASCENDING,scopeId:DESCENDING',
     ])
   })
 })
@@ -99,7 +109,7 @@ describe('every clause lands on one query', () => {
       { path: 'scopeId', op: '==', value: 'host-1' },
       { path: 'orgId', op: '==', value: 'org-1' },
     ])
-    expect(answer.orderBy).toEqual({ path: 'createdAtMs', direction: 'asc' })
+    expect(answer.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'asc' })
   })
 
   it('in flight is the claims younger than the stranded threshold', () => {
@@ -135,5 +145,50 @@ describe('every clause lands on one query', () => {
   it('has no search to offer, and says so rather than ignoring one', () => {
     const answer = planListQuery(CLAIM_LIST_QUERY, { clauses: [], search: ['acme'] }, nameSearchNormalizers)
     expect(answer.refused.map((entry) => entry.clause)).toEqual(['search'])
+  })
+})
+
+describe('the header sorts (AGL-3680)', () => {
+  it('Age and State are the claim time read the other way round', () => {
+    expect(claimQuerySort({ path: 'ageMs', direction: 'asc' })).toMatchObject({
+      path: 'createdAtMs',
+      direction: 'desc',
+    })
+    expect(claimQuerySort({ path: 'ageMs', direction: 'desc' })).toMatchObject({
+      path: 'createdAtMs',
+      direction: 'asc',
+    })
+    expect(claimQuerySort({ path: 'stranded', direction: 'asc' })).toMatchObject({
+      path: 'createdAtMs',
+      direction: 'desc',
+    })
+    expect(claimQuerySort({ path: 'kind', direction: 'asc' })).toEqual({ path: 'kind', direction: 'asc' })
+  })
+
+  it('every header order the card asks for is one the plan serves', () => {
+    for (const sort of CLAIM_COLUMN_SORTS) {
+      const asked = claimQuerySort(sort)
+      const answer = planListQuery(
+        CLAIM_LIST_QUERY,
+        { clauses: [], sort: asked, base: CLAIM_PENDING_BASE },
+        nameSearchNormalizers,
+      )
+      expect(answer.orderBy).toMatchObject({ path: asked?.path, direction: asked?.direction })
+      expect(answer.sortFallback).toBeUndefined()
+    }
+  })
+
+  it('an Operation sort falls back to the claim time under a filter, and says so', () => {
+    const answer = planListQuery(
+      CLAIM_LIST_QUERY,
+      {
+        clauses: [{ field: 'orgId', op: 'equals', value: 'org-1' }],
+        sort: { path: 'kind', direction: 'asc' },
+        base: CLAIM_PENDING_BASE,
+      },
+      nameSearchNormalizers,
+    )
+    expect(answer.orderBy).toMatchObject({ path: 'createdAtMs', direction: 'asc' })
+    expect(answer.notices).toHaveLength(1)
   })
 })

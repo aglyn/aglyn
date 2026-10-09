@@ -27,7 +27,9 @@ import {
   EMAIL_DELIVERIES_COLLECTION,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { emailDeliveriesSort } from '../../../../utils/email-deliveries-list-query'
 import {
+  readStaffListQuery,
   STAFF_LIST_DEFAULT_PAGE,
   STAFF_LIST_MAX_PAGE,
 } from '../../../../utils/server/staff-list-query'
@@ -104,10 +106,13 @@ async function handler(request: Request): Promise<Response> {
       Number.isFinite(asked) && asked > 0
         ? Math.min(asked, STAFF_LIST_MAX_PAGE)
         : STAFF_LIST_DEFAULT_PAGE
+    const order = emailDeliveriesSort(readStaffListQuery(query ?? {})?.sort ?? null)
     let ref = db
       .collectionGroup(EMAIL_DELIVERY_MESSAGES_COLLECTION)
       .where('hostId', hostIds.length === 1 ? '==' : 'in', hostIds.length === 1 ? hostIds[0] : hostIds)
-      .orderBy('firstSeenAtMs', 'desc')
+      // The header's order, or newest first (AGL-3680): each has its
+      // collection-group composite beside the site scope.
+      .orderBy(order.path, order.direction)
     const cursor = String(query['cursor'] ?? '').trim()
     // A path, re-read as a snapshot: a value cursor would skip every message
     // sharing the last one's millisecond.

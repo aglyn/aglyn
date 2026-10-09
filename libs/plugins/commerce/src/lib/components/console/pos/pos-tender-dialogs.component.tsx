@@ -24,6 +24,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  List,
+  ListItemButton,
+  ListItemText,
   MenuItem,
   Stack,
   TextField,
@@ -36,7 +39,7 @@ import { loadStripe } from '@stripe/stripe-js/pure'
 import type { Stripe } from '@stripe/stripe-js'
 import { QRCodeSVG } from 'qrcode.react'
 import { useMemo, useState } from 'react'
-import { centsFromInput, usd } from './pos-api'
+import { centsFromInput, usd, type PosCreditAccount } from './pos-api'
 import { POS_TOUCH_PX } from './pos-product-grid.component'
 
 /*==========================================
@@ -353,5 +356,101 @@ function KeyedCardForm(props: { onClose: () => void; onConfirmed: () => void }) 
         </Button>
       </DialogActions>
     </>
+  )
+}
+
+/**
+ * Store credit another plugin keeps (AGL-3640) — a rewards balance, a friend's
+ * referral credit. The cashier finds the customer by email or code and takes
+ * from the account found, or applies a code the customer reads out. Which
+ * plugin answers is the provider's business; the register only shows its name
+ * and what the account can give.
+ */
+export function PosCreditDialog(props: {
+  open: boolean
+  label: string
+  canLookup: boolean
+  busy: boolean
+  onClose: () => void
+  onLookup: (query: string) => Promise<PosCreditAccount[] | null>
+  onApplyCode: (code: string) => void
+  onApplyAccount: (account: PosCreditAccount) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState<PosCreditAccount[] | null>(null)
+  const close = () => {
+    setQuery('')
+    setFound(null)
+    props.onClose()
+  }
+  const find = async () => {
+    if (!query.trim()) return
+    setFound(await props.onLookup(query.trim()))
+  }
+  return (
+    <Dialog open={props.open} onClose={close} maxWidth="xs" fullWidth>
+      <DialogTitle>{props.label}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField
+          label={props.canLookup ? 'Code or customer email' : 'Code'}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setFound(null)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && props.canLookup) void find()
+          }}
+          autoFocus
+          sx={{ mt: 1 }}
+          slotProps={{ htmlInput: { autoComplete: 'off', 'data-testid': 'pos-credit-query' } }}
+        />
+        {found && !found.length ? <Alert severity="info">{'No account matches.'}</Alert> : null}
+        {found?.length ? (
+          <List disablePadding>
+            {found.map((account) => (
+              <ListItemButton
+                key={account.reference}
+                disabled={props.busy || account.availableCents <= 0}
+                onClick={() => {
+                  props.onApplyAccount(account)
+                  setQuery('')
+                  setFound(null)
+                }}
+                divider
+                sx={{ minHeight: POS_TOUCH_PX }}
+              >
+                <ListItemText
+                  primary={`${account.label}${account.last4 ? ` •• ${account.last4}` : ''} · ${usd(account.availableCents)} available`}
+                  secondary={account.detail}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        ) : null}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={close} sx={{ minHeight: POS_TOUCH_PX }}>
+          {'Cancel'}
+        </Button>
+        {props.canLookup ? (
+          <Button disabled={props.busy || !query.trim()} onClick={() => void find()} sx={{ minHeight: POS_TOUCH_PX }}>
+            {'Find'}
+          </Button>
+        ) : null}
+        <Button
+          variant="contained"
+          disabled={props.busy || !query.trim() || query.includes('@')}
+          onClick={() => {
+            props.onApplyCode(query.trim())
+            setQuery('')
+            setFound(null)
+          }}
+          sx={{ minHeight: POS_TOUCH_PX }}
+        >
+          {'Apply code'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }

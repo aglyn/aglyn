@@ -576,6 +576,17 @@ A zone that names a country **hides the rest-of-world zone for it** — so a
 "Europe" zone with no rates on it refuses Europe even when a `*` zone exists.
 Cover a destination by pricing a rate on the zone that claims it.
 
+## Pickup and local delivery {#pickup-and-local-delivery}
+
+Buyers can choose to **pick up** an order at one of your locations, or have
+**your own driver deliver it**, instead of shipping. Pickup is turned on per
+location, with its hours and arrival instructions; local delivery has zones by
+postal code, each with a fee, a minimum order and a free-over amount, and the
+delivery times buyers book at the cart. The **Pickup & delivery** card on the
+Orders page lists what to prepare, what is waiting to be collected and what is
+out for delivery, and the buyer is emailed at each step. See
+[Pickup & local delivery](./pickup-and-local-delivery.md).
+
 ## Dropshipping
 
 Assign a **supplier** to a product and paid orders route automatically —

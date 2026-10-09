@@ -23,6 +23,7 @@ import type {
 } from '@aglyn/aglyn/server'
 import { saleProcessingCostCents } from '@aglyn/aglyn/server'
 import { posOrderHandler } from './pos-order'
+import { withPosKioskPrincipal } from './pos-kiosk-principal'
 import { defaultPosOpsDeps, mintPosAssertion } from './pos-ops-gate'
 
 /**
@@ -2739,5 +2740,69 @@ describe('register modifiers are priced by the server (AGL-3607)', () => {
     expect(result.status).toBe(400)
     expect(String(result.body.error)).toContain(message)
     expect(orderDocs()).toHaveLength(0)
+  })
+})
+
+describe('a self-service kiosk opens a sale as the staff member who paired it (AGL-3623)', () => {
+  const principal = { uid: 'cashier-1', registerId: 'register-1', deviceId: 'device-hash-0001' }
+
+  async function postAsKiosk(body: Record<string, unknown>, who = principal) {
+    const { res, result } = makeResponse()
+    const req = makeRequest({ payment: 'open', ...body }, {})
+    delete (req.headers as Record<string, unknown>)['authorization']
+    await posOrderHandler(withPosKioskPrincipal(req, who), res)
+    return result
+  }
+
+  it('prices an open sale with no ID token, stamped as the kiosk\'s', async () => {
+    const result = await postAsKiosk({})
+    expect(result.status).toBe(200)
+    expect(mockVerifyIdToken).not.toHaveBeenCalled()
+    expect(orderDocs()[0]).toMatchObject({
+      status: 'pending',
+      cashierId: 'cashier-1',
+      posSource: 'kiosk',
+      kioskDeviceId: 'device-hash-0001',
+      payments: [],
+    })
+    expect(orderDocs()[0]?.totals?.totalCents).toBe(400)
+  })
+
+  it.each([
+    ['a cash tender', { payment: 'cash', cashReceivedCents: 500 }],
+    ['a discount', { discountPct: 10 }],
+    ['a coupon code', { couponCode: 'SAVE10' }],
+    ['a stay', { reservationId: 'stay-1' }],
+    ['a customer', { customer: { kind: 'contact', id: 'c-1', name: 'Ann' } }],
+    ['another register', { registerId: 'register-2' }],
+  ])('refuses %s', async (_label, body) => {
+    const result = await postAsKiosk(body)
+    expect(result.status).toBe(400)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it("is refused once the pairing member's managePos is revoked", async () => {
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'editor',
+      isOwner: false,
+      permissions: { managePos: false },
+      orgWide: false,
+      hostRole: 'editor',
+    } as any)
+    expect((await postAsKiosk({})).status).toBe(403)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('is refused for a pairing member no longer on the site', async () => {
+    expect((await postAsKiosk({}, { ...principal, uid: 'former-staff' })).status).toBe(403)
+  })
+
+  it('cannot be claimed over HTTP: a body naming a kiosk is just an unauthenticated request', async () => {
+    const { res, result } = makeResponse()
+    const req = makeRequest({ payment: 'open', kiosk: principal, posKioskPrincipal: principal })
+    delete (req.headers as Record<string, unknown>)['authorization']
+    await posOrderHandler(req, res)
+    expect(result.status).toBe(401)
   })
 })

@@ -29,21 +29,6 @@ extension JSONValue {
     default: return .string(String(describing: value!))
     }
   }
-
-  public var boolValue: Bool? {
-    if case .bool(let value) = self { return value }
-    return nil
-  }
-
-  public var numberValue: Double? {
-    if case .number(let value) = self { return value }
-    return nil
-  }
-
-  public var arrayValue: [JSONValue]? {
-    if case .array(let value) = self { return value }
-    return nil
-  }
 }
 
 extension Optional where Wrapped == JSONValue {

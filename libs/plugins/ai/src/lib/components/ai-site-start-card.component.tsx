@@ -64,6 +64,8 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   MenuItem,
   Stack,
@@ -77,14 +79,26 @@ import {
 } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type SyntheticEvent,
+} from 'react'
 import {
   AI_JOB_AUTO_CONFIRM_INPUT,
   AI_SITE_FREE_PAGES,
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
+  aiFreeCreditsResetLabel,
   aiFreeSiteCreditEstimate,
+  aiFreeSiteShortfall,
+  aiFreeSiteShortfallText,
   aiSiteCreditEstimate,
+  type AiFreeCreditsLeft,
   aiSitePagesBand,
   type AiSiteSubmissions,
 } from '../model/ai-site-job'
@@ -128,7 +142,7 @@ const AI_SITE_KIND_ICONS: Record<string, string> = {
 import { AiJobFollow } from './ai-job-follow.component'
 import { AiModelSelector } from './ai-model-selector.component'
 import { useAiModelChoice } from './use-ai-model-choice'
-import { aiSiteBuildHref } from './ai-job-links'
+import { aiCreditsBillingHref, aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
 
 /**
@@ -157,6 +171,14 @@ import { publishAiJob } from './ai-jobs-store'
  * Before a job is started all three are the zone's own `startBlank`: the
  * starter site, and no job, no draft, no record of a site half begun. After,
  * they close through `leave`, and the job builds the site.
+ *
+ * Escape and the close control are DISMISSALS, though, and Skip is a choice
+ * (AGL-3660, 2026-10-08). Once anything is typed or picked, a dismissal asks
+ * "Leave without your answers?" first, focused on Keep editing, so a stray
+ * Escape — the second press after closing the model menu was the one in
+ * production — can never trade a brief for the starter. Escape that reached
+ * the dialog from a portal it does not contain (a menu, a select's list) is
+ * that popup's, and the dialog ignores it.
  *
  * The header is the dialog's own chrome rather than part of its body, so the
  * way out cannot be scrolled off, and it is never disabled — least of all
@@ -353,6 +375,14 @@ export function AiSiteStartCard({
   const [started, setStarted] = useState<AiJobSummary | null>(null)
   // The Free taste's page band (AGL-3594), read off the verdict request.
   const [freeTaste, setFreeTaste] = useState(false)
+  // What the Free workspace has left this month (AGL-3660), as the same read
+  // the create door refuses on: the less of its own band and its owner's
+  // allowance across their Free workspaces. `null` when the route said none.
+  const [freeCredits, setFreeCredits] = useState<AiFreeCreditsLeft | null>(null)
+  // "Leave without your answers?" (AGL-3660): a dismissal with a brief typed.
+  const [confirmingLeave, setConfirmingLeave] = useState(false)
+  // The dialog's own root, to tell its Escape from a nested popup's.
+  const dialogRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -367,6 +397,8 @@ export function AiSiteStartCard({
         if (active) {
           if (payload?.freeTaste === true) {
             setFreeTaste(true)
+            const credits = payload?.freeCredits as AiFreeCreditsLeft | undefined
+            if (credits && Number.isFinite(credits.left)) setFreeCredits(credits)
             // A reopened start keeps the pages it asked for, within the band.
             setAnswers((current) => ({
               ...current,
@@ -391,6 +423,9 @@ export function AiSiteStartCard({
     [],
   )
 
+  // A Free start what is left cannot pay for is not started (AGL-3660): the
+  // dialog says so before anything spends, and the create door refuses it too.
+  const shortfall = freeTaste ? aiFreeSiteShortfall(freeCredits, answers.pages) : null
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
   // On a paid plan the person picks the model that builds the site (AGL-3660),
@@ -406,7 +441,7 @@ export function AiSiteStartCard({
   const pickedModel = freeTaste ? null : modelChoice.model
 
   const plan = useCallback(async () => {
-    if (!orgId || aiSiteStartRefusal(answers, { freeTaste })) return
+    if (!orgId || aiSiteStartRefusal(answers, { freeTaste }) || shortfall) return
     setBusy(true)
     setNotice(null)
     try {
@@ -456,7 +491,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste, orgSlug, host, leave, router, pickedModel])
+  }, [orgId, hostId, answers, freeTaste, shortfall, orgSlug, host, leave, router, pickedModel])
 
   const chooseStarter = useCallback(() => {
     setStartingStarter(true)
@@ -474,6 +509,27 @@ export function AiSiteStartCard({
   // Before a job is started every way out is the blank site, which writes the
   // starter (AGL-3594); after, it only closes — the job builds the site.
   const exit = started ? (leave ?? startBlank) : startBlank
+  // Anything the person typed or picked, which a dismissal must not discard
+  // silently (AGL-3660). After a job starts there is nothing left to lose.
+  const drafted =
+    !started &&
+    Boolean(answers.siteType.trim() || answers.audience.trim() || answers.kind !== null)
+  // Escape and the close control: a dismissal, never a choice. Escape that
+  // bubbled here through React from a portal outside this dialog's own DOM is
+  // a nested menu's, already handled there, and is not this dialog's to act on.
+  const dismiss = (event?: SyntheticEvent | object, reason?: string) => {
+    if (reason === 'escapeKeyDown') {
+      const target = (event as SyntheticEvent | undefined)?.target
+      const root = dialogRef.current
+      if (root && target instanceof Node && !root.contains(target)) return
+    }
+    if (drafted) setConfirmingLeave(true)
+    else exit()
+  }
+  const leaveDraft = () => {
+    setConfirmingLeave(false)
+    exit()
+  }
 
   // The chosen model's cost against Auto's, as the model list states it.
   const modelMultiplier =
@@ -485,8 +541,12 @@ export function AiSiteStartCard({
           welcomeEmail: answers.welcomeEmail,
         }) * modelMultiplier,
       )
+  // A Free start quotes what is LEFT (AGL-3660), shared across the owner's
+  // Free workspaces — never the month's whole allowance as if none were spent.
   const estimateText = freeTaste
-    ? `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits your Free workspace has each month`
+    ? freeCredits
+      ? `Up to about ${estimate.toLocaleString('en-US')} AI credits. You have ${freeCredits.left.toLocaleString('en-US')} of your ${freeCredits.total.toLocaleString('en-US')} free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}`
+      : `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
     : `About ${estimate.toLocaleString('en-US')} credits, estimated`
 
   const choosing = step === 'choose' && !started
@@ -495,7 +555,8 @@ export function AiSiteStartCard({
     <Dialog
       open
       fullScreen
-      onClose={exit}
+      ref={dialogRef}
+      onClose={dismiss}
       aria-labelledby={TITLE_ID}
       // The console's own page surface, in both modes. A Dialog's paper sits
       // at elevation 24 by default, and in dark mode MUI lightens an elevated
@@ -520,7 +581,7 @@ export function AiSiteStartCard({
           <IconButton
             edge="start"
             color="inherit"
-            onClick={exit}
+            onClick={() => dismiss()}
             aria-label="Close the guided start"
           >
             <MdiIcon path={ICON_VARIANT_CLOSE.path} />
@@ -564,6 +625,23 @@ export function AiSiteStartCard({
               </Typography>
             </Stack>
             {notice && <Alert severity="info">{notice}</Alert>}
+            {step === 'describe' && !started && shortfall && freeCredits && (
+              <Alert
+                severity="warning"
+                action={
+                  orgSlug ? (
+                    <Button color="inherit" size="small" href={aiCreditsBillingHref(orgSlug)}>
+                      {'Upgrade'}
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {aiFreeSiteShortfallText(shortfall, freeCredits.resetsOn)}
+                {answers.pages > 1 && !aiFreeSiteShortfall(freeCredits, 1)
+                  ? ' Or choose 1 page, which what you have left covers.'
+                  : null}
+              </Alert>
+            )}
             {choosing ? (
               <Box
                 sx={{
@@ -765,7 +843,7 @@ export function AiSiteStartCard({
           <Button
             variant="contained"
             size="large"
-            disabled={busy || Boolean(refusal)}
+            disabled={busy || Boolean(refusal) || Boolean(shortfall)}
             onClick={plan}
             startIcon={<MdiIcon path={mdiCreation.path} />}
           >
@@ -773,6 +851,28 @@ export function AiSiteStartCard({
           </Button>
         </DialogActions>
       )}
+      <Dialog
+        open={confirmingLeave}
+        onClose={() => setConfirmingLeave(false)}
+        aria-labelledby={`${TITLE_ID}-leave`}
+        aria-describedby={`${TITLE_ID}-leave-text`}
+        maxWidth="xs"
+      >
+        <DialogTitle id={`${TITLE_ID}-leave`}>{'Leave without your answers?'}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id={`${TITLE_ID}-leave-text`}>
+            {'What you typed is not saved. Leaving starts your site from the starter site instead.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={leaveDraft}>
+            {'Leave and start blank'}
+          </Button>
+          <Button variant="contained" autoFocus onClick={() => setConfirmingLeave(false)}>
+            {'Keep editing'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   )
 }

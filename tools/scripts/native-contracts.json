@@ -148,7 +148,10 @@
         "SUBMISSION_LIST_QUERY",
         "FORM_SCOPED_SUBMISSION_LIST_QUERY",
         "ORG_SUBMISSION_LIST_QUERY",
+        "SITE_MEMBER_LIST_QUERY",
+        "LEAD_LIST_QUERY",
         "SUBMISSION_READ_OPTIONS",
+        "LEAD_SOURCE_OPTIONS",
         "SUBMISSION_FILTER_HEADERS"
       ]
     },
@@ -305,6 +308,261 @@
         "TENANT_EMAILS",
         "TENANT_EMAIL_COLLECTION"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts": {
+      "types": [
+        "PosOfflineSaleLine",
+        "PosOfflineSaleCustomer",
+        "PosOfflineSale",
+        "PosOfflineFlag",
+        "PosOfflineStockConflict",
+        "PosOfflineOrderStamp",
+        "PosOfflineRefusal",
+        "PosOfflineOutcomeStatus",
+        "PosOfflineSaleOutcome",
+        "PosOfflineSyncRequest",
+        "PosOfflineSyncResponse",
+        "PosOfflineKitRegister",
+        "PosOfflineKit"
+      ],
+      "values": [
+        "POS_OFFLINE_SYNC_ROUTE",
+        "POS_OFFLINE_SYNC_BATCH_MAX",
+        "POS_OFFLINE_SALE_MAX_LINES",
+        "POS_OFFLINE_LATE_SYNC_MS",
+        "POS_OFFLINE_MAX_AGE_MS",
+        "POS_OFFLINE_CLOCK_SKEW_MS",
+        "POS_OFFLINE_DISABLED_TENDERS",
+        "POS_OFFLINE_FLAG_LABELS"
+      ]
+    },
+    "libs/plugins/inbox/src/lib/model/reply-policy.ts": {
+      "values": [
+        "REPLY_SUBJECT_MAX",
+        "REPLY_BODY_MAX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/crm.ts": {
+      "types": [
+        "CrmDealStage",
+        "CrmForecastCategory"
+      ],
+      "values": [
+        "CONTACT_LIFECYCLE_STAGE_LABELS",
+        "DEFAULT_DEAL_STAGES",
+        "CRM_TASK_KIND_LABELS",
+        "CRM_ACTIVITY_KIND_LABELS",
+        "CRM_ACTIVITY_DIRECTION_LABELS",
+        "CRM_FIELD_OBJECT_LABELS",
+        "CRM_LEAD_STATUS_LABELS",
+        "CRM_ACTIVITIES_PER_RECORD_CEILING",
+        "CRM_EMAIL_SUBJECT_MAX",
+        "CRM_EMAIL_BODY_MAX"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
+      "values": [
+        "CONTACT_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/company-filters.ts": {
+      "values": [
+        "COMPANY_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/constants/deal-filters.ts": {
+      "values": [
+        "DEAL_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/lead-filters.ts": {
+      "values": [
+        "LEAD_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/task-views.ts": {
+      "values": [
+        "TASK_LIST_DECLARATION"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/crm-reports.ts": {
+      "values": [
+        "CRM_REPORT_PERIOD_LABELS"
+      ]
+    },
+    "libs/plugins/crm/src/lib/model/native-vocabulary.ts": {
+      "types": [
+        "NativeCrmPicklist"
+      ],
+      "values": [
+        "NATIVE_CRM_LEAD_STATUSES",
+        "NATIVE_CRM_LEAD_OPEN_STATUSES",
+        "NATIVE_CONTACT_LIFECYCLE_STAGES",
+        "NATIVE_CRM_TASK_KINDS",
+        "NATIVE_CRM_FIELD_OBJECTS",
+        "NATIVE_CRM_REPORT_PERIODS",
+        "NATIVE_CRM_ACTIVITY_DIRECTIONS",
+        "NATIVE_CRM_PICKLISTS",
+        "NATIVE_CRM_ACTIVITY_KINDS"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/native-vocabulary.ts": {
+      "values": [
+        "NATIVE_SITE_EMAILS_QUERY",
+        "NATIVE_SITE_CAMPAIGNS_QUERY",
+        "NATIVE_CAMPAIGN_SEND_STATUSES"
+      ]
+    },
+    "libs/plugins/email/src/lib/constants/list-queries.ts": {
+      "values": [
+        "EMAIL_LIST_QUERY",
+        "LIST_MEMBER_QUERY",
+        "EMAIL_TEMPLATE_QUERY",
+        "SUPPRESSION_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/campaign-list-query.ts": {
+      "values": [
+        "CAMPAIGN_EMAILS_QUERY"
+      ]
+    },
+    "libs/plugins/marketing/src/lib/model/experiment-list-query.ts": {
+      "values": [
+        "EXPERIMENT_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/sequence-list-query.ts": {
+      "values": [
+        "OUTREACH_SEQUENCE_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts": {
+      "values": [
+        "OUTREACH_ENROLLMENT_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts": {
+      "values": [
+        "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/model/outreach.types.ts": {
+      "values": [
+        "OUTREACH_MAX_STEPS",
+        "OUTREACH_MAX_EMAIL_STEPS",
+        "OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS",
+        "OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS",
+        "OUTREACH_DEFAULT_ALLOWED_COUNTRIES"
+      ]
+    },
+    "libs/plugins/outreach/src/lib/engine/sequence-validation.ts": {
+      "values": [
+        "OUTREACH_SEQUENCE_NAME_MAX",
+        "OUTREACH_TASK_TITLE_MAX"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts": {
+      "types": [
+        "OrderFulfillmentMethod",
+        "OrderPickupStatus",
+        "OrderLocalDeliveryStatus",
+        "OrderPickup",
+        "OrderLocalDelivery",
+        "OrderFulfillmentKey",
+        "PickupLocationSettings"
+      ],
+      "values": [
+        "ORDER_PICKUP_STATUS_LABELS",
+        "ORDER_LOCAL_DELIVERY_STATUS_LABELS",
+        "ORDER_FULFILLMENT_METHOD_LABELS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts": {
+      "types": [
+        "LocalFulfillmentQueueTab"
+      ],
+      "values": [
+        "LOCAL_FULFILLMENT_QUEUE_TABS",
+        "LOCAL_FULFILLMENT_OPEN_STATUSES",
+        "LOCAL_FULFILLMENT_QUEUE_LIMIT",
+        "LOCAL_FULFILLMENT_QUEUE_FIELDS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-pos-kiosk.ts": {
+      "types": [
+        "PosDeviceMode",
+        "PosKioskProduct",
+        "PosKioskVariant",
+        "PosKioskCategory",
+        "PosKioskCatalog",
+        "PosKioskContext",
+        "PosKioskLine",
+        "PosKioskSaleLine",
+        "PosKioskSaleStatus",
+        "PosKioskSale"
+      ],
+      "values": [
+        "POS_KIOSK_IDLE_SECONDS_DEFAULT",
+        "POS_KIOSK_IDLE_SECONDS_MIN",
+        "POS_KIOSK_IDLE_SECONDS_MAX",
+        "POS_KIOSK_IDLE_WARNING_SECONDS",
+        "POS_KIOSK_DONE_SECONDS",
+        "POS_KIOSK_MAX_LINES",
+        "POS_KIOSK_MAX_QUANTITY",
+        "POS_KIOSK_CATALOG_LIMIT",
+        "POS_KIOSK_UNLOCK_MAX_ATTEMPTS",
+        "POS_KIOSK_UNLOCK_LOCKOUT_MS",
+        "POS_KIOSK_UNLOCK_TTL_MS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/site-journey-steps.ts": {
+      "types": [
+        "SiteJourneyStepType"
+      ],
+      "values": [
+        "SITE_JOURNEY_KEY_MAX"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnels.types.ts": {
+      "types": [
+        "FunnelPageMatch",
+        "FunnelStep",
+        "FunnelDefinition",
+        "FunnelStepResult",
+        "FunnelSourceResult",
+        "FunnelResult"
+      ],
+      "values": [
+        "FUNNEL_FEATURE",
+        "FUNNEL_MIN_STEPS",
+        "FUNNEL_MAX_STEPS",
+        "FUNNELS_MAX_PER_SITE",
+        "FUNNEL_NAME_MAX",
+        "FUNNEL_LABEL_MAX",
+        "FUNNEL_MAX_RANGE_DAYS"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnel-definition.ts": {
+      "values": [
+        "FUNNEL_STEP_TYPE_LABELS",
+        "FUNNEL_EMAIL_KEY_LABELS"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/funnel-inventory.ts": {
+      "types": [
+        "FunnelInventory",
+        "FunnelInventoryItem"
+      ]
+    },
+    "libs/plugins/funnels/src/lib/model/drop-off.ts": {
+      "types": [
+        "DropOffAction"
+      ],
+      "values": [
+        "DROP_OFF_WAIT_HOURS",
+        "DROP_OFF_MAX_HOURS",
+        "DROP_OFF_WATCHES_MAX"
+      ]
     }
   },
   "ints": [
@@ -325,7 +583,29 @@
     "EventStoredFields.endsAtMs",
     "DeviceSplitEntry.count",
     "DeviceSplitEntry.percent",
-    "ScreenTrafficRow.total"
+    "ScreenTrafficRow.total",
+    "PosKioskContext.idleSeconds",
+    "PosKioskLine.quantity",
+    "PosKioskSale.discountCents",
+    "PosKioskSale.dueCents",
+    "PosKioskSale.itemsCents",
+    "PosKioskSale.number",
+    "PosKioskSale.paidCents",
+    "PosKioskSale.taxCents",
+    "PosKioskSale.tipCents",
+    "PosKioskSale.totalCents",
+    "PosKioskSaleLine.amountCents",
+    "PosKioskSaleLine.quantity",
+    "PosKioskVariant.priceCents",
+    "FunnelStepResult.index",
+    "FunnelStepResult.visitors",
+    "FunnelStepResult.dropOff",
+    "FunnelSourceResult.entered",
+    "FunnelSourceResult.completed",
+    "FunnelResult.entered",
+    "FunnelResult.completed",
+    "FunnelResult.journeysRead",
+    "FunnelResult.computedAt"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -341,7 +621,15 @@
     "OrderTotals",
     "HostProduct",
     "ProductVariant",
-    "TenantEmailEntry"
+    "TenantEmailEntry",
+    "OrderPickup",
+    "OrderLocalDelivery",
+    "PickupLocationSettings",
+    "PosKioskProduct.description",
+    "PosKioskProduct.imageUrl",
+    "PosKioskLine.variantId",
+    "PosKioskLine.modifiers",
+    "PosKioskSaleLine.variantLabel"
   ],
   "listQueryCases": {
     "ORDER_LIST_QUERY": {},
@@ -2194,6 +2482,51 @@
       "args": [
         [
           {
+            "Full Name": "Ada Lovelace",
+            "Email Address": "ada@example.com",
+            "message": "Hi"
+          }
+        ],
+        [
+          {
+            "first_name": "Grace",
+            "email": "grace@example.com"
+          }
+        ],
+        [
+          {
+            "email": "only@example.com"
+          }
+        ],
+        [
+          {
+            "Your Name": "  ",
+            "name": "Alan",
+            "E-mail": "x"
+          }
+        ],
+        [
+          {
+            "name": [
+              "Ada",
+              "L"
+            ],
+            "email": 42
+          }
+        ],
+        [
+          {
+            "message": "no sender"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ],
+        [
+          {
             "name": "Priya Shah",
             "email": "priya@example.com",
             "message": "Hi"
@@ -2213,11 +2546,6 @@
         ],
         [
           {
-            "message": "no sender"
-          }
-        ],
-        [
-          {
             "name": "  ",
             "email": "x@example.com"
           }
@@ -2230,9 +2558,6 @@
               "b@example.com"
             ]
           }
-        ],
-        [
-          null
         ]
       ]
     },
@@ -5534,6 +5859,2899 @@
         ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "submissionSender": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "args": [
+        [
+          {
+            "name": "Ada Lovelace",
+            "email": "ada@example.com"
+          }
+        ],
+        [
+          {
+            "email": "priya@lumen.co"
+          }
+        ],
+        [
+          {},
+          "Contact form"
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "name": "cher"
+          }
+        ],
+        [
+          {
+            "name": "Jean-Luc Picard"
+          }
+        ]
+      ]
+    },
+    "routingChips": {
+      "module": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "dataset": {
+              "id": "d",
+              "name": "Leads",
+              "recordId": "r"
+            }
+          }
+        ],
+        [
+          {
+            "dataset": {
+              "id": "d",
+              "recordId": "r"
+            }
+          }
+        ],
+        [
+          {
+            "datasetRefused": {
+              "name": "Leads",
+              "errors": {
+                "a": "Email is not valid",
+                "b": "Phone is too long"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "datasetRefused": {}
+          }
+        ]
+      ]
+    },
+    "defaultReplySubject": {
+      "module": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
+      "args": [
+        [
+          "Lumen Studio",
+          "Contact"
+        ],
+        [
+          null,
+          "Contact"
+        ],
+        [
+          "",
+          ""
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          null
+        ]
+      ]
+    },
+    "consentGroupForHost": {
+      "module": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "args": [
+        [
+          null,
+          "h1"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h1"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h3"
+        ],
+        [
+          {
+            "hosts": {
+              "h1": true,
+              "h2": true,
+              "h3": true,
+              "h4": true
+            },
+            "consentGroups": {
+              "brand": {
+                "name": "Brand",
+                "hostIds": [
+                  "h2",
+                  "h1"
+                ]
+              },
+              "solo": {
+                "name": "Solo",
+                "hostIds": [
+                  "h3"
+                ]
+              },
+              "bad": {
+                "hostIds": [
+                  "h4",
+                  "h5"
+                ]
+              }
+            }
+          },
+          "h4"
+        ],
+        [
+          {
+            "consentGroups": {
+              "a": {
+                "name": "A",
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
+              },
+              "b": {
+                "name": "B",
+                "hostIds": [
+                  "h2",
+                  "h3"
+                ]
+              }
+            }
+          },
+          "h1"
+        ],
+        [
+          {
+            "consentGroups": {
+              "h1": {
+                "name": "X",
+                "hostIds": [
+                  "h1",
+                  "h2"
+                ]
+              }
+            }
+          },
+          "h2"
+        ]
+      ]
+    },
+    "crmScopeTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null,
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "org"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "crm": {
+              "defaultRecordScope": "host"
+            }
+          },
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "defaultResourceScope": "org"
+          },
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmReadTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "hostId": "h1",
+            "groupId": "h1",
+            "name": null,
+            "hostIds": [
+              "h1"
+            ],
+            "declared": false,
+            "awaitsConfirmation": false
+          }
+        ],
+        [
+          {
+            "hostId": "h1",
+            "groupId": "brand",
+            "name": "Brand",
+            "hostIds": [
+              "h1",
+              "h2"
+            ],
+            "declared": true,
+            "awaitsConfirmation": false
+          }
+        ]
+      ]
+    },
+    "crmFieldListFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "key": "shoe_size",
+            "label": "Shoe size",
+            "required": true,
+            "object": "contact"
+          }
+        ],
+        [
+          {
+            "key": "tier",
+            "label": "Tier",
+            "object": "company"
+          }
+        ],
+        [
+          {
+            "key": "a.b-c",
+            "label": ""
+          }
+        ]
+      ]
+    },
+    "pipelineTotals": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "args": [
+        [
+          [
+            {
+              "status": "open",
+              "stageId": "s1",
+              "amountCents": 1000
+            },
+            {
+              "status": "open",
+              "stageId": "s2",
+              "amountCents": 2001,
+              "probability": 75
+            },
+            {
+              "status": "won",
+              "stageId": "won",
+              "amountCents": 500
+            },
+            {
+              "status": "open",
+              "stageId": "gone",
+              "amountCents": 300
+            },
+            {
+              "status": "open",
+              "stageId": "s2"
+            }
+          ],
+          {
+            "stages": [
+              {
+                "id": "s1",
+                "name": "One",
+                "order": 0,
+                "probability": 10,
+                "kind": "open"
+              },
+              {
+                "id": "s2",
+                "name": "Two",
+                "order": 1,
+                "probability": 50,
+                "kind": "open"
+              },
+              {
+                "id": "won",
+                "name": "Won",
+                "order": 2,
+                "probability": 100,
+                "kind": "won"
+              }
+            ]
+          }
+        ],
+        [
+          [],
+          {
+            "stages": [
+              {
+                "id": "s1",
+                "name": "One",
+                "order": 0,
+                "probability": 10,
+                "kind": "open"
+              },
+              {
+                "id": "s2",
+                "name": "Two",
+                "order": 1,
+                "probability": 50,
+                "kind": "open"
+              },
+              {
+                "id": "won",
+                "name": "Won",
+                "order": 2,
+                "probability": 100,
+                "kind": "won"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "leadFunnel": {
+      "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "args": [
+        [
+          [
+            {
+              "status": "new"
+            },
+            {
+              "status": "working"
+            },
+            {
+              "status": "unqualified",
+              "unqualifiedReason": "Too small"
+            },
+            {
+              "status": "unqualified",
+              "unqualifiedReason": "too  small"
+            },
+            {
+              "status": "unqualified"
+            },
+            {
+              "status": "bogus"
+            },
+            {
+              "status": "qualified"
+            }
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "campaignSendDisplay": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "draft"
+          }
+        ],
+        [
+          {
+            "status": "scheduled",
+            "staffReview": {
+              "state": "held"
+            }
+          }
+        ],
+        [
+          {
+            "status": "scheduled"
+          }
+        ],
+        [
+          {
+            "status": "scheduled",
+            "stats": {
+              "sent": 1200,
+              "audienceSize": 5000
+            },
+            "resume": {
+              "remaining": 3800,
+              "batch": 2,
+              "nextAtMs": 1790000000000
+            }
+          }
+        ],
+        [
+          {
+            "status": "canceled",
+            "stats": {
+              "sent": 10,
+              "audienceSize": 40
+            },
+            "resume": {
+              "remaining": 30
+            }
+          }
+        ],
+        [
+          {
+            "status": "failed",
+            "stats": {
+              "sent": 10
+            },
+            "resume": {
+              "remaining": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "sent",
+            "stats": {
+              "sent": 2400,
+              "audienceSize": 2400
+            },
+            "resume": {
+              "batch": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "sent",
+            "stats": {
+              "sent": 12
+            }
+          }
+        ],
+        [
+          {
+            "status": "sending"
+          }
+        ]
+      ]
+    },
+    "campaignReport": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "sent": 1000,
+            "recipients": 1100,
+            "delivered": 980,
+            "opens": 700,
+            "uniqueOpens": 420,
+            "clicks": 90,
+            "uniqueClicks": 60,
+            "bounced": 20,
+            "complained": 1,
+            "unsubscribes": 4,
+            "clickTracked": true,
+            "audienceSize": 1200,
+            "consented": 1150,
+            "suppressed": 30,
+            "deferred": 5
+          }
+        ],
+        [
+          {
+            "sent": 50,
+            "recipients": 50,
+            "opens": 3,
+            "audienceSizeTruncated": true
+          }
+        ]
+      ]
+    },
+    "sendLinkReport": {
+      "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://x.test/b",
+                "clicks": 3
+              },
+              "b": {
+                "url": "https://x.test/a",
+                "clicks": 3
+              },
+              "c": {
+                "url": "https://x.test/c",
+                "clicks": 10
+              }
+            },
+            "overflowClicks": 2,
+            "unattributedClicks": 1
+          }
+        ]
+      ]
+    },
+    "emailDesignStarterNodes": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "args": [
+        [
+          {
+            "sectionId": "section-1",
+            "textId": "text-1"
+          }
+        ]
+      ]
+    },
+    "emailDesignDocuments": {
+      "module": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "args": [
+        [
+          {
+            "screenId": "screen-1",
+            "versionId": "version-1",
+            "displayName": "Untitled email",
+            "nodes": {
+              "a": {
+                "$id": "a"
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "validateExperiment": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          {
+            "name": "",
+            "status": "draft",
+            "target": "screen",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "section",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "autoWinner": {
+              "minExposures": 0,
+              "confidence": 0.95
+            }
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "autoWinner": {
+              "minExposures": 200,
+              "confidence": 1
+            }
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "email",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Hero",
+            "status": "draft",
+            "target": "screen",
+            "screenId": "s1",
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "experimentResultRows": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ]
+          },
+          {}
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              }
+            ],
+            "winnerVariantId": "b"
+          },
+          {
+            "a": {
+              "exposures": 1000,
+              "conversions": 50
+            },
+            "b": {
+              "exposures": 1000,
+              "conversions": 80
+            }
+          }
+        ],
+        [
+          {
+            "variants": [
+              {
+                "id": "a",
+                "name": "A (control)",
+                "weight": 1
+              },
+              {
+                "id": "b",
+                "name": "B",
+                "weight": 1
+              },
+              {
+                "id": "c",
+                "name": "C"
+              }
+            ]
+          },
+          {
+            "a": {
+              "exposures": 10,
+              "conversions": 0
+            },
+            "b": {
+              "exposures": 10,
+              "conversions": 1
+            },
+            "c": {
+              "exposures": 0
+            }
+          }
+        ]
+      ]
+    },
+    "describeVariantComparison": {
+      "module": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "lift": 0.6,
+            "confidence": 0.987
+          }
+        ],
+        [
+          {
+            "lift": null,
+            "confidence": null
+          }
+        ],
+        [
+          {
+            "lift": -0.125,
+            "confidence": 0.2
+          }
+        ]
+      ]
+    },
+    "validateOutreachSequence": {
+      "module": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
+      "args": [
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t0",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t2",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t3",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t4",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t5",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t6",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t7",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "t8",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s3",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s4",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s5",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 31,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 3,
+                "subject": "",
+                "replyInThread": false,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": "tpl"
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "",
+                "templateId": "tpl"
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "fax",
+                "title": "Call",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+                "delayBusinessDays": 1
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "t1",
+                "kind": "task",
+                "taskKind": "call",
+                "title": "Call",
+                "delayBusinessDays": 1
+              },
+              {
+                "id": "s2",
+                "kind": "email",
+                "delayBusinessDays": 0,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ],
+        [
+          {
+            "name": "Intro",
+            "mailboxId": "mb1",
+            "steps": [
+              {
+                "id": "s1",
+                "kind": "email",
+                "delayBusinessDays": 1.5,
+                "subject": "Hello",
+                "replyInThread": true,
+                "body": "Hi {{enrollment.personalLine}}",
+                "templateId": null
+              }
+            ],
+            "settings": {
+              "window": null,
+              "allowedCountries": [
+                "US"
+              ],
+              "allowCustomers": false,
+              "trackClicks": true,
+              "countOpens": false,
+              "listUnsubscribe": true
+            }
+          }
+        ]
+      ]
+    },
+    "posOfflineSaleTotals": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              },
+              {
+                "unitAmountCents": 2500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 10,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1200,
+                "quantity": 2
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": true
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 999,
+                "quantity": 3
+              }
+            ],
+            "discountPct": 12.5,
+            "tax": {
+              "pct": 7.25,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 500,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 100,
+            "tax": {
+              "pct": 8,
+              "pricesIncludeTax": false
+            }
+          }
+        ],
+        [
+          {
+            "lines": [
+              {
+                "unitAmountCents": 1999,
+                "quantity": 1
+              }
+            ],
+            "discountPct": 0,
+            "tax": {
+              "pct": null,
+              "pricesIncludeTax": false
+            }
+          }
+        ]
+      ]
+    },
+    "posOfflineChangeCents": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          4763,
+          5000
+        ],
+        [
+          4763,
+          4763
+        ],
+        [
+          4763,
+          4000
+        ]
+      ]
+    },
+    "posOfflineSaleKeyIsValid": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          "off8f2f9807c22c4fe3b1ed9042c497949d"
+        ],
+        [
+          "short"
+        ],
+        [
+          "../orders/abcdefghijklmnop"
+        ],
+        [
+          "__abcdefghijklmnop__"
+        ]
+      ]
+    },
+    "posOfflineSoldAt": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
+      "args": [
+        [
+          1799999000000,
+          1800000000000
+        ],
+        [
+          1800000300000,
+          1800000000000
+        ],
+        [
+          1800001000000,
+          1800000000000
+        ],
+        [
+          1797000000000,
+          1800000000000
+        ]
+      ]
+    },
+    "canTransitionPickup": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ],
+        [
+          "preparing",
+          "ready",
+          "picked_up"
+        ]
+      ]
+    },
+    "canTransitionLocalDelivery": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "argsProduct": [
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ],
+        [
+          "scheduled",
+          "out_for_delivery",
+          "delivered",
+          "failed"
+        ]
+      ]
+    },
+    "orderLocalFulfillmentListFields": {
+      "module": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
+      "args": [
+        [
+          {
+            "fulfillmentMethod": "pickup",
+            "pickup": {
+              "locationId": "loc1",
+              "locationName": "Main",
+              "status": "ready"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "local_delivery",
+            "localDelivery": {
+              "zoneId": "z",
+              "zoneName": "Z",
+              "feeCents": 500,
+              "windowStartMs": 5000,
+              "windowEndMs": 9000,
+              "status": "out_for_delivery"
+            },
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {
+            "fulfillmentMethod": "shipping",
+            "createdAtMs": 1000
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "localFulfillmentQueueQuery": {
+      "module": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "args": [
+        [
+          "pickup_ready"
+        ],
+        [
+          "delivery_scheduled",
+          "loc1"
+        ]
+      ]
+    },
+    "funnelStepTitle": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "args": [
+        [
+          {
+            "type": "page",
+            "key": "/pricing",
+            "match": "exact"
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/blog",
+            "match": "prefix"
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/pricing",
+            "match": "exact",
+            "label": "Pricing page"
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "cart",
+            "key": "p9"
+          }
+        ],
+        [
+          {
+            "type": "order",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "overlay",
+            "key": ""
+          }
+        ],
+        [
+          {
+            "type": "event",
+            "key": "sign_up"
+          }
+        ],
+        [
+          {
+            "type": "email",
+            "key": "opened"
+          }
+        ],
+        [
+          {
+            "type": "email",
+            "key": "clicked"
+          }
+        ]
+      ]
+    },
+    "waitLabel": {
+      "module": "libs/plugins/funnels/src/lib/model/drop-off.ts",
+      "args": [
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          24
+        ],
+        [
+          48
+        ],
+        [
+          72
+        ],
+        [
+          168
+        ],
+        [
+          36
+        ]
+      ]
+    },
+    "formatShare": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          0.5
+        ],
+        [
+          0.3333
+        ],
+        [
+          0.12345
+        ],
+        [
+          0.0004
+        ]
+      ]
+    },
+    "formatDuration": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-format.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          0
+        ],
+        [
+          999
+        ],
+        [
+          45000
+        ],
+        [
+          59600
+        ],
+        [
+          60000
+        ],
+        [
+          185000
+        ],
+        [
+          3600000
+        ],
+        [
+          7800000
+        ],
+        [
+          172800000
+        ],
+        [
+          190000000
+        ]
+      ]
+    },
+    "normalizeFunnelDefinition": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
+      "args": [
+        [
+          {
+            "name": "Signup",
+            "steps": [
+              {
+                "type": "page",
+                "key": "pricing/?x=1#h",
+                "match": "prefix"
+              },
+              {
+                "type": "form",
+                "key": "f1",
+                "label": "Contact"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "  ",
+            "steps": []
+          }
+        ],
+        [
+          {
+            "name": "One",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Many",
+            "steps": [
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              },
+              {
+                "type": "order"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "No type",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "key": "x"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "No path",
+            "steps": [
+              {
+                "type": "page",
+                "key": ""
+              },
+              {
+                "type": "order"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Email",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "email",
+                "key": "bounced"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Email ok",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "email",
+                "key": "opened"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Event",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "event",
+                "key": "Bad Name"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Event ok",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "event",
+                "key": "sign_up",
+                "label": "Signed up"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Order key dropped",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "order",
+                "key": "zzz"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Cart needs one",
+            "steps": [
+              {
+                "type": "page",
+                "key": "/a"
+              },
+              {
+                "type": "cart"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Dup slashes",
+            "steps": [
+              {
+                "type": "page",
+                "key": "//a//b//"
+              },
+              {
+                "type": "booking",
+                "key": "s1"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "stepInventoryProblem": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "args": [
+        [
+          {
+            "type": "page",
+            "key": "/about",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/nope",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/blog",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/shop",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/",
+            "match": "prefix"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f2"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": ""
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": "s9"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "cart",
+            "key": "p1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "overlay",
+            "key": "o1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "event",
+            "key": "sign_up"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "order",
+            "key": ""
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "labelStepFromInventory": {
+      "module": "libs/plugins/funnels/src/lib/model/funnel-inventory.ts",
+      "args": [
+        [
+          {
+            "type": "form",
+            "key": "f1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "f1",
+            "label": "Mine"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "form",
+            "key": "zz"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "booking",
+            "key": "s1"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "type": "page",
+            "key": "/about",
+            "match": "exact"
+          },
+          {
+            "pages": [
+              "/",
+              "/about",
+              "/blog/post"
+            ],
+            "forms": [
+              {
+                "id": "f1",
+                "name": "Contact"
+              }
+            ],
+            "services": [
+              {
+                "id": "s1",
+                "name": "Intro call"
+              }
+            ],
+            "products": [],
+            "overlays": [
+              {
+                "id": "o1",
+                "name": "Promo"
+              }
+            ]
+          }
         ]
       ]
     }

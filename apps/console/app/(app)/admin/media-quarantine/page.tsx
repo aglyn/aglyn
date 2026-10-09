@@ -79,6 +79,8 @@ import {
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -107,6 +109,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffRole } from '../../../../hooks/use-is-staff'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
+  DENY_COLUMN_SORTS,
   DENY_FILTER_FIELDS,
   DENY_FILTER_HEADERS,
   DENY_FILTER_OPTIONS,
@@ -259,12 +262,21 @@ function AdminMediaQuarantine() {
       ),
     [enqueueSnackbar],
   )
+  // Every header sorts, on the route over the whole list (AGL-3680, 4s).
+  const [denySort, setDenySort] = useState<ListQuerySort | null>(null)
   const denyList = useStaffListQuery<DenyListRow>({
     endpoint: '/api/admin/media-quarantine',
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: denySort,
     params: DENY_LIST_PARAMS,
     onError: onDenyListError,
+  })
+  const denyColumnSort = useListColumnSort<DenyListRow>({
+    sorts: DENY_COLUMN_SORTS,
+    sort: denySort,
+    onSortChange: setDenySort,
+    rows: denyList.rows,
   })
   const { refresh: refreshDenyList } = denyList
 
@@ -1025,10 +1037,13 @@ function AdminMediaQuarantine() {
                       clauses={gridFilter.clauses}
                       onChange={gridFilter.setClauses}
                     />
-                    <ListQueryNotices refused={denyRefusals} notices={denyList.notices} />
+                    <ListQueryNotices
+                      refused={denyRefusals}
+                      notices={[...denyList.notices, ...denyColumnSort.notices]}
+                    />
                     <ListTable
                       aria-label="The whole deny list"
-                      rows={denyList.rows}
+                      rows={denyColumnSort.rows}
                       columns={denyColumns}
                       loading={denyList.loading}
                       filterMode="server"
@@ -1039,10 +1054,10 @@ function AdminMediaQuarantine() {
                       // its key.
                       getRowHeight={() => 'auto'}
                       // The route answers one page at a time; the footer
-                      // below walks the pages, and a header sort would order
-                      // only one.
+                      // below walks the pages. A header sort is the ROUTE's,
+                      // over every entry before the page (`DENY_SORT_COLUMNS`).
                       hideFooter
-                      disableColumnSorting
+                      columnSort={denyColumnSort}
                       initialState={{
                         columns: { columnVisibilityModel: DENY_HIDDEN_COLUMNS },
                       }}

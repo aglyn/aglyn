@@ -37,6 +37,8 @@ import {
 import {
   ERASURE_LIST_QUERY,
   splitErasureStateClauses,
+  ERASURE_COLUMN_SORTS,
+  erasureQuerySort,
 } from '../utils/pending-erasures-list-query'
 
 const INDEX_FILE = JSON.parse(
@@ -83,7 +85,7 @@ describe('every clause and the search word land on one query', () => {
       { path: 'erasureRequestedAt', op: '<=', value: new Date(NOW - HOLD) },
       { path: 'nameTokens', op: 'array-contains', value: 'acme' },
     ])
-    expect(answer.orderBy).toEqual({ path: 'erasureRequestedAt', direction: 'asc' })
+    expect(answer.orderBy).toMatchObject({ path: 'erasureRequestedAt', direction: 'asc' })
   })
 
   it('Holding is every request younger than the hold', () => {
@@ -113,5 +115,14 @@ describe('every clause and the search word land on one query', () => {
     const { split, answer } = plan([{ field: 'due', op: 'isAnyOf', value: 'due,holding' }])
     expect(split.refused).toHaveLength(1)
     expect(answer.filters).toEqual([])
+  })
+})
+
+describe('the header sorts (AGL-3680)', () => {
+  it('Requested, Hold expires and State all order the queue by the request time', () => {
+    for (const sort of ERASURE_COLUMN_SORTS) {
+      expect(erasureQuerySort(sort)?.path).toBe('erasureRequestedAt')
+      expect(erasureQuerySort(sort)?.direction).toBe(sort.direction)
+    }
   })
 })

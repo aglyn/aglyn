@@ -21,6 +21,7 @@ import { contrastRatio, validateThemeForPublish } from '@aglyn/aglyn/app-utils/s
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { AI_SITE_FONT_PAIRINGS, AI_SITE_KINDS, aiSiteKind, aiSiteKindFor } from './ai-site-kinds'
 import {
+  AI_SITE_DISPLAY_BOOST,
   AI_SITE_LOOK_DIMENSIONS,
   aiReadSiteLook,
   aiSiteLookSignature,
@@ -28,7 +29,12 @@ import {
   aiSiteSeed,
   aiSiteStyleFor,
   aiSiteTheme,
+  AI_SITE_ACCENT_CLASH_DEGREES,
+  aiHexOklch,
+  aiHueGap,
+  aiSiteColors,
   type AiSiteLookAnswer,
+  type AiSiteStyle,
 } from './ai-site-look'
 
 const kind = (id: string) => aiSiteKind(id) as NonNullable<ReturnType<typeof aiSiteKind>>
@@ -77,6 +83,39 @@ describe('site looks (AGL-3660)', () => {
         // Not the starter's colors: the fallback is only for a theme that would not read.
         expect(theme.colorSchemes?.light?.primary?.main).not.toBe(DEFAULT_SITE_THEME.colorSchemes?.light?.primary?.main)
       }
+    }
+  })
+
+  it('fills every base’s buttons from the brand hue, never an accent that clashes with it (AGL-3660)', () => {
+    // The live Juniper Clay look: green brand, magenta accent, neutral chroma, on Cupertino.
+    const juniper = {
+      v: 1, kind: 'portfolio', base: 'cupertino', seed: 2047654009, hue: 131, accent: 323, chroma: 'neutral', ground: 'white',
+      fonts: 'inter', corners: 'sharp', buttons: 'square', cards: 'outlined', fields: 'outlined', eyebrow: 'caps', header: 'flat',
+      headerAlign: 'center', rhythm: 'bold', headingScale: 1.26, density: 'airy', brand: null,
+    } as unknown as AiSiteStyle
+    const styles: AiSiteStyle[] = [juniper]
+    for (const entry of AI_SITE_KINDS) {
+      for (let n = 0; n < 8; n += 1) styles.push(aiSiteStyleFor({ kind: entry, answer: {}, seed: aiSiteSeed(`${entry.id}-buttons-${n}`) }))
+    }
+    const near = (hex: string | undefined, h: number) => {
+      const color = aiHexOklch(String(hex))
+      return color.C < 0.02 || aiHueGap(color.h, h) <= AI_SITE_ACCENT_CLASH_DEGREES
+    }
+    for (const style of styles) {
+      const h = style.brand ? aiHexOklch(style.brand).h : style.hue
+      const colors = aiSiteColors(style)
+      for (const scheme of ['light', 'dark'] as const) {
+        const c = colors[scheme]
+        const at = `${style.kind}/${style.base} seed ${style.seed} ${scheme}`
+        // Cupertino's outlined button: the primary's dark words on its tint.
+        expect([at, (contrastRatio(c.primary?.dark, c.tint?.primary) ?? 0) >= 4.5]).toEqual([at, true])
+        // Material 3's secondary button: the text color on the secondary tint.
+        expect([at, (contrastRatio(c.text?.primary, c.tint?.secondary) ?? 0) >= 4.5]).toEqual([at, true])
+        // Every fill a button takes sits near the brand hue, or is near gray.
+        for (const fill of [c.tint?.primary, c.tint?.secondary, c.secondary?.main]) expect([at, fill, near(fill, h)]).toEqual([at, fill, true])
+      }
+      // The compiler's button on a brand band stands apart from the band.
+      expect([style.kind, style.seed, (contrastRatio(colors.light.secondary?.main, colors.light.primary?.main) ?? 0) >= 3]).toEqual([style.kind, style.seed, true])
     }
   })
 
@@ -182,6 +221,22 @@ describe('site looks (AGL-3660)', () => {
     expect(JSON.stringify(theme.components)).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i)
   })
 
+  it('sets a designer kind’s display line and title larger, and a business site’s as before (AGL-3660)', () => {
+    const size = (id: string, variant: 'displayXl' | 'h1' | 'h2') => {
+      // One style but its kind, so only the kind's boost differs.
+      const style = { ...aiSiteStyleFor({ kind: kind('business'), answer: {}, seed: 5 }), kind: id, fonts: 'inter', headingScale: 1.2 }
+      return parseFloat(String(aiSiteTheme(style, DEFAULT_SITE_THEME).typography?.variants?.[variant]?.fontSize))
+    }
+    expect(Object.keys(AI_SITE_DISPLAY_BOOST).sort()).toEqual(['blog', 'photography', 'portfolio', 'studio'])
+    // 4rem at a 1.2 heading scale with the display share of 1.2: 4.96rem.
+    expect(size('business', 'displayXl')).toBeCloseTo(4.96, 2)
+    expect(size('portfolio', 'displayXl')).toBeCloseTo(4.96 * 1.25, 2)
+    expect(size('studio', 'displayXl')).toBeCloseTo(4.96 * 1.3, 2)
+    expect(size('portfolio', 'h1')).toBeCloseTo(size('business', 'h1') * 1.1, 2)
+    // Nothing under the page title moves.
+    expect(size('portfolio', 'h2')).toBe(size('business', 'h2'))
+  })
+
   it('keeps what a base theme sets beyond the look', () => {
     const base = {
       ...DEFAULT_SITE_THEME,
@@ -205,6 +260,11 @@ describe('site looks (AGL-3660)', () => {
     expect(aiSiteKindFor('a family law firm').id).toBe('professional')
     expect(aiSiteKindFor('a counselor for teens').id).toBe('wellness')
     expect(aiSiteKindFor('my food blog').id).toBe('blog')
+    // "Personal" is an adjective here, not a resume (the live paid blog start of 2026-10-08).
+    expect(aiSiteKindFor('Slow Roads, a personal travel blog about long train journeys through Europe, written by one person').id).toBe('blog')
+    expect(aiSiteKindFor('my personal website').id).toBe('personal')
+    expect(aiSiteKindFor('my resume').id).toBe('personal')
+    expect(aiSiteKindFor('An independent illustrator and designer: a portfolio of editorial illustrations and brand work').id).toBe('portfolio')
     expect(aiSiteKindFor('something else entirely').id).toBe('business')
     // The briefs the live eval runs (AGL-3660).
     expect(aiSiteKindFor('a yoga studio with drop-in classes').id).toBe('yoga')

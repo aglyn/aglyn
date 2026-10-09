@@ -535,7 +535,7 @@ describe('the cart’s offers (AGL-3635)', () => {
     seedStore(null, {})
     const { res, result } = makeResponse()
     await cartExtrasHandler(getRequest(), res)
-    expect(result).toEqual({ status: 200, body: { extras: [] } })
+    expect(result).toEqual({ status: 200, body: { extras: [], credits: [] } })
   })
 
   it('shows each offer for the visitor’s basket, without its quote id', async () => {
@@ -555,6 +555,8 @@ describe('the cart’s offers (AGL-3635)', () => {
             defaultSelected: true,
           },
         ],
+        // No store-credit provider is registered here (AGL-3640).
+        credits: [],
       },
     })
   })
@@ -564,10 +566,10 @@ describe('the cart’s offers (AGL-3635)', () => {
     offerProtection()
     const digital = makeResponse()
     await cartExtrasHandler(getRequest(), digital.res)
-    expect(digital.result.body).toEqual({ extras: [] })
+    expect(digital.result.body).toEqual({ extras: [], credits: [] })
     const none = makeResponse()
     await cartExtrasHandler(getRequest(false), none.res)
-    expect(none.result.body).toEqual({ extras: [] })
+    expect(none.result.body).toEqual({ extras: [], credits: [] })
     expect(asked).toHaveLength(0)
   })
 })

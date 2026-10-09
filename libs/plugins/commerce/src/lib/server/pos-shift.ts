@@ -179,6 +179,12 @@ export async function handlePosShift(
           openedAtMs: now,
           openingFloatCents: float,
           cashEvents: [],
+          // Null until the close: the history orders by each (AGL-3680).
+          closedAtMs: null,
+          countedCashCents: null,
+          expectedCashCents: null,
+          varianceCents: null,
+          netSalesCents: null,
         }
         transaction.create(shiftRef, shift)
         transaction.update(register.ref, { openShiftId: shiftRef.id })
@@ -317,6 +323,7 @@ export async function handlePosShift(
           countedCashCents: counted,
           expectedCashCents: report.expectedCashCents,
           varianceCents: posCashVarianceCents(counted, report.expectedCashCents),
+          netSalesCents: report.netSalesCents,
           report,
           ...(note ? { closingNote: note } : {}),
         }

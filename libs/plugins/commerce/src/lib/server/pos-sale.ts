@@ -114,6 +114,8 @@ export function posSaleSummary(order: PosLiftedOrder) {
         ? { checkoutUrl: payment.checkoutUrl }
         : {}),
       ...(payment.readerId ? { readerId: payment.readerId } : {}),
+      // What a store-credit payment's provider calls it (AGL-3640).
+      ...(payment.creditLabel ? { creditLabel: payment.creditLabel } : {}),
       ...(payment.failureMessage ? { failureMessage: payment.failureMessage } : {}),
       ...(payment.livemode != null ? { livemode: payment.livemode } : {}),
     })),
@@ -335,6 +337,11 @@ export interface PosSaleCompletedEvent {
   hostId: string
   orderId: string
   order: CommerceModel.HostOrder
+  /**
+   * Rung while the register was offline and synced later (AGL-3625): the
+   * customer has already left, so nothing at the counter should react now.
+   */
+  offline?: boolean
 }
 
 export type PosSaleCompletedListener = (event: PosSaleCompletedEvent) => void | Promise<void>

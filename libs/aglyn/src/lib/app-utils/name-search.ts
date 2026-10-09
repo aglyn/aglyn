@@ -79,9 +79,15 @@ export function nameSearchTokens(name: string | null | undefined): string[] {
   const tokens = new Set<string>()
   for (const word of key.split(' ')) {
     if (!word) continue
-    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    // Walked by CODEPOINT, never by UTF-16 unit (AGL-3689, 2026-10-08). The
+    // first unit of an emoji is a lone surrogate, which is not valid UTF-8,
+    // and Firestore refuses the whole write with `3 INVALID_ARGUMENT` — a
+    // site named "Nova Library. 📚" was created and then failed its member
+    // projections, so its owner got a 500 for a site that existed. Identical
+    // to the unit walk for every BMP name, so no stored token moves.
+    const capped = [...word].slice(0, NAME_TOKEN_MAX_PREFIX)
     for (let end = 1; end <= capped.length; end += 1) {
-      tokens.add(capped.slice(0, end))
+      tokens.add(capped.slice(0, end).join(''))
       if (tokens.size >= NAME_TOKEN_LIMIT) return [...tokens]
     }
   }
@@ -101,7 +107,9 @@ export function nameSearchTokens(name: string | null | undefined): string[] {
 export function nameSearchToken(query: string | null | undefined): string {
   const key = nameSearchKey(query)
   if (!key) return ''
-  return (key.split(' ')[0] ?? '').slice(0, NAME_TOKEN_MAX_PREFIX)
+  // By codepoint, as the tokens were written: a query is capped where a
+  // stored token was, or it would ask for one that was never stored.
+  return [...(key.split(' ')[0] ?? '')].slice(0, NAME_TOKEN_MAX_PREFIX).join('')
 }
 
 /**

@@ -514,6 +514,193 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
   },
   {
+    "key": "order-ready-for-pickup",
+    "name": "Order ready for pickup",
+    "description": "Tells the buyer their pickup order is ready, where to collect it, the pickup hours and any arrival instructions.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Your order {{order.number}} is ready for pickup",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "order.summary",
+        "description": "The ordered items, one per line",
+        "sample": "2× House Blend"
+      },
+      {
+        "name": "pickup.location",
+        "description": "The pickup location’s name and address",
+        "sample": "Main Street shop, 12 Main St, Springfield"
+      },
+      {
+        "name": "pickup.hours",
+        "description": "The location’s pickup hours; empty when it lists none",
+        "sample": "Pickup hours:\nMo-Fr 09:00-17:00"
+      },
+      {
+        "name": "pickup.instructions",
+        "description": "What to do on arrival, as the store wrote it; empty when it wrote none",
+        "sample": "Ring the bell at the side door."
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your order is ready for pickup",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Order {{order.number}} is ready at {{pickup.location}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{order.summary}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{pickup.hours}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{pickup.instructions}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Bring your order number, {{order.number}}.",
+        "variant": "caption"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "order-picked-up",
+    "name": "Order picked up",
+    "description": "Confirms to the buyer that their pickup order was collected.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "You picked up order {{order.number}}",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "order.summary",
+        "description": "The ordered items, one per line",
+        "sample": "2× House Blend"
+      },
+      {
+        "name": "pickup.location",
+        "description": "The pickup location’s name and address",
+        "sample": "Main Street shop, 12 Main St, Springfield"
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Thanks for picking up your order",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Order {{order.number}} was picked up from {{pickup.location}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{order.summary}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "If something is missing or not right, reply to this email or contact {{host.businessName}}.",
+        "variant": "caption"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
+    "key": "order-out-for-delivery",
+    "name": "Order out for delivery",
+    "description": "Tells the buyer the store’s own driver is on the way with their local delivery, in the window they booked.",
+    "pluginId": "commerce",
+    "plugin": "Commerce",
+    "control": "besigner",
+    "defaultSubject": "Your order {{order.number}} is out for delivery",
+    "mergeTokens": [
+      {
+        "name": "order.number",
+        "description": "The order number, as the store shows it",
+        "sample": "#1042"
+      },
+      {
+        "name": "order.summary",
+        "description": "The ordered items, one per line",
+        "sample": "2× House Blend"
+      },
+      {
+        "name": "delivery.window",
+        "description": "The delivery window the buyer booked",
+        "sample": "Tue, Oct 14, 9:00 AM – 12:00 PM"
+      },
+      {
+        "name": "order.statusUrl",
+        "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+        "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your order is on its way",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{host.businessName}} is out delivering order {{order.number}}. Your window: {{delivery.window}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{order.summary}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "View your order",
+        "href": "{{order.statusUrl}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}."
+  },
+  {
     "key": "sale-notification",
     "name": "New sale",
     "description": "Notifies the seller when an order is placed.",
@@ -1223,5 +1410,237 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "control": "external",
     "authoredIn": "the workflow that sends it",
     "footerReason": "You’re receiving this because you’re in touch with {{host.businessName}}."
+  },
+  {
+    "key": "loyalty-points-earned",
+    "name": "Rewards points earned",
+    "description": "Tells a customer the points an order earned them, their balance and their rewards code.",
+    "pluginId": "loyalty",
+    "plugin": "Rewards",
+    "control": "besigner",
+    "defaultSubject": "You earned {{loyalty.points}} points",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The member's name, when the store knows it",
+        "sample": "Alex"
+      },
+      {
+        "name": "loyalty.balance",
+        "description": "Points the member holds now",
+        "sample": "1,250"
+      },
+      {
+        "name": "loyalty.value",
+        "description": "What those points are worth",
+        "sample": "$12.50"
+      },
+      {
+        "name": "loyalty.credit",
+        "description": "Store credit the member holds",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.code",
+        "description": "The member’s rewards code, to spend their balance",
+        "sample": "RW-7K3P-Q9XZ-2M4D"
+      },
+      {
+        "name": "loyalty.referral",
+        "description": "A sentence with the member’s referral code and what it gives; empty when referrals are off",
+        "sample": "Share your referral code RF-7K3P9X: a friend gets $10.00 off their first order, and you get $10.00 in store credit."
+      },
+      {
+        "name": "loyalty.points",
+        "description": "Points this order earned",
+        "sample": "45"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "You earned {{loyalty.points}} points",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Thanks for your order with {{host.businessName}}.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "{{loyalty.referral}}",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Shop {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because you earned rewards with an order from {{host.businessName}}."
+  },
+  {
+    "key": "loyalty-store-credit",
+    "name": "Store credit given",
+    "description": "Tells a customer the store gave them store credit, with their rewards code to spend it.",
+    "pluginId": "loyalty",
+    "plugin": "Rewards",
+    "control": "besigner",
+    "defaultSubject": "You have {{loyalty.amount}} in store credit",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The member's name, when the store knows it",
+        "sample": "Alex"
+      },
+      {
+        "name": "loyalty.balance",
+        "description": "Points the member holds now",
+        "sample": "1,250"
+      },
+      {
+        "name": "loyalty.value",
+        "description": "What those points are worth",
+        "sample": "$12.50"
+      },
+      {
+        "name": "loyalty.credit",
+        "description": "Store credit the member holds",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.code",
+        "description": "The member’s rewards code, to spend their balance",
+        "sample": "RW-7K3P-Q9XZ-2M4D"
+      },
+      {
+        "name": "loyalty.referral",
+        "description": "A sentence with the member’s referral code and what it gives; empty when referrals are off",
+        "sample": "Share your referral code RF-7K3P9X: a friend gets $10.00 off their first order, and you get $10.00 in store credit."
+      },
+      {
+        "name": "loyalty.amount",
+        "description": "The credit given",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.note",
+        "description": "The note the store wrote; empty when none",
+        "sample": "Sorry about the delay!"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "You have {{loyalty.amount}} in store credit",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "{{loyalty.note}}",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Shop {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because {{host.businessName}} gave you store credit."
+  },
+  {
+    "key": "loyalty-referral-reward",
+    "name": "Referral reward",
+    "description": "Tells a customer a friend’s first order earned them store credit.",
+    "pluginId": "loyalty",
+    "plugin": "Rewards",
+    "control": "besigner",
+    "defaultSubject": "A friend’s first order earned you {{loyalty.amount}}",
+    "mergeTokens": [
+      {
+        "name": "name",
+        "description": "The member's name, when the store knows it",
+        "sample": "Alex"
+      },
+      {
+        "name": "loyalty.balance",
+        "description": "Points the member holds now",
+        "sample": "1,250"
+      },
+      {
+        "name": "loyalty.value",
+        "description": "What those points are worth",
+        "sample": "$12.50"
+      },
+      {
+        "name": "loyalty.credit",
+        "description": "Store credit the member holds",
+        "sample": "$10.00"
+      },
+      {
+        "name": "loyalty.code",
+        "description": "The member’s rewards code, to spend their balance",
+        "sample": "RW-7K3P-Q9XZ-2M4D"
+      },
+      {
+        "name": "loyalty.referral",
+        "description": "A sentence with the member’s referral code and what it gives; empty when referrals are off",
+        "sample": "Share your referral code RF-7K3P9X: a friend gets $10.00 off their first order, and you get $10.00 in store credit."
+      },
+      {
+        "name": "loyalty.amount",
+        "description": "The reward",
+        "sample": "$10.00"
+      }
+    ],
+    "defaultBody": [
+      {
+        "block": "text",
+        "text": "Your referral paid off",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "A friend used your referral code at {{host.businessName}}, so you have {{loyalty.amount}} more in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
+        "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "variant": "body"
+      },
+      {
+        "block": "button",
+        "label": "Shop {{host.businessName}}",
+        "href": "{{host.url}}"
+      }
+    ],
+    "footerReason": "You’re receiving this because a friend used your referral code at {{host.businessName}}."
   }
 ]

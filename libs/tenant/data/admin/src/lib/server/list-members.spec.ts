@@ -42,6 +42,7 @@ const MEMBERS_PATH = `${LIST_PATH}/members`
 const EMAIL = 'priya@lumen.co'
 
 let store: Record<string, Record<string, any>> = {}
+const CREATED = { seconds: 1_700_000_000, nanoseconds: 0 }
 
 const snapshotFor = (path: string) => ({
   id: path.slice(path.lastIndexOf('/') + 1),
@@ -51,6 +52,10 @@ const snapshotFor = (path: string) => ({
   },
   get: (field: string) => store[path]?.[field],
   data: () => store[path],
+  // The instant a legacy row's create time stands for, when it lacks `addedAt`.
+  get createTime() {
+    return store[path] !== undefined ? CREATED : undefined
+  },
   get ref() {
     return docHandle(path)
   },
@@ -446,5 +451,33 @@ describe('the keys the membership table queries', () => {
     await enroll({ via: 'rule', marketingConsent: true })
     await enroll({ marketingConsent: true })
     expect(theRow()?.via).toBe('rule')
+  })
+  /*
+   * The table orders its query by Name and Joined (AGL-3680), and `orderBy`
+   * drops a row that lacks the field — so both are on every row written.
+   */
+  it('stamps a null name on a row written without one', async () => {
+    await enroll({ marketingConsent: true })
+    expect(theRow()).toHaveProperty('name', null)
+    expect(theRow()?.addedAt).toBeDefined()
+  })
+
+  it('never clears a stored name when a re-enrollment names nobody', async () => {
+    await enroll({ name: 'Priya Raman', marketingConsent: true })
+    await enroll({ marketingConsent: true })
+    expect(theRow()?.name).toBe('Priya Raman')
+  })
+
+  it('dates a legacy row that predates `addedAt` by its create time', async () => {
+    store[`${MEMBERS_PATH}/${KEY}`] = { email: EMAIL, via: 'manual' }
+    await enroll({ marketingConsent: true })
+    expect(theRow()?.addedAt).toBe(CREATED)
+  })
+
+  it('never moves a stored `addedAt`', async () => {
+    const joined = { seconds: 1_600_000_000, nanoseconds: 0 }
+    store[`${MEMBERS_PATH}/${KEY}`] = { email: EMAIL, via: 'manual', addedAt: joined }
+    await enroll({ marketingConsent: true })
+    expect(theRow()?.addedAt).toBe(joined)
   })
 })

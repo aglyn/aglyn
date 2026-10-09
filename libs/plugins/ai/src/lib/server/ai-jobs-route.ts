@@ -42,6 +42,7 @@ import {
   runAiJobStep,
 } from '../jobs/ai-jobs'
 import { releaseAssistMessage } from '../usage/assist-usage'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
 import { withoutErasedSites } from './ai-jobs-live-sites'
@@ -341,12 +342,20 @@ export async function GET(request: Request): Promise<Response> {
       ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
     }),
   )
+  const freeTaste = resolveEffectivePlan(gate.org as never) === 'free'
+  // What the Free workspace has left this month (AGL-3660): the less of its
+  // own band and its owner's allowance across their Free workspaces, which is
+  // what the steps' reservations refuse at — never the 300 a month starts with.
+  const freeCredits = freeTaste
+    ? await readFreeAiCreditsLeft(gate.firestore, { orgId: gate.orgId, org: gate.org as object | null, now })
+    : null
   return Response.json(
     {
       jobs: jobs.map((job) => aiJobSummary(job, now)),
       // Whether the workspace spends the Free taste (AGL-3594), so the guided
       // start offers the Free page band from the request it already makes.
-      freeTaste: resolveEffectivePlan(gate.org as never) === 'free',
+      freeTaste,
+      ...(freeCredits ? { freeCredits } : {}),
     },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )

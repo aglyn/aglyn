@@ -1619,6 +1619,12 @@ describe('hosts', () => {
       // short PIN's hash to crack offline, a write plants a PIN or lifts a
       // lockout. Named here for the `registers` reason above.
       'posStaffPins',
+      // The offline register's sync record (AGL-3625), created with the order
+      // it names by /api/commerce/pos-offline-sync. A client delete would let
+      // one offline cash sale record a second order; a client create would
+      // block a real sale from syncing. Named here for the `registers` reason
+      // above.
+      'posOfflineSales',
       // A site's shopping-channel feeds and connections (AGL-3637). A feed
       // document holds the token that is the catalog feed's only lock, and a
       // connection a sealed channel OAuth token; only the sales-channels
@@ -7387,6 +7393,34 @@ describe("the deliverability store is server-written: staff read the platform ha
         blocked: 0,
       }),
     )
+  })
+})
+
+describe("the stock photo search cache is the server's alone (AGL-3660)", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'stockPhotoSearches', 'k1'), {
+        photos: [{ provider: 'pixabay', id: '1' }],
+        expiresAt: new Date(Date.now() + 86_400_000),
+      })
+    })
+  })
+
+  it('nobody reads or writes it from a client, staff included', async () => {
+    const principals = [
+      ['the owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['super staff', authed(STAFF, { staff: true, staffRole: 'super' })],
+      ['anonymous', anon()],
+    ]
+    for (const [who, db] of principals) {
+      await mustDeny(`${who} reading a cached search`, getDoc(doc(db, 'stockPhotoSearches', 'k1')))
+      // A client that could write an entry could hand every site build the photo of its choosing.
+      await mustDeny(
+        `${who} planting a search answer`,
+        setDoc(doc(db, 'stockPhotoSearches', 'k2'), { photos: [{ provider: 'pixabay', id: '2' }] }),
+      )
+    }
   })
 })
 
@@ -13688,6 +13722,66 @@ describe('print-on-demand records are the server’s alone (AGL-3641)', () => {
         await mustDeny(`${who} creating ${name}`, setDoc(doc(db, name, `${HOST}__new`), { orgId: ORG, hostId: HOST }))
         await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
       }
+    }
+  })
+})
+
+describe('rewards records are the server’s alone (AGL-3640)', () => {
+  // A store's loyalty program, its members' points and store credit, the
+  // rewards codes that spend them, every movement, each sale's redemption and
+  // a friend's referral claim. Written and read through the Admin SDK by the
+  // loyalty plugin's routes and checkout-credit provider; the owner, an
+  // editor and staff are refused like everyone. A readable member would hand
+  // out a rewards code, which spends like a gift card.
+  const ORG_DOCS = [
+    ['loyaltyPrograms', HOST],
+    ['loyaltyMembers', `${HOST}__member-1`],
+    ['loyaltyCodes', `${HOST}__RW-AAAA-BBBB-CCCC`],
+    ['loyaltyLedger', `${HOST}__earn__order-1`],
+    ['loyaltyRedemptions', `${HOST}__order-1__member-1`],
+    ['loyaltyReferralClaims', `${HOST}__member-2`],
+    // A merchant's sealed Smile.io or Yotpo key, and a buyer's points on
+    // their way there (AGL-3677).
+    ['loyaltyConnections', HOST],
+    ['loyaltySync', `${HOST}__earn__order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, points: 100, creditCents: 500 })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { creditCents: 1_000_000 }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, name, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+
+  it('no client reaches a document nested beneath one, either', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      const nested = doc(db, 'orgs', ORG, 'loyaltyMembers', `${HOST}__member-1`, 'anything', 'x')
+      await mustDeny(`${who} reading beneath a member`, getDoc(nested))
+      await mustDeny(`${who} writing beneath a member`, setDoc(nested, { creditCents: 1 }))
     }
   })
 })

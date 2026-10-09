@@ -56,15 +56,62 @@ import type {
  */
 
 /** Oldest request first: the order the runner takes them in. */
-export const ERASURE_LIST_SORT: ListQuerySort = { path: 'erasureRequestedAt', direction: 'asc' }
+export const ERASURE_LIST_SORT: ListQuerySort = {
+  path: 'erasureRequestedAt',
+  direction: 'asc',
+  column: 'requestedAtMs',
+  label: 'Requested',
+}
+
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Requested, Hold expires and State are all the request time read three
+ * ways — the hold is one fixed length, and a request is due once it is that
+ * old — so each orders the QUERY by `erasureRequestedAt`. Newest first is
+ * `alone`: served with no search or Organization filter on, so it needs no
+ * composite beside the name tokens' one; a State filter is a range over the
+ * same field, which keeps either direction. Hold expires and State ask the
+ * route by their own names (`ERASURE_COLUMN_SORTS`) so each header shows its
+ * own arrow; `erasureQuerySort` turns them into the request-time order.
+ * Organization is a name the queue holds a few of: it sorts the page.
+ */
+const ERASURE_NEWEST_FIRST: ListQuerySort = {
+  path: 'erasureRequestedAt',
+  direction: 'desc',
+  column: 'requestedAtMs',
+  label: 'Requested',
+  alone: true,
+}
 
 /** What the plan serves: the organization's name, and the search over it. */
 export const ERASURE_LIST_QUERY: ListQueryDeclaration = {
   fields: [
     { column: 'name', kind: 'text', path: 'name', tokensPath: 'nameTokens', operators: ['contains'] },
   ],
-  sorts: [ERASURE_LIST_SORT],
+  sorts: [ERASURE_LIST_SORT, ERASURE_NEWEST_FIRST],
   search: { tokensPath: 'nameTokens' },
+}
+
+/** Every header order the card offers, as it asks the route (`sort=path:dir`). */
+export const ERASURE_COLUMN_SORTS: readonly ListQuerySort[] = [
+  ERASURE_LIST_SORT,
+  ERASURE_NEWEST_FIRST,
+  { path: 'holdExpiresAtMs', direction: 'asc', column: 'holdExpiresAtMs', label: 'Hold expires' },
+  { path: 'holdExpiresAtMs', direction: 'desc', column: 'holdExpiresAtMs', label: 'Hold expires' },
+  // Due sorts before Holding: the oldest requests first.
+  { path: 'due', direction: 'asc', column: 'due', label: 'State' },
+  { path: 'due', direction: 'desc', column: 'due', label: 'State' },
+]
+
+/**
+ * The request-time order a Hold expires or State header asks for: both run
+ * with the request time, so each is that order in the same direction. Any
+ * other order passes through for the plan to match.
+ */
+export function erasureQuerySort(sort: ListQuerySort | null): ListQuerySort | null {
+  if (!sort || (sort.path !== 'holdExpiresAtMs' && sort.path !== 'due')) return sort
+  return sort.direction === 'asc' ? ERASURE_LIST_SORT : ERASURE_NEWEST_FIRST
 }
 
 /** Due or Holding — a range over `erasureRequestedAt` at the hold. */

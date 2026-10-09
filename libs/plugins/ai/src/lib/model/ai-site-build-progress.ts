@@ -17,7 +17,8 @@
 
 import { aiJobConfirmingOwnPlan, aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
-import { aiBuildItemRows, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
+import { aiBuildItemRows, aiBuildOpNoun, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
+import { AI_JOB_PAUSED_NEXT_COPY, aiJobPausedTitle } from './ai-job-notice'
 import type { AiJobSummary } from './ai-jobs.types'
 
 /**
@@ -33,7 +34,11 @@ import type { AiJobSummary } from './ai-jobs.types'
  * Pure: no React, no request. The page and its spec read the same rows.
  */
 
-export type AiSiteBuildRowState = 'done' | 'active' | 'waiting' | 'failed' | 'skipped'
+/**
+ * `paused` (AGL-3660): the row a job the meter paused stopped at — not
+ * running, not failed, and carried on from by Resume.
+ */
+export type AiSiteBuildRowState = 'done' | 'active' | 'waiting' | 'failed' | 'skipped' | 'paused'
 
 export interface AiSiteBuildRow {
   id: string
@@ -91,6 +96,30 @@ const CREATION_ROWS: ReadonlyArray<{ kind: string; resource: string; label: (nam
  * the first page's.
  */
 export function aiSiteBuildRows(
+  job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'> &
+    Partial<Pick<AiJobSummary, 'items' | 'kind' | 'siteInputs' | 'sitePublish'>>,
+): AiSiteBuildRow[] {
+  const rows = aiSiteBuildRowsOf(job)
+  return job.status === 'needs_input' ? aiPausedRows(rows) : rows
+}
+
+/**
+ * A job the meter paused (AGL-3660) shows no spinner: the row it stopped at —
+ * one still marked running, else the first not yet built — reads `paused`,
+ * with no running clock and no "building now" hint, and every row after it
+ * keeps waiting.
+ */
+function aiPausedRows(rows: AiSiteBuildRow[]): AiSiteBuildRow[] {
+  const at = rows.findIndex((row) => row.state === 'active' || row.state === 'paused')
+  const index = at >= 0 ? at : rows.findIndex((row) => row.state === 'waiting')
+  return rows.map((row, position) => {
+    if (row.state === 'active' && position !== index) return { ...row, state: 'waiting', hint: null, startedAt: null }
+    if (position !== index) return row
+    return { ...row, state: 'paused', hint: null, startedAt: null }
+  })
+}
+
+function aiSiteBuildRowsOf(
   job: Pick<AiJobSummary, 'status' | 'steps' | 'plan' | 'outputs' | 'review'> &
     Partial<Pick<AiJobSummary, 'items' | 'kind' | 'siteInputs' | 'sitePublish'>>,
 ): AiSiteBuildRow[] {
@@ -160,7 +189,16 @@ export function aiSiteBuildRows(
   const planStep = job.steps.find((step) => step.name === 'plan')
   const planDone = planStep?.status === 'done' || Boolean(job.plan)
   const stopped = phase === 'failed' || phase === 'stopped'
-  const planState: AiSiteBuildRowState = planDone ? 'done' : stopped ? 'failed' : phase === 'working' ? 'active' : 'waiting'
+  const paused = job.status === 'needs_input'
+  const planState: AiSiteBuildRowState = planDone
+    ? 'done'
+    : paused
+      ? 'paused'
+      : stopped
+        ? 'failed'
+        : phase === 'working'
+          ? 'active'
+          : 'waiting'
   const rows: AiSiteBuildRow[] = [
     {
       id: 'plan',
@@ -229,7 +267,15 @@ export function aiSiteBuildRows(
     rows.push({
       id: stage.id,
       label: stage.label,
-      state: done ? 'done' : current && stopped ? 'failed' : current && phase === 'working' ? 'active' : 'waiting',
+      state: done
+        ? 'done'
+        : current && paused
+          ? 'paused'
+          : current && stopped
+            ? 'failed'
+            : current && phase === 'working'
+              ? 'active'
+              : 'waiting',
       ...(stage.sections?.length ? { sections: stage.sections } : {}),
     })
   }
@@ -293,7 +339,7 @@ function aiSitePublishRow(
 export function aiSiteBuildFraction(rows: readonly AiSiteBuildRow[]): number | null {
   if (rows.length < 2) return null
   const counted = rows.reduce(
-    (sum, row) => sum + (row.state === 'active' ? 0.5 : row.state === 'waiting' ? 0 : 1),
+    (sum, row) => sum + (row.state === 'active' ? 0.5 : row.state === 'waiting' || row.state === 'paused' ? 0 : 1),
     0,
   )
   return Math.min(1, counted / rows.length)
@@ -340,10 +386,19 @@ export interface AiJobPageCopy {
  * guided start — built drafts, and says that instead.
  */
 export function aiJobPageCopy(
-  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> & Partial<Pick<AiJobSummary, 'sitePublish' | 'items'>>,
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'review' | 'error'> &
+    Partial<Pick<AiJobSummary, 'sitePublish' | 'items' | 'outputs'>>,
   brand: string,
 ): AiJobPageCopy {
   const phase = aiSiteBuildPhase(job)
+  // Paused by the meter (AGL-3660): why, what is already built, and that it
+  // carries on — never "was not built", which read as a dead end.
+  if (job.status === 'needs_input') {
+    return {
+      heading: aiJobPausedTitle(job.kind),
+      lede: [job.error, aiJobBuiltSoFar(job), AI_JOB_PAUSED_NEXT_COPY].filter(Boolean).join(' '),
+    }
+  }
   // A build is what the person asked for, item by item (AGL-3616).
   if (job.kind === 'build') return aiBuildPageCopy(job, brand)
   const noun = job.kind === 'site' ? 'site' : aiJobKindNoun(job.kind)
@@ -399,6 +454,40 @@ export function aiJobPageCopy(
     heading: generic ? 'Your AI job stopped' : `Your ${noun} ${noun.endsWith('s') ? 'were' : 'was'} not built`,
     lede: why ?? (generic ? 'Something went wrong running this job.' : `Something went wrong building your ${noun}.`),
   }
+}
+
+const joinWords = (names: string[]): string =>
+  names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+
+/**
+ * What a job has already built, in a sentence (AGL-3660): its look, the header
+ * and footer, its form, its pages — from the item ledger where it has one,
+ * else from what it has reported as outputs. `null` when it has built nothing.
+ */
+export function aiJobBuiltSoFar(
+  job: Pick<AiJobSummary, 'kind'> & Partial<Pick<AiJobSummary, 'items' | 'outputs'>>,
+): string | null {
+  const built = (job.items ?? []).filter((row) => row.status === 'succeeded' || row.status === 'degraded')
+  const names: string[] = []
+  if (job.items?.length) {
+    for (const row of built) {
+      if (row.op === 'theme') names.push('your look')
+      else if (row.op === 'layout') names.push('the header and footer')
+      else if (row.op === 'form') names.push(`the form “${row.label}”`)
+      else if (row.op === 'page') names.push(`the page “${row.label}”`)
+      else if (row.op === 'email') names.push('your welcome email')
+      else names.push(`${aiBuildOpNoun(row.op).toLowerCase()} “${row.label}”`)
+    }
+  } else {
+    const outputs = job.outputs ?? []
+    const count = (resource: string) => outputs.filter((output) => output.resource === resource).length
+    if (count('theme')) names.push('your look')
+    if (count('layout')) names.push('the header and footer')
+    if (count('form')) names.push(count('form') === 1 ? 'the form' : `${count('form')} forms`)
+    const pages = count('screen')
+    if (pages) names.push(pages === 1 ? '1 page' : `${pages} pages`)
+  }
+  return names.length ? `Built so far: ${joinWords(names)}.` : null
 }
 
 /** A build's page heading and sentence (AGL-3616). */

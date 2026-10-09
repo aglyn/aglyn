@@ -20,6 +20,7 @@ import { collectionListUrl } from './collection-entries'
 import { ENTRY_PREVIEW_ROUTE_SEGMENT } from './entry-preview-link'
 import { LEAVING_NOTICE_ROUTE_SEGMENT } from './leaving-notice'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
+import { SCREEN_KIND_EMAIL } from './screen-kind'
 import {
   formatCollectionLinkValue,
   formatEntryLinkValue,
@@ -786,11 +787,7 @@ export function linkableScreenRoutes(
   return next
 }
 
-/**
- * `kind` of a besigner email document (AGL-395): a screen authored on the
- * Emails page and sent by a campaign, never served at a URL.
- */
-export const SCREEN_KIND_EMAIL = 'email'
+export { SCREEN_KIND_EMAIL } from './screen-kind'
 
 /**
  * `kind` of a collection ENTRY template (AGL-1400): a screen that composes

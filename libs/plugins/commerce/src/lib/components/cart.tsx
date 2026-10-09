@@ -52,6 +52,7 @@ import {
 import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 import { CheckoutReturnNotice } from './checkout-return-notice'
 import { CartExtras, useCartExtras } from './cart-extras'
+import { CartFulfillmentChoice, useCartFulfillment } from './cart-fulfillment'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
@@ -137,6 +138,8 @@ function CartLines(props: {
   const [email, setEmail] = useState('')
   const [optIn, setOptIn] = useState(false)
   const [giftCard, setGiftCard] = useState('')
+  // A rewards or referral code (AGL-3640), asked only where the store takes one.
+  const [creditCode, setCreditCode] = useState('')
   // Where the parcel is going (AGL-1721). Asked ONLY when the server says it
   // cannot price shipping without it — a merchant with one zone, one
   // rest-of-world zone, or no shipping at all never sees this field, which is
@@ -251,9 +254,11 @@ function CartLines(props: {
   // Optional lines another plugin offers (AGL-3635), asked while the cart is shown.
   const extras = useCartExtras(hostId, cartSignature)
   const extrasSignature = extras.chosenIds.join(',')
+  // Shipped, picked up, or the store's own delivery (AGL-3624).
+  const fulfillment = useCartFulfillment(hostId, cartSignature)
   useEffect(() => {
     attemptKey.current = ''
-  }, [cartSignature, email, coupon, giftCard, shipTo, shipPostal, extrasSignature])
+  }, [cartSignature, email, coupon, giftCard, creditCode, shipTo, shipPostal, extrasSignature, fulfillment.signature])
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -279,14 +284,17 @@ function CartLines(props: {
           ...(optIn ? { marketingOptIn: true } : {}),
           ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
           ...(giftCard.trim() ? { giftCardCode: giftCard.trim() } : {}),
+          ...(creditCode.trim() && extras.credits.length ? { creditCode: creditCode.trim() } : {}),
           // A request, never an instruction: the server resolves the rates
           // for this country AND restricts the session's collectable
           // addresses to it, so declaring one cannot buy a cheaper zone's
           // rate than the address the shopper then enters (AGL-1721).
-          ...(shipTo ? { shippingCountry: shipTo } : {}),
-          ...(shipPostal.trim() ? { shippingPostalCode: shipPostal.trim() } : {}),
+          ...(shipTo && !fulfillment.request ? { shippingCountry: shipTo } : {}),
+          ...(shipPostal.trim() && !fulfillment.request ? { shippingPostalCode: shipPostal.trim() } : {}),
           // Which offers, never their price: the server asks the provider again.
           ...(extras.chosenIds.length ? { extras: extras.chosenIds } : {}),
+          // Where and when, never the fee: the server decides it again.
+          ...(fulfillment.request ? { fulfillment: fulfillment.request } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -371,6 +379,14 @@ function CartLines(props: {
         setStatus('error')
         return
       }
+      // The pickup location or delivery time went away while the cart was
+      // open (AGL-3624): ask again and let the shopper choose.
+      if (payload?.fulfillmentChanged) {
+        fulfillment.reload()
+        setMessage(String(payload?.error ?? ''))
+        setStatus('error')
+        return
+      }
       if (isPaymentsNotConfigured(response.status)) {
         setMessage(storefrontPaymentsNotConfiguredText())
         setStatus('unconfigured')
@@ -403,7 +419,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload])
+  }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length, fulfillment.request, fulfillment.reload])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -505,8 +521,11 @@ function CartLines(props: {
         onToggle={extras.toggle}
         formatCents={usd}
       />
+      <CartFulfillmentChoice state={fulfillment} formatCents={usd} />
       <Typography variant="caption" color="text.secondary">
-        {'Shipping and taxes are calculated at checkout.'}
+        {fulfillment.method === 'shipping'
+          ? 'Shipping and taxes are calculated at checkout.'
+          : 'Taxes are calculated at checkout.'}
       </Typography>
       <TextField
         label="Email"
@@ -547,7 +566,18 @@ function CartLines(props: {
           />
         </>
       ) : null}
-      {shipCountries ? (
+      {extras.credits.length ? (
+        // Drawn wherever the store takes a code, coupon field or not: a
+        // member was emailed theirs and comes here to spend it (AGL-3640).
+        <TextField
+          label={`${extras.credits[0].label} code`}
+          value={creditCode}
+          onChange={(event) => setCreditCode(event.target.value)}
+          size="small"
+          slotProps={{ htmlInput: { 'data-testid': 'cart-credit-code' } }}
+        />
+      ) : null}
+      {shipCountries && fulfillment.method === 'shipping' ? (
         <TextField
           select
           label="Ship to"
@@ -563,7 +593,7 @@ function CartLines(props: {
           ))}
         </TextField>
       ) : null}
-      {askPostal ? (
+      {askPostal && fulfillment.method === 'shipping' ? (
         <TextField
           label="Postal code"
           value={shipPostal}
@@ -592,8 +622,10 @@ function CartLines(props: {
           // cannot succeed (AGL-2019).
           status === 'unconfigured' ||
           // Asked but unanswered: the server would only refuse again.
-          (shipCountries !== null && !shipTo) ||
-          (askPostal && !shipPostal.trim())
+          (fulfillment.method === 'shipping' && shipCountries !== null && !shipTo) ||
+          (fulfillment.method === 'shipping' && askPostal && !shipPostal.trim()) ||
+          // Pickup needs a location, delivery a zone and a time (AGL-3624).
+          !fulfillment.ready
         }
         onClick={handleCheckout}
       >

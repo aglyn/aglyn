@@ -77,6 +77,7 @@ import {
   aiSiteCreditEstimate,
 } from '../model/ai-site-job'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+import { resetAiModelOptionReadsForTests } from './use-ai-model-choice'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -432,6 +433,125 @@ describe('leaving the full screen dialog', () => {
   })
 })
 
+/**
+ * Escape is the menu's before it is the dialog's, and a brief is never traded
+ * for the starter by a dismissal (AGL-3660, 2026-10-08).
+ *
+ * In production a person filled in the brief, opened the model menu, pressed
+ * Escape to close it — and the whole guided start closed through
+ * `startBlank`, so the site was silently given the starter and the brief was
+ * gone. Escape and the close control are dismissals, not a choice: with a
+ * brief typed they ask first, and "Keep editing" is the answer they default
+ * to. Skip is still the starter, at once, because it says so.
+ */
+describe('a dismissal never trades a typed brief for the starter', () => {
+  const MODELS = {
+    kind: 'job.page',
+    auto: { id: 'auto', label: 'Auto', tier: 'balanced', creditsPerRequest: 10, multiplier: 1, model: 'm' },
+    options: [{ id: 'fast-model', label: 'Fast model', tier: 'fast', creditsPerRequest: 4, multiplier: 0.4 }],
+    measured: true,
+  }
+  const escapeOn = (element: Element) => fireEvent.keyDown(element, { key: 'Escape', code: 'Escape' })
+  const briefField = () => screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement
+  const LEAVE_QUESTION = 'Leave without your answers?'
+
+  afterEach(() => {
+    localStorage.clear()
+    // The options read is shared by every mount; the next case reads afresh.
+    resetAiModelOptionReadsForTests()
+  })
+
+  it('closes only the model menu on Escape, and keeps the dialog and the brief', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(kindCard(1))
+    mockFetch.mockResolvedValueOnce(json(MODELS))
+    fireEvent.click(screen.getByRole('button', { name: 'AI model: Auto' }))
+    await screen.findByText('Fast model')
+    escapeOn(screen.getByRole('menu'))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
+    expect(screen.getByText('Tell us about your site')).toBeTruthy()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+    expect(kindCard(1).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('closes only an open select’s list on Escape', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    escapeOn(await screen.findByRole('listbox'))
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+  })
+
+  it.each([
+    ['Escape', () => escapeOn(screen.getByRole('dialog', { name: 'Start your site' }))],
+    [
+      'the close control',
+      () => fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' })),
+    ],
+  ])('asks before %s leaves a typed brief, and Keep editing keeps it', async (_how, dismiss) => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    dismiss()
+    await screen.findByRole('dialog', { name: LEAVE_QUESTION })
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+  })
+
+  it('takes a second Escape as Keep editing, never as the starter', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    escapeOn(screen.getByRole('dialog', { name: 'Start your site' }))
+    escapeOn(await screen.findByRole('dialog', { name: LEAVE_QUESTION }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull())
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(briefField().value).toBe('a neighborhood dog groomer')
+  })
+
+  it('focuses Keep editing, so Enter on the question keeps the brief too', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    await screen.findByRole('dialog', { name: LEAVE_QUESTION })
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' })),
+    )
+  })
+
+  it('leaves for the starter only when the person says so in the question', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Skip a deliberate starter, with no question, brief or none', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
+  })
+
+  it('opens no model menu from a style card', async () => {
+    await openCard()
+    for (const index of [0, 1, 2]) fireEvent.click(kindCard(index))
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'AI model: Auto' }).getAttribute('aria-expanded'),
+    ).toBe('false')
+  })
+})
+
 describe('the questions become a site scaffold', () => {
   it('asks what the site is, who it is for and which style of site it is', async () => {
     await openCard()
@@ -553,6 +673,44 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     expect(
       screen.getByText(new RegExp(`Up to about ${aiFreeSiteCreditEstimate(2)} of the 300 AI credits`)),
     ).toBeTruthy()
+  })
+
+  it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 250, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    expect(
+      screen.getByText(
+        `Up to about ${aiFreeSiteCreditEstimate(2)} AI credits. You have 250 of your 300 free AI credits left this month, until November 1.`,
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Building this site can take/)).toBeNull()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not start a site what is left cannot pay for: says so, offers the upgrade, and starts no job (AGL-3660)', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 70, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    const warning = screen.getByText(/Building this site can take up to about 218 AI credits, and only 70 are left/)
+    expect(warning.textContent).toMatch(/shared by all your Free workspaces and reset on November 1/)
+    // 70 covers no one-page start either, so it offers none.
+    expect(warning.textContent).not.toMatch(/choose 1 page/)
+    expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
+    const start = screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement
+    expect(start.disabled).toBe(true)
+    fireEvent.click(start)
+    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it('points at one page when what is left covers one and not two (AGL-3660)', async () => {
+    const left = aiFreeSiteCreditEstimate(1)
+    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left, total: 300, resetsOn: '2026-11-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    expect(screen.getByText(/Or choose 1 page, which what you have left covers\./)).toBeTruthy()
   })
 
   it('starts a two-page site job with no welcome email', async () => {

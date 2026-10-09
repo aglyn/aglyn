@@ -24,6 +24,10 @@ import {
 } from '@aglyn/aglyn/app-utils/media-quarantine'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import {
+  type StaffCompleteListColumns,
+  staffCompleteListSorts,
+} from './staff-complete-list-sort'
 
 /*
  * THE DENY-LIST TABLE ON STAFF → DISABLED FILES (AGL-3321) — an exception
@@ -190,3 +194,31 @@ export const DENY_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOpt
 
 /** The search: the key, the reason, the note, or where it was set from. */
 export const DENY_SEARCH_PATHS: readonly string[] = ['key', 'reason', 'note', 'origin']
+
+/*
+ * THE HEADER SORTS (AGL-3680, strategy 4s): every column, ordered by the
+ * route over the whole deny list and then paged — see
+ * `utils/staff-complete-list-sort.ts`. With none asked the list stays oldest
+ * first (`compareDenyRows`). Release is a button, not a value.
+ */
+export const DENY_SORT_COLUMNS: StaffCompleteListColumns<DenyListRow> = {
+  key: { label: 'Key', value: (row) => row.key },
+  reason: {
+    label: 'Reason',
+    value: (row) =>
+      (row.reason && (MEDIA_QUARANTINE_REASON_LABELS as Record<string, string>)[row.reason]) ||
+      row.reason ||
+      null,
+  },
+  atMs: { label: 'Set', value: (row) => (typeof row.atMs === 'number' ? row.atMs : null) },
+  untilMs: {
+    label: 'Expires',
+    value: (row) => (typeof row.untilMs === 'number' ? row.untilMs : null),
+  },
+  origin: { label: 'Set from', value: (row) => row.origin || null },
+  note: { label: 'Note', value: (row) => row.note || null },
+  state: { label: 'State', value: (row) => ROW_STATE_LABEL[row.state] },
+  kind: { label: 'Key kind', value: (row) => LISTED_KIND_LABEL[row.kind] },
+}
+
+export const DENY_COLUMN_SORTS = staffCompleteListSorts(DENY_SORT_COLUMNS)

@@ -52,11 +52,47 @@ import {
  * per equality beside it.
  */
 
-/** The one order: by document id, which is by sending domain, then gateway. */
+/** The default order: by document id, which is by sending domain, then gateway. */
 export const MAIL_GATEWAY_LEDGER_LIST_SORT: ListQuerySort = {
   path: LIST_QUERY_ID_PATH,
   direction: 'asc',
+  column: 'sendingDomain',
+  label: 'Sending domain',
 }
+
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Sending domain is the id order either way. Gateway, Shared sender, Last
+ * refusal and Last diagnostic order the query by the stored field, `alone`
+ * — served with no filter on — so on this top-level collection none costs a
+ * composite. Each is on EVERY ledger, as an `orderBy` needs: the one writer,
+ * `recordMailGatewayOutcome`, sets the whole of `applyMailGatewayOutcome`'s
+ * shape every time — `lastBlockedAtMs` and `lastBlockedDetail` null until a
+ * refusal, `shared` on every platform ledger — and has since the ledger was
+ * introduced (AGL-3328), so no ledger predates a field. State, Refused and
+ * Delivered are worked out from the last thirty days at read time, so they
+ * sort the page on screen.
+ */
+const ledgerAlone = (path: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column: path, label, alone: true },
+  { path, direction: 'desc', column: path, label, alone: true },
+]
+
+export const MAIL_GATEWAY_LEDGER_COLUMN_SORTS: readonly ListQuerySort[] = [
+  MAIL_GATEWAY_LEDGER_LIST_SORT,
+  {
+    path: LIST_QUERY_ID_PATH,
+    direction: 'desc',
+    column: 'sendingDomain',
+    label: 'Sending domain',
+    alone: true,
+  },
+  ...ledgerAlone('gateway', 'Gateway'),
+  ...ledgerAlone('shared', 'Shared sender'),
+  ...ledgerAlone('lastBlockedAtMs', 'Last refusal'),
+  ...ledgerAlone('lastBlockedDetail', 'Last diagnostic'),
+]
 
 /** What the ledger table filters by, every one on the query. */
 export const MAIL_GATEWAY_LEDGER_FILTER_FIELDS: readonly ListFilterField[] = [
@@ -77,5 +113,5 @@ export const MAIL_GATEWAY_LEDGER_FILTER_HEADERS: Readonly<Record<string, string>
 /** The ledger table's query. */
 export const MAIL_GATEWAY_LEDGER_LIST_QUERY: ListQueryDeclaration = {
   fields: MAIL_GATEWAY_LEDGER_FILTER_FIELDS,
-  sorts: [MAIL_GATEWAY_LEDGER_LIST_SORT],
+  sorts: MAIL_GATEWAY_LEDGER_COLUMN_SORTS,
 }

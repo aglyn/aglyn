@@ -413,6 +413,9 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           hostId,
           orderId,
           kind: 'commerce-refund',
+          // The site, as every claim names its scope: the staff claims list
+          // sorts by `scopeId`, and an `orderBy` drops a claim without it.
+          scopeId: hostId,
           status: 'pending',
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           createdAtMs: Date.now(),

@@ -1953,11 +1953,12 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
     expect(subcollectionWrites.length).toBe(SEEDS.length)
     for (const { path, data } of subcollectionWrites) {
       expect({ path, key: '$id' in data }).toEqual({ path, key: false })
-      // The bundle's soft delete is never stored; a screen is written live,
-      // with the stored null a campaign's screens list asks for (AGL-3321).
+      // The bundle's soft delete is never stored; a screen and a layout are
+      // written live, with the stored null their lists ask for (AGL-3321: a
+      // campaign's screens; AGL-3680: the layouts list).
       expect({ path, deletedAt: data['deletedAt'] }).toEqual({
         path,
-        deletedAt: /^hosts\/[^/]+\/screens\/[^/]+$/.test(path) ? null : undefined,
+        deletedAt: /^hosts\/[^/]+\/(?:screens|layouts)\/[^/]+$/.test(path) ? null : undefined,
       })
       expect({ path, key: 'staff' in data }).toEqual({ path, key: false })
       expect({ path, key: 'role' in data }).toEqual({ path, key: false })

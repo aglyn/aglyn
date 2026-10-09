@@ -67,7 +67,41 @@ export const IDEMPOTENCY_CLAIMS_COLLECTION = 'apiIdempotency'
 export const STRANDED_AFTER_MS = 10 * 60 * 1000
 
 /** Oldest claim first: the longest-stuck key is the one holding up a customer. */
-export const CLAIM_LIST_SORT: ListQuerySort = { path: 'createdAtMs', direction: 'asc' }
+export const CLAIM_LIST_SORT: ListQuerySort = {
+  path: 'createdAtMs',
+  direction: 'asc',
+  label: 'Age',
+}
+
+/*
+ * ## The header sorts (AGL-3680)
+ *
+ * Operation, Scope and Org order the query by the stored field, `alone`:
+ * served with no Operation, Scope or Org filter on, each costing one
+ * `(status, field)` composite per direction beside the pending base. Every
+ * claim writer stores all three — `scopeId` on a commerce refund claim since
+ * AGL-3680, and `tools/scripts/backfill-staff-list-sort-fields.mjs` stamps
+ * the claims before it (and `createdAtMs` on untimed ones, from what each
+ * carries), because an `orderBy` drops a document that lacks its field.
+ *
+ * Age and State are both "how long ago was `createdAtMs`", read the other
+ * way round: the youngest claim has the smallest age. So their headers ask
+ * the route for `ageMs` / `stranded` (`CLAIM_COLUMN_SORTS`), and the route
+ * turns that into the claim-time order (`claimQuerySort`) before planning.
+ * An Age or State filter is a range over the claim time, which leads the
+ * order, so under one the list is ordered by age and says so.
+ */
+const CLAIM_NEWEST_FIRST: ListQuerySort = {
+  path: 'createdAtMs',
+  direction: 'desc',
+  label: 'Age',
+  alone: true,
+}
+
+const claimAlone = (path: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column: path, label, alone: true },
+  { path, direction: 'desc', column: path, label, alone: true },
+]
 
 /** What the plan serves: equalities beneath the claim-time order. */
 export const CLAIM_LIST_QUERY: ListQueryDeclaration = {
@@ -76,7 +110,41 @@ export const CLAIM_LIST_QUERY: ListQueryDeclaration = {
     { column: 'scopeId', kind: 'exact', path: 'scopeId', operators: ['equals'] },
     { column: 'orgId', kind: 'exact', path: 'orgId', operators: ['equals'] },
   ],
-  sorts: [CLAIM_LIST_SORT],
+  sorts: [
+    CLAIM_LIST_SORT,
+    CLAIM_NEWEST_FIRST,
+    ...claimAlone('kind', 'Operation'),
+    ...claimAlone('scopeId', 'Scope'),
+    ...claimAlone('orgId', 'Org'),
+  ],
+}
+
+/** The Age header's default: oldest first, which is the query's own order. */
+export const CLAIM_AGE_SORT: ListQuerySort = {
+  path: 'ageMs',
+  direction: 'desc',
+  column: 'ageMs',
+  label: 'Age',
+}
+
+/** Every header order the card offers, as it asks the route (`sort=path:dir`). */
+export const CLAIM_COLUMN_SORTS: readonly ListQuerySort[] = [
+  CLAIM_AGE_SORT,
+  { path: 'ageMs', direction: 'asc', column: 'ageMs', label: 'Age' },
+  // In flight sorts before stranded: the youngest claims first.
+  { path: 'stranded', direction: 'asc', column: 'stranded', label: 'State' },
+  { path: 'stranded', direction: 'desc', column: 'stranded', label: 'State' },
+  ...CLAIM_LIST_QUERY.sorts.filter((sort) => sort.column),
+]
+
+/**
+ * The claim-time order an Age or State header asks for: an older claim has
+ * the larger age and is the stranded one, so each reads `createdAtMs` the
+ * other way round. Any other order passes through for the plan to match.
+ */
+export function claimQuerySort(sort: ListQuerySort | null): ListQuerySort | null {
+  if (!sort || (sort.path !== 'ageMs' && sort.path !== 'stranded')) return sort
+  return sort.direction === 'asc' ? CLAIM_NEWEST_FIRST : CLAIM_LIST_SORT
 }
 
 /** The list's base: only claims that have not settled. */

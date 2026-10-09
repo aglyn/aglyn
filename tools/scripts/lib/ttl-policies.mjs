@@ -217,4 +217,12 @@ export const TTL_POLICIES = Object.freeze([
     // (`ZAPIER_DELIVERY_MARKER_RETENTION_MS`).
     why: 'Zapier hook delivery markers (ids only), 3 days',
   },
+  {
+    collection: 'stockPhotoSearches',
+    field: 'expiresAt',
+    // AGL-3660 — top level: what a stock photo library answered a search,
+    // kept the 24 hours Pixabay's terms ask (`STOCK_PHOTO_SEARCH_CACHE_MS`);
+    // also refused by age on read. No workspace's data.
+    why: 'stock photo search answers, 24 hours',
+  },
 ])

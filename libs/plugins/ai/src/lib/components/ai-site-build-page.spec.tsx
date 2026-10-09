@@ -65,6 +65,7 @@ import {
   aiSiteBuildRows,
 } from '../model/ai-site-build-progress'
 import { AI_JOB_FIRST_STATE_TIMEOUT_MS, AiSiteBuildPage } from './ai-site-build-page.component'
+import { AI_JOB_PAUSED_NEXT_COPY } from '../model/ai-job-notice'
 
 beforeEach(() => {
   mockGetDoc.mockReset()
@@ -641,5 +642,79 @@ describe('the contact form’s stage (AGL-3596)', () => {
     expect(await screen.findByText(AI_SITE_ITEM_HINT)).toBeTruthy()
     const row = screen.getByText('Building the form: Contact Request Form').closest('li') as HTMLElement
     expect(row.querySelector('[aria-label="In progress"]')).toBeTruthy()
+  })
+})
+
+/*
+ * The prod case (AGL-3660): a Free start ran out of credits between its form
+ * and its first page. The machine PAUSES the job (`needs_input`); the page
+ * must say so — not "was not built" — with what is built, the way to more
+ * credits, and Resume on the same job.
+ */
+describe('a site the meter paused (AGL-3660)', () => {
+  const OUT = 'Your free AI credits for this month are used across your workspaces — upgrade any workspace to keep going.'
+  const ledger = (slot: string, op: string, label: string, status: string) => ({
+    slot, op, label, status, attempt: 1, creditsSpent: status === 'succeeded' ? 24 : 0, creditsRefunded: 0, outputs: [],
+  })
+  const PAUSED = () =>
+    job({
+      status: 'needs_input',
+      running: false,
+      error: OUT,
+      creditsSpent: 76,
+      steps: [
+        { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 21, error: null },
+        { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 55, error: null },
+      ],
+      items: [
+        ledger('t', 'theme', 'Look', 'succeeded'),
+        ledger('l', 'layout', 'Main Layout', 'succeeded'),
+        ledger('f', 'form', 'Contact Request Form', 'succeeded'),
+        // A page the ledger still marks running when the meter refused its pass.
+        ledger('p0', 'page', 'Home', 'running'),
+        ledger('p1', 'page', 'Book', 'pending'),
+      ],
+    } as never)
+
+  beforeEach(() => mockFetch.mockReset())
+
+  it('reads as paused, not as a site that was not built, with what is built and that nothing is lost', () => {
+    const copy = aiJobPageCopy(PAUSED(), 'Aglyn')
+    expect(copy.heading).toBe('Your site is paused')
+    expect(copy.lede).toBe(
+      `${OUT} Built so far: your look, the header and footer and the form “Contact Request Form”. ${AI_JOB_PAUSED_NEXT_COPY}`,
+    )
+  })
+
+  it('shows no spinner: the row it stopped at is paused, and the rest wait', () => {
+    const rows = aiSiteBuildRows(PAUSED())
+    expect(rows.map((row) => row.state)).toEqual(['done', 'done', 'done', 'done', 'paused', 'waiting', 'skipped'])
+    expect(rows.find((row) => row.state === 'paused')).toMatchObject({ label: 'Writing page 1 of 2: Home', hint: null, startedAt: null })
+    expect(rows.some((row) => row.state === 'active')).toBe(false)
+  })
+
+  it('offers Get more AI credits in Billing and Resume, which carries on the same job', async () => {
+    await open(PAUSED())
+    expect(await screen.findByRole('heading', { name: 'Your site is paused' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Your site was not built' })).toBeNull()
+    expect(screen.queryByLabelText('In progress')).toBeNull()
+    expect(screen.getByRole('img', { name: 'Paused' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Get more AI credits' }).getAttribute('href')).toBe('/acme/billing#plans')
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ job: { ...PAUSED(), status: 'running', error: null } }) })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    const [, url, init] = mockFetch.mock.calls[0]
+    expect(url).toBe('/api/ai/jobs/job-1/resume')
+    expect(JSON.parse(init.body)).toEqual({ orgId: 'org-1', hostId: 'host-1' })
+    expect(await screen.findByRole('heading', { name: 'Building your site' })).toBeTruthy()
+  })
+
+  it('says the door’s words when credits are still out, and stays paused', async () => {
+    await open(PAUSED())
+    await screen.findByRole('heading', { name: 'Your site is paused' })
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({ error: OUT }) })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    expect(await screen.findAllByText(OUT)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Your site is paused' })).toBeTruthy()
   })
 })

@@ -61,6 +61,11 @@ const COVERED_INGRESSES = [
   // 8. A workspace package (AGL-3535) — a JSON file a member imports, stored
   //    as the package job's source and read back at apply.
   'libs/tenant/data/admin/src/lib/server/transfer-packages.ts',
+  // 9. The server's media door (`core.media-ingest`, AGL-3660) — a stock
+  //    photo a server process downloaded from a library, kept in a site's
+  //    media library. The bytes are a third party's, so they are inspected
+  //    like any upload's, before the bucket write.
+  'apps/console/utils/server/media-ingest.ts',
 ]
 
 /**

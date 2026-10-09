@@ -98,6 +98,11 @@ export const schema: Aglyn.ComponentSchema<BreadcrumbsElementProps> = {
     'survives slug changes.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiSlashForward.path, sx: { color: '#2196f3' } },
+  // MUI wraps each of `Children.toArray(children)` in its own `<li>` and puts
+  // a separator between them, so the renderer has to hand it one React child
+  // per crumb (AGL-3660). Wrapped in the single `<Branch>`, a trail of any
+  // length was ONE item: no separators, and `maxItems` never collapsed it.
+  flags: { positionalChildren: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
       name: 'separator',

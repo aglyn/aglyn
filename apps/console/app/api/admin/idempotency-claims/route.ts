@@ -27,6 +27,7 @@ import {
   CLAIM_PENDING_BASE,
   IDEMPOTENCY_CLAIMS_COLLECTION,
   STRANDED_AFTER_MS,
+  claimQuerySort,
   splitClaimTimeClauses,
 } from '../../../../utils/idempotency-claims-list-query'
 import {
@@ -135,7 +136,8 @@ async function handler(request: Request): Promise<Response> {
       firestore,
       collection: claims,
       declaration: CLAIM_LIST_QUERY,
-      request: { ...listed, clauses: split.rest },
+      // An Age or State header is the claim-time order, read the other way.
+      request: { ...listed, clauses: split.rest, sort: claimQuerySort(listed.sort) },
       base: [...CLAIM_PENDING_BASE, ...split.base],
       row: (doc) => {
         const createdAtMs = Number(doc.get('createdAtMs') ?? 0)
