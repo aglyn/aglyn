@@ -107,8 +107,8 @@ final class BesignerOnlyTests: XCTestCase {
     let registry = NativePluginRegistry()
     _ = NativePluginLoader.load(
       [
-        entry(
-          contributes: ["widgets": ["a.late", "a.early", "a.home"]],
+        NativePluginManifestEntry(
+          id: "a", contributes: ["widgets": ["a.late", "a.early", "a.home"]],
           register: {
             $0.widget("a.late", title: "Late", order: 2, slot: "commerceSettings") { _ in EmptyView() }
             $0.widget("a.early", title: "Early", order: 1, slot: "commerceSettings") { _ in EmptyView() }

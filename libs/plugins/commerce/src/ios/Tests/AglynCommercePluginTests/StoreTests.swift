@@ -82,7 +82,7 @@ final class CommerceRegistrationTests: XCTestCase {
     let declared = NativeContributionDeclaration(
       screens: [
         "commerce.card-readers", "commerce.order", "commerce.orders", "commerce.product", "commerce.products",
-        "commerce.register", "commerce.sales", "commerce.scan",
+        "commerce.register", "commerce.sales", "commerce.scan", "commerce.settings",
       ],
       tabs: ["commerce.orders-tab", "commerce.products-tab"],
       widgets: ["commerce.sales-trend", "commerce.to-ship", "commerce.today"],
