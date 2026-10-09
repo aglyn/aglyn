@@ -43,6 +43,7 @@ import {
 } from '../jobs/ai-jobs'
 import { releaseAssistMessage } from '../usage/assist-usage'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
+import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
 import { withoutErasedSites } from './ai-jobs-live-sites'
@@ -219,6 +220,9 @@ export async function POST(request: Request): Promise<Response> {
   // needs, inputs it reads, an allowance its draft counts against. Asked
   // before the job exists, so a refusal spends nothing.
   let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
+  // A Free start past what is left, which the person chose to build as far as
+  // it goes (AGL-3722): the prompt they confirmed, kept on the job.
+  let confirmedCredits: AiCreditsPrompt | null = null
   try {
     // A site that switched AI off first (AGL-3028), then the kind's own check.
     refusal =
@@ -234,6 +238,10 @@ export async function POST(request: Request): Promise<Response> {
         inputs: parsed.inputs,
         org: gate.org,
         uid: gate.uid,
+        creditsConfirmed: (payload as Record<string, unknown> | null)?.['creditsConfirmed'] === true,
+        onCreditsConfirmed: (prompt) => {
+          confirmedCredits = prompt
+        },
       }))
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
@@ -247,7 +255,12 @@ export async function POST(request: Request): Promise<Response> {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
       () => undefined,
     )
-    return Response.json({ error: refusal.error }, { status: refusal.status })
+    // A Free start past what is left asks before it starts (AGL-3722): the
+    // prompt rides the 409, so the dialog offers its choices.
+    return Response.json(
+      { error: refusal.error, ...(refusal.code ? { code: refusal.code } : {}), ...(refusal.credits ? { credits: refusal.credits } : {}) },
+      { status: refusal.status },
+    )
   }
 
   const now = new Date()
@@ -271,6 +284,7 @@ export async function POST(request: Request): Promise<Response> {
         model: parsed.model,
         createdBy: gate.uid,
         createdByEmail: gate.decoded.email ?? null,
+        creditsConfirmed: aiCreditsConfirmation(confirmedCredits, gate.uid, now),
       },
       now,
     )

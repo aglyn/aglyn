@@ -38,8 +38,11 @@ import {
   aiFreeCreditsResetLabel,
   aiFreeCreditsResetOn,
   aiFreeSiteCreditEstimate,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
+  aiFreeCreditsNoneLeftText,
+  aiFreeSiteCreditRange,
+  aiFreeSitePrompt,
+  aiJobPlanCreditRange,
+  aiSiteCreditRange,
   aiJobPlanCreditEstimate,
   aiPlanCreditEstimate,
   aiPlanPasses,
@@ -445,29 +448,42 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
     expect(aiFreeCreditsResetLabel('2026-11-01')).toBe('November 1')
   })
 
-  it('is short when what is left is under the figure the dialog quotes, and never when nothing is known', () => {
-    const needed = aiFreeSiteCreditEstimate(2)
-    expect(aiFreeSiteShortfall({ left: needed - 1 }, 2)).toEqual({ needed, left: needed - 1 })
-    expect(aiFreeSiteShortfall({ left: needed }, 2)).toBeNull()
-    expect(aiFreeSiteShortfall(null, 2)).toBeNull()
-    // The prod case: a person with 70 left was quoted 216 of 300 — 218 once
-    // the wall priced the guided start's form at what it metered, and 282
-    // since the door asks for the whole worst case: the eight sections the
-    // plan may hold and the room for one retried page (AGL-3660).
-    expect(aiFreeSiteShortfall({ left: 70 }, 2)).toEqual({ needed: 282, left: 70 })
-    // 218 left was let start a job that could spend 282; it no longer is.
-    expect(aiFreeSiteShortfall({ left: 218 }, 2)).toEqual({ needed: 282, left: 218 })
-    expect(aiFreeSiteShortfall({ left: 282 }, 2)).toBeNull()
-    expect(aiFreeSiteShortfall({ left: 235 }, 1)).toEqual({ needed: 236, left: 235 })
+  it('quotes a start at its measured figures and its worst case: about 137 (p90 213, up to 282) for two pages (AGL-3722)', () => {
+    expect(aiFreeSiteCreditRange(2)).toEqual({ likely: 137, p90: 213, ceiling: aiFreeSiteCreditEstimate(2) })
+    expect(aiFreeSiteCreditEstimate(2)).toBe(282)
+    expect(aiFreeSiteCreditRange(1)).toEqual({ likely: 107, p90: 173, ceiling: aiFreeSiteCreditEstimate(1) })
   })
 
-  it('says how many are left, when they reset, that they are shared, and the way on', () => {
-    const text = aiFreeSiteShortfallText({ needed: 216, left: 70 }, '2026-11-01')
-    expect(text).toBe(
-      'Building this site can take up to about 216 AI credits, and only 70 are left of your free AI credits ' +
-        'this month. They are shared by all your Free workspaces and reset on November 1. Upgrade this ' +
-        'workspace to build your site now, or start from the starter site and try AI again after the reset.',
+  it('asks before a start whose p90 is more than what is left — never when it fits, or when nothing is known (AGL-3722)', () => {
+    const { p90 } = aiFreeSiteCreditRange(2)
+    // Fits: no prompt. The worst-case hold of beta.235 (282) is gone: 218 left starts at once.
+    expect(aiFreeSitePrompt({ left: p90, resetsOn: '2026-11-01' }, 2)).toBeNull()
+    expect(aiFreeSitePrompt({ left: 218, resetsOn: '2026-11-01' }, 2)).toBeNull()
+    expect(aiFreeSitePrompt(null, 2)).toBeNull()
+    // Past it: the prompt, with what is left and the home page first.
+    const prompt = aiFreeSitePrompt({ left: p90 - 1, resetsOn: '2026-11-01' }, 2)
+    expect(prompt).toEqual({
+      ...aiFreeSiteCreditRange(2),
+      left: p90 - 1,
+      resetsOn: '2026-11-01',
+      smaller: { label: 'Build the home page first', ...aiFreeSiteCreditRange(1) },
+    })
+    // One page has no smaller first build.
+    expect(aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 1)?.smaller).toBeNull()
+  })
+
+  it('refuses outright only when nothing at all is left, with when the credits renew and the way on', () => {
+    expect(aiFreeCreditsNoneLeftText('2026-11-01')).toBe(
+      'You have no free AI credits left this month. They are shared by all your Free workspaces and renew on ' +
+        'November 1. Upgrade this workspace to build with AI now.',
     )
-    expect(aiFreeSiteShortfallText({ needed: 216, left: 1 }, '2026-11-01')).toMatch(/only 1 is left/)
+  })
+
+  it('quotes a paid start and a kept plan as ranges whose ceiling is the old figure (AGL-3722)', () => {
+    expect(aiSiteCreditRange(6).ceiling).toBe(aiSiteCreditEstimate(6))
+    expect(aiSiteCreditRange(6).likely).toBe(21 + 4 + 23 + 29 + 6 * 30)
+    const kept = plan({ screens: [screen(), screen({ slug: '/about' })] })
+    expect(aiJobPlanCreditRange('site', kept).ceiling).toBe(aiJobPlanCreditEstimate('site', kept))
+    expect(aiJobPlanCreditRange('site', kept).likely).toBeLessThan(aiJobPlanCreditEstimate('site', kept))
   })
 })

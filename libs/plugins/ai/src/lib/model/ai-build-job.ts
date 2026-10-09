@@ -29,7 +29,25 @@ import {
   type AiBuildPlanScreen,
 } from './ai-build-plan'
 import type { AiJobItemLedger, AiJobItemStatus } from './ai-jobs.types'
-import { AI_SITE_MAX_SECTIONS, AI_SITE_PASS_CREDITS, aiJobPlanCreditEstimate } from './ai-site-job'
+import {
+  AI_SITE_HOME_FIRST_LABEL,
+  AI_SITE_MAX_SECTIONS,
+  AI_SITE_PASS_CREDITS,
+  aiCreationMeasuredCredits,
+  aiJobPlanCreditEstimate,
+  aiJobPlanCreditRange,
+  aiScreenCreditRange,
+  aiSitePlanIsHome,
+} from './ai-site-job'
+import {
+  AI_CREDIT_RANGE_ZERO,
+  AI_MEASURED_PASS_CREDITS,
+  aiCreditRangeAdd,
+  aiCreditRangeOf,
+  aiCreditRangeOrdered,
+  type AiCreditRange,
+  type AiCreditsSmaller,
+} from './ai-credit-estimate'
 
 /**
  * What a `build` job is (AGL-3616): one request — "a few pages, a contact
@@ -313,6 +331,89 @@ export function aiBuildCreditEstimate(
  */
 export function aiJobCreditEstimate(kind: string, plan: AiBuildPlan): number {
   return kind === 'build' ? aiBuildCreditEstimate(plan) : aiJobPlanCreditEstimate(kind, plan)
+}
+
+/**
+ * What one unit is likely to cost, its p90 and its ceiling (AGL-3722): a page
+ * by its sections around the measured page, a creation at what its kind
+ * measured, an item at the measured pass times the passes its capability
+ * estimates (none for a draft another plugin writes, which asks no model).
+ * The ceiling is `aiBuildUnitCreditEstimate`, unchanged.
+ */
+export function aiBuildUnitCreditRange(unit: AiBuildUnit, ops?: AiBuildOps): AiCreditRange {
+  const ceiling = aiBuildUnitCreditEstimate(unit, ops)
+  if (unit.screen) return aiScreenCreditRange(unit.screen.sections.length)
+  if (unit.creation) return aiCreditRangeOf(aiCreationMeasuredCredits(unit.creation.kind), ceiling)
+  const passes = Math.ceil(ceiling / AI_SITE_PASS_CREDITS)
+  return aiCreditRangeOf(
+    { median: passes * AI_MEASURED_PASS_CREDITS.median, p90: passes * AI_MEASURED_PASS_CREDITS.p90 },
+    ceiling,
+  )
+}
+
+/**
+ * What a build is likely to cost, its p90 and its ceiling (AGL-3722): every
+ * unit's range, or only the units named in `slots` — what Try again runs.
+ * The plan card, Try again and the Free admission all read this; the meter
+ * charges what actually runs.
+ */
+export function aiBuildCreditRange(
+  plan: AiBuildPlan,
+  options: { ops?: AiBuildOps; slots?: ReadonlySet<string> } = {},
+): AiCreditRange {
+  return aiCreditRangeOrdered(
+    aiBuildUnits(plan)
+      .filter((unit) => !options.slots || options.slots.has(unit.slot))
+      .reduce((total, unit) => aiCreditRangeAdd(total, aiBuildUnitCreditRange(unit, options.ops)), AI_CREDIT_RANGE_ZERO),
+  )
+}
+
+/** `aiJobCreditEstimate` as a range (AGL-3722). */
+export function aiJobCreditRange(kind: string, plan: AiBuildPlan): AiCreditRange {
+  return kind === 'build' ? aiBuildCreditRange(plan) : aiJobPlanCreditRange(kind, plan)
+}
+
+/**
+ * A smaller first build (AGL-3722): the plan's home page — its first page
+ * where it has no home — and only what that page needs, transitively: the
+ * layout it is drawn in, the form and anything else its sections place.
+ * Every other page, and what only they needed, waits for a later request.
+ * `null` when the plan has no page, or when the smaller plan is the whole one.
+ */
+export function aiBuildFirstPagePlan<T extends AiBuildPlan>(plan: T): T | null {
+  if (!plan.screens.length) return null
+  const index = Math.max(0, plan.screens.findIndex(aiSitePlanIsHome))
+  const units = aiBuildUnits(plan)
+  const bySlot = new Map(units.map((unit) => [unit.slot, unit]))
+  const keep = new Set<string>()
+  const queue = [`p${index}`]
+  while (queue.length) {
+    const slot = queue.shift() as string
+    if (keep.has(slot)) continue
+    keep.add(slot)
+    for (const dep of bySlot.get(slot)?.deps ?? []) queue.push(dep)
+  }
+  if (keep.size === units.length) return null
+  const screen = plan.screens[index]
+  const create = plan.create.filter((creation, at) => !AI_BUILD_CREATE_KINDS.includes(creation.kind) || keep.has(`c${at}`))
+  const items = (plan.items ?? []).filter((item) => keep.has(item.slot))
+  const kept = new Set([screen.slug, ...create.map((entry) => `${AI_PLAN_NEW_REF_PREFIX}${entry.name}`)])
+  return {
+    ...plan,
+    create,
+    screens: [screen],
+    ...(plan.items ? { items } : {}),
+    ...(plan.embeds ? { embeds: plan.embeds.filter((embed) => kept.has(embed.where)) } : {}),
+  }
+}
+
+/** The smaller first build a build that does not fit is offered (AGL-3722), with its range; `null` when there is none. */
+export function aiBuildSmaller(plan: AiBuildPlan, ops?: AiBuildOps): AiCreditsSmaller | null {
+  const smaller = aiBuildFirstPagePlan(plan)
+  if (!smaller) return null
+  const screen = smaller.screens[0]
+  const label = aiSitePlanIsHome(screen) ? AI_SITE_HOME_FIRST_LABEL : `Build the page “${screen.title}” first`
+  return { label, ...aiBuildCreditRange(smaller, { ops }) }
 }
 
 /** A fresh ledger: one pending row per unit, first attempt. */

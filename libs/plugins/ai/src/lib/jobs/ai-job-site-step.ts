@@ -44,8 +44,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
+  aiFreeCreditsNoneLeftText,
+  aiFreeSitePrompt,
   aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
@@ -58,6 +58,7 @@ import {
   aiSitePlanWithoutBlogStandIns,
 } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -752,15 +753,24 @@ export function createAiSiteJobAdmission(
     const freeTaste = aiSiteFreeTaste(context.org)
     const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
     if (pages) return { status: 400, error: pages }
-    // A Free start that what is left of the month's Free credits cannot pay for
-    // is refused before it spends (AGL-3660), on the figure the dialog quotes —
-    // the dialog asks the same, and this is what a stale dialog meets. Only at
-    // creation: a resume is the same job carrying on from where it paused.
+    // A Free start is admitted on its measured p90 (AGL-3722), not its worst
+    // case: one that fits what is left of the month starts with no prompt;
+    // one that does not is answered with the prompt — what it is likely to
+    // cost, what is left, and its choices — until the person chooses to build
+    // what fits, which then pauses with Resume where the credits run out.
+    // Nothing left at all is refused outright. Only at creation: a resume is
+    // the same job carrying on from where it paused.
     if (freeTaste && !context.plan) {
       const credits = await freeCreditsLeft(context.firestore, { orgId: context.orgId, org: context.org, now: now() })
-      const shortfall = aiFreeSiteShortfall(credits, inputs.pages)
-      if (credits && shortfall) {
-        return { status: 429, error: aiFreeSiteShortfallText(shortfall, credits.resetsOn) }
+      if (credits && credits.left <= 0) {
+        return { status: 429, error: aiFreeCreditsNoneLeftText(credits.resetsOn) }
+      }
+      const prompt = aiFreeSitePrompt(credits, inputs.pages)
+      if (prompt) {
+        if (!context.creditsConfirmed) {
+          return { status: 409, error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
+        }
+        context.onCreditsConfirmed?.(prompt)
       }
     }
     if (context.plan) {

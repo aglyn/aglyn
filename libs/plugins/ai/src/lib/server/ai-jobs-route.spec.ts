@@ -47,6 +47,7 @@ let mockAiPermissionAsks: unknown[][] = []
 
 const mockVerifyIdToken = jest.fn()
 const mockGetOrgForUser = jest.fn()
+const mockResolveOwner = jest.fn(async (..._args: unknown[]): Promise<string | null> => null)
 const mockRunAiRequest = jest.fn()
 
 function applyData(
@@ -217,6 +218,7 @@ jest.mock('@aglyn/tenant-data-admin/server/id-token-refusal', () => ({
 jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   __esModule: true,
   getOrgForUser: (...args: unknown[]) => mockGetOrgForUser(...args),
+  resolveOrgIdForHost: (...args: unknown[]) => mockResolveOwner(...args),
   memberHasPermissionOnHost: async (...args: unknown[]) => {
     mockAiPermissionAsks.push(args)
     return mockAiPermitted
@@ -295,7 +297,8 @@ import {
 } from '../jobs/ai-jobs'
 import { registerAiJobAdmission } from '../jobs/ai-job-admission'
 import { createAiSiteJobAdmission } from '../jobs/ai-job-site-step'
-import { aiFreeCreditsResetOn, aiFreeSiteCreditEstimate, aiFreeSiteShortfallText } from '../model/ai-site-job'
+import { aiFreeCreditsResetOn, aiFreeSitePrompt } from '../model/ai-site-job'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 
 const ORG = 'org-1'
 /** A Pro workspace with the AI add-on: `aiGenerative` is on. */
@@ -1143,6 +1146,75 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
       registerAiJobStep('site', (context) => siteRunner(context))
     }
   })
+
+  it('a Free build past what is left answers its plan card with the prompt, and confirms on the go-ahead — whole, or as the home page first — recording it (AGL-3722)', async () => {
+    const screen = (title: string, slug: string, id: string) => ({
+      title,
+      slug,
+      layout: 'new:Frame',
+      template: null,
+      duplicateOf: null,
+      nav: true,
+      seoTitle: title,
+      seoDescription: title,
+      sections: [{ name: 'hero', uses: [], items: 0 }],
+      record: null,
+      id,
+    })
+    planRunner.mockImplementation(async ({ now }: { now: Date }) => ({
+      outputs: [],
+      ...spend,
+      plan: {
+        reuse: [],
+        create: [{ kind: 'layout', name: 'Frame', why: 'shared', duplicateOf: null, fields: [], id: 'layout-1' }],
+        screens: [screen('Home', '/', 'page-1'), screen('About', '/about', 'page-2')],
+        status: 'proposed',
+        labels: {},
+        proposedAt: now,
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    const prompt = { likely: 90, p90: 110, ceiling: 300, left: 40, resetsOn: '2026-11-01', smaller: null }
+    const admission = jest.fn(async (context: { plan?: unknown; creditsConfirmed?: boolean; onCreditsConfirmed?: (one: typeof prompt) => void }) => {
+      if (!context.plan) return null
+      if (!context.creditsConfirmed) return { status: 409 as const, error: 'This build is about 90 credits (up to 300).', code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
+      context.onCreditsConfirmed?.(prompt)
+      return null
+    })
+    registerAiJobAdmission('build', admission as never)
+    registerAiJobStep('build', (context) => siteRunner(context), { minimumMs: 10 * 60_000 })
+    try {
+      const { job } = await (await createJob(post({ ...VALID, kind: 'build' }))).json()
+      expect(job).toMatchObject({ status: 'needs_review', review: { reason: 'plan' } })
+      // Confirm alone: the prompt, the card told what is left, nothing started.
+      const asked = await resume(job.id)
+      expect(asked.status).toBe(409)
+      expect(await asked.json()).toMatchObject({
+        code: AI_CREDITS_CONFIRM_CODE,
+        credits: prompt,
+        job: { status: 'needs_review', review: { reason: 'plan', freeCredits: { left: 40, resetsOn: '2026-11-01' } } },
+      })
+      expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('needs_review')
+      // "Build the home page first": the plan narrowed to Home and its layout, confirmed on the go-ahead.
+      const confirmed = await resume(job.id, { orgId: ORG, hostId: 'host-1', creditsConfirmed: true, reduce: 'first-page' })
+      expect(confirmed.status).toBe(200)
+      expect(admission).toHaveBeenLastCalledWith(
+        expect.objectContaining({ creditsConfirmed: true, plan: expect.objectContaining({ screens: [expect.objectContaining({ title: 'Home' })] }) }),
+      )
+      const stored = mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`) as unknown as {
+        plan: { status: string; screens: Array<{ title: string }>; create: Array<{ name: string }> }
+        creditsConfirmed: unknown
+      }
+      expect(stored.plan).toMatchObject({ status: 'confirmed', confirmedBy: 'uid-1' })
+      expect(stored.plan.screens.map((one) => one.title)).toEqual(['Home'])
+      expect(stored.plan.create.map((one) => one.name)).toEqual(['Frame'])
+      expect(stored.creditsConfirmed).toMatchObject({ by: 'uid-1', left: 40, likely: 90, p90: 110, ceiling: 300 })
+    } finally {
+      registerAiJobAdmission('build', null)
+    }
+  })
 })
 
 describe('a Free workspace’s AI credits before and after a start (AGL-3660)', () => {
@@ -1185,22 +1257,39 @@ describe('a Free workspace’s AI credits before and after a start (AGL-3660)', 
     expect(payload.freeCredits.resetsOn).toMatch(/^\d{4}-\d{2}-01$/)
   })
 
-  it('refuses a guided start what is left cannot pay for, creating no job and spending nothing', async () => {
+  it('asks before a guided start past what is left — no job, nothing spent — and starts it on the go-ahead, recording it (AGL-3722)', async () => {
     mockDocs.set(accountMonth(), { estCostUsd: 0.23 })
     registerAiJobAdmission('site', createAiSiteJobAdmission())
     try {
-      const response = await createJob(
-        post({ ...VALID, kind: 'site', brief: 'A site for a dog groomer.', inputs: { businessType: 'dog groomer', pages: 2 } }),
-      )
-      expect(response.status).toBe(429)
-      expect((await response.json()).error).toBe(
-        aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, aiFreeCreditsResetOn(new Date())),
-      )
+      const body = { ...VALID, kind: 'site', brief: 'A site for a dog groomer.', inputs: { businessType: 'dog groomer', pages: 2 } }
+      const response = await createJob(post(body))
+      expect(response.status).toBe(409)
+      const prompt = aiFreeSitePrompt({ left: 70, resetsOn: aiFreeCreditsResetOn(new Date()) }, 2)
+      expect(await response.json()).toEqual({
+        error: aiCreditsPromptText(prompt!, 'site'),
+        code: AI_CREDITS_CONFIRM_CODE,
+        credits: prompt,
+      })
       expect(jobDocs()).toEqual([])
       expect(planRunner).not.toHaveBeenCalled()
       expect(mockDocs.get(`orgs/${ORG}/assistUsage/${month()}`)?.['messages']).toBe(0)
+      // "Build what fits": the same start, confirmed, is created, and keeps who said go and what was left.
+      mockResolveOwner.mockResolvedValue(ORG)
+      registerAiJobStep('page', (context) => siteRunner(context))
+      const confirmed = await createJob(post({ ...body, creditsConfirmed: true }))
+      expect(confirmed.status).toBe(200)
+      expect(planRunner).toHaveBeenCalledTimes(1)
+      const [[, stored]] = jobDocs() as Array<[string, Record<string, unknown>]>
+      expect(stored['creditsConfirmed']).toMatchObject({
+        by: 'uid-1',
+        left: 70,
+        likely: prompt!.likely,
+        p90: prompt!.p90,
+        ceiling: prompt!.ceiling,
+      })
     } finally {
       registerAiJobAdmission('site', null)
+      mockResolveOwner.mockResolvedValue(null)
     }
   })
 

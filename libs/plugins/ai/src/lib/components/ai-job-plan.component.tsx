@@ -22,7 +22,11 @@ import {
   type AiBuildPlanEmbed,
 } from '../model/ai-build-plan'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
-import { aiJobCreditEstimate } from '../model/ai-build-job'
+import { aiBuildSmaller, aiJobCreditRange } from '../model/ai-build-job'
+import { aiCreditRangeText, aiCreditsPromptFor } from '../model/ai-credit-estimate'
+import { aiFreeCreditsResetLabel } from '../model/ai-site-job'
+import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
+import type { AiJobResumeOptions } from './ai-job-requests'
 import { aiBuildOpNoun } from '../model/ai-build-progress'
 import { aiJobConfirmingOwnPlan } from '../model/ai-job-activity'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
@@ -44,7 +48,7 @@ export interface AiJobPlanProps {
    * Confirms the plan, or tries the refused step again. A build whose request
    * asked to publish confirms with `publish` when its box is ticked (AGL-3616).
    */
-  onResume: (job: AiJobSummary, options?: { publish?: boolean }) => void
+  onResume: (job: AiJobSummary, options?: AiJobResumeOptions) => void
   /** A resume for this job is in flight. */
   busy?: boolean
   /**
@@ -58,6 +62,8 @@ export interface AiJobPlanProps {
    * that did not work out (AGL-3594); the action is drawn only when given.
    */
   user?: Parameters<typeof AiSiteStarterFallback>[0]['user']
+  /** The workspace's path slug, for the Upgrade a Free build past what is left offers (AGL-3722). */
+  orgSlug?: string | null
 }
 
 /**
@@ -112,6 +118,7 @@ export function AiJobPlan({
   busy = false,
   staff = false,
   user,
+  orgSlug,
 }: AiJobPlanProps): JSX.Element | null {
   const [detailsOpen, setDetailsOpen] = useState(false)
   // Unticked until the person ticks it: a build publishes only when its
@@ -131,12 +138,17 @@ export function AiJobPlan({
   const waiting = job.status === 'needs_review' && review !== null && !aiJobConfirmingOwnPlan(job)
   // The guard rail (AGL-2911): what the plan is estimated to cost is read
   // before it is confirmed, not after it has been spent. An estimate, and
-  // said to be one — the plan's own passes at the nominal credits a step
-  // holds, where what a step really costs is its model's tokens. A page job
+  // said to be one: what it is likely to cost — what builds like it measured
+  // — and its ceiling, every pass at its reserve (AGL-3722). A page job
   // counts the creations it builds before its page (AGL-3031).
-  const estimate =
-    plan && waiting && review.reason === 'plan' ? aiJobCreditEstimate(job.kind, plan) : 0
+  const range = plan && waiting && review.reason === 'plan' ? aiJobCreditRange(job.kind, plan) : null
+  // A Free build past what is left asks first (AGL-3722): build what fits,
+  // the home page first, or upgrade — never a refusal with no way on.
+  const freeCredits = review?.freeCredits ?? null
+  const prompt =
+    plan && range && job.kind === 'build' ? aiCreditsPromptFor(range, freeCredits, aiBuildSmaller(plan)) : null
   const offersPublish = job.kind === 'build' && job.publishAsked === true && waiting && review.reason === 'plan'
+  const publishing = offersPublish && publish ? { publish: true } : {}
   return (
     <Box sx={{ mt: 1 }}>
       {plan && (
@@ -233,13 +245,16 @@ export function AiJobPlan({
           </Collapse>
         </Box>
       )}
-      {estimate > 0 && (
+      {range && range.ceiling > 0 && (
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ display: 'block', mt: 1 }}
         >
-          {`Estimated cost: about ${estimate.toLocaleString('en-US')} credits. What it costs is what its steps spend.`}
+          {`Estimated cost: ${aiCreditRangeText(range)}. What it costs is what its steps spend.`}
+          {freeCredits && !prompt
+            ? ` You have ${freeCredits.left.toLocaleString('en-US')} of your free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}.`
+            : ''}
         </Typography>
       )}
       {waiting && review.retryRefusal && review.reason !== 'plan' && (
@@ -254,14 +269,24 @@ export function AiJobPlan({
           label={<Typography variant="body2">{'Publish the new pages when they are built'}</Typography>}
         />
       )}
-      {waiting && (
+      {waiting && prompt && (
+        <AiCreditsPromptNotice
+          prompt={prompt}
+          noun="build"
+          orgSlug={orgSlug}
+          busy={busy}
+          onBuildWhatFits={() => onResume(job, { ...publishing, creditsConfirmed: true })}
+          onSmaller={() => onResume(job, { ...publishing, creditsConfirmed: true, reduce: 'first-page' })}
+        />
+      )}
+      {waiting && !prompt && (
         <Button
           size="small"
           variant="contained"
           // Disabled with its reason above when the Free allowance left
           // cannot pay for another try (AGL-3594).
           disabled={busy || (review.reason !== 'plan' && Boolean(review.retryRefusal))}
-          onClick={() => onResume(job, offersPublish && publish ? { publish: true } : undefined)}
+          onClick={() => onResume(job, offersPublish && publish ? publishing : undefined)}
           sx={{ mt: 1 }}
         >
           {review.reason === 'plan' ? 'Confirm plan' : 'Try again'}

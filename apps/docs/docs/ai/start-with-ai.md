@@ -77,11 +77,13 @@ unless you have a reason to choose; see
 
 ## What it will cost {#what-it-will-cost}
 
-The bar at the bottom shows what the start can cost before you begin. On a paid plan it is
-an estimate. On the Free plan it is the most the start can cost, next to how many of your
-free credits are left this month and when they reset. If what is left cannot cover it,
-**Plan my site** is turned off and the window says so. It also tells you if one page would
-fit. See [Before a job starts](./ai-credits.md#before-a-job-starts).
+The bar at the bottom shows what the start will cost before you begin, as *About N
+credits (up to M)*: about what starts like it cost on real builds, and the most it can cost.
+On the Free plan it also shows how many of your free credits are left this month and when
+they renew. If the start will likely use more than you have left, the window says so and
+offers **Build what fits** (it builds what your credits cover, then pauses until you
+**Resume**), **Build the home page first** (a one-page start), and **Upgrade**. **Plan my
+site** waits until you choose. See [Before a job starts](./ai-credits.md#before-a-job-starts).
 
 ## What gets built {#what-gets-built}
 

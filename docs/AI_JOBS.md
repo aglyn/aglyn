@@ -216,18 +216,43 @@ credits is refused in the meter's words and the job stays paused. A month
 that rolls over or a staff credit return re-opens the meter, and Resume (or
 the beat) carries on.
 
-**A Free guided start is refused before it spends when what is left cannot
-pay for it (AGL-3660).** What a Free workspace has left is the less of its own
-band and its owner's allowance across every Free workspace they hold
-(`readFreeAiCreditsLeft`), net of give-backs. The jobs list returns it as
-`freeCredits`, the dialog quotes it beside the start's estimate
-(`aiFreeSiteCreditEstimate`) and disables the start below it, and the site
-kind's admission refuses the create with a 429 on the same figure, so a stale
-dialog cannot start a job that would pause between its form and its first page.
-The figure is the whole worst case (`aiFreeSiteWorstCaseCredits`): the plan,
-the look, the layout and form, each page and its listing, the sections the
-plan is held to and the room for one retried page — 282 credits for two pages,
-236 for one — never a nominal count that leaves any of them out.
+**A job is quoted at what it measured, beside its ceiling (AGL-3722).** Every
+surface that quotes a job's cost — the plan card, the guided start, Try again
+and the Free prompt — reads `model/ai-credit-estimate.ts`: a range of `likely`
+(the sum of the measured medians of what it builds), `p90` (the sum of the
+measured p90s) and `ceiling` (every pass at `AI_SITE_PASS_CREDITS`, the figure
+quoted before), shown as "About 106 credits (up to 650)". The table is
+`AI_MEASURED_UNIT_CREDITS` — done jobs in production since 2026-10-01, read
+2026-10-09: page 30/40 for about five sections (scaled about 6/8 a section by
+`aiMeasuredPageCredits`), form 29/31, layout 23/24, theme 4/8, plan 21/70; the
+module says how to re-measure. Kinds with no measurement of their own
+(components, email designs, items) use a form's figures per pass as a declared
+stand-in. The meter still charges actual use and each pass still reserves 50:
+only the quote and the Free admission moved.
+
+**A Free job is admitted on its p90; past what is left it asks first
+(AGL-3722, reversing the worst-case hold of AGL-3660).** What a Free workspace
+has left is the less of its own band and its owner's allowance across every
+Free workspace they hold (`readFreeAiCreditsLeft`), net of give-backs. A Free
+site start (`createAiSiteJobAdmission`, on `aiFreeSiteCreditRange`: 137 / 213
+/ 282 for two pages) and a Free build's confirm and Try again
+(`aiBuildFreeCreditsRefusal`, on `aiBuildCreditRange`) are admitted with no
+prompt when the p90 fits. When it does not, the door answers 409 with
+`code: 'credits-confirm'` and `credits` (the range, what is left, the reset
+day and `smaller`, the home page first), and nothing starts. The dialog, the
+plan card (told what is left through `review.freeCredits`, read when a build's
+plan is kept) and Try again show the sentence and three choices: **Build what
+fits** re-sends with `creditsConfirmed: true`, which admits it and records
+`creditsConfirmed` on the job (who, when, what was left, the range shown);
+**Build the home page first** re-sends with `reduce: 'first-page'` too, and
+the resume door confirms `aiBuildFirstPagePlan` — the home page and what it
+needs transitively, the rest left for a later request — in place of the
+proposed plan (a guided start asks for one page); **Upgrade** opens Billing.
+Nothing left at all is a 429 (`aiFreeCreditsNoneLeftText`). A confirmed job
+that runs out mid-build parks `needs_input` like any meter refusal — between
+items, never inside one, so nothing is half-written — and Resume (or the beat)
+carries on from the next pending item; delivered items are never re-run or
+re-charged. The Free per-pass wall (`ai-job-free-page.spec.ts`) is unchanged.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.

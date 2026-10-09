@@ -92,16 +92,23 @@ import {
   AI_SITE_FREE_PAGES,
   AI_SITE_FREE_PAGES_NOTE,
   AI_SITE_SUBMISSION_CHOICES,
+  aiFreeCreditsNoneLeftText,
   aiFreeCreditsResetLabel,
-  aiFreeSiteCreditEstimate,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
-  aiSiteCreditEstimate,
+  aiFreeSiteCreditRange,
+  aiFreeSitePrompt,
+  aiSiteCreditRange,
   type AiFreeCreditsLeft,
   aiSitePagesBand,
   type AiSiteSubmissions,
 } from '../model/ai-site-job'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import {
+  AI_CREDITS_CONFIRM_CODE,
+  aiCreditRangeText,
+  type AiCreditRange,
+  type AiCreditsPrompt,
+} from '../model/ai-credit-estimate'
+import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_TYPES,
@@ -356,7 +363,7 @@ const START_HELP = {
   estimate: pluginDocsHelp('aiCredits', {
     anchor: '#before-a-job-starts',
     excerpt:
-      'The most this start can cost. What it really costs is what each step spends, and you can watch that add up while it runs.',
+      'About what a start like this costs, measured on real builds, and the most it can cost. What it really costs is what each step spends, and you can watch that add up while it runs.',
   }),
 }
 
@@ -457,9 +464,17 @@ export function AiSiteStartCard({
     [],
   )
 
-  // A Free start what is left cannot pay for is not started (AGL-3660): the
-  // dialog says so before anything spends, and the create door refuses it too.
-  const shortfall = freeTaste ? aiFreeSiteShortfall(freeCredits, answers.pages) : null
+  // A Free start past what is left asks first (AGL-3722): it is admitted on
+  // its measured p90, and one past what is left starts only on "Build what
+  // fits" (pausing with Resume where the credits run out), or smaller as the
+  // home page alone. The create door asks the same, so a stale dialog meets
+  // the prompt there too (`serverPrompt`). Nothing at all left is a dead
+  // stop until the credits renew or the workspace upgrades.
+  const [serverPrompt, setServerPrompt] = useState<AiCreditsPrompt | null>(null)
+  // The door's prompt was for the pages it was asked with.
+  useEffect(() => setServerPrompt(null), [answers.pages])
+  const prompt = freeTaste ? (aiFreeSitePrompt(freeCredits, answers.pages) ?? serverPrompt) : null
+  const noneLeft = freeTaste && freeCredits !== null && freeCredits.left <= 0
   const refusal = aiSiteStartRefusal(answers, { freeTaste })
   const band = aiSitePagesBand(freeTaste)
   // On a paid plan the person picks the model that builds the site (AGL-3660),
@@ -474,10 +489,15 @@ export function AiSiteStartCard({
   }, [freeTaste, step, rememberedModel, loadModels])
   const pickedModel = freeTaste ? null : modelChoice.model
 
-  const plan = useCallback(async () => {
-    if (!orgId || aiSiteStartRefusal(answers, { freeTaste }) || shortfall) return
+  const plan = useCallback(async (options: { creditsConfirmed?: boolean; pages?: number } = {}) => {
+    const asked = options.pages ? { ...answers, pages: options.pages } : answers
+    if (!orgId || aiSiteStartRefusal(asked, { freeTaste }) || noneLeft) return
+    // Past what is left, only an explicit go-ahead starts it.
+    if (freeTaste && !options.creditsConfirmed && aiFreeSitePrompt(freeCredits, asked.pages)) return
+    if (options.pages) answer({ pages: options.pages })
     setBusy(true)
     setNotice(null)
+    setServerPrompt(null)
     try {
       const response = await authorizedFetch(userRef.current, '/api/ai/jobs', {
         method: 'POST',
@@ -486,15 +506,20 @@ export function AiSiteStartCard({
           orgId,
           hostId,
           kind: 'site',
-          brief: aiSiteStartBrief(answers),
+          brief: aiSiteStartBrief(asked),
           // The guided start confirms its own plan (AGL-3594): the build
           // follows the plan with no approval to make.
-          inputs: { ...aiSiteStartInputs(answers), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
+          inputs: { ...aiSiteStartInputs(asked), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
           ...(pickedModel ? { model: pickedModel } : {}),
+          ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
         }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
+        if (response.status === 409 && payload?.code === AI_CREDITS_CONFIRM_CODE && payload?.credits) {
+          setServerPrompt(payload.credits as AiCreditsPrompt)
+          return
+        }
         const locked = parseLockdownRefusal(response.status, payload)
         setNotice(
           locked
@@ -525,7 +550,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, freeTaste, shortfall, orgSlug, host, leave, router, pickedModel])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel])
 
   const chooseStarter = useCallback(() => {
     setStartingStarter(true)
@@ -568,20 +593,23 @@ export function AiSiteStartCard({
   // The chosen model's cost against Auto's, as the model list states it.
   const modelMultiplier =
     (pickedModel && modelChoice.options?.options.find((option) => option.id === pickedModel)?.multiplier) || 1
+  // What the start is likely to cost and at most (AGL-3722): "About 137
+  // credits (up to 282)", the measured figures scaled by the chosen model.
+  const scaled = (range: AiCreditRange): AiCreditRange => ({
+    likely: Math.round(range.likely * modelMultiplier),
+    p90: Math.round(range.p90 * modelMultiplier),
+    ceiling: Math.round(range.ceiling * modelMultiplier),
+  })
   const estimate = freeTaste
-    ? aiFreeSiteCreditEstimate(answers.pages)
-    : Math.round(
-        aiSiteCreditEstimate(answers.pages, {
-          welcomeEmail: answers.welcomeEmail,
-        }) * modelMultiplier,
-      )
+    ? aiFreeSiteCreditRange(answers.pages)
+    : scaled(aiSiteCreditRange(answers.pages, { welcomeEmail: answers.welcomeEmail }))
   // A Free start quotes what is LEFT (AGL-3660), shared across the owner's
   // Free workspaces — never the month's whole allowance as if none were spent.
   const estimateText = freeTaste
     ? freeCredits
-      ? `Up to about ${estimate.toLocaleString('en-US')} AI credits. You have ${freeCredits.left.toLocaleString('en-US')} of your ${freeCredits.total.toLocaleString('en-US')} free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}`
-      : `Up to about ${estimate.toLocaleString('en-US')} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
-    : `About ${estimate.toLocaleString('en-US')} credits, estimated`
+      ? `${aiCreditRangeText(estimate)}. You have ${freeCredits.left.toLocaleString('en-US')} of your ${freeCredits.total.toLocaleString('en-US')} free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}`
+      : `${aiCreditRangeText(estimate)}, of the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits you get free each month`
+    : `${aiCreditRangeText(estimate)}, estimated`
 
   const choosing = step === 'choose' && !started
 
@@ -660,7 +688,7 @@ export function AiSiteStartCard({
               </Typography>
             </Stack>
             {notice && <Alert severity="info">{notice}</Alert>}
-            {step === 'describe' && !started && shortfall && freeCredits && (
+            {step === 'describe' && !started && noneLeft && freeCredits && (
               <Alert
                 severity="warning"
                 action={
@@ -671,11 +699,18 @@ export function AiSiteStartCard({
                   ) : undefined
                 }
               >
-                {aiFreeSiteShortfallText(shortfall, freeCredits.resetsOn)}
-                {answers.pages > 1 && !aiFreeSiteShortfall(freeCredits, 1)
-                  ? ' Or choose 1 page, which what you have left covers.'
-                  : null}
+                {aiFreeCreditsNoneLeftText(freeCredits.resetsOn)}
               </Alert>
+            )}
+            {step === 'describe' && !started && !noneLeft && prompt && (
+              <AiCreditsPromptNotice
+                prompt={prompt}
+                noun="site"
+                orgSlug={orgSlug}
+                busy={busy}
+                onBuildWhatFits={() => void plan({ creditsConfirmed: true })}
+                onSmaller={() => void plan({ creditsConfirmed: true, pages: 1 })}
+              />
             )}
             {choosing ? (
               <Box
@@ -869,8 +904,8 @@ export function AiSiteStartCard({
           <Button
             variant="contained"
             size="large"
-            disabled={busy || Boolean(refusal) || Boolean(shortfall)}
-            onClick={plan}
+            disabled={busy || Boolean(refusal) || Boolean(prompt) || noneLeft}
+            onClick={() => void plan()}
             startIcon={<MdiIcon path={mdiCreation.path} />}
           >
             {busy ? 'Starting…' : 'Plan my site'}

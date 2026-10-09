@@ -20,14 +20,17 @@
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
-import { Box, Button, CircularProgress, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Paper, Stack, Typography } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
-import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine } from '../model/ai-build-progress'
+import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine, aiBuildRetryCreditRange } from '../model/ai-build-progress'
+import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
+import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
+import { aiCreditsBillingHref } from './ai-job-links'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import type { AssistBuildProposal } from '../model/assist-build'
 import { followAiJobEvents } from './ai-job-events'
 import { AiJobPlan } from './ai-job-plan.component'
-import { resumeAiJobRequest } from './ai-job-requests'
+import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
 import { openAiJobs } from './ai-jobs-store'
 
 /**
@@ -51,6 +54,8 @@ export interface AssistBuildCardProps {
   /** The job as it moved, for the thread to keep. */
   onJob: (job: AiJobSummary) => void
   onNotice: (notice: string | null) => void
+  /** The workspace's path slug, for Upgrade on a Free build past what is left or paused (AGL-3722). */
+  orgSlug?: string | null
 }
 
 /** The card's own section of the Assist builds guide (AGL-3660). */
@@ -71,8 +76,11 @@ export function AssistBuildCard({
   staff = false,
   onJob,
   onNotice,
+  orgSlug,
 }: AssistBuildCardProps): JSX.Element {
   const [busy, setBusy] = useState(false)
+  // A Free Try again past what is left (AGL-3722): its prompt, until chosen.
+  const [retryPrompt, setRetryPrompt] = useState<AiCreditsPrompt | null>(null)
   const userRef = useRef(user)
   userRef.current = user
   const onJobRef = useRef(onJob)
@@ -80,7 +88,11 @@ export function AssistBuildCard({
 
   // Follow a job that is still planning or building; a plan waiting for its
   // confirmation and a settled job need nothing more from the stream.
-  const following = Boolean(job && !AI_JOB_TERMINAL_STATUSES.includes(job.status) && job.status !== 'needs_review')
+  // A build the meter paused (AGL-3722) waits for Resume, not the stream.
+  const paused = job?.status === 'needs_input'
+  const following = Boolean(
+    job && !AI_JOB_TERMINAL_STATUSES.includes(job.status) && job.status !== 'needs_review' && !paused,
+  )
   const jobId = job?.id ?? null
   useEffect(() => {
     if (!following || !jobId) return
@@ -89,14 +101,19 @@ export function AssistBuildCard({
     return () => controller.abort()
   }, [following, jobId, orgId])
 
-  const resume = async (target: AiJobSummary, options?: { publish?: boolean; retry?: 'failed-items' }) => {
+  const resume = async (target: AiJobSummary, options?: AiJobResumeOptions) => {
     setBusy(true)
     onNotice(null)
+    setRetryPrompt(null)
     const decision = await resumeAiJobRequest(user, orgId, target, options)
     if (decision.job) onJob(decision.job)
-    if (decision.error) onNotice(decision.error)
+    // A Free Try again past what is left asks with its choices; a plan's
+    // card draws its own from the job the door answered with.
+    if (decision.credits && options?.retry) setRetryPrompt(decision.credits)
+    else if (decision.error && !(decision.credits && target.status === 'needs_review')) onNotice(decision.error)
     setBusy(false)
   }
+  const retryRange = job && aiBuildCanRetry(job) ? aiBuildRetryCreditRange(job) : null
 
   const settled = job ? AI_JOB_TERMINAL_STATUSES.includes(job.status) : false
   const outcome = job ? aiBuildOutcomeLine(job) : null
@@ -120,7 +137,14 @@ export function AssistBuildCard({
         </Typography>
       )}
       {job && job.status === 'needs_review' && (
-        <AiJobPlan job={job} busy={busy} staff={staff} user={user} onResume={(target, options) => void resume(target, options)} />
+        <AiJobPlan
+          job={job}
+          busy={busy}
+          staff={staff}
+          user={user}
+          orgSlug={orgSlug}
+          onResume={(target, options) => void resume(target, options)}
+        />
       )}
       {job && following && (
         <Stack direction="row" spacing={1} sx={{ mt: 0.5, alignItems: 'center' }}>
@@ -142,6 +166,37 @@ export function AssistBuildCard({
           ))}
         </Box>
       )}
+      {job && paused && (
+        // Out of credits mid-build (AGL-3722): paused, never failed. What is
+        // built is kept, and Resume carries on from the next item.
+        <Alert
+          severity="warning"
+          sx={{ mt: 0.5 }}
+          action={
+            <Stack direction="row" spacing={1}>
+              {orgSlug ? (
+                <Button color="inherit" size="small" href={aiCreditsBillingHref(orgSlug)}>
+                  {'Upgrade'}
+                </Button>
+              ) : null}
+              <Button color="inherit" size="small" disabled={busy} onClick={() => void resume(job)}>
+                {'Resume'}
+              </Button>
+            </Stack>
+          }
+        >
+          {`Paused. ${job.error ?? 'Your AI credits ran out.'} What is built so far is kept, and Resume carries on from the next item once you upgrade or your credits renew.`}
+        </Alert>
+      )}
+      {job && retryPrompt && (
+        <AiCreditsPromptNotice
+          prompt={retryPrompt}
+          noun="build"
+          orgSlug={orgSlug}
+          busy={busy}
+          onBuildWhatFits={() => void resume(job, { retry: 'failed-items', creditsConfirmed: true })}
+        />
+      )}
       {settled && (
         <Typography variant="body2" sx={{ mt: 0.5 }}>
           {outcome ?? job?.error ?? ''}
@@ -151,7 +206,7 @@ export function AssistBuildCard({
         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
           {job && aiBuildCanRetry(job) && (
             <Button size="small" variant="contained" disabled={busy} onClick={() => void resume(job, { retry: 'failed-items' })}>
-              {'Try again what failed'}
+              {retryRange ? `Try again what failed · ${aiCreditRangeText(retryRange)}` : 'Try again what failed'}
             </Button>
           )}
           <Button size="small" onClick={() => openAiJobs({ jobId: job.id })}>

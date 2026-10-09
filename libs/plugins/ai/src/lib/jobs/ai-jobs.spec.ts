@@ -289,6 +289,7 @@ import { AI_JOB_TEXT_STEP_MINIMUM_MS } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
 import { assistFreeTasteRefusalText } from '../usage/assist-credits'
+import { FREE_AI_ACCOUNT_BUDGET_USD } from '../usage/assist-free-taste'
 import {
   ASSIST_EXCHANGE_RETENTION_DAYS,
   assistUsageDay,
@@ -2752,6 +2753,57 @@ describe('a build from one request settles item by item (AGL-3616)', () => {
     expect(job.status).toBe('done')
     // Nothing left to try: a second retry changes nothing.
     expect((await retryAiBuildJob(firestore, ORG, first.$id, NOW)).changed).toBe(false)
+  })
+
+  it('a Free build confirmed past what is left PAUSES where its credits run out — never fails — and Resume carries on from the next item, charging nothing twice (AGL-3722)', async () => {
+    const orgId = 'org-free'
+    const accountMonth = `users/owner-1/aiUsage/${assistUsageMonth(NOW)}`
+    const job = await createAiJob(
+      firestore,
+      { orgId, hostId: 'host-1', kind: 'build', brief: 'Two pages and a contact form.', createdBy: 'uid-1' },
+      NOW,
+    )
+    expect((await runAiJobStep(firestore, orgId, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+    const confirmation = { by: 'uid-1', at: NOW, left: 90, likely: 106, p90: 127, ceiling: 300 }
+    const { job: confirmed } = await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW, { creditsConfirmed: confirmation })
+    // The go-ahead is kept on the job: who, when, what was left, the range shown.
+    expect(confirmed.creditsConfirmed).toEqual(confirmation)
+    // The layout and the form are built; then the owner's month runs out.
+    await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })
+    await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })
+    mockDocs.set(accountMonth, { estCostUsd: FREE_AI_ACCOUNT_BUDGET_USD })
+    const run = await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })
+    if (run.outcome !== 'needs_input') throw new Error(`expected a pause, got ${run.outcome}`)
+    const paused = run
+    expect(paused.job).toMatchObject({ status: 'needs_input', error: assistFreeTasteRefusalText('account') })
+    // Nothing half-written: what was built stands, the next page never started.
+    expect(paused.job.items?.map((row) => [row.slot, row.status, row.creditsSpent])).toEqual([
+      ['c0', 'succeeded', 6],
+      ['c1', 'succeeded', 6],
+      ['p0', 'pending', 0],
+      ['p1', 'pending', 0],
+    ])
+    expect(handed.map((one) => one.kind)).toEqual(['layout', 'form'])
+    // Resume while still out: the meter refuses again, still paused, nothing run.
+    await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW)
+    expect((await runAiJobStep(firestore, orgId, job.$id, { owner: 'beat-1', now: NOW })).outcome).toBe('needs_input')
+    expect(handed).toHaveLength(2)
+    // Next month's credits arrive (or an upgrade): Resume carries on from the next item.
+    mockDocs.delete(accountMonth)
+    const { job: resumed, changed } = await resumeAiJob(firestore, orgId, job.$id, { uid: 'uid-1' }, NOW)
+    expect(changed).toBe(true)
+    expect(resumed.status).toBe('queued')
+    const done = await runToEnd(orgId, job.$id)
+    expect(done.status).toBe('done')
+    // The layout and form were never built again, nor charged again.
+    expect(handed.map((one) => one.kind)).toEqual(['layout', 'form', 'page', 'page'])
+    expect(done.items?.map((row) => [row.slot, row.status, row.attempt, row.creditsSpent])).toEqual([
+      ['c0', 'succeeded', 1, 6],
+      ['c1', 'succeeded', 1, 6],
+      ['p0', 'succeeded', 1, 6],
+      ['p1', 'succeeded', 1, 6],
+    ])
+    expect(done.creditsSpent).toBe(6 + 4 * 6)
   })
 
   it('a provider that throws for one item fails that item, not the build', async () => {

@@ -24,7 +24,8 @@ import {
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
-import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
+import type { AiJob, AiJobKind, AiJobPlan, AiJobReview, AiJobStatus } from '../model/ai-jobs.types'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
   aiTemplateShownTokens,
@@ -717,6 +718,11 @@ export interface AiJobPlanStepDeps {
    * turns it off.
    */
   readSiteContext?: AiSiteContextReader | null
+  /**
+   * What a Free workspace has left (AGL-3722), read when a build's plan is
+   * kept so its card can say whether it fits; `null` turns it off.
+   */
+  readFreeCredits?: typeof readFreeAiCreditsLeft | null
 }
 
 /** What a job's site context is read with (AGL-3661). */
@@ -769,6 +775,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
   const readOps = deps.readOps ?? readAiBuildOps
   const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
+  const readFreeCredits = deps.readFreeCredits === undefined ? readFreeAiCreditsLeft : deps.readFreeCredits
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
     const [inventory, workspace, siteContext] = await Promise.all([
@@ -789,6 +796,14 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // A build's operations, as this site has them (AGL-3616).
     const ops = job.kind === 'build' ? await readOps({ job, org, firestore, freeTaste }) : null
     const site = job.kind === 'site'
+    // A kept plan waits for its confirmation; a Free build's card is told what
+    // is left, so it says before Confirm whether the build fits (AGL-3722).
+    const planReview = async (): Promise<AiJobReview> => {
+      const review: AiJobReview = { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] }
+      if (job.kind !== 'build' || !freeTaste || !readFreeCredits) return review
+      const credits = await readFreeCredits(firestore, { orgId: job.orgId, org, now })
+      return credits ? { ...review, freeCredits: credits } : review
+    }
     // The model switch's answer for this job (AGL-2942): the creator's pick
     // where the plan, the org restriction and the allotment allowlists allow
     // it, and Auto held to those same lists otherwise. Without a resolver the
@@ -868,7 +883,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         (await refusalOnKeep(plan, unspent)) ?? {
           ...unspent,
           plan,
-          review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+          review: await planReview(),
         }
       )
     }
@@ -950,7 +965,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,
         plan,
-        review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+        review: await planReview(),
       }
     )
   }

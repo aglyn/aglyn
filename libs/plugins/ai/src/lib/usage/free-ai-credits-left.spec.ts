@@ -31,7 +31,7 @@ jest.mock('@aglyn/tenant-data-admin/server/admin-audit-write', () => ({
 }))
 
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
-import { aiFreeSiteCreditEstimate, aiFreeSiteShortfall } from '../model/ai-site-job'
+import { aiFreeSiteCreditRange, aiFreeSitePrompt } from '../model/ai-site-job'
 import { assistUsdFromCredits } from './assist-credits'
 import { freeAiCreditsLeftFrom, readFreeAiCreditsLeft } from './free-ai-credits-left'
 
@@ -72,16 +72,16 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
   it('tells the new workspace what the owner has left, not the 300 a fresh band shows', async () => {
     const left = await readFreeAiCreditsLeft(fakeFirestore(docs), { orgId: 'org-b', org: free('org-b'), now: NOW })
     expect(left).toEqual({ left: 70, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: '2026-11-01' })
-    // A two-page start's quoted figure is past it, so the start is refused;
-    // a give-back that reopens the owner's month admits it again.
-    expect(aiFreeSiteShortfall(left, 2)).toEqual({ needed: aiFreeSiteCreditEstimate(2), left: 70 })
+    // A two-page start's p90 is past it, so the start asks first (AGL-3722);
+    // a give-back that reopens the owner's month admits it with no prompt.
+    expect(aiFreeSitePrompt(left, 2)).toMatchObject({ ...aiFreeSiteCreditRange(2), left: 70 })
     const returned = {
       ...docs,
       [`users/${owner}/aiUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(230), returnedUsd: assistUsdFromCredits(230) },
     }
     const after = await readFreeAiCreditsLeft(fakeFirestore(returned), { orgId: 'org-b', org: free('org-b'), now: NOW })
     expect(after?.left).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
-    expect(aiFreeSiteShortfall(after, 2)).toBeNull()
+    expect(aiFreeSitePrompt(after, 2)).toBeNull()
   })
 
   it('reads the workspace that spent as limited by both walls', async () => {
