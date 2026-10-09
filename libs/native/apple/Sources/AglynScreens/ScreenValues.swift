@@ -126,6 +126,23 @@ public enum ScreenValues {
       format = String(body[body.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
       body = String(body[..<colon])
     }
+    // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
+    if body.contains("??") {
+      var found: JSONValue?
+      for alternative in body.components(separatedBy: "??") {
+        let part = alternative.trimmingCharacters(in: .whitespaces)
+        if part.count >= 2, part.hasPrefix("'"), part.hasSuffix("'") {
+          found = .string(String(part.dropFirst().dropLast()))
+          break
+        }
+        if let value = lookup(part, in: context), value != .null {
+          found = value
+          break
+        }
+      }
+      guard let format, !format.isEmpty else { return found }
+      return .string(formatted(found, as: format, in: context))
+    }
     // A truthy alternative or a quoted literal wins where it stands; failing
     // both, the first value that was there at all (0, false, "").
     var picked: JSONValue?

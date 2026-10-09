@@ -260,7 +260,7 @@
     "generate:native-contracts:check": "node tools/scripts/generate-native-contracts.mjs --check",
     "generate:native-derived-values": "node tools/scripts/generate-native-derived-values.mjs",
     "generate:native-derived-values:check": "node tools/scripts/generate-native-derived-values.mjs --check",
-    "test:native-contracts": "node --test tools/scripts/lib/native-contracts.test.mjs",
+    "test:native-contracts": "node --test tools/scripts/lib/native-contracts.test.mjs tools/scripts/lib/native-plugin-settings.test.mjs",
     "test:native-ci-changed": "node --test tools/scripts/lib/native-ci-changed.test.mjs",
     "generate:native-brand-assets": "node tools/scripts/generate-native-brand-assets.mjs",
     "generate:native-brand-assets:check": "node tools/scripts/generate-native-brand-assets.mjs --check",
