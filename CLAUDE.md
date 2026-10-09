@@ -27,6 +27,16 @@ The session that fixes it owns the whole path, in the same turn:
 A fix that is on main and missing from production counts as the bug still
 being live.
 
+## Every PR body details every change and every commit in it
+
+Zach, 2026-10-09, standing: a PR description lists every change it carries and
+every commit in it, especially a promotion PR. For a promotion, that is each
+merged PR (number, title, one line on what it does) and each direct commit
+(short sha, subject) in `origin/production..HEAD`, grouped by area. When you
+push more onto an open PR (a CI fix, a `git merge origin/main`), update the
+body in the same push with what was added. A body that says "plus a few fixes",
+or lists only the headline PRs, is incomplete.
+
 ## Verify in the cheapest tier that can see the mistake
 
 Four tiers exist. They are not interchangeable, and collapsing them is the
