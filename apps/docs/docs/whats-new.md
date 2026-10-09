@@ -229,17 +229,17 @@ for the how-to.
 
 <!--
   AGL-3634 — Fulfillment networks are built and hidden until a deployment holds a
-  ShipBob developer app or an Amazon selling-partner app and sets
-  FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,
+  ShipBob developer app or an Amazon selling-partner app, or sets SHIPMONK_ENABLED
+  (AGL-3697), and sets FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,
   like the guide it links (`unlisted: true`): once a network is configured on
   aglyn.com, remove this comment's markers, move "(newest)" here from the top
   heading, and delete `unlisted: true` and the "Rolling out" note from
   commerce-and-bookings/commerce/fulfillment-networks.md.
 
-## October 2026 — ShipBob and Amazon ship your orders
+## October 2026 — ShipBob, ShipMonk and Amazon ship your orders
 
 - **[Fulfillment networks](commerce-and-bookings/commerce/fulfillment-networks.md)** —
-  connect your own ShipBob or Amazon Multi-Channel Fulfillment account and paid orders
+  connect your own ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account and paid orders
   go to it to pick, pack and ship. Items it does not stock stay with you, each parcel
   it ships comes back to the order with its tracking, canceling an order cancels it
   there, and your stock counts can follow the warehouse's.
