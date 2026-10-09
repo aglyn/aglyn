@@ -142,5 +142,9 @@
   "loyalty": {
     "baseline": 9161,
     "budget": 12288
+  },
+  "weglot": {
+    "baseline": 6494,
+    "budget": 8192
   }
 }
