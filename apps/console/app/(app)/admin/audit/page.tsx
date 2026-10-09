@@ -31,6 +31,11 @@ import {
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { describeStaffAudit } from '@aglyn/aglyn/app-utils/activity-labels'
+import ActivityDetailsDialog, {
+  type ActivityDetails,
+} from '@aglyn/shared-ui-jsx/components/activity-details-dialog.component'
+import { staffActivityLinks } from '../../../../utils/activity-details'
 import {
   type ListFilterClause,
   type ListFilterOption,
@@ -105,6 +110,7 @@ function ArchiveCard() {
   const [openFile, setOpenFile] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [opened, setOpened] = useState<Record<string, any> | null>(null)
 
   const call = async (params: Record<string, string>) => {
     const search = new URLSearchParams(params).toString()
@@ -223,7 +229,19 @@ function ArchiveCard() {
           <Stack
             key={`${row['$id'] ?? index}`}
             spacing={0.5}
-            sx={{ borderBottom: 1, borderColor: 'divider', pb: 1 }}
+            role="button"
+            tabIndex={0}
+            onClick={() => setOpened(row)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') setOpened(row)
+            }}
+            sx={{
+              borderBottom: 1,
+              borderColor: 'divider',
+              pb: 1,
+              cursor: 'pointer',
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
           >
             <Stack
               useFlexGap
@@ -231,7 +249,11 @@ function ArchiveCard() {
               spacing={1}
               sx={{ alignItems: 'center', flexWrap: 'wrap' }}
             >
-              <Chip label={String(row['action'] ?? '')} size="small" />
+              <Chip
+                label={describeStaffAudit(row).action}
+                title={String(row['action'] ?? '')}
+                size="small"
+              />
               {row['scope'] ? (
                 <Chip
                   label={String(row['scope'])}
@@ -239,8 +261,8 @@ function ArchiveCard() {
                   variant="outlined"
                 />
               ) : null}
-              <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                {String(row['target'] ?? '')}
+              <Typography variant="body2" title={String(row['target'] ?? '')}>
+                {describeStaffAudit(row).target}
               </Typography>
               <Typography
                 variant="caption"
@@ -266,6 +288,11 @@ function ArchiveCard() {
           </Stack>
         ))}
       </Stack>
+      <ActivityDetailsDialog
+        staff
+        details={opened ? auditRowDetails(opened) : null}
+        onClose={() => setOpened(null)}
+      />
     </CardDisplay>
   )
 }
@@ -312,6 +339,52 @@ const auditWhy = (entry: Record<string, any>): string | null =>
  * before/after one click away. Read access is staff-only in rules; the page
  * also hides itself without the claim, matching the orgs page.
  */
+
+/** One stored audit entry as the shared details dialog shows it (AGL-3660). */
+function auditRowDetails(row: Record<string, unknown>): ActivityDetails {
+  const described = describeStaffAudit(row as never)
+  // A live row's `at` is a Timestamp; an archived row's is an ISO string.
+  const stamp = row['at'] as { seconds?: number } | string | undefined
+  const at =
+    typeof stamp === 'string'
+      ? Date.parse(stamp) / 1000 || null
+      : (stamp?.seconds ?? null)
+  return {
+    description: described,
+    who: row['actorEmail']
+      ? `${String(row['actorEmail'])} (${String(row['actorUid'])})`
+      : String(row['actorUid'] ?? '—'),
+    when: at ? new Date(at * 1000).toLocaleString() : '—',
+    links: staffActivityLinks(described),
+    staffFields: [
+      {
+        label: 'Stored entry',
+        value: (
+          <Typography
+            component="pre"
+            variant="caption"
+            aria-label="Entry details"
+            sx={{ m: 0, p: 1, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto' }}
+          >
+            {JSON.stringify(
+              {
+                action: row['action'],
+                target: row['target'],
+                reason: row['reason'] ?? null,
+                note: row['note'] ?? null,
+                before: row['before'],
+                after: row['after'],
+              },
+              null,
+              2,
+            )}
+          </Typography>
+        ),
+      },
+    ],
+  }
+}
+
 const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
@@ -492,7 +565,13 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Action',
         flex: 1.1,
         minWidth: 190,
-        renderCell: ({ row }: any) => <Chip label={row.action} size="small" />,
+        // The shared words (AGL-3660); the stored code is the tooltip and is
+        // in the row's details. The cell's value stays the code, which is
+        // what the Action filter compares.
+        renderCell: ({ row }: any) => {
+          const described = describeStaffAudit(row)
+          return <span title={described.code ?? undefined}>{described.action}</span>
+        },
       },
       {
         field: 'scope',
@@ -514,8 +593,8 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         minWidth: 220,
         renderCell: ({ row }: any) => (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontFamily: 'monospace' }} noWrap>
-              {row.target}
+            <Typography variant="body2" noWrap title={row.target ?? undefined}>
+              {describeStaffAudit(row).target}
             </Typography>
             {/*
               A staff grant made inside a CUSTOMER's identity pool (AGL-2324),
@@ -755,7 +834,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                    * A row opens its entry — the reason, the note and the
                    * before/after — below the list.
                    */
-                  onOpen={(id) => setExpanded((previous) => (previous === id ? null : id))}
+                  onOpen={(id) => setExpanded(id)}
                   hideFooter
                   rowHeight={TABLE_ROW_HEIGHT}
                   /*
@@ -773,33 +852,16 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   noRowsLabel="No audit entries match these filters"
                 />
               )}
-              {expandedRow ? (
-                <Typography
-                  component="pre"
-                  variant="caption"
-                  aria-label="Entry details"
-                  sx={{
-                    m: 0,
-                    p: 1,
-                    bgcolor: 'action.hover',
-                    borderRadius: 1,
-                    overflowX: 'auto',
-                  }}
-                >
-                  {JSON.stringify(
-                    {
-                      action: expandedRow['action'],
-                      target: expandedRow['target'],
-                      reason: expandedRow['reason'] ?? null,
-                      note: expandedRow['note'] ?? null,
-                      before: expandedRow['before'],
-                      after: expandedRow['after'],
-                    },
-                    null,
-                    2,
-                  )}
-                </Typography>
-              ) : null}
+              {/*
+                A row opens the shared details dialog (AGL-3660): the same
+                words as the row, and — this being the staff log — the
+                stored code, path, reason, note and before/after.
+              */}
+              <ActivityDetailsDialog
+                staff
+                onClose={() => setExpanded(null)}
+                details={expandedRow ? auditRowDetails(expandedRow) : null}
+              />
               {/*
                 The shared footer (AGL-2501). `hasMore` is a FACT: the read
                 over-fetches by one.

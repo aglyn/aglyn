@@ -26,6 +26,12 @@ import {
   isImpersonationSession,
   resolveUidsToPeople,
 } from '@aglyn/tenant-data-admin'
+import type { ActivityNames } from '@aglyn/aglyn/app-utils/activity-labels'
+import {
+  type AuditAfterSummary,
+  auditAfterSummary,
+  resolveAuditNames,
+} from '../../../../utils/server/audit-names'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -157,6 +163,9 @@ async function handler(request: Request): Promise<Response> {
           reason: string | null
           note: string | null
           at: unknown
+          subjectUid: string | null
+          after: AuditAfterSummary | null
+          names?: ActivityNames
         }>
       | null = null
     try {
@@ -181,7 +190,15 @@ async function handler(request: Request): Promise<Response> {
           reason: doc.get('reason') ?? null,
           note: doc.get('note') ?? null,
           at: serialize(doc.get('at') ?? null),
+          subjectUid: doc.get('subjectUid') ?? null,
+          // What an AI act made and spent, for the readable row (AGL-3660).
+          after: auditAfterSummary(doc.get('after')),
         }))
+      // The org, site and account names the rows mention, so the card reads
+      // words rather than paths (AGL-3660). One table for the slice: it is
+      // twenty rows about one organization.
+      const names = await resolveAuditNames(db, audit)
+      audit = audit.map((entry) => ({ ...entry, names }))
     } catch (error) {
       console.error('org-detail audit slice failed', error)
     }

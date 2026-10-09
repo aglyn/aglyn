@@ -1050,6 +1050,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <ActorActivityTable
                     endpoint={`/api/admin/user-activity?uid=${encodeURIComponent(uid)}`}
                     header="Activity by this account"
+                    staff
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:

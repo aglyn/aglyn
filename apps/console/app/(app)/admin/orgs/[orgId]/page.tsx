@@ -27,7 +27,6 @@ import {
   orgCogsBasisSummary,
   orgCogsPreview,
   netOfProcessorFee,
-  orgOverrideReasonSummary,
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
@@ -47,6 +46,7 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
+import StaffOrgAdminActionsCard from '../../../../../components/staff-org-admin-actions-card.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
@@ -65,7 +65,6 @@ import {
   TableCell,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -106,7 +105,6 @@ import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
 } from '../../../../../components/staff-org-usage-table.component'
 import StaffOrgSummaryCard, {
-  staffPersonLabel,
   type StaffPerson,
 } from '../../../../../components/staff-org-summary-card.component'
 import { fetchAllPages } from '../../../../../utils/fetch-all-pages'
@@ -2232,120 +2230,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 },
                 {
                   children: (
-                    <CardDisplay
-                      header={'Recent admin actions on this organization'}
+                    <StaffOrgAdminActionsCard
+                      entries={orgAudit}
+                      ready={orgReady}
+                      people={people}
                       help={docsHelp('staffConsole', {
                         anchor: '#whats-there',
                         excerpt:
                           'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
                       })}
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <Stack spacing={1}>
-                        {orgAudit == null ? (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {orgReady
-                              ? 'Could not read the audit slice — a failed ' +
-                                'read, not an empty history.'
-                              : 'Loading…'}
-                          </Typography>
-                        ) : orgAudit.length === 0 ? (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            {'No audit entries reference this ' +
-                              'organization in the latest 200.'}
-                          </Typography>
-                        ) : (
-                          orgAudit.map((entry: any) => {
-                            // The actor as a person (AGL-938); the uid
-                            // survives as the tooltip, and an unresolved
-                            // actor (`system:cron`, an erased account)
-                            // stays legible as its raw id.
-                            const actor = staffPersonLabel(
-                              entry.actorUid
-                                ? people[entry.actorUid]
-                                : null,
-                            )
-                            // WHY the action was taken (AGL-1652). This is
-                            // the surface an override is actually looked at
-                            // from, so it is the surface the reason has to
-                            // reach — an audit field nobody renders is the
-                            // same failure as no field.
-                            const why = orgOverrideReasonSummary(
-                              entry.reason,
-                              entry.note,
-                            )
-                            return (
-                              <Stack key={entry.$id} spacing={0.25}>
-                                <Stack
-                                  direction="row"
-                                  spacing={1}
-                                  sx={{ justifyContent: 'space-between' }}
-                                >
-                                  <Chip label={entry.action} size="small" />
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {/* A uid is an account: it links to
-                                        that account's staff page. A
-                                        `system:*` actor has none. */}
-                                    {entry.actorUid &&
-                                    !String(entry.actorUid).includes(':') ? (
-                                      <Tooltip
-                                        title={actor ? entry.actorUid : ''}
-                                      >
-                                        <AppLink
-                                          variant="caption"
-                                          underline="hover"
-                                          href={buildRoute(
-                                            Route.ADMIN_USER_DETAIL,
-                                            { uid: entry.actorUid },
-                                          )}
-                                        >
-                                          {actor ?? entry.actorUid}
-                                        </AppLink>
-                                      </Tooltip>
-                                    ) : (
-                                      (entry.actorUid ?? '—')
-                                    )}
-                                    {` · ${
-                                      entry.at?.seconds
-                                        ? new Date(
-                                            entry.at.seconds * 1000,
-                                          ).toLocaleString()
-                                        : '—'
-                                    }`}
-                                  </Typography>
-                                </Stack>
-                                {why ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {`Why: ${why}`}
-                                  </Typography>
-                                ) : entry.action === 'org.override' ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="warning.main"
-                                  >
-                                    {'Why: not recorded — predates the ' +
-                                      'required reason.'}
-                                  </Typography>
-                                ) : null}
-                              </Stack>
-                            )
-                          })
-                        )}
-                      </Stack>
-                    </CardDisplay>
+                    />
                   ),
                 },
                 {
@@ -2534,6 +2428,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       // on the day it published three pages, because the org
                       // collection holds only invites, roles and billing.
                       orgWide
+                      staff
                     />
                   ),
                 },

@@ -68,6 +68,12 @@ export interface PluginActivityAction {
   key: string
   /** What a person reads for the code in the feed and the actor table. */
   label: string
+  /**
+   * The same act as a sentence about its target (AGL-3660): `{target}` is
+   * replaced by the target's noun and name — `Created {target} with Aglyn AI`
+   * reads `Created page Home with Aglyn AI`. Absent, a row reads `label`.
+   */
+  sentence?: string
   /** Which log(s) the writers put the code in. */
   scope: PluginActivityScope | readonly PluginActivityScope[]
   /** The feed target types rows carrying this code file their output under. */
@@ -95,6 +101,12 @@ export interface PluginActivityGroup {
    * an access. Matched exactly.
    */
   staffAuditAccessActions?: readonly string[]
+  /**
+   * What a person reads for each staff audit code the plugin's doors write
+   * (AGL-3660) — the audit trail shows these words and keeps the code for
+   * the row's tooltip and details. Matched exactly.
+   */
+  staffAuditLabels?: Readonly<Record<string, string>>
 }
 
 export interface PluginActivityRegistration {
@@ -191,6 +203,26 @@ export function listPluginActivityRegistrations(): PluginActivityRegistration[] 
 /** Every declared action across plugins. */
 export function listPluginActivityActions(): PluginActivityAction[] {
   return listPluginActivityRegistrations().flatMap((entry) => [...entry.actions])
+}
+
+/** A declared code's sentence template (`{target}` placeholder), if it has one. */
+export function pluginActivityActionSentence(action: unknown): string | undefined {
+  if (typeof action !== 'string') return undefined
+  for (const registration of registrations.values()) {
+    const match = registration.actions.find((entry) => entry.key === action)
+    if (match) return match.sentence
+  }
+  return undefined
+}
+
+/** What a plugin declared a staff audit code reads as; `undefined` otherwise. */
+export function pluginStaffAuditActionLabel(action: unknown): string | undefined {
+  if (typeof action !== 'string') return undefined
+  for (const registration of registrations.values()) {
+    const label = registration.group.staffAuditLabels?.[action]
+    if (label) return label
+  }
+  return undefined
 }
 
 /** The readable label for a declared code; `undefined` for any other action. */

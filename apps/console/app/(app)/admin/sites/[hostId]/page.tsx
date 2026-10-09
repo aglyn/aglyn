@@ -585,7 +585,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                    * own console — which is both slower and a different
                    * permission story.
                    */
-                  <HostActivityTable hostId={hostId} />
+                  <HostActivityTable hostId={hostId} staff />
                 ),
               },
             ]}
