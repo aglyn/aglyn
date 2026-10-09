@@ -47,6 +47,7 @@ import { TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import AccountAvatar from '../../../../components/account-avatar.component'
 import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
@@ -82,6 +83,7 @@ import {
   STAFF_ROLES,
   USER_LIST_COLUMN_SORTS,
   USER_LIST_FILTER_FIELDS,
+  USER_LIST_DEFAULT_SORT,
   USER_LIST_FILTER_HEADERS,
   USER_LIST_FILTER_OPTIONS,
 } from '../../../../utils/list-filters'
@@ -92,6 +94,8 @@ interface AdminUser {
   uid: string
   email: string | null
   displayName: string | null
+  /** The profile photo, when the account has one (AGL-3660). */
+  photoUrl?: string | null
   disabled: boolean
   staff: boolean
   staffRole: string | null
@@ -202,7 +206,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   }>({
     search: '',
     clauses: [],
-    sort: null,
+    // Newest account first until a header says otherwise (AGL-3660).
+    sort: USER_LIST_DEFAULT_SORT,
   })
   /** What the route could not answer, and why; none of it is applied. */
   const [refused, setRefused] = useState<ListQueryRefusal[]>([])
@@ -343,7 +348,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * the complete read it already makes for a filter, and pages that. A new
    * order is a new query, restarted at page one like a new filter.
    */
-  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(USER_LIST_DEFAULT_SORT)
   const onSortChange = useCallback(
     (next: ListQuerySort | null) => {
       setAskedSort(next)
@@ -404,6 +409,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   )
   const columnSort = useListColumnSort<AdminUser>({
     sorts: USER_LIST_COLUMN_SORTS,
+    // Created, newest first, is the route's order when none is asked
+    // (AGL-3660), so its header has nowhere to clear to.
+    defaultSort: USER_LIST_DEFAULT_SORT,
     sort: askedSort,
     onSortChange,
     rows: window.shown,
@@ -541,6 +549,13 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             useFlexGap
             sx={{ flexWrap: 'wrap', alignItems: 'center', height: '100%' }}
           >
+            {/* The profile photo, or initials (AGL-3660). */}
+            <AccountAvatar
+              photoUrl={row.photoUrl}
+              name={row.displayName}
+              email={row.email}
+              size={24}
+            />
             {/* Detail page (AGL-244); ids stay off the email line — copy
                 them from the chip (AGL-360). A real anchor, so it can be
                 middle-clicked or copied; the row's own click opens the same

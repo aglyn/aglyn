@@ -51,6 +51,7 @@ import StaffAcquisitionCard from '../../../../../components/staff-acquisition-ca
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
+import AccountAvatar from '../../../../../components/account-avatar.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import StaffUserDeviceSessionsCard, {
@@ -366,7 +367,23 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       ]}
       header={{
         children: accountLabel ?? 'User',
-        icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+        // The account's photo, or its initials, once it has loaded
+        // (AGL-3660); the staff glyph until then.
+        icon: detail ? (
+          <Stack
+            component="span"
+            sx={{ mr: { xs: 1.25, sm: 1.75 }, flexShrink: 0, display: 'inline-flex' }}
+          >
+            <AccountAvatar
+              photoUrl={(detail.user as { photoUrl?: string | null }).photoUrl}
+              name={detail.user.displayName}
+              email={detail.user.email}
+              size={40}
+            />
+          </Stack>
+        ) : (
+          { path: ICON_VARIANT_SYMBOL_SECURE.path }
+        ),
       }}
       help={{ topic: 'staffConsole', anchor: '#password-help' }}
     >
