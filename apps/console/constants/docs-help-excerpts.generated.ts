@@ -948,6 +948,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#site-usage': 'Live counts for this site — published pages, all pages, the organization\'s media files, site members and storage in MB — the figures its organization\'s plan limits are measured against.',
     '#sites-admin': 'Sites lists every site on the platform, across every organization, read server-side with the Admin SDK so it shows sites you are not a member of.',
     '#staff-automations': 'The Automations card — on a site\'s page, and Organization automations on an organization\'s — comes from the Automation plugin.',
+    '#staff-media-library': 'Media library — on an organization\'s staff page for the workspace\'s shared library, and on a site\'s for that site\'s own — lists the stored files, newest first: a thumbnail, the name, the type, the size and when it…',
     '#staff-notes': 'Free-text support/billing context on each organization\'s detail page, visible to staff only (never in tenant-readable data) and audited.',
     '#staff-org-automations': 'The Organization automations card on an organization\'s staff page lists that organization\'s automations, whether each is on, and on how many of its sites each is paused.',
     '#staff-org-email': 'The Email campaigns card, from the Marketing plugin, has two tabs, each paged in id order: Sends — every campaign send: its subject and site, status (and held for review when the outbound screen stopped it), how many…',
