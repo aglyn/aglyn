@@ -86,6 +86,10 @@ const ALLOWED = new Map<string, string>([
     'The nonprofit/community-organization website kind and its search keyword — AGL-3660.',
   ],
   [
+    'apps/docs/docs/ai/site-looks.md',
+    'The AI site styles guide names the "Nonprofit & community" kind — AGL-3660.',
+  ],
+  [
     'libs/plugins/ai/src/lib/model/ai-site-kinds.spec.ts',
     'Table-spec briefs for that kind ("a community food bank", "a community center") — AGL-3660.',
   ],
