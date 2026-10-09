@@ -142,5 +142,9 @@
   "loyalty": {
     "baseline": 9161,
     "budget": 12288
+  },
+  "ad-conversions": {
+    "baseline": 4837,
+    "budget": 6144
   }
 }
