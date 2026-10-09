@@ -248,6 +248,10 @@ export function createEngine(deps: EngineDeps) {
       await settle(id, finish('failed', 'Not sent: choose the Amazon marketplace whose inventory ships, then send it again.'))
       return 'failed'
     }
+    if (routing.provider === 'shipmonk' && !connection.storeId) {
+      await settle(id, finish('failed', 'Not sent: connect ShipMonk again with its store id, then send it again.'))
+      return 'failed'
+    }
     const others = await deps.otherHolds(routing.hostId, routing.recordId)
     if (others.unanswered.length) {
       await settle(id, { nextRunAtMs: deps.now() + RETRY_BASE_MS })
@@ -477,6 +481,17 @@ export function createEngine(deps: EngineDeps) {
       await log(routing.connectionId, 'canceled', `Order ${routing.displayRef} canceled at ${network}.`, routing.recordId)
       return 'canceled'
     }
+    if (outcome === 'requested') {
+      // The warehouse confirms it: read back until the network says canceled or shipped.
+      await log(routing.connectionId, 'canceled', `Cancellation of order ${routing.displayRef} requested at ${network}.`, routing.recordId)
+      await settle(id, {
+        cancelRequested: false,
+        note: `A cancellation was requested at ${network}; its warehouse confirms it. Anything that ships anyway comes back to the order.`,
+        active: true,
+        nextRunAtMs: deps.now() + ORDER_POLL_MS,
+      })
+      return 'read'
+    }
     await log(routing.connectionId, 'error', `${network} could not cancel order ${routing.displayRef}: it was already being packed.`, routing.recordId)
     await settle(id, {
       cancelRequested: false,
@@ -637,7 +652,20 @@ export function createEngine(deps: EngineDeps) {
     return 'applied'
   }
 
-  return { runRouting, runDue, runInventory, applyShipbobEvent }
+  /**
+   * A network's webhook naming one of our orders (its signature verified by
+   * the caller, AGL-3697): read the order back now. The payload only says
+   * WHICH order; what is written comes from reading it at the network.
+   */
+  async function applyOrderWebhook(connectionId: string, providerOrderId: string | null): Promise<'applied' | 'unknown_order'> {
+    if (!providerOrderId) return 'unknown_order'
+    const found = await deps.store.routingByProviderOrder(connectionId, providerOrderId)
+    if (!found) return 'unknown_order'
+    if (found.routing.active) await runRouting(found.id, { force: true })
+    return 'applied'
+  }
+
+  return { runRouting, runDue, runInventory, applyShipbobEvent, applyOrderWebhook }
 }
 
 export type Engine = ReturnType<typeof createEngine>
