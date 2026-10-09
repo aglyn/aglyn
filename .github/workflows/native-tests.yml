@@ -94,6 +94,12 @@ jobs:
       # AglynKit and through it the Firebase SDK, and a shared build
       # directory compiles that once instead of once per package.
       SPM_SCRATCH: ${{ github.workspace }}/../spm-scratch
+      # The Swift Build engine, which Xcode 27's SwiftPM uses by default and
+      # older images' SwiftPM does not. The native engine copies a symlinked
+      # resource (contracts.generated.json links to libs/native/contracts) as
+      # the link itself, which dangles inside the bundle, so every test that
+      # reads the contracts traps.
+      SPM_BUILD_SYSTEM: swiftbuild
     steps:
       - uses: actions/checkout@v7
         with:
@@ -143,7 +149,7 @@ jobs:
           for pkg in $packages; do
             [ -d "$pkg/Tests" ] || { echo "::notice::$pkg has no Tests; skipped"; continue; }
             echo "::group::swift test $pkg"
-            if ! swift test --package-path "$pkg" --scratch-path "$SPM_SCRATCH"; then
+            if ! swift test --package-path "$pkg" --scratch-path "$SPM_SCRATCH" --build-system "$SPM_BUILD_SYSTEM"; then
               failed="$failed $pkg"
               echo "::error::swift test failed in $pkg"
             fi
@@ -156,7 +162,7 @@ jobs:
 
       - name: swift build apps/ios/PluginManifest
         if: steps.changed.outputs.run == 'true'
-        run: swift build --package-path apps/ios/PluginManifest --scratch-path "$SPM_SCRATCH"
+        run: swift build --package-path apps/ios/PluginManifest --scratch-path "$SPM_SCRATCH" --build-system "$SPM_BUILD_SYSTEM"
 
       - name: xcodebuild Aglyn and AglynPOS (macOS)
         if: steps.changed.outputs.run == 'true'
