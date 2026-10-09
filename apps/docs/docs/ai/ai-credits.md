@@ -56,7 +56,8 @@ confirm. See [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#agl
 ## What things cost {#what-things-cost}
 
 What a request costs depends on how much the AI reads and writes, so the figures below are
-typical, not fixed. Every job shows its estimate before you confirm it.
+typical, not fixed: what jobs like it cost on real builds. Every job shows its estimate
+before you confirm it.
 
 | Request | Typical cost |
 | --- | --- |
@@ -65,10 +66,12 @@ typical, not fixed. Every job shows its estimate before you confirm it.
 | A vector illustration, icon or logo mark | About 18 credits a picture |
 | A photo, art or design picture | About 108 credits a picture (about 75 on Free) |
 | A new site's look | A few credits |
-| A page from a brief | About 50 credits for each section, plus planning |
-| A layout, form, component or email design | About 50 credits each |
-| A new site started with AI, paid plan | About 1,050 for 3 pages to 2,600 for 8 |
-| A new site started with AI, Free plan | Always within the 300 Free credits; the window shows the most it can cost |
+| A page from a brief | About 30 credits for a page of five sections (about 6 a section), plus planning |
+| A layout (header and footer) | About 25 credits |
+| A form | About 30 credits |
+| A component or email design | About 30 credits |
+| A new site started with AI, paid plan | About 170 for 3 pages to 320 for 8 |
+| A new site started with AI, Free plan | About 140 for two pages, within the 300 Free credits |
 | Products, booking services, overlays, A/B tests, funnels, variables in a chat build | Almost nothing |
 | [Stock photos](./stock-photos.md) in an AI site | Nothing |
 
@@ -79,13 +82,24 @@ shows each model's cost. See [Choosing a model](./ai-allotments.md#choosing-a-mo
 
 Every job tells you what it will cost before it spends anything:
 
-- **A plan** shows **Estimated cost: about N credits** beside **Confirm plan**. What it
-  really costs is what its steps spend, and you can watch that add up on the job.
-- **On the Free plan**, a job is checked against the **most** it could cost, not a typical
-  figure, and against the credits you have left this month. The **Start your site** window,
-  for example, says *Up to about N AI credits* and how many of your free credits are left
-  until they reset. If what is left cannot cover it, the start button is turned off and the
-  window says so, with **Upgrade**. If fewer pages would fit, it says that too.
+- **A plan** shows **Estimated cost: About N credits (up to M)** beside **Confirm plan**:
+  about what jobs like it cost on real builds, and the most it can cost. What it really
+  costs is what its steps spend, and you can watch that add up on the job. **Try again**
+  shows the same for the parts it will run again.
+- **On the Free plan**, a job is checked against the credits you have left this month, and
+  the window or plan card shows how many that is. A job that will very likely fit starts
+  with no question asked. One that will likely use more than you have left says so before
+  it starts, for example *This build is about 106 credits (up to 650). You have 90 left, so
+  it will build as much as it can and pause when your credits run out.* Nothing starts
+  until you choose:
+  - **Build what fits** builds as much as your credits cover, then pauses. Choose
+    **Resume** after you upgrade or when your credits renew, and it carries on from where it
+    stopped. Nothing it already built is built or charged again.
+  - **Build the home page first** builds a smaller first version: the home page and what it
+    needs, such as its layout and the form it shows. Ask for the rest later.
+  - **Upgrade** opens **Billing**.
+
+  With no free credits left at all, nothing can start until they renew or you upgrade.
 - **A picture** shows its credits per picture and in total before **Create**.
 
 ## When credits run out {#when-credits-run-out}
