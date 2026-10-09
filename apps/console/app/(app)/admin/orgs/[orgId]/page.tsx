@@ -93,6 +93,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffSiteDoorFlags from '../../../../../components/staff-site-door-flags.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
+import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
@@ -2518,6 +2519,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
             {/* Full width below the columns: a wide table. */}
             <Stack sx={{ mt: 3 }}>
               <StaffEmailDeliveriesCard orgId={orgId} siteNames={siteNames} />
+            </Stack>
+            {/* The workspace's shared media library, read-only and audited. */}
+            <Stack sx={{ mt: 3 }}>
+              <StaffMediaLibraryCard orgId={orgId} />
             </Stack>
           </>
         </StaffOnly>
