@@ -33,6 +33,7 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
   FORM_IN_CAMPAIGN_OPTIONS,
+  FORM_IN_USE,
   FORM_LEAD_ROUTING_OPTIONS,
   FORM_LIST_FILTER_FIELDS,
   FORM_LIST_FILTER_HEADERS,
@@ -76,7 +77,7 @@ describe('the questions a reader asks of the marketing site’s forms', () => {
         value: new Date(2026, 8, 11).getTime(),
       },
     ])
-    expect(result.orderBy).toEqual({ path: 'stats.lastSubmissionAtMs', direction: 'desc' })
+    expect(result.orderBy).toMatchObject({ path: 'stats.lastSubmissionAtMs', direction: 'desc' })
   })
 
   it('Leads = 0 or empty: an equality, the empty one on the null an uncounted form holds', () => {
@@ -105,7 +106,7 @@ describe('the questions a reader asks of the marketing site’s forms', () => {
   })
 
   it('Updated, Lead routing, Campaign, Slug and a Display name word', () => {
-    expect(plan([{ field: 'updatedAt', op: 'before', value: '2026-09-01' }]).orderBy).toEqual({
+    expect(plan([{ field: 'updatedAt', op: 'before', value: '2026-09-01' }]).orderBy).toMatchObject({
       path: 'updatedAt',
       direction: 'desc',
     })
@@ -323,5 +324,25 @@ describe('every composite the forms query can need is in the index file', () => 
 
   it('has every one of them', () => {
     expect(missingListQueryIndexes(file, 'forms', needed)).toEqual([])
+  })
+
+  /*
+   * The header orders (AGL-3680) are `alone`: each pairs only with the list's
+   * scope, the forms in use (`retired == false`), so a header costs one
+   * composite per direction beside `retired` — none where a range order
+   * already holds it.
+   */
+  const withScope = listQueryIndexes(FORM_LIST_QUERY, [{ path: FORM_IN_USE.path }])
+
+  it('adds one scope composite per header order, and nothing else', () => {
+    const added = withScope.filter(
+      (index) => !needed.some((one) => JSON.stringify(one) === JSON.stringify(index)),
+    )
+    expect(added.every((index) => index.fields[0].fieldPath === 'retired')).toBe(true)
+    expect(added).toHaveLength(13)
+  })
+
+  it('has every scope composite too', () => {
+    expect(missingListQueryIndexes(file, 'forms', withScope)).toEqual([])
   })
 })

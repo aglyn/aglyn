@@ -356,7 +356,17 @@ export async function enrollListMember(
   await target.set(
     {
       email,
-      ...(input.name ? { name: input.name } : {}),
+      /*
+       * `name` and `addedAt` are on EVERY row, because the members table
+       * orders its query by them (AGL-3680) and `orderBy` drops a document
+       * that lacks the field: the caller's name, else the stored one, else
+       * `null`. A caller that says nothing never clears a stored name.
+       */
+      ...(input.name
+        ? { name: input.name }
+        : existing?.get('name') !== undefined
+          ? {}
+          : { name: null }),
       searchTokens: listMemberSearchTokens(email, name),
       source: input.source,
       /*
@@ -412,7 +422,11 @@ export async function enrollListMember(
        */
       ...(consent ? membershipConsentFields(input, consent) : {}),
       ...(existing
-        ? {}
+        ? // A legacy row that predates `addedAt` joined when it was created:
+          // its document's create time, the date it has always meant.
+          existing.get('addedAt') === undefined && existing.createTime
+          ? { addedAt: existing.createTime }
+          : {}
         : {
             addedAt: FieldValue.serverTimestamp(),
             [CAPTURED_BY_HOST_FIELD]: [input.group.hostId],

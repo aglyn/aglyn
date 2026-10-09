@@ -36,6 +36,7 @@ import {
   aiJobPublishesSite,
   aiLayoutWithNavigation,
   aiPublishGuidedSite,
+  aiSiteUnwrittenBlogHrefs,
   aiSitePublishTakenCopy,
 } from './ai-site-publish'
 
@@ -251,5 +252,30 @@ describe('a page that cannot go live stays a draft, and the rest still publish',
 describe('aiLayoutWithNavigation', () => {
   it('changes nothing when every entry is already linked and no home moved', () => {
     expect(aiLayoutWithNavigation(STARTER_LAYOUT as never, { entries: [{ screenId: 'scr-starter', label: 'Home' }] })).toBeNull()
+  })
+
+  it('takes out every link to a blog whose posts were not written — header, phone menu, footer — and keeps the rest (AGL-3660)', () => {
+    const link = (parentId: string, props: Record<string, unknown>) => ({ componentId: 'muiScreenLink', pluginId: 'mui', parentId, props: { renderAs: 'link', ...props }, nodes: [] })
+    const nodes = {
+      root: { componentId: 'muiBox', nodes: ['bar', 'menu', 'footer'] },
+      bar: { componentId: 'muiToolbar', nodes: ['home', 'blog', 'about'] },
+      home: link('bar', { children: 'Home', screenId: 'scr-home' }),
+      blog: link('bar', { children: 'Blog', href: '/blog' }),
+      about: link('bar', { children: 'About', screenId: 'scr-about' }),
+      menu: { componentId: 'muiStack', props: { component: 'nav' }, nodes: ['menuBlog', 'menuAbout'] },
+      menuBlog: link('menu', { children: 'Blog', href: '/blog' }),
+      menuAbout: link('menu', { children: 'About', screenId: 'scr-about' }),
+      footer: { componentId: 'muiStack', nodes: ['footBlog', 'footSite'] },
+      footBlog: link('footer', { children: 'Blog', href: '/blog' }),
+      // A link the brief gave, which is no blog.
+      footSite: link('footer', { children: 'Our shop', href: 'https://example.com/shop', target: '_blank' }),
+    }
+    const kept = aiLayoutWithNavigation(nodes as never, { entries: [], droppedHrefs: aiSiteUnwrittenBlogHrefs(true) }) as unknown as Record<string, { nodes?: string[] }>
+    expect(Object.keys(kept).filter((id) => /blog/i.test(id))).toEqual([])
+    expect([kept['bar'].nodes, kept['menu'].nodes, kept['footer'].nodes]).toEqual([['home', 'about'], ['menuAbout'], ['footSite']])
+    // A blog that was written keeps its links, and so does a layout that has none.
+    expect(aiSiteUnwrittenBlogHrefs(false)).toEqual([])
+    expect(aiLayoutWithNavigation(nodes as never, { entries: [], droppedHrefs: aiSiteUnwrittenBlogHrefs(false) })).toBeNull()
+    expect(aiLayoutWithNavigation(STARTER_LAYOUT as never, { entries: [], droppedHrefs: aiSiteUnwrittenBlogHrefs(true) })).toBeNull()
   })
 })

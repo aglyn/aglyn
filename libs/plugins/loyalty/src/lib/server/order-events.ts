@@ -21,7 +21,10 @@ import { cumulativeTarget, earnedPoints, normalizeLoyaltyEmail } from '../model/
 import type { StoredLoyaltyMember } from '../model/loyalty-member'
 import { isDocumentId, keyId, loyaltyDb, loyaltyRefs, parseLoyaltyReference } from './db'
 import { pointsEarnedEmail, referralRewardEmail, sendLoyaltyEmail } from './emails'
-import { normalizeStoredMember, readMemberForWrite, writeLedger, writeMember } from './members'
+import { loyaltyOrderIsTestMode } from '../model/loyalty-connectors'
+import { normalizeLoyaltyProgram } from '../model/loyalty-program'
+import { refreshConnectedMember, sendLoyaltySync } from './connector-sync'
+import { loyaltySyncTarget, normalizeStoredMember, readMemberForWrite, writeLedger, writeMember } from './members'
 import { resolveLoyaltyStore } from './program-store'
 import { normalizeRedemption } from './redemptions'
 import { restoreRedemptionTo } from './credit-provider'
@@ -43,11 +46,19 @@ import { resolveLoyaltyOrgId } from './site-context'
  * points that refunds account for, and never past it. A partial refund, a
  * second partial refund and then a cancellation reach the same total however
  * many times each is delivered.
+ *
+ * A CONNECTED PROGRAM (AGL-3677) earns and reverses the same points, by the
+ * same keys, and each movement goes on to the merchant's own Smile.io or
+ * Yotpo account through `loyaltySync`; the built-in program awards nothing of
+ * its own beside it — no welcome points, no referral rewards — and a
+ * test-mode sale earns nothing at all.
  */
 
 /** The order fields loyalty reads, restated from the seller's event. */
 export interface LoyaltyEventOrder {
   id: string
+  /** Which Stripe environment the sale was paid in, when the seller recorded it. */
+  livemode?: boolean
   status: string | null
   channel: string
   currency?: string
@@ -97,9 +108,16 @@ export async function earnForOrder(envelope: PluginDomainEventEnvelope<LoyaltyOr
   const referral = loyaltyCredits(order)
     .map((credit) => parseLoyaltyReference(credit.reference))
     .find((parsed): parsed is { kind: 'referral'; referrerKey: string; refereeKey: string } => parsed?.kind === 'referral')
+  const connected = program.connected
   // A program switched off earns nothing new; a friend already given their
   // credit under it still earns their referrer the reward they were promised.
-  if (!program.enabled && !referral) return
+  // A connected program runs no referrals of its own, and moves no real
+  // points for a test-mode sale.
+  if ((!program.enabled && (!referral || connected)) || (connected && loyaltyOrderIsTestMode(order))) {
+    // What the sale spent still goes on to the account (or is closed, for a test sale).
+    if (connected) await sendLoyaltySync({ ...scope, orderId: order.id })
+    return
+  }
   const points = program.enabled ? earnedPoints(earnBasisCents(order), program) : 0
   const nowMs = Date.now()
 
@@ -111,7 +129,7 @@ export async function earnForOrder(envelope: PluginDomainEventEnvelope<LoyaltyOr
       ? await readMemberForWrite(transaction, scope, { email, name: order.customerName, nowMs })
       : null
     const referrerRef =
-      referral && !referralSnapshot.exists && program.referrerRewardCents > 0
+      referral && !connected && !referralSnapshot.exists && program.referrerRewardCents > 0
         ? loyaltyRefs.member(scope.orgId, scope.hostId, referral.referrerKey)
         : null
     const referrerSnapshot = referrerRef ? await transaction.get(referrerRef) : null
@@ -119,7 +137,7 @@ export async function earnForOrder(envelope: PluginDomainEventEnvelope<LoyaltyOr
     let member: StoredLoyaltyMember | null = null
     let welcome = 0
     if (plan) {
-      welcome = plan.created ? program.welcomePoints : 0
+      welcome = plan.created && !connected ? program.welcomePoints : 0
       member = {
         ...plan.member,
         name: plan.member.name ?? (order.customerName?.trim() ? order.customerName.trim().slice(0, 120) : null),
@@ -141,7 +159,7 @@ export async function earnForOrder(envelope: PluginDomainEventEnvelope<LoyaltyOr
         basisCents: earnBasisCents(order),
         reversedPoints: 0,
         atMs: nowMs,
-      })
+      }, loyaltySyncTarget(program, member.email))
       if (welcome > 0) {
         writeLedger(transaction, scope, `welcome__${plan.memberKey}`, {
           memberKey: plan.memberKey,
@@ -172,6 +190,17 @@ export async function earnForOrder(envelope: PluginDomainEventEnvelope<LoyaltyOr
     }
     return { member, created: Boolean(plan?.created), earned: points + welcome, referrer }
   })
+
+  if (connected) {
+    // The account hears now; what it could not take waits for the next pass.
+    await sendLoyaltySync({ ...scope, orderId: order.id })
+    await sendLoyaltySync({ ...scope, limit: 10 })
+    // The email states the balance the account now holds, not the mirror's guess.
+    if (outcome.member && program.emails) {
+      const refreshed = await refreshConnectedMember(scope, outcome.member.memberKey).catch(() => null)
+      if (refreshed) outcome.member = refreshed
+    }
+  }
 
   if (!program.emails) return
   if (outcome.member && (outcome.earned > 0 || outcome.created)) {
@@ -212,9 +241,15 @@ export async function reverseForOrder(
   const share = { refundedCents: cents(order.refundedCents), paidCents: cents(order.totals?.totalCents), full }
   const nowMs = Date.now()
 
+  let connected = false
   await loyaltyDb().runTransaction(async (transaction: any) => {
     const earnRef = loyaltyRefs.ledger(scope.orgId, scope.hostId, `earn__${order.id}`)
-    const earnSnapshot = await transaction.get(earnRef)
+    const [earnSnapshot, programSnapshot] = await Promise.all([
+      transaction.get(earnRef),
+      transaction.get(loyaltyRefs.program(scope.orgId, scope.hostId)),
+    ])
+    const program = normalizeLoyaltyProgram(programSnapshot.exists ? programSnapshot.data() : null)
+    connected = Boolean(program.connected)
     if (!earnSnapshot.exists) return
     const earned = cents(earnSnapshot.get('points'))
     const reversed = cents(earnSnapshot.get('reversedPoints'))
@@ -224,6 +259,7 @@ export async function reverseForOrder(
     const memberRef = loyaltyRefs.member(scope.orgId, scope.hostId, memberKey)
     const memberSnapshot = await transaction.get(memberRef)
     const delta = target - reversed
+    const email = memberSnapshot.exists ? String(memberSnapshot.get('email') ?? '') : ''
     if (memberSnapshot.exists) {
       const member = normalizeStoredMember(scope, memberKey, memberSnapshot.data())
       // A balance may go below zero: the points were spent before the refund.
@@ -238,7 +274,7 @@ export async function reverseForOrder(
       orderId: order.id,
       note: kind === 'cancelled' ? 'Order canceled' : full ? 'Order refunded' : 'Part of the order refunded',
       atMs: nowMs,
-    })
+    }, loyaltySyncTarget(program, email))
   })
 
   for (const credit of loyaltyCredits(order)) {
@@ -257,4 +293,5 @@ export async function reverseForOrder(
       nowMs,
     })
   }
+  if (connected) await sendLoyaltySync({ ...scope, orderId: order.id })
 }

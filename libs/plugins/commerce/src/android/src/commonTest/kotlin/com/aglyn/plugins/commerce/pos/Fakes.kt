@@ -17,7 +17,15 @@ class ScriptedSaleApi(script: Map<String, List<Any>> = emptyMap()) : PosSaleApi 
     queues.getOrPut(action) { mutableListOf() }.addAll(next)
   }
 
-  override suspend fun context() = PosContext(PosRegisterSettings(), terminalAvailable = true, testMode = true, readers = emptyList(), smsReceipts = false)
+  /** Counts the calls to the context route, which a register reads at launch. */
+  var contextCalls = 0
+
+  override suspend fun context(): PosContext {
+    contextCalls += 1
+    val next = queues["context"]?.removeFirstOrNull()
+    if (next is Throwable) throw next
+    return PosContext(PosRegisterSettings(), terminalAvailable = true, testMode = true, readers = emptyList(), smsReceipts = false)
+  }
 
   override suspend fun openSale(registerId: String, locationId: String?, cart: Cart, attemptKey: String) = opened
 

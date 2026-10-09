@@ -28,6 +28,12 @@ import {
   type ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import {
+  type ListQuerySort,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { MAIL_GATEWAY_LABELS, MAIL_GATEWAYS, type MailGateway } from '@aglyn/shared-util-email'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -37,10 +43,28 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
+  MAIL_GATEWAY_LEDGER_COLUMN_SORTS,
   MAIL_GATEWAY_LEDGER_FILTER_FIELDS,
   MAIL_GATEWAY_LEDGER_FILTER_HEADERS,
+  MAIL_GATEWAY_LEDGER_LIST_QUERY,
+  MAIL_GATEWAY_LEDGER_LIST_SORT,
 } from '../utils/mail-gateway-ledger-list-query'
 import StaffListPaginationControls from './staff-list-pagination.component'
+
+/**
+ * The figures worked out from the last thirty days at read time sort the
+ * page on screen (AGL-3680): nothing stored holds them to order a query by.
+ */
+const LEDGER_PAGE_SORTS = {
+  holds: (row: MailGatewayLedgerRowView) => row.holds,
+  blocked30: (row: MailGatewayLedgerRowView) => row.blocked30 ?? 0,
+  delivered30: (row: MailGatewayLedgerRowView) => row.delivered30 ?? 0,
+}
+const LEDGER_PAGE_SORT_HEADERS = {
+  holds: 'State',
+  blocked30: 'Refused (30 days)',
+  delivered30: 'Delivered (30 days)',
+}
 
 /** One ledger as `/api/admin/email-health/gateways` returns it. */
 export interface MailGatewayLedgerRowView {
@@ -138,12 +162,39 @@ export default function MailGatewayLedgerCard() {
       setError(reason instanceof Error && reason.message ? reason.message : 'Gateway ledger read failed'),
     [],
   )
+  /*
+   * EVERY HEADER SORTS (AGL-3680): the stored columns on the route's query
+   * (`MAIL_GATEWAY_LEDGER_COLUMN_SORTS`), the thirty-day figures over the
+   * page. The plan says which order the route reads in, so the header shows
+   * that one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const orderPlan = useMemo(
+    () =>
+      planListQuery(
+        MAIL_GATEWAY_LEDGER_LIST_QUERY,
+        { clauses: gridFilter.clauses, sort: askedSort },
+        nameSearchNormalizers,
+      ),
+    [gridFilter.clauses, askedSort],
+  )
   const ledger = useStaffListQuery<MailGatewayLedgerRowView>({
     endpoint: user ? ENDPOINT : null,
     clauses: gridFilter.clauses,
     search: NO_SEARCH,
+    sort: askedSort,
     params: ROWS_PARAMS,
     onError,
+  })
+  const columnSort = useListColumnSort<MailGatewayLedgerRowView>({
+    sorts: MAIL_GATEWAY_LEDGER_COLUMN_SORTS,
+    defaultSort: MAIL_GATEWAY_LEDGER_LIST_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: orderPlan.orderBy,
+    rows: ledger.rows,
+    pageSorts: LEDGER_PAGE_SORTS,
+    headers: LEDGER_PAGE_SORT_HEADERS,
   })
   const { refresh } = ledger
   const reload = useCallback(() => {
@@ -305,11 +356,11 @@ export default function MailGatewayLedgerCard() {
             headers: MAIL_GATEWAY_LEDGER_FILTER_HEADERS,
             options: GATEWAY_OPTIONS,
           })}
-          notices={ledger.notices}
+          notices={[...ledger.notices, ...columnSort.notices]}
         />
         <ListTable
           aria-label="Mail gateway ledger"
-          rows={ledger.rows}
+          rows={columnSort.rows}
           columns={columns}
           getRowId={(row: MailGatewayLedgerRowView) => row.id}
           loading={ledger.loading}
@@ -317,10 +368,10 @@ export default function MailGatewayLedgerCard() {
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           noRowsLabel="No gateway has answered a sending domain yet"
-          // One page of a cursor walk in the query's order; a header sort
-          // would order only the page on screen.
+          // One page of a cursor walk. A stored column's header orders the
+          // query; a thirty-day figure sorts this page and says so.
           hideFooter
-          disableColumnSorting
+          columnSort={columnSort}
           getRowHeight={() => 'auto'}
         />
         <StaffListPaginationControls pagination={ledger} shown={ledger.rows.length} sizeMenu={false} />

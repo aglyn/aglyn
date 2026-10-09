@@ -16,7 +16,10 @@
  */
 
 import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import type {
+  ListQueryDeclaration,
+  ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /*
  * WHAT EACH EMAILS LIST CAN BE ASKED, ON ITS FIRESTORE QUERY (AGL-3321).
@@ -27,6 +30,17 @@ import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query
  * list's spec holds `cloud/firebase-firestore.indexes.json` to
  * `listQueryIndexes` of its declaration.
  */
+
+/**
+ * A header's two orders, both `alone` (AGL-3680): served while nothing
+ * narrows the list, so on these subcollection lists they cost no composite.
+ * Asked under a filter or the search, the plan falls back to the list's
+ * default order and its notices say so.
+ */
+const aloneSorts = (column: string, path: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label, alone: true },
+  { path, direction: 'desc', column, label, alone: true },
+]
 
 /*==========================================
  * SUPPRESSIONS — `hosts/{hostId}/suppressions`, newest first.
@@ -40,6 +54,10 @@ import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query
  *
  * `Since` is `createdAt`, the list's own order, so a date range on it
  * keeps that order and needs no index of its own.
+ *
+ * Every header sorts the query (AGL-3680). `email` is on every row — the
+ * address, or `null` for an erasure — and the same backfill stamps `null` on
+ * a row from before addresses were stored, so an Address order drops none.
  *=========================================*/
 export const SUPPRESSION_LIST_QUERY: ListQueryDeclaration = {
   fields: [
@@ -53,7 +71,12 @@ export const SUPPRESSION_LIST_QUERY: ListQueryDeclaration = {
     { column: 'reason', kind: 'exact', path: 'reason', operators: ['equals', 'isAnyOf'] },
     { column: 'since', kind: 'date', path: 'createdAt', presence: 'always' },
   ],
-  sorts: [{ path: 'createdAt', direction: 'desc', column: 'since' }],
+  sorts: [
+    { path: 'createdAt', direction: 'desc', column: 'since', label: 'Since' },
+    { path: 'createdAt', direction: 'asc', column: 'since', label: 'Since', alone: true },
+    ...aloneSorts('email', 'email', 'Address'),
+    ...aloneSorts('reason', 'reason', 'Reason'),
+  ],
   search: { tokensPath: 'emailTokens' },
 }
 
@@ -71,7 +94,8 @@ export const SUPPRESSION_FILTER_HEADERS: Readonly<Record<string, string>> = {
  * `backfill-email-list-filters.mjs` stamps the lists written before them.
  * `kind` is written on every create; the same backfill stamps `manual` on a
  * list that predates the field, which is what an absent kind has always
- * meant.
+ * meant. The materializer writes `dynamic`, so Membership sorts the query
+ * (AGL-3680). Subscribers is a count read per row: it sorts the page.
  *=========================================*/
 export const EMAIL_LIST_QUERY: ListQueryDeclaration = {
   fields: [
@@ -85,7 +109,11 @@ export const EMAIL_LIST_QUERY: ListQueryDeclaration = {
     },
     { column: 'kind', kind: 'exact', path: 'kind', operators: ['equals'] },
   ],
-  sorts: [{ path: 'name', direction: 'asc', column: 'name' }],
+  sorts: [
+    { path: 'name', direction: 'asc', column: 'name', label: 'List' },
+    { path: 'name', direction: 'desc', column: 'name', label: 'List', alone: true },
+    ...aloneSorts('kind', 'kind', 'Membership'),
+  ],
   search: { tokensPath: 'nameTokens' },
 }
 
@@ -116,7 +144,14 @@ export const EMAIL_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFil
  * `manual` where it is absent, which is what absent has always meant.
  *
  * ⛔ Consent is NOT filterable. It is read per viewing consent group
- * (`readMarketingBasis`), so no stored value answers it for every reader.
+ * (`readMarketingBasis`), so no stored value answers it for every reader —
+ * its header sorts the page.
+ *
+ * Address, Name, Joined and How sort the query (AGL-3680), each `alone`.
+ * `enrollListMember` stamps `name` (null without one) and `addedAt` on every
+ * row it writes — a legacy row lacking `addedAt` gets its document's create
+ * time — and `backfill-list-member-sort-fields.mjs` stamps both on the rows
+ * written before, so neither order drops a member.
  *=========================================*/
 export const LIST_MEMBER_QUERY: ListQueryDeclaration = {
   fields: [
@@ -130,7 +165,13 @@ export const LIST_MEMBER_QUERY: ListQueryDeclaration = {
     },
     { column: 'via', kind: 'exact', path: 'via', operators: ['equals'] },
   ],
-  sorts: [{ path: '__name__', direction: 'asc' }],
+  sorts: [
+    { path: '__name__', direction: 'asc' },
+    ...aloneSorts('email', 'email', 'Address'),
+    ...aloneSorts('name', 'name', 'Name'),
+    ...aloneSorts('addedAt', 'addedAt', 'Joined'),
+    ...aloneSorts('via', 'via', 'How'),
+  ],
   search: { tokensPath: 'searchTokens' },
 }
 
@@ -177,7 +218,16 @@ export const EMAIL_TEMPLATE_QUERY: ListQueryDeclaration = {
       operators: ['contains', 'equals', 'startsWith'],
     },
   ],
-  sorts: [{ path: 'nameLower', direction: 'asc', column: 'displayName' }],
+  sorts: [
+    { path: 'nameLower', direction: 'asc', column: 'displayName', label: 'Template' },
+    {
+      path: 'nameLower',
+      direction: 'desc',
+      column: 'displayName',
+      label: 'Template',
+      alone: true,
+    },
+  ],
   search: { tokensPath: 'nameTokens' },
 }
 

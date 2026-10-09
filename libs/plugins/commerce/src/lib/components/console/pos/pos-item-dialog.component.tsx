@@ -54,6 +54,18 @@ export interface PosItemDialogProps {
   onConfirm: (choice: PosItemChoice) => void
   /** Editing only: takes the line out of the basket. */
   onRemove?: () => void
+  /**
+   * How a price reads; the register's dollars by default. The self-service
+   * kiosk (AGL-3623) passes the store's currency.
+   */
+  formatMoney?: (cents: number) => string
+  /**
+   * A sold-out variant cannot be added, rather than warned about: a kiosk's
+   * customer is not holding the goods the way a cashier is (AGL-3623).
+   */
+  blockSoldOut?: boolean
+  /** The most of one line that can be added; 99 at the register. */
+  maxQuantity?: number
 }
 
 /** Whether the register must ask before adding: a choice of variant or any modifier. */
@@ -94,6 +106,8 @@ function soldOut(variant: CommerceModel.ProductVariant | undefined): boolean {
  */
 export function PosItemDialog(props: PosItemDialogProps) {
   const { product, initial } = props
+  const money = props.formatMoney ?? usd
+  const maxQuantity = props.maxQuantity ?? 99
   const theme = useTheme()
   const phone = useMediaQuery(theme.breakpoints.down('sm'))
   const groups = useMemo(
@@ -131,7 +145,8 @@ export function PosItemDialog(props: PosItemDialogProps) {
   const missing = groups.find(
     (group) => modifiers.filter((pick) => pick.groupId === group.id).length < group.min,
   )
-  const canAdd = Boolean(variant) && chosen.ok && quantity >= 1
+  const canAdd =
+    Boolean(variant) && chosen.ok && quantity >= 1 && !(props.blockSoldOut && soldOut(variant))
 
   const toggle = (group: CommerceModel.ProductModifierGroup, optionId: string) => {
     setModifiers((current) => {
@@ -184,7 +199,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
                   >
                     {product.variants.map((item) => (
                       <ToggleButton key={item.id} value={item.id} sx={{ minHeight: POS_TOUCH_PX, minWidth: 88 }}>
-                        {`${variantLabel(item)} · ${usd(Math.round(Number(item.priceUsd) * 100))}`}
+                        {`${variantLabel(item)} · ${money(Math.round(Number(item.priceUsd) * 100))}`}
                       </ToggleButton>
                     ))}
                   </ToggleButtonGroup>
@@ -197,7 +212,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
           ) : null}
           {variant && soldOut(variant) ? (
             <Typography variant="body2" color="warning.main">
-              {'Out of stock: selling it takes the count below zero.'}
+              {props.blockSoldOut ? 'Sold out' : 'Out of stock: selling it takes the count below zero.'}
             </Typography>
           ) : null}
           {groups.map((group) => {
@@ -230,7 +245,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
                     return (
                       <Chip
                         key={option.id}
-                        label={option.priceCents ? `${option.name} +${usd(option.priceCents)}` : option.name}
+                        label={option.priceCents ? `${option.name} +${money(option.priceCents)}` : option.name}
                         color={selected ? 'primary' : 'default'}
                         variant={selected ? 'filled' : 'outlined'}
                         aria-pressed={selected}
@@ -259,7 +274,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
               value={quantity}
               onChange={(event) => {
                 const next = Math.round(Number(event.target.value.replace(/\D/g, '')))
-                setQuantity(Math.max(1, Math.min(99, next || 1)))
+                setQuantity(Math.max(1, Math.min(maxQuantity, next || 1)))
               }}
               sx={{ width: 72 }}
               slotProps={{
@@ -268,7 +283,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
             />
             <IconButton
               aria-label="One more"
-              onClick={() => setQuantity((value) => Math.min(99, value + 1))}
+              onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}
               sx={{ width: POS_TOUCH_PX, height: POS_TOUCH_PX, border: 1, borderColor: 'divider' }}
             >
               {'+'}
@@ -296,7 +311,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
         >
           {missing
             ? `Choose ${missing.name.toLowerCase()}`
-            : `${props.onRemove ? 'Update' : 'Add'} · ${usd(unitCents * quantity)}`}
+            : `${props.onRemove ? 'Update' : 'Add'} · ${money(unitCents * quantity)}`}
         </Button>
       </DialogActions>
     </Dialog>

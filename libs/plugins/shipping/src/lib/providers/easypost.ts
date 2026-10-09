@@ -26,6 +26,7 @@ import {
   cmToInches,
   decimalToCents,
   gramsToOunces,
+  mapPosition,
   providerJson,
   type ProviderFetch,
 } from './http'
@@ -364,7 +365,11 @@ export function createEasypostProvider(options: EasypostProviderOptions): Shippi
         country?: string
         residential?: boolean | null
         verifications?: {
-          delivery?: { success?: boolean; errors?: Array<{ message?: string }> }
+          delivery?: {
+            success?: boolean
+            errors?: Array<{ message?: string }>
+            details?: { latitude?: number | null; longitude?: number | null } | null
+          }
         }
       }>(childKey(account), '/addresses', {
         method: 'POST',
@@ -376,6 +381,9 @@ export function createEasypostProvider(options: EasypostProviderOptions): Shippi
         .filter(Boolean)
       if (!delivery) return { verdict: 'unknown', messages }
       if (!delivery.success) return { verdict: 'invalid', messages }
+      // EasyPost places a verified delivery address on the map; a local
+      // delivery radius zone measures from it (AGL-3624).
+      const coordinates = mapPosition(delivery.details?.latitude, delivery.details?.longitude)
       const suggested: PluginShippingAddress = {
         ...address,
         line1: result?.street1 ?? address.line1,
@@ -391,7 +399,10 @@ export function createEasypostProvider(options: EasypostProviderOptions): Shippi
           String(suggested[field] ?? '').trim().toUpperCase() !==
           String(address[field] ?? '').trim().toUpperCase(),
       )
-      return differs ? { verdict: 'corrected', suggested, messages } : { verdict: 'valid', messages }
+      const placed = coordinates ? { coordinates } : {}
+      return differs
+        ? { verdict: 'corrected', suggested, messages, ...placed }
+        : { verdict: 'valid', messages, ...placed }
     },
 
     async listCarrierAccounts(account): Promise<ProviderCarrierAccount[]> {

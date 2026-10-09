@@ -1407,6 +1407,28 @@ describe('the activity log (AGL-2929)', () => {
     expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledTimes(1)
   })
 
+  it('tells the person once that the job paused, and Resume queues the same job on its paused step (AGL-3660)', async () => {
+    const job = await newTextJob({ orgId: 'org-free' })
+    mockDocs.set(`platformAiFreeSpend/${assistUsageDay(NOW)}`, { estCostUsd: 25 })
+    const told: Array<{ to: string; status: string; error: string | null | undefined }> = []
+    registerAiJobTransitionListener(async ({ job: changed, to }) => {
+      told.push({ to, status: changed.status, error: changed.error })
+    })
+    try {
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'beat', now: NOW })
+      await sweepAiJobs({ firestore, owner: 'beat', now: () => NOW.getTime() + AI_JOB_NEEDS_INPUT_RETRY_MS })
+      // Paused, and refused again an hour later: one notice, not one an hour.
+      expect(told).toEqual([{ to: 'paused', status: 'needs_input', error: assistFreeTasteRefusalText('platform') }])
+      const later = new Date(NOW.getTime() + 2 * AI_JOB_NEEDS_INPUT_RETRY_MS)
+      const { job: resumed, changed } = await resumeAiJob(firestore, 'org-free', job.$id, { uid: 'uid-1' }, later)
+      expect(changed).toBe(true)
+      expect(resumed).toMatchObject({ $id: job.$id, status: 'queued', error: null, lease: null })
+      expect(resumed.steps[0]).toMatchObject({ status: 'pending' })
+    } finally {
+      registerAiJobTransitionListener(null)
+    }
+  })
+
   it('a cancel that changed the job is one row for the member who canceled; a second cancel writes nothing', async () => {
     const job = await newTextJob()
     const bo = { uid: 'uid-2', email: 'bo@example.test' }

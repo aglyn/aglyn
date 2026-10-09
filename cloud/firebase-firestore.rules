@@ -948,6 +948,16 @@ service cloud.firestore {
       match /loyaltyReferralClaims/{claimId} {
         allow read, write: if false;
       }
+      // The store's own Smile.io or Yotpo Loyalty account (AGL-3677), its
+      // API key sealed, and each points movement on its way there. Closed to
+      // every client like the rest: one holds a merchant's credential, the
+      // other a buyer's address.
+      match /loyaltyConnections/{hostId} {
+        allow read, write: if false;
+      }
+      match /loyaltySync/{rowId} {
+        allow read, write: if false;
+      }
 
       // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
       // send and each prospect's enrollment in one. Read through
@@ -3840,7 +3850,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
               'aiMemory']) &&
@@ -3865,6 +3875,14 @@ service cloud.firestore {
         //    the read list too and comes back through the dedicated blocks
         //    below, to the order book's readers only; the secrets have no
         //    reader at all.
+        //
+        //  - `posOfflineSales` (AGL-3625): the offline register's sync record,
+        //    one per sale rung offline, CREATED in the same transaction as the
+        //    order it names. Its existence is what makes a sale sent twice land
+        //    once, so a client delete would let the same cash sale record a
+        //    second order, and a client create would block a real one. The
+        //    sync route is the only writer; READ stays with the catch-all (it
+        //    holds an order id, flags and a member uid, no customer data).
         //
         //  - `printers` and `printJobs` (AGL-3619): a register's cloud receipt
         //    printers and their queue. A printer's `deviceId` and
@@ -4001,7 +4019,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads', 'siteMembers',
-              'siteMemberCredentials', 'posStaffPins', 'salesChannels', 'recordPages', 'printers',
+              'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
               'aiMemory'])));
@@ -4059,7 +4077,7 @@ service cloud.firestore {
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
-              'posStaffPins', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
+              'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
               'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
       }
@@ -5002,6 +5020,17 @@ service cloud.firestore {
     match /mailGatewayLedger/{key} {
       allow read: if isStaff();
       allow write: if false;
+    }
+
+    // The stock photo search cache (AGL-3660): what a photo library answered
+    // a search, kept 24 hours (TTL on `expiresAt`) because Pixabay's terms
+    // ask every request cached that long. Platform-wide and holding no
+    // workspace's data. Written and read by the stock-photos plugin's server
+    // half through the Admin SDK only. Deny ALL client access, staff
+    // included: a client that could write an entry could hand every site
+    // build the photo of its choosing.
+    match /stockPhotoSearches/{key} {
+      allow read, write: if false;
     }
 
     // The per-recipient DELIVERY LOG: one document per message we sent an

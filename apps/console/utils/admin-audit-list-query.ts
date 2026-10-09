@@ -52,16 +52,48 @@ import type {
  *
  * ## One order, merged indexes
  *
- * `at` DESC is the only order — the page's cursor is a position in it — so
- * the one range is When, over `at` itself. Each equality and the search token
+ * `at` DESC is the default order — the page's cursor is a position in
+ * whichever order is on — and the one range is When, over `at` itself. Each equality and the search token
  * merge with it through their own `(field, at DESC)` composite
  * (`listQueryIndexes`), pinned by `specs/admin-audit-list-query.spec.ts`. A
  * second range (on anything but `at`) could not keep that order, so it is
  * not offered.
  */
 
-/** The one order both surfaces keep, and page by. */
-export const ADMIN_AUDIT_SORT: ListQuerySort = { path: 'at', direction: 'desc', column: 'at' }
+/** The default order both surfaces keep, and page by. */
+export const ADMIN_AUDIT_SORT: ListQuerySort = {
+  path: 'at',
+  direction: 'desc',
+  column: 'at',
+  label: 'When',
+}
+
+/*
+ * ## The audit page's header sorts (AGL-3680)
+ *
+ * When newest first is the default and full. Every other header is `alone`:
+ * served with no filter or search on, falling back to When newest first with
+ * a notice — so on this top-level collection none costs a composite. Each
+ * reads a field EVERY row stores: `action`, `actorUid` and `target` are named
+ * by every writer, and `scope` is stamped null by `withAdminAuditIndex` when
+ * a writer has none (and by `tools/scripts/backfill-staff-list-sort-fields.mjs`
+ * on the rows before). Why is free text — a reason and a note — and does not
+ * sort. An account's audit tables keep the one order: four merged queries
+ * cannot share another without a composite per half.
+ */
+const auditAlone = (path: string, column: string, label: string): ListQuerySort[] => [
+  { path, direction: 'asc', column, label, alone: true },
+  { path, direction: 'desc', column, label, alone: true },
+]
+
+export const ADMIN_AUDIT_COLUMN_SORTS: readonly ListQuerySort[] = [
+  ADMIN_AUDIT_SORT,
+  { path: 'at', direction: 'asc', column: 'at', label: 'When', alone: true },
+  ...auditAlone('action', 'action', 'Action'),
+  ...auditAlone('scope', 'scope', 'Scope'),
+  ...auditAlone('target', 'target', 'Target'),
+  ...auditAlone('actorUid', 'actorUid', 'Who'),
+]
 
 /** The date operators a feed pinned to its own date order serves. */
 const DATE_RANGE_OPERATORS = ['after', 'onOrAfter', 'before', 'onOrBefore'] as const
@@ -109,7 +141,7 @@ export const ADMIN_AUDIT_LIST_SELECT_FIELDS: readonly string[] = [
 /** The Audit log page's query: every field above, and the search. */
 export const ADMIN_AUDIT_LIST_QUERY: ListQueryDeclaration = {
   fields: ADMIN_AUDIT_LIST_FIELDS,
-  sorts: [ADMIN_AUDIT_SORT],
+  sorts: ADMIN_AUDIT_COLUMN_SORTS,
   search: { tokensPath: ADMIN_AUDIT_SEARCH_FIELD },
 }
 

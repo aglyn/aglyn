@@ -148,3 +148,12 @@ export function aiSiteBuildDoneLinks(
     pages: buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
   }
 }
+
+/**
+ * Where a person gets more AI credits (AGL-3660): the workspace's Billing
+ * page at its plans, where an upgrade and the AI add-on are both sold — the
+ * door the AI credits meter's own upgrade link opens.
+ */
+export function aiCreditsBillingHref(orgSlug: string): string {
+  return `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans`
+}

@@ -13,6 +13,7 @@
       "name": "Internationalization matters",
       "tokens": ["i", "in", "int", "inte", "inter", "intern", "interna", "internat", "internati", "internatio", "internation", "internationa", "m", "ma", "mat", "matt", "matte", "matter", "matters"]
     },
+    { "name": "Nova Library. 📚", "tokens": ["n", "no", "nov", "nova", "l", "li", "lib", "libr", "libra", "librar", "library", "library.", "📚"] },
     { "name": "", "tokens": [] }
   ],
   "scoped": [

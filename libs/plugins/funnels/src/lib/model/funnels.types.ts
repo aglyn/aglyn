@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { SiteJourneyStepType } from '@aglyn/aglyn/app-utils/site-journey'
+import type { SiteJourneyStepType } from '@aglyn/aglyn/app-utils/site-journey-steps'
 
 /**
  * Funnels (AGL-3605): a site's ordered 2–8 steps, measured over the visits

@@ -56,8 +56,21 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { CSP_LIST_QUERY, cspWindowBase } from '../../../../utils/csp-report-list-query'
-import { readStaffListQuery, runStaffListQuery } from '../../../../utils/server/staff-list-query'
+import {
+  CSP_LIST_QUERY,
+  CSP_SORT_COLUMNS,
+  type CspListRow,
+  cspWindowBase,
+  isCspQuerySort,
+} from '../../../../utils/csp-report-list-query'
+// From the leaf, as `staff-list-query.ts` does.
+import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
+import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
+import {
+  planStaffListQuery,
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,15 +140,58 @@ async function handler(request: Request): Promise<Response> {
       if (!listRequest) {
         return Response.json({ error: 'Unreadable filters' }, { status: 400 })
       }
+      const base = cspWindowBase(since)
+      const collection = firestore.collection(CSP_AGGREGATE_COLLECTION)
+      /*
+       * A HEADER SORT OTHER THAN DAY NEWEST FIRST (AGL-3680, strategy 4s):
+       * every counter the window and the clauses select, read whole up to
+       * the backstop, sorted here and paged — never a page sorted on its own.
+       * Past the backstop the window is not read whole, so the order is not
+       * applied and the list says so, in the query's own order.
+       */
+      const sortNotices: string[] = []
+      const column = listRequest.sort ? CSP_SORT_COLUMNS[listRequest.sort.path] : undefined
+      if (column && !isCspQuerySort(listRequest.sort)) {
+        const plan = planStaffListQuery(CSP_LIST_QUERY, { ...listRequest, sort: null }, base)
+        const read = await applyListQuery(collection, plan).limit(READ_LIMIT + 1).get()
+        if (read.docs.length <= READ_LIMIT) {
+          const page = answerStaffCompleteList<ReturnType<typeof cspRow> & CspListRow>({
+            rows: read.docs.map(cspRow) as Array<ReturnType<typeof cspRow> & CspListRow>,
+            // Every clause and the search are already on the read.
+            fields: [],
+            searchPaths: [],
+            request: { ...listRequest, clauses: [], search: [] },
+            cursorOf: (row) => row.id,
+            sorts: CSP_SORT_COLUMNS,
+          })
+          return Response.json(
+            {
+              ...page,
+              refused: plan.refused,
+              notices: [...plan.notices, ...page.notices],
+              windowDays: days,
+              since,
+            },
+            { status: 200 },
+          )
+        }
+        sortNotices.push(
+          `Not sorted by ${column.label}: the window holds more than ${READ_LIMIT} ` +
+            'counters, so it is shown newest day first — narrow the window or filter it.',
+        )
+      }
       const page = await runStaffListQuery({
         firestore,
-        collection: firestore.collection(CSP_AGGREGATE_COLLECTION),
+        collection,
         declaration: CSP_LIST_QUERY,
-        request: listRequest,
-        base: cspWindowBase(since),
+        request: { ...listRequest, sort: null },
+        base,
         row: cspRow,
       })
-      return Response.json({ ...page, windowDays: days, since }, { status: 200 })
+      return Response.json(
+        { ...page, notices: [...page.notices, ...sortNotices], windowDays: days, since },
+        { status: 200 },
+      )
     }
 
     const snapshot = await firestore

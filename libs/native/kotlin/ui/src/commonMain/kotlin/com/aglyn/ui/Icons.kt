@@ -119,6 +119,11 @@ import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.WebAsset
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -197,6 +202,19 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileCopy
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.ViewKanban
+import androidx.compose.material.icons.automirrored.outlined.Reply
+import androidx.compose.material.icons.outlined.MarkEmailUnread
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Segment
+import androidx.compose.material.icons.outlined.CallMerge
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -312,6 +330,39 @@ object AglynIcons {
     "file_copy" to Icons.Outlined.FileCopy,
     "key" to Icons.Outlined.Key,
     "play_arrow" to Icons.Outlined.PlayArrow,
+    // CRM, Inbox and Email (AGL-3669).
+    "business" to Icons.Outlined.Business,
+    "handshake" to Icons.Outlined.Handshake,
+    "person_add" to Icons.Outlined.PersonAdd,
+    "sticky_note" to Icons.AutoMirrored.Outlined.StickyNote2,
+    "call" to Icons.Outlined.Call,
+    "groups" to Icons.Outlined.Groups,
+    "view_kanban" to Icons.Outlined.ViewKanban,
+    "upload" to Icons.Outlined.Upload,
+    "download" to Icons.Outlined.Download,
+    "reply" to Icons.AutoMirrored.Outlined.Reply,
+    "mark_unread" to Icons.Outlined.MarkEmailUnread,
+    "mark_read" to Icons.Outlined.Drafts,
+    "send" to Icons.AutoMirrored.Outlined.Send,
+    "list" to Icons.AutoMirrored.Outlined.List,
+    "label" to Icons.AutoMirrored.Outlined.Label,
+    "timeline" to Icons.Outlined.Timeline,
+    "arrow_forward" to Icons.AutoMirrored.Outlined.ArrowForward,
+    "copy" to Icons.Outlined.ContentCopy,
+    "segment" to Icons.Outlined.Segment,
+    "tag" to Icons.Outlined.Tag,
+    "merge" to Icons.Outlined.CallMerge,
+    "drafts" to Icons.Outlined.Drafts,
+    "play" to Icons.Outlined.PlayCircle,
+    "brush" to Icons.Outlined.Brush,
+    "block" to Icons.Outlined.Block,
+    "verified" to Icons.Outlined.Verified,
+    "hourglass" to Icons.Outlined.HourglassEmpty,
+    "person_remove" to Icons.Outlined.PersonRemove,
+    "science" to Icons.Outlined.Science,
+    "web_asset" to Icons.Outlined.WebAsset,
+    "archive" to Icons.Outlined.Archive,
+    "lock" to Icons.Outlined.Lock,
     "privacy_tip" to Icons.Outlined.PrivacyTip,
     "receipt_long" to Icons.Outlined.ReceiptLong,
     "text_fields" to Icons.Outlined.TextFields,
@@ -326,21 +377,12 @@ object AglynIcons {
     "local_police" to Icons.Outlined.LocalPolice,
     "inventory_2" to Icons.Outlined.Inventory2,
     "monitor_heart" to Icons.Outlined.MonitorHeart,
-    "person_add" to Icons.Outlined.PersonAdd,
-    "person_remove" to Icons.Outlined.PersonRemove,
     "admin_panel_settings" to Icons.Outlined.AdminPanelSettings,
-    "drafts" to Icons.Outlined.Drafts,
     "domain" to Icons.Outlined.Domain,
     "account_circle" to Icons.Outlined.AccountCircle,
-    "lock" to Icons.Outlined.Lock,
     "vpn_key" to Icons.Outlined.VpnKey,
-    "business" to Icons.Outlined.Business,
     "palette" to Icons.Outlined.Palette,
-    "download" to Icons.Outlined.Download,
-    "upload" to Icons.Outlined.Upload,
     "gavel" to Icons.Outlined.Gavel,
-    "block" to Icons.Outlined.Block,
-    "verified" to Icons.Outlined.Verified,
     "dns" to Icons.Outlined.Dns,
     "sync" to Icons.Outlined.Sync,
     "policy" to Icons.Outlined.Policy,
@@ -392,18 +434,15 @@ object AglynIcons {
     "image_not_supported" to Icons.Outlined.ImageNotSupported,
     "quiz" to Icons.Outlined.Quiz,
     "payment" to Icons.Outlined.Payment,
-    "tag" to Icons.Outlined.Tag,
     "person_search" to Icons.Outlined.PersonSearch,
     "psychology" to Icons.Outlined.Psychology,
     "memory" to Icons.Outlined.Memory,
     "toggle_on" to Icons.Outlined.ToggleOn,
     "power_settings_new" to Icons.Outlined.PowerSettingsNew,
     "power_off" to Icons.Outlined.PowerOff,
-    "send" to Icons.AutoMirrored.Outlined.Send,
     "login" to Icons.AutoMirrored.Outlined.Login,
     "article" to Icons.AutoMirrored.Outlined.Article,
     "assignment" to Icons.AutoMirrored.Outlined.Assignment,
-    "label" to Icons.AutoMirrored.Outlined.Label,
     "notes" to Icons.AutoMirrored.Outlined.Notes,
     "help_outline" to Icons.AutoMirrored.Outlined.HelpOutline,
   )

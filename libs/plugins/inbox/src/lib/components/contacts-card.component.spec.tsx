@@ -226,7 +226,7 @@ describe('ContactsCard (AGL-3045 → AGL-3321)', () => {
     expect(addresses()).toEqual(['ada@example.com'])
     expect(within(rowOf('ada@example.com')).getByText('Ada')).toBeTruthy()
     expect(mockOpened.every((source) => source === 'hosts/host-1/siteMembers')).toBe(true)
-    expect(planOf(MEMBERS).orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+    expect(planOf(MEMBERS).orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 
   it('lists the site’s leads on the Leads toggle, each with where it came from', async () => {

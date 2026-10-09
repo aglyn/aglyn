@@ -50,6 +50,8 @@ export interface AiLayoutSitePage {
   id: string
   label: string
   slug: string
+  /** The path of a destination that is no page, such as the blog a start writes (AGL-3660). */
+  href?: string
 }
 
 /** Whether a slug is the site's root, the home page. */
@@ -92,10 +94,16 @@ export function aiLayoutSitePages(inputs: Readonly<Record<string, unknown>> | nu
   const pages: AiLayoutSitePage[] = []
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue
-    const { id, label, slug } = entry as Record<string, unknown>
+    const { id, label, slug, href } = entry as Record<string, unknown>
     if (typeof id !== 'string' || !id || typeof label !== 'string' || !label.trim()) continue
     if (pages.some((page) => page.id === id)) continue
-    pages.push({ id, label: label.trim(), slug: typeof slug === 'string' ? slug : '' })
+    pages.push({
+      id,
+      label: label.trim(),
+      slug: typeof slug === 'string' ? slug : '',
+      // Only a path on this site, never an address elsewhere.
+      ...(typeof href === 'string' && /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(href) ? { href } : {}),
+    })
   }
   return pages.slice(0, AI_LAYOUT_SITE_PAGES_MAX)
 }
@@ -205,7 +213,12 @@ export function aiLayoutWithSitePages(
       const id = freshId(`aiNavLink_${page.id.replace(/[^A-Za-z0-9_]/g, '')}`)
       nodes[id] = {
         componentId: 'muiScreenLink',
-        props: { children: page.label.slice(0, 40), screenId: page.id, renderAs: 'link', color: 'inherit' },
+        props: {
+          children: page.label.slice(0, 40),
+          ...(page.href ? { href: page.href } : { screenId: page.id }),
+          renderAs: 'link',
+          color: 'inherit',
+        },
       }
       return id
     })
@@ -214,10 +227,10 @@ export function aiLayoutWithSitePages(
     header
       .map((id) => nodes[id])
       .filter((node) => LINK_COMPONENTS.has(String(node.componentId)))
-      .map((node) => node.props?.['screenId'])
+      .flatMap((node) => [node.props?.['screenId'], node.props?.['href']])
       .filter((value): value is string => typeof value === 'string'),
   )
-  const missing = pages.filter((page) => !linkedInHeader.has(page.id))
+  const missing = pages.filter((page) => !linkedInHeader.has(page.href ?? page.id))
   const navs = order.filter((id) => elementOf(nodes[id]) === 'nav')
   const headerNav = navs.find((id) => header.includes(id)) ?? null
 

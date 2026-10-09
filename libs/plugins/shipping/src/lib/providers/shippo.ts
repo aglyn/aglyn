@@ -23,6 +23,7 @@ import { shippoTrackingStatus } from '../model/tracking-status'
 import {
   centsToDecimal,
   decimalToCents,
+  mapPosition,
   providerJson,
   type ProviderFetch,
 } from './http'
@@ -425,6 +426,7 @@ export function createShippoProvider(options: ShippoProviderOptions): ShippingPr
           }
           address_type?: string
         }
+        geo?: { latitude?: number | null; longitude?: number | null } | null
       }>(account, `/v2/addresses/validate?${query.toString()}`)
       const value = String(result?.analysis?.validation_result?.value ?? '')
       const messages = (result?.analysis?.validation_result?.reasons ?? [])
@@ -455,10 +457,14 @@ export function createShippoProvider(options: ShippoProviderOptions): ShippingPr
             String(address[field] ?? '').trim().toUpperCase(),
         )
       if (value === 'invalid') return { verdict: 'invalid', messages }
+      // Where Shippo placed it, when the answer carries a position — a local
+      // delivery radius zone measures from it (AGL-3624).
+      const coordinates = mapPosition(result?.geo?.latitude, result?.geo?.longitude)
+      const placed = coordinates ? { coordinates } : {}
       if (value === 'valid' || value === 'partially_valid') {
         return differs && suggested
-          ? { verdict: 'corrected', suggested, messages }
-          : { verdict: value === 'valid' ? 'valid' : 'unknown', messages }
+          ? { verdict: 'corrected', suggested, messages, ...placed }
+          : { verdict: value === 'valid' ? 'valid' : 'unknown', messages, ...placed }
       }
       return { verdict: 'unknown', messages }
     },

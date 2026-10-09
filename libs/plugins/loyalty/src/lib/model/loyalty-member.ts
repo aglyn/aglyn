@@ -46,6 +46,14 @@ export interface StoredLoyaltyMember {
   createdAtMs: number
   updatedAtMs: number
   lastOrderAtMs: number | null
+  /**
+   * The built-in points this member held when the store connected its own
+   * Smile.io or Yotpo account (AGL-3677), set aside untouched while `points`
+   * mirrors the account, and given back exactly when the store disconnects.
+   * Present only while parked.
+   */
+  parked?: boolean
+  parkedPoints?: number
 }
 
 export type LoyaltyLedgerKind =

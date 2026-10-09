@@ -445,6 +445,7 @@ jobs:
       # change to one of them stales the Swift and Kotlin it generates.
       - run: npm run test:native-contracts
       - run: npm run generate:native-contracts:check
+      - run: npm run generate:native-derived-values:check
       # And the notification catalog the app's push settings list (AGL-3620):
       # a new notification type or category stales it.
       - run: npm run generate:mobile-notification-catalog:check

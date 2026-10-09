@@ -46,7 +46,9 @@ final class SubmissionsTests: XCTestCase {
         NativePluginManifestEntry(
           id: "inbox",
           contributes: [
-            "screens": ["inbox.submission", "inbox.submissions"], "deepLinks": ["inbox.submissions-page"],
+            "screens": ["inbox.submissions", "inbox.submission", "inbox.people"], "widgets": ["inbox.glance"],
+            "quickActions": ["inbox.open", "inbox.people"],
+            "deepLinks": ["inbox.page", "inbox.submissions-page", "inbox.people-page"],
           ], register: registerInboxNative)
       ], into: registry)
     XCTAssertEqual(result.failed, [])

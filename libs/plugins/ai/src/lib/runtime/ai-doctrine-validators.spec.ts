@@ -70,6 +70,7 @@ import {
   detectMissedDuplicate,
   detectMissingNavAndSeo,
   detectOffBrandEmail,
+  aiSettleOffBrandEmailColors,
   detectOffVoiceCopy,
   detectOverBudget,
   detectPlanEmbeds,
@@ -752,6 +753,60 @@ describe('rule 6 — emails use the brand', () => {
   it('passes the brand’s own color in any spelling, and is not a page rule', () => {
     expect(detectOffBrandEmail(email('#1976D2'), 'email', brand)).toEqual([])
     expect(detectOffBrandEmail(email('#FF00AA'), 'page', brand)).toEqual([])
+  })
+
+  describe('settled before it is checked (AGL-3676)', () => {
+    const palette = {
+      colors: {
+        'primary.main': '#1976d2',
+        'primary.light': '#E3F2FD',
+        'background.paper': '#ffffff',
+        divider: 'rgba(0, 0, 0, 0.12)',
+      },
+      fonts: ['Inter'],
+    }
+    const settledColor = (value: string, given = palette as typeof palette | null) => {
+      const settled = aiSettleOffBrandEmailColors(email(value), given) as ReturnType<typeof email>
+      return settled.nodes['n1'].props?.['backgroundColor']
+    }
+
+    it('snaps a tint to the nearest opaque brand color, and then passes rule 6', () => {
+      expect(settledColor('#EAF4FE')).toBe('#E3F2FD')
+      expect(settledColor('#1565C0')).toBe('#1976d2')
+      expect(settledColor('rgb(250, 250, 250)')).toBe('#ffffff')
+      const settled = aiSettleOffBrandEmailColors(email('#EAF4FE'), palette) as ReturnType<typeof email>
+      expect(detectOffBrandEmail(settled, 'email', palette)).toEqual([])
+    })
+
+    it('writes a palette path as its value, and leaves what is already the brand', () => {
+      expect(settledColor('primary.main')).toBe('#1976d2')
+      expect(settledColor('#1976D2')).toBe('#1976D2')
+    })
+
+    it('leaves a value that does not parse for the re-ask, and drops a color with no brand at all', () => {
+      expect(settledColor('cornflowerblue')).toBe('cornflowerblue')
+      expect(settledColor('#EAF4FE', null)).toBeUndefined()
+    })
+
+    it('leaves the tree as written when a snapped color would vanish into its band', () => {
+      const cream = { colors: { 'primary.main': '#8c3b2e', 'secondary.main': '#f4e3c1' }, fonts: ['Lora'] }
+      const banded = (color: string) =>
+        tree({
+          componentId: 'div',
+          children: [
+            {
+              componentId: 'emailSection',
+              props: { backgroundColor: '#f4e3c1' },
+              children: [{ componentId: 'emailText', props: { variant: 'heading', children: 'Buns', color } }],
+            },
+          ],
+        })
+      const pale = banded('#e8f5e0')
+      expect(aiSettleOffBrandEmailColors(pale, cream)).toBe(pale)
+      expect(detectOffBrandEmail(pale, 'email', cream)).toMatchObject([{ rule: 6 }])
+      const deep = aiSettleOffBrandEmailColors(banded('#7a2f22'), cream) as ReturnType<typeof banded>
+      expect(deep.nodes['n2'].props?.['color']).toBe('#8c3b2e')
+    })
   })
 })
 

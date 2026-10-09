@@ -381,7 +381,9 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     label: 'Personal & resume',
     blurb: 'A simple page about you and your work',
     icon: 'person',
-    keywords: ['personal', 'resume', 'cv', 'me', 'myself', 'profile', 'job', 'candidate', 'speaker'],
+    // "Personal" only as a site about the person (AGL-3660): as a bare word it
+    // is the adjective in "a personal travel blog", which it beat on length.
+    keywords: ['personal site', 'personal website', 'personal page', 'about me', 'resume', 'cv', 'me', 'myself', 'profile', 'job', 'candidate', 'speaker'],
     starter: 'portfolio',
     look: { bases: ['minimal', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: ALL_HUES, grounds: ['white', 'warm', 'cool'], fonts: ['inter', 'instrument', 'manrope', 'lora', 'grotesk'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.1, density: 'airy' },
     design: 'Simple and personal: who the person is in one line, what they do, experience or highlights as a list or steps, selected work as cards where the brief names some, and a way to get in touch. Mostly plain bands.',

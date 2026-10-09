@@ -32,15 +32,24 @@ import {
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import {
+  type ListQuerySort,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
 import { type GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { useStaffListQuery } from '../hooks/use-staff-list-query'
 import {
+  EMAIL_HISTORY_COLUMN_SORTS,
   EMAIL_HISTORY_FIELDS,
   EMAIL_HISTORY_HEADERS,
+  EMAIL_HISTORY_QUERY,
   EMAIL_HISTORY_SELECT_FIELDS,
+  EMAIL_HISTORY_SORT,
 } from '../utils/email-history-list-query'
 import StaffEmailMessageDialog from './staff-email-message-dialog.component'
 
@@ -195,10 +204,26 @@ export function StaffUserEmailHistoryCard({
     search: { words: searchWords, onChange: setSearchWords },
   })
   const params = useMemo(() => ({ uid }), [uid])
+  /*
+   * EVERY HEADER SORTS (AGL-3680): each address's query takes the order and
+   * the route merges them in it (`EMAIL_HISTORY_COLUMN_SORTS`). The plan says
+   * which order the route reads in, so the header shows that one.
+   */
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const orderPlan = useMemo(
+    () =>
+      planListQuery(
+        EMAIL_HISTORY_QUERY,
+        { clauses, search: searchWords, sort: askedSort },
+        nameSearchNormalizers,
+      ),
+    [clauses, searchWords, askedSort],
+  )
   const history = useStaffListQuery<HistoryRow>({
     endpoint: uid ? '/api/admin/users/email-history' : null,
     clauses,
     search: searchWords,
+    sort: askedSort,
     params,
   })
   const lookupFailed = history.failed
@@ -223,6 +248,14 @@ export function StaffUserEmailHistoryCard({
       })),
     [history.rows],
   )
+  const columnSort = useListColumnSort<(typeof gridRows)[number]>({
+    sorts: EMAIL_HISTORY_COLUMN_SORTS,
+    defaultSort: EMAIL_HISTORY_SORT,
+    sort: askedSort,
+    onSortChange: setAskedSort,
+    orderBy: orderPlan.orderBy,
+    rows: gridRows,
+  })
   const filterColumns = (shown: GridColDef[]) =>
     listFilterGridColumns(shown, EMAIL_HISTORY_FIELDS, EMAIL_FILTER_OPTIONS, EMAIL_HISTORY_HEADERS)
   const refused = listQueryRefusals(history.refused, {
@@ -466,18 +499,18 @@ export function StaffUserEmailHistoryCard({
             clauses={clauses}
             onChange={setClauses}
           />
-          <ListQueryNotices refused={refused} notices={history.notices} />
+          <ListQueryNotices refused={refused} notices={[...history.notices, ...columnSort.notices]} />
           <ListTable
             aria-label="Email delivery"
-            rows={gridRows}
+            rows={columnSort.rows}
             columns={columns}
             loading={history.loading}
             hideFooter
             /*
-             * The route answers every filter and the search; the grid holds
-             * one page and never narrows or reorders it.
+             * The route answers every filter, the search and the header
+             * sort; the grid holds one page and never narrows or reorders it.
              */
-            disableColumnSorting
+            columnSort={columnSort}
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}

@@ -59,6 +59,8 @@ import {
   type ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-sort'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -89,8 +91,10 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 import {
+  CSP_COLUMN_SORTS,
   CSP_FILTER_FIELDS,
   CSP_FILTER_HEADERS,
+  CSP_LIST_SORT,
   CSP_SEARCH_HINT,
 } from '../../../../utils/csp-report-list-query'
 import {
@@ -215,11 +219,25 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
     () => ({ view: 'rows', days: String(cspDays) }),
     [cspDays],
   )
+  /*
+   * EVERY HEADER SORTS (AGL-3680): Day newest first is the query's order;
+   * every other is sorted by the route over the whole window
+   * (`CSP_SORT_COLUMNS`), which says so when the window is too large.
+   */
+  const [cspSort, setCspSort] = useState<ListQuerySort | null>(null)
   const cspList = useStaffListQuery<CspAggregateRow>({
     endpoint: isStaff ? '/api/admin/csp-reports' : null,
     clauses: gridFilter.clauses,
     search: gridFilter.searchWords,
+    sort: cspSort,
     params: cspListParams,
+  })
+  const cspColumnSort = useListColumnSort<CspAggregateRow>({
+    sorts: CSP_COLUMN_SORTS,
+    defaultSort: CSP_LIST_SORT,
+    sort: cspSort,
+    onSortChange: setCspSort,
+    rows: cspList.rows,
   })
   const { refresh: refreshCspList } = cspList
   const cspRefusals = useMemo(
@@ -671,7 +689,10 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                         clauses={gridFilter.clauses}
                         onChange={gridFilter.setClauses}
                       />
-                      <ListQueryNotices refused={cspRefusals} notices={cspList.notices} />
+                      <ListQueryNotices
+                        refused={cspRefusals}
+                        notices={[...cspList.notices, ...cspColumnSort.notices]}
+                      />
                       {gridFilter.searchWords.length ? (
                         <Typography variant="caption" color="text.secondary">
                           {CSP_SEARCH_HINT}
@@ -684,7 +705,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                       ) : null}
                       <ListTable
                         aria-label="Content-Security-Policy violations"
-                        rows={cspList.rows}
+                        rows={cspColumnSort.rows}
                         columns={cspColumns}
                         getRowId={(row: CspAggregateRow) => row.id ?? ''}
                         loading={cspList.loading}
@@ -693,10 +714,10 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                         onFilterModelChange={gridFilter.onFilterModelChange}
                         quickFilter
                         // The route answers one page at a time; the footer
-                        // below walks the pages, and a header sort would
-                        // order only one.
+                        // below walks the pages. A header sort is the
+                        // route's, over the whole window (`cspColumnSort`).
                         hideFooter
-                        disableColumnSorting
+                        columnSort={cspColumnSort}
                         noRowsLabel="No violations match these filters"
                       />
                       <StaffListPaginationControls pagination={cspList} />

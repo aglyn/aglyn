@@ -208,6 +208,50 @@ const OrderStatus = forwardRef<HTMLDivElement, OrderStatusProps>((props, ref) =>
           ))}
         </Stepper>
 
+        {/* Where to collect it, or when it is coming (AGL-3624). */}
+        {view.pickup ? (
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" component="h2">
+                {view.pickup.status === 'picked_up' ? 'Picked up' : 'Pickup'}
+              </Typography>
+              <Typography variant="body2">
+                {[view.pickup.locationName, view.pickup.address].filter(Boolean).join(', ')}
+              </Typography>
+              {view.pickup.status === 'preparing' ? (
+                <Typography variant="body2" color="text.secondary">
+                  {'We’re preparing your order and will email you when it’s ready.'}
+                </Typography>
+              ) : null}
+              {view.pickup.hours && view.pickup.status !== 'picked_up' ? (
+                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
+                  {view.pickup.hours}
+                </Typography>
+              ) : null}
+              {view.pickup.instructions && view.pickup.status !== 'picked_up' ? (
+                <Typography variant="body2" color="text.secondary">
+                  {view.pickup.instructions}
+                </Typography>
+              ) : null}
+            </Stack>
+          </Paper>
+        ) : null}
+        {view.localDelivery ? (
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack spacing={0.5}>
+              <Typography variant="h6" component="h2">
+                {'Local delivery'}
+              </Typography>
+              <Typography variant="body2">{view.localDelivery.statusLabel}</Typography>
+              {view.localDelivery.windowLabel ? (
+                <Typography variant="body2" color="text.secondary">
+                  {view.localDelivery.windowLabel}
+                </Typography>
+              ) : null}
+            </Stack>
+          </Paper>
+        ) : null}
+
         {view.shipments.length ? (
           <Stack spacing={1.5}>
             <Typography variant="h6" component="h2">

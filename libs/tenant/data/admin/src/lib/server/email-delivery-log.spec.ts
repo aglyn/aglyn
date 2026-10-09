@@ -839,7 +839,10 @@ describe('recordEmailDeliverySnapshot', () => {
     // "Opened at least once" is all the provider said. Re-running the import
     // must not turn that into a number that grows.
     expect(stored?.status).toBe('opened')
-    expect(stored?.openCount).toBeUndefined()
+    // Stamped 0 on the message it creates (AGL-3680), so the staff table can
+    // order by it — and still 0 after the re-run, never a count that grows.
+    expect(stored?.openCount).toBe(0)
+    expect(stored?.clickCount).toBe(0)
   })
 
   it('does not overwrite the send time the event feed already recorded', async () => {

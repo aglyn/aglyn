@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3.5
 title: Running the register
-description: Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, and printed thermal receipts.
+description: Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.
 ---
 
 # Running the register
@@ -175,6 +175,65 @@ receipts**, printed at the foot.
 Most network receipt printers open the cash drawer cabled to them whenever
 they print, so printing a cash sale's receipt also opens the drawer. That is a
 setting on the printer.
+
+## Selling while offline
+
+When the register loses its connection it keeps selling **cash**. A banner
+across the top of the register says it is offline and how many sales are
+waiting on the device.
+
+- **What still works:** the product grid, search and barcode scans (from the
+  catalog the register saved while it was online), the basket, the cashier's
+  discount up to your register limit, your store's own tax rate, and cash. The
+  receipt prints through the browser's print dialog, and its barcode is the one
+  the order answers to once it syncs.
+- **What is off until the connection returns:** card readers, Tap to Pay,
+  typed cards, the QR card link, **gift cards**, store credit and rewards,
+  room charges, discount codes and store promotions. Card payments need the
+  connection, a gift card or store credit balance can only be checked online,
+  so neither is redeemed offline, and codes and promotions are counted against
+  their limits online.
+- **When the connection returns,** the register sends its saved sales on its
+  own. Each one becomes a paid order, dated when it was rung, in the shift it
+  was rung in and under the cashier who rang it. The emailed receipt goes to
+  the customer then. Cloud receipt printers print nothing for a synced sale,
+  and its drawer does not open again.
+- **A sale is never lost and never counted twice.** It stays on the device
+  until your store has recorded it, and sending it again (a connection that
+  comes and goes) records it once.
+
+### What the sync checks
+
+The customer has already paid, so the sync records the sale as it was rung
+and says what you should look at, on the order and in the register:
+
+- **Stock that went short**: more was sold than the shelf held, for example
+  because the website sold the last one meanwhile. The order lists the item
+  and how many were short.
+- A **price** that changed after the register saved the catalog (the sale
+  keeps the price it was rung at), or a product deleted since.
+- A **shift closed** before the sale synced, so its Z report does not include
+  that cash.
+- A discount above the register's limit, tax that differs from your store's
+  rate now, or a device clock that was wrong.
+
+### Before you go offline
+
+- The register needs to have been online on that device once, so it has the
+  catalog and your store's rules. It refreshes them regularly while online.
+- Your store needs a tax setting (your own rates, or no tax). A store using
+  Stripe Tax cannot ring in-person sales, online or offline.
+- If your site requires an open shift, open it before the connection drops.
+- Offline sales are kept in the browser on that device, for the member who was
+  signed in. In a private window, or where the browser blocks site data, the
+  register says offline selling is unavailable.
+- Keep the register page open. Reloading the page while offline shows the
+  console's offline page; the saved sales are kept and send when you open the
+  register again with a connection.
+- A sale syncs only for the member who was signed in when it was rung.
+- PINs are checked online, so a register that locks itself while offline
+  stays locked until the connection returns. Set the auto-lock to suit how
+  you trade.
 
 ## Related
 

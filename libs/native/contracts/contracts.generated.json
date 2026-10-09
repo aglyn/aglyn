@@ -40,6 +40,175 @@
     "Fri",
     "Sat"
   ],
+  "CAMPAIGN_EMAILS_QUERY": {
+    "fields": [
+      {
+        "column": "subject",
+        "kind": "text",
+        "operators": [
+          "contains"
+        ],
+        "path": "subject",
+        "tokensPath": "subjectTokens"
+      },
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status"
+      },
+      {
+        "column": "createdAtMs",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "storedAs": "millis"
+      }
+    ],
+    "search": {
+      "tokensPath": "subjectTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "label": "newest first",
+        "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "subject",
+        "direction": "asc",
+        "label": "Subject",
+        "path": "subjectLower"
+      },
+      {
+        "alone": true,
+        "column": "subject",
+        "direction": "desc",
+        "label": "Subject",
+        "path": "subjectLower"
+      }
+    ]
+  },
+  "COMPANY_LIST_DECLARATION": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "equals",
+          "startsWith"
+        ],
+        "path": "name",
+        "presence": "always"
+      },
+      {
+        "column": "ownerUid",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "ownerUid"
+      },
+      {
+        "column": "nextTaskAtMs",
+        "kind": "date",
+        "operators": [
+          "isEmpty"
+        ],
+        "path": "nextTaskAtMs",
+        "presence": "nullable",
+        "storedAs": "millis"
+      },
+      {
+        "column": "type",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "typeKey"
+      },
+      {
+        "column": "industry",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "industryKey"
+      },
+      {
+        "column": "rating",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "ratingKey"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "scopedSearchTokens"
+      },
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "column": "name",
+        "direction": "asc",
+        "label": "Company",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Company",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "nextTaskAtMs",
+        "direction": "asc",
+        "label": "Next activity",
+        "path": "nextTaskAtMs"
+      },
+      {
+        "alone": true,
+        "column": "nextTaskAtMs",
+        "direction": "desc",
+        "label": "Next activity",
+        "path": "nextTaskAtMs"
+      }
+    ]
+  },
   "COMPONENT_LIST_QUERY": {
     "fields": [
       {
@@ -87,6 +256,262 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "column": "$id",
+        "direction": "asc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "$id",
+        "direction": "desc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Used in",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Used in",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "asc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "desc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
+      }
+    ]
+  },
+  "CONTACT_LIFECYCLE_STAGE_LABELS": {
+    "customer": "Customer",
+    "evangelist": "Evangelist",
+    "lead": "Lead",
+    "marketing-qualified": "Marketing qualified",
+    "opportunity": "Opportunity",
+    "other": "Other",
+    "sales-qualified": "Sales qualified",
+    "subscriber": "Subscriber"
+  },
+  "CONTACT_LIST_DECLARATION": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "contains",
+          "equals",
+          "startsWith",
+          "endsWith"
+        ],
+        "path": "name",
+        "reversedPath": "nameReversed",
+        "tokensPath": "nameTokens"
+      },
+      {
+        "column": "email",
+        "kind": "text",
+        "lowerPath": "email",
+        "operators": [
+          "equals",
+          "startsWith"
+        ],
+        "path": "email",
+        "presence": "always"
+      },
+      {
+        "column": "formIds",
+        "kind": "text",
+        "operators": [
+          "contains"
+        ],
+        "path": "formIds",
+        "tokensPath": "formIds",
+        "verbatimTokens": true
+      },
+      {
+        "column": "createdAt",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAt",
+        "presence": "always"
+      },
+      {
+        "column": "hostId",
+        "kind": "exact",
+        "path": "hostId",
+        "presence": "always"
+      },
+      {
+        "column": "updatedAt",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "updatedAt",
+        "presence": "always"
+      },
+      {
+        "column": "nextTaskAtMs",
+        "kind": "date",
+        "operators": [
+          "isEmpty"
+        ],
+        "path": "nextTaskAtMs",
+        "presence": "nullable",
+        "storedAs": "millis"
+      },
+      {
+        "column": "emailStatus",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "emailStatus"
+      },
+      {
+        "column": "facetKeys",
+        "kind": "exact",
+        "operators": [
+          "contains",
+          "isAnyOf"
+        ],
+        "path": "facetKeys",
+        "tokensPath": "facetKeys"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "scopedSearchTokens"
+      },
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Last activity",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Last activity",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "asc",
+        "label": "Contact",
+        "path": "nameSortKey"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Contact",
+        "path": "nameSortKey"
+      },
+      {
+        "alone": true,
+        "column": "nextTaskAtMs",
+        "direction": "asc",
+        "label": "Next activity",
+        "path": "nextTaskAtMs"
+      },
+      {
+        "alone": true,
+        "column": "nextTaskAtMs",
+        "direction": "desc",
+        "label": "Next activity",
+        "path": "nextTaskAtMs"
+      },
+      {
+        "alone": true,
+        "column": "emailState",
+        "direction": "asc",
+        "label": "Email",
+        "path": "emailStatus"
+      },
+      {
+        "alone": true,
+        "column": "emailState",
+        "direction": "desc",
+        "label": "Email",
+        "path": "emailStatus"
       }
     ]
   },
@@ -113,8 +538,355 @@
       "value": "TechArticle"
     }
   ],
+  "CRM_ACTIVITIES_PER_RECORD_CEILING": 5000,
+  "CRM_ACTIVITY_DIRECTION_LABELS": {
+    "inbound": "Inbound",
+    "internal": "Internal",
+    "outbound": "Outbound"
+  },
+  "CRM_ACTIVITY_KIND_LABELS": {
+    "call": "Call",
+    "email": "Email",
+    "meeting": "Meeting",
+    "note": "Note",
+    "other": "Other"
+  },
+  "CRM_EMAIL_BODY_MAX": 10000,
+  "CRM_EMAIL_SUBJECT_MAX": 200,
+  "CRM_FIELD_OBJECT_LABELS": {
+    "company": "Companies",
+    "contact": "Contacts",
+    "deal": "Deals",
+    "lead": "Leads"
+  },
+  "CRM_LEAD_STATUS_LABELS": {
+    "new": "New",
+    "nurturing": "Nurturing",
+    "qualified": "Qualified",
+    "unqualified": "Unqualified",
+    "working": "Working"
+  },
+  "CRM_REPORT_PERIOD_LABELS": {
+    "30d": "Last 30 days",
+    "7d": "Last 7 days",
+    "90d": "Last 90 days",
+    "month": "This month"
+  },
+  "CRM_TASK_KIND_LABELS": {
+    "call": "Call",
+    "email": "Email",
+    "meeting": "Meeting",
+    "todo": "To-do"
+  },
   "CROSS_MAX_DEPTH": 3,
+  "DEAL_LIST_DECLARATION": {
+    "fields": [
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status"
+      },
+      {
+        "column": "nextTaskAtMs",
+        "kind": "date",
+        "operators": [
+          "isEmpty"
+        ],
+        "path": "nextTaskAtMs",
+        "presence": "nullable",
+        "storedAs": "millis"
+      },
+      {
+        "column": "typeKey",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf",
+          "isEmpty"
+        ],
+        "path": "typeKey",
+        "presence": "nullable"
+      },
+      {
+        "column": "leadSourceKey",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf",
+          "isEmpty"
+        ],
+        "path": "leadSourceKey",
+        "presence": "nullable"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "scopedSearchTokens"
+      },
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "title",
+        "direction": "asc",
+        "label": "Deal",
+        "path": "titleLower"
+      },
+      {
+        "alone": true,
+        "column": "title",
+        "direction": "desc",
+        "label": "Deal",
+        "path": "titleLower"
+      },
+      {
+        "alone": true,
+        "column": "amountCents",
+        "direction": "asc",
+        "label": "Amount",
+        "path": "amountSortCents"
+      },
+      {
+        "alone": true,
+        "column": "amountCents",
+        "direction": "desc",
+        "label": "Amount",
+        "path": "amountSortCents"
+      },
+      {
+        "alone": true,
+        "column": "expectedCloseAtMs",
+        "direction": "asc",
+        "label": "Expected close",
+        "path": "expectedCloseSortAtMs"
+      },
+      {
+        "alone": true,
+        "column": "expectedCloseAtMs",
+        "direction": "desc",
+        "label": "Expected close",
+        "path": "expectedCloseSortAtMs"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "asc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "desc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "nextTaskAtMs",
+        "direction": "asc",
+        "label": "Next activity",
+        "path": "nextTaskAtMs"
+      },
+      {
+        "alone": true,
+        "column": "nextTaskAtMs",
+        "direction": "desc",
+        "label": "Next activity",
+        "path": "nextTaskAtMs"
+      }
+    ]
+  },
+  "DEFAULT_DEAL_STAGES": [
+    {
+      "forecastCategory": "pipeline",
+      "id": "prospecting",
+      "kind": "open",
+      "name": "Prospecting",
+      "order": 0,
+      "probability": 10
+    },
+    {
+      "forecastCategory": "pipeline",
+      "id": "qualification",
+      "kind": "open",
+      "name": "Qualification",
+      "order": 1,
+      "probability": 10
+    },
+    {
+      "forecastCategory": "pipeline",
+      "id": "needs-analysis",
+      "kind": "open",
+      "name": "Needs Analysis",
+      "order": 2,
+      "probability": 20
+    },
+    {
+      "forecastCategory": "pipeline",
+      "id": "value-proposition",
+      "kind": "open",
+      "name": "Value Proposition",
+      "order": 3,
+      "probability": 50
+    },
+    {
+      "forecastCategory": "pipeline",
+      "id": "id-decision-makers",
+      "kind": "open",
+      "name": "Id. Decision Makers",
+      "order": 4,
+      "probability": 60
+    },
+    {
+      "forecastCategory": "pipeline",
+      "id": "perception-analysis",
+      "kind": "open",
+      "name": "Perception Analysis",
+      "order": 5,
+      "probability": 70
+    },
+    {
+      "forecastCategory": "bestCase",
+      "id": "proposal-price-quote",
+      "kind": "open",
+      "name": "Proposal/Price Quote",
+      "order": 6,
+      "probability": 75
+    },
+    {
+      "forecastCategory": "commit",
+      "id": "negotiation-review",
+      "kind": "open",
+      "name": "Negotiation/Review",
+      "order": 7,
+      "probability": 90
+    },
+    {
+      "forecastCategory": "closed",
+      "id": "won",
+      "kind": "won",
+      "name": "Closed Won",
+      "order": 8,
+      "probability": 100
+    },
+    {
+      "forecastCategory": "omitted",
+      "id": "lost",
+      "kind": "lost",
+      "name": "Closed Lost",
+      "order": 9,
+      "probability": 0
+    }
+  ],
   "DEFAULT_TITLE_PATTERN": "{{page.name}} {{site.separator}} {{site.name}}",
+  "DROP_OFF_MAX_HOURS": 720,
+  "DROP_OFF_WAIT_HOURS": [
+    1,
+    24,
+    72,
+    168
+  ],
+  "DROP_OFF_WATCHES_MAX": 12,
+  "EMAIL_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "contains",
+          "equals"
+        ],
+        "path": "name",
+        "tokensPath": "nameTokens"
+      },
+      {
+        "column": "kind",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "kind"
+      }
+    ],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "column": "name",
+        "direction": "asc",
+        "label": "List",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "List",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Membership",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Membership",
+        "path": "kind"
+      }
+    ]
+  },
+  "EMAIL_TEMPLATE_QUERY": {
+    "fields": [
+      {
+        "column": "displayName",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "contains",
+          "equals",
+          "startsWith"
+        ],
+        "path": "displayName",
+        "tokensPath": "nameTokens"
+      }
+    ],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Template",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Template",
+        "path": "nameLower"
+      }
+    ]
+  },
   "ENTRY_LIST_FILTER_HEADERS": {
     "authorId": "Author",
     "categoryId": "Category",
@@ -227,6 +999,73 @@
   "EVENT_LOCATION_MAX_LENGTH": 200,
   "EVENT_ORGANIZER_MAX_LENGTH": 100,
   "EVENT_TITLE_MAX_LENGTH": 150,
+  "EXPERIMENT_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "contains",
+          "equals"
+        ],
+        "path": "name",
+        "tokensPath": "nameTokens"
+      },
+      {
+        "column": "target",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "target",
+        "presence": "always"
+      },
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status",
+        "presence": "always"
+      }
+    ],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "column": "name",
+        "direction": "asc",
+        "label": "Experiment",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Experiment",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "asc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "desc",
+        "label": "Status",
+        "path": "status"
+      }
+    ]
+  },
   "FIRST_PARTY_PLUGINS": [
     {
       "alwaysOn": true,
@@ -614,6 +1453,118 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "slug",
+        "direction": "asc",
+        "label": "Slug",
+        "path": "slug"
+      },
+      {
+        "alone": true,
+        "column": "slug",
+        "direction": "desc",
+        "label": "Slug",
+        "path": "slug"
+      },
+      {
+        "alone": true,
+        "column": "submissions",
+        "direction": "asc",
+        "label": "Submissions",
+        "path": "stats.submissions"
+      },
+      {
+        "alone": true,
+        "column": "submissions",
+        "direction": "desc",
+        "label": "Submissions",
+        "path": "stats.submissions"
+      },
+      {
+        "alone": true,
+        "column": "leads",
+        "direction": "asc",
+        "label": "Leads",
+        "path": "stats.leads"
+      },
+      {
+        "alone": true,
+        "column": "leads",
+        "direction": "desc",
+        "label": "Leads",
+        "path": "stats.leads"
+      },
+      {
+        "alone": true,
+        "column": "lastSubmission",
+        "direction": "desc",
+        "label": "Last submission",
+        "path": "stats.lastSubmissionAtMs"
+      },
+      {
+        "alone": true,
+        "column": "lastSubmission",
+        "direction": "asc",
+        "label": "Last submission",
+        "path": "stats.lastSubmissionAtMs"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "leadRouting",
+        "direction": "asc",
+        "label": "Lead routing",
+        "path": "routing.lead"
+      },
+      {
+        "alone": true,
+        "column": "leadRouting",
+        "direction": "desc",
+        "label": "Lead routing",
+        "path": "routing.lead"
+      },
+      {
+        "alone": true,
+        "column": "inCampaign",
+        "direction": "asc",
+        "label": "In a campaign",
+        "path": "inCampaign"
+      },
+      {
+        "alone": true,
+        "column": "inCampaign",
+        "direction": "desc",
+        "label": "In a campaign",
+        "path": "inCampaign"
       }
     ]
   },
@@ -642,8 +1593,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -667,6 +1641,27 @@
     "format"
   ],
   "FUNCTION_MAX_OPERATIONS": 1000,
+  "FUNNEL_EMAIL_KEY_LABELS": {
+    "clicked": "link clicked",
+    "opened": "opened"
+  },
+  "FUNNEL_FEATURE": "screenAnalytics",
+  "FUNNEL_LABEL_MAX": 80,
+  "FUNNEL_MAX_RANGE_DAYS": 90,
+  "FUNNEL_MAX_STEPS": 8,
+  "FUNNEL_MIN_STEPS": 2,
+  "FUNNEL_NAME_MAX": 80,
+  "FUNNEL_STEP_TYPE_LABELS": {
+    "booking": "Made a booking",
+    "cart": "Added a product to the cart",
+    "email": "Email from the site",
+    "event": "Custom event",
+    "form": "Submitted a form",
+    "order": "Placed an order",
+    "overlay": "Clicked a bar or popup",
+    "page": "Viewed a page"
+  },
+  "FUNNELS_MAX_PER_SITE": 20,
   "HOST_EVENTS": [
     {
       "label": "Form submitted",
@@ -1046,6 +2041,398 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "column": "$id",
+        "direction": "asc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "$id",
+        "direction": "desc",
+        "label": "ID",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "asc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "alone": true,
+        "column": "description",
+        "direction": "desc",
+        "label": "Description",
+        "path": "description"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
+      }
+    ]
+  },
+  "LEAD_LIST_DECLARATION": {
+    "fields": [
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status"
+      },
+      {
+        "column": "emailStatus",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "emailStatus"
+      },
+      {
+        "column": "ownerUid",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "ownerUid"
+      },
+      {
+        "column": "leadSourceKey",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf",
+          "isEmpty"
+        ],
+        "path": "leadSourceKey",
+        "presence": "nullable"
+      },
+      {
+        "column": "campaignIds",
+        "kind": "exact",
+        "operators": [
+          "contains"
+        ],
+        "path": "campaignIds",
+        "tokensPath": "campaignIds"
+      },
+      {
+        "column": "leadSourceDirection",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "leadSourceDirection"
+      },
+      {
+        "column": "industryKey",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "industryKey"
+      },
+      {
+        "column": "ratingKey",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "ratingKey"
+      },
+      {
+        "column": "scopedCampaignIds",
+        "kind": "exact",
+        "operators": [
+          "isAnyOf"
+        ],
+        "path": "scopedCampaignIds",
+        "tokensPath": "scopedCampaignIds"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "scopedSearchTokens"
+      },
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "lastSeenAtMs",
+        "direction": "desc",
+        "label": "Last seen",
+        "path": "lastSeenAtMs"
+      },
+      {
+        "alone": true,
+        "column": "lastSeenAtMs",
+        "direction": "asc",
+        "label": "Last seen",
+        "path": "lastSeenAtMs"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "asc",
+        "label": "Lead",
+        "path": "nameSortKey"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Lead",
+        "path": "nameSortKey"
+      },
+      {
+        "alone": true,
+        "column": "company",
+        "direction": "asc",
+        "label": "Company",
+        "path": "companyLower"
+      },
+      {
+        "alone": true,
+        "column": "company",
+        "direction": "desc",
+        "label": "Company",
+        "path": "companyLower"
+      },
+      {
+        "alone": true,
+        "column": "jobTitle",
+        "direction": "asc",
+        "label": "Title",
+        "path": "jobTitleLower"
+      },
+      {
+        "alone": true,
+        "column": "jobTitle",
+        "direction": "desc",
+        "label": "Title",
+        "path": "jobTitleLower"
+      },
+      {
+        "alone": true,
+        "column": "emailState",
+        "direction": "asc",
+        "label": "Email",
+        "path": "emailStatus"
+      },
+      {
+        "alone": true,
+        "column": "emailState",
+        "direction": "desc",
+        "label": "Email",
+        "path": "emailStatus"
+      }
+    ]
+  },
+  "LEAD_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "email",
+        "kind": "text",
+        "lowerPath": "email",
+        "operators": [
+          "equals"
+        ],
+        "path": "email",
+        "presence": "always"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "scopedSearchTokens"
+      },
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Captured",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Captured",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Email",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Email",
+        "path": "email"
+      }
+    ]
+  },
+  "LEAD_SOURCE_OPTIONS": [
+    {
+      "label": "Booking",
+      "value": "booking"
+    },
+    {
+      "label": "Added by hand",
+      "value": "manual"
+    },
+    {
+      "label": "API",
+      "value": "api"
+    },
+    {
+      "label": "Import",
+      "value": "import"
+    },
+    {
+      "label": "Sign-up",
+      "value": "signup"
+    }
+  ],
+  "LIST_MEMBER_QUERY": {
+    "fields": [
+      {
+        "column": "email",
+        "kind": "text",
+        "lowerPath": "email",
+        "operators": [
+          "equals"
+        ],
+        "path": "email",
+        "presence": "always"
+      },
+      {
+        "column": "via",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "via"
+      }
+    ],
+    "search": {
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "asc",
+        "label": "Name",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Name",
+        "path": "name"
+      },
+      {
+        "alone": true,
+        "column": "addedAt",
+        "direction": "asc",
+        "label": "Joined",
+        "path": "addedAt"
+      },
+      {
+        "alone": true,
+        "column": "addedAt",
+        "direction": "desc",
+        "label": "Joined",
+        "path": "addedAt"
+      },
+      {
+        "alone": true,
+        "column": "via",
+        "direction": "asc",
+        "label": "How",
+        "path": "via"
+      },
+      {
+        "alone": true,
+        "column": "via",
+        "direction": "desc",
+        "label": "How",
+        "path": "via"
       }
     ]
   },
@@ -1147,6 +2534,45 @@
     {
       "label": "Animal shelter",
       "value": "AnimalShelter"
+    }
+  ],
+  "LOCAL_FULFILLMENT_OPEN_STATUSES": [
+    "paid",
+    "partially_fulfilled",
+    "fulfilled"
+  ],
+  "LOCAL_FULFILLMENT_QUEUE_FIELDS": {
+    "due": "fulfillmentDueMs",
+    "key": "fulfillmentKey",
+    "location": "fulfillmentLocationId",
+    "status": "status"
+  },
+  "LOCAL_FULFILLMENT_QUEUE_LIMIT": 50,
+  "LOCAL_FULFILLMENT_QUEUE_TABS": [
+    {
+      "key": "pickup_preparing",
+      "label": "To prepare",
+      "method": "pickup"
+    },
+    {
+      "key": "pickup_ready",
+      "label": "Ready for pickup",
+      "method": "pickup"
+    },
+    {
+      "key": "delivery_scheduled",
+      "label": "To deliver",
+      "method": "local_delivery"
+    },
+    {
+      "key": "delivery_out_for_delivery",
+      "label": "Out for delivery",
+      "method": "local_delivery"
+    },
+    {
+      "key": "delivery_failed",
+      "label": "Delivery failed",
+      "method": "local_delivery"
     }
   ],
   "MEDIA_ALT_MAX_LENGTH": 300,
@@ -1350,6 +2776,406 @@
   ],
   "NAME_TOKEN_LIMIT": 120,
   "NAME_TOKEN_MAX_PREFIX": 12,
+  "NATIVE_CAMPAIGN_SEND_STATUSES": [
+    {
+      "label": "Draft",
+      "value": "draft"
+    },
+    {
+      "label": "Scheduled",
+      "value": "scheduled"
+    },
+    {
+      "label": "Sending",
+      "value": "sending"
+    },
+    {
+      "label": "Sent",
+      "value": "sent"
+    },
+    {
+      "label": "Canceled",
+      "value": "canceled"
+    },
+    {
+      "label": "Failed",
+      "value": "failed"
+    }
+  ],
+  "NATIVE_CONTACT_LIFECYCLE_STAGES": [
+    "subscriber",
+    "lead",
+    "marketing-qualified",
+    "sales-qualified",
+    "opportunity",
+    "customer",
+    "evangelist",
+    "other"
+  ],
+  "NATIVE_CRM_ACTIVITY_DIRECTIONS": {
+    "call": [
+      "outbound",
+      "inbound",
+      "internal"
+    ],
+    "email": [
+      "outbound",
+      "inbound"
+    ]
+  },
+  "NATIVE_CRM_ACTIVITY_KINDS": [
+    "call",
+    "email",
+    "meeting",
+    "note",
+    "other"
+  ],
+  "NATIVE_CRM_FIELD_OBJECTS": [
+    "contact",
+    "company",
+    "deal",
+    "lead"
+  ],
+  "NATIVE_CRM_LEAD_OPEN_STATUSES": [
+    "new",
+    "nurturing",
+    "working"
+  ],
+  "NATIVE_CRM_LEAD_STATUSES": [
+    "new",
+    "nurturing",
+    "working",
+    "qualified",
+    "unqualified"
+  ],
+  "NATIVE_CRM_PICKLISTS": [
+    {
+      "id": "leadSource",
+      "label": "Lead source",
+      "object": "lead",
+      "standardLabels": [
+        "Web",
+        "Phone inquiry",
+        "Email inquiry",
+        "Partner referral",
+        "Employee referral",
+        "External referral",
+        "Advertisement",
+        "Trade show",
+        "Webinar",
+        "Word of mouth",
+        "Website form",
+        "Booking",
+        "Newsletter sign-up",
+        "Site member sign-up",
+        "Online purchase",
+        "Account sign-up",
+        "Purchased list",
+        "Sequence",
+        "Email campaign",
+        "Other"
+      ]
+    },
+    {
+      "id": "leadStatus",
+      "label": "Lead status",
+      "object": "lead",
+      "standardLabels": [
+        "New",
+        "Nurturing",
+        "Working",
+        "Qualified",
+        "Unqualified"
+      ]
+    },
+    {
+      "id": "accountType",
+      "label": "Type",
+      "object": "company",
+      "standardLabels": [
+        "Analyst",
+        "Press",
+        "Competitor",
+        "Prospect",
+        "Customer",
+        "Reseller",
+        "Integrator",
+        "Investor",
+        "Partner",
+        "Consulting",
+        "Other"
+      ]
+    },
+    {
+      "id": "industry",
+      "label": "Industry",
+      "object": "company",
+      "standardLabels": [
+        "Agriculture",
+        "Apparel",
+        "Banking",
+        "Biotechnology",
+        "Chemicals",
+        "Communications",
+        "Construction",
+        "Consulting",
+        "Education",
+        "Electronics",
+        "Energy",
+        "Engineering",
+        "Entertainment",
+        "Environmental",
+        "Finance",
+        "Food & Beverage",
+        "Government",
+        "Healthcare",
+        "Hospitality",
+        "Insurance",
+        "Machinery",
+        "Manufacturing",
+        "Media",
+        "Not For Profit",
+        "Recreation",
+        "Retail",
+        "Shipping",
+        "Technology",
+        "Telecommunications",
+        "Transportation",
+        "Utilities",
+        "Other"
+      ]
+    },
+    {
+      "id": "rating",
+      "label": "Rating",
+      "object": "company",
+      "standardLabels": [
+        "Hot",
+        "Warm",
+        "Cold"
+      ]
+    },
+    {
+      "id": "ownership",
+      "label": "Ownership",
+      "object": "company",
+      "standardLabels": [
+        "Public",
+        "Private",
+        "Subsidiary",
+        "Other"
+      ]
+    },
+    {
+      "id": "salutation",
+      "label": "Salutation",
+      "object": "contact",
+      "standardLabels": [
+        "Mr.",
+        "Ms.",
+        "Mrs.",
+        "Dr.",
+        "Prof."
+      ]
+    },
+    {
+      "id": "opportunityType",
+      "label": "Type",
+      "object": "deal",
+      "standardLabels": [
+        "Existing Business",
+        "New Business"
+      ]
+    },
+    {
+      "id": "opportunityContactRole",
+      "label": "Contact role",
+      "object": "deal",
+      "standardLabels": [
+        "Business User",
+        "Decision Maker",
+        "Economic Buyer",
+        "Economic Decision Maker",
+        "Evaluator",
+        "Executive Sponsor",
+        "Influencer",
+        "Technical Buyer",
+        "Other"
+      ]
+    },
+    {
+      "id": "taskStatus",
+      "label": "Status",
+      "object": "task",
+      "standardLabels": [
+        "Not Started",
+        "In Progress",
+        "Waiting on someone else",
+        "Deferred",
+        "Completed"
+      ]
+    },
+    {
+      "id": "taskPriority",
+      "label": "Priority",
+      "object": "task",
+      "standardLabels": [
+        "High",
+        "Normal",
+        "Low"
+      ]
+    },
+    {
+      "id": "taskType",
+      "label": "Type",
+      "object": "task",
+      "standardLabels": [
+        "Call",
+        "Email",
+        "Meeting",
+        "To-do"
+      ]
+    },
+    {
+      "id": "taskSubject",
+      "label": "Subject",
+      "object": "task",
+      "standardLabels": [
+        "Call",
+        "Send Letter",
+        "Send Quote",
+        "Other"
+      ]
+    }
+  ],
+  "NATIVE_CRM_REPORT_PERIODS": [
+    "7d",
+    "30d",
+    "90d",
+    "month"
+  ],
+  "NATIVE_CRM_TASK_KINDS": [
+    "call",
+    "email",
+    "meeting",
+    "todo"
+  ],
+  "NATIVE_SITE_CAMPAIGNS_QUERY": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "startsWith"
+        ],
+        "path": "name"
+      },
+      {
+        "column": "createdAtMs",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "storedAs": "millis"
+      }
+    ],
+    "sorts": [
+      {
+        "direction": "desc",
+        "label": "newest first",
+        "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "asc",
+        "label": "Campaign",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Campaign",
+        "path": "nameLower"
+      }
+    ]
+  },
+  "NATIVE_SITE_EMAILS_QUERY": {
+    "fields": [
+      {
+        "column": "subject",
+        "kind": "text",
+        "operators": [
+          "contains"
+        ],
+        "path": "subject",
+        "tokensPath": "subjectTokens"
+      },
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status"
+      },
+      {
+        "column": "emailCampaignId",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isEmpty"
+        ],
+        "path": "emailCampaignId",
+        "presence": "nullable"
+      },
+      {
+        "column": "createdAtMs",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "storedAs": "millis"
+      }
+    ],
+    "search": {
+      "tokensPath": "subjectTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "label": "newest first",
+        "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "subject",
+        "direction": "asc",
+        "label": "Subject",
+        "path": "subjectLower"
+      },
+      {
+        "alone": true,
+        "column": "subject",
+        "direction": "desc",
+        "label": "Subject",
+        "path": "subjectLower"
+      }
+    ]
+  },
   "OPEN_DISPUTE_CLAUSE": {
     "field": "disputeKey",
     "op": "equals",
@@ -1402,6 +3228,11 @@
       "value": "settled"
     }
   ],
+  "ORDER_FULFILLMENT_METHOD_LABELS": {
+    "local_delivery": "Local delivery",
+    "pickup": "Pickup",
+    "shipping": "Shipping"
+  },
   "ORDER_LIST_HEADERS": {
     "channelKey": "Channel",
     "createdAtMs": "Date",
@@ -1568,6 +3399,17 @@
     "productIds",
     "disputeKey"
   ],
+  "ORDER_LOCAL_DELIVERY_STATUS_LABELS": {
+    "delivered": "Delivered",
+    "failed": "Delivery failed",
+    "out_for_delivery": "Out for delivery",
+    "scheduled": "Scheduled"
+  },
+  "ORDER_PICKUP_STATUS_LABELS": {
+    "picked_up": "Picked up",
+    "preparing": "Preparing",
+    "ready": "Ready for pickup"
+  },
   "ORDER_STATUS_COLOR": {
     "cancelled": "default",
     "delivered": "info",
@@ -1650,12 +3492,392 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
+  "OUTREACH_DEFAULT_ALLOWED_COUNTRIES": [
+    "US"
+  ],
+  "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "domain",
+        "kind": "text",
+        "lowerPath": "domain",
+        "operators": [
+          "equals"
+        ],
+        "path": "domain"
+      },
+      {
+        "column": "reason",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "reason",
+        "presence": "always"
+      },
+      {
+        "column": "addedAtMs",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "addedAtMs",
+        "presence": "always",
+        "storedAs": "millis"
+      }
+    ],
+    "search": {
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "domain",
+        "direction": "asc",
+        "label": "Domain",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "domain",
+        "direction": "desc",
+        "label": "Domain",
+        "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "reason",
+        "direction": "asc",
+        "label": "Why",
+        "path": "reason"
+      },
+      {
+        "alone": true,
+        "column": "reason",
+        "direction": "desc",
+        "label": "Why",
+        "path": "reason"
+      },
+      {
+        "alone": true,
+        "column": "addedAtMs",
+        "direction": "desc",
+        "label": "Added",
+        "path": "addedAtMs"
+      },
+      {
+        "alone": true,
+        "column": "addedAtMs",
+        "direction": "asc",
+        "label": "Added",
+        "path": "addedAtMs"
+      },
+      {
+        "alone": true,
+        "column": "detail",
+        "direction": "asc",
+        "label": "Detail",
+        "path": "detail"
+      },
+      {
+        "alone": true,
+        "column": "detail",
+        "direction": "desc",
+        "label": "Detail",
+        "path": "detail"
+      }
+    ]
+  },
+  "OUTREACH_ENROLLMENT_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status",
+        "presence": "always"
+      },
+      {
+        "column": "target",
+        "kind": "exact",
+        "operators": [
+          "equals"
+        ],
+        "path": "target",
+        "presence": "always"
+      },
+      {
+        "column": "stopReason",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "stopReason"
+      },
+      {
+        "column": "email",
+        "kind": "text",
+        "lowerPath": "email",
+        "operators": [
+          "equals"
+        ],
+        "path": "email"
+      },
+      {
+        "column": "enrolled",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "presence": "always",
+        "storedAs": "millis"
+      },
+      {
+        "column": "clicked",
+        "kind": "boolean",
+        "operators": [
+          "equals"
+        ],
+        "path": "clicked"
+      },
+      {
+        "column": "link",
+        "kind": "exact",
+        "operators": [
+          "isAnyOf"
+        ],
+        "path": "engagement.links",
+        "tokensPath": "engagement.links"
+      }
+    ],
+    "search": {
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "label": "newest enrolled first",
+        "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "person",
+        "direction": "asc",
+        "label": "Person",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "person",
+        "direction": "desc",
+        "label": "Person",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "asc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "step",
+        "direction": "asc",
+        "label": "Current step",
+        "path": "stepIndex"
+      },
+      {
+        "alone": true,
+        "column": "nextSend",
+        "direction": "asc",
+        "label": "Next send",
+        "path": "nextDueAtMs"
+      },
+      {
+        "alone": true,
+        "column": "stopReason",
+        "direction": "asc",
+        "label": "Stop reason",
+        "path": "stopReason"
+      }
+    ]
+  },
+  "OUTREACH_MAX_EMAIL_STEPS": 4,
+  "OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS": 30,
+  "OUTREACH_MAX_STEPS": 8,
+  "OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS": 1,
+  "OUTREACH_SEQUENCE_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "name",
+        "kind": "text",
+        "lowerPath": "nameLower",
+        "operators": [
+          "contains",
+          "equals"
+        ],
+        "path": "name",
+        "tokensPath": "nameTokens"
+      },
+      {
+        "column": "mailbox",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "mailboxId"
+      },
+      {
+        "column": "status",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "status",
+        "presence": "always"
+      },
+      {
+        "column": "created",
+        "kind": "date",
+        "operators": [
+          "is",
+          "after",
+          "onOrAfter",
+          "before",
+          "onOrBefore"
+        ],
+        "path": "createdAtMs",
+        "presence": "always",
+        "storedAs": "millis"
+      }
+    ],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "direction": "desc",
+        "label": "newest first",
+        "path": "createdAtMs"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "asc",
+        "label": "Name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "name",
+        "direction": "desc",
+        "label": "Name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "asc",
+        "label": "Status",
+        "path": "status"
+      },
+      {
+        "alone": true,
+        "column": "status",
+        "direction": "desc",
+        "label": "Status",
+        "path": "status"
+      }
+    ]
+  },
+  "OUTREACH_SEQUENCE_NAME_MAX": 120,
+  "OUTREACH_TASK_TITLE_MAX": 200,
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
+  "POS_KIOSK_CATALOG_LIMIT": 200,
+  "POS_KIOSK_DONE_SECONDS": 15,
+  "POS_KIOSK_IDLE_SECONDS_DEFAULT": 90,
+  "POS_KIOSK_IDLE_SECONDS_MAX": 600,
+  "POS_KIOSK_IDLE_SECONDS_MIN": 30,
+  "POS_KIOSK_IDLE_WARNING_SECONDS": 20,
+  "POS_KIOSK_MAX_LINES": 40,
+  "POS_KIOSK_MAX_QUANTITY": 20,
+  "POS_KIOSK_UNLOCK_LOCKOUT_MS": 900000,
+  "POS_KIOSK_UNLOCK_MAX_ATTEMPTS": 5,
+  "POS_KIOSK_UNLOCK_TTL_MS": 300000,
+  "POS_OFFLINE_CLOCK_SKEW_MS": 600000,
+  "POS_OFFLINE_DISABLED_TENDERS": {
+    "card_keyed": "Typed cards need the connection.",
+    "card_link": "The QR card link needs the connection.",
+    "card_present": "Card readers need the connection.",
+    "credit": "Store credit and rewards balances can only be checked online.",
+    "folio": "Room charges are checked against the stay online.",
+    "gift_card": "A gift card balance can only be checked online."
+  },
+  "POS_OFFLINE_FLAG_LABELS": {
+    "cash-short": "The cash recorded is less than the total",
+    "cashier-unverified": "The PIN-switched cashier could not be confirmed; the sale is under the signed-in member",
+    "clock-adjusted": "The device clock was off; the sale is dated when it synced",
+    "discount-over-limit": "The discount is above this register’s limit",
+    "late-sync": "Synced more than a day after it was rung",
+    "no-shift": "Rung with no shift open, on a site that requires one",
+    "price-changed": "A price changed after the register cached it; the sale kept the price it was rung at",
+    "register-over-cap": "The register it was rung on is over the plan’s register limit",
+    "shift-closed": "Rung in a shift that closed before the sale synced; its Z report does not include it",
+    "stock-short": "Stock went short: more was sold than the shelf held",
+    "tax-differs": "The tax rung differs from the store’s rate now; the sale kept the tax it collected",
+    "totals-restated": "The register’s totals did not add up; the server restated them from the lines",
+    "unknown-product": "A product was deleted before the sale synced; the line kept what the receipt printed",
+    "unknown-register": "The register it was rung on no longer exists"
+  },
+  "POS_OFFLINE_LATE_SYNC_MS": 86400000,
+  "POS_OFFLINE_MAX_AGE_MS": 2592000000,
+  "POS_OFFLINE_SALE_MAX_LINES": 100,
+  "POS_OFFLINE_SYNC_BATCH_MAX": 25,
+  "POS_OFFLINE_SYNC_ROUTE": "/api/commerce/pos-offline-sync",
   "PRICE_RANGE_MAX_LENGTH": 100,
   "PRODUCT_LIST_BASE": [
     {
@@ -1831,6 +4053,8 @@
   ],
   "REMINDER_WINDOW_END_HOURS": 25,
   "REMINDER_WINDOW_START_HOURS": 23,
+  "REPLY_BODY_MAX": 20000,
+  "REPLY_SUBJECT_MAX": 150,
   "SCOPED_SEARCH_JOIN": "~",
   "SEARCH_ENGINE_VERIFICATION_LABELS": {
     "bing": "Bing Webmaster Tools",
@@ -1857,6 +4081,7 @@
       }
     ]
   },
+  "SITE_JOURNEY_KEY_MAX": 200,
   "SITE_LIST_DECLARATION": {
     "fields": [
       {
@@ -1891,6 +4116,52 @@
       {
         "direction": "desc",
         "path": "createdAt"
+      }
+    ]
+  },
+  "SITE_MEMBER_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "email",
+        "kind": "text",
+        "lowerPath": "email",
+        "operators": [
+          "equals"
+        ],
+        "path": "email",
+        "presence": "always"
+      }
+    ],
+    "search": {
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Joined",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Joined",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Email",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Email",
+        "path": "email"
       }
     ]
   },
@@ -1933,8 +4204,31 @@
     },
     "sorts": [
       {
+        "column": "createdAt",
         "direction": "desc",
+        "label": "Received",
         "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Received",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "asc",
+        "label": "Read",
+        "path": "read"
+      },
+      {
+        "alone": true,
+        "column": "read",
+        "direction": "desc",
+        "label": "Read",
+        "path": "read"
       }
     ]
   },
@@ -1948,6 +4242,160 @@
       "value": "true"
     }
   ],
+  "SUPPRESSION_LIST_QUERY": {
+    "fields": [
+      {
+        "column": "email",
+        "kind": "text",
+        "operators": [
+          "contains"
+        ],
+        "path": "email",
+        "tokensPath": "emailTokens"
+      },
+      {
+        "column": "reason",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "reason"
+      },
+      {
+        "column": "since",
+        "kind": "date",
+        "path": "createdAt",
+        "presence": "always"
+      }
+    ],
+    "search": {
+      "tokensPath": "emailTokens"
+    },
+    "sorts": [
+      {
+        "column": "since",
+        "direction": "desc",
+        "label": "Since",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "since",
+        "direction": "asc",
+        "label": "Since",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "asc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "email",
+        "direction": "desc",
+        "label": "Address",
+        "path": "email"
+      },
+      {
+        "alone": true,
+        "column": "reason",
+        "direction": "asc",
+        "label": "Reason",
+        "path": "reason"
+      },
+      {
+        "alone": true,
+        "column": "reason",
+        "direction": "desc",
+        "label": "Reason",
+        "path": "reason"
+      }
+    ]
+  },
+  "TASK_LIST_DECLARATION": {
+    "fields": [
+      {
+        "column": "kind",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "kind"
+      },
+      {
+        "column": "priority",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "priority"
+      },
+      {
+        "column": "assigneeUid",
+        "kind": "exact",
+        "operators": [
+          "equals",
+          "isAnyOf"
+        ],
+        "path": "assigneeUid"
+      }
+    ],
+    "search": {
+      "scoped": {
+        "join": "~",
+        "tokensPath": "scopedSearchTokens"
+      },
+      "tokensPath": "searchTokens"
+    },
+    "sorts": [
+      {
+        "column": "dueAtMs",
+        "direction": "asc",
+        "label": "Due",
+        "path": "dueAtMs"
+      },
+      {
+        "column": "dueAtMs",
+        "direction": "desc",
+        "label": "Due",
+        "path": "dueAtMs"
+      },
+      {
+        "alone": true,
+        "column": "title",
+        "direction": "asc",
+        "label": "Task",
+        "path": "titleLower"
+      },
+      {
+        "alone": true,
+        "column": "title",
+        "direction": "desc",
+        "label": "Task",
+        "path": "titleLower"
+      },
+      {
+        "alone": true,
+        "column": "priority",
+        "direction": "asc",
+        "label": "Priority",
+        "path": "priorityRank"
+      },
+      {
+        "alone": true,
+        "column": "priority",
+        "direction": "desc",
+        "label": "Priority",
+        "path": "priorityRank"
+      }
+    ]
+  },
   "TEMPLATE_KIND_OPTIONS": [
     {
       "label": "Page",
@@ -2020,6 +4468,75 @@
       {
         "direction": "asc",
         "path": "__name__"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "asc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "displayName",
+        "direction": "desc",
+        "label": "Display name",
+        "path": "nameLower"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "asc",
+        "label": "Kind",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "kind",
+        "direction": "desc",
+        "label": "Kind",
+        "path": "kind"
+      },
+      {
+        "alone": true,
+        "column": "source",
+        "direction": "asc",
+        "label": "Source",
+        "path": "source.type"
+      },
+      {
+        "alone": true,
+        "column": "source",
+        "direction": "desc",
+        "label": "Source",
+        "path": "source.type"
+      },
+      {
+        "column": "updatedAt",
+        "direction": "desc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "updatedAt",
+        "direction": "asc",
+        "label": "Updated",
+        "path": "updatedAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "asc",
+        "label": "Created",
+        "path": "createdAt"
+      },
+      {
+        "alone": true,
+        "column": "createdAt",
+        "direction": "desc",
+        "label": "Created",
+        "path": "createdAt"
       }
     ]
   },
@@ -2524,6 +5041,193 @@
         }
       ],
       "name": "Order canceled",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "Your order is ready for pickup",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Order {{order.number}} is ready at {{pickup.location}}.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{order.summary}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{pickup.hours}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{pickup.instructions}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Bring your order number, {{order.number}}.",
+          "variant": "caption"
+        },
+        {
+          "block": "button",
+          "href": "{{order.statusUrl}}",
+          "label": "View your order"
+        }
+      ],
+      "defaultSubject": "Your order {{order.number}} is ready for pickup",
+      "description": "Tells the buyer their pickup order is ready, where to collect it, the pickup hours and any arrival instructions.",
+      "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}.",
+      "key": "order-ready-for-pickup",
+      "mergeTokens": [
+        {
+          "description": "The order number, as the store shows it",
+          "name": "order.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The ordered items, one per line",
+          "name": "order.summary",
+          "sample": "2× House Blend"
+        },
+        {
+          "description": "The pickup location’s name and address",
+          "name": "pickup.location",
+          "sample": "Main Street shop, 12 Main St, Springfield"
+        },
+        {
+          "description": "The location’s pickup hours; empty when it lists none",
+          "name": "pickup.hours",
+          "sample": "Pickup hours:\nMo-Fr 09:00-17:00"
+        },
+        {
+          "description": "What to do on arrival, as the store wrote it; empty when it wrote none",
+          "name": "pickup.instructions",
+          "sample": "Ring the bell at the side door."
+        },
+        {
+          "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+          "name": "order.statusUrl",
+          "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+        }
+      ],
+      "name": "Order ready for pickup",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "Thanks for picking up your order",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Order {{order.number}} was picked up from {{pickup.location}}.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{order.summary}}",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "If something is missing or not right, reply to this email or contact {{host.businessName}}.",
+          "variant": "caption"
+        }
+      ],
+      "defaultSubject": "You picked up order {{order.number}}",
+      "description": "Confirms to the buyer that their pickup order was collected.",
+      "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}.",
+      "key": "order-picked-up",
+      "mergeTokens": [
+        {
+          "description": "The order number, as the store shows it",
+          "name": "order.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The ordered items, one per line",
+          "name": "order.summary",
+          "sample": "2× House Blend"
+        },
+        {
+          "description": "The pickup location’s name and address",
+          "name": "pickup.location",
+          "sample": "Main Street shop, 12 Main St, Springfield"
+        },
+        {
+          "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+          "name": "order.statusUrl",
+          "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+        }
+      ],
+      "name": "Order picked up",
+      "plugin": "Commerce",
+      "pluginId": "commerce"
+    },
+    {
+      "control": "besigner",
+      "defaultBody": [
+        {
+          "block": "text",
+          "text": "Your order is on its way",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "{{host.businessName}} is out delivering order {{order.number}}. Your window: {{delivery.window}}.",
+          "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "{{order.summary}}",
+          "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{order.statusUrl}}",
+          "label": "View your order"
+        }
+      ],
+      "defaultSubject": "Your order {{order.number}} is out for delivery",
+      "description": "Tells the buyer the store’s own driver is on the way with their local delivery, in the window they booked.",
+      "footerReason": "You’re receiving this because you placed an order with {{host.businessName}}.",
+      "key": "order-out-for-delivery",
+      "mergeTokens": [
+        {
+          "description": "The order number, as the store shows it",
+          "name": "order.number",
+          "sample": "#1042"
+        },
+        {
+          "description": "The ordered items, one per line",
+          "name": "order.summary",
+          "sample": "2× House Blend"
+        },
+        {
+          "description": "The delivery window the buyer booked",
+          "name": "delivery.window",
+          "sample": "Tue, Oct 14, 9:00 AM – 12:00 PM"
+        },
+        {
+          "description": "Link to the order status page: status, shipments and tracking. Private to the buyer; it needs no account",
+          "name": "order.statusUrl",
+          "sample": "https://shop.example.com/order-status?o=ord_123&t=…"
+        }
+      ],
+      "name": "Order out for delivery",
       "plugin": "Commerce",
       "pluginId": "commerce"
     },

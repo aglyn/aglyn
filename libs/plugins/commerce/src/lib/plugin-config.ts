@@ -18,6 +18,7 @@
 import type { PluginConfigSchema } from '@aglyn/aglyn'
 import { posTipPercentages } from './model/commerce-pos'
 import { POS_OPS_CONFIG_DEFAULTS, POS_OPS_CONFIG_FIELDS } from './pos-ops-config'
+import { POS_KIOSK_CONFIG_DEFAULTS, POS_KIOSK_CONFIG_FIELDS } from './pos-kiosk-config'
 
 /**
  * The ceiling a register may discount to, when the merchant has not set one
@@ -121,6 +122,9 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
     // RUNNING THE REGISTER (AGL-3609): shifts, refund limits, the idle lock
     // and what a printed receipt carries.
     ...POS_OPS_CONFIG_FIELDS,
+    // THE SELF-SERVICE KIOSK (AGL-3623): pay at counter, the idle reset and
+    // its welcome line.
+    ...POS_KIOSK_CONFIG_FIELDS,
   ],
   defaults: {
     posMaxDiscountPct: POS_MAX_DISCOUNT_PCT_DEFAULT,
@@ -130,6 +134,7 @@ export const COMMERCE_CONFIG_SCHEMA: PluginConfigSchema = {
     posDisplayMessage: '',
     posDisplayMarketingOptIn: true,
     ...POS_OPS_CONFIG_DEFAULTS,
+    ...POS_KIOSK_CONFIG_DEFAULTS,
   },
 }
 

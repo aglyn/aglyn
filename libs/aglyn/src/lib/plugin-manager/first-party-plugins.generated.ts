@@ -701,6 +701,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   },
   {
     "pluginId": "commerce",
+    "name": "posOfflineSales",
+    "mediaScan": "none",
+    "mediaScanReason": "The offline register's sync records (AGL-3625): one per cash sale rung offline, holding its order id, flags and stock conflicts, written only by the sync route. No content field, and a busy offline register writes one per sale."
+  },
+  {
+    "pluginId": "commerce",
     "name": "terminal",
     "mediaScan": "none",
     "mediaScanReason": "The site's Stripe Terminal Location (AGL-3607): a vendor id and the address it was registered with, written only by the reader routes. No content field."

@@ -27,13 +27,17 @@ import { loyaltyDb, loyaltyRefs } from './db'
  * codes, a friend's referral claim — so the address and the codes that
  * spend for it leave the store. The ledger rows stay: they name the member
  * by a hash of the address and carry no address, and they are the store's
- * record of a liability it paid out.
+ * record of a liability it paid out. A connected program's movements carry
+ * the address they were sent for (AGL-3677), so those go too; what already
+ * reached the merchant's Smile.io or Yotpo account is the merchant's to erase
+ * there.
  */
 export async function eraseLoyaltyPerson(request: PluginPersonErasureRequest): Promise<PluginPersonErasureReport> {
   const email = String(request.email ?? '').trim().toLowerCase()
   if (!email || !request.orgId) return { members: 0 }
   const members = await loyaltyRefs.members(request.orgId).where('email', '==', email).limit(200).get()
-  if (request.dryRun) return { members: members.size }
+  const syncRows = await loyaltyRefs.syncCollection(request.orgId).where('email', '==', email).limit(400).get()
+  if (request.dryRun) return { members: members.size, ...(syncRows.size ? { syncRows: syncRows.size } : {}) }
   let erased = 0
   for (const doc of members.docs) {
     const hostId = String(doc.get('hostId') ?? '')
@@ -48,5 +52,12 @@ export async function eraseLoyaltyPerson(request: PluginPersonErasureRequest): P
     await batch.commit()
     erased += 1
   }
-  return { members: erased }
+  let rows = 0
+  for (let start = 0; start < syncRows.docs.length; start += 200) {
+    const batch = loyaltyDb().batch()
+    for (const doc of syncRows.docs.slice(start, start + 200)) batch.delete(doc.ref)
+    await batch.commit()
+    rows += Math.min(200, syncRows.docs.length - start)
+  }
+  return { members: erased, ...(rows ? { syncRows: rows } : {}) }
 }
