@@ -402,9 +402,38 @@ describe('the records the pages list, and their photos (AGL-3676)', () => {
 
   it('tells a layout built before the products that the site sells, so its header carries the cart', () => {
     expect(aiSiteListings({ outputs: [], screens, sells: true })).toEqual([
-      { id: 'listing:products', kind: 'products', name: 'the shop', records: [], placements: [] },
+      expect.objectContaining({ id: 'listing:products', kind: 'products', name: 'the shop', records: [] }),
     ])
     expect(aiSiteListings({ outputs: [], screens })).toEqual([])
+  })
+
+  /*
+   * The live Hearth & Wick start (job FYNasg1h0S, 2026-10-09): its products
+   * step failed, so nothing was listed and its Shop page compiled "Product
+   * range image cards" as six cards naming kinds of candle — no product,
+   * price or cart. A store's Shop page lists its catalog whatever its first
+   * products came to; the grid says when there is nothing in it yet.
+   */
+  it('lists a store’s catalog on its Shop page and home even with no products written', () => {
+    const hearth = [
+      { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero with shop call to action', items: 0 }, { name: 'Featured range of candles, wax melts and gift sets', items: 3 }, { name: 'Why small-batch soy', items: 3 }] },
+      { id: 'shop', title: 'Shop', slug: '/shop', sections: [{ name: 'Shop intro heading', items: 0 }, { name: 'Product range image cards', items: 6 }, { name: 'Care and burn tips', items: 3 }, { name: 'Gift help call to action', items: 0 }] },
+      { id: 'contact', title: 'Contact', slug: '/contact', sections: [{ name: 'Contact intro heading', items: 0 }, { name: 'Contact form', items: 0, uses: ['new:Contact form'] }] },
+    ]
+    expect(aiSiteListings({ outputs: [], screens: hearth, store: true })).toEqual([
+      {
+        id: 'listing:products',
+        kind: 'products',
+        name: 'the shop',
+        records: [],
+        emptyAction: { label: 'Get in touch', href: '/contact' },
+        cart: false,
+        placements: [
+          { screenId: 'home', section: 1, role: 'featured' },
+          { screenId: 'shop', section: 1, role: 'index' },
+        ],
+      },
+    ])
   })
 
   it('lists no product with a gap for the owner in its description', () => {

@@ -2524,9 +2524,15 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
         source: 'all',
         sort: 'newest',
         columns: String(featured ? Math.min(AI_LAYOUT_FEATURED_RECORDS.products, Math.max(3, listing.records.length)) : 3),
-        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown) }),
+        // The shop's own page browses: a sort and the store's categories as
+        // filter chips (shown once it has any), never categories drawn as cards.
+        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown), showSort: true, showCategories: true }),
         cardStyle: 'photo',
-        emptyText: 'New products are on their way.',
+        // A store that opens before its first products are in says so, with a
+        // way to hear when they land (AGL-3676): never placeholder products.
+        emptyTitle: AI_LAYOUT_STORE_EMPTY.title,
+        emptyText: listing.emptyAction ? AI_LAYOUT_STORE_EMPTY.text : AI_LAYOUT_STORE_EMPTY.textAlone,
+        ...(listing.emptyAction ? { emptyActionLabel: listing.emptyAction.label, emptyActionHref: listing.emptyAction.href } : {}),
       },
       null,
       null,
@@ -2540,6 +2546,14 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
   noted(scope, Array.from({ length: Math.max(2, Math.min(shown, listing.records.length)) }, () => id))
   return id
 }
+
+/** What a store's Product grid says while the store lists nothing yet (AGL-3676). */
+export const AI_LAYOUT_STORE_EMPTY = {
+  title: 'New pieces are on the way',
+  text: 'Our first pieces are being finished now. Get in touch and we will let you know the moment they land.',
+  /** Said where the site has no page to get in touch on. */
+  textAlone: 'Our first pieces are being finished now. Check back soon.',
+} as const
 
 /** The most posts a page of the site lists where it is the writing's own page. */
 const COLLECTION_INDEX_POSTS = 9

@@ -1449,7 +1449,13 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     const sells = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: owed as never }), layout, aiSiteBuiltRefs(units, []))
     expect(listingsOf(sells).map((listing) => listing.kind)).toEqual(['products'])
     const skipped = owed.map((row) => (row.slot === 'products' ? { ...row, status: 'skipped' } : row))
-    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
+    // A store whose products were skipped still lists its catalog, as a storefront
+    // that says new pieces are on the way, but carries no cart (AGL-3676).
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([
+      expect.objectContaining({ kind: 'products', records: [], cart: false }),
+    ])
+    const portfolio = { ...storeInputs, siteKind: 'portfolio' }
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: portfolio, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
   })
 
   it('tells each page the posts and the products built before it, by name', () => {

@@ -83,6 +83,17 @@ export interface ProductGridProps {
   /** Empty-state copy when nothing matches. */
   emptyText?: string
   /**
+   * The empty state's headline (AGL-3676). Set, a catalog with nothing in it
+   * yet opens as a full panel — the headline, `emptyText` and one action —
+   * the way a designer store template opens before its first products; the
+   * sort and filter controls wait for products to sort.
+   */
+  emptyTitle?: string
+  /** The empty panel's one action: its label… */
+  emptyActionLabel?: string
+  /** …and where it goes, a path on the site ("/contact"). */
+  emptyActionHref?: string
+  /**
    * How each product is drawn (AGL-3676): `outlined`, the default, a card
    * with a short photo strip; `photo`, the photo first and tall, with the
    * name and price under it and no card around it — the way a storefront
@@ -216,6 +227,9 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       columns,
       maxItems,
       emptyText,
+      emptyTitle,
+      emptyActionLabel,
+      emptyActionHref,
       showFilters,
       showSearch,
       showCategories,
@@ -641,11 +655,55 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       </Box>
     ) : null
 
-    if (visible && visible.length === 0 && !hasCatalogControls) {
-      return (
+    const filtering = Boolean(
+      query ||
+        activeType ||
+        selectedCategoryId ||
+        activeTag ||
+        inStockOnly ||
+        priceFilter,
+    )
+    const emptyCopy = emptyText || 'No products here yet — check back soon.'
+    // A store with nothing listed yet (AGL-3676): a headline, a line and one
+    // way to hear more — never sample products, never a sort over nothing.
+    const emptyPanel = emptyTitle ? (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 3,
+          py: { xs: 6, md: 10 },
+          textAlign: 'center',
+          borderRadius: 2,
+          bgcolor: 'action.hover',
+        }}
+      >
+        <Typography variant="h5" component="h3">
+          {emptyTitle}
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 480 }}>
+          {emptyCopy}
+        </Typography>
+        {emptyActionLabel && emptyActionHref ? (
+          <Button variant="outlined" href={emptyActionHref} sx={{ mt: 1 }}>
+            {emptyActionLabel}
+          </Button>
+        ) : null}
+      </Box>
+    ) : null
+    // An empty catalog with nothing asked of it shows its empty state alone:
+    // controls are for narrowing products, and there are none to narrow.
+    if (visible && visible.length === 0 && (!hasCatalogControls || !filtering)) {
+      return emptyPanel ? (
+        <Box ref={ref} {...rest} sx={nodeSx}>
+          {emptyPanel}
+        </Box>
+      ) : (
         <Box ref={ref} {...rest} sx={[{ p: 3, textAlign: 'center' }, ...nodeSx]}>
           <Typography variant="body2" color="text.secondary">
-            {emptyText || 'No products here yet — check back soon.'}
+            {emptyCopy}
           </Typography>
         </Box>
       )
@@ -655,14 +713,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const emptyState = (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {query ||
-          activeType ||
-          selectedCategoryId ||
-          activeTag ||
-          inStockOnly ||
-          priceFilter
-            ? 'No products match — try clearing a filter.'
-            : emptyText || 'No products here yet — check back soon.'}
+          {filtering ? 'No products match — try clearing a filter.' : emptyCopy}
         </Typography>
       </Box>
     )
@@ -710,7 +761,14 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   alt={item.name}
                   sx={
                     photoCards
-                      ? { aspectRatio: '4 / 5', objectFit: 'cover', borderRadius: 2 }
+                      ? {
+                          aspectRatio: '4 / 5',
+                          objectFit: 'cover',
+                          borderRadius: 2,
+                          // A storefront's photo answers the pointer (AGL-3676).
+                          transition: 'opacity 200ms ease',
+                          '.MuiCardActionArea-root:hover &': { opacity: 0.88 },
+                        }
                       : { height: 160, objectFit: 'cover' }
                   }
                   // Deferred (AGL-2486), and this is the worst offender of
@@ -940,6 +998,26 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       name: 'emptyText',
       label: 'Empty text',
       description: 'Copy when nothing matches.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'emptyTitle',
+      label: 'Empty headline',
+      description:
+        'Headline while the store lists nothing yet; set, the empty state ' +
+        'is a full panel with the empty text and one button.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'emptyActionLabel',
+      label: 'Empty button label',
+      description: 'The empty panel’s button, e.g. “Get in touch”.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'emptyActionHref',
+      label: 'Empty button link',
+      description: 'Where the empty panel’s button goes, e.g. /contact.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {

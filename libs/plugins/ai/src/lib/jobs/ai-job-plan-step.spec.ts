@@ -103,6 +103,11 @@ import {
   runAiJobPlanStep,
   type AiJobPlanCandidate,
   registerAiJobPlan,
+  AI_SITE_STORE_SHOP_CODE,
+  AI_SITE_STORE_SHOP_SENTENCE,
+  aiPlanSiteLines,
+  aiSiteStoreShopCheck,
+  aiSiteStoreShopPageViolations,
 } from './ai-job-plan-step'
 import { registerAiJobPlanStep } from './ai-jobs'
 
@@ -920,5 +925,36 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
 
   it('scopes a build to the creations it builds', () => {
     expect(AI_JOB_PLAN_SCOPES.build?.creates).toEqual(['layout', 'form', 'component', 'email'])
+  })
+})
+
+/*
+ * A store's Shop page is its storefront (AGL-3676): the live Hearth & Wick
+ * start was told to plan "Shop presenting the range as image cards", and
+ * did. A store plan is told the platform lists its products in the Shop
+ * page's "Product grid", and a plan of two or more pages with no Shop page
+ * is re-asked once.
+ */
+describe('a store plan’s Shop page (AGL-3676)', () => {
+  const screen = (title: string, slug: string) => ({ title, slug, sections: [{ name: 'Intro', uses: [], items: 0 }] })
+  const plan = (screens: Array<ReturnType<typeof screen>>) => ({ reuse: [], create: [], screens }) as unknown as AiBuildPlan
+
+  it('tells a store plan the products are listed in its Shop page’s product grid, and never drawn as cards', () => {
+    const lines = aiPlanSiteLines({ kind: 'site', inputs: { siteKind: 'store', businessType: 'candles' } }, null, null)
+    expect(lines).toContain(AI_SITE_STORE_SHOP_SENTENCE)
+    expect(lines.join(' ')).not.toMatch(/range as image cards/)
+    expect(aiPlanSiteLines({ kind: 'site', inputs: { siteKind: 'portfolio', businessType: 'ceramics' } }, null, null)).not.toContain(
+      AI_SITE_STORE_SHOP_SENTENCE,
+    )
+  })
+
+  it('asks once for a Shop page a store plan left out', () => {
+    expect(aiSiteStoreShopPageViolations(plan([screen('Home', '/'), screen('Shop', '/shop')]))).toEqual([])
+    expect(aiSiteStoreShopPageViolations(plan([screen('Home', '/')]))).toEqual([])
+    const missing = plan([screen('Home', '/'), screen('About', '/about'), screen('Contact', '/contact')])
+    expect(aiSiteStoreShopPageViolations(missing).map((violation) => violation.code)).toEqual([AI_SITE_STORE_SHOP_CODE])
+    const check = aiSiteStoreShopCheck()
+    expect(check(missing)).toHaveLength(1)
+    expect(check(missing)).toEqual([])
   })
 })
