@@ -68,7 +68,7 @@ function harness(options: { env?: Record<string, string>; role?: NetworkRole } =
         accountCalls.push(credential)
         if (id === 'shipmonk') {
           if (credential.accessToken === 'sm-refused') throw new ProviderError('auth', 'ShipMonk refused the connection: Invalid API key')
-          if (credential.accessToken === 'sm-down') throw new ProviderError('transient', 'ShipMonk could not be reached')
+          if (credential.accessToken === 'sm-down-key') throw new ProviderError('transient', 'ShipMonk could not be reached')
           return { accountName: `Store ${credential.storeId}` }
         }
         return id === 'shipbob'
@@ -439,7 +439,7 @@ describe('ShipMonk: connecting with the merchant’s own API key (AGL-3697)', ()
     const refused = await connectShipmonk(h, { apiKey: 'sm-refused' })
     expect(refused.status).toBe(400)
     expect((await refused.json()).error).toBe('ShipMonk refused that API key. Check it and the store id.')
-    expect((await connectShipmonk(h, { apiKey: 'sm-down' })).status).toBe(502)
+    expect((await connectShipmonk(h, { apiKey: 'sm-down-key' })).status).toBe(502)
     expect(h.store.connections.get(networkConnectionId(HOST, 'shipmonk'))).toBeUndefined()
   })
 

@@ -1,4 +1,8 @@
 /**
+ * @jest-environment node
+ */
+
+/**
  * @license
  * Copyright 2026 Aglyn LLC
  *
