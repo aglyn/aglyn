@@ -230,6 +230,12 @@
       "@aglyn/plugins-mui/*": [
         "../../libs/plugins/mui/src/lib/*"
       ],
+      "@aglyn/plugins-music": [
+        "../../libs/plugins/music/src/index.ts"
+      ],
+      "@aglyn/plugins-music/*": [
+        "../../libs/plugins/music/src/lib/*"
+      ],
       "@aglyn/plugins-workflows": [
         "../../libs/plugins/workflows/src/index.ts"
       ],

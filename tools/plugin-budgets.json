@@ -162,5 +162,9 @@
   "live-chat": {
     "baseline": 7342,
     "budget": 9216
+  },
+  "music": {
+    "baseline": 13442,
+    "budget": 17408
   }
 }

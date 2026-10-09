@@ -64,4 +64,9 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"site":"registerWeglotSite"},
     load: () => import('@aglyn/plugins-weglot/site'),
   },
+  {
+    id: 'music',
+    register: {"site":"registerMusicPlugin"},
+    load: () => import('@aglyn/plugins-music/site'),
+  },
 ]

@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
+import { StaffMediaTakedown } from './staff-media-takedown.component'
 import {
   type StaffMediaAsset,
   type StaffMediaRow,
@@ -92,9 +93,11 @@ function Preview({ asset }: { asset: StaffMediaAsset }) {
 }
 
 /**
- * One asset of a media library, opened from the staff media card —
- * read-only: the preview, what the file is, where its bytes sit, who
- * uploaded it, who may see it and where it is used.
+ * One asset of a media library, opened from the staff media card: the
+ * preview, what the file is, where its bytes sit, who uploaded it (and, for
+ * audio, who confirmed its rights), who may see it and where it is used —
+ * and the one write it offers, the copyright takedown (AGL-3716,
+ * `StaffMediaTakedown`), which is the platform's asset quarantine.
  *
  * Mounted only while open: it reads `/api/admin/media-library/asset` on
  * mount, and that read is what records the look in the staff audit log. A
@@ -196,6 +199,13 @@ export function StaffMediaAssetDialog({ scopeQuery, row, onClose }: StaffMediaAs
                   ? ` · limited to ${asset.visibleTo.join(', ')}`
                   : ' · everyone with access to this library'}
               </Row>
+              {asset.contentType.startsWith('audio/') ? (
+                <Row label="Rights confirmed">
+                  {asset.rightsConfirmation
+                    ? `${when(asset.rightsConfirmation.atMs)} by ${asset.rightsConfirmation.uid}`
+                    : 'Never — no rights confirmation is recorded for this audio'}
+                </Row>
+              ) : null}
               {asset.alt ? <Row label="Alt text">{asset.alt}</Row> : null}
               {asset.description ? <Row label="Description">{asset.description}</Row> : null}
             </Stack>
@@ -237,8 +247,10 @@ export function StaffMediaAssetDialog({ scopeQuery, row, onClose }: StaffMediaAs
                 </Typography>
               ) : null}
             </Stack>
+            <Divider />
+            <StaffMediaTakedown scopeQuery={scopeQuery} mediaId={asset.$id} />
             <Typography variant="caption" color="text.secondary">
-              {'Read-only. Opening this file is recorded in the staff audit log.'}
+              {'Opening this file is recorded in the staff audit log.'}
             </Typography>
           </Stack>
         ) : null}

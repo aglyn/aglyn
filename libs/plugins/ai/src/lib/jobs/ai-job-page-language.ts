@@ -271,6 +271,10 @@ export function aiLayoutPagePrompt(input: {
     // A section the site's records fill (AGL-3676): the platform places them,
     // so the design writes the words around them and no group for them.
     const listed = aiLayoutListingAt(targets.listings ?? [], targets.pageId, index)
+    if (listed?.listing.kind === 'tracks') {
+      // A music site's player (AGL-3716): placed empty, for the owner's own uploads.
+      return `${index + 1}. "${section.name}"${places}; the platform places a music player here for the artist's own tracks, which they add themselves: write only its heading and a line inviting visitors to listen, and no cards, list, images or links for songs`
+    }
     if (listed) {
       return `${index + 1}. "${section.name}"${places}; the platform lists ${listed.listing.name}'s ${listed.listing.kind} here itself, with their photos and links: write only its heading and a line about them, and no cards, list or images for them`
     }

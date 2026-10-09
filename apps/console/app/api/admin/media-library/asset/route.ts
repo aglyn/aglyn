@@ -30,6 +30,7 @@ import {
   type StaffMediaUsage,
   staffMediaScopeBase,
   staffMediaScopeFrom,
+  staffRightsConfirmation,
 } from '../../../../../utils/staff-media-library'
 import {
   recordStaffMediaView,
@@ -194,6 +195,7 @@ async function handler(request: Request): Promise<Response> {
       visibleTo: Array.isArray(data['visibleTo'])
         ? (data['visibleTo'] as unknown[]).filter((token): token is string => typeof token === 'string')
         : [],
+      rightsConfirmation: staffRightsConfirmation(data['rightsConfirmation']),
       usage,
     }
 

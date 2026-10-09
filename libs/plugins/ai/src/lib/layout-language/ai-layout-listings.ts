@@ -41,6 +41,10 @@
  *  - `posts` — the content plugin's Collection Entries (`collectionEntries`)
  *    over the blog's collection, its card a cover, the date and byline, the
  *    title and the excerpt, linking each post.
+ *  - `tracks` — the music plugin's Music player (`musicPlayer`, AGL-3716) on a
+ *    music site, placed EMPTY: its "add your tracks" state, for the owner to
+ *    fill from their own media library. No job ever sources a recording, so
+ *    a tracks listing has no records and the player no source.
  *
  * The elements are named by their persisted ids, as the form binding names
  * `form`: a plugin never imports another's internals, and
@@ -50,7 +54,7 @@
  * Model only: shapes and the inputs reader; the compiler draws them.
  */
 
-export type AiLayoutListingKind = 'products' | 'posts'
+export type AiLayoutListingKind = 'products' | 'posts' | 'tracks'
 
 /** How a section shows a listing: a few of its records on a page about something else, or all of them on its own page. */
 export type AiLayoutListingRole = 'featured' | 'index'
@@ -103,16 +107,17 @@ export function aiLayoutListingId(kind: AiLayoutListingKind): string {
 export const AI_LAYOUT_LISTING_ELEMENTS: Readonly<Record<AiLayoutListingKind, string>> = {
   products: 'product-grid',
   posts: 'collectionEntries',
+  tracks: 'musicPlayer',
 }
 
 /** The header's cart button: the commerce plugin's Cart in its `button` variant. */
 export const AI_LAYOUT_CART_ELEMENT = 'cart'
 
 /** The most records a featured band shows; a page of its own shows them all. */
-export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3 } as const
+export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0 } as const
 
 const PLACEMENT_ROLES: readonly AiLayoutListingRole[] = ['featured', 'index']
-const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts']
+const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks']
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
@@ -148,8 +153,12 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     listings.push({
       id: aiLayoutListingId(kind),
       kind,
-      name: text(record['name']) || (kind === 'products' ? 'the shop' : 'the blog'),
-      records: (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
+      name: text(record['name']) || (kind === 'products' ? 'the shop' : kind === 'posts' ? 'the blog' : 'the music'),
+      // A tracks listing names no records: no job sources a recording (AGL-3716).
+      records:
+        kind === 'tracks'
+          ? []
+          : (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
       ...(SITE_PATH.test(href) ? { href } : {}),
       ...(kind === 'posts' ? { collectionSlug } : {}),
       ...(kind === 'products' && record['cart'] === false ? { cart: false } : {}),
@@ -188,6 +197,8 @@ const PRODUCT_PAGE = /\b(shop|store|products?|catalog(?:ue)?|collections?|range|
 const PRODUCT_SECTION =
   /\b(shop|store|products?|catalog(?:ue)?|collections?|range|bestsellers?|best[- ]sellers?|new arrivals|arrivals|featured|favou?rites|signature)\b/i
 const POST_SECTION = /\b(blog|posts?|articles?|writing|journal|stories|essays?|latest|recent|news|featured)\b/i
+/** A music site's page or section about its recordings (AGL-3716). */
+const MUSIC_PAGE = /\b(music|listen|tracks?|songs?|releases?|discography|albums?|eps?|singles?|sounds?)\b/i
 
 /**
  * The section of a shop's own page the whole catalog fills (AGL-3676): the
@@ -243,6 +254,26 @@ export function aiLayoutListingPlacements(
   }
   const afterHero = (screen: AiLayoutListingScreen, test: (name: string, items: number) => boolean) =>
     screen.sections.findIndex((section, index) => index > 0 && test(section.name, section.items))
+  if (kind === 'tracks') {
+    // A music site's player (AGL-3716): on its Music page, in the section that
+    // says it is about the recordings, else the one after the opening; on the
+    // home, only in a section named for them. A site with neither gets it on
+    // its home, after the opening.
+    for (const screen of screens) {
+      if (isHome(screen.slug)) {
+        place(screen, afterHero(screen, (name) => MUSIC_PAGE.test(name)), 'featured')
+        continue
+      }
+      if (!MUSIC_PAGE.test(`${firstSegment(screen.slug)} ${screen.title}`)) continue
+      const named = afterHero(screen, (name) => MUSIC_PAGE.test(name))
+      place(screen, named !== -1 ? named : screen.sections.length > 1 ? 1 : 0, 'index')
+    }
+    if (!placements.length) {
+      const home = screens.find((screen) => isHome(screen.slug))
+      if (home) place(home, home.sections.length > 1 ? 1 : 0, 'featured')
+    }
+    return placements
+  }
   if (kind === 'products') {
     for (const screen of screens) {
       if (isHome(screen.slug)) {

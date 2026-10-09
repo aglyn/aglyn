@@ -1091,6 +1091,7 @@ data class ManagedBooking(
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = MediaKindSerializer::class)
 enum class MediaKind(val raw: String) {
+    AUDIO("audio"),
     DOCUMENT("document"),
     IMAGE("image"),
     PDF("pdf"),
