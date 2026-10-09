@@ -9026,6 +9026,698 @@
           "texts"
         ]
       ]
+    },
+    "expandVariantMatrix": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          []
+        ],
+        [
+          [
+            {
+              "name": "Size",
+              "values": [
+                "S",
+                "M",
+                "L"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "Size",
+              "values": [
+                "S",
+                "M"
+              ]
+            },
+            {
+              "name": "Color",
+              "values": [
+                "Red",
+                "Blue",
+                "Green"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "Size",
+              "values": [
+                "S",
+                "M"
+              ]
+            },
+            {
+              "name": "Color",
+              "values": [
+                "Red",
+                "Blue"
+              ]
+            },
+            {
+              "name": "Fit",
+              "values": [
+                "Slim",
+                "Regular"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "Size",
+              "values": [
+                "S",
+                "M"
+              ]
+            },
+            {
+              "name": "",
+              "values": [
+                "x"
+              ]
+            },
+            {
+              "name": "Color",
+              "values": []
+            },
+            {
+              "name": "Fit",
+              "values": [
+                "Slim"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "A",
+              "values": [
+                "a1",
+                "a2",
+                "a3",
+                "a4",
+                "a5"
+              ]
+            },
+            {
+              "name": "B",
+              "values": [
+                "b1",
+                "b2",
+                "b3",
+                "b4",
+                "b5"
+              ]
+            },
+            {
+              "name": "C",
+              "values": [
+                "c1",
+                "c2",
+                "c3",
+                "c4",
+                "c5"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "A",
+              "values": [
+                "a1",
+                "a2",
+                "a3",
+                "a4",
+                "a5",
+                "a6",
+                "a7",
+                "a8",
+                "a9",
+                "a10",
+                "a11",
+                "a12",
+                "a13",
+                "a14",
+                "a15",
+                "a16",
+                "a17",
+                "a18",
+                "a19",
+                "a20",
+                "a21",
+                "a22",
+                "a23",
+                "a24",
+                "a25"
+              ]
+            },
+            {
+              "name": "B",
+              "values": [
+                "b1",
+                "b2",
+                "b3",
+                "b4",
+                "b5",
+                "b6",
+                "b7",
+                "b8",
+                "b9",
+                "b10",
+                "b11",
+                "b12",
+                "b13",
+                "b14",
+                "b15",
+                "b16",
+                "b17",
+                "b18",
+                "b19",
+                "b20",
+                "b21",
+                "b22",
+                "b23",
+                "b24",
+                "b25"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "A",
+              "values": [
+                "a1",
+                "a2",
+                "a3",
+                "a4",
+                "a5",
+                "a6",
+                "a7",
+                "a8",
+                "a9",
+                "a10",
+                "a11",
+                "a12",
+                "a13",
+                "a14",
+                "a15",
+                "a16",
+                "a17",
+                "a18",
+                "a19",
+                "a20",
+                "a21",
+                "a22",
+                "a23",
+                "a24",
+                "a25"
+              ]
+            },
+            {
+              "name": "B",
+              "values": [
+                "b1",
+                "b2",
+                "b3",
+                "b4"
+              ]
+            }
+          ]
+        ]
+      ]
+    },
+    "renameProductOptions": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
+      "args": [
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Color": "Red"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR",
+                "inventory": 4
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Size": "S",
+                  "Color": "Blue"
+                },
+                "priceUsd": 10,
+                "inventory": 0
+              },
+              {
+                "id": "v3",
+                "options": {
+                  "Size": "M",
+                  "Color": "Red"
+                },
+                "priceUsd": 12,
+                "compareAtPriceUsd": 15
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Size": "M",
+                  "Color": "Blue"
+                },
+                "priceUsd": 12
+              }
+            ]
+          },
+          [
+            "Size",
+            "Colour"
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Color": "Red"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR",
+                "inventory": 4
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Size": "S",
+                  "Color": "Blue"
+                },
+                "priceUsd": 10,
+                "inventory": 0
+              },
+              {
+                "id": "v3",
+                "options": {
+                  "Size": "M",
+                  "Color": "Red"
+                },
+                "priceUsd": 12,
+                "compareAtPriceUsd": 15
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Size": "M",
+                  "Color": "Blue"
+                },
+                "priceUsd": 12
+              }
+            ]
+          },
+          [
+            "Fit",
+            "Colour"
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Color": "Red"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR",
+                "inventory": 4
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Size": "S",
+                  "Color": "Blue"
+                },
+                "priceUsd": 10,
+                "inventory": 0
+              },
+              {
+                "id": "v3",
+                "options": {
+                  "Size": "M",
+                  "Color": "Red"
+                },
+                "priceUsd": 12,
+                "compareAtPriceUsd": 15
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Size": "M",
+                  "Color": "Blue"
+                },
+                "priceUsd": 12
+              }
+            ]
+          },
+          [
+            "Size",
+            null
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Color": "Red"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR",
+                "inventory": 4
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Size": "S",
+                  "Color": "Blue"
+                },
+                "priceUsd": 10,
+                "inventory": 0
+              },
+              {
+                "id": "v3",
+                "options": {
+                  "Size": "M",
+                  "Color": "Red"
+                },
+                "priceUsd": 12,
+                "compareAtPriceUsd": 15
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Size": "M",
+                  "Color": "Blue"
+                },
+                "priceUsd": 12
+              }
+            ]
+          },
+          [
+            "Size",
+            "Size"
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Color": "Red"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR",
+                "inventory": 4
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Size": "S",
+                  "Color": "Blue"
+                },
+                "priceUsd": 10,
+                "inventory": 0
+              },
+              {
+                "id": "v3",
+                "options": {
+                  "Size": "M",
+                  "Color": "Red"
+                },
+                "priceUsd": 12,
+                "compareAtPriceUsd": 15
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Size": "M",
+                  "Color": "Blue"
+                },
+                "priceUsd": 12
+              }
+            ]
+          },
+          [
+            null,
+            null
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Color": "Red"
+                },
+                "priceUsd": 10,
+                "sku": "TS-SR",
+                "inventory": 4
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Size": "S",
+                  "Color": "Blue"
+                },
+                "priceUsd": 10,
+                "inventory": 0
+              },
+              {
+                "id": "v3",
+                "options": {
+                  "Size": "M",
+                  "Color": "Red"
+                },
+                "priceUsd": 12,
+                "compareAtPriceUsd": 15
+              },
+              {
+                "id": "v4",
+                "options": {
+                  "Size": "M",
+                  "Color": "Blue"
+                },
+                "priceUsd": 12
+              }
+            ]
+          },
+          [
+            "Fit"
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S",
+                  "M"
+                ]
+              },
+              {
+                "name": "Color",
+                "values": [
+                  "Red",
+                  "Blue"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "v1",
+                "options": {
+                  "Size": "S",
+                  "Colour": "Red"
+                },
+                "priceUsd": 10
+              },
+              {
+                "id": "v2",
+                "options": {
+                  "Colour": "Blue",
+                  "Size": "M"
+                },
+                "priceUsd": 10
+              }
+            ]
+          },
+          [
+            "Size",
+            "Color"
+          ]
+        ],
+        [
+          {
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "S"
+                ]
+              }
+            ],
+            "variants": [
+              {
+                "id": "d",
+                "options": null,
+                "priceUsd": 5
+              },
+              {
+                "id": "e",
+                "priceUsd": 6
+              }
+            ]
+          },
+          [
+            "Fit"
+          ]
+        ],
+        [
+          {
+            "options": [],
+            "variants": [
+              {
+                "id": "d",
+                "options": {},
+                "priceUsd": 5
+              }
+            ]
+          },
+          []
+        ]
+      ]
     }
   }
 }
