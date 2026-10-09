@@ -181,6 +181,11 @@ const PLUGIN_TOPICS = {
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
   // The Email platforms cards on a site's setup page (AGL-3639).
   emailPlatforms: '/marketing-and-automation/email-campaigns/email-platforms',
+  // The Couriers card under the store's Settings, the order dialog's Courier
+  // section and the Pickup & delivery queue's "Send a courier" (AGL-3695).
+  // Unlisted until the console holds COURIERS_TOKEN_KEY; see
+  // PLUGIN_UNLISTED_TOPICS.
+  couriers: '/commerce-and-bookings/commerce/couriers',
   // The Fulfillment networks cards under the store's Settings and the order
   // dialog's section (AGL-3634). Unlisted until the deployment offers a
   // network; see PLUGIN_UNLISTED_TOPICS.
@@ -276,6 +281,10 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // two guides wait on (AGL-3614).
   'connectQuickbooksOnline',
   'connectXero',
+  // The Couriers card, the order's Courier section and the queue's "Send a
+  // courier" draw nothing until the console holds COURIERS_TOKEN_KEY, the gate
+  // the guide waits on (AGL-3695).
+  'couriers',
   // The Fulfillment networks cards draw nothing until the console holds
   // FULFILLMENT_NETWORKS_TOKEN_KEY and a network's app, the gate the guide
   // waits on (AGL-3634).

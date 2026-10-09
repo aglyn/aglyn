@@ -2554,6 +2554,23 @@ allow read, write: if false;
 
 
 
+match /courierConnections/{connectionId} {
+allow read, write: if false;
+}
+match /courierDeliveries/{deliveryId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
+
+
+
 match /marketplaceConnections/{connectionId} {
 allow read, write: if false;
 match /log/{entryId} {

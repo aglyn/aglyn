@@ -228,6 +228,23 @@ for the how-to.
 -->
 
 <!--
+  AGL-3695 — Couriers are built and hidden until a deployment sets
+  COURIERS_TOKEN_KEY on the console. This entry is held unpublished, like the
+  guide it links (`unlisted: true`): once it is set on aglyn.com, remove this
+  comment's markers, move "(newest)" here from the top heading, and delete
+  `unlisted: true` and the "Rolling out" note from
+  commerce-and-bookings/commerce/couriers.md.
+
+## October 2026 — send a DoorDash courier for your local deliveries
+
+- **[Couriers](commerce-and-bookings/commerce/couriers.md)** — connect your own
+  DoorDash Drive account and send a DoorDash courier for any local delivery from the
+  Pickup & delivery queue or the order. Get a quote, send the courier, and follow its
+  progress, tracking link and arrival time on the order and your buyer's status page.
+  DoorDash bills your own account; your buyers pay your delivery zone's fee as before.
+-->
+
+<!--
   AGL-3634 — Fulfillment networks are built and hidden until a deployment holds a
   ShipBob developer app or an Amazon selling-partner app, or sets SHIPMONK_ENABLED
   (AGL-3697), and sets FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,

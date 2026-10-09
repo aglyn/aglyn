@@ -3170,6 +3170,53 @@
       }
     },
     {
+      "id": "couriers",
+      "package": "@aglyn/plugins-couriers",
+      "register": {
+        "console": "registerCouriersConsole",
+        "consoleApi": "registerCouriersConsoleApi",
+        "serverDeclarations": "registerCouriersServerDeclarations",
+        "consoleServerDeclarations": "registerCouriersConsoleServerDeclarations",
+        "subprocessors": "couriersSubprocessors"
+      },
+      "apiPrefixes": [
+        "couriers"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN DoorDash Drive developer account: the live and test keys with the signing secret sealed, the webhook token's hash, the store's courier phone and note (AGL-3695). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "courierConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One local-delivery order's courier: the quote offered, the one run booked at a time, and the runs before it (AGL-3695). Written by the console routes, DoorDash's webhook, the order-event intake and the console job.",
+          "name": "courierDeliveries",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 32,
+        "$comment": "On-demand couriers for the commerce plugin's OWN local deliveries (AGL-3695): a member sends a DoorDash courier from the merchant's own DoorDash Drive account for a local-delivery order, and the courier's steps come back through core's core.local-delivery-records, whose seller moves the delivery to Out for delivery, Delivered or Delivery failed under its own rules; order.cancelled and a full order.refunded call the courier off. It imports no other plugin. DoorDash bills the merchant's account; Aglyn charges nothing for it. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds COURIERS_TOKEN_KEY. Uber Direct is not offered: its terms have a merchant warrant it shares its keys with no third party.",
+        "label": "Couriers",
+        "alwaysOnForWorkspace": true,
+        "description": "Send a DoorDash courier for your own local deliveries, from your own DoorDash Drive account, with its tracking on the order.",
+        "siteOff": {
+          "stops": "Switching Couriers off for this site stops members sending DoorDash couriers for its local deliveries.",
+          "keeps": "The connection is kept, and a courier already on its way still finishes, with its progress on the order."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "commerceSettings",
+            "orderDetail",
+            "localDeliveryRow"
+          ]
+        }
+      }
+    },
+    {
       "id": "marketplaces",
       "package": "@aglyn/plugins-marketplaces",
       "register": {

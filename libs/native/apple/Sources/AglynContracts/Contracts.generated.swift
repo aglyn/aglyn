@@ -1596,6 +1596,25 @@ public struct OrderChannelSourceLinesItem: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrderCourierState: String, Codable, CaseIterable, Hashable, Sendable {
+  case assigned = "assigned"
+  case atDropoff = "at_dropoff"
+  case atPickup = "at_pickup"
+  case cancelled = "cancelled"
+  case delivered = "delivered"
+  case pickedUp = "picked_up"
+  case requested = "requested"
+  case returned = "returned"
+  case returning = "returning"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct OrderCredit: Codable, Hashable, Sendable {
   public var amountCents: Double
   public var appliedAs: OrderCreditAppliedAs
@@ -1826,6 +1845,7 @@ public struct OrderLineModifier: Codable, Hashable, Sendable {
 
 public struct OrderLocalDelivery: Codable, Hashable, Sendable {
   public var addressOutsideZone: Bool?
+  public var courier: OrderLocalDeliveryCourier?
   public var deliveredAtMs: Double?
   public var failedAtMs: Double?
   public var failedReason: String?
@@ -1841,8 +1861,9 @@ public struct OrderLocalDelivery: Codable, Hashable, Sendable {
   public var zoneId: String?
   public var zoneName: String?
 
-  public init(addressOutsideZone: Bool? = nil, deliveredAtMs: Double? = nil, failedAtMs: Double? = nil, failedReason: String? = nil, feeCents: Double? = nil, locationId: String? = nil, outForDeliveryAtMs: Double? = nil, postalCode: String? = nil, status: OrderLocalDeliveryStatus? = nil, updatedAtMs: Double? = nil, windowEndMs: Double? = nil, windowLabel: String? = nil, windowStartMs: Double? = nil, zoneId: String? = nil, zoneName: String? = nil) {
+  public init(addressOutsideZone: Bool? = nil, courier: OrderLocalDeliveryCourier? = nil, deliveredAtMs: Double? = nil, failedAtMs: Double? = nil, failedReason: String? = nil, feeCents: Double? = nil, locationId: String? = nil, outForDeliveryAtMs: Double? = nil, postalCode: String? = nil, status: OrderLocalDeliveryStatus? = nil, updatedAtMs: Double? = nil, windowEndMs: Double? = nil, windowLabel: String? = nil, windowStartMs: Double? = nil, zoneId: String? = nil, zoneName: String? = nil) {
     self.addressOutsideZone = addressOutsideZone
+    self.courier = courier
     self.deliveredAtMs = deliveredAtMs
     self.failedAtMs = failedAtMs
     self.failedReason = failedReason
@@ -1857,6 +1878,32 @@ public struct OrderLocalDelivery: Codable, Hashable, Sendable {
     self.windowStartMs = windowStartMs
     self.zoneId = zoneId
     self.zoneName = zoneName
+  }
+}
+
+public struct OrderLocalDeliveryCourier: Codable, Hashable, Sendable {
+  public var deliveryRef: String?
+  public var etaMs: Double?
+  public var pickupEtaMs: Double?
+  public var provider: String?
+  public var providerLabel: String?
+  public var reason: String?
+  public var state: OrderCourierState?
+  public var testMode: Bool?
+  public var trackingUrl: String?
+  public var updatedAtMs: Double?
+
+  public init(deliveryRef: String? = nil, etaMs: Double? = nil, pickupEtaMs: Double? = nil, provider: String? = nil, providerLabel: String? = nil, reason: String? = nil, state: OrderCourierState? = nil, testMode: Bool? = nil, trackingUrl: String? = nil, updatedAtMs: Double? = nil) {
+    self.deliveryRef = deliveryRef
+    self.etaMs = etaMs
+    self.pickupEtaMs = pickupEtaMs
+    self.provider = provider
+    self.providerLabel = providerLabel
+    self.reason = reason
+    self.state = state
+    self.testMode = testMode
+    self.trackingUrl = trackingUrl
+    self.updatedAtMs = updatedAtMs
   }
 }
 
@@ -3137,6 +3184,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
+  public let orderCourierStateLabels: [String: String]
   public let orderDisputeOptions: [ListFilterOption]
   public let orderFulfillmentMethodLabels: [String: String]
   public let orderListHeaders: [String: String]
@@ -3320,6 +3368,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
+    case orderCourierStateLabels = "ORDER_COURIER_STATE_LABELS"
     case orderDisputeOptions = "ORDER_DISPUTE_OPTIONS"
     case orderFulfillmentMethodLabels = "ORDER_FULFILLMENT_METHOD_LABELS"
     case orderListHeaders = "ORDER_LIST_HEADERS"

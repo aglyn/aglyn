@@ -954,6 +954,25 @@ address and with the signing secret the card shows once, and are answered at
 `https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
 verified by its HMAC-SHA512 `X-Sm-Signature`.
 
+### Couriers: DoorDash Drive {#couriers}
+
+A store can send a DoorDash courier for its own local deliveries from the
+merchant's **own** DoorDash Drive developer account. The deployment registers
+nothing and holds no DoorDash account: each merchant pastes their own keys,
+and DoorDash bills each courier to that merchant's account. The deployment
+holds only the key those keys are sealed under. Leave it unset and no Couriers
+card or **Send a courier** appears, and nothing is sent to DoorDash. Set it on
+the **console only**: the routes, DoorDash's webhook and the job that follows
+open deliveries run there.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `COURIERS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored DoorDash Drive signing secret with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a secret opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again. |
+
+Each merchant registers the webhook in their own DoorDash developer portal, at
+`https://<console>/api/couriers/webhooks/doordash?site=<siteId>` with the token
+their Couriers card shows; the card gives them both.
+
 ### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
 
 A store can keep its stock counts, products and paid orders in step with the

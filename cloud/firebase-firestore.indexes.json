@@ -307,6 +307,34 @@
       ]
     },
     {
+      "collectionGroup": "courierDeliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "open",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextCheckAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "courierDeliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "open",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "inventorySyncConnections",
       "queryScope": "COLLECTION",
       "fields": [

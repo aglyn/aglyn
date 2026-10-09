@@ -95,7 +95,68 @@ export interface OrderLocalDelivery {
   failedAtMs?: number
   /** Why a drop failed, in the driver's words. */
   failedReason?: string
+  /**
+   * An outside courier the store sent for this drop (AGL-3695), as the
+   * courier plugin last reported it through core's
+   * `core.local-delivery-records`. Absent when the store's own driver takes it.
+   */
+  courier?: OrderLocalDeliveryCourier
   updatedAtMs?: number
+}
+
+/** Where an outside courier's run stands. `returning`/`returned`: it is coming back to the store. */
+export type OrderCourierState =
+  | 'requested'
+  | 'assigned'
+  | 'at_pickup'
+  | 'picked_up'
+  | 'at_dropoff'
+  | 'delivered'
+  | 'cancelled'
+  | 'returning'
+  | 'returned'
+
+/**
+ * An outside courier's run on a local delivery (AGL-3695): the merchant's own
+ * DoorDash Drive account, booked from the console. The courier bills the
+ * merchant's account directly, so no fee is kept here.
+ */
+export interface OrderLocalDeliveryCourier {
+  /** The courier plugin's provider id: `doordash`. */
+  provider: string
+  /** `DoorDash`. */
+  providerLabel: string
+  /** The courier's reference for the run. */
+  deliveryRef: string
+  state: OrderCourierState
+  /** The courier's live tracking page. */
+  trackingUrl?: string
+  /** When the courier expects to reach the door. */
+  etaMs?: number
+  /** When the courier expects to collect. */
+  pickupEtaMs?: number
+  /** Why the run was canceled or came back, in the courier's words. */
+  reason?: string
+  /** Booked in the courier's test environment: nobody is coming. */
+  testMode?: boolean
+  updatedAtMs: number
+}
+
+export const ORDER_COURIER_STATE_LABELS: Readonly<Record<OrderCourierState, string>> = {
+  requested: 'Courier requested',
+  assigned: 'Courier on the way to the store',
+  at_pickup: 'Courier at the store',
+  picked_up: 'On its way',
+  at_dropoff: 'Courier arriving',
+  delivered: 'Delivered',
+  cancelled: 'Courier canceled',
+  returning: 'Coming back to the store',
+  returned: 'Returned to the store',
+}
+
+/** Whether a courier is still working the drop: requested, and neither done nor called off. */
+export function orderCourierIsActive(courier: Pick<OrderLocalDeliveryCourier, 'state'> | null | undefined): boolean {
+  return Boolean(courier) && !['delivered', 'cancelled', 'returned'].includes(String(courier?.state))
 }
 
 export const ORDER_PICKUP_STATUS_LABELS: Readonly<Record<OrderPickupStatus, string>> = {

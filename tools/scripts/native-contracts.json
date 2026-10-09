@@ -476,13 +476,16 @@
         "OrderLocalDeliveryStatus",
         "OrderPickup",
         "OrderLocalDelivery",
+        "OrderCourierState",
+        "OrderLocalDeliveryCourier",
         "OrderFulfillmentKey",
         "PickupLocationSettings"
       ],
       "values": [
         "ORDER_PICKUP_STATUS_LABELS",
         "ORDER_LOCAL_DELIVERY_STATUS_LABELS",
-        "ORDER_FULFILLMENT_METHOD_LABELS"
+        "ORDER_FULFILLMENT_METHOD_LABELS",
+        "ORDER_COURIER_STATE_LABELS"
       ]
     },
     "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts": {
@@ -632,6 +635,7 @@
     "TenantEmailEntry",
     "OrderPickup",
     "OrderLocalDelivery",
+    "OrderLocalDeliveryCourier",
     "PickupLocationSettings",
     "PosKioskProduct.description",
     "PosKioskProduct.imageUrl",

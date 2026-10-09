@@ -33,6 +33,7 @@ import type {
   ConsoleFulfillmentTracking,
   ConsoleOrderZoneAddress,
   ConsoleOrderZoneFulfillment,
+  ConsoleOrderZoneLocalDelivery,
   ConsoleOrderZoneOrder,
 } from './order-zones'
 
@@ -112,6 +113,34 @@ export function consoleOrderZoneOrder(
       totalCents: order.totals?.totalCents ?? Number(order.amountCents ?? 0),
     },
     testMode: CommerceModel.orderIsTestMode(order),
+    fulfillmentMethod: order.fulfillmentMethod ?? 'shipping',
+    localDelivery: zoneLocalDelivery(order),
+  }
+}
+
+/** The order's local delivery in the zone's words, or `null` on any other order (AGL-3695). */
+export function zoneLocalDelivery(order: CommerceModel.HostOrder): ConsoleOrderZoneLocalDelivery | null {
+  const delivery = order.fulfillmentMethod === 'local_delivery' ? order.localDelivery : undefined
+  if (!delivery) return null
+  const courier = delivery.courier
+  return {
+    status: CommerceModel.orderLocalDeliveryStatus(delivery.status),
+    windowStartMs: Number(delivery.windowStartMs) || null,
+    windowEndMs: Number(delivery.windowEndMs) || null,
+    windowLabel: delivery.windowLabel ?? null,
+    courier: courier
+      ? {
+          provider: String(courier.provider ?? ''),
+          providerLabel: String(courier.providerLabel ?? courier.provider ?? 'Courier'),
+          deliveryRef: String(courier.deliveryRef ?? ''),
+          state: String(courier.state ?? ''),
+          trackingUrl: courier.trackingUrl ?? null,
+          etaMs: Number(courier.etaMs) || null,
+          reason: courier.reason ?? null,
+          testMode: courier.testMode === true,
+          updatedAtMs: Number(courier.updatedAtMs) || 0,
+        }
+      : null,
   }
 }
 

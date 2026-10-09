@@ -3210,6 +3210,17 @@
       "value": "marketplace"
     }
   ],
+  "ORDER_COURIER_STATE_LABELS": {
+    "assigned": "Courier on the way to the store",
+    "at_dropoff": "Courier arriving",
+    "at_pickup": "Courier at the store",
+    "cancelled": "Courier canceled",
+    "delivered": "Delivered",
+    "picked_up": "On its way",
+    "requested": "Courier requested",
+    "returned": "Returned to the store",
+    "returning": "Coming back to the store"
+  },
   "ORDER_DISPUTE_OPTIONS": [
     {
       "label": "Open dispute",

@@ -520,6 +520,17 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'couriers',
+    subprocessors: [],
+    uses: [
+      {
+        host: "openapi.doordash.com",
+        reason: "Also customer-chosen: DoorDash Drive's API, reached only from `libs/plugins/couriers/src/lib/providers/doordash.ts` with the merchant's own developer keys (live, or test for DoorDash's sandbox) when a member of the site asks for a courier's quote, books one, cancels one or checks one, and from the console job that follows open deliveries. DoorDash bills the delivery to the merchant's own account.",
+        dataReceived: "For each order a courier is sent for: the order's number and value, the store's name, pickup address, phone and pickup note, and the buyer's name, delivery address and phone number. Read back: the delivery's status, fee, pickup and drop-off estimates, tracking link and any cancellation reason. Each request carries a short-lived token signed with the merchant's signing secret; the secret itself is never sent. No payment details are sent.",
+      },
+    ],
+  },
+  {
     pluginId: 'marketplaces',
     subprocessors: [],
     hosts: [

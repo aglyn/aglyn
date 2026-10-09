@@ -1060,6 +1060,24 @@ data class OrderChannelSourceLinesItem(
     val lineIndex: Double,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrderCourierStateSerializer::class)
+enum class OrderCourierState(val raw: String) {
+    ASSIGNED("assigned"),
+    AT_DROPOFF("at_dropoff"),
+    AT_PICKUP("at_pickup"),
+    CANCELLED("cancelled"),
+    DELIVERED("delivered"),
+    PICKED_UP("picked_up"),
+    REQUESTED("requested"),
+    RETURNED("returned"),
+    RETURNING("returning"),
+    UNKNOWN(""),
+}
+
+internal object OrderCourierStateSerializer :
+    RawEnumSerializer<OrderCourierState>("com.aglyn.contracts.OrderCourierState", OrderCourierState.entries, OrderCourierState.UNKNOWN, { it.raw })
+
 @Serializable
 data class OrderCredit(
     val amountCents: Double,
@@ -1212,6 +1230,7 @@ data class OrderLineModifier(
 @Serializable
 data class OrderLocalDelivery(
     val addressOutsideZone: Boolean? = null,
+    val courier: OrderLocalDeliveryCourier? = null,
     val deliveredAtMs: Double? = null,
     val failedAtMs: Double? = null,
     val failedReason: String? = null,
@@ -1226,6 +1245,20 @@ data class OrderLocalDelivery(
     val windowStartMs: Double? = null,
     val zoneId: String? = null,
     val zoneName: String? = null,
+)
+
+@Serializable
+data class OrderLocalDeliveryCourier(
+    val deliveryRef: String? = null,
+    val etaMs: Double? = null,
+    val pickupEtaMs: Double? = null,
+    val provider: String? = null,
+    val providerLabel: String? = null,
+    val reason: String? = null,
+    val state: OrderCourierState? = null,
+    val testMode: Boolean? = null,
+    val trackingUrl: String? = null,
+    val updatedAtMs: Double? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -2105,6 +2138,7 @@ internal data class ContractValuesPart3(
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
+    @SerialName("ORDER_COURIER_STATE_LABELS") val orderCourierStateLabels: Map<String, String>,
     @SerialName("ORDER_DISPUTE_OPTIONS") val orderDisputeOptions: List<ListFilterOption>,
     @SerialName("ORDER_FULFILLMENT_METHOD_LABELS") val orderFulfillmentMethodLabels: Map<String, String>,
     @SerialName("ORDER_LIST_HEADERS") val orderListHeaders: Map<String, String>,

@@ -182,6 +182,11 @@ export const PLUGIN_DOCS = {
     title: 'CRM',
     excerpt: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   },
+  couriers: {
+    path: '/commerce-and-bookings/commerce/couriers',
+    title: 'Couriers for local delivery (DoorDash Drive)',
+    excerpt: 'Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier\'s tracking link and arrival time on the order. Rolling out.',
+  },
   crmEmailTemplates: {
     path: '/content-and-data/crm/email-templates',
     title: 'Email templates',
@@ -452,6 +457,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contactFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#the-standard-fields', '#do-not-call', '#deleting-and-erasing', '#what-each-site-keeps-to-itself', '#when-sites-join-or-leave-a-group', '#merging-two-records', '#likely-duplicates', '#owner', '#last-engaged', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#files', '#related'],
   contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
+  couriers: ['#who-pays', '#connect-doordash-drive', '#webhook', '#send-a-courier', '#cancel', '#what-your-buyer-sees', '#uber-direct'],
   crmEmailTemplates: ['#templates-and-snippets', '#merge-fields', '#saving', '#managing-templates', '#duplicate-a-template', '#shared-or-personal', '#over-the-rest-api', '#related'],
   crmLeads: ['#what-makes-a-lead', '#what-a-lead-holds', '#lead-source-filled-in', '#adding-a-lead-by-hand', '#the-leads-list', '#lead-statuses', '#filter-the-leads', '#working-a-lead-from-the-row', '#several-leads-at-once', '#import-from-csv', '#who-owns-a-lead', '#a-leads-page', '#email-state', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#lead-sources', '#pipeline', '#forecast-by-close-month', '#by-forecast-category', '#won-and-lost', '#won-and-lost-by-owner', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
