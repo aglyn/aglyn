@@ -633,14 +633,16 @@ describe('the questions become a site scaffold', () => {
     expect(JSON.parse(init.body).inputs.submissions).toBe('inbox')
   })
 
-  it('promises a plan to confirm, never a built or a published site', async () => {
+  it('says the site is built and published for them, and can be edited or unpublished', async () => {
     await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     const said = await screen.findByText(/Your site is being planned/)
-    expect(said.textContent).toMatch(/confirm/)
-    expect(said.textContent).toMatch(/nothing is published/)
+    // The guided start confirms its own plan (AGL-3594) and the site goes live.
+    expect(said.textContent).toMatch(/built and published for you/)
+    expect(said.textContent).toMatch(/edit or unpublish it/)
+    expect(said.textContent).not.toMatch(/nothing is published|confirm/)
   })
 
   it('says the door’s own words when it refuses, and keeps the answers', async () => {
