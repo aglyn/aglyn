@@ -193,7 +193,7 @@ describe('the usage strip', () => {
     )
     expect(screen.getByText('You have 48 free AI credits left this month')).toBeTruthy()
     expect(
-      screen.getByText(/Used this month: you 252 of 300 across your Free workspaces · this workspace 200 of 300/),
+      screen.getByText(/Used: you 252 of 300 across your Free workspaces · this workspace 200 of 300/),
     ).toBeTruthy()
     expect(screen.getByRole('progressbar').getAttribute('aria-label')).toBe('84% of your free AI credits used')
     expect(screen.queryByText(/401/)).toBeNull()

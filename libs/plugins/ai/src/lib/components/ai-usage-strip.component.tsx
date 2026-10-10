@@ -75,14 +75,10 @@ export function aiUsageStripMineLabel(meter: AiUsageMeterWire): string {
  */
 export function aiUsageStripPoolLabel(meter: AiUsageMeterWire): string {
   const { mine, pool } = meter
-  const workspace =
-    pool.limit === null
-      ? `Workspace: ${credits(pool.used)} credits`
-      : `Workspace: ${credits(pool.used)} of ${credits(pool.limit)} credits`
-  if (mine.free && mine.limit !== null) {
-    return `Used this month: you ${credits(mine.used)} of ${credits(mine.limit)} across your Free workspaces · this workspace ${credits(pool.used)}${pool.limit === null ? '' : ` of ${credits(pool.limit)}`}`
-  }
-  return workspace
+  const of = (used: number, limit: number | null) => `${credits(used)}${limit === null ? '' : ` of ${credits(limit)}`}`
+  return mine.free
+    ? `Used: you ${of(mine.used, mine.limit)} across your Free workspaces · this workspace ${of(pool.used, pool.limit)}`
+    : `Workspace: ${of(pool.used, pool.limit)} credits`
 }
 
 /**
@@ -162,7 +158,7 @@ export function AiUsageStrip({ orgId, orgSlug }: AiUsageStripProps) {
       {meter.state === 'capped' ? (
         <Typography variant="caption" color="error" component="div">
           {allotmentReached && mine.free
-            ? 'Your free AI credits for this month are used. They renew on the 1st, or upgrade this workspace to keep building with AI.'
+            ? 'Your free AI credits for this month are used. They renew on the 1st.'
             : allotmentReached
             ? mine.scope === 'collab'
               ? 'Your AI allotment on this site is used for the month. The site’s admin, or an organization admin, can raise it.'
