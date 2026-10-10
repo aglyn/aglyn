@@ -51,6 +51,7 @@ import {
   aiSettleOffBrandEmailColors,
   aiSettleDisagreeingNodes,
   aiSettlePlanDatasets,
+  aiSettlePlanFormDatasets,
   aiSettlePlanForms,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
@@ -691,9 +692,18 @@ export function aiDoctrinePlanCheck(
     // A reference or a page's layout that has only one answer is given it,
     // not refused for it; so is a section that collects answers with no form
     // placed, which places the plan's own (AGL-3660).
-    // A plan past the datasets this job may make keeps the most useful (AGL-3616).
+    // A plan past the datasets this job may make keeps the most useful
+    // (AGL-3616), once a form's dataset is one it can write to and no page
+    // lists it.
     const plan = aiSettlePlanForms(
-      aiSettlePlanLayouts(aiSettlePlanDatasets(aiSettlePlanRefs(parsed.plan, inventory), capabilities), inventory, capabilities),
+      aiSettlePlanLayouts(
+        aiSettlePlanDatasets(
+          aiSettlePlanFormDatasets(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+          capabilities,
+        ),
+        inventory,
+        capabilities,
+      ),
       inventory,
       capabilities,
     )

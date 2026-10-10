@@ -112,6 +112,7 @@ import {
   runAiSiteDatasetUnit,
 } from './ai-job-site-datasets'
 import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
+import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -184,9 +185,10 @@ import {
 
 /**
  * What a scaffold's units are, in the order it builds them; a component is a
- * page job's. The site's datasets (AGL-3616), a blog's first posts and a
- * store's first products (AGL-3676) are built after the layout and the form
- * and before the pages, which are told what they are.
+ * page job's. The site's datasets (AGL-3616) are built after the layout and
+ * before the form, which may write its submissions to one; a blog's first
+ * posts and a store's first products (AGL-3676) after the form; all of them
+ * before the pages, which are told what they are.
  */
 export type AiSiteUnitKind =
   | 'theme'
@@ -291,9 +293,11 @@ export const AI_SITE_MAX_PASSES =
 /**
  * The units a plan implies, in build order: the palette first, because a
  * member reads it while the pages are still building; then the layout every
- * page renders inside and the form they place, because a page binds both by
- * id and so needs them to exist; then the pages; then the welcome email,
- * which is about the site rather than part of it.
+ * page renders inside, the site's datasets, and the form they place —
+ * because a page binds the layout and the form by id, and a form binds the
+ * dataset it writes to (AGL-3616), so each needs what it binds to exist;
+ * then the pages; then the welcome email, which is about the site rather
+ * than part of it.
  */
 export function aiSiteJobUnits(
   plan: Pick<AiJobPlan, 'create' | 'screens'>,
@@ -307,6 +311,13 @@ export function aiSiteJobUnits(
   ]
   for (const { unit, create } of CREATION_UNITS) {
     if (unit === 'theme') continue
+    // The site's datasets (AGL-3616), before anything that lists them and
+    // before the form, which may write its submissions to one of them.
+    if (unit === 'form') {
+      aiSitePlanDatasets(plan).forEach((creation, index) => {
+        units.push({ kind: 'dataset', ...UNIT_KINDS.dataset, slot: `d${index}`, creation, label: creation.name })
+      })
+    }
     const creation = plan.create.find((entry) => entry.kind === create)
     if (!creation) continue
     units.push({
@@ -317,10 +328,6 @@ export function aiSiteJobUnits(
       label: creation.name,
     })
   }
-  // The site's datasets (AGL-3616), before anything that lists them.
-  aiSitePlanDatasets(plan).forEach((creation, index) => {
-    units.push({ kind: 'dataset', ...UNIT_KINDS.dataset, slot: `d${index}`, creation, label: creation.name })
-  })
   // A paid blog's first posts and a paid store's first products (AGL-3676).
   if (options.content === 'posts') {
     units.push({ kind: 'posts', ...UNIT_KINDS.posts, slot: 'posts', label: AI_SITE_POSTS_LABEL })
@@ -588,6 +595,9 @@ export function aiSiteUnitJob(
       {
         ...unit.creation,
         duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built),
+        // The dataset a form writes to, once built (AGL-3616); one that
+        // failed leaves the form as it always was.
+        ...(unit.creation.writesTo ? { writesTo: aiSiteResolvedRef(unit.creation.writesTo, built) } : {}),
       },
     ]
     brief.push(
@@ -731,8 +741,14 @@ export function aiSiteUnitJob(
     unitInputs[AI_SITE_CONTENT_INPUT] = posts
   }
   if (unit.kind === 'products') unitInputs['target'] = 'catalog'
-  // Where the plan lists a dataset, which its design reads (AGL-3616).
-  if (unit.kind === 'dataset' && unit.creation) unitInputs[AI_SITE_DATASET_INPUT] = aiSiteDatasetInputOf(unit.creation, plan.screens)
+  // Where the plan lists a dataset, which its design reads, and the form
+  // that writes to it (AGL-3616).
+  if (unit.kind === 'dataset' && unit.creation) {
+    unitInputs[AI_SITE_DATASET_INPUT] = aiSiteDatasetInputOf(unit.creation, plan.screens, plan.create)
+  }
+  // A form's dataset this start made, which the form may bind (AGL-3616).
+  const writesTo = unit.kind === 'form' ? unitPlan.create[0]?.writesTo : null
+  if (writesTo && isAiPlanNewRef(unit.creation?.writesTo)) unitInputs[AI_FORM_DATASET_MADE_INPUT] = writesTo
   return {
     ...job,
     $id: aiSiteUnitJobId(job, unit),
@@ -950,6 +966,11 @@ export async function aiSitePageWritten(
 export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
   const creations = units.filter((unit) => unit.kind === 'layout' || unit.kind === 'form').map((unit) => unit.slot)
   const datasets = units.filter((unit) => unit.kind === 'dataset' && unit.creation)
+  /** The dataset a form writes to (AGL-3616): built before it, and it without the binding if it fails. */
+  const writtenTo = (creation: AiBuildPlanCreate | undefined) =>
+    datasets
+      .filter((unit) => !!creation?.writesTo && creation.writesTo.trim().toLowerCase() === `new:${unit.creation?.name ?? ''}`.trim().toLowerCase())
+      .map((unit) => unit.slot)
   /** The datasets a page lists or is the record template of (AGL-3616): built before it, and it without them if they fail. */
   const listed = (screen: AiBuildPlanScreen | undefined) =>
     datasets
@@ -967,7 +988,7 @@ export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
     label: unit.label,
     ...(unit.creation ? { creation: unit.creation } : {}),
     ...(unit.screen ? { screen: unit.screen } : {}),
-    deps: unit.kind === 'page' ? [...creations, ...listed(unit.screen)] : [],
+    deps: unit.kind === 'page' ? [...creations, ...listed(unit.screen)] : unit.kind === 'form' ? writtenTo(unit.creation) : [],
   }))
 }
 

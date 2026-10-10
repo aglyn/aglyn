@@ -130,6 +130,15 @@ export interface AiBuildPlanCreate {
    */
   fields: string[]
   /**
+   * A form only: the dataset each of its submissions is also written to as a
+   * record (AGL-3616, Zach 2026-10-10: a volunteer sign-up writing to a
+   * Volunteers dataset) — `new:<name>` of a dataset this plan creates, or a
+   * dataset id from the inventory. Said by the plan, never inferred from a
+   * section's `uses`. Absent or null on every other creation, and on a form
+   * whose submissions only reach the Inbox.
+   */
+  writesTo?: string | null
+  /**
    * The id the draft this creation becomes is written under, where a unit of
    * the job builds it (AGL-3079). Minted when the job keeps the plan, never
    * part of the model's answer.
@@ -485,16 +494,36 @@ const RECORD_SCHEMA = {
     "When this page is one dataset's record template, serving a page per record at /<base>/<record address> with its copy bound as {{item.<field>}}: the dataset and the base. Otherwise null.",
 }
 
-/** A plan tool whose screens each name the dataset they are the record template of, or null. */
+const WRITES_TO_SCHEMA = nullableString(
+  'A form only, and only where each submission should also be kept as a record (a volunteer sign-up, an RSVP, an enquiry): the dataset it writes to, as new:<name> of a dataset this plan creates or a dataset id from the inventory. Otherwise null.',
+)
+
+/**
+ * A plan tool whose screens each name the dataset they are the record
+ * template of, or null, and whose creations each name the dataset a form
+ * writes its submissions to, or null (AGL-3616).
+ */
 function withRecords(tool: AiTool): AiTool {
   const properties = tool.inputSchema['properties'] as Record<string, unknown>
   const screens = properties['screens'] as { items: Record<string, unknown> }
+  const create = properties['create'] as { items: Record<string, unknown> }
   return {
     ...tool,
     inputSchema: {
       ...tool.inputSchema,
       properties: {
         ...properties,
+        create: {
+          ...create,
+          items: {
+            ...create.items,
+            required: [...(create.items['required'] as string[]), 'writesTo'],
+            properties: {
+              ...(create.items['properties'] as Record<string, unknown>),
+              writesTo: WRITES_TO_SCHEMA,
+            },
+          },
+        },
         screens: {
           ...screens,
           items: {
@@ -512,9 +541,10 @@ function withRecords(tool: AiTool): AiTool {
 }
 
 /**
- * The plan tools with a record template on every screen (AGL-3475), offered
- * only where the job may bind a dataset: a site with a dataset, or a job that
- * may create one. Record pages are a Starter feature, and every other plan's
+ * The plan tools with a record template on every screen (AGL-3475) and the
+ * dataset a form writes to on every creation (AGL-3616), offered only where
+ * the job may bind a dataset: a site with a dataset, or a job that may create
+ * one. Record pages are a Starter feature, and every other plan's
  * request is the plain tool, byte for byte, so the field costs a Free taste
  * nothing and a model planning a site with no dataset has none to bind.
  */
@@ -736,12 +766,16 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         const fields = list(entry['fields'] ?? [], `create[${index}].fields`, AI_BUILD_PLAN_LIMITS.fields)
           .map((field, fieldIndex) => text(field, `create[${index}].fields[${fieldIndex}]`))
           .filter(Boolean)
+        // Only a form writes its submissions to a dataset (AGL-3616); kept
+        // only where it says one, so a plan without one reads as it always did.
+        const writesTo = kind === 'form' ? nullable(entry['writesTo'], `create[${index}].writesTo`) : null
         return {
           kind,
           name,
           why: text(entry['why'], `create[${index}].why`),
           duplicateOf: nullable(entry['duplicateOf'], `create[${index}].duplicateOf`),
           fields: kind === 'layout' ? aiPlanLayoutRegionWords(fields) : fields,
+          ...(writesTo ? { writesTo } : {}),
         }
       },
     )
@@ -879,6 +913,29 @@ export function aiPlanCreateFor(
   if (!isAiPlanNewRef(ref)) return undefined
   const name = ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
   return plan.create.find((entry) => entry.name.toLowerCase() === name)
+}
+
+/** The operation a build's dataset item is planned as (AGL-3616), owned by the data plugin. */
+export const AI_PLAN_DATASET_ITEM_OP = 'dataset'
+
+/**
+ * The datasets this plan makes that one of its forms writes its submissions
+ * to (AGL-3616), by name lowercased: a dataset creation of a site start, or a
+ * build's dataset item. Such a dataset starts with no records — its records
+ * are the submissions — so a site start designs it from its planned fields
+ * with no model, and no page lists it.
+ */
+export function aiPlanFormDatasetNames(plan: Pick<AiBuildPlan, 'create'> & Partial<Pick<AiBuildPlan, 'items'>>): Set<string> {
+  const names = new Set<string>()
+  for (const entry of plan.create) {
+    if (entry.kind !== 'form' || !isAiPlanNewRef(entry.writesTo)) continue
+    const name = entry.writesTo.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
+    const made =
+      plan.create.some((one) => one.kind === 'dataset' && one.name.trim().toLowerCase() === name) ||
+      (plan.items ?? []).some((one) => one.op === AI_PLAN_DATASET_ITEM_OP && one.name.trim().toLowerCase() === name)
+    if (made) names.add(name)
+  }
+  return names
 }
 
 /** The item a `new:<name>` reference names, case-insensitively (AGL-3616). */

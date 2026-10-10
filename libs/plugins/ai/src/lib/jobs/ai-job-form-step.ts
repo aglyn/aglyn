@@ -53,6 +53,16 @@ import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import type { AiSystemBlock, AiTool } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import {
+  AI_FORM_DATASET_MADE_INPUT,
+  aiBindFormToDataset,
+  aiFormDatasetNote,
+  aiFormDatasetPromptLine,
+  aiReadFormDataset,
+  type AiFormDataset,
+  type AiFormDatasetBinding,
+  type AiFormDatasetReadDeps,
+} from './ai-job-form-dataset'
 import { aiJobPlanCreationsRefusal } from './ai-job-plan-creations'
 import { aiJobDraftId } from './ai-job-draft-ids'
 import {
@@ -289,19 +299,23 @@ export interface AiFormDraft {
   consentFieldName: string | null
   routing: FormRouting | null
   answer: AiFormAnswer
+  /** The dataset its submissions are also written to, and what was bound (AGL-3616). */
+  dataset?: { dataset: AiFormDataset; binding: AiFormDatasetBinding }
 }
 
 /**
  * The draft a validated design and its answer make: the form node bound to
- * `formId` and captioned `name`, no dataset binding, the platform's consent
- * field when the fields can yield an email address, the canvas root above,
- * and the declaration read off the result. Pure; the input tree is not
+ * `formId` and captioned `name`, the platform's consent field when the
+ * fields can yield an email address, the canvas root above, and the
+ * declaration read off the result. A dataset binding is made only where the
+ * plan said the form writes to one this step may bind (`identity.dataset`,
+ * AGL-3616); any the model drew is dropped. Pure; the input tree is not
  * changed.
  */
 export function aiFormDraft(
   tree: Pick<AiValidatedTree, 'rootId' | 'nodes'>,
   answer: Record<string, unknown>,
-  identity: { formId: string; name: string; decisions?: AiFormDecisions },
+  identity: { formId: string; name: string; decisions?: AiFormDecisions; dataset?: AiFormDataset | null },
 ): AiFormDraft {
   const parsed = parseAiFormAnswer(answer, identity.decisions ?? { submissions: null })
   const formNodeId = tree.rootId
@@ -317,8 +331,8 @@ export function aiFormDraft(
   let consentFieldName: string | null = null
   if (form?.componentId === FORM_COMPONENT_ID) {
     const props = form.props as Record<string, unknown>
-    // A dataset binding decides where every submission is also written; it
-    // stays the person's choice, made on the Form element.
+    // A dataset binding decides where every submission is also written: the
+    // plan's to say (AGL-3616), bound below, never the model's to draw.
     delete props['datasetId']
     delete props['datasetName']
     props[FORM_ID_PROP] = identity.formId
@@ -348,6 +362,12 @@ export function aiFormDraft(
     }
     form.parentId = CANVAS_ROOT_ELEMENT_ID
   }
+  // The dataset the plan says the form writes to (AGL-3616), bound as the
+  // Form element binds one.
+  const dataset =
+    identity.dataset && form?.componentId === FORM_COMPONENT_ID
+      ? { dataset: identity.dataset, binding: aiBindFormToDataset(nodes, formNodeId, identity.dataset) }
+      : undefined
   nodes[CANVAS_ROOT_ELEMENT_ID] = {
     $id: CANVAS_ROOT_ELEMENT_ID,
     componentId: 'div',
@@ -361,6 +381,7 @@ export function aiFormDraft(
     consentFieldName,
     routing: parsed.routing.kind === 'lead' ? { lead: true } : null,
     answer: parsed,
+    ...(dataset ? { dataset } : {}),
   }
 }
 
@@ -419,6 +440,7 @@ export function aiFormDraftCheck(identity: {
   formId: string
   name: string
   decisions?: AiFormDecisions
+  dataset?: AiFormDataset | null
 }): {
   extend: (tree: AiValidatedTree, answer: Record<string, unknown>) => AiDoctrineViolation[]
   draftFor: (tree: AiValidatedTree) => AiFormDraft | undefined
@@ -677,6 +699,8 @@ export interface AiJobFormStepDeps {
   readInventory?: typeof readSiteInventory
   /** The platform's duplicate module, for a plan that starts from a copy. */
   duplicate?: typeof duplicateResource
+  /** The data plugin's writer lookup the form's dataset is read through (AGL-3616); specs hand in a fake. */
+  datasetWriterFor?: AiFormDatasetReadDeps['writerFor']
 }
 
 export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunner {
@@ -777,7 +801,19 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     // (AGL-2918): a scaffold's form unit carries the guided start's inputs.
     const decisions: AiFormDecisions = { submissions: aiSiteSubmissions(job.inputs) }
     const { audience } = aiSiteWords(job.inputs)
-    const check = aiFormDraftCheck({ formId: draftId, name, decisions })
+    // The dataset the plan says the form writes to (AGL-3616), where this
+    // workspace may bind one; otherwise the form is the form it always was.
+    const dataset = await aiReadFormDataset(
+      {
+        hostId,
+        id: creation?.writesTo,
+        org,
+        inventory,
+        madeId: job.inputs?.[AI_FORM_DATASET_MADE_INPUT],
+      },
+      deps.datasetWriterFor ? { writerFor: deps.datasetWriterFor } : {},
+    )
+    const check = aiFormDraftCheck({ formId: draftId, name, decisions, dataset })
     const result = await runValidatedGeneration('form', {
       step: 'job.form',
       model,
@@ -792,6 +828,7 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
               submissions: decisions.submissions,
             }),
             ...sourceLines,
+            ...(dataset ? [aiFormDatasetPromptLine(dataset)] : []),
           ].join('\n'),
         },
       ],
@@ -833,6 +870,7 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     // What the person decides next, then the facts the brief did not give (AGL-3056).
     const note = [
       aiFormOutputNote(draft.answer),
+      draft.dataset ? aiFormDatasetNote(draft.dataset.dataset, draft.dataset.binding) : null,
       aiBracketedFactsNote({
         tree: { rootId: result.value.rootId, nodes: result.value.nodes as unknown as AiDoctrineTree['nodes'] },
         inventory,

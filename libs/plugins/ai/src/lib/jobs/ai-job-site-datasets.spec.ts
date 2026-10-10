@@ -43,6 +43,9 @@ import {
   aiSiteDatasetListings,
   aiSiteDatasetNote,
   aiSiteDatasetRefusal,
+  aiSiteDatasetFieldName,
+  aiSiteFormDatasetContent,
+  aiSiteFormDatasetNote,
   aiSitePlanDatasetCapability,
   aiSitePlanDatasets,
   aiSiteRecordTemplateOf,
@@ -243,6 +246,83 @@ describe('the dataset unit', () => {
     const outcome = await createAiSiteDatasetRunner({ generate: generated(), writerFor: () => null })(context(unitJob()))
     expect(outcome.failure).toBe('Datasets are not available on this site.')
     expect(outcome.estCostUsd).toBe(0)
+  })
+})
+
+describe('a dataset a form writes to (AGL-3616)', () => {
+  const VOLUNTEERS: AiBuildPlanCreate = {
+    kind: 'dataset',
+    name: 'Volunteers',
+    why: 'each sign-up kept as a record',
+    duplicateOf: null,
+    fields: ['fullName', 'email', 'shifts:list', 'availability'],
+    id: 'drftVolnt01',
+  }
+  const SIGN_UP: AiBuildPlanCreate = {
+    kind: 'form',
+    name: 'Volunteer sign-up',
+    why: 'w',
+    duplicateOf: null,
+    fields: ['fullName', 'email', 'availability'],
+    writesTo: 'new:Volunteers',
+  }
+  const formJob = () =>
+    unitJob({
+      $id: 'drftVolnt01',
+      inputs: { [AI_SITE_DATASET_INPUT]: aiSiteDatasetInputOf(VOLUNTEERS, SCREENS, [SIGN_UP, VOLUNTEERS]) },
+      plan: { reuse: [], create: [VOLUNTEERS], screens: [], status: 'confirmed', labels: {} } as unknown as AiJobPlan,
+    })
+
+  it('is told which form writes to it', () => {
+    expect(aiSiteDatasetInputOf(VOLUNTEERS, SCREENS, [SIGN_UP])).toEqual({
+      shownIn: [],
+      recordPages: false,
+      forForm: { name: 'Volunteer sign-up', fields: ['fullName', 'email', 'availability'] },
+    })
+    // A dataset no form writes to is told nothing of forms.
+    expect(aiSiteDatasetInputOf(MENU, SCREENS, [SIGN_UP])).not.toHaveProperty('forForm')
+  })
+
+  it('is designed from its planned fields with no model, in a person’s words, typed where the plan typed them, empty', () => {
+    expect(aiSiteDatasetFieldName('fullName')).toBe('Full name')
+    expect(aiSiteDatasetFieldName('time_commitment')).toBe('Time commitment')
+    expect(aiSiteFormDatasetContent('Volunteers', VOLUNTEERS.fields, SIGN_UP)).toEqual({
+      name: 'Volunteers',
+      fields: [
+        { name: 'Full name', type: 'text' },
+        { name: 'Email', type: 'text' },
+        { name: 'Shifts', type: 'list' },
+        { name: 'Availability', type: 'text' },
+      ],
+      records: [],
+    })
+    // A dataset the plan gave no fields takes the form's.
+    expect(aiSiteFormDatasetContent('Volunteers', [], SIGN_UP)['fields']).toEqual([
+      { name: 'Full name', type: 'text' },
+      { name: 'Email', type: 'text' },
+      { name: 'Availability', type: 'text' },
+    ])
+  })
+
+  it('is written by the data plugin, spending nothing and seeding no record', async () => {
+    const generate = generated()
+    const { writes, writerFor } = fakeWriter()
+    const outcome = await createAiSiteDatasetRunner({ generate, writerFor })(context(formJob()))
+    expect(generate).not.toHaveBeenCalled()
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toMatchObject({ id: 'drftVolnt01', name: 'Volunteers', content: { records: [] } })
+    expect(outcome.usage).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 })
+    expect(outcome.estCostUsd).toBe(0)
+    expect(outcome.outputs).toEqual([
+      expect.objectContaining({ id: 'drftVolnt01', note: aiSiteFormDatasetNote('Volunteer sign-up'), proposal: expect.objectContaining({ recordNames: [] }) }),
+    ])
+  })
+
+  it('reports the one it already wrote when its pass runs again', async () => {
+    const { writerFor, writes } = fakeWriter({ read: async ({ id }) => ({ id, name: 'Volunteers', versionId: null, facts: { fields: [], addressField: null } }) })
+    const outcome = await createAiSiteDatasetRunner({ generate: generated(), writerFor })(context(formJob()))
+    expect(writes).toHaveLength(0)
+    expect(outcome.outputs[0]).toMatchObject({ id: 'drftVolnt01', note: aiSiteFormDatasetNote('Volunteer sign-up') })
   })
 })
 

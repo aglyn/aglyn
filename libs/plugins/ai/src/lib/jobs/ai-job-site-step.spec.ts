@@ -111,6 +111,7 @@ import {
 } from './ai-job-site-content'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
+import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -1620,12 +1621,14 @@ describe('a site’s datasets (AGL-3616)', () => {
   })
   const pageRunner = () => fakeRunner([], () => ({ outputs: [output('screen', 'screen-x')] }))
 
-  it('builds each dataset after the layout and the form and before the pages, and a page after the datasets it lists', () => {
+  it('builds each dataset after the layout and before the form and the pages, and a page after the datasets it lists', () => {
     const units = aiSiteJobUnits(plan)
-    expect(units.map((unit) => unit.slot)).toEqual(['t', 'l', 'f', 'd0', 'd1', 'p0', 'p1', 'p2', 'p3'])
-    expect(units[3]).toMatchObject({ kind: 'dataset', jobKind: 'text', resource: 'draft', label: 'Menu', creation: MENU })
+    expect(units.map((unit) => unit.slot)).toEqual(['t', 'l', 'd0', 'd1', 'f', 'p0', 'p1', 'p2', 'p3'])
+    expect(units[2]).toMatchObject({ kind: 'dataset', jobKind: 'text', resource: 'draft', label: 'Menu', creation: MENU })
     const ledger = aiSiteLedgerUnits(units)
-    expect(ledger[3]).toMatchObject({ slot: 'd0', op: 'dataset', deps: [] })
+    expect(ledger[2]).toMatchObject({ slot: 'd0', op: 'dataset', deps: [] })
+    // A form that writes to no dataset depends on none.
+    expect(ledger.find((unit) => unit.slot === 'f')?.deps).toEqual([])
     // The home lists the menu, the record template shows it; the About page needs neither.
     expect(ledger.find((unit) => unit.slot === 'p0')?.deps).toEqual(['l', 'f', 'd0'])
     expect(ledger.find((unit) => unit.slot === 'p1')?.deps).toEqual(['l', 'f'])
@@ -1727,6 +1730,76 @@ describe('a site’s datasets (AGL-3616)', () => {
     await step(context(siteJob({ plan, items, outputs, inputs: { businessType: 'a trattoria', pages: 4, welcomeEmail: false, autoConfirm: true } })))
     const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[] }]
     expect(input.outputs.map((entry) => entry.id)).toEqual(['home-out', 'about-out', 'contact-out'])
+  })
+})
+
+describe('a form that writes to a dataset (AGL-3616)', () => {
+  const VOLUNTEERS = {
+    kind: 'dataset' as const,
+    name: 'Volunteers',
+    why: 'each sign-up kept as a record',
+    duplicateOf: null,
+    fields: ['fullName', 'email', 'availability'],
+    id: 'drftVolnt01',
+  }
+  const SIGN_UP = { ...FORM, name: 'Volunteer sign-up', fields: ['fullName', 'email', 'availability'], writesTo: 'new:Volunteers' }
+  const plan = confirmedPlan({
+    create: [LAYOUT, SIGN_UP, VOLUNTEERS],
+    screens: [
+      planScreen({ title: 'Home', slug: '/', id: 'drftPage00' }),
+      planScreen({ title: 'Volunteer', slug: 'volunteer', id: 'drftPage01', nav: false, sections: [{ name: 'sign up', uses: ['new:Volunteer sign-up'], items: 0 }] }),
+      planScreen({ title: 'About', slug: 'about', id: 'drftPage02', nav: false }),
+      planScreen({ title: 'Contact', slug: 'contact', id: 'drftPage03', nav: false }),
+    ],
+  })
+
+  it('builds the dataset before the form, and the form after it', () => {
+    const units = aiSiteJobUnits(plan)
+    expect(units.map((unit) => unit.slot)).toEqual(['t', 'l', 'd0', 'f', 'p0', 'p1', 'p2', 'p3'])
+    const ledger = aiSiteLedgerUnits(units)
+    expect(ledger.find((unit) => unit.slot === 'f')?.deps).toEqual(['d0'])
+  })
+
+  it('tells the dataset which form writes to it, with the form’s fields', () => {
+    const units = aiSiteJobUnits(plan)
+    const job = aiSiteUnitJob(siteJob({ plan }), units.find((unit) => unit.slot === 'd0') as AiSiteUnit, new Map())
+    expect(job.inputs['siteDataset']).toEqual({
+      shownIn: [],
+      recordPages: false,
+      forForm: { name: 'Volunteer sign-up', fields: ['fullName', 'email', 'availability'] },
+    })
+  })
+
+  it('hands the form the dataset built for it, by id', () => {
+    const units = aiSiteJobUnits(plan)
+    const built = new Map([['volunteers', { id: 'drftVolnt01', label: 'Volunteers', kind: 'dataset' as const }]])
+    const job = aiSiteUnitJob(siteJob({ plan }), units.find((unit) => unit.slot === 'f') as AiSiteUnit, built)
+    expect(job.plan?.create).toEqual([expect.objectContaining({ kind: 'form', writesTo: 'drftVolnt01' })])
+    expect(job.inputs[AI_FORM_DATASET_MADE_INPUT]).toBe('drftVolnt01')
+  })
+
+  it('builds the form without the binding where its dataset could not be made', async () => {
+    const units = aiSiteJobUnits(plan)
+    const items = aiSiteInitialLedger(units, [LOOK]).map((row) =>
+      row.slot === 't' || row.slot === 'l'
+        ? { ...row, status: 'succeeded' as const, outputs: [row.slot] }
+        : row.slot === 'd0'
+          ? { ...row, status: 'failed' as const }
+          : row,
+    )
+    const seen: AiJob[] = []
+    const form = fakeRunner(seen, () => ({ outputs: [output('form', 'drftContct')] }))
+    const outcome = await stepWith({ form, page: fakeRunner([], () => ({ outputs: [output('screen', 'x')] })) })(
+      context(siteJob({ plan, items })),
+    )
+    expect(outcome.item).toMatchObject({
+      slot: 'f',
+      status: 'degraded',
+      degradedBy: ['d0'],
+      note: 'Its submissions arrive in the Inbox only: the dataset “Volunteers” could not be created.',
+    })
+    expect(seen[0].plan?.create[0]?.writesTo).toBeNull()
+    expect(seen[0].inputs[AI_FORM_DATASET_MADE_INPUT]).toBeUndefined()
   })
 })
 
