@@ -39,20 +39,46 @@ const AI_USAGE_STRIP_HELP = pluginDocsHelp('aiAllotments', {
     'Your credits this month against your allotment, the workspace pool, and what your last request cost. It warns from 80%.',
 })
 
-/** The line about the reader's own month, in the words the strip uses. */
+/**
+ * What a Free reader has left this month (AGL-3722): the less of their own
+ * allowance — 300 credits a month across every Free workspace they hold, net
+ * of give-backs — and this workspace's band. The same two walls the credits
+ * prompt reads, so the strip and the prompt say one number. `null` off the
+ * Free plan.
+ */
+export function aiUsageStripFreeLeft(meter: AiUsageMeterWire): number | null {
+  const { mine, pool } = meter
+  if (!mine.free || mine.limit === null) return null
+  const balances = [mine.limit - mine.used, ...(pool.limit === null ? [] : [pool.limit - pool.used])]
+  return Math.max(0, Math.min(...balances))
+}
+
+/**
+ * The line about the reader's own month, in the words the strip uses. On the
+ * Free plan it is what is LEFT (`aiUsageStripFreeLeft`), the figure the
+ * credits prompt quotes, and the second line says which two meters it is
+ * the less of (AGL-3722).
+ */
 export function aiUsageStripMineLabel(meter: AiUsageMeterWire): string {
   const { mine } = meter
+  const freeLeft = aiUsageStripFreeLeft(meter)
+  if (freeLeft !== null) return `You have ${credits(freeLeft)} free AI credits left this month`
   if (mine.limit === null) return `You: ${credits(mine.used)} credits this month`
   const who = mine.scope === 'host' ? 'This site' : mine.scope === 'collab' ? 'You, on this site' : 'You'
   return `${who}: ${credits(mine.used)} of ${credits(mine.limit)} credits this month`
 }
 
-/** The line about the workspace's pool. */
+/**
+ * The line about the workspace's pool. On the Free plan both meters a Free
+ * step is held to, each used of its limit and each for this month: the
+ * person's across their Free workspaces, and this workspace's (AGL-3722).
+ */
 export function aiUsageStripPoolLabel(meter: AiUsageMeterWire): string {
-  const { pool } = meter
-  return pool.limit === null
-    ? `Workspace: ${credits(pool.used)} credits`
-    : `Workspace: ${credits(pool.used)} of ${credits(pool.limit)} credits`
+  const { mine, pool } = meter
+  const of = (used: number, limit: number | null) => `${credits(used)}${limit === null ? '' : ` of ${credits(limit)}`}`
+  return mine.free
+    ? `Used: you ${of(mine.used, mine.limit)} across your Free workspaces · this workspace ${of(pool.used, pool.limit)}`
+    : `Workspace: ${of(pool.used, pool.limit)} credits`
 }
 
 /**
@@ -71,18 +97,23 @@ export function AiUsageStrip({ orgId, orgSlug }: AiUsageStripProps) {
   if (!meter) return null
   const { mine, pool } = meter
   const bound = mine.limit !== null
-  const used = bound ? mine.used : pool.used
+  const freeLeft = aiUsageStripFreeLeft(meter)
+  // On the Free plan the bar is what is used of the wall nearest to running out (AGL-3722).
+  const used = freeLeft !== null && mine.limit !== null ? mine.limit - freeLeft : bound ? mine.used : pool.used
   const limit = bound ? mine.limit : pool.limit
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : null
   const tone = meter.state === 'capped' ? 'error' : meter.state === 'warn' ? 'warning' : 'primary'
-  const allotmentReached = bound && mine.mode === 'hard' && mine.limit !== null && mine.used >= mine.limit
+  const allotmentReached =
+    freeLeft !== null ? freeLeft <= 0 : bound && mine.mode === 'hard' && mine.limit !== null && mine.used >= mine.limit
   const raiseHref =
     orgSlug && mine.scope !== 'collab'
       ? `${buildRoute(Route.MANAGE_BILLING_USAGE, { orgSlug })}#ai-allotments`
       : null
   const whose = !bound
     ? 'the workspace’s credits'
-    : mine.scope === 'host'
+    : mine.free
+      ? 'your free AI credits'
+      : mine.scope === 'host'
       ? 'this site’s AI allotment'
       : 'your AI allotment'
 
@@ -126,14 +157,16 @@ export function AiUsageStrip({ orgId, orgSlug }: AiUsageStripProps) {
       ) : null}
       {meter.state === 'capped' ? (
         <Typography variant="caption" color="error" component="div">
-          {allotmentReached
+          {allotmentReached && mine.free
+            ? 'Your free AI credits for this month are used. They renew on the 1st.'
+            : allotmentReached
             ? mine.scope === 'collab'
               ? 'Your AI allotment on this site is used for the month. The site’s admin, or an organization admin, can raise it.'
               : mine.scope === 'host'
                 ? 'This site’s AI allotment is used for the month. An organization admin can raise it'
                 : 'Your AI allotment is used for the month. An organization admin can raise it'
             : 'That request was stopped by a limit on this workspace.'}
-          {allotmentReached && raiseHref ? (
+          {allotmentReached && mine.free ? null : allotmentReached && raiseHref ? (
             <>
               {' under '}
               <AppLink componentVariant="naked" href={raiseHref}>

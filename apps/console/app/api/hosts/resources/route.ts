@@ -302,6 +302,7 @@ const RESOURCES: Record<string, HostResource> = {
       'slug',
       'fields',
       'consentFieldName',
+      'optInOnSubmit',
       'routing',
       'legacyMatch',
       'rootId',

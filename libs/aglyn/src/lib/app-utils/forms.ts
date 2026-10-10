@@ -206,6 +206,17 @@ export interface FormDocument<N = AglynNodeSchema> {
   fields: FormFieldDecl[]
   /** Names the entry in `fields` that IS the marketing opt-in. */
   consentFieldName?: string
+  /**
+   * A SIGN-UP form: submitting it is the opt-in.
+   *
+   * For a form whose one purpose is subscribing ("Get product updates",
+   * an email field and a Subscribe button), where a box to tick beside the
+   * button would ask the same question twice. Set by the merchant on the
+   * form, never inferred, so every other form keeps the rule that the fact
+   * of submission is not consent. Read by `/api/forms/submit`, which then
+   * records the opt-in and makes the person at least a subscriber.
+   */
+  optInOnSubmit?: boolean
   routing?: FormRouting
   legacyMatch?: FormLegacyMatch
   stats?: FormStats

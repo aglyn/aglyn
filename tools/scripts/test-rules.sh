@@ -47,6 +47,7 @@ npx firebase emulators:exec --only firestore,database --project demo-rules-check
         cloud/rules-working-draft.spec.mjs \
         cloud/rules-ai-usage-by-user.spec.mjs \
         cloud/rules-ai-allotments.spec.mjs \
+        cloud/rules-ai-jobs.spec.mjs \
         cloud/rules-outreach.spec.mjs \
         cloud/rules-business-profile.spec.mjs \
         cloud/rules-accounting.spec.mjs \

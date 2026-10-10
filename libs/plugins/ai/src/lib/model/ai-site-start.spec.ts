@@ -253,7 +253,7 @@ describe('a failed start reopens on its own answers (AGL-3596)', () => {
     expect(copy.aiJobRefundCopy({ status: 'failed', creditsSpent: 40, refundedCredits: 1 })).toBe(
       'This one’s on us — you weren’t charged for the part that failed. The 1 credit it used is back in your AI credits.',
     )
-    expect(copy.aiJobRefundCopy({ status: 'canceled', creditsSpent: 13 })).toBe('You paid for what was spent up to then.')
+    expect(copy.aiJobRefundCopy({ status: 'canceled', creditsSpent: 13 })).toBe('This job used 13 credits before it stopped.')
     expect(copy.aiJobRefundCopy({ status: 'failed', creditsSpent: 13 })).toBeNull()
   })
 })

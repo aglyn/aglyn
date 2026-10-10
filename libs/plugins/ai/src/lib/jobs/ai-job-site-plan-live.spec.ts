@@ -123,7 +123,10 @@ const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, o
  * Briefs as people answer the guided start: a business, who it is for, a look,
  * two pages — and the site's own name, which the create door adds (AGL-3596).
  */
-const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audience: string; starter: string }> = [
+const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audience: string; starter: string; siteKind?: string }> = [
+  // The beta.237 store start Zach judged "not a store front" (AGL-3676): its
+  // plan is settled into a storefront, which the table reports below.
+  { businessName: 'Willow Wick Candles', businessType: 'a small-batch candle shop selling hand-poured soy candles online', audience: 'people who buy candles for themselves and as gifts', starter: 'shop-physical', siteKind: 'store' },
   { businessName: 'Hillside Dog Grooming', businessType: 'a neighborhood dog groomer in Austin that takes grooming appointments', audience: 'local dog owners who want a regular groom', starter: 'business' },
   { businessName: 'Maple Street Dental', businessType: 'a family dental practice', audience: 'parents booking check-ups for their kids', starter: 'business' },
   { businessName: 'Ana Ruiz Photography', businessType: 'a wedding photographer', audience: 'engaged couples comparing photographers', starter: 'portfolio' },
@@ -200,6 +203,14 @@ describeLive("a guided start's plan from the real model", () => {
           home:
             (outcome['plan'] as AiJobPlan | undefined)?.screens.find((screen) => aiSitePlanIsHome(screen))?.sections
               .length ?? null,
+          // Reported, not held: a store's pages as its plan was kept, settled into a storefront (AGL-3676).
+          ...(brief.siteKind === 'store'
+            ? {
+                storefront: ((outcome['plan'] as AiJobPlan | undefined)?.screens ?? []).map(
+                  (screen) => `${screen.slug}: ${screen.sections.map((section) => section.name).join(' | ')}`,
+                ),
+              }
+            : {}),
           // Every answer the step read: its home's sections and what the step's checks found.
           answers: [...mockAnswers.entries()].find(([turn]) => turn.includes(brief.businessType))?.[1] ?? [],
           generation: [...mockGenerations.entries()].find(([turn]) => turn.includes(brief.businessType))?.[1] ?? null,

@@ -580,6 +580,21 @@ export interface AiJob {
    * what was left and the range they were shown; absent on every job that fit.
    */
   creditsConfirmed?: AiJobCreditsConfirmation | null
+  /**
+   * A person asked to stop the job (AGL-3616): written only by the cancel
+   * door, in the transaction that decides it. A job no step holds ends
+   * `canceled` in that same write; a job whose step holds a live lease keeps
+   * running until the step finishes or aborts, and the machine ends it
+   * `canceled` at its next write. Absent on a job nobody canceled.
+   */
+  cancelRequested?: AiJobCancelRequest | null
+}
+
+/** Who asked to cancel a job, and when (AGL-3616). */
+export interface AiJobCancelRequest {
+  at: ITimestamp
+  /** The member or staff account that asked; `null` when nobody was named. */
+  by: string | null
 }
 
 /**
@@ -691,4 +706,10 @@ export interface AiJobSummary {
   publishAsked?: boolean
   /** A `build` job's planning spend and how it settled (AGL-3616). */
   orchestration?: AiJobOrchestration
+  /**
+   * A cancel was asked and the job has not ended yet (AGL-3616): the step in
+   * flight is finishing or aborting, and nothing after it runs. Absent once
+   * the job is terminal, and on every job nobody canceled.
+   */
+  cancelRequested?: boolean
 }

@@ -571,6 +571,19 @@ describe('the questions become a site scaffold', () => {
     expect(kindCard(trades).getAttribute('aria-checked')).toBe('false')
   })
 
+  it("selects Music & bands for a band's site as it is typed, and Business only when nothing is named", async () => {
+    await openCard()
+    const music = AI_SITE_KINDS.findIndex((kind) => kind.id === 'music')
+    typeAnswer(
+      /What kind of site are you creating\?/,
+      'A website for an indie folk band from Asheville — tour dates, new album, merch and booking',
+    )
+    expect(kindCard(music).getAttribute('aria-checked')).toBe('true')
+    expect(kindCard(0).getAttribute('aria-checked')).toBe('false')
+    typeAnswer(/What kind of site are you creating\?/, 'a folk trio with a new record out')
+    expect(kindCard(music).getAttribute('aria-checked')).toBe('true')
+  })
+
   it('starts one site job for this site, carrying every answer', async () => {
     await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
@@ -725,7 +738,9 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
-    fireEvent.click(screen.getByRole('button', { name: `Build the home page first (about ${aiFreeSiteCreditRange(1).likely} credits)` }))
+    const first = screen.getByRole('button', { name: 'Build the home page first' })
+    expect(first.textContent).toContain(`About ${aiFreeSiteCreditRange(1).likely} credits`)
+    fireEvent.click(first)
     await waitFor(() => expect(postCall()).toBeTruthy())
     const body = JSON.parse(postCall()[1].body)
     expect(body.inputs).toEqual(expect.objectContaining({ pages: 1 }))

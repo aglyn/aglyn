@@ -4097,6 +4097,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         showCoupon: {
           type: 'boolean',
         },
+        showDetails: {
+          type: 'boolean',
+        },
+        showShipping: {
+          type: 'boolean',
+        },
       },
       required: [],
       additionalProperties: false,
@@ -4110,6 +4116,8 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       buyLabel: 'text-field',
       hideDescription: 'checkbox',
       showCoupon: 'checkbox',
+      showDetails: 'checkbox',
+      showShipping: 'checkbox',
     },
     textLimits: {
       slug: 200,
@@ -4198,6 +4206,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['outlined', 'photo'],
         },
+        quickAdd: {
+          type: 'boolean',
+        },
       },
       required: [],
       additionalProperties: false,
@@ -4234,6 +4245,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       showPriceFilter: 'checkbox',
       pageSize: 'text-field',
       cardStyle: 'select',
+      quickAdd: 'checkbox',
     },
     textLimits: {
       collectionSlug: 200,
@@ -4264,18 +4276,35 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        scope: {
+          type: 'string',
+          enum: ['product', 'store'],
+        },
+        maxItems: {
+          type: 'string',
+          maxLength: 200,
+        },
+        headingLevel: {
+          type: 'string',
+          enum: ['2', '3', '4'],
+        },
       },
       required: [],
       additionalProperties: false,
     },
     propRoles: {
       heading: 'text',
+      maxItems: 'text',
     },
     propFields: {
       heading: 'text-field',
+      scope: 'select',
+      maxItems: 'text-field',
+      headingLevel: 'select',
     },
     textLimits: {
       heading: 200,
+      maxItems: 200,
     },
     presets: ['Product reviews'],
   },
@@ -4298,6 +4327,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        layout: {
+          type: 'string',
+          enum: ['strip', 'grid'],
+        },
       },
       required: [],
       additionalProperties: false,
@@ -4309,6 +4342,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propFields: {
       heading: 'text-field',
       maxItems: 'text-field',
+      layout: 'select',
     },
     textLimits: {
       heading: 200,
@@ -4980,7 +5014,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
-    codeOnly: ['icon', 'product-grid'],
+    codeOnly: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup'],
   },
   email: {
     root: 'div',

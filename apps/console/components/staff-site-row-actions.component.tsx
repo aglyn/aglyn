@@ -17,7 +17,6 @@
 
 'use client'
 
-import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { buildRoute, Route } from '../constants/route-links'
@@ -47,10 +46,19 @@ export interface StaffSiteRow {
      * The plan staff asked the workspace to buy, and its subscription
      * status, for the site page's "Ask to upgrade" (AGL-3466).
      */
-    upgradeProposal?: { plan: string; proposedBy: string; proposedAt: number; note?: string } | null
+    upgradeProposal?: {
+      plan: string
+      proposedBy: string
+      proposedAt: number
+      note?: string
+    } | null
     billingStatus?: string | null
   } | null
-  owner: { uid: string; email: string | null; displayName: string | null } | null
+  owner: {
+    uid: string
+    email: string | null
+    displayName: string | null
+  } | null
   publishedPages: number
   homeScreenId: string | null
   suspended: boolean
@@ -74,8 +82,10 @@ export const staffSiteLiveUrl = (
   })
 
 /**
- * The menu under the row's ⋮, after "Visit live site" (the quick action,
- * which `ListRowActions` restates first). Each label names where it goes —
+ * The menu under the row's ⋮. "Visit live site" is its first entry and lives
+ * ONLY here: it used to be a ↗ icon beside the menu as well, and
+ * `ListRowActions` restated that icon as the menu's first item, so the one
+ * action showed twice (Zach, 2026-10-10). Each label names where it goes —
  * a staff page, or a new tab — rather than "Open …" four times over (Zach,
  * 2026-10-09: "confusing menu items"). An item a row cannot use says why on
  * a second line, not only in a tooltip nobody hovers: the preview of a site
@@ -83,14 +93,32 @@ export const staffSiteLiveUrl = (
  * with no owner.
  */
 export function staffSiteMenuItems(
-  site: Pick<StaffSiteRow, '$id' | 'orgId' | 'homeScreenId'> & { ownerUid?: string | null },
+  site: Pick<StaffSiteRow, '$id' | 'orgId' | 'homeScreenId'> &
+    Partial<
+      Pick<StaffSiteRow, 'subdomain' | 'cname' | 'cnameAttachmentPending'>
+    > & {
+      ownerUid?: string | null
+    },
 ): RowActionsMenuItem[] {
+  const liveUrl = staffSiteLiveUrl({
+    subdomain: site.subdomain ?? null,
+    cname: site.cname ?? null,
+    cnameAttachmentPending: site.cnameAttachmentPending ?? false,
+  })
   const unavailable = (reason: string) => ({
     disabled: true,
     disabledReason: reason,
     description: reason,
   })
   return [
+    liveUrl
+      ? { key: 'live', label: 'Visit live site', href: liveUrl, external: true }
+      : {
+          key: 'live',
+          label: 'Visit live site',
+          external: true,
+          ...unavailable('This site has no address yet'),
+        },
     {
       key: 'open',
       label: 'Site details',
@@ -115,41 +143,47 @@ export function staffSiteMenuItems(
           label: 'Organization details',
           href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: site.orgId }),
         }
-      : { key: 'org', label: 'Organization details', ...unavailable('Belongs to no organization') },
+      : {
+          key: 'org',
+          label: 'Organization details',
+          ...unavailable('Belongs to no organization'),
+        },
     site.ownerUid
       ? {
           key: 'owner',
           label: 'Owner details',
           href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.ownerUid }),
         }
-      : { key: 'owner', label: 'Owner details', ...unavailable('The organization records no owner') },
+      : {
+          key: 'owner',
+          label: 'Owner details',
+          ...unavailable('The organization records no owner'),
+        },
   ]
 }
 
 /**
- * The row's ways out: the live site and the preview in a new tab, and the
- * staff pages for the site, its organization and its owner. Shared with the
+ * The row's ways out, all in the ⋮ menu (no quick icon): the live site and
+ * the preview in a new tab, and the staff pages for the site, its organization and its owner. Shared with the
  * organization page's Sites card so both lists offer the same menu.
  */
 export function StaffSiteRowActions(props: {
   site: Pick<
     StaffSiteRow,
-    '$id' | 'displayName' | 'subdomain' | 'cname' | 'cnameAttachmentPending' | 'orgId' | 'homeScreenId'
+    | '$id'
+    | 'displayName'
+    | 'subdomain'
+    | 'cname'
+    | 'cnameAttachmentPending'
+    | 'orgId'
+    | 'homeScreenId'
   > & { ownerUid?: string | null }
 }) {
   const { site } = props
-  const liveUrl = staffSiteLiveUrl(site)
   return (
     <ListRowActions
       label={site.displayName ?? site.subdomain ?? site.$id}
-      quick={{
-        icon: mdiOpenInNew.path,
-        label: 'Visit live site',
-        href: liveUrl,
-        unavailableReason: liveUrl ? undefined : 'This site has no address yet',
-      }}
       items={staffSiteMenuItems(site)}
     />
   )
 }
-

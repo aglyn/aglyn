@@ -1461,6 +1461,52 @@ nothing itself.
   told to plan /shop with a "Product grid" section and is re-asked once for a
   missing Shop page (`plan-store-shop-page`); a store whose products were
   skipped or failed carries no cart until it sells.
+  A store is a STOREFRONT, the way a designer shop theme is (second round,
+  2026-10-09: the beta.237 Willow Wick start was a lifestyle hero, one row of
+  products and four text-only bands, its /shop grid below the fold;
+  `layout-language/ai-layout-storefront.ts`). Not a band library — the model
+  still names, orders and designs every section — but:
+  - **The plan.** The store kind tells the plan a storefront's parts and
+    order (hero that sells, "Bestsellers", "Shop by collection", story, why
+    buy here with icons, "Customer reviews", "Newsletter sign-up"), and a
+    store plan is SETTLED before it is kept and priced
+    (`aiSiteStorefrontPlan`): on a paid start the home gains any part it left
+    out — bestsellers, collections, sign-up, then reviews — while it has room
+    (eight sections, nothing removed); on any start the Shop page's grid
+    section moves to second, straight under its title.
+  - **The pages.** A storefront home's hero gets "Shop all" as its first
+    button where it had no button to the shop; the bestsellers list through
+    the Product grid with quick add (`quickAdd`); collection groups draw as
+    picture tiles linking the Shop page; every other group draws as icon
+    columns (`icons`: the item's icon, else one its words suggest — shipping
+    a truck, returns the arrows — never the same twice), on paid plans too
+    (the doctrine's rule 1 spares the compiler's icon cards as it spares its
+    picture cards); a store's steps draw as pictures; a storefront keeps one
+    dark band. A section named for reviews places the commerce Product
+    reviews in its store-wide scope (`scope: 'store'`): the store's APPROVED
+    reviews with their stars, carrying the heading itself and showing
+    NOTHING on a published page until a shopper has written one — no review
+    is ever written for a store (the FTC fake-review rule). A section named
+    for the newsletter places the commerce Newsletter signup beside its
+    words. Both only on a store that sells. The Shop page opens on a title
+    bar (no photo, no button) with the browsing grid under it.
+  - **The header.** A store's header carries no button repeating its
+    navigation, and a selling store's none at all — the cart is there — with
+    an announcement bar above it: the design's own short line (the frame is
+    told to give a true one from the brief, never an invented offer) and
+    "Shop now", else "Shop the full collection", linking the Shop page.
+  - **The products.** Each product's photo is searched for by its name, then
+    by what its catalog said the photo shows, with the shop's category
+    ("candle gift box"), then the category alone, and every hit must NAME the
+    category (`aiStockProductSearches`): no laptop under a wick trimmer, no
+    tea set under a gift set. The business type is read up to what it does
+    ("a candle shop selling … online" is a candle shop, never "online").
+    Every product gets a photo (a starter where nothing named the category),
+    and an option of one value is no choice and is left out
+    (`aiSiteProductChoices`). The store's built-in product page shows a
+    select only for a real choice, a Details and a Shipping & returns
+    accordion from what the product and the store's return settings hold,
+    the store's reviews, and related products as photo cards.
   Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent

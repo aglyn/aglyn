@@ -44,6 +44,8 @@ import {
   STOREFRONT_CATALOG_OPTIONS,
 } from '../constants/storefront-catalog-query'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { addToCart } from '../utils/add-to-cart'
+import { ProductImagePlaceholder } from './product-image-placeholder'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-grid'
@@ -100,6 +102,13 @@ export interface ProductGridProps {
    * leads with what it sells.
    */
   cardStyle?: 'outlined' | 'photo'
+  /**
+   * A compact button under each card: "Add to cart" for a product that sells
+   * as one priced variant in stock, "Choose options" (to its page) for one
+   * with several variants, and nothing for a product with no price yet or
+   * sold out. Off by default.
+   */
+  quickAdd?: boolean
 }
 
 interface CatalogItem {
@@ -114,6 +123,33 @@ interface CatalogItem {
   tags?: string[]
   /** Listed before it has a price (AGL-3676): no price to print yet. */
   priceComingSoon?: boolean
+  /** How many variants it sells as (absent from an older payload). */
+  variantCount?: number
+  /** The one variant a quick add puts in the cart. */
+  defaultVariantId?: string
+}
+
+/** What a card's quick add offers for one product. */
+export function quickAddAction(
+  item: Pick<CatalogItem, 'priceComingSoon' | 'soldOut' | 'variantCount' | 'defaultVariantId'>,
+): 'add' | 'options' | null {
+  if (item.priceComingSoon || item.soldOut) return null
+  if (item.defaultVariantId) return 'add'
+  if ((item.variantCount ?? 0) > 1) return 'options'
+  return null
+}
+
+/**
+ * The chip and tag a browsing grid opens on, from the page's address:
+ * `?category=<slug>` and `?tag=<tag>`. Read after hydration only — the
+ * server renders the unfiltered first page and has no address to read.
+ */
+export function browseParamsFromSearch(search: string): { categorySlug: string; tag: string } {
+  const params = new URLSearchParams(search)
+  return {
+    categorySlug: (params.get('category') ?? '').trim(),
+    tag: (params.get('tag') ?? '').trim(),
+  }
 }
 
 /** What a card says where a product listed before it has a price would show one (AGL-3676). */
@@ -238,13 +274,18 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       showPriceFilter,
       pageSize,
       cardStyle,
+      quickAdd,
       ...rest
     } = props
     const photoCards = cardStyle === 'photo'
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
+    // Quick add (AGL-3676 follow-up): which card is adding, which just did.
+    const [quickAdding, setQuickAdding] = useState('')
+    const [quickAdded, setQuickAdded] = useState('')
     // Server-rendered first page (AGL-659). The site-page enricher ran this
     // grid's own query on the server and keyed the result by node id — two
     // grids on a page have different queries, so an unkeyed seed would put
@@ -299,6 +340,25 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const pageLimit =
       pageSize && Number(pageSize) > 0 ? Math.floor(Number(pageSize)) : 0
     const pinnedCategoryId = source === 'category' ? categoryId ?? '' : ''
+
+    // A browsing grid opens on the address's `?category=` / `?tag=`: a shop
+    // page linked as /shop?category=candles shows that chip picked. Read in
+    // an effect, so the server and the first client render agree.
+    const [urlCategorySlug, setUrlCategorySlug] = useState('')
+    useEffect(() => {
+      if (!hostId || typeof window === 'undefined') return
+      const asked = browseParamsFromSearch(window.location.search)
+      if (showCategories && asked.categorySlug) setUrlCategorySlug(asked.categorySlug)
+      if (showFilters && asked.tag) setActiveTag(asked.tag)
+      // Once, on arrival: later chip picks are the visitor's.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hostId])
+    useEffect(() => {
+      if (!urlCategorySlug || !categories.length) return
+      const match = categories.find((category) => category.slug === urlCategorySlug)
+      if (match) setActiveCategoryId(match.id)
+      setUrlCategorySlug('')
+    }, [urlCategorySlug, categories])
 
     // Debounce keystrokes so large catalogs aren't fetched per letter.
     useEffect(() => {
@@ -779,11 +839,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                 />
               ) : (
-                <Box
+                // Never a blank tile (AGL-3676 follow-up).
+                <ProductImagePlaceholder
+                  name={item.name}
                   sx={
                     photoCards
-                      ? { aspectRatio: '4 / 5', bgcolor: 'action.hover', borderRadius: 2 }
-                      : { height: 160, bgcolor: 'action.hover' }
+                      ? { aspectRatio: '4 / 5', borderRadius: 2 }
+                      : { height: 160 }
                   }
                 />
               )}
@@ -810,6 +872,34 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                 </Box>
               </CardContent>
             </CardActionArea>
+            {quickAdd ? (
+              <QuickAddButton
+                item={item}
+                inert={!hostId}
+                busy={quickAdding === item.id}
+                added={quickAdded === item.id}
+                photoCards={photoCards}
+                onAdd={async () => {
+                  if (!hostId || !item.defaultVariantId || quickAdding) return
+                  setQuickAdding(item.id)
+                  const ok = await addToCart({
+                    hostId,
+                    siteFetch,
+                    productId: item.id,
+                    variantId: item.defaultVariantId,
+                    quantity: 1,
+                    item: {
+                      item_id: item.id,
+                      item_name: item.name,
+                      price: item.priceUsd,
+                      quantity: 1,
+                    },
+                  })
+                  setQuickAdding('')
+                  if (ok) setQuickAdded(item.id)
+                }}
+              />
+            ) : null}
           </Card>
           )
         })}
@@ -910,6 +1000,63 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     )
   },
 )
+/**
+ * A card's quick add: outside the card's link, so a click never follows it.
+ * Sample cards on the canvas show the button inert.
+ */
+function QuickAddButton({
+  item,
+  inert,
+  busy,
+  added,
+  photoCards,
+  onAdd,
+}: {
+  item: CatalogItem
+  inert: boolean
+  busy: boolean
+  added: boolean
+  photoCards: boolean
+  onAdd: () => void
+}) {
+  const action = inert ? 'add' : quickAddAction(item)
+  if (!action) return null
+  const sx = photoCards ? { mt: 0.5, mx: 0.5, mb: 1 } : { mx: 2, mb: 2 }
+  if (action === 'options') {
+    return (
+      <Box sx={sx}>
+        <Button
+          size="small"
+          variant="outlined"
+          fullWidth
+          href={`/products/${item.slug}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {'Choose options'}
+        </Button>
+      </Box>
+    )
+  }
+  return (
+    <Box sx={sx}>
+      <Button
+        size="small"
+        variant="outlined"
+        fullWidth
+        disabled={inert || busy}
+        aria-label={`Add ${item.name} to cart`}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onAdd()
+        }}
+      >
+        {added ? 'Added ✓' : busy ? 'Adding…' : 'Add to cart'}
+      </Button>
+    </Box>
+  )
+}
+
 ProductGrid.displayName = 'AglynProductGrid'
 
 export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
@@ -1079,6 +1226,15 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
         { label: 'Outlined', value: 'outlined' },
         { label: 'Photo', value: 'photo' },
       ],
+    },
+    {
+      // Off by default, so no existing grid changes shape on deploy.
+      name: 'quickAdd',
+      label: 'Quick add to cart',
+      description:
+        'An Add to cart button on each card for a product with one variant; ' +
+        '"Choose options" for one with several.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
     },
   ],
 }

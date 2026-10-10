@@ -17,7 +17,7 @@
 
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { checkEntitlement } from '@aglyn/aglyn/server'
-import type { AglynOrganization } from '@aglyn/aglyn/foundation/definitions/organization.types'
+import type { AglynOrganization, AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 // By their own entry points rather than the barrel, for the reason the chat
 // route gives for the runtime: the route specs replace the barrel with a
 // closed-world factory, and a leaf that is mocked at its own seam is one
@@ -58,7 +58,18 @@ export interface AiJobsGateContext {
   staff: boolean
   orgId: string
   org: Partial<AglynOrganization>
+  /** The caller's membership; `null` only for staff let in by `staffWithoutMembership`. */
+  member: AglynOrgMember | null
   firestore: FirebaseFirestore.Firestore
+}
+
+export interface AiJobsGateOptions {
+  /**
+   * A verified staff claim passes the membership rung for an org it is not a
+   * member of (AGL-3616): staff stop a customer's job from the job's own
+   * page. Every rung after it is climbed as for anyone else.
+   */
+  staffWithoutMembership?: boolean
 }
 
 function bearerToken(request: Request): string | undefined {
@@ -71,6 +82,7 @@ function bearerToken(request: Request): string | undefined {
 export async function aiJobsGate(
   request: Request,
   rawOrgId: string,
+  options: AiJobsGateOptions = {},
 ): Promise<Response | AiJobsGateContext> {
   const idToken = bearerToken(request)
   if (!idToken) {
@@ -101,13 +113,25 @@ export async function aiJobsGate(
     )
   }
   const resolved = await getOrgForUser(decoded.uid, orgId)
-  if (!resolved || resolved.orgId !== orgId) {
-    return Response.json(
-      { error: 'You are not a member of that organization' },
-      { status: 403 },
-    )
+  let org: Partial<AglynOrganization>
+  let member: AglynOrgMember | null
+  if (resolved && resolved.orgId === orgId) {
+    org = resolved.org ?? {}
+    member = resolved.member ?? null
+  } else {
+    const staffOrg =
+      staff && options.staffWithoutMembership
+        ? await app.firestore().collection('orgs').doc(orgId).get()
+        : null
+    if (!staffOrg?.exists) {
+      return Response.json(
+        { error: 'You are not a member of that organization' },
+        { status: 403 },
+      )
+    }
+    org = (staffOrg.data() ?? {}) as Partial<AglynOrganization>
+    member = null
   }
-  const org = resolved.org ?? {}
 
   if (!staff && !(await isServerReleaseFlagOnForOrg('release_ai_generative', orgId))) {
     return Response.json({ error: 'Not found' }, { status: 404 })
@@ -135,6 +159,7 @@ export async function aiJobsGate(
     staff,
     orgId,
     org,
+    member,
     firestore: app.firestore(),
   }
 }

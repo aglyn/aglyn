@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { AI_JOB_CANCELED_LEDE, aiJobCanceledCreditsCopy } from './ai-job-cancel-copy'
 import { aiJobConfirmingOwnPlan, aiJobKindNoun } from './ai-job-activity'
 import { aiJobRefundCopy } from './ai-job-failure-copy'
 import { aiBuildItemRows, aiBuildOpNoun, aiBuildOutcomeLine, aiSitePartialCopy } from './ai-build-progress'
@@ -383,6 +384,8 @@ export function aiSiteBuildCreditsLine(
   // from the job's recorded give-back.
   const refund = phase === 'working' || phase === 'done' ? null : aiJobRefundCopy(job)
   if (refund && refunded > 0) return refund
+  // A person's cancel keeps what ran charged, and says how much (AGL-3616).
+  if (phase === 'canceled') return aiJobCanceledCreditsCopy(job)
   if (phase === 'done') return `${subject} used ${net} credits.`
   if (phase === 'working') return `Credits used so far: ${net}`
   if (refund) return `${subject} used ${net} credits. ${refund}`
@@ -468,7 +471,7 @@ export function aiJobPageCopy(
     }
   }
   if (phase === 'canceled') {
-    return { heading: generic ? 'Your AI job was canceled' : `Your ${noun} was not built`, lede: 'The job was canceled.' }
+    return { heading: generic ? 'Your AI job was canceled' : `You canceled your ${noun}`, lede: AI_JOB_CANCELED_LEDE }
   }
   return {
     heading: generic ? 'Your AI job stopped' : `Your ${noun} ${noun.endsWith('s') ? 'were' : 'was'} not built`,
@@ -543,7 +546,7 @@ function aiBuildPageCopy(
         .join(' '),
     }
   }
-  if (phase === 'canceled') return { heading: 'Your build was canceled', lede: 'The job was canceled.' }
+  if (phase === 'canceled') return { heading: 'Your build was canceled', lede: AI_JOB_CANCELED_LEDE }
   return {
     heading: 'Nothing could be built',
     lede: [job.error ?? 'Something went wrong building what you asked for.', outcome].filter(Boolean).join(' '),

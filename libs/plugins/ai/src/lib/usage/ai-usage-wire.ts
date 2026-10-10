@@ -171,6 +171,12 @@ export interface AiUsageMeterWire {
     limit: number | null
     mode: AiAllotmentMode | null
     scope: AiCreditAllotmentScope | null
+    /**
+     * `mine` is the person's Free allowance (AGL-3722): `used` of the 300
+     * free credits a month every Free workspace they hold draws on, net of
+     * give-backs. Absent on a paid workspace.
+     */
+    free?: boolean
   }
   /** Credits the exchange this envelope answers cost; `null` when no model ran. */
   last: number | null

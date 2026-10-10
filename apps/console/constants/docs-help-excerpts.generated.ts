@@ -77,6 +77,7 @@ export const DOCS_HELP_EXCERPTS = {
   companies: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, type, industry, addresses, parent company and the people who work there.',
   components: 'Promote a subtree into a reusable component, give it properties, and insert instances across pages.',
   connectADomain: 'Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.',
+  connectConversionsApi: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   consoleSearch: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
   consoleTour: 'Where things live in the Aglyn console app bar and navigation.',
@@ -85,6 +86,7 @@ export const DOCS_HELP_EXCERPTS = {
   cookieConsent: 'Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Google Analytics and Tag Manager tags never load for a visitor whose recorded state does not grant them.',
   copyAssist: 'An AI copywriter for the words already on your site: rewrite a headline, a paragraph, a button label or a blog entry in your own voice, as an unsaved change one undo takes back.',
   copyPaste: 'Copy any element — with its children — and paste it elsewhere, including into a different page, layout or component.',
+  couriers: 'Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier\'s tracking link and arrival time on the order.',
   createARedirect: 'Add a redirect rule and read its hit metrics.',
   createImages: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits.',
   createWithAi: 'The Create with AI button sits beside the create button on every list Aglyn AI can fill: pages, templates, layouts, forms, components, emails, campaigns, automations, products, overlays and media.',
@@ -117,6 +119,7 @@ export const DOCS_HELP_EXCERPTS = {
   firstPartySurfaces: 'How to make a new site of ours — a forum, a status page, a second domain — count its visitors\' first touch: register its host, include one script tag. Nothing else, and nothing to configure on a self-hosted install.',
   firstPlugin: 'The full loop — scaffold, develop against a live workspace, verify, publish, install, uninstall.',
   forms: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
+  fulfillmentNetworks: 'Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.',
   funnels: 'See how visitors move through the steps you care about, where they drop off and how long each step takes; build or explain a funnel with Aglyn AI, and follow up with people who dropped off.',
   generateAComponentWithAglynAi: 'Describe a block your site repeats, or point at one already on a page, and Aglyn AI makes it a reusable component with typed properties bound to the elements that show them.',
   generateAForm: 'An AI form generator inside Aglyn: describe the form you need and a build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing already agreed.',
@@ -297,7 +300,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   aiCredits: {
     '#before-a-job-starts': 'Photos.md) in an AI site | Nothing | A model you choose with the Model switch can cost more or less than Auto; the switch shows each model\'s cost.',
     '#past-the-band': 'N hour. See Paused, or out of credits.',
-    '#see-your-credits': 'Re not given back when you cancel a job yourself (you pay for what ran until then), or when the AI declines what the brief asked for.',
+    '#see-your-credits': 'At never ran are released; see Cancel a job), or when the AI declines what the brief asked for.',
   },
   aiJobsAndActivity: {
     '#the-ai-jobs-page': 'Ho started, applied or canceled what." ---',
@@ -472,6 +475,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   cookieConsent: {
     '#how-it-works': 'Site uses Google Analytics or Google Tag Manager, Aglyn manages visitor consent for you.',
+  },
+  couriers: {
+    '#connect-doordash-drive': 'Hat delivery. Aglyn doesn\'t charge, collect or mark up the courier\'s fee.',
   },
   crm: {
     '#at-the-organization-level': 'Ddresses](./settings.md#your-sending-addresses) and open the verification link it is sent.',
@@ -942,7 +948,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#enterprise-custom-billing': 'Before. A warning that the rollups could not be read means a failed read, not zero usage.',
     '#existing-coupons': 'Unlimited cannot be costed, so a deal on one cannot be provisioned until an entitlement override bounds it.',
     '#filter-the-directory': 'Ld leave it out of the list. AI spend (month) sorts the page on screen by this month\'s figures.',
-    '#filter-the-site-list': 'Pages for the organization and its owner. Visit live site is also the icon beside the menu.',
+    '#filter-the-site-list': 'Ization details and Owner details go to the staff pages for the organization and its owner.',
     '#first-party-hosts': 'T" is a real answer. Today that is done by raising the platform number; there is no per-account override.',
     '#free-workspace-limit': 'In a new tab.',
     '#import-delivery-history': 'Ged keeps its older mail under the old one. An empty table is not proof that nothing was sent.',

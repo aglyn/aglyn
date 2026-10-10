@@ -18,32 +18,43 @@
 import { advertisingConsentField } from '@aglyn/aglyn/app-utils/advertising-consent'
 import * as Aglyn from '@aglyn/aglyn'
 import {
-  buildAddToCartParams,
   buildBeginCheckoutParams,
   trackEvent,
   trackEventBeforeNavigation,
   type AnalyticsItem,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import { recordSiteJourneyStep } from '@aglyn/aglyn/app-utils/site-journey'
 import { isPaymentsNotConfigured } from '@aglyn/aglyn/app-utils/payments-configured'
 import { storefrontPaymentsNotConfiguredText } from '../constants/storefront-payments'
 import * as CommerceModel from '../model'
-import { mdiTagOutline } from '@aglyn/shared-data-mdi'
+import { mdiChevronDown, mdiTagOutline } from '@aglyn/shared-data-mdi'
+import Accordion from '@mui/material/Accordion'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import AccordionSummary from '@mui/material/AccordionSummary'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
+import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
-import { Suspense, forwardRef, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Suspense,
+  forwardRef,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
-import { CART_UPDATED_EVENT } from './cart'
+import { addToCart } from '../utils/add-to-cart'
 import { CartFulfillmentChoice, useCartFulfillment } from './cart-fulfillment'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
@@ -75,6 +86,19 @@ export interface ProductDetailProps {
   hideDescription?: boolean
   /** Offer a discount/coupon code field before the buy button. */
   showCoupon?: boolean
+  /**
+   * A "Details" panel under the description: the facts the product record
+   * holds — its kind (digital, service), the choices it comes in, the
+   * selected variant's SKU, its tags. Never a fact the record does not hold.
+   * Off by default, so a page that already places this block keeps its shape.
+   */
+  showDetails?: boolean
+  /**
+   * A "Shipping & returns" panel: how it is delivered (shipping priced at
+   * checkout, or delivered digitally), and the store's own return window
+   * when the store takes returns of this kind of product. Off by default.
+   */
+  showShipping?: boolean
 }
 
 interface DetailVariant {
@@ -85,6 +109,7 @@ interface DetailVariant {
   compareAtPriceUsd?: number
   soldOut: boolean
   imageUrl?: string
+  sku?: string
 }
 
 /** What the page says where a variant with no price yet would show one (AGL-3676). */
@@ -95,6 +120,8 @@ interface Detail {
   name: string
   slug: string
   description?: string
+  type?: CommerceModel.ProductType
+  tags?: string[]
   mediaUrls: string[]
   options: CommerceModel.ProductOption[]
   variants: DetailVariant[]
@@ -143,6 +170,111 @@ function buyItem(
   }
 }
 
+/** How one option is offered on the page. */
+export interface OptionPresentation {
+  name: string
+  /** The values a shopper can actually get, in the option's own order. */
+  values: string[]
+  /**
+   * `select` only when there is a real choice — two or more values that
+   * variants carry; `text` for the one value every variant has ("Scent:
+   * Lavender"); `hidden` for an option with no value at all.
+   */
+  mode: 'select' | 'text' | 'hidden'
+}
+
+/**
+ * Which options are a CHOICE (AGL-3676 follow-up). A select with one entry —
+ * or with entries no variant carries — is not a choice, and on a live store
+ * it read as a broken control: an AI-built candle listed a "Scent" select
+ * that offered nothing to pick. Decided from the variants, which are what is
+ * sold: an option's values count only where a variant carries them, and only
+ * when no variant names the option at all do its listed values stand in —
+ * and then as a choice only when there are several variants to choose among.
+ */
+export function optionPresentation(
+  options: readonly CommerceModel.ProductOption[],
+  variants: ReadonlyArray<Pick<DetailVariant, 'options'>>,
+): OptionPresentation[] {
+  return options.map((option) => {
+    const listed = [
+      ...new Set(
+        (option.values ?? []).map((value) => String(value).trim()).filter(Boolean),
+      ),
+    ]
+    const carried = new Set(
+      variants
+        .map((variant) => variant.options?.[option.name])
+        .filter(
+          (value): value is string => typeof value === 'string' && value.trim() !== '',
+        ),
+    )
+    const values = carried.size
+      ? [
+          ...listed.filter((value) => carried.has(value)),
+          ...[...carried].filter((value) => !listed.includes(value)),
+        ]
+      : variants.length > 1 || listed.length === 1
+        ? listed
+        : []
+    return {
+      name: option.name,
+      values,
+      mode: values.length >= 2 ? 'select' : values.length === 1 ? 'text' : 'hidden',
+    }
+  })
+}
+
+/** The selections a page opens on: the first variant on sale, else the first. */
+function initialSelections(
+  product: Pick<Detail, 'variants'> | undefined,
+): Record<string, string> {
+  const first =
+    product?.variants.find((variant) => !variant.soldOut) ?? product?.variants[0]
+  return { ...(first?.options ?? {}) }
+}
+
+/** What the Details panel lists: only facts the product record holds. */
+export function productDetailFacts(
+  product: Pick<Detail, 'type' | 'tags'>,
+  variant: Pick<DetailVariant, 'sku'> | undefined,
+  presented: readonly OptionPresentation[],
+): Array<{ label: string; value: string }> {
+  const facts: Array<{ label: string; value: string }> = []
+  if (product.type === 'digital') facts.push({ label: 'Format', value: 'Digital product' })
+  if (product.type === 'service') facts.push({ label: 'Format', value: 'Service' })
+  for (const option of presented) {
+    if (option.mode !== 'hidden') {
+      facts.push({ label: option.name, value: option.values.join(', ') })
+    }
+  }
+  if (variant?.sku) facts.push({ label: 'SKU', value: variant.sku })
+  if (product.tags?.length) facts.push({ label: 'Tags', value: product.tags.join(', ') })
+  return facts
+}
+
+/**
+ * What the Shipping & returns panel says, from the product's kind and the
+ * store's own return settings — never a policy the store has not set.
+ */
+export function productShippingLines(
+  product: Pick<Detail, 'type'>,
+  returns: { windowDays: number } | undefined,
+): string[] {
+  const lines: string[] = []
+  if (product.type === 'digital') lines.push('Delivered digitally after purchase — nothing ships.')
+  else if (product.type === 'service') lines.push('A service — nothing ships.')
+  else lines.push('Shipping is calculated at checkout.')
+  if (returns && returns.windowDays > 0) {
+    lines.push(
+      `Returns accepted within ${returns.windowDays} ` +
+        `${returns.windowDays === 1 ? 'day' : 'days'} of shipping — ` +
+        'request one from your order status page.',
+    )
+  }
+  return lines
+}
+
 function slugFromLocation(): string {
   if (typeof window === 'undefined') return ''
   const match = window.location.pathname.match(/\/products\/([^/?#]+)/)
@@ -158,8 +290,15 @@ function slugFromLocation(): string {
  */
 const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   (props, ref) => {
-    const { slug: slugProp, buyLabel, hideDescription, showCoupon, ...rest } =
-      props
+    const {
+      slug: slugProp,
+      buyLabel,
+      hideDescription,
+      showCoupon,
+      showDetails,
+      showShipping,
+      ...rest
+    } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -176,17 +315,28 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     // emitted a <Skeleton> and the crawler got a product page with no
     // product in it. Absent in the besigner/preview, where the effect below
     // still fetches — so this is an optimisation, not a new requirement.
-    const seededProduct = (
-      site.pageData as { commerce?: { product?: Detail } } | undefined
-    )?.commerce?.product
+    const seededCommerce = (
+      site.pageData as
+        | { commerce?: { product?: Detail; returns?: { windowDays: number } } }
+        | undefined
+    )?.commerce
+    const seededProduct = seededCommerce?.product
+    // The store's return window, seeded with the built-in product page only
+    // when the store takes returns of this product's kind.
+    const seededReturns = seededCommerce?.returns
     const [detail, setDetail] = useState<Detail | null | 'missing'>(
       seededProduct ?? null,
     )
-    const [selections, setSelections] = useState<Record<string, string>>({})
+    // Opened on the first variant on sale. A seeded page skips the fetch that
+    // used to set this, so it opened with nothing selected — an empty select.
+    const [selections, setSelections] = useState<Record<string, string>>(() =>
+      initialSelections(seededProduct),
+    )
     const [quantity, setQuantity] = useState(1)
     /** A discount or coupon code typed on the product page. */
     const [coupon, setCoupon] = useState('')
-    const [activeImage, setActiveImage] = useState(0)
+    // A thumbnail the shopper picked; null follows the variant's own photo.
+    const [activeImage, setActiveImage] = useState<number | null>(null)
     // `unconfigured` is not an `error` with softer words (AGL-2019). A store
     // with no Stripe key answers 501, and rendering that at `severity="error"`
     // tells a shopper their payment failed when nothing was ever attempted —
@@ -260,10 +410,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             trackEvent('view_item', {
               items: [{ item_id: product.id, item_name: product.name }],
             })
-            const first =
-              product.variants.find((variant) => !variant.soldOut) ??
-              product.variants[0]
-            setSelections(first?.options ?? {})
+            setSelections(initialSelections(product))
           }
         })
         .catch(() => {
@@ -296,35 +443,20 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const handleAddToCart = async () => {
       if (!hostId || !resolved || !variant) return
       setAdded(false)
-      const response = await siteFetch('/api/commerce/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hostId,
-          action: 'add',
-          productId: resolved.id,
-          variantId: variant.id,
-          quantity,
-        }),
-      }).catch(() => null)
-      if (response?.ok) {
-        setAdded(true)
-        // A funnel step (AGL-3605): the product, by its id.
-        recordSiteJourneyStep('cart', resolved.id)
-        // Priced (AGL-1591's shape, completed): the resolved variant's price
-        // and the chosen quantity are both known here and both come from the
-        // server's product payload, so GA4's "value added to cart" is a real
-        // number rather than the empty column an items-only hit leaves. The
-        // `value` describes what was JUST ADDED, not the cart's new total —
-        // see `buildAddToCartParams`.
-        trackEvent(
-          'add_to_cart',
-          buildAddToCartParams({
-            items: [buyItem(resolved, variant, quantity)],
-          }),
-        )
-        window.dispatchEvent(new Event(CART_UPDATED_EVENT))
-      }
+      // Priced (AGL-1591's shape, completed): the resolved variant's price
+      // and the chosen quantity both come from the server's product payload,
+      // so GA4's "value added to cart" is a real number. The funnel step
+      // (AGL-3605) and the badge refresh ride the same shared helper the
+      // product grid's quick add uses.
+      const ok = await addToCart({
+        hostId,
+        siteFetch,
+        productId: resolved.id,
+        variantId: variant.id,
+        quantity,
+        item: buyItem(resolved, variant, quantity),
+      })
+      if (ok) setAdded(true)
     }
 
     /**
@@ -515,9 +647,21 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     // an absolute URL is the point. That one wants `absoluteMediaSrc` with
     // the site's own origin, which is the tenant page's job (AGL-1725).
     const galleryImage = Aglyn.siteRelativeMediaSrc(
-      variant?.imageUrl ?? resolved.mediaUrls[activeImage] ?? resolved.mediaUrls[0],
+      (activeImage !== null ? resolved.mediaUrls[activeImage] : undefined) ??
+        variant?.imageUrl ??
+        resolved.mediaUrls[0],
       { hostId },
     )
+    const presentedOptions = optionPresentation(resolved.options, resolved.variants)
+    const detailFacts = showDetails
+      ? productDetailFacts(resolved, variant, presentedOptions)
+      : []
+    const shippingLines = showShipping
+      ? productShippingLines(
+          resolved,
+          seededProduct?.id === resolved.id ? seededReturns : undefined,
+        )
+      : []
 
     // Subscription framing (AGL-545): subscription-only products price as
     // $X/mo|/yr with a "Subscribe" button; subscriptionOptional products
@@ -627,14 +771,14 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   alt=""
                   onClick={() => setActiveImage(index)}
                   sx={{
-                    width: 56,
-                    height: 56,
+                    width: 64,
+                    height: 64,
                     objectFit: 'cover',
                     borderRadius: 1,
                     cursor: 'pointer',
                     border: 2,
                     borderColor:
-                      index === activeImage ? 'primary.main' : 'transparent',
+                      index === (activeImage ?? 0) ? 'primary.main' : 'transparent',
                   }}
                   // Deferred (AGL-2486): 56px thumbnails that exist to swap
                   // the hero above. They were fetching eagerly ALONGSIDE
@@ -713,17 +857,33 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               </ToggleButton>
             </ToggleButtonGroup>
           ) : null}
-          {resolved.options.map((option) => (
+          {presentedOptions.map((option) =>
+            option.mode === 'hidden' ? null : option.mode === 'text' ? (
+              <Typography
+                key={option.name}
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1.5 }}
+              >
+                {`${option.name}: ${option.values[0]}`}
+              </Typography>
+            ) : (
             <TextField
               key={option.name}
               label={option.name}
-              value={selections[option.name] ?? ''}
-              onChange={(event) =>
+              value={
+                option.values.includes(selections[option.name] ?? '')
+                  ? selections[option.name]
+                  : ''
+              }
+              onChange={(event) => {
+                // A new variant shows its own photo, not the last thumbnail.
+                setActiveImage(null)
                 setSelections((prev) => ({
                   ...prev,
                   [option.name]: event.target.value,
                 }))
-              }
+              }}
               size="small"
               select
               fullWidth
@@ -735,7 +895,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 </MenuItem>
               ))}
             </TextField>
-          ))}
+            ),
+          )}
           {showCoupon ? (
             <TextField
               label="Discount code"
@@ -930,9 +1091,61 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             )
           ) : null}
           {!hideDescription && resolved.description ? (
-            <Typography variant="body1" color="text.secondary">
+            <Typography
+              variant="body1"
+              color="text.secondary"
+              sx={{ whiteSpace: 'pre-line' }}
+            >
               {resolved.description}
             </Typography>
+          ) : null}
+          {detailFacts.length || shippingLines.length ? (
+            <Box sx={{ mt: 3 }}>
+              {detailFacts.length ? (
+                <ProductDetailPanel title="Details">
+                  <Box
+                    component="dl"
+                    sx={{
+                      m: 0,
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr',
+                      columnGap: 2,
+                      rowGap: 0.75,
+                    }}
+                  >
+                    {detailFacts.map((fact) => (
+                      <Box key={fact.label} sx={{ display: 'contents' }}>
+                        <Typography component="dt" variant="body2" sx={{ fontWeight: 600 }}>
+                          {fact.label}
+                        </Typography>
+                        <Typography
+                          component="dd"
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ m: 0 }}
+                        >
+                          {fact.value}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </ProductDetailPanel>
+              ) : null}
+              {shippingLines.length ? (
+                <ProductDetailPanel title="Shipping & returns">
+                  {shippingLines.map((line) => (
+                    <Typography
+                      key={line}
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 0.75 }}
+                    >
+                      {line}
+                    </Typography>
+                  ))}
+                </ProductDetailPanel>
+              ) : null}
+            </Box>
           ) : null}
         </Box>
       </Box>
@@ -940,6 +1153,48 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   },
 )
 ProductDetail.displayName = 'AglynProductDetail'
+
+/**
+ * One fold of the panels under the buy box: a flat, divided accordion in the
+ * theme's own colours — the way a designer storefront stacks Details and
+ * Shipping under the description.
+ */
+function ProductDetailPanel({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <Accordion
+      disableGutters
+      elevation={0}
+      square
+      sx={{
+        bgcolor: 'transparent',
+        borderTop: 1,
+        borderColor: 'divider',
+        '&:last-of-type': { borderBottom: 1, borderColor: 'divider' },
+        '&::before': { display: 'none' },
+      }}
+    >
+      <AccordionSummary
+        expandIcon={
+          <SvgIcon fontSize="small">
+            <path d={mdiChevronDown.path} />
+          </SvgIcon>
+        }
+        sx={{ px: 0 }}
+      >
+        <Typography variant="subtitle1" component="h2">
+          {title}
+        </Typography>
+      </AccordionSummary>
+      <AccordionDetails sx={{ px: 0, pt: 0, pb: 2 }}>{children}</AccordionDetails>
+    </Accordion>
+  )
+}
 
 export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   $id: ID,
@@ -978,6 +1233,23 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
       name: 'showCoupon',
       label: 'Show discount code field',
       description: 'Lets a buyer enter a discount or coupon code before buying.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      // Off by default, so no existing page changes shape on deploy.
+      name: 'showDetails',
+      label: 'Show details panel',
+      description:
+        'A Details fold under the description with the facts the product ' +
+        'holds: its options, SKU, tags, and whether it is digital or a service.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      name: 'showShipping',
+      label: 'Show shipping & returns panel',
+      description:
+        'A Shipping & returns fold: shipping priced at checkout (or digital ' +
+        'delivery), and your return window when your store takes returns.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
   ],

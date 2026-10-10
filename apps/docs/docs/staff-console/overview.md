@@ -389,8 +389,6 @@ The row menu holds the ways out of the list:
 - **Organization details** and **Owner details** go to the staff pages for the
   organization and its owner.
 
-**Visit live site** is also the icon beside the menu.
-
 #### Filter the site list {#filter-the-site-list}
 
 The grid's toolbar filters and searches every site, not the page on screen.

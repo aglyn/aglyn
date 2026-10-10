@@ -580,7 +580,16 @@ export async function POST(request: Request): Promise<Response> {
     const formFieldDecls = Array.isArray(form?.get('fields'))
       ? (form?.get('fields') as Aglyn.FormFieldDecl[])
       : []
-    const declaredMarketingConsent = form?.get('consentFieldName')
+    /*
+     * A SIGN-UP form says so on the entity (`optInOnSubmit`): its one purpose
+     * is subscribing, so the submission IS the opt-in. Read off the verified
+     * document only — a request cannot claim it — and only as the literal
+     * `true` the console writes, so no other form becomes mailable by it.
+     */
+    const optsInOnSubmit = form?.get('optInOnSubmit') === true
+    const declaredMarketingConsent = optsInOnSubmit
+      ? true
+      : form?.get('consentFieldName')
       ? Aglyn.readFormDeclaredConsent(
           {
             consentFieldName: String(form.get('consentFieldName')),
@@ -885,6 +894,10 @@ export async function POST(request: Request): Promise<Response> {
         },
         surface: routed ? 'lead' : 'touch',
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+        // Somebody who signed up to hear from the site is at least a
+        // subscriber, as the newsletter door makes them. A floor, so a
+        // customer who signs up stays a customer.
+        ...(optsInOnSubmit ? { lifecycleFloor: 'subscriber' } : {}),
         ...(declaredMarketingConsent && disclosedConsentGroup
           ? { disclosedConsentGroup }
           : {}),

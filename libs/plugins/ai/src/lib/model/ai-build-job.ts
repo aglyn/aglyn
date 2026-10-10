@@ -36,8 +36,8 @@ import {
   aiCreationMeasuredCredits,
   aiJobPlanCreditEstimate,
   aiJobPlanCreditRange,
-  aiScreenCreditRange,
   aiSitePlanIsHome,
+  aiStandaloneScreenCreditRange,
 } from './ai-site-job'
 import {
   AI_CREDIT_RANGE_ZERO,
@@ -76,6 +76,19 @@ export const AI_BUILD_LIMITS = {
   /** A Free workspace's pages. */
   freePages: 2,
 } as const
+
+/**
+ * What a Free build's plan card says when it holds as many pages as a Free
+ * build makes (AGL-3722): the plan is told the cap and plans the first pages
+ * a request asks for, so a request for three — "About us, Custom cakes and
+ * Catering", 2026-10-10 — came back as two with nothing saying why. `null`
+ * when the plan holds fewer, or on a paid workspace.
+ */
+export function aiBuildFreePageCapNote(plan: Pick<AiBuildPlan, 'screens'>, freeTaste: boolean): string | null {
+  const cap = AI_BUILD_LIMITS.freePages
+  if (!freeTaste || plan.screens.length < cap) return null
+  return `A Free workspace’s build makes up to ${cap} pages at a time. If you asked for more, ask Assist for the rest once this build is done.`
+}
 
 /** What a build creates through its `create` list; everything else beyond pages is an item. */
 export const AI_BUILD_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = ['layout', 'form', 'component', 'email']
@@ -335,15 +348,16 @@ export function aiJobCreditEstimate(kind: string, plan: AiBuildPlan): number {
 
 /**
  * What one unit is likely to cost, its p90 and its ceiling (AGL-3722): a page
- * by its sections around the measured page, a creation at what its kind
+ * as a page written on its own measured (a fixed cost and one per section), a creation at what its kind
  * measured, an item at the measured pass times the passes its capability
  * estimates (none for a draft another plugin writes, which asks no model).
  * The ceiling is `aiBuildUnitCreditEstimate`, unchanged.
  */
 export function aiBuildUnitCreditRange(unit: AiBuildUnit, ops?: AiBuildOps): AiCreditRange {
   const ceiling = aiBuildUnitCreditEstimate(unit, ops)
-  if (unit.screen) return aiScreenCreditRange(unit.screen.sections.length)
-  if (unit.creation) return aiCreditRangeOf(aiCreationMeasuredCredits(unit.creation.kind), ceiling)
+  // A build writes each page on its own, never in a site start's warm run (AGL-3722).
+  if (unit.screen) return aiStandaloneScreenCreditRange(unit.screen.sections.length)
+  if (unit.creation) return aiCreditRangeOf(aiCreationMeasuredCredits(unit.creation.kind, { standalone: true }), ceiling)
   const passes = Math.ceil(ceiling / AI_SITE_PASS_CREDITS)
   return aiCreditRangeOf(
     { median: passes * AI_MEASURED_PASS_CREDITS.median, p90: passes * AI_MEASURED_PASS_CREDITS.p90 },
@@ -412,7 +426,7 @@ export function aiBuildSmaller(plan: AiBuildPlan, ops?: AiBuildOps): AiCreditsSm
   const smaller = aiBuildFirstPagePlan(plan)
   if (!smaller) return null
   const screen = smaller.screens[0]
-  const label = aiSitePlanIsHome(screen) ? AI_SITE_HOME_FIRST_LABEL : `Build the page “${screen.title}” first`
+  const label = aiSitePlanIsHome(screen) ? AI_SITE_HOME_FIRST_LABEL : `Build the ${screen.title} page first`
   return { label, ...aiBuildCreditRange(smaller, { ops }) }
 }
 

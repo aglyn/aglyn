@@ -45,7 +45,7 @@ export const PLUGIN_DOCS = {
   adConversions: {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
-    excerpt: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising. Rolling out.',
+    excerpt: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
   },
   aglynAssist: {
     path: '/getting-started/aglyn-assist',
@@ -265,7 +265,7 @@ export const PLUGIN_DOCS = {
   couriers: {
     path: '/commerce-and-bookings/commerce/couriers',
     title: 'Couriers for local delivery (DoorDash Drive)',
-    excerpt: 'Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier\'s tracking link and arrival time on the order. Rolling out.',
+    excerpt: 'Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier\'s tracking link and arrival time on the order.',
   },
   crmEmailTemplates: {
     path: '/content-and-data/crm/email-templates',
@@ -345,7 +345,7 @@ export const PLUGIN_DOCS = {
   fulfillmentNetworks: {
     path: '/commerce-and-bookings/commerce/fulfillment-networks',
     title: 'Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)',
-    excerpt: 'Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step. Rolling out.',
+    excerpt: 'Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.',
   },
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',
@@ -544,7 +544,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   aiImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
-  aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
+  aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#cancel-a-new-site', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
   aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
   aiLogic: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMarketing: ['#write-overlay-copy', '#create-an-overlay', '#create-a-campaign', '#ask-about-these-numbers', '#what-is-sent', '#who-can-use-it', '#related'],

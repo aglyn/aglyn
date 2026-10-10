@@ -1,26 +1,10 @@
 ---
 sidebar_position: 6.5
 title: Server-side ad conversions
-description: Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising. Rolling out.
-unlisted: true
+description: Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.
 ---
 
-<!--
-AGL-3694: held unpublished (`unlisted: true`) until the deployment sets
-AD_CONVERSIONS_TOKEN_KEY on the console — the key merchants' access tokens are
-sealed under. Without it no Ad conversions card appears. Once it is set on
-aglyn.com, delete `unlisted: true` and the "Rolling out" note, and add this
-page to the Related list of ad-tracking.md and to whats-new.md (the held entry
-is commented there).
--->
-
 # Server-side ad conversions
-
-:::caution Rolling out
-Server-side conversions are **not yet available** on aglyn.com-hosted
-workspaces. Until they are, no **Ad conversions** card appears on your site's
-setup page, and your [browser tags](./ad-tracking.md) report on their own.
-:::
 
 Send purchases and leads to **Meta**, **TikTok** and **Pinterest** from the
 server as well as from the browser tag, so a conversion is still counted when an

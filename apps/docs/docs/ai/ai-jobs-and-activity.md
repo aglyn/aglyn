@@ -46,6 +46,7 @@ step used. From there you can:
 - **Confirm plan**, when a plan is waiting for you;
 - **Resume** a job that paused for credits, or **Get more AI credits**;
 - **Try again**, or **Try again what failed** to build only the parts that failed;
+- **Cancel** a job that is still running (see [Cancel a job](#cancel-a-job));
 - open what it built: **View your site**, **Edit your pages**, or the draft itself.
 
 For a new site this is the **Building your site** page; see
@@ -68,9 +69,42 @@ notification settings.
 
 ## Cancel a job {#cancel-a-job}
 
-**Cancel job** in the window that started a job, or **Cancel** in the AI jobs list, stops
-it. What it built so far is kept as drafts. A canceled job is charged for what it spent
-until then.
+You can stop a job at any point before it finishes. **Cancel** is on:
+
+- the job's own page, such as **Building your site**;
+- each row of a site's **AI jobs** page, from the row's **⋮** menu (**Cancel job**);
+- each running job in the **AI jobs** list in Assist, which the **AI** chip in the top bar
+  opens.
+
+Each asks first, in a **Cancel this AI job?** window. Choose **Cancel job** to stop, or
+**Keep building** to let it carry on. Cancel needs the **Generate with AI** permission on
+the site.
+
+What happens when you cancel:
+
+- **Nothing more runs.** If a step is in progress, it stops, or finishes if it is about to,
+  and the job shows *Stopping* until it has. Nothing after it starts.
+- **What it built stays, as drafts.** Pages, layouts and forms it already made are kept as
+  unpublished drafts for you to open, edit or delete. A canceled job never publishes
+  anything, so your live site is unchanged.
+- **You pay only for what ran.** Credits held for the steps that did not run are released.
+  The steps that finished stay charged, and the job says how much, for example
+  *This job used 42 credits before it stopped.* A job you cancel is not counted as a
+  failure, so it is not given back and you are not sent a "job stopped" notice.
+- **It is recorded.** *Canceled an AI generation* is added to the site's activity, with
+  who canceled it.
+
+A canceled job shows **Canceled** in every list. A job that is already **Done** or
+**Failed** cannot be canceled; its **Cancel** is turned off and says why.
+
+### Cancel a new site {#cancel-a-new-site}
+
+If you cancel a site you started with AI, the **Building your site** page says
+**You canceled your site** and offers:
+
+- **Start again**, which reopens the questions with your answers filled in, for a fresh job;
+- **Use the starter site instead**, which gives the site the starter home page. It is
+  offered only while the job had not built anything yet.
 
 ## AI activity {#ai-activity}
 

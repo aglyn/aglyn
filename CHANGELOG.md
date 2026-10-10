@@ -9,6 +9,43 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.238 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.237...v1.0.0-beta.238)
+
+### Added
+
+- **ai:** cancel an AI job from its page, the jobs list and Assist ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **forms:** a sign-up form's submission is its opt-in (+ AI draft field list) (#1353)
+- **ai:** store sites built by AI are real storefronts ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **commerce:** a store's product page, grid and reviews read as a designer storefront ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+### Fixed
+
+- **console:** typing in Assist no longer loops renders ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616), [AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **ai:** the Free usage strip's lines stay inside the plugin's load budget ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **staff:** drop the duplicate live-site icon from the sites row
+- **ai:** the Assist usage strip reads the Free allowance the prompt quotes ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **ai:** estimates and the credits prompt state the real numbers ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **console:** the guided start picks Music & bands for a band's site ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** storefront icon code clears the image-sink and community sweeps ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **ai:** stock photos match what they illustrate ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a section collecting answers gets its form placed instead of failing the build ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+### Documentation
+
+- **ai:** explain canceling an AI job ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **commerce:** couriers, ShipMonk fulfillment and ad conversions are live in What's new ([AGL-3695](https://linear.app/aglyn/issue/AGL-3695))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- **linear:** the fallback ceiling is AGL-3723, read off Linear ([AGL-3723](https://linear.app/aglyn/issue/AGL-3723))
+- **spellings:** stock-photo filler words accept both cosy and favourite ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** the live site-plan eval plans the Willow Wick store and reports its storefront ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+</details>
+
 ## v1.0.0-beta.237 — 2026-10-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.236...v1.0.0-beta.237)

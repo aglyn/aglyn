@@ -155,8 +155,20 @@ export function aiLayoutFramePrompt(input: {
     targets.forms.length || targets.formPageId
       ? 'A call to action that asks a visitor to get in touch goes to form.'
       : 'The site has no form yet.',
+    // A storefront's header (AGL-3676): its cart, and an announcement line.
+    ...(aiLayoutShopPageId(targets)
+      ? [
+          "This is an online store: give the header no button, since the platform puts the cart beside the navigation. Give the header one note instead: a short announcement for the bar above it, under 60 characters, about the shop from the brief (a promise it makes, such as its shipping, or what is new); never invent an offer, a discount, a price or a shipping threshold the brief does not give.",
+        ]
+      : []),
     `Design seed: ${job.$id.slice(-6)}.`,
   ].join('\n')
+}
+
+/** A store's Shop page, by its id: the page its catalog's whole list is placed on (AGL-3676). */
+export function aiLayoutShopPageId(targets: Pick<AiLayoutTargets, 'listings'>): string | null {
+  const products = (targets.listings ?? []).find((listing) => listing.kind === 'products')
+  return products?.placements.find((placement) => placement.role === 'index')?.screenId ?? null
 }
 
 /** A validated language layout. */
@@ -196,6 +208,8 @@ export function aiLayoutFrameCheck(input: {
         closesDark: input.design ? aiLayoutDesignChoices(input.design).coverClose : false,
         // A site that sells carries its cart in the header (AGL-3676).
         cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products' && listing.cart !== false),
+        // And a store's header is a storefront's: no button repeating its navigation, an announcement bar (AGL-3676).
+        shopId: aiLayoutShopPageId(input.targets),
       },
       input.targets,
     )
