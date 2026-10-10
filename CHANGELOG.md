@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.240 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.239...v1.0.0-beta.240)
+
+### Fixed
+
+- **ai:** the Assist usage strip moves with the build plan's spend ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **beacon:** a hydration report names the translator that rewrote the page
+- **console:** the all sites page shows the list instead of jumping to the last site
+- **ai:** an eagerly loading image below the first is fixed in code, never refuses a page ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **staff:** row menus use the Besigner menu items, icons on the left
+
 ## v1.0.0-beta.239 — 2026-10-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.238...v1.0.0-beta.239)
