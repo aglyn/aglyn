@@ -67,6 +67,7 @@ const StorefrontPaymentElement = lazy(() =>
   })),
 )
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { CART_UPDATED_EVENT } from '../constants/cart-events'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 
@@ -74,7 +75,7 @@ import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-eve
 export const ID: Aglyn.ComponentId = 'cart'
 
 /** Blocks dispatch this after mutating the cart so badges refresh. */
-export const CART_UPDATED_EVENT = 'aglyn:cart-updated'
+export { CART_UPDATED_EVENT }
 
 export interface CartProps {
   /** 'button' = app-bar icon + drawer; 'inline' = full cart in place. */

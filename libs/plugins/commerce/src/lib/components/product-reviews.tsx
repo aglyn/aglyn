@@ -36,7 +36,41 @@ export interface ProductReviewsProps {
   /** Product id; blank resolves from the /products/{slug} page product. */
   productId?: string
   heading?: string
+  /**
+   * `product` (default): one product's reviews with the submit form.
+   * `store`: the store's latest approved reviews across every product, with
+   * the average and count, and no form — for a storefront home. In store
+   * scope the block draws its own heading (`heading`, default "What
+   * customers say") and draws NOTHING when there are no approved reviews,
+   * so a page never shows an empty reviews band.
+   */
+  scope?: 'product' | 'store'
+  /** Store scope: how many reviews to show (default 6, at most 12). */
+  maxItems?: number
+  /** Store scope: the heading's level, 2–4 (default 2). */
+  headingLevel?: 2 | 3 | 4 | '2' | '3' | '4'
 }
+
+interface StoreReviewView {
+  id: string
+  rating: number
+  body: string
+  authorName: string
+  verified: boolean
+  createdAtMs: number
+  productName?: string
+  productSlug?: string
+}
+
+const EDITOR_HINT_SX = {
+  p: 3,
+  border: '1px dashed',
+  borderColor: 'divider',
+  borderRadius: 1,
+  color: 'text.secondary',
+  fontSize: 13,
+  fontFamily: 'system-ui, sans-serif',
+} as const
 
 interface ReviewView {
   id: string
@@ -67,7 +101,159 @@ async function resolveProductIdFromSlug(hostId: string): Promise<string> {
  */
 const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
   (props, ref) => {
-    const { productId: productIdProp, heading, ...rest } = props
+    if (props.scope === 'store') return <StoreReviews ref={ref} {...props} />
+    return <SingleProductReviews ref={ref} {...props} />
+  },
+)
+ProductReviews.displayName = 'AglynProductReviews'
+
+/**
+ * The store-wide reviews band (`scope: 'store'`): the store's latest APPROVED
+ * reviews, read-only stars, the reviewer's first name and initial, a verified
+ * badge, and the product reviewed. Real reviews or nothing: with none it
+ * renders an empty, zero-height element — never sample reviews on a live page
+ * (sample testimonials presented as customers' would be fake reviews). The
+ * editor, which has no site, gets a dashed hint instead.
+ */
+const StoreReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
+  (props, ref) => {
+    const {
+      productId: _productId,
+      heading,
+      scope: _scope,
+      maxItems,
+      headingLevel,
+      ...rest
+    } = props
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+    const { hostId } = Aglyn.useSite()
+    const [payload, setPayload] = useState<{
+      reviews: StoreReviewView[]
+      aggregate: { count: number; average: number }
+    } | null>(null)
+    const limit = maxItems && Number(maxItems) > 0 ? Math.min(12, Math.floor(Number(maxItems))) : 6
+
+    useEffect(() => {
+      if (!hostId) return
+      let active = true
+      void fetch(
+        `/api/commerce/reviews?hostId=${encodeURIComponent(hostId)}` +
+          `&scope=store&limit=${limit}`,
+      )
+        .then((response) => (response.ok ? response.json() : null))
+        .then((body) => {
+          if (!active || !body) return
+          setPayload({
+            reviews: Array.isArray(body.reviews) ? body.reviews : [],
+            aggregate: body.aggregate ?? { count: 0, average: 0 },
+          })
+        })
+        .catch(() => undefined)
+      return () => {
+        active = false
+      }
+    }, [hostId, limit])
+
+    if (!hostId) {
+      return (
+        <Box ref={ref} {...rest} sx={[EDITOR_HINT_SX, ...nodeSx]}>
+          {'★★★★★ Customer reviews appear here once shoppers review your products'}
+        </Box>
+      )
+    }
+    // Loading, failed, or none approved: nothing at all — not the node's
+    // padding, not a heading over an empty band.
+    if (!payload || payload.reviews.length === 0) {
+      return <Box ref={ref} data-store-reviews-empty="" sx={{ display: 'none' }} />
+    }
+    // A select may store the level as a string; read it as a number.
+    const asked = Number(headingLevel)
+    const level = asked === 3 || asked === 4 ? asked : 2
+    const { aggregate } = payload
+    return (
+      <Box
+        ref={ref}
+        {...rest}
+        sx={[{ display: 'flex', flexDirection: 'column', gap: 3 }, ...nodeSx]}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+          <Typography variant={level === 2 ? 'h4' : level === 3 ? 'h5' : 'h6'} component={`h${level}`}>
+            {heading || 'What customers say'}
+          </Typography>
+          {aggregate.count > 0 ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Rating value={aggregate.average} precision={0.1} readOnly size="small" />
+              <Typography variant="body2" color="text.secondary">
+                {`${aggregate.average} out of 5 · ${aggregate.count} ${aggregate.count === 1 ? 'review' : 'reviews'}`}
+              </Typography>
+            </Box>
+          ) : null}
+        </Box>
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 2,
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          }}
+        >
+          {payload.reviews.map((review) => (
+            <Box
+              key={review.id}
+              component="figure"
+              sx={{
+                m: 0,
+                p: 2.5,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 2,
+                bgcolor: 'background.paper',
+              }}
+            >
+              <Rating value={review.rating} readOnly size="small" />
+              <Typography component="blockquote" variant="body1" sx={{ m: 0, flex: 1 }}>
+                {review.body}
+              </Typography>
+              <Box component="figcaption" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {review.authorName}
+                </Typography>
+                {review.verified ? (
+                  <Chip label="Verified buyer" size="small" variant="outlined" color="success" />
+                ) : null}
+              </Box>
+              {review.productName ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component={review.productSlug ? 'a' : 'span'}
+                  {...(review.productSlug ? { href: `/products/${review.productSlug}` } : {})}
+                  sx={{ textDecoration: 'none' }}
+                >
+                  {review.productName}
+                </Typography>
+              ) : null}
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    )
+  },
+)
+StoreReviews.displayName = 'AglynStoreReviews'
+
+const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
+  (props, ref) => {
+    const {
+      productId: productIdProp,
+      heading,
+      scope: _scope,
+      maxItems: _maxItems,
+      headingLevel: _headingLevel,
+      ...rest
+    } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
@@ -124,22 +310,7 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
 
     if (!hostId) {
       return (
-        <Box
-          ref={ref}
-          {...rest}
-          sx={[
-            {
-              p: 3,
-              border: '1px dashed',
-              borderColor: 'divider',
-              borderRadius: 1,
-              color: 'text.secondary',
-              fontSize: 13,
-              fontFamily: 'system-ui, sans-serif',
-            },
-            ...nodeSx,
-          ]}
-        >
+        <Box ref={ref} {...rest} sx={[EDITOR_HINT_SX, ...nodeSx]}>
           {'★★★★★ Product reviews render here'}
         </Box>
       )
@@ -252,7 +423,7 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
     )
   },
 )
-ProductReviews.displayName = 'AglynProductReviews'
+SingleProductReviews.displayName = 'AglynSingleProductReviews'
 
 export const schema: Aglyn.ComponentSchema<ProductReviewsProps> = {
   $id: ID,
@@ -276,8 +447,40 @@ export const schema: Aglyn.ComponentSchema<ProductReviewsProps> = {
     {
       name: 'heading',
       label: 'Heading',
-      description: 'Defaults to "Reviews".',
+      description: 'Defaults to "Reviews" ("What customers say" store-wide).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      // Default `product`, so a page that already places this block keeps it.
+      name: 'scope',
+      label: 'Show',
+      description:
+        'One product’s reviews with a form, or the store’s latest approved ' +
+        'reviews across every product. Store-wide shows nothing until a ' +
+        'shopper’s review is approved.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { label: 'This product', value: 'product' },
+        { label: 'Whole store', value: 'store' },
+      ],
+    },
+    {
+      name: 'maxItems',
+      label: 'Max reviews',
+      description: 'Store-wide: how many to show (default 6, at most 12).',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+    },
+    {
+      name: 'headingLevel',
+      label: 'Heading level',
+      description: 'Store-wide: the heading’s level on the page (default H2).',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { label: 'H2', value: '2' },
+        { label: 'H3', value: '3' },
+        { label: 'H4', value: '4' },
+      ],
     },
   ],
 }
