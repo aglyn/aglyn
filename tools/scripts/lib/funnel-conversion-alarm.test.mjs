@@ -39,9 +39,11 @@ import {
   MIN_USERS,
   MIN_VIEWS,
   PROCESSING_LAG_DAYS,
+  RETURN_GAP_MS,
   announceDecision,
   beaconWindow,
   countReturningLogins,
+  countTruth,
   countWithin,
   doorWindow,
   doorWindowLabel,
@@ -49,6 +51,7 @@ import {
   gradeDoor,
   gradeFunnel,
   hourBuckets,
+  mapBounded,
   recoveryPayload,
   slackPayload,
   zonedHourInstant,
@@ -452,6 +455,141 @@ test('countReturningLogins still reds a real sign-in drought, and never guesses'
     'signed in after the window',
   )
   assert.equal(countReturningLogins(undefined, window), 0)
+})
+
+/* ========================================================================= *
+ * SSO TENANTS — a sign-in through an org's GCIP tenant is a sign-in.
+ * ========================================================================= */
+
+test('THE 2026-10-09 FALSE RED: SSO sign-ins in a per-org tenant open the sign-in door', () => {
+  const window = { startMs: 2000, endMs: 3000 }
+  const pages = {
+    byCreated: [],
+    byLogin: [],
+    tenantLogins: [
+      // aglyn-org-…: an SSO member who has been signing in for months.
+      [{ createdAt: '500', lastLoginAt: '2600' }],
+      [],
+      [{ createdAt: '900', lastLoginAt: '2100' }],
+    ],
+  }
+  const truth = countTruth(pages, { door: window })
+  assert.equal(truth.door.lastLoginAt, 2, 'every tenant is read')
+  const graded = gradeDoor({
+    ...signinDoor,
+    views: 9,
+    users: 5,
+    conversions: truth.door[signinDoor.truthField],
+  })
+  assert.equal(graded.verdict, 'green')
+  assert.equal(
+    countTruth({ ...pages, tenantLogins: [] }, { door: window }).door
+      .lastLoginAt,
+    0,
+    'default tenant alone: the red the alarm used to raise',
+  )
+})
+
+test('tenant accounts never count as accounts created, and keep the returning-login rule', () => {
+  const window = { startMs: 2000, endMs: 3000 }
+  const truth = countTruth(
+    {
+      byCreated: [{ createdAt: '2500' }],
+      byLogin: [{ createdAt: '1000', lastLoginAt: '2200' }],
+      tenantLogins: [
+        // Born by an SSO sign-in inside the window: not a sign-up, and not
+        // provably a return either.
+        [{ createdAt: '2400', lastLoginAt: '2400' }],
+        [{ createdAt: '1000', lastLoginAt: '9000' }],
+      ],
+    },
+    { door: window, beacon: { startMs: 0, endMs: 1500 } },
+  )
+  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1 })
+  assert.deepEqual(truth.beacon, { createdAt: 0, lastLoginAt: 0 })
+  assert.deepEqual(countTruth({}, { door: window }).door, {
+    createdAt: 0,
+    lastLoginAt: 0,
+  })
+})
+
+/**
+ * The 01:48Z run on 2026-10-10 graded 2026-10-09 13:48Z → 2026-10-10 01:48Z
+ * and said nobody signed in. Inside it, a default-tenant password account
+ * created at 21:23:38Z came back through /signin at 23:06Z.
+ */
+const OCTOBER_WINDOW = {
+  startMs: Date.parse('2026-10-09T13:48:00Z'),
+  endMs: Date.parse('2026-10-10T01:48:00Z'),
+}
+const HOTMAIL_RETURN = {
+  createdAt: String(Date.parse('2026-10-09T21:23:38Z')),
+  lastLoginAt: String(Date.parse('2026-10-09T23:06:00Z')),
+}
+
+test('THE 2026-10-09 HOTMAIL RETURN: signed up inside the window, came back 1h43m later — a /signin conversion', () => {
+  assert.equal(countReturningLogins([HOTMAIL_RETURN], OCTOBER_WINDOW), 1)
+  const truth = countTruth(
+    { byCreated: [HOTMAIL_RETURN], byLogin: [HOTMAIL_RETURN] },
+    { door: OCTOBER_WINDOW },
+  )
+  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1 })
+  assert.equal(
+    gradeDoor({ ...signinDoor, views: 9, users: 5, conversions: 1 }).verdict,
+    'green',
+  )
+})
+
+test('the return gap: a creation re-authenticating itself is not a return, a sign-in an hour on is', () => {
+  const created = Date.parse('2026-10-09T21:00:00Z')
+  const at = (ms) => ({
+    createdAt: String(created),
+    lastLoginAt: String(created + ms),
+  })
+  assert.equal(countReturningLogins([at(0)], OCTOBER_WINDOW), 0, 'creation')
+  assert.equal(
+    countReturningLogins([at(9_700)], OCTOBER_WINDOW),
+    0,
+    'the AGL-1497 consent bounce, 9.7 s on',
+  )
+  assert.equal(countReturningLogins([at(RETURN_GAP_MS - 1)], OCTOBER_WINDOW), 0)
+  assert.equal(countReturningLogins([at(RETURN_GAP_MS)], OCTOBER_WINDOW), 1)
+  // The September cohort's two creations stay out under the gap.
+  assert.equal(countReturningLogins(SEPTEMBER_ACCOUNTS, SEPTEMBER_WEEK), 1)
+})
+
+test('an SSO tenant account: its first sign-in is its creation, its later return counts', () => {
+  const created = Date.parse('2026-10-09T15:00:00Z')
+  const first = { createdAt: String(created), lastLoginAt: String(created) }
+  const back = {
+    createdAt: String(created),
+    lastLoginAt: String(created + 3 * RETURN_GAP_MS),
+  }
+  const count = (page) =>
+    countTruth({ tenantLogins: [page] }, { door: OCTOBER_WINDOW }).door
+  assert.deepEqual(count([first]), { createdAt: 0, lastLoginAt: 0 })
+  assert.deepEqual(count([back]), { createdAt: 0, lastLoginAt: 1 })
+})
+
+test('mapBounded keeps order and never runs more than the limit at once', async () => {
+  let running = 0
+  let peak = 0
+  const out = await mapBounded([5, 1, 4, 2, 3], 2, async (n) => {
+    running += 1
+    peak = Math.max(peak, running)
+    await new Promise((resolve) => setTimeout(resolve, n))
+    running -= 1
+    return n * 10
+  })
+  assert.deepEqual(out, [50, 10, 40, 20, 30])
+  assert.equal(peak, 2)
+  assert.deepEqual(await mapBounded([], 8, async () => 1), [])
+})
+
+test('the network half reads every SSO tenant, not just the default one', () => {
+  assert.match(NETWORK_HALF, /v2\/projects\/\$\{projectId\}\/tenants/)
+  assert.match(NETWORK_HALF, /tenantId/)
+  assert.match(NETWORK_HALF, /countTruth\(/)
 })
 
 /* ========================================================================= *
