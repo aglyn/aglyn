@@ -300,7 +300,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   aiCredits: {
     '#before-a-job-starts': 'Photos.md) in an AI site | Nothing | A model you choose with the Model switch can cost more or less than Auto; the switch shows each model\'s cost.',
     '#past-the-band': 'N hour. See Paused, or out of credits.',
-    '#see-your-credits': 'Re not given back when you cancel a job yourself (you pay for what ran until then), or when the AI declines what the brief asked for.',
+    '#see-your-credits': 'At never ran are released; see Cancel a job), or when the AI declines what the brief asked for.',
   },
   aiJobsAndActivity: {
     '#the-ai-jobs-page': 'Ho started, applied or canceled what." ---',

@@ -73,6 +73,8 @@ import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
+import { AiJobCancelButton } from './ai-job-cancel.component'
+import { AI_JOB_CANCELING_COPY } from '../model/ai-job-cancel-copy'
 
 /**
  * "Building your site" (AGL-3594): one job's page, at `/ai-jobs/{jobId}`
@@ -337,6 +339,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   }
 
   const phase = aiSiteBuildPhase(ready)
+  const terminal = AI_JOB_TERMINAL_STATUSES.includes(ready.status)
   const rows = aiSiteBuildRows(ready)
   const fraction = aiSiteBuildFraction(rows)
   const activeRow = phase === 'working' ? (rows.find((row) => row.state === 'active') ?? null) : null
@@ -435,6 +438,11 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
         <Typography variant="body2" color="text.secondary">
           {credits}
         </Typography>
+      ) : null}
+      {ready.cancelRequested && !terminal ? (
+        // Asked to cancel while a step is in flight (AGL-3616): it finishes
+        // or stops, and the page turns to "canceled" when it has.
+        <Alert severity="info">{AI_JOB_CANCELING_COPY}</Alert>
       ) : null}
       {retrying && restartAnswers && hostId ? (
         <AiSiteStartCard
@@ -550,8 +558,9 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           )}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
             {restartAnswers && hostId && (
+              // A fresh job from the same answers; a canceled one starts again.
               <Button variant="contained" onClick={() => setRetrying(true)}>
-                {'Try again'}
+                {phase === 'canceled' ? 'Start again' : 'Try again'}
               </Button>
             )}
             {canRetry && (
@@ -567,6 +576,17 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           </Stack>
         </Stack>
       )}
+      {/* Cancel (AGL-3616): while the job can stop, and disabled with its reason once it cannot. */}
+      <Box>
+        <AiJobCancelButton
+          job={ready}
+          user={user}
+          orgId={orgId}
+          onJob={setJob}
+          variant={terminal ? 'text' : 'outlined'}
+          size={terminal ? 'small' : 'medium'}
+        />
+      </Box>
       {ready.plan && ready.plan.screens.length > 0 && (
         <Accordion
           // Open while the site is built, so the plan is in view as each part of it is written.

@@ -759,3 +759,78 @@ describe('a site the meter paused (AGL-3660)', () => {
     expect(screen.getByRole('heading', { name: 'Your site is paused' })).toBeTruthy()
   })
 })
+
+describe('canceling from the job’s page (AGL-3616)', () => {
+  beforeEach(() => mockFetch.mockReset())
+
+  it('a running job offers Cancel, says what it does first, and shows the job stopping', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ changed: true, job: job({ cancelRequested: true }) }),
+    })
+    await open(job())
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(
+      await screen.findByText(
+        'Stop building. Pages already built stay as drafts; you won’t be charged for steps that haven’t run.',
+      ),
+    ).toBeTruthy()
+    // Nothing is sent until the person confirms.
+    expect(mockFetch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel job' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    const [, url, init] = mockFetch.mock.calls[0] as [unknown, string, RequestInit]
+    expect(url).toBe('/api/ai/jobs/job-1/cancel')
+    expect(JSON.parse(String(init.body))).toEqual({ orgId: 'org-1' })
+    // The dialog closes on the door's answer, and the page shows the job stopping.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(
+      await screen.findByText('Stopping. The step in progress finishes or stops first, and nothing after it runs.'),
+    ).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Stopping…' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('a refused cancel says why in the dialog and leaves the job as it was', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'Your role does not include "Use AI to generate" — ask an organization admin' }),
+    })
+    await open(job())
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel job' }))
+    expect(await screen.findByText(/Your role does not include/)).toBeTruthy()
+    // The dialog stays open over the page, which still reads as building.
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Building your site', hidden: true })).toBeTruthy()
+  })
+
+  it('a canceled guided start says what it cost, and offers Start again and the starter site', async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ jobs: [], freeTaste: true }) })
+    await open(
+      job({
+        status: 'canceled',
+        running: false,
+        creditsSpent: 9,
+        creditsReserved: 0,
+        siteInputs: { businessType: 'dog grooming salon', pages: 2 },
+      } as never),
+    )
+    expect(await screen.findByRole('heading', { name: 'You canceled your site' })).toBeTruthy()
+    expect(screen.getByText(/Anything it already built stays as an unpublished draft/)).toBeTruthy()
+    expect(screen.getByText('This job used 9 credits before it stopped.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start again' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Use the starter site instead' })).toBeTruthy()
+    // Not a failure: no "something went wrong".
+    expect(screen.queryByText(/Something went wrong/)).toBeNull()
+    expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('Cancel is disabled, with its reason, once the job is done or failed', async () => {
+    await open(job({ status: 'done', running: false, outputs: [screenOutput('home')] as never }))
+    const done = (await screen.findByRole('button', { name: 'Cancel' })) as HTMLButtonElement
+    expect(done.disabled).toBe(true)
+    expect(screen.getByLabelText('This job already finished.')).toBeTruthy()
+  })
+})

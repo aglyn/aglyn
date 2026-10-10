@@ -35,6 +35,7 @@ import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJob,
   type AiJobApplied,
+  type AiJobCancelRequest,
   type AiJobItemLedger,
   type AiJobKind,
   type AiJobOutput,
@@ -112,6 +113,13 @@ import {
 } from '../model/ai-job-failure-copy'
 import { aiSiteStartInputsOf } from '../model/ai-site-start'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  AI_JOB_CANCELED_ITEM_NOTE,
+  AiJobCanceledError,
+  aiJobCancelPending,
+  isAiJobCanceledError,
+  watchAiJobCancel,
+} from './ai-job-cancel'
 
 /**
  * AI generation jobs — the Firestore state machine (AGL-2904).
@@ -754,6 +762,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     ...(job.items?.length ? { items: job.items.map(aiCustomerSafeItem) } : {}),
     ...(job.orchestration ? { orchestration: job.orchestration } : {}),
     ...(job.kind === 'build' && job.inputs?.['publish'] === true ? { publishAsked: true } : {}),
+    ...(aiJobCancelPending(job) ? { cancelRequested: true } : {}),
   }
 }
 
@@ -770,6 +779,52 @@ function leaseIsLive(job: AiJob, owner: string, nowMs: number): boolean {
   if (lease.owner === owner) return false
   const until = toMillis(lease.until as Instant)
   return until !== null && until > nowMs
+}
+
+/** Whether ANY owner's lease on the job is still live: a step is in flight. */
+function anyLeaseIsLive(job: AiJob, nowMs: number): boolean {
+  const until = toMillis(job.lease?.until as Instant)
+  return Boolean(job.lease) && until !== null && until > nowMs
+}
+
+/**
+ * The write that ends a job `canceled` (AGL-3616): it holds nothing and no
+ * lease, a step left running goes back to `pending` (it did not finish), and
+ * every item not yet built is skipped with the cancel's note. What the job
+ * built, spent and was given back stays as it is: drafts stay drafts, and
+ * credits for what ran stay charged.
+ */
+function aiJobCanceledPatch(job: AiJob, now: Date, request: AiJobCancelRequest): Record<string, unknown> {
+  return {
+    status: 'canceled',
+    cancelRequested: request,
+    creditsReserved: 0,
+    lease: null,
+    error: null,
+    steps: (job.steps ?? []).map((step) =>
+      step.status === 'running' ? { ...step, status: 'pending', endedAt: null } : step,
+    ),
+    ...(job.items?.length ? { items: aiCanceledItems(job.items) } : {}),
+    updatedAt: now,
+  }
+}
+
+function aiCanceledItems(items: readonly AiJobItemLedger[]): AiJobItemLedger[] {
+  return items.map((row) =>
+    row.status === 'pending' || row.status === 'running'
+      ? { ...row, status: 'skipped', note: AI_JOB_CANCELED_ITEM_NOTE }
+      : row,
+  )
+}
+
+/** The cancel a pending-cancel job carries, or one made now for a job that has none. */
+function cancelRequestOf(job: AiJob, now: Date): AiJobCancelRequest {
+  return job.cancelRequested ?? aiJobCancelRequest(now, null)
+}
+
+/** A cancel asked now by `by`, as the job stores it (the instant is written as a Date). */
+function aiJobCancelRequest(now: Date, by: string | null): AiJobCancelRequest {
+  return { at: now as unknown as AiJobCancelRequest['at'], by }
 }
 
 function nextStepIndex(job: AiJob): number {
@@ -811,6 +866,14 @@ export async function claimNextStep(
   return firestore.runTransaction(async (tx: Transaction) => {
     const job = jobFrom(await tx.get(ref))
     if (!job) return null
+    // A cancel asked while a step ran, whose runner never came back to end
+    // it (AGL-3616): the lease ran out, so the job ends here, unclaimed.
+    if (aiJobCancelPending(job)) {
+      if (!leaseIsLive(job, owner, now.getTime())) {
+        tx.set(ref, aiJobCanceledPatch(job, now, cancelRequestOf(job, now)), { merge: true })
+      }
+      return null
+    }
     const stepIndex = claimableStepIndex(job, owner, now.getTime())
     if (stepIndex === -1) return null
     const steps = job.steps.map((step, index) =>
@@ -893,7 +956,15 @@ export async function holdPausedAiJob(
   const ref = jobsCollection(firestore, orgId).doc(jobId)
   return firestore.runTransaction(async (tx: Transaction) => {
     const job = jobFrom(await tx.get(ref))
-    if (!job || claimableStepIndex(job, owner, now.getTime()) === -1) return null
+    if (!job) return null
+    // A paused workspace's job a person canceled ends canceled (AGL-3616).
+    if (aiJobCancelPending(job)) {
+      if (!leaseIsLive(job, owner, now.getTime())) {
+        tx.set(ref, aiJobCanceledPatch(job, now, cancelRequestOf(job, now)), { merge: true })
+      }
+      return null
+    }
+    if (claimableStepIndex(job, owner, now.getTime()) === -1) return null
     tx.set(ref, { updatedAt: now }, { merge: true })
     return { ...job, updatedAt: now as unknown as AiJob['updatedAt'] }
   })
@@ -1091,18 +1162,23 @@ export async function recordStep(
       ledger && input.item ? aiApplyJobItemRecord(ledger, input.item, input.creditsSpent, now) : input.items ? ledger : null
     const settled = input.status !== 'pending'
     const ownsLease = job.lease?.owner === owner
-    const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status)
+    // A cancel asked while this step ran ends the job here (AGL-3616), in the
+    // write that records what the step cost and built: nothing after it runs.
+    const canceling = aiJobCancelPending(job)
+    const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status) && !canceling
     const status: AiJobStatus = isAiJobTerminal(job.status)
       ? job.status
-      : job.status === 'needs_input'
-        ? job.status
-        : parksForReview
-          ? 'needs_review'
-          : input.status === 'failed'
-            ? 'running'
-            : remaining > 0
-              ? 'queued'
-              : 'running'
+      : canceling
+        ? 'canceled'
+        : job.status === 'needs_input'
+          ? job.status
+          : parksForReview
+            ? 'needs_review'
+            : input.status === 'failed'
+              ? 'running'
+              : remaining > 0
+                ? 'queued'
+                : 'running'
     const patch = {
       status,
       steps,
@@ -1132,6 +1208,15 @@ export async function recordStep(
         ? {
             review: input.review,
             error: input.review.reason === 'plan' ? null : input.review.message,
+          }
+        : {}),
+      ...(canceling
+        ? {
+            creditsReserved: 0,
+            lease: null,
+            error: null,
+            steps: steps.map((step) => (step.status === 'running' ? { ...step, status: 'pending' as const } : step)),
+            ...((items ?? job.items)?.length ? { items: aiCanceledItems(items ?? job.items ?? []) } : {}),
           }
         : {}),
     }
@@ -1177,15 +1262,18 @@ export async function completeAiJob(
   const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
-      : {
-          status: 'done',
-          creditsReserved: 0,
-          lease: null,
-          error: null,
-          updatedAt: now,
-        },
+      : // A cancel asked before the finish commits wins (AGL-3616).
+        aiJobCancelPending(current)
+        ? aiJobCanceledPatch(current, now, cancelRequestOf(current, now))
+        : {
+            status: 'done',
+            creditsReserved: 0,
+            lease: null,
+            error: null,
+            updatedAt: now,
+          },
   )
-  if (changed) await announceAiJobTransition(job, 'done')
+  if (changed && job.status === 'done') await announceAiJobTransition(job, 'done')
   return job
 }
 
@@ -1211,20 +1299,23 @@ export async function failAiJob(
   const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
-      : {
-          status: 'failed',
-          error: message,
-          creditsReserved: 0,
-          lease: null,
-          steps: current.steps.map((step) =>
-            step.status === 'running'
-              ? { ...step, status: 'failed', endedAt: now, error: message }
-              : step,
-          ),
-          updatedAt: now,
-        },
+      : // A person's cancel is not a failure (AGL-3616): no alert, no notice.
+        aiJobCancelPending(current)
+        ? aiJobCanceledPatch(current, now, cancelRequestOf(current, now))
+        : {
+            status: 'failed',
+            error: message,
+            creditsReserved: 0,
+            lease: null,
+            steps: current.steps.map((step) =>
+              step.status === 'running'
+                ? { ...step, status: 'failed', endedAt: now, error: message }
+                : step,
+            ),
+            updatedAt: now,
+          },
   )
-  if (changed) {
+  if (changed && job.status === 'failed') {
     await announceAiJobTransition(job, 'failed', {
       ours: detail?.ours ?? false,
       stepIndex: detail?.stepIndex ?? null,
@@ -1249,35 +1340,56 @@ export async function markAiJobNeedsInput(
   const { job } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
-      : {
-          status: 'needs_input',
-          error: reason,
-          lease: null,
-          steps: current.steps.map((step) =>
-            step.status === 'running'
-              ? {
-                  ...step,
-                  status: 'pending',
-                  attempts: Math.max(0, (step.attempts ?? 0) - 1),
-                }
-              : step,
-          ),
-          updatedAt: now,
-        },
+      : aiJobCancelPending(current)
+        ? aiJobCanceledPatch(current, now, cancelRequestOf(current, now))
+        : {
+            status: 'needs_input',
+            error: reason,
+            lease: null,
+            steps: current.steps.map((step) =>
+              step.status === 'running'
+                ? {
+                    ...step,
+                    status: 'pending',
+                    attempts: Math.max(0, (step.attempts ?? 0) - 1),
+                  }
+                : step,
+            ),
+            updatedAt: now,
+          },
   )
   return job
 }
 
+/** What a cancel did (AGL-3616). */
+export interface AiJobCancelResult {
+  job: AiJob
+  /** The cancel was new: it ended the job, or asked the step in flight to stop. */
+  changed: boolean
+}
+
 /**
- * Cancel. Idempotent — a terminal job is returned unchanged — and it does
- * not wait for a step in flight: the runner holding the lease finishes its
- * provider call, records what it cost, and finds the job canceled when it
- * goes to complete it.
+ * Cancel (AGL-2904, AGL-3616). One transaction decides it against whatever
+ * else commits, so a cancel racing a finish resolves to whichever committed
+ * first: a job already `done`, `failed` or `canceled` is returned unchanged.
  *
- * The activity row is written only when the cancel changed something: a
- * second cancel of the same job is not a second act. `actor` is the member
- * who canceled; a cancel with nobody named is recorded as nobody's rather
- * than as the creator's.
+ * - **No step in flight** (queued, parked for a person or the meter, or a
+ *   lease that ran out): the job ends `canceled` in this write. It holds
+ *   nothing, its unbuilt items are skipped, and nothing it built is touched.
+ * - **A step in flight** (a live lease): the cancel is recorded as
+ *   `cancelRequested` and the job keeps its status until the runner holding
+ *   the lease comes back. The runner watches for it and aborts its provider
+ *   call; whatever the step had spent is metered, and the machine's next
+ *   write ends the job `canceled` (`recordStep`, or the finish or failure it
+ *   was about to write, which a pending cancel turns into the cancel).
+ *
+ * Either way a canceled job is never failed: no `ai.jobFailed` alert, no
+ * failure notice, no give-back (what ran stays charged), no publish.
+ *
+ * The activity row is written once, when the cancel is first asked: a second
+ * cancel of the same job is not a second act. `actor` is the member who
+ * canceled; a cancel with nobody named is recorded as nobody's rather than
+ * as the creator's.
  */
 export async function cancelAiJob(
   firestore: Firestore,
@@ -1285,18 +1397,23 @@ export async function cancelAiJob(
   jobId: string,
   now = new Date(),
   actor: AiActivityActor | null = null,
-): Promise<{ job: AiJob; changed: boolean }> {
-  const result = await transition(firestore, orgId, jobId, (current) =>
-    isAiJobTerminal(current.status)
-      ? null
-      : {
-          status: 'canceled',
-          creditsReserved: 0,
-          lease: null,
-          updatedAt: now,
-        },
-  )
-  if (result.changed) {
+): Promise<AiJobCancelResult> {
+  const request = aiJobCancelRequest(now, actor?.uid ?? null)
+  let firstAsk = false
+  const result = await transition(firestore, orgId, jobId, (current) => {
+    if (isAiJobTerminal(current.status)) return null
+    const inFlight = anyLeaseIsLive(current, now.getTime())
+    if (current.cancelRequested) {
+      // Asked already: nothing new while its step is still in flight; a
+      // step whose runner never came back is ended now.
+      return inFlight ? null : aiJobCanceledPatch(current, now, current.cancelRequested)
+    }
+    firstAsk = true
+    return inFlight
+      ? { cancelRequested: request, updatedAt: now }
+      : aiJobCanceledPatch(current, now, request)
+  })
+  if (result.changed && firstAsk) {
     await logAiJobCanceled(orgId, actor ?? { uid: null }, {
       jobId,
       kind: result.job.kind,
@@ -1384,6 +1501,11 @@ async function failOurFailure(
   now: Date,
 ): Promise<AiJob> {
   const current = await getAiJob(firestore, orgId, jobId)
+  // A person's cancel asked while the step ran is the job's end (AGL-3616):
+  // not our failure, so nothing is given back and nobody is told.
+  if (current && aiJobCancelPending(current)) {
+    return failAiJob(firestore, orgId, jobId, message, { ...detail, ours: false }, now)
+  }
   // A build that got as far as its items settles item by item (AGL-3616):
   // what it delivered stands, and what it did not is given back per item.
   if (current && aiJobSettlesByItem(current.kind) && current.items?.length && !isAiJobTerminal(current.status)) {
@@ -1509,6 +1631,8 @@ export async function settleAiBuildJob(
   const { now } = input
   let job = await getAiJob(firestore, orgId, jobId)
   if (!job || isAiJobTerminal(job.status)) return job as AiJob
+  // A cancel asked before the build settled is how it ends (AGL-3616).
+  if (aiJobCancelPending(job)) return completeAiJob(firestore, orgId, jobId, now)
   const stopped = input.stopped
   if (stopped && (job.items ?? []).some((row) => row.status === 'pending' || row.status === 'running')) {
     const refunds = new Map<string, { credits: number; key: string }>()
@@ -1885,6 +2009,8 @@ export function aiJobRefusalText(
 export interface RunAiJobStepOptions {
   /** Who is claiming: a request id or a beat id. */
   owner: string
+  /** How often the running step re-reads its job for a cancel (AGL-3616); specs shorten it. */
+  cancelPollMs?: number
   now?: Date
   /**
    * A reservation the caller already holds for THIS step — the console
@@ -1929,6 +2055,11 @@ export type AiJobStepRun =
    * beat's queue, until staff resume AI.
    */
   | { outcome: 'paused'; job: AiJob }
+  /**
+   * A person canceled the job while this step held it (AGL-3616): the step
+   * finished or aborted, what it spent is recorded, and the job is canceled.
+   */
+  | { outcome: 'canceled'; job: AiJob }
 
 /**
  * A budget that ended before the provider answered. `fetch` rejects with
@@ -2079,6 +2210,8 @@ export async function runAiJobStep(
   if (!reservation.allowed) {
     const refusal = aiJobRefusalText(org, reservation)
     const parked = await markAiJobNeedsInput(firestore, orgId, jobId, refusal, now)
+    // A cancel asked meanwhile ended the job instead of parking it (AGL-3616).
+    if (parked.status === 'canceled') return { outcome: 'canceled', job: parked }
     // Nobody parked the job — the meter did — so the row carries no actor
     // rather than the creator's name on an act they did not perform. Only
     // when the job was not already parked for this: the reason the last
@@ -2111,13 +2244,29 @@ export async function runAiJobStep(
   const modelFor = (kind: Parameters<typeof resolveAiModelChoice>[0]) =>
     resolveAiModelChoice(kind, job.model ?? null, bounds)?.model
 
+  // A person's cancel stops the step (AGL-3616): the step's signal is the
+  // caller's budget AND a watch on the job, so a cancel aborts the provider
+  // call in flight, stops one about to start, and stops a write the step
+  // asks `throwIfAiJobCanceled` about first.
+  const stepSignal = new AbortController()
+  const forwardBudget = () => stepSignal.abort(options.signal?.reason)
+  if (options.signal?.aborted) forwardBudget()
+  else options.signal?.addEventListener('abort', forwardBudget, { once: true })
+  const stopWatch = watchAiJobCancel(
+    () => getAiJob(firestore, orgId, jobId),
+    stepSignal,
+    options.cancelPollMs,
+  )
+  const canceledMidStep = () =>
+    stepSignal.signal.aborted && isAiJobCanceledError(stepSignal.signal.reason)
+
   let outcome: AiJobStepOutcome
   // The runner's wall-clock time, recorded on the step beside its tokens
   // (AGL-2937): measured here, around the call, rather than asked of it.
   const runStarted = Date.now()
   try {
     outcome = await runner({
-      job, stepIndex, now, signal: options.signal, firestore, org, modelFor,
+      job, stepIndex, now, signal: stepSignal.signal, firestore, org, modelFor,
     })
   } catch (error) {
     // The provider refused the request or the budget ended before it
@@ -2127,6 +2276,16 @@ export async function runAiJobStep(
     await releaseAssistMessage(firestore, orgId, reservation).catch((releaseError) =>
       console.error('ai job release failed', { orgId, jobId, releaseError }),
     )
+    // Canceled mid-step (AGL-3616): the step is handed back unrun and the
+    // record ends the job canceled — never failed, never retried.
+    if (isAiJobCanceledError(error) || canceledMidStep()) {
+      const { job: canceled } = await recordStep(
+        firestore, orgId, jobId, options.owner, stepIndex,
+        { status: 'pending', creditsSpent: 0 },
+        now,
+      )
+      return { outcome: 'canceled', job: canceled }
+    }
     const retryable =
       (error instanceof AiUpstreamError && error.retryable) || isAbort(error)
     if (retryable) {
@@ -2144,6 +2303,9 @@ export async function runAiJobStep(
         error,
       }, { reason: 'provider', stepCredits: 0, free: reservation.free ?? null }, now),
     }
+  } finally {
+    stopWatch()
+    options.signal?.removeEventListener('abort', forwardBudget)
   }
 
   const latencyMs = Math.max(0, Date.now() - runStarted)
@@ -2286,7 +2448,9 @@ export async function runAiJobStep(
   // A build item that failed on our side gives back its own attempt's spend
   // before its row is written (AGL-3616), so the row records what was given.
   let itemRecord: AiJobItemRecord | undefined = aiJobSettlesByItem(job.kind) ? outcome.item : undefined
-  if (itemRecord?.status === 'failed' && itemRecord.failure?.ours) {
+  // An item a person's cancel cut short is not our failure (AGL-3616): it is
+  // given nothing back, and its row is the cancel's.
+  if (itemRecord?.status === 'failed' && itemRecord.failure?.ours && !canceledMidStep()) {
     const slot = itemRecord.slot
     const row = (outcome.items ?? job.items ?? []).find((one) => one.slot === slot)
     const refund = await refundBuildCredits(firestore, orgId, job, {
@@ -2357,6 +2521,8 @@ export async function runAiJobStep(
       },
     })
   }
+  // A cancel asked while the step ran ended the job in that record (AGL-3616).
+  if (recorded.job.status === 'canceled') return { outcome: 'canceled', job: recorded.job }
   if (review?.reason === 'plan' && recorded.job.status === 'needs_review' && aiJobAutoConfirms(job)) {
     // A guided site start confirms its own plan (AGL-3594): the resume
     // door's confirmation, by the job's creator, and the build queued.

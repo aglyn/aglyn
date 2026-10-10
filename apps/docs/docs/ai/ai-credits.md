@@ -135,7 +135,8 @@ The job says *This one's on us — you weren't charged.* and how many credits ca
 to three jobs a day are given back this way.
 
 Credits are **not** given back when you cancel a job yourself (you pay for what ran until
-then), or when the AI declines what the brief asked for. A picture that is declined or
+then, and credits held for steps that never ran are released; see
+[Cancel a job](./ai-jobs-and-activity.md#cancel-a-job)), or when the AI declines what the brief asked for. A picture that is declined or
 does not come out is never charged in the first place.
 
 ## See your credits {#see-your-credits}

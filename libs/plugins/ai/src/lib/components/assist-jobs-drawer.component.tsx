@@ -48,7 +48,8 @@ import {
   type AiJobPhase,
 } from '../model/ai-job-activity'
 import type { AiInsightSurface } from '../model/ai-insight'
-import { cancelAiJobRequest, resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
+import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
+import { useAiJobCancel } from './ai-job-cancel.component'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildRetryCreditRange, aiSitePartialCopy } from '../model/ai-build-progress'
 import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
@@ -393,19 +394,9 @@ export function AssistJobsDrawer({
     }
   }, [expanded, orgId, watchedId, user, patchJob])
 
-  // The same door the dialog that started the job cancels through (AGL-3593).
-  const cancel = useCallback(
-    async (jobId: string) => {
-      if (!orgId) return
-      const { job, error } = await cancelAiJobRequest(user, orgId, jobId)
-      if (error) {
-        setNotice(error)
-        return
-      }
-      if (job) patchJob(job)
-    },
-    [orgId, user, patchJob],
-  )
+  // The same door the dialog that started the job cancels through (AGL-3593),
+  // behind the one confirm every Cancel shows (AGL-3616).
+  const canceling = useAiJobCancel({ user, orgId, onJob: patchJob })
 
   /** The job whose resume is in flight, so its button cannot send twice. */
   const [resuming, setResuming] = useState<string | null>(null)
@@ -502,6 +493,7 @@ export function AssistJobsDrawer({
             No AI jobs yet.
           </Typography>
         )}
+        {canceling.dialog}
         <Stack ref={listRef} spacing={1} sx={{ mt: 1 }} role="list" aria-label="AI jobs">
           {jobs.map((job) => {
             const restartHref = (row: AiJobSummary) =>
@@ -545,8 +537,12 @@ export function AssistJobsDrawer({
                     {netCredits(job) > 0 ? ` · ${netCredits(job)} credits` : ''}
                   </Typography>
                   {!terminal && (
-                    <Button size="small" onClick={() => void cancel(job.id)}>
-                      Cancel
+                    <Button
+                      size="small"
+                      disabled={Boolean(job.cancelRequested) || canceling.busyJobId === job.id}
+                      onClick={() => canceling.ask(job)}
+                    >
+                      {job.cancelRequested ? 'Stopping…' : 'Cancel'}
                     </Button>
                   )}
                 </Stack>

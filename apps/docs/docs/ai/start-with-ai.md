@@ -157,6 +157,11 @@ all of them if it built nothing, or the failed step's if it had already built so
 The page says so. A job you cancel yourself is not given back. See
 [Credits given back](./ai-credits.md#credits-given-back).
 
+You can also stop the build yourself with **Cancel** on the **Building your site** page.
+The pages it already made stay as drafts, nothing is published, and the page offers
+**Start again** and **Use the starter site instead**. See
+[Cancel a job](./ai-jobs-and-activity.md#cancel-a-new-site).
+
 ## Published, and found by search engines {#published-and-indexable}
 
 A guided start **publishes** the site when it finishes, so it is live at its address:

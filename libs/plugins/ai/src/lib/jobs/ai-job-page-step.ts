@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import { buildPageMarkdown } from '@aglyn/aglyn/app-utils/page-markdown'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { SCREEN_ROOT_PATH, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
@@ -743,6 +744,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             }
           }
         }
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
         await writeAiDraftScreenSeo(firestore, { hostId, id: draftId, seo: values, now })
       }
       return { ...spent, outputs: reports }
@@ -796,6 +799,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         }),
       })
       if (!written) {
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
         const draft = await writeAiDraft(firestore, {
           kind: 'screen',
           hostId,
@@ -815,6 +820,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         }
       } else {
         // A draft written by an earlier, interrupted pass is replaced whole.
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
         const update = await updateAiDraftNodes(firestore, {
           kind: 'screen',
           hostId,
@@ -861,6 +868,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result, { page: true }) }
 
     if (!written) {
+      // Never written once the job is canceled (AGL-3616).
+      throwIfAiJobCanceled(signal)
       const draft = await writeAiDraft(firestore, {
         kind: 'screen',
         hostId,
@@ -879,6 +888,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         return { ...spent, review: aiLimitReview(draft.error) }
       }
     } else {
+      // Never written once the job is canceled (AGL-3616).
+      throwIfAiJobCanceled(signal)
       const update = await updateAiDraftNodes(firestore, {
         kind: 'screen',
         hostId,

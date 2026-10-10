@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiJobCancelAsked } from './ai-job-cancel'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -993,6 +994,8 @@ export function createAiJobSiteStep(
     /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      // A canceled start never puts the site live (AGL-3616): its pages stay drafts.
+      if (await aiJobCancelAsked(context.firestore, job, context.signal)) return outcome
       // A blog the header links by path before its posts exist (AGL-3660):
       // owed and not delivered, its links come out of what is published.
       const postsRow = rows.get('posts')

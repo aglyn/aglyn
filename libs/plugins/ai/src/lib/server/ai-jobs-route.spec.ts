@@ -950,6 +950,66 @@ describe('POST /api/ai/jobs/[jobId]/cancel', () => {
     expect(response.status).toBe(404)
     expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('queued')
   })
+
+  // AGL-3616: who may stop a job, and what a job in flight answers.
+  const queuedJob = async () => {
+    mockRunAiRequest.mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' }))
+    return (await (await createJob(post(VALID))).json()).job as { id: string }
+  }
+  const cancel = (jobId: string, orgId = ORG) =>
+    cancelJob(post({ orgId }, { path: `/api/ai/jobs/${jobId}/cancel` }), params(jobId))
+
+  it('403 for a member without ai.generate on the job’s site, asked about THAT site; the job runs on', async () => {
+    const job = await queuedJob()
+    mockAiPermitted = false
+    mockAiPermissionAsks = []
+    const member = { role: 'editor', allHosts: false, hostAccess: { 'host-1': 'viewer' } }
+    mockGetOrgForUser.mockResolvedValue({ orgId: ORG, org: ENTITLED_ORG, member })
+    const response = await cancel(job.id)
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ reason: 'permission', permission: 'ai.generate' })
+    expect(mockAiPermissionAsks).toEqual([[ORG, 'host-1', member, 'ai.generate']])
+    expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('queued')
+    expect(mockAiActivity.logAiJobCanceled).not.toHaveBeenCalled()
+  })
+
+  it('403 for someone who is neither a member nor staff', async () => {
+    const job = await queuedJob()
+    mockGetOrgForUser.mockResolvedValue(null)
+    expect((await cancel(job.id)).status).toBe(403)
+    expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('queued')
+  })
+
+  it('staff cancel a workspace’s job they are not a member of, audited as staff', async () => {
+    const job = await queuedJob()
+    mockAiPermitted = false
+    mockGetOrgForUser.mockResolvedValue(null)
+    mockVerifyIdToken.mockResolvedValue({ uid: 'staff-1', email: 'staff@example.com', email_verified: true, staff: true })
+    const response = await cancel(job.id)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ changed: true, job: { status: 'canceled' } })
+    const audit = [...mockDocs.entries()].filter(([path]) => path.startsWith('adminAudit/'))
+    expect(audit.map(([, row]) => row)).toEqual([
+      expect.objectContaining({ action: 'ai.job.cancel', actorUid: 'staff-1', after: expect.objectContaining({ staff: true }) }),
+    ])
+  })
+
+  it('a job whose step is in flight answers still running, asked to cancel', async () => {
+    const job = await queuedJob()
+    const path = `orgs/${ORG}/aiJobs/${job.id}`
+    mockDocs.set(path, {
+      ...mockDocs.get(path),
+      status: 'running',
+      lease: { owner: 'beat-1', until: new Date(Date.now() + 60_000) },
+    })
+    const response = await cancel(job.id)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ changed: true, job: { status: 'running', cancelRequested: true } })
+    expect(mockDocs.get(path)).toMatchObject({ status: 'running', cancelRequested: { by: 'uid-1' } })
+    // Asked again while it stops: nothing new, one row.
+    expect(await (await cancel(job.id)).json()).toMatchObject({ changed: false })
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {

@@ -44,6 +44,7 @@ jest.mock('../providers/routing', () => ({
   aiModelForStep: () => 'routed-model',
 }))
 
+import { AiJobCanceledError } from './ai-job-cancel'
 import type {
   AiJob,
   AiJobKind,
@@ -1317,6 +1318,44 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     publish.mockClear()
     await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: SITE_PUBLISH }))
     expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('never puts a canceled start live: its pages stay drafts (AGL-3616)', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish },
+    )
+    // Seen by the step's own watch: its signal was aborted by the cancel.
+    const aborted = new AbortController()
+    aborted.abort(new AiJobCanceledError())
+    const watched = await step({ ...context(lastPass({ autoConfirm: true })), signal: aborted.signal })
+    expect(publish).not.toHaveBeenCalled()
+    expect(watched.sitePublish).toBeUndefined()
+    expect(watched.outputs.map((entry) => entry.id)).toContain('screen-3')
+    // Read fresh right before the publish: the cancel was asked a moment ago.
+    const read = (stored: Record<string, unknown>) =>
+      ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => stored }) }) }),
+          }),
+        }),
+      }) as unknown as FirebaseFirestore.Firestore
+    await step({
+      ...context(lastPass({ autoConfirm: true })),
+      firestore: read({ status: 'running', cancelRequested: { at: new Date(), by: 'uid-2' } }),
+    })
+    expect(publish).not.toHaveBeenCalled()
+    // A budget that ran out is not a cancel, and a job nobody canceled publishes.
+    const timedOut = new AbortController()
+    timedOut.abort(Object.assign(new Error('budget'), { name: 'TimeoutError' }))
+    await step({
+      ...context(lastPass({ autoConfirm: true })),
+      signal: timedOut.signal,
+      firestore: read({ status: 'running' }),
+    })
+    expect(publish).toHaveBeenCalledTimes(1)
   })
 
   it('publishes what was built when the last unit fails, since no pass comes after it (AGL-3676)', async () => {
