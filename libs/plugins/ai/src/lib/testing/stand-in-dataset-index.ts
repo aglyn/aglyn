@@ -28,7 +28,8 @@ import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-ser
  * plugin may not load the data plugin that registers the real one. It answers
  * in the shape the data plugin's `dataset-record-index.ts` documents: live
  * datasets only, narrowed to a site to those shared with it, each with its
- * fields (`{ id, name, type }`, in the dataset page's order) and its
+ * fields (`{ id, name, type }` and a `customType` where one rides it, in
+ * the dataset page's order) and its
  * `visibleTo`. What the data plugin itself answers is held in its own spec.
  */
 
@@ -40,6 +41,7 @@ const str = (value: unknown): string => (typeof value === 'string' ? value.trim(
 interface StoredField {
   name?: unknown
   type?: unknown
+  customType?: unknown
 }
 
 /**
@@ -74,6 +76,7 @@ function record(id: string, data: Record<string, unknown> | undefined): PluginIn
         id: fieldId,
         name: str(model.fields[fieldId]?.name) || fieldId,
         type: String(model.fields[fieldId]?.type ?? 'text'),
+        ...(str(model.fields[fieldId]?.customType) ? { customType: str(model.fields[fieldId]?.customType) } : {}),
       })),
       visibleTo: Array.isArray(data['visibleTo']) ? data['visibleTo'] : [],
     },

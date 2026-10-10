@@ -134,7 +134,7 @@ jobs:
 
       - name: Swift package cache
         if: steps.changed.outputs.run == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Caches/org.swift.swiftpm
           key: swiftpm-${{ runner.os }}-${{ hashFiles('libs/native/apple/Package.swift', 'apps/ios/Aglyn.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}

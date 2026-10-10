@@ -34,6 +34,9 @@ import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import type { generateAiDataset } from '../runtime/ai-dataset-generation'
 import type { AiJobStepContext } from './ai-job-text-step'
+import type { PluginMediaIngest, PluginMediaIngestRequest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
+import type { StockPhoto, StockPhotoProvider } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
+import { aiLayoutStockPhotoSource, aiStockForgetJobPhotos } from './ai-layout-stock-photos'
 import {
   AI_SITE_DATASET_INPUT,
   AI_SITE_DATASET_NOT_WRITTEN_COPY,
@@ -42,7 +45,11 @@ import {
   aiSiteDatasetBriefLines,
   aiSiteDatasetInputOf,
   aiSiteDatasetListings,
+  aiSiteDatasetContentWithPhotos,
   aiSiteDatasetNote,
+  aiSiteDatasetPicturesOf,
+  aiSiteDatasetPlacedPhotos,
+  aiSiteDatasetRecordPhotos,
   aiSiteDatasetRefusal,
   aiSiteDatasetFieldName,
   aiSiteFormDatasetContent,
@@ -167,6 +174,8 @@ describe('what a site plan’s dataset is', () => {
     expect(aiSiteDatasetInputOf(MENU, SCREENS)).toEqual({
       shownIn: ['Home › From the menu (3 items)', 'Menu › The whole menu (12 items)'],
       recordPages: true,
+      // A menu is looked at before it is read: its dishes carry photos (AGL-3616).
+      pictures: 'things',
     })
     expect(aiSiteRecordTemplateOf(SCREENS[2])).toBe('Menu')
     expect(aiSiteRecordTemplateOf(SCREENS[0])).toBeNull()
@@ -177,7 +186,13 @@ describe('the dataset unit', () => {
   it('designs the dataset from the brief and has the data plugin write it under the creation’s id', async () => {
     const generate = generated()
     const { writes, writerFor } = fakeWriter()
-    const outcome = await createAiSiteDatasetRunner({ generate, writerFor })(context(unitJob()))
+    const photos = jest.fn(async ({ names }: { names: readonly string[] }) =>
+      names.map((_name, index) => ({ src: `/api/media/cdn/host-1/m${index + 1}`, placed: `media:host-1/m${index + 1}` })),
+    )
+    const outcome = await createAiSiteDatasetRunner({ generate, writerFor, photos })(context(unitJob()))
+    expect(photos).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Menu', names: ['Margherita', 'Tagliatelle al ragù', 'Tiramisù'], pictures: 'things' }),
+    )
     expect(generate).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Menu',
@@ -191,11 +206,24 @@ describe('the dataset unit', () => {
     expect(writes[0]).toMatchObject({ orgId: 'org-1', hostId: 'host-1', uid: 'uid-1', id: 'drftMenu01', name: 'Menu' })
     expect(writes[0].content).toEqual({
       name: 'Menu',
-      fields: DESIGNED.fields,
+      // Each dish keeps its photo in an Image field (AGL-3616).
+      fields: [...DESIGNED.fields, { name: 'Image', type: 'image' }],
       records: [
-        { Dish: 'Margherita', Description: 'Tomato, fior di latte and basil from the wood oven.', Course: 'Pizza', Vegetarian: 'yes' },
-        { Dish: 'Tagliatelle al ragù', Description: 'Fresh egg pasta with a slow-cooked Bolognese ragù.', Course: 'Pasta', Vegetarian: 'no' },
-        { Dish: 'Tiramisù', Description: 'Mascarpone, espresso and cocoa.', Course: 'Dessert', Vegetarian: 'yes' },
+        {
+          Dish: 'Margherita',
+          Description: 'Tomato, fior di latte and basil from the wood oven.',
+          Course: 'Pizza',
+          Vegetarian: 'yes',
+          Image: '/api/media/cdn/host-1/m1',
+        },
+        {
+          Dish: 'Tagliatelle al ragù',
+          Description: 'Fresh egg pasta with a slow-cooked Bolognese ragù.',
+          Course: 'Pasta',
+          Vegetarian: 'no',
+          Image: '/api/media/cdn/host-1/m2',
+        },
+        { Dish: 'Tiramisù', Description: 'Mascarpone, espresso and cocoa.', Course: 'Dessert', Vegetarian: 'yes', Image: '/api/media/cdn/host-1/m3' },
       ],
       // A record page shows each dish at an address made from its name.
       pageAddressFrom: 'Dish',
@@ -209,7 +237,12 @@ describe('the dataset unit', () => {
         hostSubdomain: 'trattoria',
         label: 'Menu',
         note: aiSiteDatasetNote(3),
-        proposal: expect.objectContaining({ recordNames: ['Margherita', 'Tagliatelle al ragù', 'Tiramisù'], addressField: 'slug' }),
+        proposal: expect.objectContaining({
+          recordNames: ['Margherita', 'Tagliatelle al ragù', 'Tiramisù'],
+          addressField: 'slug',
+          // What no page of the job places again.
+          photos: ['media:host-1/m1', 'media:host-1/m2', 'media:host-1/m3'],
+        }),
       }),
     ])
   })
@@ -473,5 +506,252 @@ describe('what the pages built after a dataset are told', () => {
     expect(aiSiteDatasetBriefLines([written])).toEqual([
       'This site\'s dataset “Menu” holds: “Margherita”, “Tiramisù”. Where a page names one, name it as written; never name one that is not in this list.',
     ])
+  })
+})
+
+/*
+ * A pictured dataset (AGL-3616). beta.239's fresh ceramics portfolio start
+ * listed "Selected work" (dataset "Portfolio pieces") and "Commissions and
+ * classes" (dataset "Studio offerings") as text-only cards, where the same
+ * section had been an image-led gallery before it was a dataset. Through
+ * core's seams only: a fake stock provider and a fake library. No network.
+ */
+describe('a dataset whose records carry photos (AGL-3616)', () => {
+  const CLAY = 'a portfolio for a ceramic artist who makes stoneware bowls and vases'
+  const PIECES: AiBuildPlanCreate = {
+    kind: 'dataset',
+    name: 'Portfolio pieces',
+    why: 'the work the home and the work page show',
+    duplicateOf: null,
+    fields: ['Title', 'Description'],
+    id: 'drftPiece01',
+  }
+  const OFFERINGS: AiBuildPlanCreate = { ...PIECES, name: 'Studio offerings', id: 'drftOffer01' }
+  const STUDIO_SCREENS = [
+    screen('Home', '/', [{ name: 'Hero', uses: [], items: 0 }, { name: 'Selected work', uses: ['new:Portfolio pieces'], items: 6 }], { id: 'pHome' }),
+    screen('Studio', '/studio', [{ name: 'Commissions and classes', uses: ['new:Studio offerings'], items: 3 }], { id: 'pStudio' }),
+  ]
+
+  it('pictures the lists a visitor looks at, read off the plan, and never the ones they read', () => {
+    expect(aiSiteDatasetInputOf(PIECES, STUDIO_SCREENS).pictures).toBe('things')
+    // Offerings are pictured where their section names classes, commissions or a gallery…
+    expect(aiSiteDatasetInputOf(OFFERINGS, STUDIO_SCREENS).pictures).toBe('things')
+    expect(aiSiteDatasetPicturesOf({ name: 'Services' }, ['Services gallery'])).toBe('things')
+    // …and not where it lists them as words.
+    expect(aiSiteDatasetPicturesOf({ name: 'Dental services' }, ['Services overview', 'Full services list'])).toBeNull()
+    expect(aiSiteDatasetPicturesOf({ name: 'Programs' }, ['Our programs'])).toBeNull()
+    // A team is pictured as people.
+    expect(aiSiteDatasetPicturesOf({ name: 'Team members' }, ['Meet the team'])).toBe('people')
+    // Questions, voices and roles are read, never pictured.
+    expect(aiSiteDatasetPicturesOf({ name: 'Visit questions' }, ['Frequently asked questions'])).toBeNull()
+    expect(aiSiteDatasetPicturesOf({ name: 'Patient testimonials' }, ['Parent testimonials'])).toBeNull()
+    expect(aiSiteDatasetPicturesOf({ name: 'Volunteer roles' }, ['Volunteer roles'])).toBeNull()
+    // Listed nowhere, it is pictured nowhere.
+    expect(aiSiteDatasetPicturesOf(PIECES, [])).toBeNull()
+    // A form's dataset holds its submissions.
+    const form: AiBuildPlanCreate = { ...PIECES, kind: 'form', name: 'Commission request', writesTo: 'new:Portfolio pieces' }
+    expect(aiSiteDatasetInputOf(PIECES, STUDIO_SCREENS, [form])).not.toHaveProperty('pictures')
+  })
+
+  it('keeps each record’s photo in an Image field, the planned one where the plan named it', () => {
+    const designed = { name: 'Pieces', fields: [{ name: 'Title', type: 'text' }], records: [{ Title: 'Bowl' }, { Title: 'Vase' }] }
+    expect(aiSiteDatasetContentWithPhotos(designed, ['/api/media/cdn/host-1/m1', null])).toEqual({
+      name: 'Pieces',
+      fields: [
+        { name: 'Title', type: 'text' },
+        { name: 'Image', type: 'image' },
+      ],
+      // A record with no photo holds none.
+      records: [{ Title: 'Bowl', Image: '/api/media/cdn/host-1/m1' }, { Title: 'Vase' }],
+    })
+    const planned = {
+      name: 'Pieces',
+      fields: [
+        { name: 'Title', type: 'text' },
+        { name: 'Photo', type: 'text' },
+      ],
+      records: [{ Title: 'Bowl', Photo: 'a bowl on linen' }],
+    }
+    expect(aiSiteDatasetContentWithPhotos(planned, ['/api/media/cdn/host-1/m1'])).toEqual({
+      name: 'Pieces',
+      fields: [
+        { name: 'Title', type: 'text' },
+        { name: 'Photo', type: 'image' },
+      ],
+      records: [{ Title: 'Bowl', Photo: '/api/media/cdn/host-1/m1' }],
+    })
+  })
+
+  const hit = (id: number, tags: string[]): StockPhoto => ({
+    provider: 'pexels',
+    id: String(id),
+    width: 1200,
+    height: 900,
+    pageUrl: `https://www.pexels.com/photo/${id}/`,
+    photographer: `user${id}`,
+    tags,
+  })
+  function stock(hits: Record<string, StockPhoto[]>) {
+    const asked: string[] = []
+    const stored: PluginMediaIngestRequest[] = []
+    const provider: StockPhotoProvider = {
+      id: 'pexels',
+      label: 'Pexels',
+      isConfigured: () => true,
+      search: async (request) => {
+        asked.push(request.query)
+        return { photos: hits[request.query] ?? [], cached: false }
+      },
+      download: async () => ({ bytes: new Uint8Array([0xff, 0xd8, 0xff]), contentType: 'image/jpeg' }),
+      credit: (found) => ({
+        providerLabel: 'Pexels',
+        license: 'Pexels License',
+        licenseUrl: 'https://www.pexels.com/license/',
+        attributionRequired: false,
+        text: `Photo by ${found.photographer} on Pexels.`,
+      }),
+    }
+    const ingest: PluginMediaIngest = {
+      ingest: async (request) => {
+        stored.push(request)
+        return { ok: true, mediaId: `m${stored.length}`, src: `media:host-1/m${stored.length}`, width: 1200, height: 900 }
+      },
+      findStockPhoto: async () => null,
+    }
+    const stockPhotos: typeof aiLayoutStockPhotoSource = (input, deps) =>
+      aiLayoutStockPhotoSource(input, { ...deps, provider: () => provider, ingest: () => ingest })
+    return { stockPhotos, asked, stored }
+  }
+  const studioJob = () => unitJob({ $id: 'drftPiece01', brief: CLAY, inputs: { businessType: CLAY, originJobId: 'job-clay' } })
+
+  it('gives each record a stock photo of its own name in the site’s craft, never one twice, as its CDN path', async () => {
+    aiStockForgetJobPhotos()
+    const { stockPhotos, asked, stored } = stock({
+      'ceramic serving bowl': [hit(1, ['ceramic', 'bowl', 'speckled']), hit(2, ['robin', 'food bowl'])],
+      'ceramic bud vase': [hit(3, ['ceramic', 'vase', 'bud vase'])],
+      // Both bowls' searches see the same photo first; the second takes another.
+      'ceramic nesting bowl set': [hit(1, ['ceramic', 'bowl', 'speckled']), hit(4, ['pottery', 'bowl', 'nesting'])],
+    })
+    const photos = await aiSiteDatasetRecordPhotos({
+      job: studioJob(),
+      name: 'Portfolio pieces',
+      names: ['Speckled serving bowl', 'Tall bud vase', 'Nesting bowl set'],
+      pictures: 'things',
+      stockPhotos,
+    })
+    expect(asked[0]).toBe('ceramic serving bowl')
+    expect(stored.map((request) => request.stockPhoto?.id).sort()).toEqual(['1', '3', '4'])
+    expect(photos.map((photo) => photo.src)).toEqual(photos.map((photo) => photo.placed?.replace('media:', '/api/media/cdn/')))
+    expect(new Set(photos.map((photo) => photo.src)).size).toBe(3)
+    // The robin's food bowl is never a serving bowl.
+    expect(stored.some((request) => request.stockPhoto?.id === '2')).toBe(false)
+  })
+
+  it('never places a photo another part of the job placed, and falls back to a starter when nothing matches', async () => {
+    aiStockForgetJobPhotos()
+    const { stockPhotos, stored } = stock({ 'ceramic serving bowl': [hit(1, ['ceramic', 'bowl'])] })
+    // An earlier part of the same job, in this process, placed photo 1.
+    const earlier = stock({ 'ceramic bowl': [hit(1, ['ceramic', 'bowl'])] })
+    const page = earlier.stockPhotos({ hostId: 'host-1', uid: 'uid-1', seed: 'job-clay:home', business: CLAY, sectionNames: ['Work'], jobId: 'job-clay' })
+    await page?.([{ imageId: 'a', frameId: null, iconId: null, alt: 'A bowl', aspect: 4 / 3, sectionIndex: 0, role: 'gallery' }])
+    expect(earlier.stored).toHaveLength(1)
+    const photos = await aiSiteDatasetRecordPhotos({
+      job: studioJob(),
+      name: 'Portfolio pieces',
+      names: ['Speckled serving bowl', 'Glaze test tiles'],
+      pictures: 'things',
+      stockPhotos,
+    })
+    expect(stored).toHaveLength(0)
+    // Every record still has a photo: a starter, which no library holds.
+    expect(photos.every((photo) => !!photo.src?.startsWith('/') && photo.placed === null)).toBe(true)
+    expect(new Set(photos.map((photo) => photo.src)).size).toBe(2)
+  })
+
+  it('searches a team as the business’s people, and spends nothing on a deployment without a library', async () => {
+    aiStockForgetJobPhotos()
+    const { stockPhotos, asked } = stock({})
+    await aiSiteDatasetRecordPhotos({ job: studioJob(), name: 'Team members', names: ['Studio manager'], pictures: 'people', stockPhotos })
+    expect(asked[0]).toBe('ceramic artist studio manager')
+    const none = await aiSiteDatasetRecordPhotos({ job: studioJob(), name: 'Pieces', names: ['Bowl'], pictures: 'things', stockPhotos: () => null })
+    expect(none[0]).toEqual({ src: expect.stringMatching(/^\//), placed: null })
+  })
+
+  it('writes the pieces with their photos, tells the pages which field holds them, and which photos not to place again', async () => {
+    const generate = generated({
+      fields: [
+        { name: 'Title', type: 'text' as const },
+        { name: 'Description', type: 'text' as const },
+      ],
+      records: [
+        ['Speckled serving bowl', 'A wide stoneware bowl.'],
+        ['Tall bud vase', 'A slim vase for one stem.'],
+      ],
+    } as never)
+    const writes: Array<{ content: Record<string, unknown> }> = []
+    const { writerFor } = fakeWriter({
+      write: async (request) => (writes.push(request), {
+        ok: true,
+        replayed: false,
+        id: request.id,
+        name: request.name,
+        versionId: null,
+        facts: {
+          fields: [
+            { id: 'title', name: 'Title', type: 'text' },
+            { id: 'description', name: 'Description', type: 'text' },
+            { id: 'image', name: 'Image', type: 'text' },
+          ],
+          records: 2,
+          addressField: null,
+          imageField: 'image',
+        },
+      }),
+    })
+    const photos = async () => [
+      { src: '/api/media/cdn/host-1/m1', placed: 'media:host-1/m1' },
+      { src: '/_static/starter/gallery-craft.jpg', placed: null },
+    ]
+    const job = unitJob({
+      $id: 'drftPiece01',
+      inputs: { [AI_SITE_DATASET_INPUT]: aiSiteDatasetInputOf(PIECES, STUDIO_SCREENS) },
+      plan: { reuse: [], create: [PIECES], screens: [], status: 'confirmed', labels: {} } as unknown as AiJobPlan,
+    })
+    const outcome = await createAiSiteDatasetRunner({ generate, writerFor, photos })(context(job))
+    expect((writes[0].content as { records: unknown[] }).records).toEqual([
+      { Title: 'Speckled serving bowl', Description: 'A wide stoneware bowl.', Image: '/api/media/cdn/host-1/m1' },
+      { Title: 'Tall bud vase', Description: 'A slim vase for one stem.', Image: '/_static/starter/gallery-craft.jpg' },
+    ])
+    // Photos are searched in code: the pass spends only its one generation.
+    expect(outcome.usage).toEqual(SPEND.usage)
+    const listings = aiSiteDatasetListings({
+      outputs: outcome.outputs,
+      datasets: [PIECES],
+      screens: STUDIO_SCREENS,
+      delivered: new Map([['portfolio pieces', 'drftPiece01']]),
+    })
+    expect(listings[0]).toMatchObject({
+      imageField: 'image',
+      // The photo is the card's picture, never its words.
+      fields: [
+        { id: 'title', name: 'Title', type: 'text' },
+        { id: 'description', name: 'Description', type: 'text' },
+      ],
+    })
+    expect(aiSiteDatasetPlacedPhotos(outcome.outputs)).toEqual(['media:host-1/m1'])
+  })
+
+  it('asks for no photo for a list read rather than looked at', async () => {
+    const photos = jest.fn(async () => [])
+    const FAQ: AiBuildPlanCreate = { ...PIECES, name: 'Visit questions', fields: ['Question', 'Answer'] }
+    const visit = screen('Visit', '/visit', [{ name: 'Questions', uses: ['new:Visit questions'], items: 6 }], { id: 'pVisit' })
+    const job = unitJob({
+      inputs: { [AI_SITE_DATASET_INPUT]: aiSiteDatasetInputOf(FAQ, [visit]) },
+      plan: { reuse: [], create: [FAQ], screens: [], status: 'confirmed', labels: {} } as unknown as AiJobPlan,
+    })
+    const { writes, writerFor } = fakeWriter()
+    await createAiSiteDatasetRunner({ generate: generated(), writerFor, photos })(context(job))
+    expect(photos).not.toHaveBeenCalled()
+    expect((writes[0].content as { fields: Array<{ type: string }> }).fields.some((field) => field.type === 'image')).toBe(false)
   })
 })

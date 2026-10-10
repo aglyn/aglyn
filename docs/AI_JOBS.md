@@ -1507,6 +1507,78 @@ nothing itself.
     select only for a real choice, a Details and a Shipping & returns
     accordion from what the product and the store's return settings hold,
     the store's reviews, and related products as photo cards.
+  - **The store's own pages** (third round, Zach 2026-10-10: "make sure all
+    they would have to do is setup the payment info and update products";
+    `model/ai-site-store-pages.ts`, `jobs/ai-job-site-store-pages.ts`). A paid
+    store owes one more unit, `store` ("Adding your account, cart and policy
+    pages"), after its planned pages and before the welcome email, written by
+    CODE in one pass: no model, no credits. It writes, through the same page
+    draft writer and pages allowance as every page: **Your account** at
+    `/account` (the commerce Customer account — sign in, create an account,
+    profile, addresses, order history with status and tracking — and Saved
+    items, the Wishlist the product page's Save fills), **Your cart** at
+    `/cart` (the inline Cart with its checkout, and Continue shopping) — both
+    written UNLISTED (`screen.visibility`, the page Access setting), so the
+    tenant serves them `noindex` and the sitemap leaves them out — and
+    **Shipping & returns** (`/shipping-returns`), **Privacy policy**
+    (`/privacy`) and **Terms of sale** (`/terms`) as Markdown drafts whose
+    every merchant-only fact is a `[bracketed placeholder]` — no window,
+    price, threshold or date is ever invented. A planned page that holds one
+    of those addresses, or a planned shipping page by its words ("Shipping &
+    care"), stands for that store page instead: nothing is written for it and
+    the links go to it. These are STORE PAGES, outside the plan's four to
+    eight: the plan is told the platform adds them and to spend no page on
+    them (`AI_SITE_STORE_PAGES_SENTENCE`), so they never crowd out content.
+    The layout, built first, is told their paths while the ledger owes them
+    (`storeLinks`): the header carries Account beside the cart (and in the
+    phone menu), the footer the account and the policies; a skipped or
+    failed unit's links come out at publish (`unwrittenHrefs`). The pass
+    turns on the site's user accounts (`accounts`, default-off per site)
+    unless the owner switched them off. An order's own page stays the
+    built-in `/order-status` its emails link. Gated like the products: the
+    `commerce` feature (Starter and up), Commerce running on the site, and
+    the editor role; Free gets none. The done page then shows **Finish your
+    store**: connect payments, review products and prices, set shipping and
+    tax (each the commerce plugin's `store-settings` or `product` record
+    route), and fill in the policies (Pages).
+    **An Assist `build` that makes the site a store gets the same pages**
+    (`model/ai-build-store-pages.ts`): a build has no site kind, so the plan
+    step decides by code, as it keeps a `build` plan, whether the plan makes
+    a store (a `product` item, a product page template, or a Shop / Store /
+    Products page) and whether the site can sell (its ops include commerce's
+    `product`, which means the `commerce` feature and Commerce on for the site).
+    It then stores `plan.storePages`: the store pages that neither the plan nor
+    the site's own pages hold, by address or by name ("Privacy Policy" at
+    /privacy-policy). The plan card lists them as added automatically, at no
+    credits. The build gets one more unit, `store`, which runs last, after
+    every planned unit, and is no part of the 16-unit size or the estimate.
+    It runs the site start's own runner behind the site start's gate
+    (`aiSiteStorePagesRefusal`). It reads the site's pages again first, so a
+    page made since the plan is not made twice. Its own pages from an earlier
+    pass are found by their ids and are not counted against it. A layout the
+    build makes is told `storeLinks`. A confirmed publish puts the store pages
+    live with the planned pages and drops the links of any that were not
+    written. The done card shows **Finish your store**, where the products step
+    says the products are drafts to price. It leaves out the policies step when
+    the build wrote no policy page. Where the build makes no layout for them,
+    the store pages render inside the layout of the plan's Shop page, else the
+    home page's layout, else the layout most of the site's pages use. Code adds
+    the links to that layout (`model/ai-layout-store-links.ts`,
+    `jobs/ai-job-store-links-layout.ts`) as a NEW DRAFT VERSION beside the
+    live one. Account goes into each list of links in the header (the bar's and
+    the phone menu's), or into a Toolbar that holds a link. Cart is added too
+    where the layout has no `cart` element. The account and the policies go
+    into the footer's longest list of links. Each new link is a copy of its
+    neighbour, and a link already there, by href or by the page at that
+    address, is skipped. The version that is live is never touched. A build's
+    publish makes the draft the live version while the live one is still the
+    version it was made from (`aiStoreLinksSourceVersionId`). Otherwise it
+    adds the same links to the version that is live then. A layout with no
+    header or footer list is left as it is: the first store page's output
+    carries `storeLinks: missing`, and the finish card asks the owner to "Add
+    Account and policy links to your header and footer". A draft the build did
+    not publish adds "Publish your header and footer links". The build plan
+    prompt is unchanged.
   Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent

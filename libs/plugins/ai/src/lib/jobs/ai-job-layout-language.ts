@@ -45,6 +45,7 @@ import {
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
+import type { AiStoreFrameLinks } from '../model/ai-site-store-pages'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine } from './ai-job-generation'
@@ -193,6 +194,8 @@ export function aiLayoutFrameCheck(input: {
   extend: (tree: AiValidatedTree) => AiDoctrineViolation[]
   /** The site's design (`aiLayoutDesignOf`), whose pages' closing band the footer sits under. */
   design?: AiLayoutDesign | null
+  /** A store's own pages, which the header and footer link by path (AGL-3676). */
+  storeLinks?: AiStoreFrameLinks | null
 }): AiGenerationCheck<AiLayoutFrameBuilt> {
   let answers = 0
   return (answer) => {
@@ -212,6 +215,8 @@ export function aiLayoutFrameCheck(input: {
         cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products' && listing.cart !== false),
         // And a store's header is a storefront's: no button repeating its navigation, an announcement bar (AGL-3676).
         shopId: aiLayoutShopPageId(input.targets),
+        // And its account and policies, written after it (AGL-3676).
+        storeLinks: input.storeLinks ?? null,
       },
       input.targets,
     )

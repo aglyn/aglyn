@@ -113,6 +113,12 @@ export interface AiLayoutListing {
   /** The dataset's fields, in its order, which the card binds. */
   fields?: AiLayoutListingField[]
   /**
+   * The field holding each record's photo (AGL-3616), which the card leads
+   * with as its Image's `src`, so a portfolio stays a gallery. Never among
+   * `fields`: it is the card's picture, not its words.
+   */
+  imageField?: string
+  /**
    * Where a visitor goes from a store with nothing listed yet (AGL-3676): the
    * site's contact page, by its path. The empty state names it as its one
    * action, so a shop that opens empty still answers a visitor.
@@ -197,6 +203,7 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     // A records listing is one dataset's (AGL-3616): a site may list several.
     const datasetId = kind === 'records' ? text(record['datasetId']) : ''
     const fields = kind === 'records' ? listingFieldsOf(record['fields']) : []
+    const imageField = kind === 'records' ? text(record['imageField']) : ''
     // Its fields may be left for the page to read off the site's inventory.
     if (kind === 'records' && !DATASET_ID.test(datasetId)) continue
     if (
@@ -234,6 +241,7 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
       ...(SITE_PATH.test(href) ? { href } : {}),
       ...(kind === 'posts' ? { collectionSlug } : {}),
       ...(kind === 'records' ? { datasetId, fields } : {}),
+      ...(kind === 'records' && FIELD_ID.test(imageField) ? { imageField } : {}),
       ...(kind === 'products' && record['cart'] === false ? { cart: false } : {}),
       ...(kind === 'products' && actionLabel && SITE_PATH.test(actionHref) ? { emptyAction: { label: actionLabel, href: actionHref } } : {}),
       placements,

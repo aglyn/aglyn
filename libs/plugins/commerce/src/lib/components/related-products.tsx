@@ -144,7 +144,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
               ? {
                   display: 'grid',
                   gap: 2,
-                  gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+                  gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
                 }
               : { display: 'flex', gap: 1.5, overflowX: 'auto', pb: 1 }
           }
@@ -165,7 +165,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                 key={item.id}
                 variant={grid ? 'elevation' : 'outlined'}
                 elevation={0}
-                sx={grid ? { bgcolor: 'transparent', overflow: 'visible' } : { minWidth: 160 }}
+                sx={grid ? { bgcolor: 'transparent', overflow: 'visible', minWidth: 0 } : { minWidth: 160 }}
               >
                 <CardActionArea
                   href={`/products/${item.slug}`}

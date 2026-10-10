@@ -39,6 +39,7 @@ import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AI_SITE_PASS_CREDITS, aiJobPlanCreditRange, aiPlanCreditEstimate, aiPlanCreditRange } from '../model/ai-site-job'
 import { aiBuildCreditRange, aiBuildFirstPagePlan } from '../model/ai-build-job'
 import { aiCreditRangeText } from '../model/ai-credit-estimate'
+import { aiBuildStorePagesFor } from '../model/ai-build-store-pages'
 import { AiJobPlan, aiJobReviewDetails, aiPlanEmbedLine } from './ai-job-plan.component'
 
 const PLAN = {
@@ -459,5 +460,24 @@ describe('a Free build against what is left (AGL-3722)', () => {
   it('quotes a range the same way everywhere', () => {
     expect(aiCreditRangeText({ likely: 180, p90: 220, ceiling: 600 })).toBe('About 180 credits (up to 600)')
     expect(aiCreditRangeText({ likely: 50, p90: 50, ceiling: 50 })).toBe('About 50 credits')
+  })
+})
+
+describe('a build that makes the site a store (AGL-3676)', () => {
+  const shop = { ...PLAN.screens[0], title: 'Shop', slug: '/shop' }
+  const storePages = aiBuildStorePagesFor({ screens: [shop] }, { store: true, pages: [{ slug: 'privacy', title: 'Privacy' }] })
+  const STORE = { ...PLAN, screens: [shop], storePages: storePages ?? undefined }
+
+  it('lists the store pages the platform adds, at no credits, and only those the site lacks', () => {
+    render(<AiJobPlan job={job({ kind: 'build', plan: STORE as never })} onResume={jest.fn()} />)
+    const added = screen.getAllByRole('listitem').filter((item) => item.getAttribute('data-platform-added') === 'true')
+    expect(added.map((item) => item.textContent)).toEqual([
+      'Adds the page Your account at /account — added for your store automatically, uses no AI credits',
+      'Adds the page Your cart at /cart — added for your store automatically, uses no AI credits',
+      'Adds the page Shipping & returns at /shipping-returns — added for your store automatically, uses no AI credits',
+      'Adds the page Terms of sale at /terms — added for your store automatically, uses no AI credits',
+    ])
+    // They change no figure on the card.
+    expect(aiBuildCreditRange(STORE as never)).toEqual(aiBuildCreditRange({ ...STORE, storePages: undefined } as never))
   })
 })

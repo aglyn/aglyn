@@ -76,6 +76,11 @@ beforeEach(() => {
     },
     'orgs/o1/datasets/orders/records/r1': { values: { state: 'TX', total: 400 } },
     'orgs/o1/datasets/team': { displayName: 'Team', visibleTo: ['org'], fields: ['name'] },
+    'orgs/o1/datasets/work': {
+      displayName: 'Work',
+      visibleTo: ['host:h3'],
+      model: { order: ['title', 'image'], fields: { title: { name: 'Title', type: 'text' }, image: { name: 'Image', type: 'text', customType: 'image' } } },
+    },
     'orgs/o1/datasets/gone': { displayName: 'Old', visibleTo: ['org'], deletedAt: 1 },
   }
 })
@@ -101,6 +106,19 @@ describe('the dataset index', () => {
         id: 'team',
         name: 'Team',
         facts: { fields: [{ id: 'name', name: 'Name', type: 'text' }], visibleTo: ['org'], installedFrom: null },
+      },
+      {
+        id: 'work',
+        name: 'Work',
+        facts: {
+          // A record's photo names the type it rides (AGL-3616).
+          fields: [
+            { id: 'title', name: 'Title', type: 'text' },
+            { id: 'image', name: 'Image', type: 'text', customType: 'image' },
+          ],
+          visibleTo: ['host:h3'],
+          installedFrom: null,
+        },
       },
     ])
     expect(JSON.stringify(records)).not.toContain('TX')

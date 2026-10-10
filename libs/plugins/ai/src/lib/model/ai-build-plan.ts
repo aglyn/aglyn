@@ -16,6 +16,7 @@
  */
 
 import type { AiTool } from '../providers/contract'
+import type { AiBuildStorePages } from './ai-build-store-pages'
 
 /**
  * The plan a generation job builds from (AGL-2935): what the job's plan step
@@ -273,6 +274,12 @@ export interface AiBuildPlan {
    * Absent is none: every other kind's plan.
    */
   items?: AiBuildItem[]
+  /**
+   * The store pages a `build` adds where its plan turns the site into a store
+   * (AGL-3676): worked out by code as the plan is kept, never by the model,
+   * and built by a unit of their own after every planned one. Absent is none.
+   */
+  storePages?: AiBuildStorePages
 }
 
 /**

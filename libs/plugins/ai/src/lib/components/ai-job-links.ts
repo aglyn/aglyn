@@ -21,6 +21,8 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AI_JOB_BESIGNER_SEGMENT as BESIGNER_SEGMENT, AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import type { AiJobOutput, AiJobSummary } from '../model/ai-jobs.types'
+import { AI_STORE_FINISH_STEPS, type AiStoreFinishStep } from '../model/ai-site-store-pages'
+import { AI_BUILD_STORE_LINKS_DRAFT_STEP, AI_BUILD_STORE_LINKS_MISSING_STEP } from '../model/ai-build-store-pages'
 
 // Where a job's work opens in the console (AGL-2904), shared by the AI jobs
 // drawer and every dialog that follows the job it started (AGL-3593).
@@ -162,3 +164,60 @@ export function aiSiteBuildDoneLinks(
 export function aiCreditsBillingHref(orgSlug: string): string {
   return `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans`
 }
+
+/** One thing left to finish an AI-built store, with where it is done. */
+export interface AiStoreFinishLink extends AiStoreFinishStep {
+  /** The console page it is done on; `null` where the owner of that page is not loaded. */
+  href: string | null
+}
+
+/**
+ * What is left to finish a store a site start built (AGL-3676), or `null`
+ * where the start built no store's own pages: its account, cart and policy
+ * pages are written, so payments, products, shipping and tax, and the
+ * policies' brackets are all that remain. Each links the exact console page:
+ * the store's settings and its catalog, as the commerce plugin publishes
+ * them, and the site's Pages.
+ */
+export function aiStoreFinishLinks(
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'items' | 'outputs'> & Partial<Pick<AiJobSummary, 'sitePublish'>>,
+  orgSlug: string,
+): AiStoreFinishLink[] | null {
+  // A site start's store, or an Assist build that made the site a store (AGL-3676).
+  if ((job.kind !== 'site' && job.kind !== 'build') || job.status !== 'done' || !orgSlug) return null
+  const row = (job.items ?? []).find((one) => one.slot === 'store')
+  if (!row || (row.status !== 'succeeded' && row.status !== 'degraded')) return null
+  const host = job.outputs.find((output) => output.resource === 'screen' && output.hostSubdomain)?.hostSubdomain
+  if (!host) return null
+  const context = { orgSlug, host: String(host) }
+  // A build's products are drafts with no price unless asked, and it may
+  // have written none of the policies (the site had them): its list says so.
+  const build = job.kind === 'build'
+  const mine = job.outputs.filter((output) => row.outputs.includes(output.id))
+  const written = new Set(mine.map((output) => output.proposal?.['storePage']))
+  const policies = !build || ['shipping', 'privacy', 'terms'].some((key) => written.has(key))
+  const steps: AiStoreFinishLink[] = AI_STORE_FINISH_STEPS.filter((step) => step.id !== 'policies' || policies).map((step) => ({
+    ...step,
+    ...(build && step.id === 'products' ? { text: AI_BUILD_STORE_PRODUCTS_TEXT } : {}),
+    href:
+      step.opens === 'pages'
+        ? buildRoute(Route.HOST_SCREENS, context)
+        : step.opens === 'layouts' || step.opens === 'layout'
+          ? buildRoute(Route.HOST_LAYOUTS, context)
+          : pluginRecordListHref(step.opens, context),
+  }))
+  if (!build) return steps
+  // The site's own header and footer (AGL-3676): links it had no list for are
+  // the owner's to add; links drafted into it wait for its publish.
+  if (mine.some((output) => output.proposal?.['storeLinks'] === 'missing')) {
+    steps.push({ ...AI_BUILD_STORE_LINKS_MISSING_STEP, href: buildRoute(Route.HOST_LAYOUTS, context) })
+  }
+  const draft = mine.find((output) => output.resource === 'layout' && output.proposal?.['storeLinks'] === 'draft')
+  const live = draft && job.sitePublish?.published.length
+  if (draft && !live) steps.push({ ...AI_BUILD_STORE_LINKS_DRAFT_STEP, href: aiJobOutputHref(draft, orgSlug) })
+  return steps
+}
+
+/** What a build's "Review your products" step says: its products are drafts, priced only where the request said. */
+export const AI_BUILD_STORE_PRODUCTS_TEXT =
+  'Your new products are drafts. Set their prices, photos and stock, then make them active so they show in your store.'

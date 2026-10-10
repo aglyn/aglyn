@@ -43,7 +43,7 @@ import type {
   AglynOrgBilling,
   OrgFeatureFlags,
 } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
+import { HostScreenVisibility, type ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -585,6 +585,15 @@ export interface AiDraftInput {
   /** A screen's layout, for its first version to render inside; a layout the site has. */
   layoutId?: string | null
   /**
+   * A screen's access, as the page's Access setting in the console writes it
+   * (`screen.visibility`): only ever `UNLISTED` here, a store's account and
+   * cart (AGL-3676), which the tenant then serves `noindex` and leaves out of
+   * the sitemap. Absent, the page is public and indexable, as every content
+   * and landing page stays.
+   */
+  visibility?: HostScreenVisibility.UNLISTED
+  
+  /**
    * The job the member started that wrote this draft (AGL-3596), stamped as
    * `aiJobId` on a page's or a layout's document and first version, so staff
    * can tell a generated page from a copy someone made. A scaffold's unit
@@ -698,6 +707,9 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
       tx.create(draftRef, {
         ...allowListed('screen', { displayName: name, slug, versionId }),
         ...artifactCreateListKeys('screens', { displayName: name }),
+        // Not on the create route's list: the console sets it after, with the
+        // page's Access setting, and this writer sets the same field at once.
+        ...(input.visibility === HostScreenVisibility.UNLISTED ? { visibility: HostScreenVisibility.UNLISTED } : {}),
         ...stamps,
         ...marker,
       })

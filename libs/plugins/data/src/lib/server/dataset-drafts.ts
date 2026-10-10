@@ -45,6 +45,7 @@ import {
   type DatasetFieldType,
   type DatasetModel,
 } from '../model/dataset-models'
+import { DATASET_IMAGE_FIELD_TYPE, isDatasetImageValue } from '../model/dataset-image-field'
 import {
   RECORD_PAGE_ADDRESS_FIELD_TYPE,
   RECORD_PAGE_ADDRESS_MAX,
@@ -77,6 +78,10 @@ import {
  *    the route's own words.
  *  - THE CHECK holds every record to the model it is written under
  *    (`validateDocument`), so what is seeded is what a person could type.
+ *  - A PHOTO is an `image` field (AGL-3616): text storage riding the
+ *    "Image" custom type, each value an address the site's Image element
+ *    shows (`isDatasetImageValue`), so a portfolio's pieces or a team keep
+ *    the photo the page that lists them binds.
  *
  * Nothing is published. The writer touches the one new dataset and its
  * records; a page shows them only where a person (or a job's draft page)
@@ -104,7 +109,8 @@ export const DATASET_DRAFT_LIST_MAX = 12
  * The field types a caller names, in words a person reads, and the type
  * each one is stored as. A date or a time is written as text the way a
  * visitor reads it ("Saturday 8 November, 7 pm"): a stored timestamp renders
- * as a number in a repeat's `{{item.<field>}}`.
+ * as a number in a repeat's `{{item.<field>}}`. An image is text holding a
+ * photo's address, under the "Image" custom type (AGL-3616).
  */
 export const DATASET_DRAFT_FIELD_TYPES = {
   text: 'text',
@@ -112,6 +118,7 @@ export const DATASET_DRAFT_FIELD_TYPES = {
   integer: 'int32',
   boolean: 'bool',
   list: 'sorted',
+  image: 'text',
 } as const satisfies Record<string, DatasetFieldType>
 
 export type DatasetDraftFieldType = keyof typeof DATASET_DRAFT_FIELD_TYPES
@@ -169,6 +176,8 @@ export interface DatasetDraftFacts {
   records: number
   /** The page-address field's id, where the dataset has one. */
   addressField: string | null
+  /** The first photo field's id, where the dataset has one (AGL-3616). */
+  imageField: string | null
 }
 
 /** The draft as the writer will store it. */
@@ -250,6 +259,7 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
       model.fields[id] = {
         name: fieldName,
         type: DATASET_DRAFT_FIELD_TYPES[rawType as DatasetDraftFieldType],
+        ...(rawType === 'image' ? { customType: DATASET_IMAGE_FIELD_TYPE } : {}),
         ...(isRecord(raw) && raw['required'] === true ? { required: true } : {}),
       }
       model.order.push(id)
@@ -262,7 +272,7 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
   const rawAddress = content['pageAddressFrom']
   if (rawAddress !== undefined && rawAddress !== null && rawAddress !== '') {
     const sourceId = byName.get(line(rawAddress).toLowerCase())
-    if (!sourceId || model.fields[sourceId]?.type !== 'text') {
+    if (!sourceId || model.fields[sourceId]?.type !== 'text' || model.fields[sourceId]?.customType) {
       problems.push('A page address fills from one of the dataset’s text fields')
     } else {
       addressField = defaultDatasetFieldId('slug', new Set(model.order))
@@ -305,6 +315,14 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
         }
       }
       const errors = validateDocument(model, values)
+      // A photo is an address the site's Image shows, whether or not the
+      // "Image" type's check is registered in this process (AGL-3616).
+      for (const [id, value] of Object.entries(values)) {
+        const field = model.fields[id]
+        if (field?.customType === DATASET_IMAGE_FIELD_TYPE && !errors[id] && !isDatasetImageValue(value)) {
+          errors[id] = `${field.name} is not a photo from the media library or an https link`
+        }
+      }
       for (const error of Object.values(errors)) problems.push(`Record ${index + 1}: ${error}`)
       if (!Object.keys(values).length) problems.push(`Record ${index + 1} has no values`)
       records.push(values)
@@ -324,11 +342,17 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
   return { ok: true, value: { name, model, records, addressField } }
 }
 
+/** The first photo field of a model, by id. */
+function imageFieldOf(model: DatasetModel): string | null {
+  return model.order.find((id) => model.fields[id]?.customType === DATASET_IMAGE_FIELD_TYPE) ?? null
+}
+
 function factsOf(model: DatasetModel, records: number, addressField: string | null): DatasetDraftFacts {
   return {
     fields: model.order.map((id) => ({ id, name: model.fields[id]?.name ?? id, type: model.fields[id]?.type ?? 'text' })),
     records,
     addressField,
+    imageField: imageFieldOf(model),
   }
 }
 

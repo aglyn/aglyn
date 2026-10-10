@@ -55,6 +55,8 @@ const HITS: Record<string, StockPhoto[]> = {
   'candle gift box': [hit(4, ['candle', 'gift', 'box', 'twine'])],
   'tin soy candle': [hit(5, ['candle', 'tin', 'soy'])],
   candle: [hit(5, ['candle', 'tin', 'soy']), hit(6, ['candle', 'jar', 'flame']), hit(7, ['bedroom', 'book', 'cozy'])],
+  // A wax melt is searched by its own kin, never the category alone (AGL-3660).
+  'wax melts': [hit(6, ['candle', 'jar', 'flame']), hit(8, ['wax melts', 'warmer', 'scented']), hit(7, ['bedroom', 'book', 'cozy'])],
 }
 
 function fakes() {
@@ -135,9 +137,10 @@ describe('a store’s product photos (AGL-3676)', () => {
     // Every product has a photo…
     expect(photos?.every((found) => !!found?.src)).toBe(true)
     // …the trimmer, not the laptop; the gift box, not the tea set; the tin;
-    // and for the wax melts, which nothing named, a candle not shown yet —
-    // never the cozy bedroom.
-    expect(stored.map((request) => request.stockPhoto?.id)).toEqual(['2', '4', '5', '6'])
+    // and for the wax melts, a photo of wax melts — never a candle (a candle
+    // is not a wax melt, AGL-3660), never the cozy bedroom.
+    expect(stored.map((request) => request.stockPhoto?.id)).toEqual(['2', '4', '5', '8'])
+    expect(asked).toContain('wax melts')
     expect(asked).not.toContain('soy candles online')
   })
 })

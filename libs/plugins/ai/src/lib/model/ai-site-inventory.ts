@@ -127,6 +127,11 @@ export interface AiInventoryDataset {
    * `{{item.<id>}}` (AGL-3475). Absent where the reader did not see them.
    */
   fieldIds?: string[]
+  /**
+   * The id of the field holding each record's photo, where it has one
+   * (AGL-3616): what a record template's Image binds as its `src`.
+   */
+  imageField?: string
 }
 
 export interface AiInventoryCollection {

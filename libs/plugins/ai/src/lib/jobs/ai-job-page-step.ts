@@ -84,12 +84,14 @@ import {
   aiPageSectionNodeId,
   aiPageSectionPrompt,
   aiPageSectionSmaller,
+  aiPageSectionWithRecordImage,
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
 import {
+  AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
   aiStockPlacedSrcs,
@@ -430,7 +432,8 @@ export const aiPageJobAdmission: AiJobAdmission = async (context) => {
  * The library photos the job's other pages already show (AGL-3660): read
  * from the screen drafts a site job names for its page unit
  * (`AI_STOCK_PHOTO_PAGES_INPUT`), never this page's own, so a pass repeated
- * over it keeps its photos. Empty on any failure: a repeat is better than a
+ * over it keeps its photos, and those its datasets' records show
+ * (`AI_STOCK_PHOTO_AVOID_INPUT`, AGL-3616). Empty on any failure: a repeat is better than a
  * page that fails over decoration.
  */
 export async function aiJobPagesPlacedPhotos(
@@ -442,11 +445,16 @@ export async function aiJobPagesPlacedPhotos(
   const ids = Array.isArray(listed)
     ? [...new Set(listed.filter((id): id is string => typeof id === 'string' && !!id && id !== input.draftId))]
     : []
-  if (!ids.length) return []
+  // What the site's datasets' records show (AGL-3616), named by the job.
+  const elsewhere = input.job.inputs?.[AI_STOCK_PHOTO_AVOID_INPUT]
+  const shown = Array.isArray(elsewhere)
+    ? elsewhere.filter((src): src is string => typeof src === 'string' && src.startsWith('media:'))
+    : []
+  if (!ids.length) return [...new Set(shown)]
   const read = await Promise.all(
     ids.map((id) => readNodes(firestore, { kind: 'screen', hostId: input.hostId, id }).catch(() => null)),
   )
-  return [...new Set(read.flatMap((stored) => aiStockPlacedSrcs(stored?.nodes)))]
+  return [...new Set([...shown, ...read.flatMap((stored) => aiStockPlacedSrcs(stored?.nodes))])]
 }
 
 export interface AiJobPageStepDeps {
@@ -891,6 +899,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const spent = aiGenerationSpent(result)
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result, { page: true }) }
+    // A record template's page leads with each record's own photo (AGL-3616).
+    const section = aiPageSectionWithRecordImage(result.value, page, record)
 
     if (!written) {
       // Never written once the job is canceled (AGL-3616).
@@ -902,7 +912,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         uid: job.createdBy,
         org,
         name,
-        nodes: aiPageWithSection(aiEmptyPage(), result.value, sectionIds),
+        nodes: aiPageWithSection(aiEmptyPage(), section, sectionIds),
         slug,
         layoutId: aiPageDraftLayoutId(screen, inventory),
         aiJobId: aiOriginJobId(job),
@@ -922,7 +932,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         now,
         // A pass run again after its write finds its section and changes nothing.
         update: (nodes) =>
-          result.value.rootId in nodes ? null : aiPageWithSection(nodes, result.value, sectionIds),
+          section.rootId in nodes ? null : aiPageWithSection(nodes, section, sectionIds),
       })
       if (update.ok === false) return { ...spent, failure: AI_JOB_PAGE_DELETED_COPY }
     }

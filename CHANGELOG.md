@@ -9,6 +9,37 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.241 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.240...v1.0.0-beta.241)
+
+### Added
+
+- **ai:** a store build adds Account and policy links to the site's own layout as a draft ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** an Assist build that makes a store adds its account, cart and policy pages ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** a store's account and cart pages are unlisted, so search engines skip them ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** dataset records the AI seeds carry photos, so lists stay image-led (AGL-3616) (#1375) ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** stores built by AI get account, cart, order and policy pages ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+### Fixed
+
+- **admin:** erasing a site removes every holder's hostMemberships row
+- **console:** a deleted site's pages say it's gone instead of loading forever
+- **ai:** bare "body" is not nudity, so body lotion photos still fill ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** stock photos skip hands, sensitive imagery and unnamed products ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **commerce:** the product grid keeps equal columns on a phone ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+<details>
+<summary>Also in this release: 4 chore, 1 ci</summary>
+
+- **deps-dev:** Bump the linters group across 1 directory with 4 updates
+- **deps-dev:** Bump @types/node
+- **deps:** Bump the mui-emotion group with 2 updates
+- **deps:** Bump actions/cache from 4 to 6 in the actions group
+- **deps-dev:** Bump eslint-config-next
+
+</details>
+
 ## v1.0.0-beta.240 — 2026-10-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.239...v1.0.0-beta.240)
