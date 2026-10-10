@@ -235,8 +235,10 @@ is a decision about the account, not something to build.
   `dataStore`, data plugin on and released, writer registered), the plan is
   told to create one for structured content (menus, team, services, portfolio
   pieces, events, FAQs) and to name it in the section that lists it. Each
-  dataset is a unit after the form: `job.dataset` designs its typed fields and
-  seeds 3 to 12 records from the brief (`runtime/ai-dataset-generation.ts`).
+  dataset is a unit after the form: the `submit_dataset` generation
+  (`runtime/ai-dataset-generation.ts`, routed on the `job.products` row until
+  a live eval records a row of its own) designs its typed fields and seeds 3
+  to 12 records from the brief.
   It never writes reviews, testimonials, ratings, quotes or people's names the
   brief does not give, or a price it does not state. The section that names
   the dataset lists its records through a repeat over the dataset, which the
@@ -248,4 +250,7 @@ is a decision about the account, not something to build.
   Where a dataset unit fails or is refused, the pages that listed it are built
   without it and say so, and its record page is skipped.
 - **Estimates.** A dataset is one pass, counted in the plan's estimate and
-  range like a form.
+  range like a form. A build's `dataset` item is planner-filled and costs 0.
+- **Not yet.** Records carry no photos (a portfolio's pieces are words only),
+  listing cards do not link record pages until the member saves the binding,
+  and forms are not bound to a dataset (gap 4).
