@@ -57,6 +57,12 @@ import { aiStorefrontSays } from './ai-layout-storefront'
  *  - `signup` — a selling store's newsletter sign-up, through the commerce
  *    plugin's Newsletter signup (`newsletter-signup`, AGL-3676): a consented
  *    email field into the store's contacts, where a section says newsletter.
+ *  - `records` — one of the site's datasets (AGL-3616): a menu, a team, its
+ *    services, built by the site start and kept by the data plugin. Drawn as
+ *    a Box that repeats over the dataset (`repeatDataset`, the platform's own
+ *    repeat), its card binding the record's fields as `{{item.<field>}}`, in
+ *    the sections whose plan names the dataset in its `uses`. A site may list
+ *    several, one listing a dataset.
  *
  * The elements are named by their persisted ids, as the form binding names
  * `form`: a plugin never imports another's internals, and
@@ -66,7 +72,7 @@ import { aiStorefrontSays } from './ai-layout-storefront'
  * Model only: shapes and the inputs reader; the compiler draws them.
  */
 
-export type AiLayoutListingKind = 'products' | 'posts' | 'tracks' | 'reviews' | 'signup'
+export type AiLayoutListingKind = 'products' | 'posts' | 'tracks' | 'reviews' | 'signup' | 'records'
 
 /** How a section shows a listing: a few of its records on a page about something else, or all of them on its own page. */
 export type AiLayoutListingRole = 'featured' | 'index'
@@ -78,6 +84,15 @@ export interface AiLayoutListingPlacement {
   /** The section, by plan index. */
   section: number
   role: AiLayoutListingRole
+}
+
+/** One field of a dataset a `records` listing shows, as its card binds it. */
+export interface AiLayoutListingField {
+  /** The field's id, which `{{item.<id>}}` reads. */
+  id: string
+  name: string
+  /** The data plugin's stored type: `text`, `float`, `int32`, `bool`, `sorted`. */
+  type: string
 }
 
 /** A kind of record the site keeps, and where its pages place it. */
@@ -93,6 +108,10 @@ export interface AiLayoutListing {
   href?: string
   /** The content collection a posts listing repeats, by its slug. */
   collectionSlug?: string
+  /** The dataset a records listing repeats over, by id (AGL-3616). */
+  datasetId?: string
+  /** The dataset's fields, in its order, which the card binds. */
+  fields?: AiLayoutListingField[]
   /**
    * Where a visitor goes from a store with nothing listed yet (AGL-3676): the
    * site's contact page, by its path. The empty state names it as its one
@@ -110,9 +129,9 @@ export interface AiLayoutListing {
 /** The unit input a site's listings travel in, to its layout and its pages. */
 export const AI_LAYOUT_LISTINGS_INPUT = 'siteListings'
 
-/** The id a listing of a kind is placed by. */
-export function aiLayoutListingId(kind: AiLayoutListingKind): string {
-  return `listing:${kind}`
+/** The id a listing of a kind is placed by; a records listing is one dataset's. */
+export function aiLayoutListingId(kind: AiLayoutListingKind, datasetId?: string): string {
+  return kind === 'records' && datasetId ? `listing:records:${datasetId}` : `listing:${kind}`
 }
 
 /** The persisted element a listing is drawn with, by kind (held to its plugin's source by a spec). */
@@ -122,16 +141,18 @@ export const AI_LAYOUT_LISTING_ELEMENTS: Readonly<Record<AiLayoutListingKind, st
   tracks: 'musicPlayer',
   reviews: 'product-reviews',
   signup: 'newsletter-signup',
+  // The platform's own Box, repeating its card over the dataset.
+  records: 'muiBox',
 }
 
 /** The header's cart button: the commerce plugin's Cart in its `button` variant. */
 export const AI_LAYOUT_CART_ELEMENT = 'cart'
 
 /** The most records a featured band shows; a page of its own shows them all. */
-export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0, reviews: 3, signup: 0 } as const
+export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0, reviews: 3, signup: 0, records: 3 } as const
 
 const PLACEMENT_ROLES: readonly AiLayoutListingRole[] = ['featured', 'index']
-const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks', 'reviews', 'signup']
+const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks', 'reviews', 'signup', 'records']
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
@@ -142,10 +163,27 @@ const LISTING_NAMES: Readonly<Record<AiLayoutListingKind, string>> = {
   tracks: 'the music',
   reviews: 'the store',
   signup: 'the newsletter',
+  records: 'the list',
 }
 
 /** A path on the site, as a listing's links are kept. */
 const SITE_PATH = /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
+
+/** A dataset id and a field id, as the data plugin mints them. */
+const DATASET_ID = /^[A-Za-z0-9_-]{1,128}$/
+const FIELD_ID = /^[A-Za-z][A-Za-z0-9_]{0,63}$/
+
+/** A records listing's fields as its input carries them; nothing that does not read is kept. */
+function listingFieldsOf(raw: unknown): AiLayoutListingField[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .flatMap((value) => {
+      const field = (value ?? {}) as Record<string, unknown>
+      const id = text(field['id'])
+      return FIELD_ID.test(id) ? [{ id, name: text(field['name']).slice(0, 60) || id, type: text(field['type']) || 'text' }] : []
+    })
+    .slice(0, 16)
+}
 
 /** A site's listings as its unit inputs carry them; nothing that does not read is kept. */
 export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutListing[] {
@@ -156,7 +194,17 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     if (!entry || typeof entry !== 'object') continue
     const record = entry as Record<string, unknown>
     const kind = record['kind'] as AiLayoutListingKind
-    if (!KINDS.includes(kind) || listings.some((listing) => listing.kind === kind)) continue
+    // A records listing is one dataset's (AGL-3616): a site may list several.
+    const datasetId = kind === 'records' ? text(record['datasetId']) : ''
+    const fields = kind === 'records' ? listingFieldsOf(record['fields']) : []
+    // Its fields may be left for the page to read off the site's inventory.
+    if (kind === 'records' && !DATASET_ID.test(datasetId)) continue
+    if (
+      !KINDS.includes(kind) ||
+      listings.some((listing) => listing.kind === kind && (kind !== 'records' || listing.datasetId === datasetId))
+    ) {
+      continue
+    }
     const href = text(record['href'])
     const action = (record['emptyAction'] ?? {}) as Record<string, unknown>
     const actionLabel = text(action['label']).slice(0, 40)
@@ -174,17 +222,18 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
         : []
     })
     listings.push({
-      id: aiLayoutListingId(kind),
+      id: aiLayoutListingId(kind, datasetId),
       kind,
       name: text(record['name']) || LISTING_NAMES[kind],
       // A tracks listing names no records: no job sources a recording (AGL-3716);
       // nor do a store's reviews and its sign-up, which shoppers fill (AGL-3676).
       records:
-        kind !== 'products' && kind !== 'posts'
+        kind !== 'products' && kind !== 'posts' && kind !== 'records'
           ? []
           : (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
       ...(SITE_PATH.test(href) ? { href } : {}),
       ...(kind === 'posts' ? { collectionSlug } : {}),
+      ...(kind === 'records' ? { datasetId, fields } : {}),
       ...(kind === 'products' && record['cart'] === false ? { cart: false } : {}),
       ...(kind === 'products' && actionLabel && SITE_PATH.test(actionHref) ? { emptyAction: { label: actionLabel, href: actionHref } } : {}),
       placements,
@@ -372,6 +421,28 @@ export function aiLayoutListingPlacements(
     }
     if (!POST_SECTION.test(screen.title)) continue
     place(screen, afterHero(screen, (name) => POST_SECTION.test(name)), 'featured')
+  }
+  return placements
+}
+
+/**
+ * The sections that list one of the site's datasets (AGL-3616): every section
+ * whose plan names it in its `uses` — `new:<its name>` as the plan wrote it,
+ * or its id once built. The home page features a few of its records; any
+ * other page lists them all. Chosen from the plan, never asked of the model.
+ */
+export function aiLayoutRecordsPlacements(
+  dataset: { id: string; name: string },
+  screens: readonly AiLayoutListingScreen[],
+): AiLayoutListingPlacement[] {
+  const named = `new:${dataset.name}`.trim().toLowerCase()
+  const placements: AiLayoutListingPlacement[] = []
+  for (const screen of screens) {
+    if (typeof screen.id !== 'string' || !screen.id) continue
+    screen.sections.forEach((section, index) => {
+      const lists = (section.uses ?? []).some((ref) => ref === dataset.id || ref.trim().toLowerCase() === named)
+      if (lists) placements.push({ screenId: screen.id as string, section: index, role: isHome(screen.slug) ? 'featured' : 'index' })
+    })
   }
   return placements
 }

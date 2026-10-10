@@ -83,6 +83,7 @@ import {
   AI_PLAN_NO_FORM_SENTENCE,
   aiPlanCapabilitiesForJob,
   aiPlanCapabilityLines,
+  aiPlanUncreatable,
   aiUnrestrictedPlanCapabilities,
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
@@ -104,6 +105,7 @@ import {
   runAiJobPlanStep,
   type AiJobPlanCandidate,
   registerAiJobPlan,
+  AI_SITE_DATASET_SENTENCE,
   AI_SITE_STORE_SHOP_CODE,
   AI_SITE_STORE_SHOP_SENTENCE,
   aiPlanSiteLines,
@@ -111,6 +113,7 @@ import {
   aiSiteStoreShopPageViolations,
 } from './ai-job-plan-step'
 import { registerAiJobPlanStep } from './ai-jobs'
+import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 
 const NOW = new Date('2026-09-15T12:00:00.000Z')
 const firestore = { handle: 'the machine’s' } as unknown as FirebaseFirestore.Firestore
@@ -983,5 +986,58 @@ describe('a store plan’s Shop page (AGL-3676)', () => {
     const check = aiSiteStoreShopCheck()
     expect(check(missing)).toHaveLength(1)
     expect(check(missing)).toEqual([])
+  })
+})
+
+/*
+ * A site plan keeps its structured content as datasets (AGL-3616): "Aglyn AI
+ * can also use/create datasets too for whatever it needs" (Zach, 2026-10-10).
+ * Told so only where it may create one, so a Free plan's turn — whose length
+ * its wall is proven at — is unchanged.
+ */
+describe('a site plan’s datasets (AGL-3616)', () => {
+  const site = { kind: 'site' as const, brief: 'A trattoria in Bologna', inputs: { businessType: 'a trattoria' } }
+  const paid = aiPlanCapabilitiesFrom({ plan: 'pro' } as never)
+  const free = aiPlanCapabilitiesFrom({ plan: 'free' } as never)
+  const menuPlan = {
+    reuse: [],
+    create: [{ kind: 'dataset', name: 'Menu', why: 'the dishes', duplicateOf: null, fields: ['Dish', 'Description'] }],
+    screens: [
+      {
+        title: 'Menu',
+        slug: '/menu',
+        layout: null,
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'Menu',
+        seoDescription: 'The menu',
+        record: null,
+        sections: [{ name: 'The whole menu', uses: ['new:Menu'], items: 12 }],
+      },
+    ],
+  } as unknown as AiBuildPlan
+
+  it('tells a paid site plan to keep a list of like things as a dataset, named in the sections that list it', () => {
+    const scoped = aiPlanCapabilitiesForJob(paid, AI_JOB_PLAN_SCOPES.site)
+    expect(scoped.create.dataset.allowed).toBe(true)
+    expect(aiPlanSiteLines(site, null, scoped)).toContain(AI_SITE_DATASET_SENTENCE)
+    expect(aiJobPlanPrompt(site, scoped)).toContain('- dataset: yes')
+  })
+
+  it('tells a Free plan nothing new: its plan includes no datasets', () => {
+    const scoped = aiPlanCapabilitiesForJob(free, AI_JOB_PLAN_SCOPES.site)
+    expect(scoped.create.dataset).toEqual({ allowed: false, left: 0, reason: "this workspace's plan does not include datasets" })
+    expect(aiPlanSiteLines(site, null, scoped)).not.toContain(AI_SITE_DATASET_SENTENCE)
+  })
+
+  it('keeps a paid plan that creates a dataset and lists it, and a scaffold builds it', () => {
+    const scoped = aiPlanCapabilitiesForJob(paid, AI_JOB_PLAN_SCOPES.site)
+    expect(aiPlanUncreatable(menuPlan, scoped)).toEqual([])
+    expect(AI_JOB_PLAN_SCOPES.site?.creates).toContain('dataset')
+    // A Free one is told it may not, and to write the items out instead.
+    expect(aiPlanUncreatable(menuPlan, aiPlanCapabilitiesForJob(free, AI_JOB_PLAN_SCOPES.site))[0]?.message).toContain(
+      'keep the list short enough to write out',
+    )
   })
 })

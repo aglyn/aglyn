@@ -19,10 +19,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { COLLECTION_ENTRIES_COMPONENT_ID } from '@aglyn/aglyn/app-utils/collection-entries'
 import { AI_PALETTE, AI_SURFACES } from '../runtime/ai-palette.generated'
-import { aiLayoutListingContext, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
+import { aiLayoutListingContext, aiLayoutListingsWithDatasets, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
 import { aiLayoutFrameCheck } from '../jobs/ai-job-layout-language'
 import { aiSiteListings } from '../jobs/ai-job-site-content'
-import { AI_LAYOUT_POST_CARD_TOKENS, AI_LAYOUT_STORE_EMPTY, aiCompileLayoutPage } from './ai-layout-compiler'
+import { AI_LAYOUT_POST_CARD_TOKENS, AI_LAYOUT_STORE_EMPTY, aiCompileLayoutPage, aiLayoutRecordCardFields } from './ai-layout-compiler'
 import {
   AI_LAYOUT_CART_ELEMENT,
   AI_LAYOUT_LISTING_ELEMENTS,
@@ -30,6 +30,7 @@ import {
   aiLayoutListingAt,
   aiLayoutListingPlacements,
   aiLayoutListingsOf,
+  aiLayoutRecordsPlacements,
   type AiLayoutListing,
 } from './ai-layout-listings'
 import type { AiLayoutTargets } from './ai-layout-links'
@@ -579,5 +580,119 @@ describe('a music site places an empty player for the artist’s own tracks (AGL
       reusableComponents: false,
     })
     expect(prompt).toContain('2. "Listen to the tracks"; the platform places a music player here for the artist\'s own tracks')
+  })
+})
+
+/*
+ * A site's datasets (AGL-3616): a menu, a team, a list of services kept as
+ * records by the data plugin and repeated by the platform in the sections
+ * that name them, never typed out by the model.
+ */
+describe('a section one of the site’s datasets fills (AGL-3616)', () => {
+  const MENU: AiLayoutListing = {
+    id: 'listing:records:ds-menu',
+    kind: 'records',
+    name: 'Menu',
+    records: ['Margherita', 'Tiramisù'],
+    datasetId: 'ds-menu',
+    fields: [
+      { id: 'dish', name: 'Dish', type: 'text' },
+      { id: 'description', name: 'Description', type: 'text' },
+      { id: 'course', name: 'Course', type: 'text' },
+      { id: 'vegetarian', name: 'Vegetarian', type: 'bool' },
+    ],
+    placements: aiLayoutRecordsPlacements({ id: 'ds-menu', name: 'Menu' }, [
+      { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'From the menu', uses: ['new:Menu'], items: 3 }] },
+      { id: 'menu', title: 'Menu', slug: '/menu', sections: [{ name: 'Intro', items: 0 }, { name: 'The menu', uses: ['ds-menu'], items: 12 }] },
+    ]),
+  }
+  const MENU_SCREEN = {
+    ...HOME_SCREEN,
+    sections: [
+      { name: 'Hero', uses: [], items: 0 },
+      { name: 'From the menu', uses: ['ds-menu'], items: 3 },
+    ],
+  }
+  const answer = {
+    sections: [
+      { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Trattoria Nonna')] },
+      { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'From the menu'), block('cards', '', [{ title: 'Margherita', text: 'Classic.' }, { title: 'Lasagne', text: 'Baked.' }])] },
+    ],
+  }
+  const check = (datasetIds: string[]) => {
+    const sectionIds = ['sec-0', 'sec-1']
+    return aiLayoutPageCheck({
+      screen: MENU_SCREEN as never,
+      sectionIds,
+      targets: { ...targets('home', [MENU]), pages: [...targets('home', [MENU]).pages, { id: 'menu', label: 'Menu', slug: '/menu' }] },
+      context: { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds, codeBuilt: true, scrollTargetIds: sectionIds },
+      reusableComponents: false,
+    })(answer)
+  }
+
+  it('places the dataset where the plan names it, featured on the home and all of it on its own page', () => {
+    expect(MENU.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'menu', section: 1, role: 'index' },
+    ])
+    expect(aiLayoutListingAt([MENU], 'home', 1)?.listing.kind).toBe('records')
+  })
+
+  it('repeats one card over the dataset — its kicker, name and words bound to the record — in place of the cards the design wrote', () => {
+    const result = check(['ds-menu'])
+    expect(result.violations).toEqual([])
+    const nodes = nodesOf(result.value?.nodes)
+    const repeat = nodes.find((node) => node.props?.['repeatDataset'] === 'ds-menu')
+    expect(repeat).toMatchObject({ componentId: AI_LAYOUT_LISTING_ELEMENTS.records, props: { repeatDataset: 'ds-menu', repeatLimit: '3' } })
+    const stored = JSON.stringify(result.value?.nodes)
+    for (const token of ['{{item.dish}}', '{{item.description}}', '{{item.course}}']) expect(stored).toContain(token)
+    // The design's own cards named dishes; the records are the dataset's.
+    expect(stored).not.toContain('Lasagne')
+    // A way to the whole menu, on its own page.
+    expect(nodes.some((node) => node.props?.['children'] === 'See all')).toBe(true)
+  })
+
+  it('admits a repeat only over a dataset the site has, as a Form’s dataset binding is', () => {
+    const nodes = nodesOf(check([]).value?.nodes)
+    expect(nodes.some((node) => 'repeatDataset' in (node.props ?? {}))).toBe(false)
+  })
+
+  it('tells the design the platform lists the records, by name', () => {
+    const prompt = aiLayoutPagePrompt({
+      job: { brief: 'A trattoria', inputs: {}, $id: 'job-123456' },
+      plan: { reuse: [], create: [], screens: [MENU_SCREEN as never] } as never,
+      screen: MENU_SCREEN as never,
+      targets: targets('home', [MENU]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain('the platform lists the records of the dataset “Menu” (“Margherita”, “Tiramisù”) here itself, one card each')
+  })
+
+  it('keeps a dataset’s listing only where the site has the dataset, and reads its fields off the inventory where it names none', () => {
+    const inventory = { datasets: [{ id: 'ds-menu', name: 'Menu', fields: ['Dish', 'Notes'], fieldIds: ['dish', 'notes'] }] }
+    expect(aiLayoutListingsWithDatasets([MENU, PRODUCTS], { datasets: [] })).toEqual([PRODUCTS])
+    expect(aiLayoutListingsWithDatasets([{ ...MENU, fields: [] }], inventory)[0].fields).toEqual([
+      { id: 'dish', name: 'Dish', type: 'text' },
+      { id: 'notes', name: 'Notes', type: 'text' },
+    ])
+    // Read back from a unit's inputs: one listing a dataset, several datasets a site.
+    const read = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [MENU, { ...MENU, id: 'listing:records:ds-team', datasetId: 'ds-team' }, { ...MENU, datasetId: '../x' }] })
+    expect(read.map((listing) => listing.id)).toEqual(['listing:records:ds-menu', 'listing:records:ds-team'])
+  })
+
+  it('draws questions and answers as a ruled list, and a card from the fields its names say', () => {
+    expect(
+      aiLayoutRecordCardFields([
+        { id: 'name', name: 'Name', type: 'text' },
+        { id: 'role', name: 'Role', type: 'text' },
+        { id: 'bio', name: 'Bio', type: 'text' },
+        { id: 'years', name: 'Years', type: 'int32' },
+      ]),
+    ).toEqual({ title: 'name', kicker: 'role', body: 'bio' })
+    expect(aiLayoutRecordCardFields([{ id: 'question', name: 'Question', type: 'text' }, { id: 'answer', name: 'Answer', type: 'text' }])).toEqual({
+      title: 'question',
+      kicker: null,
+      body: 'answer',
+    })
   })
 })

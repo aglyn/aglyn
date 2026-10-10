@@ -2953,8 +2953,9 @@ the element budget its request asks for.
   figures it derives, and the Free wall holds a Free site's plan to that section count
   and to its page cap. That leaves 18 credits, and one post at its worst on the fast
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
-  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
-  for five pages, where the routing table's ceiling with thinking spent 227.
+  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 85 credits
+  for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
+  create datasets: the record-template plan tool and the dataset sentence, AGL-3616.)
 - **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
   the only section figure a site plan was told was the Free wall's ceiling, so a local
   Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn

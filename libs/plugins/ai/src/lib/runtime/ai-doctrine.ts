@@ -299,6 +299,8 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'site-look': 'fields',
   // A site's first posts (AGL-3676): an entry's fields, which its own check holds.
   'blog-post': 'fields',
+  // A site's datasets (AGL-3616): a dataset's fields and records, which its own check holds.
+  dataset: 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */

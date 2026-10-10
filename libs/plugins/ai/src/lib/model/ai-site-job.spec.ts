@@ -31,6 +31,7 @@
 import { AI_JOB_STEP_RESERVE_CREDITS } from '../jobs/ai-jobs'
 import type { AiBuildPlan, AiBuildPlanScreen } from './ai-build-plan'
 import {
+  AI_SITE_DATASETS_MAX,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_NOMINAL_SECTIONS,
   AI_SITE_PAGES,
@@ -45,6 +46,7 @@ import {
   aiSiteCreditRange,
   aiJobPlanCreditEstimate,
   aiPlanCreditEstimate,
+  aiPlanCreditRange,
   aiPlanPasses,
   aiSiteCreditEstimate,
   aiSitePlanPrerequisites,
@@ -311,8 +313,8 @@ describe('the plans a scaffold can build', () => {
           fields: [],
         },
         {
-          kind: 'dataset',
-          name: 'Menu',
+          kind: 'email',
+          name: 'Welcome',
           why: 'entries',
           duplicateOf: null,
           fields: [],
@@ -328,7 +330,7 @@ describe('the plans a scaffold can build', () => {
     })
     const refusal = aiSitePlanRefusal(several) ?? ''
     expect(refusal).toContain(
-      'the component “Card” on the Components page and the dataset “Menu” on the Datasets page',
+      'the component “Card” on the Components page and the email design “Welcome” in Emails → Templates',
     )
     expect(refusal.match(/Card/g)).toHaveLength(1)
   })
@@ -352,6 +354,29 @@ describe('what a page job is estimated to cost (AGL-3031)', () => {
     // A scaffold builds its layout and form, and no component.
     expect(aiJobPlanCreditEstimate('site', page)).toBe(aiPlanCreditEstimate(page))
     expect(aiPlanCreditEstimate(page)).toBe((2 + 1 + 2) * AI_SITE_PASS_CREDITS)
+  })
+})
+
+describe('what a scaffold’s datasets cost and how many it makes (AGL-3616)', () => {
+  const dataset = (name: string) => ({ kind: 'dataset' as const, name, why: 'a list of like things', duplicateOf: null, fields: ['Name'] })
+  const menu: AiBuildPlan = {
+    reuse: [],
+    create: [dataset('Menu')],
+    screens: [screen({ nav: true, sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'menu', uses: ['new:Menu'], items: 12 }] })],
+  }
+
+  it('counts each dataset as one pass, at what a single-answer creation measures', () => {
+    expect(aiPlanCreditEstimate(menu)).toBe((2 + 1 + 1) * AI_SITE_PASS_CREDITS)
+    expect(aiPlanCreditRange(menu).ceiling).toBe(aiPlanCreditEstimate(menu))
+    expect(aiPlanCreditRange(menu).likely).toBeGreaterThan(aiPlanCreditRange({ ...menu, create: [] }).likely)
+  })
+
+  it('builds a plan’s datasets itself, at most a start’s few', () => {
+    expect(aiSitePlanPrerequisites(menu)).toEqual([])
+    const pages = Array.from({ length: AI_SITE_PAGES.min }, (_, index) => screen({ title: `Page ${index}`, slug: `page-${index}` }))
+    const many = { ...menu, screens: pages, create: Array.from({ length: AI_SITE_DATASETS_MAX + 1 }, (_, index) => dataset(`List ${index}`)) }
+    expect(aiSitePlanShapeRefusal({ ...many, create: many.create.slice(1) })).toBeNull()
+    expect(aiSitePlanShapeRefusal(many)).toContain(`creates at most ${AI_SITE_DATASETS_MAX}`)
   })
 })
 

@@ -99,6 +99,18 @@ import {
   type AiSitePostsInput,
 } from './ai-job-site-content'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import {
+  AI_SITE_DATASET_BUDGET,
+  AI_SITE_DATASET_INPUT,
+  AI_SITE_DATASETS_MAX,
+  aiSiteDatasetBriefLines,
+  aiSiteDatasetInputOf,
+  aiSiteDatasetListings,
+  aiSiteDatasetRefusal,
+  aiSitePlanDatasets,
+  aiSiteRecordTemplateOf,
+  runAiSiteDatasetUnit,
+} from './ai-job-site-datasets'
 import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
@@ -172,11 +184,20 @@ import {
 
 /**
  * What a scaffold's units are, in the order it builds them; a component is a
- * page job's. A blog's first posts and a store's first products (AGL-3676)
- * are built after the layout and the form and before the pages, which are
- * told what they are.
+ * page job's. The site's datasets (AGL-3616), a blog's first posts and a
+ * store's first products (AGL-3676) are built after the layout and the form
+ * and before the pages, which are told what they are.
  */
-export type AiSiteUnitKind = 'theme' | 'layout' | 'form' | 'component' | 'posts' | 'products' | 'page' | 'email'
+export type AiSiteUnitKind =
+  | 'theme'
+  | 'layout'
+  | 'form'
+  | 'component'
+  | 'dataset'
+  | 'posts'
+  | 'products'
+  | 'page'
+  | 'email'
 
 export interface AiSiteUnit {
   kind: AiSiteUnitKind
@@ -210,6 +231,9 @@ const UNIT_KINDS: Record<
   // products' the step that proposes the catalog they are written from.
   posts: { jobKind: 'text', resource: 'entry' },
   products: { jobKind: 'products', resource: 'product' },
+  // The scaffold's own runner designs it (`ai-job-site-datasets.ts`), and the
+  // data plugin's writer keeps it: a draft of another plugin's (AGL-3616).
+  dataset: { jobKind: 'text', resource: 'draft' },
 }
 
 /** The unit kind a creation is built as, where a unit builds it. */
@@ -262,7 +286,7 @@ export const AI_SITE_UNIT_EMPTY_COPY =
  * is not.
  */
 export const AI_SITE_MAX_PASSES =
-  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_POSTS + 1
+  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 1
 
 /**
  * The units a plan implies, in build order: the palette first, because a
@@ -293,6 +317,10 @@ export function aiSiteJobUnits(
       label: creation.name,
     })
   }
+  // The site's datasets (AGL-3616), before anything that lists them.
+  aiSitePlanDatasets(plan).forEach((creation, index) => {
+    units.push({ kind: 'dataset', ...UNIT_KINDS.dataset, slot: `d${index}`, creation, label: creation.name })
+  })
   // A paid blog's first posts and a paid store's first products (AGL-3676).
   if (options.content === 'posts') {
     units.push({ kind: 'posts', ...UNIT_KINDS.posts, slot: 'posts', label: AI_SITE_POSTS_LABEL })
@@ -374,7 +402,7 @@ export interface AiSiteBuiltRef {
   id: string
   label: string
   /** Only what becomes a record a page can name; a palette change is not one. */
-  kind: 'layout' | 'form' | 'component'
+  kind: 'layout' | 'form' | 'component' | 'dataset'
 }
 
 /**
@@ -402,11 +430,12 @@ export function aiSiteBuiltRefs(
     const row = rows?.shift()
     if (!row || !unit.creation) continue
     // A theme change is a proposal with no record to reference; a layout, a
-    // form and a component become ids a page can name.
+    // form, a component and a dataset (AGL-3616) become ids a page can name.
     if (
       unit.creation.kind !== 'layout' &&
       unit.creation.kind !== 'form' &&
-      unit.creation.kind !== 'component'
+      unit.creation.kind !== 'component' &&
+      unit.creation.kind !== 'dataset'
     ) {
       continue
     }
@@ -608,8 +637,11 @@ export function aiSiteUnitJob(
     brief.push(
       `Build the page “${screen.title}” of this site, at ${screen.slug}.`,
     )
-    // What the blog's posts or the store's products are, once built (AGL-3676).
-    if (job.kind === 'site') brief.push(...aiSiteContentBriefLines(job.outputs ?? []))
+    // What the blog's posts or the store's products are, once built (AGL-3676),
+    // and what the site's datasets hold (AGL-3616).
+    if (job.kind === 'site') {
+      brief.push(...aiSiteContentBriefLines(job.outputs ?? []), ...aiSiteDatasetBriefLines(job.outputs ?? []))
+    }
   }
   if (unit.kind === 'products') brief.push(aiSiteProductsBriefLine())
   if (unit.kind === 'email') {
@@ -664,6 +696,11 @@ export function aiSiteUnitJob(
       // A music site places an empty player for the artist's own tracks (AGL-3716).
       music: aiSiteKindOfInputs(job.inputs)?.id === 'music',
     })
+    // The site's datasets, each repeated in the sections that name it (AGL-3616).
+    const delivered = new Map([...built.entries()].filter(([, entry]) => entry.kind === 'dataset').map(([name, entry]) => [name, entry.id]))
+    listings.push(
+      ...aiSiteDatasetListings({ outputs: job.outputs ?? [], datasets: aiSitePlanDatasets(plan), screens: merged.screens, delivered }),
+    )
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   // A site's pages and its layout are designed in the layout language and
@@ -694,6 +731,8 @@ export function aiSiteUnitJob(
     unitInputs[AI_SITE_CONTENT_INPUT] = posts
   }
   if (unit.kind === 'products') unitInputs['target'] = 'catalog'
+  // Where the plan lists a dataset, which its design reads (AGL-3616).
+  if (unit.kind === 'dataset' && unit.creation) unitInputs[AI_SITE_DATASET_INPUT] = aiSiteDatasetInputOf(unit.creation, plan.screens)
   return {
     ...job,
     $id: aiSiteUnitJobId(job, unit),
@@ -872,6 +911,9 @@ export interface AiJobSiteStepDeps {
   products?: AiJobStepRunner
   /** Whether a part may be built for this member, before its first pass. */
   contentRefusal?: typeof aiSiteContentRefusal
+  /** A dataset's pass and whether one may be made here (AGL-3616); specs hand in fakes. */
+  dataset?: AiJobStepRunner
+  datasetRefusal?: typeof aiSiteDatasetRefusal
   /** The posts' publish once the pages are live, and the cache drop after it. */
   publishPosts?: typeof aiPublishSitePosts
   dropCache?: typeof dropPluginSiteCache
@@ -907,13 +949,25 @@ export async function aiSitePageWritten(
  */
 export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
   const creations = units.filter((unit) => unit.kind === 'layout' || unit.kind === 'form').map((unit) => unit.slot)
+  const datasets = units.filter((unit) => unit.kind === 'dataset' && unit.creation)
+  /** The datasets a page lists or is the record template of (AGL-3616): built before it, and it without them if they fail. */
+  const listed = (screen: AiBuildPlanScreen | undefined) =>
+    datasets
+      .filter((unit) => {
+        const named = `new:${unit.creation?.name ?? ''}`.trim().toLowerCase()
+        return (
+          screen?.record?.dataset.trim().toLowerCase() === named ||
+          (screen?.sections ?? []).some((section) => section.uses.some((ref) => ref.trim().toLowerCase() === named))
+        )
+      })
+      .map((unit) => unit.slot)
   return units.map((unit) => ({
     slot: unit.slot,
-    op: unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' ? unit.kind : unit.jobKind,
+    op: unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' || unit.kind === 'dataset' ? unit.kind : unit.jobKind,
     label: unit.label,
     ...(unit.creation ? { creation: unit.creation } : {}),
     ...(unit.screen ? { screen: unit.screen } : {}),
-    deps: unit.kind === 'page' ? creations : [],
+    deps: unit.kind === 'page' ? [...creations, ...listed(unit.screen)] : [],
   }))
 }
 
@@ -948,7 +1002,7 @@ function aiSiteOwedUnits(
   return aiSiteJobUnits(plan, {
     welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
     content: aiSiteContentPart(job.inputs, freeTaste),
-  }).filter((unit) => unit.kind === 'theme' || unit.kind === 'posts' || runnerFor(unit.jobKind))
+  }).filter((unit) => unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'dataset' || runnerFor(unit.jobKind))
 }
 
 export function createAiJobSiteStep(
@@ -959,6 +1013,7 @@ export function createAiJobSiteStep(
   const publish = deps.publish ?? aiPublishGuidedSite
   const look = deps.look ?? aiRunSiteLook
   const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
+  const datasetRefusal = deps.datasetRefusal ?? aiSiteDatasetRefusal
   const publishPosts = deps.publishPosts ?? aiPublishSitePosts
   const dropCache = deps.dropCache ?? dropPluginSiteCache
   return async (context): Promise<AiJobStepOutcome> => {
@@ -1026,11 +1081,20 @@ export function createAiJobSiteStep(
         paths: { [job.hostId]: published.paths },
       }).catch((error: unknown) => console.warn('ai site posts: cache not dropped', { jobId: job.$id, error }))
     }
-    /** The pages built so far, as the job reported them. */
+    /**
+     * The pages built so far, as the job reported them. A dataset's record
+     * template is not among them (AGL-3616): it renders once per record only
+     * once the member saves its binding, so it is never published at its own
+     * address, where its `{{item.*}}` would show.
+     */
+    const templates = new Set(units.filter((unit) => unit.kind === 'page' && unit.screen?.record).map((unit) => unit.slot))
     const builtPages = (extra: readonly AiJobOutput[] = []) => {
       const ids = new Set(
         units
-          .filter((unit) => unit.kind === 'page' && aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }))
+          .filter(
+            (unit) =>
+              unit.kind === 'page' && !templates.has(unit.slot) && aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }),
+          )
           .flatMap((unit) => rows.get(unit.slot)?.outputs ?? []),
       )
       return [...(job.outputs ?? []).filter((output) => output.resource === 'screen' && ids.has(output.id)), ...extra]
@@ -1047,7 +1111,9 @@ export function createAiJobSiteStep(
           ? (deps.posts ?? runAiSitePostsUnit)
           : unit.kind === 'products'
             ? (deps.products ?? (catalog ? createAiSiteProductsRunner({ catalog }) : undefined))
-            : runnerFor(unit.jobKind)
+            : unit.kind === 'dataset'
+              ? (deps.dataset ?? runAiSiteDatasetUnit)
+              : runnerFor(unit.jobKind)
     if (!runner) return { ...aiUnspentOutcome(model), ...init }
     const othersOpen = ledgerUnits.some(
       (one) => one.slot !== unit.slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }),
@@ -1087,6 +1153,33 @@ export function createAiJobSiteStep(
         return AI_SITE_UNIT_EMPTY_COPY
       })
       if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // A dataset asks the same before its first pass (AGL-3616): the data
+    // plugin runs here, and its writer admits this member now.
+    if (unit.kind === 'dataset' && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await datasetRefusal({ ...context, job }).catch((error: unknown) => {
+        console.error('ai site dataset admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // A record template whose dataset was not made has nothing to show
+    // (AGL-3616): it is not built, and the pages that list the dataset are
+    // built without it.
+    const templateOf = unit.kind === 'page' && unit.screen ? aiSiteRecordTemplateOf(unit.screen) : null
+    if (templateOf) {
+      const dataset = units.find((one) => one.kind === 'dataset' && one.creation?.name.trim().toLowerCase() === templateOf.toLowerCase())
+      const row = dataset ? rows.get(dataset.slot) : undefined
+      if (!row || !aiBuildItemDelivered(row) || !row.outputs.length) {
+        return closing(
+          settle({
+            slot: unit.slot,
+            status: 'skipped',
+            note: `Not built: the dataset “${templateOf}” it shows a page of each record of could not be created.`,
+            ...(dataset ? { degradedBy: [dataset.slot] } : {}),
+          }),
+        )
+      }
     }
 
     // A page whose layout or form failed is built without it, and says so.
@@ -1153,7 +1246,10 @@ export function createAiJobSiteStep(
     )
     if (done.continue) return done
     rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: degraded ? 'degraded' : 'succeeded' })
-    return finish(done, builtPages(unit.kind === 'page' ? outcome.outputs.filter((output) => output.resource === 'screen') : []))
+    return finish(
+      done,
+      builtPages(unit.kind === 'page' && !templates.has(unit.slot) ? outcome.outputs.filter((output) => output.resource === 'screen') : []),
+    )
   }
 }
 
@@ -1179,7 +1275,7 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
     content: aiSiteContentPart(job.inputs, false),
   }).filter(
     (unit) =>
-      (unit.kind === 'theme' || unit.kind === 'posts' || aiJobStepRunnerFor(unit.jobKind)) &&
+      (unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'dataset' || aiJobStepRunnerFor(unit.jobKind)) &&
       (!owed.size || owed.has(unit.slot)),
   )
   const outputs = job.outputs ?? []
@@ -1189,6 +1285,7 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
   if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
   if (unit.kind === 'posts') return AI_SITE_POST_BUDGET.minimumMs
+  if (unit.kind === 'dataset') return AI_SITE_DATASET_BUDGET.minimumMs
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))
 }
 

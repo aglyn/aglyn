@@ -43,6 +43,7 @@ import {
   type AiPlanJobScope,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiSitePlanDatasetCapability } from './ai-job-site-datasets'
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_SITE_CREATE_KINDS,
@@ -298,6 +299,8 @@ export function aiPlanSiteLines(
   // portfolio start planned a commissions inquiry beside the form it made
   // for its Contact page, without placing it.
   if (aiPlanCanPlaceForm(inventory, capabilities)) lines.push(AI_SITE_FORM_SENTENCE)
+  // Structured content is kept as a dataset where one may be made (AGL-3616).
+  if (capabilities?.create.dataset.allowed) lines.push(AI_SITE_DATASET_SENTENCE)
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
@@ -317,6 +320,16 @@ export function aiPlanSiteLines(
  */
 export const AI_SITE_FORM_SENTENCE =
   "A section that asks visitors for something (contact, inquiry, commissions, booking, sign-up) places the form: put new:<the form's name> or the site's form id in its uses. One form may be placed on several pages."
+
+/**
+ * The sentence a site plan's turn states where it may create datasets
+ * (AGL-3616): a list of like things is kept as one, named in the sections
+ * that list it, and a page of its own per record is that dataset's record
+ * template. Only where datasets may be made, so a Free plan's turn, whose
+ * length its wall is proven at, is unchanged.
+ */
+export const AI_SITE_DATASET_SENTENCE =
+  'Keep structured content as a dataset: where a page lists like things (a menu, a team, services, portfolio pieces, events, questions and answers), create a dataset of them, its fields their field names, and put new:<the dataset\'s name> in the uses of each section that lists them; the platform lists its records there. Where each one deserves a page of its own, plan one page as the dataset\'s record template.'
 
 /**
  * What a site start's home page is held to (AGL-3660): its fewest sections,
@@ -735,8 +748,15 @@ export type AiPlanCapabilitiesReader = (input: {
 }) => Promise<AiPlanCapabilities | null>
 
 /** The reader the step uses in production: the draft bands' own arithmetic, for the job's site. */
-export const readAiJobPlanCapabilities: AiPlanCapabilitiesReader = async ({ job, org, firestore }) =>
-  job.hostId ? readAiPlanCapabilities(firestore, { hostId: job.hostId, org }) : null
+export const readAiJobPlanCapabilities: AiPlanCapabilitiesReader = async ({ job, org, firestore }) => {
+  if (!job.hostId) return null
+  const capabilities = await readAiPlanCapabilities(firestore, { hostId: job.hostId, org })
+  // A site start creates datasets only where the data plugin runs and its
+  // writer admits this member now (AGL-3616), and at most a start's few.
+  return job.kind === 'site'
+    ? aiSitePlanDatasetCapability(capabilities, { firestore, org, now: new Date(), job })
+    : capabilities
+}
 
 export interface AiJobPlanStepDeps {
   /** The inventory reader; specs hand in a fake. */

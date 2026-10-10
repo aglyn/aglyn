@@ -98,6 +98,8 @@ import {
 } from './ai-products-generation'
 import { AI_BLOG_POST_INSTRUCTIONS } from './ai-blog-post-generation'
 import { AI_BLOG_POST_TOOL } from '../tools/ai-blog-post-tool'
+import { AI_DATASET_INSTRUCTIONS } from './ai-dataset-generation'
+import { AI_DATASET_TOOL } from '../tools/ai-dataset-tool'
 import {
   AI_CATALOG_TOOL,
   AI_CATEGORIES_TOOL,
@@ -297,6 +299,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'copy.blog',
     caches: true,
     why: "the doctrine's fields block, a post's rules and its tool (AGL-3676); the site's brief, the posts already written and which post this is ride uncached",
+  },
+  'runtime/ai-dataset-generation.ts': {
+    step: 'job.products',
+    caches: true,
+    why: "the doctrine's fields block, a dataset's rules and its tool (AGL-3616); the site's brief, the dataset's plan entry and where it is listed ride uncached",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -533,6 +540,13 @@ const REQUESTS: Record<string, Composed> = {
     step: 'copy.blog',
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_BLOG_POST_INSTRUCTIONS, scope: 'fields' }),
     tools: () => [AI_BLOG_POST_TOOL],
+  },
+  // A site's dataset (AGL-3616): the brief, the dataset and where it is listed are the user turn.
+  dataset: {
+    door: 'runtime/ai-dataset-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_DATASET_INSTRUCTIONS, scope: 'fields' }),
+    tools: () => [AI_DATASET_TOOL],
   },
   categories: {
     door: 'runtime/ai-products-generation.ts',
@@ -922,6 +936,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
       // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
+      // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
+      dataset: { prefixTokens: 1_030, minimum: 512, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
       // so each prompt is only the field rules, the kind's own and its tool.
       'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },

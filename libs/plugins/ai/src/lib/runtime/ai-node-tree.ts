@@ -735,6 +735,9 @@ const INSTANCE_SURFACES: ReadonlySet<AiSurface> = new Set([
 
 const FORM_COMPONENT_ID = 'form'
 
+/** The prop a repeat over a dataset is stored under (the data plugin's `repeatDataset`). Persisted — never rename. */
+export const AI_REPEAT_DATASET_PROP = 'repeatDataset'
+
 /** The instance prop naming the component it places; stored on every instance node. */
 export const AI_INSTANCE_REF_PROP = 'refId'
 
@@ -834,6 +837,20 @@ function sanitizeReferenceProps(
 ): { props: Record<string, unknown>; kept: Record<string, unknown> } | { refusal: string } {
   const rest: Record<string, unknown> = { ...props }
   const kept: Record<string, unknown> = {}
+  // A repeat over one of the site's datasets (AGL-3616), on any element: the
+  // platform's own repeat, admitted against the datasets the caller supplies,
+  // as a Form's dataset binding is. The palette leaves it off, since from a
+  // description alone a model can only invent a dataset's id.
+  if (AI_REPEAT_DATASET_PROP in rest) {
+    const raw = rest[AI_REPEAT_DATASET_PROP]
+    delete rest[AI_REPEAT_DATASET_PROP]
+    const id = typeof raw === 'string' ? raw.trim() : ''
+    if (id && refs.datasetIds?.has(id)) {
+      kept[AI_REPEAT_DATASET_PROP] = id
+    } else if (raw !== undefined && raw !== null && raw !== '') {
+      repairs.push(`${nodeId}.${AI_REPEAT_DATASET_PROP} names a dataset this site does not have; dropped`)
+    }
+  }
   if (componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
     const refId = typeof rest[AI_INSTANCE_REF_PROP] === 'string' ? String(rest[AI_INSTANCE_REF_PROP]).trim() : ''
     delete rest[AI_INSTANCE_REF_PROP]

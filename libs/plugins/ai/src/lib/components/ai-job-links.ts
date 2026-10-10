@@ -65,6 +65,10 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
+  if (output.resource === 'draft' && output.draftResource === 'dataset') {
+    // A dataset a site start or a build made (AGL-3616) opens on the site's Data page.
+    return buildRoute(Route.HOST_DATA, { orgSlug, host })
+  }
   if (output.resource === 'form') {
     // A new form has no version for the besigner to open: its own page — the
     // forms plugin's address for it — mints the first one, and holds the

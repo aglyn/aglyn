@@ -128,9 +128,9 @@ const writer = createDatasetDraftWriter({
 // ── Fixtures ─────────────────────────────────────────────────────────────
 
 /** Free: no data store. */
-const FREE = { plan: 'free' }
+const FREE = { plan: 'free' as const }
 /** Starter: the data store, two datasets. */
-const STARTER = { plan: 'starter' }
+const STARTER = { plan: 'starter' as const }
 
 const MENU = {
   fields: [
@@ -215,7 +215,7 @@ describe('reading what a caller sends', () => {
       records: [{ Dish: 'Soup', Colour: 'red' }, { Dish: 'Stew', Spicy: 'very' }],
     })
     expect(values.ok).toBe(false)
-    if (values.ok) return
+    if (values.ok !== false) return
     expect(values.problems).toContain('Record 1 names "Colour", which is not a field')
     expect(values.problems).toContain('Record 2: Spicy must be true or false')
   })

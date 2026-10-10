@@ -53,6 +53,7 @@ import type {
 } from '../model/ai-jobs.types'
 import {
   AI_SITE_BLOG_NAV_ID,
+  AI_SITE_DATASETS_MAX,
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
@@ -109,6 +110,7 @@ import {
   AI_SITE_PRODUCTS_PRICE_NOTE,
 } from './ai-job-site-content'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
+import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
 import {
   AI_JOB_STEP_MAX_PASSES,
   aiJobStepMaxPasses,
@@ -1583,6 +1585,154 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
 
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
     expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
-    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_POSTS + 1)
+    // …and a site's datasets, one pass each (AGL-3616).
+    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 1)
+  })
+})
+
+describe('a site’s datasets (AGL-3616)', () => {
+  const MENU = {
+    kind: 'dataset' as const,
+    name: 'Menu',
+    why: 'the dishes the pages list',
+    duplicateOf: null,
+    fields: ['Dish', 'Description'],
+    id: 'drftMenu01',
+  }
+  const TEAM = { ...MENU, name: 'Team', fields: ['Role'], id: 'drftTeam01' }
+  const MENU_OUTPUT: AiJobOutput = {
+    resource: 'draft',
+    draftResource: 'dataset',
+    id: 'drftMenu01',
+    hostId: 'host-1',
+    label: 'Menu',
+    proposal: { fields: [{ id: 'dish', name: 'Dish', type: 'text' }], recordNames: ['Margherita'], addressField: null },
+  }
+  /** Four pages: one listing the menu, two plain, and the menu's record template. */
+  const plan = confirmedPlan({
+    create: [LAYOUT, FORM, MENU, TEAM],
+    screens: [
+      planScreen({ title: 'Home', slug: '/', id: 'drftPage00', sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'From the menu', uses: ['new:Menu'], items: 3 }] }),
+      planScreen({ title: 'About', slug: 'about', id: 'drftPage01', nav: false }),
+      planScreen({ title: 'Dish', slug: 'dish', id: 'drftPage02', nav: false, record: { dataset: 'new:Menu', base: 'menu' } }),
+      planScreen({ title: 'Contact', slug: 'contact', id: 'drftPage03', nav: false }),
+    ],
+  })
+  const pageRunner = () => fakeRunner([], () => ({ outputs: [output('screen', 'screen-x')] }))
+
+  it('builds each dataset after the layout and the form and before the pages, and a page after the datasets it lists', () => {
+    const units = aiSiteJobUnits(plan)
+    expect(units.map((unit) => unit.slot)).toEqual(['t', 'l', 'f', 'd0', 'd1', 'p0', 'p1', 'p2', 'p3'])
+    expect(units[3]).toMatchObject({ kind: 'dataset', jobKind: 'text', resource: 'draft', label: 'Menu', creation: MENU })
+    const ledger = aiSiteLedgerUnits(units)
+    expect(ledger[3]).toMatchObject({ slot: 'd0', op: 'dataset', deps: [] })
+    // The home lists the menu, the record template shows it; the About page needs neither.
+    expect(ledger.find((unit) => unit.slot === 'p0')?.deps).toEqual(['l', 'f', 'd0'])
+    expect(ledger.find((unit) => unit.slot === 'p1')?.deps).toEqual(['l', 'f'])
+    expect(ledger.find((unit) => unit.slot === 'p2')?.deps).toEqual(['l', 'f', 'd0'])
+  })
+
+  it('asks before a dataset’s first pass, and hands it where the plan lists it, under the creation’s id', async () => {
+    const seen: AiJob[] = []
+    const datasetRefusal = jest.fn(async () => null)
+    const dataset = fakeRunner(seen, () => ({ outputs: [MENU_OUTPUT] }))
+    const job = siteJob({ plan: confirmedPlan({ create: [MENU], screens: plan.screens }) })
+    const outcome = await stepWith({ page: pageRunner() }, { dataset, datasetRefusal })(context(job))
+    expect(datasetRefusal).toHaveBeenCalledWith(expect.objectContaining({ job: expect.objectContaining({ $id: 'job-1' }) }))
+    expect(seen.map((one) => one.$id)).toEqual(['drftMenu01'])
+    expect(seen[0].inputs['siteDataset']).toEqual({ shownIn: ['Home › From the menu (3 items)'], recordPages: true })
+    expect(seen[0].brief).toContain('Build the dataset “Menu”: the dishes the pages list')
+    expect(outcome.item).toMatchObject({ slot: 'd0', status: 'succeeded', outputs: ['drftMenu01'] })
+  })
+
+  it('skips a dataset, unspent, where the data plugin or the member may not have it', async () => {
+    const dataset = jest.fn()
+    const job = siteJob({ plan: confirmedPlan({ create: [MENU], screens: plan.screens }) })
+    const outcome = await stepWith({ page: pageRunner() }, { dataset, datasetRefusal: async () => 'Dataset limit reached (2) — upgrade in Billing' })(context(job))
+    expect(dataset).not.toHaveBeenCalled()
+    expect(outcome.item).toEqual({ slot: 'd0', status: 'skipped', note: 'Not built: Dataset limit reached (2) — upgrade in Billing' })
+    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+  })
+
+  it('hands a page that lists the dataset its records to repeat, and names them in its brief', () => {
+    const units = aiSiteJobUnits(plan)
+    const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
+    const built = new Map([['menu', { id: 'drftMenu01', label: 'Menu', kind: 'dataset' as const }]])
+    const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, MENU_OUTPUT] }), home, built)
+    expect(aiLayoutListingsOf(job.inputs)).toEqual([
+      expect.objectContaining({
+        kind: 'records',
+        datasetId: 'drftMenu01',
+        fields: [{ id: 'dish', name: 'Dish', type: 'text' }],
+        placements: [{ screenId: 'drftPage00', section: 1, role: 'featured' }],
+      }),
+    ])
+    expect(job.brief).toContain('This site\'s dataset “Menu” holds: “Margherita”.')
+    // The section names the dataset by the id it was written under.
+    expect(job.plan?.screens[0].sections[1].uses).toEqual(['drftMenu01'])
+    expect(job.plan?.reuse).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'dataset', id: 'drftMenu01' })]))
+    // The record template binds the dataset it shows by id.
+    const template = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, MENU_OUTPUT] }), units.find((unit) => unit.slot === 'p2') as AiSiteUnit, built)
+    expect(template.plan?.screens[0].record).toEqual({ dataset: 'drftMenu01', base: 'menu' })
+  })
+
+  it('builds no record template for a dataset that was not made, and the page that lists it without it', async () => {
+    const units = aiSiteJobUnits(plan)
+    const done = ['t', 'l', 'f']
+    const items = aiSiteInitialLedger(units, [LOOK]).map((row) =>
+      done.includes(row.slot)
+        ? { ...row, status: 'succeeded' as const, outputs: [row.slot] }
+        : row.slot === 'd0'
+          ? { ...row, status: 'failed' as const }
+          : row.slot === 'd1' || row.slot === 'p0' || row.slot === 'p1'
+            ? { ...row, status: 'succeeded' as const, outputs: [`${row.slot}-out`] }
+            : row,
+    )
+    const page = jest.fn()
+    const outcome = await stepWith({ page: page as never })(context(siteJob({ plan, items })))
+    expect(page).not.toHaveBeenCalled()
+    expect(outcome.item).toMatchObject({
+      slot: 'p2',
+      status: 'skipped',
+      note: 'Not built: the dataset “Menu” it shows a page of each record of could not be created.',
+      degradedBy: ['d0'],
+    })
+    // The home, built after the menu failed, is told to write its items out.
+    const homeItems = aiSiteInitialLedger(units, [LOOK]).map((row) =>
+      done.includes(row.slot)
+        ? { ...row, status: 'succeeded' as const, outputs: [row.slot] }
+        : row.slot === 'd0'
+          ? { ...row, status: 'failed' as const }
+          : row.slot === 'd1'
+            ? { ...row, status: 'succeeded' as const, outputs: ['d1'] }
+            : row,
+    )
+    const seen: AiJob[] = []
+    const home = await stepWith({ page: fakeRunner(seen, () => ({ outputs: [output('screen', 'drftPage00')] })) })(
+      context(siteJob({ plan, items: homeItems })),
+    )
+    expect(home.item).toMatchObject({ slot: 'p0', status: 'degraded', degradedBy: ['d0'] })
+    expect(seen[0].brief).toContain('without the dataset “Menu”')
+  })
+
+  it('never publishes a record template at its own address on a guided start', async () => {
+    const units = aiSiteJobUnits(plan)
+    const outputs = [LOOK, MENU_OUTPUT, output('screen', 'home-out'), output('screen', 'about-out'), output('screen', 'dish-out')]
+    const ids: Record<string, string> = { d0: 'drftMenu01', d1: 'drftTeam01', p0: 'home-out', p1: 'about-out', p2: 'dish-out' }
+    const items = aiSiteInitialLedger(units, [LOOK]).map((row) =>
+      row.slot === 'p3' ? row : { ...row, status: 'succeeded' as const, outputs: [ids[row.slot] ?? row.slot] },
+    )
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 'contact-out')] })) }, { publish })
+    await step(context(siteJob({ plan, items, outputs, inputs: { businessType: 'a trattoria', pages: 4, welcomeEmail: false, autoConfirm: true } })))
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[] }]
+    expect(input.outputs.map((entry) => entry.id)).toEqual(['home-out', 'about-out', 'contact-out'])
+  })
+})
+
+describe('a dataset’s pass, timed (AGL-3616)', () => {
+  it('gives a dataset’s pass the time one dataset needs', () => {
+    const menu = { kind: 'dataset' as const, name: 'Menu', why: 'dishes', duplicateOf: null, fields: ['Dish'], id: 'drftMenu01' }
+    expect(aiSiteJobRunMinimumMs(siteJob({ plan: confirmedPlan({ create: [menu] }) }))).toBe(AI_SITE_DATASET_BUDGET.minimumMs)
   })
 })
