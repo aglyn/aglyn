@@ -398,8 +398,9 @@ export async function aiSiteProductPhotos(input: {
       business: aiSiteWords(input.job.inputs).about || input.job.brief,
       sectionNames: ['Products'],
       jobId: aiOriginJobId(input.job),
-      // Each product may try its name, its photo's subject and its category.
-      searches: slots.length * 4,
+      // Each product may try its name, its photo's subject, its category, a
+      // gift's wrapper and the craft's broad searches (AGL-3660).
+      searches: slots.length * 6,
       ...(input.signal ? { signal: input.signal } : {}),
     })
     if (source) found = await source(slots)

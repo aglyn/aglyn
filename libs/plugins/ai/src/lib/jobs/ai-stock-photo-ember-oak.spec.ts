@@ -210,16 +210,15 @@ describe('the Ember & Oak start’s photos (AGL-3660, beta.239)', () => {
   it('names the product’s head noun among the first tags: no lifestyle bed for a soy candle, no taper for wax melts', () => {
     const terms = aiStockSiteTerms(EMBER)
     const melts = aiStockProductSearches(productSlot('Wax Melt Gift Set'), terms.craft, terms.domain)
-    expect(melts.map((search) => search.query)).toEqual([
-      'wax melt gift set',
-      'wax melts',
-      'wax melt warmer',
-      'scented wax cubes',
-    ])
+    const held = (searches: typeof melts) => searches.filter((search) => search.lead).map((search) => search.query)
+    expect(held(melts)).toEqual(['wax melt gift set', 'wax melts', 'wax melt warmer', 'scented wax cubes'])
+    // Then the same searches, the head noun named anywhere, its first tags of the shop's world.
+    expect(melts.filter((search) => !search.lead).map((search) => search.query)).toEqual(held(melts))
+    expect(melts.filter((search) => !search.lead).every((search) => search.leadWorld)).toBe(true)
     // The category alone never stands in for a wax melt.
     expect(melts.map((search) => search.query)).not.toContain('candle')
     const candle = aiStockProductSearches(productSlot('Hand-Poured Soy Candle'), terms.craft, terms.domain)
-    expect(candle.map((search) => search.query)).toEqual(['soy candle', 'candle'])
+    expect(held(candle)).toEqual(['soy candle', 'candle'])
     const judge = (search: (typeof melts)[number]) => ({
       subject: search.subject ?? '',
       domain: terms.domain,
@@ -229,7 +228,11 @@ describe('the Ember & Oak start’s photos (AGL-3660, beta.239)', () => {
       ...(search.object ? { object: search.object } : {}),
       ...(search.kin ? { kin: search.kin } : {}),
       ...(search.lead ? { lead: true } : {}),
+      ...(search.leadWorld ? { leadWorld: true } : {}),
+      ...(search.category ? { category: search.category } : {}),
     })
+    // Not even named anywhere: the bed's first tags are not a candle's world.
+    for (const search of candle) expect(aiStockRelevance(BED_SCENE, judge(search))).toBe(0)
     expect(aiStockRelevance(BED_SCENE, judge(candle[0] as (typeof candle)[number]))).toBe(0)
     expect(aiStockRelevance(SOY_CANDLE, judge(candle[1] as (typeof candle)[number]))).toBeGreaterThan(0)
     for (const search of melts) {

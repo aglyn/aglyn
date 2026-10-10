@@ -331,13 +331,21 @@ describe('the stock photo searches (AGL-3660)', () => {
         'calm class',
       ),
     ).toEqual([
+      // A hero of a craft names the craft itself (AGL-3660, Saltmarsh).
       {
         query: 'yoga studio',
         orientation: 'horizontal',
         minWidth: 1600,
         broad: true,
+        category: ['yoga'],
       },
-      { query: 'yoga', orientation: 'horizontal', minWidth: 1600, broad: true },
+      {
+        query: 'yoga',
+        orientation: 'horizontal',
+        minWidth: 1600,
+        broad: true,
+        category: ['yoga'],
+      },
     ])
     expect(
       aiStockSearchesFor(
