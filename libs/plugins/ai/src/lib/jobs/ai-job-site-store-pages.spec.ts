@@ -32,6 +32,7 @@ jest.mock('../providers/routing', () => ({
   aiModelForStep: () => 'routed-model',
 }))
 
+import { HostScreenVisibility } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import type { AiJob } from '../model/ai-jobs.types'
 import { aiStorePagesOfPlan } from '../model/ai-site-store-pages'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
@@ -104,6 +105,13 @@ describe('the store pages’ pass', () => {
       ['job-1-store-terms', 'terms', 'Terms of sale', 'frame-1', 'job-1'],
     ])
     expect(written.every((input) => input['kind'] === 'screen')).toBe(true)
+    // A shopper's own pages are unlisted (noindex, out of the sitemap); the policies stay indexable.
+    expect(written.map((input) => [input['slug'], input['visibility'] ?? null])).toEqual([
+      ['account', HostScreenVisibility.UNLISTED],
+      ['cart', HostScreenVisibility.UNLISTED],
+      ['privacy', null],
+      ['terms', null],
+    ])
     expect(writeSeo).toHaveBeenCalledWith(firestore, expect.objectContaining({ id: 'job-1-store-privacy', seo: expect.objectContaining({ title: 'Privacy policy' }) }))
     expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
     expect(outcome.outputs.map((output) => [output.resource, output.id, output.versionId, output.proposal])).toEqual([

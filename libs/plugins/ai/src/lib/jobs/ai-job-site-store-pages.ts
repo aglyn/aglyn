@@ -18,6 +18,7 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { ACCOUNTS_PLUGIN_ID } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+import { HostScreenVisibility } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
@@ -147,6 +148,8 @@ export function createAiSiteStorePagesRunner(deps: AiSiteStorePagesRunnerDeps = 
         slug: page.slug,
         nodes: aiStorePageNodes(page.key, input.facts) as unknown as NodesMap,
         layoutId: input.layoutId,
+        // The account and the cart are a shopper's own pages: unlisted, noindex (AGL-3676).
+        ...(definition.noindex ? { visibility: HostScreenVisibility.UNLISTED } : {}),
         aiJobId: aiOriginJobId(job),
         now,
       })

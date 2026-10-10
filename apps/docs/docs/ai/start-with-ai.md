@@ -203,6 +203,9 @@ site. They do not count toward the pages you asked for:
   orders with status and tracking, keep their addresses, and find the items they saved
   with **Save** on a product page. User accounts are turned on for the site.
 - **Your cart** at `/cart`, with checkout.
+
+  These two are set to **Unlisted**, so search engines don't index them. The policy
+  pages below are listed like the rest of your site.
 - **Shipping & returns**, **Privacy policy** and **Terms of sale**, written as drafts. The
   facts only you know, such as your return window or where you ship from, are left in
   [brackets] for you to fill in. If your plan already has a shipping page, it is used

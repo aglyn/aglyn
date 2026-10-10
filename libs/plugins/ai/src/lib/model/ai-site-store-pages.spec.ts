@@ -93,6 +93,10 @@ describe('the pages a store gets beside its plan', () => {
     expect(pages.find((page) => page.key === 'shipping')?.planned).toBeUndefined()
   })
 
+  it('marks only the account and the cart as a shopper’s own, unlisted pages; the policies stay indexable', () => {
+    expect(AI_STORE_PAGES.filter((page) => page.noindex).map((page) => page.key)).toEqual(['account', 'cart'])
+  })
+
   it('links the account beside the cart, and the account and the policies in the footer; the cart is the header’s own button', () => {
     const links = aiStoreFrameLinks(aiStorePagesOfPlan(EMBER_AND_OAK))
     expect(links).toEqual({

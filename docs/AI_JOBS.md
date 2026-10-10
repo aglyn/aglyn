@@ -1517,7 +1517,9 @@ nothing itself.
     `/account` (the commerce Customer account — sign in, create an account,
     profile, addresses, order history with status and tracking — and Saved
     items, the Wishlist the product page's Save fills), **Your cart** at
-    `/cart` (the inline Cart with its checkout, and Continue shopping), and
+    `/cart` (the inline Cart with its checkout, and Continue shopping) — both
+    written UNLISTED (`screen.visibility`, the page Access setting), so the
+    tenant serves them `noindex` and the sitemap leaves them out — and
     **Shipping & returns** (`/shipping-returns`), **Privacy policy**
     (`/privacy`) and **Terms of sale** (`/terms`) as Markdown drafts whose
     every merchant-only fact is a `[bracketed placeholder]` — no window,

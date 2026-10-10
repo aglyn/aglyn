@@ -41,6 +41,10 @@
  *    fact only the merchant knows left as a [bracketed placeholder] — never a
  *    return window, a price or a promise the brief did not give.
  *
+ * The account and the cart are a shopper's own pages, written UNLISTED
+ * (noindex, out of the sitemap); the policies are indexable like every other
+ * page.
+ *
  * An order's own page is the commerce plugin's built-in /order-status, which
  * every order email links with its signed key; the Account page says so.
  *
@@ -71,6 +75,13 @@ export interface AiStorePageDefinition {
   /** What the footer's link to it says. */
   link: string
   seo: { title: string; description: string }
+  /**
+   * A shopper's own page, not one to find by search: written UNLISTED, the
+   * page's Access setting the console offers, so the tenant serves it
+   * `noindex` and leaves it out of the sitemap. Only the account and the
+   * cart; the policies, like every content and landing page, stay indexable.
+   */
+  noindex?: true
 }
 
 /** Every store page, in the order the job writes them and the footer links them. */
@@ -80,6 +91,7 @@ export const AI_STORE_PAGES: readonly AiStorePageDefinition[] = [
     title: 'Your account',
     slug: 'account',
     link: 'Your account',
+    noindex: true,
     seo: { title: 'Your account', description: 'Sign in to see your orders, saved addresses and saved items.' },
   },
   {
@@ -87,6 +99,7 @@ export const AI_STORE_PAGES: readonly AiStorePageDefinition[] = [
     title: 'Your cart',
     slug: 'cart',
     link: 'Cart',
+    noindex: true,
     seo: { title: 'Your cart', description: 'Review your cart and check out.' },
   },
   {
