@@ -173,14 +173,14 @@ export function aiStorefrontItemIcons(
   known: (word: string | undefined) => boolean,
 ): string[] {
   const used = new Set<string>()
-  const icons = items.map((item) => {
+  const designed = items.map((item) => {
     if (item.icon && known(item.icon) && !used.has(item.icon)) {
       used.add(item.icon)
       return item.icon
     }
     return ''
   })
-  return icons.map((icon, index) => {
+  return designed.map((icon, index) => {
     if (icon) return icon
     const words = `${items[index].title} ${items[index].text}`
     const suggested = ICON_WORDS.find(([pattern, word]) => pattern.test(words) && !used.has(word) && known(word))?.[1]

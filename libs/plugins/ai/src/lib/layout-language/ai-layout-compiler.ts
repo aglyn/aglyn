@@ -2732,12 +2732,12 @@ function iconColumns(scope: SectionScope, items: readonly AiLayoutItem[], room: 
   const { page } = scope
   const tree = page.tree
   const facts = page.targets.facts
-  const icons = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word))
+  const iconWords = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word))
   const perRow = across(items.length, room, 'cards')
   const textAlign = scope.centered ? { align: 'center' } : {}
   page.settled.push({ at: scope.at, what: `${items.length} items drawn as icon columns` })
   const ids = items.map((item, position) => {
-    const icon = aiIconOfWord(icons[position]) ?? AI_ICON_LIBRARY.star
+    const icon = aiIconOfWord(iconWords[position]) ?? AI_ICON_LIBRARY.star
     return tree.add(
       'muiStack',
       { spacing: '1.5', ...(scope.centered ? { alignItems: 'center' } : {}) },
