@@ -514,10 +514,13 @@ describe('aiJobOutputHref', () => {
     expect(aiJobOutputHref(output({ versionId: 'v-1' }) as never, 'acme')).not.toContain('host-1')
   })
 
-  it('opens a dataset a site start made on the site’s Data page (AGL-3616)', () => {
+  it('opens a dataset a site start made where the data plugin lists it, and nowhere it is not loaded (AGL-3616)', () => {
+    expect(aiJobOutputHref(output({ resource: 'draft', draftResource: 'dataset', id: 'ds-1' }) as never, 'acme')).toBeNull()
+    registerPluginRecordRoute('dataset', { list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/data`, record: () => null }, { pluginId: 'data' })
     expect(aiJobOutputHref(output({ resource: 'draft', draftResource: 'dataset', id: 'ds-1' }) as never, 'acme')).toBe(
       '/acme/hosts/shop/data',
     )
+    unregisterPluginServices('data')
   })
 
   it('opens a theme proposal on the site’s Theme section (AGL-2938)', () => {
