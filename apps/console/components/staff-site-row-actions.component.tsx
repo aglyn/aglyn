@@ -17,6 +17,13 @@
 
 'use client'
 
+import {
+  mdiAccountOutline,
+  mdiDomain,
+  mdiEyeOutline,
+  mdiInformationOutline,
+  mdiOpenInNew,
+} from '@aglyn/shared-data-mdi'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { buildRoute, Route } from '../constants/route-links'
@@ -90,7 +97,8 @@ export const staffSiteLiveUrl = (
  * 2026-10-09: "confusing menu items"). An item a row cannot use says why on
  * a second line, not only in a tooltip nobody hovers: the preview of a site
  * with no published home page, a site with no organization, an organization
- * with no owner.
+ * with no owner. Every item leads with its icon, on the left, as the
+ * besigner's File menu does (Zach, 2026-10-10).
  */
 export function staffSiteMenuItems(
   site: Pick<StaffSiteRow, '$id' | 'orgId' | 'homeScreenId'> &
@@ -105,6 +113,13 @@ export function staffSiteMenuItems(
     cname: site.cname ?? null,
     cnameAttachmentPending: site.cnameAttachmentPending ?? false,
   })
+  const icons = {
+    live: { path: mdiOpenInNew.path },
+    open: { path: mdiInformationOutline.path },
+    preview: { path: mdiEyeOutline.path },
+    org: { path: mdiDomain.path },
+    owner: { path: mdiAccountOutline.path },
+  }
   const unavailable = (reason: string) => ({
     disabled: true,
     disabledReason: reason,
@@ -112,28 +127,38 @@ export function staffSiteMenuItems(
   })
   return [
     liveUrl
-      ? { key: 'live', label: 'Visit live site', href: liveUrl, external: true }
+      ? {
+          key: 'live',
+          label: 'Visit live site',
+          icon: icons.live,
+          href: liveUrl,
+          external: true,
+        }
       : {
           key: 'live',
           label: 'Visit live site',
+          icon: icons.live,
           external: true,
           ...unavailable('This site has no address yet'),
         },
     {
       key: 'open',
       label: 'Site details',
+      icon: icons.open,
       href: buildRoute(Route.ADMIN_SITE_DETAIL, { hostId: site.$id }),
     },
     site.homeScreenId
       ? {
           key: 'preview',
           label: 'Preview home page',
+          icon: icons.preview,
           href: staffSitePreviewHref(site.$id, 'screen', site.homeScreenId),
           external: true,
         }
       : {
           key: 'preview',
           label: 'Preview home page',
+          icon: icons.preview,
           external: true,
           ...unavailable('No home page published yet'),
         },
@@ -141,22 +166,26 @@ export function staffSiteMenuItems(
       ? {
           key: 'org',
           label: 'Organization details',
+          icon: icons.org,
           href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: site.orgId }),
         }
       : {
           key: 'org',
           label: 'Organization details',
+          icon: icons.org,
           ...unavailable('Belongs to no organization'),
         },
     site.ownerUid
       ? {
           key: 'owner',
           label: 'Owner details',
+          icon: icons.owner,
           href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.ownerUid }),
         }
       : {
           key: 'owner',
           label: 'Owner details',
+          icon: icons.owner,
           ...unavailable('The organization records no owner'),
         },
   ]

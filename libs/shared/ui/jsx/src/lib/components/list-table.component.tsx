@@ -16,7 +16,6 @@
  */
 'use client'
 
-import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { AppLink } from './app-link'
 import { MdiIcon } from './mdi-icon/mdi-icon'
 import {
@@ -150,12 +149,10 @@ function quickActionMenuItem(
   return {
     key: 'quick',
     label: quick.label,
-    // A new-tab item already ends in the open-in-new mark, so an open-in-new
-    // glyph in front of it drew the same arrow on both sides of one label.
-    icon:
-      external && quick.icon === mdiOpenInNew.path ? undefined : (
-        <MdiIcon path={quick.icon} size={0.8} />
-      ),
+    // The quick button's glyph leads the item, on the left, as in the
+    // besigner's File menu. A new-tab item draws no second, trailing mark,
+    // so an open-in-new glyph here is the one arrow the item carries.
+    icon: { path: quick.icon },
     // `href` is off-site and opens a new tab; `to` is an in-app route,
     // which a preview opens in a new tab too.
     href: quick.href ?? quick.to,

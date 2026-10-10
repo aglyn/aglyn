@@ -25,7 +25,9 @@
  *    stays locked.
  *  - **The row menu drew the open-in-new arrow on both sides of "Visit live
  *    site"**: the quick action's own glyph in front, the new-tab mark behind.
- *    One arrow, trailing. And an unavailable item can say why on screen.
+ *    One arrow — and since 2026-10-10 it LEADS, as the besigner File menu's
+ *    icons do ("which is to the left"). An unavailable item says why on
+ *    screen.
  */
 
 import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
@@ -86,7 +88,7 @@ describe('Manage columns lists filter-only columns as ordinary, toggleable colum
 })
 
 describe('the row menu draws one open-in-new arrow, and says why an item is unavailable', () => {
-  it('"Visit live site" carries the trailing new-tab mark only', () => {
+  it('"Visit live site" carries one arrow, as its leading icon', () => {
     render(
       <ListRowActions
         label="Harbor Bakery"
@@ -107,7 +109,52 @@ describe('the row menu draws one open-in-new arrow, and says why an item is unav
     const [visit, preview] = screen.getAllByRole('menuitem')
     expect(visit.textContent).toContain('Visit live site')
     expect(visit.querySelectorAll('svg')).toHaveLength(1)
-    expect(visit.querySelector('.MuiListItemIcon-root')).toBeNull()
+    // The arrow is on the LEFT, in the icon column, as in the besigner's
+    // File menu (Zach, 2026-10-10) — never a trailing mark after the label.
+    const icon = visit.querySelector('.MuiListItemIcon-root')
+    expect(icon?.querySelector('svg')).toBeTruthy()
+    expect(visit.firstElementChild).toBe(icon)
     expect(within(preview).getByText('No home page published yet')).toBeTruthy()
+  })
+})
+
+describe('the row menu renders the besigner File menu rows (Zach, 2026-10-10)', () => {
+  it('leads every item with its icon and keeps one left edge', () => {
+    render(
+      <ListRowActions
+        label="Harbor Bakery"
+        items={[
+          { key: 'open', label: 'Site details', icon: { path: 'M0 0h24v24H0z' }, href: '/s/1' },
+          { key: 'plain', label: 'No icon of its own', onClick: jest.fn() },
+          { key: 'live', label: 'Visit live site', href: 'https://harbor.test', external: true },
+        ]}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Harbor Bakery' }))
+    const [details, plain, live] = screen.getAllByRole('menuitem')
+    for (const item of [details, plain, live]) {
+      expect(item.classList.contains('MuiMenuItem-dense')).toBe(true)
+      // The icon column comes first, then the label — nothing trails it.
+      expect(item.firstElementChild?.classList.contains('MuiListItemIcon-root')).toBe(true)
+      expect(item.lastElementChild?.classList.contains('MuiListItemText-root')).toBe(true)
+    }
+    // A row without an icon keeps the empty column, so its label lines up.
+    expect(plain.querySelector('svg')).toBeNull()
+    // An external item without an icon of its own leads with open-in-new.
+    expect(live.querySelector('.MuiListItemIcon-root svg path')?.getAttribute('d')).toBe(
+      mdiOpenInNew.path,
+    )
+  })
+
+  it('draws no icon column in a menu where no item has one', () => {
+    render(
+      <ListRowActions
+        label="Home"
+        items={[{ key: 'delete', label: 'Delete', onClick: jest.fn() }]}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Home' }))
+    const item = screen.getByRole('menuitem', { name: 'Delete' })
+    expect(item.querySelector('.MuiListItemIcon-root')).toBeNull()
   })
 })
