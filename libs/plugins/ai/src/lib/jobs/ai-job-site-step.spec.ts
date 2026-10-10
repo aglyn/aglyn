@@ -97,6 +97,7 @@ import {
   aiSitePendingUnits,
   aiSiteUnitJob,
   aiSiteWritesPosts,
+  AI_SITE_STORE_PAGES_MINIMUM_MS,
   createAiJobSiteStep,
   createAiSiteJobAdmission,
   registerAiSiteJob,
@@ -111,6 +112,8 @@ import {
 } from './ai-job-site-content'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
+import { AI_SITE_STORE_PAGES_INPUT, type AiSiteStorePagesInput } from './ai-job-site-store-pages'
+import { AI_SITE_STORE_PAGES_LABEL, AI_SITE_STORE_PAGES_NOTE, aiStoreFrameLinksOf } from '../model/ai-site-store-pages'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import {
   AI_JOB_STEP_MAX_PASSES,
@@ -1586,8 +1589,147 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
 
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
     expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
-    // …and a site's datasets, one pass each (AGL-3616).
-    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 1)
+    // …and a site's datasets, one pass each (AGL-3616), and a store's own pages, one pass (AGL-3676).
+    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 2)
+  })
+})
+
+/*
+ * A paid store's own pages (AGL-3676): Zach, 2026-10-10, "We seem to be
+ * missing the account pages for the shop/store AI generation". The Ember &
+ * Oak start had no account, cart or policy page. They are a unit of the
+ * scaffold's own, after the planned pages, written by code.
+ */
+describe('a store’s account, cart and policy pages (AGL-3676)', () => {
+  const storeInputs = { businessType: 'a candle shop', siteKind: 'store', pages: AI_SITE_PAGES.min, welcomeEmail: true }
+  const storePlan = () =>
+    confirmedPlan({
+      create: [LAYOUT],
+      screens: [
+        planScreen({ title: 'Home', slug: '/', id: 'drftHome00' }),
+        planScreen({ title: 'Shop', slug: '/shop', id: 'drftShop00' }),
+        planScreen({ title: 'Shipping & care', slug: '/shipping-care', id: 'drftShip00' }),
+        planScreen({ title: 'Contact', slug: '/contact', id: 'drftCont00' }),
+      ],
+    })
+  const pages = ['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))
+  /** Every unit built but the store's pages and what follows them. */
+  const ledger = (store: Record<string, unknown> | null) => {
+    const units = aiSiteJobUnits(storePlan(), { content: 'products', welcomeEmail: true })
+    return aiSiteInitialLedger(units, [])
+      .map((row) =>
+        row.slot === 'store'
+          ? { ...row, ...store }
+          : row.slot === 'e'
+            ? row
+            : {
+                ...row,
+                status: 'succeeded' as const,
+                outputs:
+                  row.slot === 'l' ? ['drftFrameL'] : row.slot.startsWith('p') && row.slot !== 'products' ? [`screen-${row.slot.slice(1)}`] : [],
+              },
+      )
+      .filter((row) => store !== null || row.slot !== 'store')
+  }
+  const storeOutput = (key: string): AiJobOutput => ({
+    resource: 'screen',
+    id: `job-1-store-${key}`,
+    hostId: 'host-1',
+    label: key,
+    proposal: { storePage: key, path: `/${key}` },
+  })
+
+  it('is a unit of a paid store only, after its pages and before its welcome email', () => {
+    const units = aiSiteJobUnits(storePlan(), { content: 'products', welcomeEmail: true })
+    expect(units.map((unit) => unit.slot)).toEqual(['t', 'l', 'products', 'p0', 'p1', 'p2', 'p3', 'store', 'e'])
+    expect(units.find((unit) => unit.slot === 'store')).toMatchObject({ kind: 'store', resource: 'screen', label: AI_SITE_STORE_PAGES_LABEL })
+    expect(aiSiteLedgerUnits(units).find((unit) => unit.slot === 'store')).toMatchObject({ op: 'store', deps: [] })
+    expect(aiSiteJobUnits(storePlan(), { content: 'posts' }).some((unit) => unit.kind === 'store')).toBe(false)
+    expect(aiSiteJobUnits(storePlan()).some((unit) => unit.kind === 'store')).toBe(false)
+  })
+
+  it('writes them after the pages, told which to write, what their words link and the layout, and says what is left', async () => {
+    const seen: AiJob[] = []
+    const storePagesRefusal = jest.fn(async () => null)
+    const storePages = fakeRunner(seen, () => ({ outputs: [storeOutput('account'), storeOutput('cart')] }))
+    const step = stepWith({ layout: fakeRunner([], () => ({})), page: fakeRunner([], () => ({})), email: fakeRunner([], () => ({})) }, { storePages, storePagesRefusal })
+    const job = siteJob({ inputs: storeInputs, plan: storePlan(), outputs: [LOOK, output('layout', 'drftFrameL'), ...pages], items: ledger({}) as never })
+    const outcome = await step(context(job))
+    expect(storePagesRefusal).toHaveBeenCalledTimes(1)
+    expect(seen.map((one) => one.$id)).toEqual(['job-1-store'])
+    const input = seen[0].inputs[AI_SITE_STORE_PAGES_INPUT] as AiSiteStorePagesInput
+    // The planned "Shipping & care" is the store's shipping page: nothing is written for it.
+    expect(input.pages.map((page) => [page.key, page.href, page.planned ?? null])).toEqual([
+      ['account', '/account', null],
+      ['cart', '/cart', null],
+      ['shipping', '/shipping-care', 'Shipping & care'],
+      ['privacy', '/privacy', null],
+      ['terms', '/terms', null],
+    ])
+    expect(input.facts).toEqual({ contactPath: '/contact', shopPath: '/shop', shippingPath: '/shipping-care' })
+    expect(input.layoutId).toBe('drftFrameL')
+    expect(outcome.item).toMatchObject({ slot: 'store', status: 'succeeded', outputs: ['job-1-store-account', 'job-1-store-cart'], note: AI_SITE_STORE_PAGES_NOTE })
+    expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
+  })
+
+  it('skips them, unspent, where the plan has no store or the member may not edit, and says why', async () => {
+    const storePages = jest.fn()
+    const step = stepWith({ page: fakeRunner([], () => ({})) }, { storePages, storePagesRefusal: async () => 'Your plan does not include a store.' })
+    const outcome = await step(context(siteJob({ inputs: storeInputs, plan: storePlan(), outputs: [LOOK, ...pages], items: ledger({}) as never })))
+    expect(storePages).not.toHaveBeenCalled()
+    expect(outcome.item).toEqual({ slot: 'store', status: 'skipped', note: 'Not built: Your plan does not include a store.' })
+  })
+
+  it('owes none to a start whose ledger was written before they existed', async () => {
+    const storePages = jest.fn()
+    const email = fakeRunner([], () => ({ outputs: [output('emailScreen', 'drftWelcom')] }))
+    const step = stepWith({ page: fakeRunner([], () => ({})), email }, { storePages, storePagesRefusal: async () => null })
+    const outcome = await step(context(siteJob({ inputs: storeInputs, plan: storePlan(), outputs: [LOOK, ...pages], items: ledger(null) as never })))
+    expect(storePages).not.toHaveBeenCalled()
+    expect(outcome.item?.slot).toBe('e')
+  })
+
+  it('tells a store’s layout its account and policy links while its ledger owes the pages, and none once they are skipped', () => {
+    const plan = storePlan()
+    const units = aiSiteJobUnits(plan, { content: 'products' })
+    const layout = units.find((unit) => unit.kind === 'layout') as AiSiteUnit
+    const owed = units.map((unit) => ({ slot: unit.slot, op: unit.kind, label: unit.label, status: 'pending' }))
+    const told = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: owed as never }), layout, aiSiteBuiltRefs(units, []))
+    expect(aiStoreFrameLinksOf(told.inputs)).toEqual({
+      account: '/account',
+      footer: [
+        { label: 'Your account', href: '/account' },
+        { label: 'Shipping & care', href: '/shipping-care' },
+        { label: 'Privacy policy', href: '/privacy' },
+        { label: 'Terms of sale', href: '/terms' },
+      ],
+    })
+    const skipped = owed.map((row) => (row.slot === 'store' ? { ...row, status: 'skipped' } : row))
+    expect(aiStoreFrameLinksOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])).inputs)).toBeNull()
+  })
+
+  it('publishes them with the pages, and tells the publish which linked ones went unwritten', async () => {
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    const written = ['account', 'cart', 'privacy', 'terms'].map(storeOutput)
+    const step = stepWith({ page: fakeRunner([], () => ({})), email: fakeRunner([], () => ({ outputs: [output('emailScreen', 'drftWelcom')] })) }, { publish })
+    const job = (store: Record<string, unknown>, outputs: AiJobOutput[]) =>
+      siteJob({ inputs: { ...storeInputs, autoConfirm: true }, plan: storePlan(), outputs: [LOOK, ...pages, ...outputs], items: ledger(store) as never })
+    await step(context(job({ status: 'succeeded', outputs: written.map((one) => one.id) }, written)))
+    expect(publish).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ outputs: [...pages, ...written], unwrittenHrefs: [] }),
+    )
+    await step(context(job({ status: 'skipped', outputs: [] }, [])))
+    // The planned shipping page is the site's own, live either way; the store's own come out.
+    expect(publish).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ outputs: pages, unwrittenHrefs: ['/account', '/cart', '/privacy', '/terms'] }),
+    )
+  })
+
+  it('gives their pass the time five page writes need', () => {
+    const items = ledger({})
+    expect(aiSiteJobRunMinimumMs(siteJob({ inputs: storeInputs, plan: storePlan(), items: items as never }))).toBe(AI_SITE_STORE_PAGES_MINIMUM_MS)
   })
 })
 

@@ -23,7 +23,9 @@ never writes another plugin's documents itself.
    whole site from a confirmed plan, one unit per pass, in this order: the look
    (theme), the layout, the form, the datasets (this PR), a blog's first three
    posts or a store's first three to six products (paid plans only), the pages,
-   then the welcome email. It writes the site's search title and description at
+   a paid store's own account, cart and policy pages (written by code, outside
+   the plan's page count, `jobs/ai-job-site-store-pages.ts`), then the welcome
+   email. It writes the site's search title and description at
    no cost (`aiSiteSeoOutputs`). A guided start (`inputs.autoConfirm`) then
    adds navigation and publishes (`jobs/ai-site-publish.ts`).
 2. **The build job** (`jobs/ai-job-build-step.ts`) builds what one request

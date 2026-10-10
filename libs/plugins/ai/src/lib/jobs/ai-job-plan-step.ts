@@ -293,6 +293,11 @@ export function aiPlanSiteLines(
       "This site's blog is written for it with its first posts at /blog, and the header links it. Plan no page that stands in for it (no Blog, Articles, Journal, Posts or Stories page); feature the posts in a section of the home page instead.",
     )
   }
+  // A paid store's account, cart and policy pages are added by the platform,
+  // outside the plan's pages (AGL-3676), so the plan spends none of its pages on them.
+  if (aiSiteContentPart(job.inputs ?? null, capabilities?.freeTaste === true) === 'products') {
+    lines.push(AI_SITE_STORE_PAGES_SENTENCE)
+  }
   // A section that shows the work counts its pieces (AGL-3660): a planned
   // gallery of no items let a page about the work show none.
   lines.push(AI_SITE_GALLERY_SENTENCE)
@@ -388,6 +393,10 @@ export function aiSiteThinHomeCheck(
 /** What a store's plan is told about its Shop page (AGL-3676). */
 export const AI_SITE_STORE_SHOP_SENTENCE =
   'Plan a Shop page at /shop: a short title section, then a section named "Product grid" second, where the platform lists the store\'s real products with sort, filters, photos, prices and cart, then at most one or two short sections (care, shipping, gifting help). Never open it with a hero, and never plan the products themselves as cards of your own.'
+
+/** What a paid store's plan is told about the pages the platform adds beside it (AGL-3676). */
+export const AI_SITE_STORE_PAGES_SENTENCE =
+  "The platform adds this store's account page (sign in, orders, saved items), its cart page, and its Shipping & returns, Privacy policy and Terms of sale pages, and links them in the header and footer; they do not count toward this plan's pages. Plan none of them: spend every page on what the brief is about."
 
 /** What a store's home is composed of (AGL-3676): a storefront's parts, in a storefront's order. */
 export const AI_SITE_STORE_HOME_BANDS =

@@ -230,6 +230,8 @@ export async function aiPublishGuidedSite(
     now: Date
     /** The start owed its blog's posts and wrote none (AGL-3660): its links to the blog come out. */
     blogUnwritten?: boolean
+    /** Paths the layout links that the start did not write, such as a store page (AGL-3676): their links come out. */
+    unwrittenHrefs?: readonly string[]
   },
   deps: AiSitePublishDeps = {},
 ): Promise<AiJobSitePublish> {
@@ -297,7 +299,7 @@ export async function aiPublishGuidedSite(
     hostId,
     pageIds: accepted.map((page) => page.id),
     entries: navEntriesOf(pages).filter((entry) => entries[entry.screenId]),
-    droppedHrefs: aiSiteUnwrittenBlogHrefs(input.blogUnwritten),
+    droppedHrefs: [...aiSiteUnwrittenBlogHrefs(input.blogUnwritten), ...(input.unwrittenHrefs ?? [])],
     retiredHomeId: releases,
     homeId: home?.id ?? null,
     jobId: job.$id,

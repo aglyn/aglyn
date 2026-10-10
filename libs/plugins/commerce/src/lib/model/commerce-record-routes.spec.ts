@@ -58,6 +58,12 @@ describe('the commerce record routes', () => {
     )
   })
 
+  it('answers the store settings, where payments, shipping and tax are set (AGL-3676)', () => {
+    expect(pluginRecordRoute('store-settings')?.pluginId).toBe('commerce')
+    expect(pluginRecordListHref('store-settings', SITE)).toBe('/acme/hosts/shop/products/settings')
+    expect(pluginRecordListHref('store-settings', ORG)).toBeNull()
+  })
+
   it('has no address at the organization, where neither lives', () => {
     expect(pluginRecordListHref('product', ORG)).toBeNull()
     expect(pluginRecordHref('order', ORG, 'ord-1')).toBeNull()

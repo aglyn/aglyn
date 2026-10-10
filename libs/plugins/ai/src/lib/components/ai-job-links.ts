@@ -21,6 +21,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AI_JOB_BESIGNER_SEGMENT as BESIGNER_SEGMENT, AI_SITE_BUILD_HREF } from '../model/ai-job-notice'
 import type { AiJobOutput, AiJobSummary } from '../model/ai-jobs.types'
+import { AI_STORE_FINISH_STEPS, type AiStoreFinishStep } from '../model/ai-site-store-pages'
 
 // Where a job's work opens in the console (AGL-2904), shared by the AI jobs
 // drawer and every dialog that follows the job it started (AGL-3593).
@@ -161,4 +162,34 @@ export function aiSiteBuildDoneLinks(
  */
 export function aiCreditsBillingHref(orgSlug: string): string {
   return `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans`
+}
+
+/** One thing left to finish an AI-built store, with where it is done. */
+export interface AiStoreFinishLink extends AiStoreFinishStep {
+  /** The console page it is done on; `null` where the owner of that page is not loaded. */
+  href: string | null
+}
+
+/**
+ * What is left to finish a store a site start built (AGL-3676), or `null`
+ * where the start built no store's own pages: its account, cart and policy
+ * pages are written, so payments, products, shipping and tax, and the
+ * policies' brackets are all that remain. Each links the exact console page:
+ * the store's settings and its catalog, as the commerce plugin publishes
+ * them, and the site's Pages.
+ */
+export function aiStoreFinishLinks(
+  job: Pick<AiJobSummary, 'kind' | 'status' | 'items' | 'outputs'>,
+  orgSlug: string,
+): AiStoreFinishLink[] | null {
+  if (job.kind !== 'site' || job.status !== 'done' || !orgSlug) return null
+  const row = (job.items ?? []).find((one) => one.slot === 'store')
+  if (!row || (row.status !== 'succeeded' && row.status !== 'degraded')) return null
+  const host = job.outputs.find((output) => output.resource === 'screen' && output.hostSubdomain)?.hostSubdomain
+  if (!host) return null
+  const context = { orgSlug, host: String(host) }
+  return AI_STORE_FINISH_STEPS.map((step) => ({
+    ...step,
+    href: step.opens === 'pages' ? buildRoute(Route.HOST_SCREENS, context) : pluginRecordListHref(step.opens, context),
+  }))
 }
