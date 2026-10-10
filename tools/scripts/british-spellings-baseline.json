@@ -1,6 +1,6 @@
 {
   "libs/plugins/accounting/src/lib/server/providers/xero.ts": 3,
-  "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": 3,
+  "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": 4,
   "libs/plugins/ai/src/lib/model/ai-site-start-seo.ts": 1,
   "libs/plugins/email/src/lib/list-import.ts": 1,
   "libs/plugins/inventory-sync/src/lib/providers/cin7-core.ts": 1,

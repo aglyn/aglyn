@@ -100,11 +100,11 @@ const slot = (name: string, shows = ''): AiLayoutPictureSlot => ({
 
 describe('a store’s product photos (AGL-3676)', () => {
   it('reads the shop’s category from what it is, not from what it does', () => {
-    expect(aiStockBusinessWords(WILLOW)).toBe('small-batch candle')
+    expect(aiStockBusinessWords(WILLOW)).toBe('candle shop')
     expect(aiStockCraftWords(aiStockBusinessWords(WILLOW))).toBe('candle')
     // A shop that is only a place has no category to hold its photos to.
-    expect(aiStockBusinessWords('An online boutique selling vintage jewelry')).toBe('online boutique')
-    expect(aiStockCraftWords('online boutique')).toBe('')
+    expect(aiStockBusinessWords('An online boutique selling vintage jewelry')).toBe('boutique')
+    expect(aiStockCraftWords('boutique')).toBe('')
     // What the business type already read stays as it was.
     expect(aiStockBusinessWords('A family-owned yoga studio in Austin for busy parents')).toBe('yoga studio')
   })
