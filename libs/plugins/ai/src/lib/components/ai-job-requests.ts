@@ -42,6 +42,11 @@ export interface AiJobDecision {
    * person's go-ahead with these figures and choices instead of starting it.
    */
   credits?: AiCreditsPrompt | null
+  /**
+   * The usage strip's envelope the job door answered with, when it ran a step
+   * inline (AGL-3722): what the plan just spent, so the strip moves with it.
+   */
+  meter?: unknown
 }
 
 /**
@@ -127,6 +132,7 @@ export async function startAssistBuildRequest(
     return {
       job: response.ok ? next : null,
       error: response.ok && next ? null : String(payload?.error ?? failed),
+      ...(payload?.meter ? { meter: payload.meter } : {}),
     }
   } catch {
     return { job: null, error: failed }
