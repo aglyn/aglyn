@@ -21,6 +21,7 @@ import { canvas } from '@aglyn/aglyn'
 // `@aglyn/aglyn` barrel, so nothing on a published page can pull them in.
 import {
   expandRepeatables,
+  REPEAT_NODE_ID_PREFIX,
   type RepeatableDataset,
   type RepeatScope,
   repeatedRecords,
@@ -197,14 +198,15 @@ export function useRepeatCopies(
       // the rows up by.
       ...(preview.datasetsByKey ?? {}),
     } as never) as Record<string, any>
-    const copyIds =
-      preview.scope === 'self'
-        ? (expanded[holderId]?.nodes ?? []).slice(1)
-        : (expanded[$id]?.nodes ?? []).slice(
-            // One template's worth of children per record: the first
-            // record's copies are the ones the real children already draw.
-            (expanded[$id]?.nodes ?? []).length / recordCount,
-          )
+    // The first record's copies are the ones the real nodes already draw. By
+    // id, not by count: a copy leaves out an element whose binding its record
+    // leaves empty (AGL-3616), so records need not copy alike.
+    const firstCopy = `${REPEAT_NODE_ID_PREFIX}${$id}__0__`
+    const copyIds = (
+      (preview.scope === 'self'
+        ? expanded[holderId]?.nodes
+        : expanded[$id]?.nodes) ?? []
+    ).filter((id: string) => !id.startsWith(firstCopy))
     return copyIds
       .map((id: string) => denormalize(expanded, id))
       .filter(Boolean)
