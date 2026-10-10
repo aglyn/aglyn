@@ -30,6 +30,13 @@ import {
 } from './ai-build-plan'
 import type { AiJobItemLedger, AiJobItemStatus } from './ai-jobs.types'
 import {
+  AI_BUILD_STORE_OP,
+  AI_BUILD_STORE_PAGES_LABEL,
+  AI_BUILD_STORE_SLOT,
+  aiBuildMakesStore,
+  aiBuildStorePagesAdded,
+} from './ai-build-store-pages'
+import {
   AI_SITE_HOME_FIRST_LABEL,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PASS_CREDITS,
@@ -182,7 +189,17 @@ export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
     const slot = `p${index}`
     units.push({ slot, op: 'page', label: screen.title, screen, deps: depsOf(aiBuildScreenRefs(screen), slot) })
   })
+  // A store's own pages (AGL-3676), added by the platform: last, so every
+  // planned page keeps the first claim on the site's pages allowance.
+  if (aiBuildStorePagesAdded(plan).length) {
+    units.push({ slot: AI_BUILD_STORE_SLOT, op: AI_BUILD_STORE_OP, label: AI_BUILD_STORE_PAGES_LABEL, deps: [] })
+  }
   return units
+}
+
+/** Whether a unit is one the platform adds rather than the plan (AGL-3676): a store's own pages. */
+export function aiBuildUnitIsPlatform(unit: Pick<AiBuildUnit, 'op'>): boolean {
+  return unit.op === AI_BUILD_STORE_OP
 }
 
 /**
@@ -247,7 +264,8 @@ export function aiBuildPlanShapeRefusal(
   plan: AiBuildPlan,
   options: { freeTaste?: boolean; ops?: AiBuildOps } = {},
 ): string | null {
-  const units = aiBuildUnits(plan)
+  // What the platform adds beside the plan (a store's own pages) is no part of its size.
+  const units = aiBuildUnits(plan).filter((unit) => !aiBuildUnitIsPlatform(unit))
   if (!units.length) return 'This plan builds nothing. Describe what to build again.'
   if (units.length > AI_BUILD_LIMITS.units) {
     return `This plan builds ${units.length} things, and one build holds ${AI_BUILD_LIMITS.units}. Ask for the rest in a second request.`
@@ -322,6 +340,8 @@ function unitPasses(unit: AiBuildUnit): number {
  * kept.
  */
 export function aiBuildUnitCreditEstimate(unit: AiBuildUnit, ops?: AiBuildOps): number {
+  // A store's own pages are written by code, with no model: no credits (AGL-3676).
+  if (aiBuildUnitIsPlatform(unit)) return 0
   if (unit.item) {
     if (typeof unit.item.credits === 'number') return unit.item.credits
     const capability = ops?.get(unit.item.op)
@@ -404,7 +424,7 @@ export function aiJobCreditRange(kind: string, plan: AiBuildPlan): AiCreditRange
 export function aiBuildFirstPagePlan<T extends AiBuildPlan>(plan: T): T | null {
   if (!plan.screens.length) return null
   const index = Math.max(0, plan.screens.findIndex(aiSitePlanIsHome))
-  const units = aiBuildUnits(plan)
+  const units = aiBuildUnits(plan).filter((unit) => !aiBuildUnitIsPlatform(unit))
   const bySlot = new Map(units.map((unit) => [unit.slot, unit]))
   const keep = new Set<string>()
   const queue = [`p${index}`]
@@ -419,13 +439,16 @@ export function aiBuildFirstPagePlan<T extends AiBuildPlan>(plan: T): T | null {
   const create = plan.create.filter((creation, at) => !AI_BUILD_CREATE_KINDS.includes(creation.kind) || keep.has(`c${at}`))
   const items = (plan.items ?? []).filter((item) => keep.has(item.slot))
   const kept = new Set([screen.slug, ...create.map((entry) => `${AI_PLAN_NEW_REF_PREFIX}${entry.name}`)])
-  return {
+  const smaller: T = {
     ...plan,
     create,
     screens: [screen],
     ...(plan.items ? { items } : {}),
     ...(plan.embeds ? { embeds: plan.embeds.filter((embed) => kept.has(embed.where)) } : {}),
   }
+  // The store's own pages stay only while the smaller build still makes a store (AGL-3676).
+  if (smaller.storePages && !aiBuildMakesStore(smaller)) delete smaller.storePages
+  return smaller
 }
 
 /** The smaller first build a build that does not fit is offered (AGL-3722), with its range; `null` when there is none. */

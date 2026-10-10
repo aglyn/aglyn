@@ -28,6 +28,7 @@ import { aiFreeCreditsResetLabel } from '../model/ai-site-job'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import type { AiJobResumeOptions } from './ai-job-requests'
 import { aiBuildOpNoun } from '../model/ai-build-progress'
+import { aiBuildStorePagesAdded } from '../model/ai-build-store-pages'
 import { aiJobConfirmingOwnPlan } from '../model/ai-job-activity'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
@@ -198,6 +199,12 @@ export function AiJobPlan({
           {(plan.embeds ?? []).map((embed, index) => (
             <Typography key={`embed-${index}`} variant="body2" role="listitem">
               {aiPlanEmbedLine(embed, named)}
+            </Typography>
+          ))}
+          {/* A store's own pages (AGL-3676): added by the platform, written by code, no credits. */}
+          {aiBuildStorePagesAdded(plan).map((page) => (
+            <Typography key={`store-${page.key}`} variant="body2" role="listitem" data-platform-added="true">
+              {`Adds the page ${page.title} at ${page.href} — added for your store automatically, uses no AI credits`}
             </Typography>
           ))}
         </Stack>

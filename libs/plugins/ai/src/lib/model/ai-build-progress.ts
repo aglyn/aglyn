@@ -66,6 +66,8 @@ const OP_NOUNS: Readonly<Record<string, string>> = {
   // A guided start's first posts and products (AGL-3676).
   posts: 'Blog',
   products: 'Store',
+  // A store's own account, cart and policy pages (AGL-3676).
+  store: 'Store',
 }
 
 /** What an operation is called at the start of a row: its own noun, or the op spelled as words. */
