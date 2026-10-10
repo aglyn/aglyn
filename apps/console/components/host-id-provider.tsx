@@ -31,6 +31,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -153,19 +154,20 @@ function HostPluginPolicyBridge({
   hostId: string
   uid?: string
   subdomain: string | null
-  onGone: (hostId: string) => void
+  onGone: (hostId: string, missing: boolean) => void
   children: ReactNode
 }) {
   const {
     doc: { data: host, status, fromCache, serverDenied },
   } = useHost({ hostId })
-  const gone =
-    (status === 'success' && fromCache === false && !host) ||
-    status === 'error' ||
-    Boolean(serverDenied)
+  // The server answered and the document is not there: the site is gone, full
+  // stop. A refusal is weaker (it can be a session fault), so it is only
+  // re-checked.
+  const missing = status === 'success' && fromCache === false && !host
+  const gone = missing || status === 'error' || Boolean(serverDenied)
   useEffect(() => {
-    if (gone) onGone(hostId)
-  }, [gone, hostId, onGone])
+    if (gone) onGone(hostId, missing)
+  }, [gone, missing, hostId, onGone])
   const disabledPlugins = useMemo(
     () =>
       Array.isArray(host?.disabledPlugins)
@@ -224,12 +226,30 @@ export function HostIdProvider({ children }) {
   // a legacy fallback, replacing the scan of the org's whole host list. Scoping
   // to the current org is what the rules allow; a subdomain owned by another
   // org resolves to nothing here and the cross-org redirect below handles it.
-  const { hostId, ready, error, authError, retry } = useHostResolution(
+  const {
+    hostId: resolvedHostId,
+    ready,
+    error,
+    authError,
+    retry,
+  } = useHostResolution(
     firestore,
     hostSubdomain,
     user?.uid,
     currentOrg?.$id ?? undefined,
   )
+  // A site the server says no longer exists (its document is missing) is not
+  // openable, even when the `hostMemberships` projection still maps the
+  // subdomain to its id. Resolving from that stale row used to mount the
+  // deleted site's pages over a host doc that never arrives: the slug as the
+  // site name and a spinner forever. Treat the id as unresolved so the guard
+  // shows "This site doesn't exist anymore". Ids are never reused, so the
+  // marker never needs clearing; a recreated site has a new id.
+  const [missingHostIds, setMissingHostIds] = useState<readonly string[]>([])
+  const hostId =
+    resolvedHostId && !missingHostIds.includes(resolvedHostId)
+      ? resolvedHostId
+      : null
   // The org read is resolution's prerequisite: useHostResolution holds while
   // `orgId` is undefined, so when the membership listen died `hostReady`
   // stayed false FOREVER and the guard span indefinitely (AGL-1260). A
@@ -264,7 +284,13 @@ export function HostIdProvider({ children }) {
   // id) is left to the listeners' own recovery instead of looping here.
   const recheckedRef = useRef<string | null>(null)
   const recheckGoneHost = useCallback(
-    (goneHostId: string) => {
+    (goneHostId: string, missing: boolean) => {
+      if (missing) {
+        setMissingHostIds((ids) =>
+          ids.includes(goneHostId) ? ids : [...ids, goneHostId],
+        )
+        return
+      }
       if (recheckedRef.current === goneHostId) return
       recheckedRef.current = goneHostId
       retry()
