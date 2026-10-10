@@ -36,6 +36,7 @@ import {
   type AiLayoutPictureSlot,
   type AiLayoutPictureSource,
 } from '../layout-language/ai-layout-pictures'
+import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 
 /**
  * STOCK PHOTOS FOR A LANGUAGE PAGE'S PICTURE SLOTS (AGL-3660).
@@ -90,6 +91,17 @@ import {
  *    ranked: the object in the hit's first tags (what the photo is OF) over
  *    a mention in its last, the subject's other words, the domain. Among
  *    equals the job's seed picks, so two sites differ and one job repeats.
+ *    What the beta.239 Ember & Oak start added: "hand-poured", "handmade"
+ *    and "by hand" never make "hands" a subject, and a story of the craft
+ *    asks for the maker at work ("candle making"); a hit carrying a topic
+ *    the brief never named (a cross, a grave, a flag, a gun, wine, a child,
+ *    a mannequin) never fills anything; a product, and a collection tile,
+ *    take only a hit naming its head noun among the first tags, held to the
+ *    shop's category; and an object whose word is not enough ("melt") is
+ *    named and searched by its kin ("wax melt", "melt warmer"), never by the
+ *    category alone. And from the Kiln & Clover portfolio: nudity never fills
+ *    anything, for any business; a hit naming a rival craft (glass, for a
+ *    potter) counts only when it names the craft's own words too.
  * 4. **Never twice.** A photo is placed once per job: not twice on a page,
  *    and not on a page when another page (or another pass, in this process)
  *    of the same job already placed it. The caller hands in what the job's
@@ -153,7 +165,7 @@ const FILLER = words(
   'beautiful beautifully stunning gorgeous lovely pretty elegant modern contemporary rustic cozy cosy warm cool ' +
     'soft bright natural simple minimal minimalist delicate unique special artisan artisanal handmade ' +
     'hand-made hand-thrown handthrown hand-crafted handcrafted crafted hand-built handbuilt hand-poured ' +
-    'hand-painted hand-dyed hand-stitched poured finished styled perfect ' +
+    'hand-painted hand-dyed hand-stitched poured finished styled perfect wheel-thrown wheelthrown thrown ' +
     'fresh clean calm serene quiet peaceful vibrant colorful colourful sunlit sunny golden glossy matte textured ' +
     'close-up closeup up view views detail details detailed shot shots overhead flat lay flatlay flat-lay ' +
     'top-down wide angle featuring featured displayed arranged sitting resting placed standing lined ' +
@@ -214,6 +226,314 @@ const REJECTED_TAGS = words(
 )
 
 /**
+ * Topics a business's photos never carry unless its own words name them
+ * (AGL-3660, the beta.239 Ember & Oak start, whose "Gifts for melt fans" tile
+ * showed devotional candles with crosses and names). A hit tagged with any
+ * word of a topic is rejected unless the site's business type or brief says
+ * one of the topic's words or its `allow` words. The last topic is not
+ * sensitive but is never the thing: the same start's story band showed bronze
+ * mannequin hands tagged "wax".
+ */
+const SENSITIVE_TOPICS: ReadonlyArray<{
+  words: readonly string[]
+  allow?: readonly string[]
+  /** Rejected whatever the brief says. */
+  always?: boolean
+}> = [
+  {
+    // Religion.
+    words: [
+      'cross',
+      'crosses',
+      'crucifix',
+      'church',
+      'chapel',
+      'cathedral',
+      'jesus',
+      'christ',
+      'christian',
+      'christianity',
+      'god',
+      'bible',
+      'rosary',
+      'prayer',
+      'pray',
+      'praying',
+      'worship',
+      'worships',
+      'religion',
+      'religious',
+      'faith',
+      'islam',
+      'islamic',
+      'muslim',
+      'mosque',
+      'quran',
+      'temple',
+      'buddha',
+      'buddhism',
+      'buddhist',
+      'hindu',
+      'hinduism',
+      'synagogue',
+      'jewish',
+      'judaism',
+      'ecclesiastical',
+      'saint',
+      'altar',
+      'sacrificial',
+      'nativity',
+      'priest',
+      'nun',
+      'monk',
+    ],
+    allow: ['ministry', 'parish', 'congregation', 'wedding'],
+  },
+  {
+    // Death and mourning.
+    words: [
+      'funeral',
+      'memorial',
+      'grave',
+      'gravestone',
+      'cemetery',
+      'tomb',
+      'death',
+      'dead',
+      'grief',
+      'mourning',
+      'condolence',
+      'coffin',
+      'skull',
+    ],
+    allow: ['hospice', 'mortuary', 'cremation', 'obituary', 'halloween'],
+  },
+  {
+    // Politics.
+    words: [
+      'political',
+      'politics',
+      'protest',
+      'protester',
+      'demonstration',
+      'rally',
+      'flag',
+      'election',
+      'vote',
+      'voting',
+      'parliament',
+      'government',
+    ],
+    allow: ['advocacy', 'campaign', 'candidate', 'council', 'nonprofit'],
+  },
+  {
+    // Weapons and war.
+    words: [
+      'gun',
+      'rifle',
+      'pistol',
+      'weapon',
+      'firearm',
+      'ammunition',
+      'bullet',
+      'sword',
+      'war',
+      'military',
+      'army',
+      'soldier',
+    ],
+    allow: ['hunting', 'archery', 'martial', 'fencing', 'veteran'],
+  },
+  {
+    // Alcohol, for a business that does not serve it.
+    words: [
+      'alcohol',
+      'wine',
+      'beer',
+      'whiskey',
+      'whisky',
+      'vodka',
+      'cocktail',
+      'liquor',
+      'rum',
+      'gin',
+      'champagne',
+      'drunk',
+    ],
+    allow: [
+      'winery',
+      'vineyard',
+      'brewery',
+      'distillery',
+      'pub',
+      'tavern',
+      'taproom',
+      'bartender',
+      'sommelier',
+      'spirits',
+    ],
+  },
+  {
+    // Tobacco and drugs.
+    words: ['cigarette', 'smoking', 'tobacco', 'cannabis', 'marijuana', 'drug', 'drugs'],
+    allow: ['dispensary', 'vape', 'cigar'],
+  },
+  {
+    // Children, for a business that is not about them.
+    words: ['child', 'children', 'kid', 'kids', 'baby', 'babies', 'toddler', 'infant'],
+    allow: [
+      'nursery',
+      'daycare',
+      'preschool',
+      'kindergarten',
+      'school',
+      'tutor',
+      'tutoring',
+      'parent',
+      'parents',
+      'parenting',
+      'family',
+      'families',
+      'pediatric',
+      'paediatric',
+      'newborn',
+      'maternity',
+    ],
+  },
+  {
+    // Nudity, for every business: no word of a brief lets it in (Kiln &
+    // Clover, 2026-10-10: a nude torso sculpture filled "About the artist").
+    words: [
+      'nude',
+      'nudes',
+      'nudity',
+      'naked',
+      'torso',
+      'breast',
+      'breasts',
+      'body',
+      'erotic',
+      'sensual',
+      'lingerie',
+      'bikini',
+    ],
+    allow: [],
+    always: true,
+  },
+  {
+    // Figures, never the maker: mannequin hands are not a candlemaker's.
+    words: [
+      'mannequin',
+      'mannequins',
+      'dummy',
+      'statue',
+      'sculpture',
+      'figurine',
+      'doll',
+      'dolls',
+      'waxwork',
+    ],
+    allow: ['sculptor', 'museum', 'fashion', 'boutique', 'clothing', 'apparel', 'toy', 'toys'],
+  },
+]
+
+/** Each topic's words and the words that allow it, as stems. */
+const SENSITIVE_STEMS = SENSITIVE_TOPICS.map((topic) => ({
+  words: new Set(topic.words.map(aiStockStem)),
+  allow: new Set(
+    topic.always
+      ? []
+      : [...topic.words, ...(topic.allow ?? [])].map(aiStockStem),
+  ),
+}))
+
+/**
+ * Hands are never a picture's subject (AGL-3660): "hand-poured", "handmade"
+ * and "by hand" say how a thing was made, and a search for "hands" found
+ * bronze mannequin hands for the beta.239 Ember & Oak story band. Each of
+ * these is dropped from a picture's words; a hand only stays where it names
+ * a thing sold for hands ("hand cream").
+ */
+const HAND_IDIOMS: readonly RegExp[] = [
+  /\b(?:made\s+|poured\s+|crafted\s+|finished\s+|done\s+)?by\s+(?:our\s+|my\s+|their\s+)?(?:own\s+)?hands?\b/g,
+  /\bwith\s+(?:our|my|their)\s+(?:own\s+)?(?:two\s+)?hands\b/g,
+  /\bhand[- ]?(?:poured|made|crafted|thrown|built|painted|dyed|stitched|sewn|knit|knitted|carved|tied|lettered|blown|bound|rolled|dipped|picked|forged|woven|cut|finished|mixed|cast|formed|shaped|pressed|printed|wrapped|selected|blended|turned|glazed)\b/g,
+  /\bhands?\b(?!\s+(?:creams?|soaps?|lotions?|wash|towels?|saniti[sz]ers?|salves?|balms?|tools?|saws?|planes?|drills?|mixers?|puppets?|bags?|warmers?))/g,
+]
+
+/** A text without its hands. */
+function withoutHands(text: string): string {
+  return HAND_IDIOMS.reduce(
+    (out, idiom) => out.replace(idiom, ' '),
+    text.toLowerCase(),
+  )
+}
+
+/** Whether a text says how a thing was made by hand: a maker at work. */
+function saysMadeByHand(text: string): boolean {
+  const lower = text.toLowerCase()
+  return HAND_IDIOMS.some((idiom) => {
+    idiom.lastIndex = 0
+    const found = idiom.test(lower)
+    idiom.lastIndex = 0
+    return found
+  })
+}
+
+/**
+ * The kin of a few objects whose own word is not enough (AGL-3660): a "melt"
+ * is any melting thing (the beta.239 "Wax melts" tile showed resin fluid
+ * art), so a wax melt names one of these phrases. `within` is the world they
+ * are of; `qualifier` the word a search adds; `queries` the searches for the
+ * object itself, which stand in for the shop's category alone: a candle is
+ * not a wax melt.
+ */
+const OBJECT_KIN: ReadonlyArray<{
+  objects: readonly string[]
+  within: readonly string[]
+  qualifier: string
+  kin: readonly string[]
+  queries: readonly string[]
+}> = [
+  {
+    objects: ['melt', 'tart', 'cube'],
+    within: ['wax', 'candle', 'soy'],
+    qualifier: 'wax',
+    kin: [
+      'wax melt',
+      'wax melts',
+      'wax cube',
+      'wax cubes',
+      'wax tart',
+      'wax tarts',
+      'melt warmer',
+      'wax warmer',
+      'tart warmer',
+      'oil burner',
+      'oil warmer',
+      'aroma burner',
+      'scent warmer',
+      'fragrance warmer',
+    ],
+    queries: ['wax melts', 'wax melt warmer', 'scented wax cubes'],
+  },
+]
+
+/** An object's kin where the site or the subject is of its world, else `null`. */
+function objectKin(
+  object: string,
+  world: readonly string[],
+): (typeof OBJECT_KIN)[number] | null {
+  return (
+    OBJECT_KIN.find(
+      (entry) =>
+        entry.objects.some((word) => aiStockStem(word) === object) &&
+        entry.within.some((word) => world.includes(aiStockStem(word))),
+    ) ?? null
+  )
+}
+
+/**
  * The kin of a few common crafts: the words a photo of that world is
  * tagged with, and the broad searches that find it. A craft not listed
  * still has its own words; this only widens what counts as its world.
@@ -222,6 +542,16 @@ const CRAFT_KIN: ReadonlyArray<{
   match: readonly string[]
   kin: readonly string[]
   broad: readonly string[]
+  /** The maker at work: what a story of the craft shows, never "hands" (AGL-3660). */
+  making: readonly string[]
+  /**
+   * Crafts a photo of this one is mistaken for, and the words only this
+   * craft's photos say: a hit naming a rival counts as of this world only
+   * when it names one of them too (Kiln & Clover, 2026-10-10: red and yellow
+   * glass art filled a ceramic artist's Work hero, glass being fired and
+   * "vase" too).
+   */
+  rivals?: { words: readonly string[]; core: readonly string[] }
 }> = [
   {
     match: [
@@ -247,6 +577,11 @@ const CRAFT_KIN: ReadonlyArray<{
       'kiln',
     ],
     broad: ['handmade ceramics', 'pottery'],
+    rivals: {
+      words: ['glass', 'glassware', 'glasswork', 'glassblowing', 'blown', 'stained', 'murano', 'crystal'],
+      core: ['ceramic', 'ceramics', 'pottery', 'potter', 'stoneware', 'porcelain', 'earthenware', 'clay', 'terracotta'],
+    },
+    making: ['pottery wheel', 'potter at work'],
   },
   {
     match: ['candle', 'candlemaker', 'candlemaking'],
@@ -261,6 +596,7 @@ const CRAFT_KIN: ReadonlyArray<{
       'candlestick',
     ],
     broad: ['handmade candles', 'scented candles'],
+    making: ['candle making', 'pouring wax'],
   },
   {
     match: [
@@ -283,11 +619,13 @@ const CRAFT_KIN: ReadonlyArray<{
       'gemstone',
     ],
     broad: ['handmade jewelry', 'jewelry'],
+    making: ['jewelry making', 'jeweler at work'],
   },
   {
     match: ['soap', 'soapmaker', 'skincare'],
     kin: ['soap', 'skincare', 'lotion', 'bath', 'spa', 'natural', 'cosmetic'],
     broad: ['handmade soap', 'natural skincare'],
+    making: ['soap making'],
   },
   {
     match: [
@@ -311,6 +649,7 @@ const CRAFT_KIN: ReadonlyArray<{
       'walnut',
     ],
     broad: ['woodworking', 'wooden furniture'],
+    making: ['woodworking workshop', 'carpenter at work'],
   },
   {
     match: ['bakery', 'baker', 'bread', 'pastry', 'cake', 'patisserie'],
@@ -325,6 +664,7 @@ const CRAFT_KIN: ReadonlyArray<{
       'croissant',
     ],
     broad: ['bakery', 'fresh bread'],
+    making: ['baker kneading dough', 'baking bread'],
   },
   {
     match: ['coffee', 'cafe', 'café', 'roaster', 'espresso'],
@@ -338,11 +678,13 @@ const CRAFT_KIN: ReadonlyArray<{
       'beans',
     ],
     broad: ['coffee shop', 'coffee'],
+    making: ['barista making coffee'],
   },
   {
     match: ['florist', 'flower', 'floral'],
     kin: ['flower', 'floral', 'bouquet', 'florist', 'bloom', 'blossom'],
     broad: ['florist', 'flower bouquet'],
+    making: ['florist arranging flowers'],
   },
   {
     match: [
@@ -369,11 +711,13 @@ const CRAFT_KIN: ReadonlyArray<{
       'sewing',
     ],
     broad: ['handmade textiles', 'yarn'],
+    making: ['knitting', 'weaving loom'],
   },
   {
     match: ['leather', 'leatherwork', 'leathercraft'],
     kin: ['leather', 'wallet', 'bag', 'belt', 'stitching'],
     broad: ['leather craft', 'leather goods'],
+    making: ['leather crafting'],
   },
 ]
 
@@ -490,6 +834,12 @@ export interface AiStockSiteTerms {
   domain: string[]
   /** The searches for the site's world itself, broadest last. */
   broad: string[]
+  /** The searches for its maker at work, for a story of the craft (AGL-3660); empty for a craft not listed. */
+  making: string[]
+  /** Every stem of the business type or brief: what lets a sensitive topic in ({@link SENSITIVE_TOPICS}). */
+  named: string[]
+  /** Rival crafts' words, each with the words that must then be named too ({@link CRAFT_KIN}). */
+  rivals: Array<{ words: string[]; core: string[] }>
 }
 
 /** The site's terms, read from its business type. */
@@ -515,7 +865,10 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     // What it makes names its world by what the things are made of, never
     // the things: "stoneware" of "stoneware bowls", "soy" of "soy candles".
     // A bowl is not a ceramic world; a robin's food bowl is not pottery.
-    const world = making ? kept.slice(0, -1) : kept
+    // A set or a gift is never a world: "gift" of "gift sets" is not one.
+    const world = (making ? kept.slice(0, -1) : kept).filter(
+      (word) => !WRAPPERS.has(word),
+    )
     for (const word of world)
       for (const stem of stemList(word)) domain.add(stem)
     if (making)
@@ -526,6 +879,8 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   // A business named only by what it sells ("a shop selling pottery") is of that world.
   if (!domain.size) for (const stem of made) domain.add(stem)
   const broad: string[] = []
+  const makingSearches: string[] = []
+  const rivals: Array<{ words: string[]; core: string[] }> = []
   for (const group of CRAFT_KIN) {
     if (
       !group.match.some(
@@ -535,6 +890,12 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
       continue
     for (const word of group.kin) domain.add(aiStockStem(word))
     broad.push(...group.broad)
+    makingSearches.push(...group.making)
+    if (group.rivals)
+      rivals.push({
+        words: group.rivals.words.map(aiStockStem),
+        core: group.rivals.core.map(aiStockStem),
+      })
   }
   if (!broad.length) broad.push(business, craft)
   return {
@@ -542,6 +903,9 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     craft,
     domain: [...domain].filter((stem) => stem.length > 1),
     broad: [...new Set(broad.map((query) => query.trim()).filter(Boolean))],
+    making: [...new Set(makingSearches)],
+    named: [...new Set(stemList(businessType))],
+    rivals,
   }
 }
 
@@ -557,11 +921,12 @@ function subjectOf(list: readonly string[]): string[] {
  * head noun is the last) — else its section's name.
  */
 export function aiStockSubjectWords(alt: string, sectionName: string): string {
-  for (const clause of alt.toLowerCase().split(CLAUSE_BREAK)) {
+  // "Hand-poured", "by hand" and "hands" say how it was made, never what it shows.
+  for (const clause of withoutHands(alt).split(CLAUSE_BREAK)) {
     const found = subjectOf(contentWords(clause ?? ''))
     if (found.length) return found.slice(-3).join(' ')
   }
-  return subjectOf(contentWords(sectionName)).slice(0, 2).join(' ')
+  return subjectOf(contentWords(withoutHands(sectionName))).slice(0, 2).join(' ')
 }
 
 /**
@@ -600,7 +965,41 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
   subject?: string
   /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
   requires?: string
+  /** The thing every hit must name, where it is not the subject's own: a product's head noun (AGL-3660). */
+  object?: string
+  /** Phrases that name the object where its own word is not enough: "wax melt" ({@link OBJECT_KIN}). */
+  kin?: readonly string[]
+  /** Whether the object must be among the hit's first tags, what the photo is OF (AGL-3660). */
+  lead?: boolean
 }
+
+/** A slot's part of a page, where it asks for more than its role: a collection tile or a story of the craft (AGL-3660). */
+export type AiStockSlotPart = 'collection' | 'story'
+
+/**
+ * A slot's part (AGL-3660): a tile of a collections band is product-like,
+ * held to the shop's category and its own object; a picture of a story of
+ * the craft, or of a thing made by hand, shows the maker at work.
+ */
+export function aiStockSlotPart(
+  slot: Pick<AiLayoutPictureSlot, 'role' | 'alt'>,
+  sectionName: string,
+): AiStockSlotPart | undefined {
+  if (slot.role === 'hero') return undefined
+  if (slot.role === 'gallery' && aiStorefrontSays('collections', sectionName))
+    return 'collection'
+  if (
+    aiStorefrontSays('story', sectionName) ||
+    saysMadeByHand(slot.alt) ||
+    saysMadeByHand(sectionName)
+  )
+    return 'story'
+  return undefined
+}
+
+/** An object's kin phrases as stems, or none. */
+const kinStems = (entry: (typeof OBJECT_KIN)[number] | null): string[] =>
+  entry ? [...new Set(entry.kin.map((phrase) => stemList(phrase).join(' ')))] : []
 
 /**
  * A product's searches (AGL-3676), most specific first: each of its subjects
@@ -610,29 +1009,64 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
  * hit naming the category, so no product is ever filled with a lifestyle shot
  * of something else: the beta.237 Willow Wick start put a laptop and roses
  * under "Candle Wick Trimmer" and an antique tea set under "Candle Gift Set".
+ *
+ * And every one must find a hit naming the product's own head noun among its
+ * first tags (AGL-3660): the beta.239 Ember & Oak start put a bed with a book,
+ * a mug and a camera (its candle a last tag) under "Hand-Poured Soy Candle".
+ * An object whose own word is not enough ({@link OBJECT_KIN}) is searched by
+ * its kin instead of the category alone, and named by them: a single taper
+ * candle filled "Wax Melt Gift Set".
  */
 export function aiStockProductSearches(
   slot: Pick<AiLayoutPictureSlot, 'aspect' | 'product'>,
   craft: string,
+  domain: readonly string[] = [],
 ): AiStockSearch[] {
   const orientation = aiStockOrientation(slot.aspect)
   const size = orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
   const craftStems = stemList(craft)
-  const queries: Array<{ query: string; subject: string }> = []
-  for (const raw of slot.product?.subjects ?? []) {
-    const subject = aiStockSubjectWords(raw, '')
-    if (!subject) continue
-    const says = craftStems.every((stem) => stemList(subject).includes(stem))
-    queries.push({ query: craft && !says ? `${craft} ${subject}` : subject, subject })
+  const subjects = (slot.product?.subjects ?? [])
+    .map((raw) => aiStockSubjectWords(raw, ''))
+    .filter(Boolean)
+  // The product's head noun is its name's: "candle" of "Hand-Poured Soy Candle".
+  const object = aiStockObjectWord(subjects[0] ?? '')
+  const kin = object
+    ? objectKin(object, [...craftStems, ...domain, ...stemList(subjects.join(' '))])
+    : null
+  const kinPhrases = kinStems(kin)
+  const queries: Array<{ query: string; subject: string; object: string }> = []
+  for (const subject of subjects) {
+    const stems = stemList(subject)
+    const query = kin
+      ? stems.includes(aiStockStem(kin.qualifier))
+        ? subject
+        : `${kin.qualifier} ${subject}`
+      : craft && !craftStems.every((stem) => stems.includes(stem))
+        ? `${craft} ${subject}`
+        : subject
+    queries.push({ query, subject, object })
   }
-  if (craft) queries.push({ query: craft, subject: craft })
+  // The category alone stands in only for a thing that is no more than of it.
+  // Its hits are still scored by the product's own words: a soy candle over a taper.
+  const own = subjects[0] ?? ''
+  if (kin) for (const query of kin.queries) queries.push({ query, subject: own || query, object })
+  else if (craft) queries.push({ query: craft, subject: own || craft, object: craft })
   const seen = new Set<string>()
   const searches: AiStockSearch[] = []
   for (const entry of queries) {
     const query = clip(entry.query)
     if (!query || seen.has(query)) continue
     seen.add(query)
-    searches.push({ query, orientation, ...size, subject: entry.subject, ...(craft ? { requires: craft } : {}) })
+    searches.push({
+      query,
+      orientation,
+      ...size,
+      subject: entry.subject,
+      lead: true,
+      ...(entry.object ? { object: entry.object } : {}),
+      ...(kinPhrases.length ? { kin: kinPhrases } : {}),
+      ...(craft ? { requires: craft } : {}),
+    })
   }
   return searches
 }
@@ -640,8 +1074,10 @@ export function aiStockProductSearches(
 /** The searches a slot tries, in order, most specific first, each distinct. */
 export function aiStockSearchesFor(
   slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect'>,
-  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'>,
+  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'> &
+    Partial<Pick<AiStockSiteTerms, 'making'>>,
   subject: string,
+  part?: AiStockSlotPart,
 ): AiStockSearch[] {
   const orientation = aiStockOrientation(slot.aspect)
   const size =
@@ -653,29 +1089,58 @@ export function aiStockSearchesFor(
   const domain = new Set(terms.domain)
   const object = aiStockObjectWord(subject)
   const subjectStems = stemList(subject)
+  const kin = object ? objectKin(object, [...terms.domain, ...subjectStems]) : null
+  const kinPhrases = kinStems(kin)
   // The craft qualifies a subject that does not already name the site's world.
   const namesWorld = subjectStems.some((stem) => domain.has(stem))
   const qualify = (phrase: string) =>
     terms.craft && !namesWorld && !stemList(phrase).includes(terms.craft)
       ? `${terms.craft} ${phrase}`
       : phrase
-  const broad = terms.broad.map((query) => ({ query, broad: true }))
-  const queries: Array<{ query: string; broad?: boolean; people?: boolean }> =
+  type Query = {
+    query: string
+    broad?: boolean
+    people?: boolean
+    held?: boolean
+    category?: boolean
+  }
+  // A collection tile is product-like: held to the shop's category and its
+  // own object among the first tags, and searched by its object's kin, never
+  // the category's world alone (AGL-3660).
+  const collection = part === 'collection' && Boolean(terms.craft)
+  const broad: Query[] = kin && collection
+    ? []
+    : terms.broad.map((query) => ({ query, broad: true, category: collection }))
+  // The maker at work, held to the craft: never "hands" (AGL-3660).
+  const making: Query[] = (terms.making ?? []).map((query) => ({
+    query,
+    broad: true,
+    category: true,
+  }))
+  const thing: Query[] = subject
+    ? [
+        { query: qualify(subject), held: true },
+        ...(kin
+          ? kin.queries.map((query) => ({ query, held: true }))
+          : [{ query: qualify(object), held: true }]),
+      ]
+    : []
+  const queries: Query[] =
     slot.role === 'hero'
       ? [{ query: terms.business, broad: true }, ...broad]
       : slot.role === 'about'
         ? [
+            ...(part === 'story' ? making : []),
             {
               query: `${terms.business} ${subject}`,
               broad: true,
               people: true,
             },
             { query: terms.business, broad: true, people: true },
+            ...(part === 'story' ? [] : making),
             ...broad,
           ]
-        : subject
-          ? [{ query: qualify(subject) }, { query: qualify(object) }, ...broad]
-          : broad
+        : [...(part === 'story' ? making : []), ...thing, ...broad]
   const seen = new Set<string>()
   const searches: AiStockSearch[] = []
   for (const raw of queries) {
@@ -683,12 +1148,18 @@ export function aiStockSearchesFor(
     const key = `${query}|${raw.people === true}`
     if (!query || seen.has(key)) continue
     seen.add(key)
+    const held = raw.held === true && (collection || kinPhrases.length > 0)
     searches.push({
       query,
       orientation,
       ...size,
       ...(raw.people ? { people: true } : {}),
       ...(raw.broad ? { broad: true } : {}),
+      ...(held && kinPhrases.length ? { kin: kinPhrases } : {}),
+      ...(held && collection ? { lead: true } : {}),
+      ...(terms.craft && (raw.category || (raw.held && collection))
+        ? { requires: terms.craft }
+        : {}),
     })
   }
   return searches
@@ -707,6 +1178,16 @@ export interface AiStockJudgement {
   strict?: boolean
   /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
   requires?: string
+  /** The thing a hit must name, where it is not the subject's own (AGL-3660). */
+  object?: string
+  /** Phrases naming the object where its word is not enough; one of them is then required, and stands for the category. */
+  kin?: readonly string[]
+  /** Whether the object must be among the hit's first tags (AGL-3660). */
+  lead?: boolean
+  /** The stems of the site's business type or brief, which let a sensitive topic in ({@link AiStockSiteTerms.named}). */
+  named?: readonly string[]
+  /** Rival crafts: a hit naming one is rejected unless it names the site's core words ({@link AiStockSiteTerms.rivals}). */
+  rivals?: ReadonlyArray<{ words: readonly string[]; core: readonly string[] }>
 }
 
 /** The words of a photo's page address at its library, its id dropped: "robin-bird-songbird-garden-winter". */
@@ -735,17 +1216,51 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
     stemList(photo.alt ?? '').join(' '),
     stemList(slug).join(' '),
   ]
+  const leadPhrases = [
+    ...tags.slice(0, 3).map((tag) => stemList(tag).join(' ')),
+    stemList(slug).join(' '),
+  ]
   const rejected = tags.some(
     (tag) =>
       REJECTED_TAGS.has(tag) ||
       tag.split(/\s+/).some((word) => REJECTED_TAGS.has(word)),
   )
-  return { lead, all, phrases, rejected }
+  // Whole words only, a hyphenated one kept whole: "cross-stitch" is not a cross.
+  const words = new Set(
+    [...tags, (photo.alt ?? '').toLowerCase()]
+      .join(' ')
+      .split(/[^a-zÀ-ɏ-]+/)
+      .filter((word) => word.length > 1)
+      .map(aiStockStem),
+  )
+  return { lead, all, phrases, leadPhrases, rejected, words }
+}
+
+/** Whether a phrase is among a hit's phrases, word for word. */
+const among = (phrases: readonly string[], phrase: string) =>
+  phrases.some((found) => ` ${found} `.includes(` ${phrase} `))
+
+/**
+ * Whether a hit carries a topic its site never named ({@link SENSITIVE_TOPICS}):
+ * a cross, a grave, a flag, a gun, a glass of wine, a child, a mannequin.
+ */
+export function aiStockSensitive(
+  photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>,
+  named: readonly string[] = [],
+): boolean {
+  const { words: found } = hitWords(photo)
+  const site = new Set(named)
+  return SENSITIVE_STEMS.some(
+    (topic) =>
+      [...topic.words].some((word) => found.has(word)) &&
+      ![...topic.allow].some((word) => site.has(word)),
+  )
 }
 
 /**
  * How well a hit shows what a slot needs (AGL-3660), or 0 when it must not
- * fill it: a mockup or a blank never; a picture of a thing only when the hit
+ * fill it: a mockup or a blank never; a topic the site never named never
+ * ({@link aiStockSensitive}); a picture of a thing only when the hit
  * names its object AND either the site's world or the subject's own
  * two-word phrase ("bud vase", "wick trimmer"); anything else only when it
  * names the site's world (when the site names one). Among the accepted, the
@@ -759,27 +1274,46 @@ export function aiStockRelevance(
 ): number {
   const hit = hitWords(photo)
   if (hit.rejected) return 0
+  if (aiStockSensitive(photo, judgement.named)) return 0
+  // Glass art is not pottery: a rival craft's photo names this craft's own words.
+  for (const rival of judgement.rivals ?? [])
+    if (
+      rival.words.some((word) => hit.all.has(word)) &&
+      !rival.core.some((word) => hit.all.has(word))
+    )
+      return 0
+  const kin = judgement.kin ?? []
+  const kinNamed = kin.some((phrase) => among(hit.phrases, phrase))
+  const kinLead = kin.some((phrase) => among(hit.leadPhrases, phrase))
   const required = stemList(judgement.requires ?? '')
-  if (required.some((stem) => !hit.all.has(stem))) return 0
+  // An object's kin stands for the category: a wax melt is the candle shop's.
+  if (!kinNamed && required.some((stem) => !hit.all.has(stem))) return 0
   const subject = stemList(judgement.subject ?? '')
-  const object = judgement.subject ? aiStockObjectWord(judgement.subject) : ''
+  const object =
+    judgement.object ??
+    (judgement.subject ? aiStockObjectWord(judgement.subject) : '')
   const domain = (judgement.domain ?? []).filter((stem) => stem !== object)
   // A hit naming the word it must name is of the site's world: a product's
   // category is that world even where it is the product's own object.
   const world =
-    required.length > 0 || domain.some((stem) => hit.all.has(stem))
+    required.length > 0 || kinNamed || domain.some((stem) => hit.all.has(stem))
   const worldLead =
     (required.length > 0 && required.every((stem) => hit.lead.has(stem))) ||
+    kinLead ||
     domain.some((stem) => hit.lead.has(stem))
   const pair = subject.length >= 2 ? subject.slice(-2).join(' ') : ''
-  const phrased =
-    Boolean(pair) &&
-    hit.phrases.some((phrase) => ` ${phrase} `.includes(` ${pair} `))
+  const phrased = Boolean(pair) && among(hit.phrases, pair)
   let score = 0
   if (judgement.strict && object) {
-    if (!hit.all.has(object)) return 0
+    // An object with kin is named only by them: "melt" alone is resin art.
+    const named = kin.length ? kinNamed : hit.all.has(object)
+    if (!named) return 0
+    const leading = kin.length ? kinLead : hit.lead.has(object)
+    // A lifestyle scene whose object is a last tag is not a photo OF it.
+    if (judgement.lead && !leading) return 0
     if (domain.length && !world && !phrased) return 0
-    score += hit.lead.has(object) ? 4 : 2
+    score += leading ? 4 : 2
+    if (kinNamed) score += 3
   } else if (domain.length) {
     if (!world) return 0
   }
@@ -964,6 +1498,9 @@ export function aiLayoutStockPhotoSource(
       delete (request as AiStockSearch).broad
       delete (request as AiStockSearch).subject
       delete (request as AiStockSearch).requires
+      delete (request as AiStockSearch).object
+      delete (request as AiStockSearch).kin
+      delete (request as AiStockSearch).lead
       const key = JSON.stringify([
         request.query,
         request.orientation,
@@ -1072,14 +1609,17 @@ export function aiLayoutStockPhotoSource(
         choices.push(null)
         continue
       }
-      const subject = aiStockSubjectWords(
-        slot.alt,
-        input.sectionNames[slot.sectionIndex] ?? '',
-      )
+      const sectionName = input.sectionNames[slot.sectionIndex] ?? ''
+      const subject = aiStockSubjectWords(slot.alt, sectionName)
       let choice: AiStockChoice | null = null
       const requests = slot.product
-        ? aiStockProductSearches(slot, terms.craft)
-        : aiStockSearchesFor(slot, terms, subject)
+        ? aiStockProductSearches(slot, terms.craft, terms.domain)
+        : aiStockSearchesFor(
+            slot,
+            terms,
+            subject,
+            aiStockSlotPart(slot, sectionName),
+          )
       for (const request of requests) {
         if (choice || signal.aborted) break
         const found = await search(request)
@@ -1098,7 +1638,12 @@ export function aiLayoutStockPhotoSource(
             domain: terms.domain,
             strict:
               (slot.role === 'gallery' && !request.broad) || !!request.requires,
+            named: terms.named,
+            rivals: terms.rivals,
             ...(request.requires ? { requires: request.requires } : {}),
+            ...(request.object ? { object: request.object } : {}),
+            ...(request.kin ? { kin: request.kin } : {}),
+            ...(request.lead ? { lead: true } : {}),
           },
         )
         if (!ranked.length) continue
