@@ -205,6 +205,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const [name, setName] = useState<string | null>(null)
   const [lead, setLead] = useState<boolean | null>(null)
   const [consentField, setConsentField] = useState<string | null>(null)
+  const [optInOnSubmit, setOptInOnSubmit] = useState<boolean | null>(null)
   /**
    * The campaigns picked on screen, or null while the stored value stands.
    *
@@ -236,6 +237,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
 
   const effectiveLead = lead ?? form?.routing?.lead === true
   const effectiveConsent = consentField ?? String(form?.consentFieldName ?? '')
+  const effectiveOptInOnSubmit = optInOnSubmit ?? form?.optInOnSubmit === true
   /*
    * Whether lead routing COULD work on this design — the two preconditions
    * `checkFormContract` applies at publish, asked here so the switch says so
@@ -376,10 +378,12 @@ export function FormDetailCard(props: FormDetailCardProps) {
         ...(consentField != null
           ? { consentFieldName: consentField.trim() }
           : {}),
+        ...(optInOnSubmit != null ? { optInOnSubmit } : {}),
         updatedAt: Timestamp.now(),
       })
       setLead(null)
       setConsentField(null)
+      setOptInOnSubmit(null)
       enqueueSnackbar('CRM routing saved', { variant: 'success', persist: false })
       /*
        * A form that routes leads holds `0` of them until its first, and one
@@ -406,6 +410,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
     form,
     lead,
     consentField,
+    optInOnSubmit,
     queueLoading,
     enqueueSnackbar,
     recountFormStats,
@@ -423,7 +428,8 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const routingDirty =
     (lead != null && lead !== (form?.routing?.lead === true)) ||
     (consentField != null &&
-      consentField.trim() !== String(form?.consentFieldName ?? ''))
+      consentField.trim() !== String(form?.consentFieldName ?? '')) ||
+    (optInOnSubmit != null && optInOnSubmit !== (form?.optInOnSubmit === true))
   const dirty = detailsDirty || routingDirty
   /**
    * Read from inside handlers that must not re-subscribe on every keystroke:
@@ -716,6 +722,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
                     onDiscard={() => {
                       setLead(null)
                       setConsentField(null)
+                      setOptInOnSubmit(null)
                     }}
                     onSave={handleSaveRouting}
                   />
@@ -769,7 +776,11 @@ export function FormDetailCard(props: FormDetailCardProps) {
                   value={effectiveConsent}
                   onChange={(event) => setConsentField(event.target.value)}
                   fullWidth
-                  helperText="The one field that IS the opt-in. Submitting a form is never itself consent."
+                  helperText={
+                    effectiveOptInOnSubmit
+                      ? 'Not needed on a sign-up form: submitting it is the opt-in.'
+                      : 'The one field that IS the opt-in. Submitting a form is never itself consent, unless it is a sign-up form.'
+                  }
                 >
                   <MenuItem value="">
                     {'None — this form collects no opt-in'}
@@ -782,6 +793,25 @@ export function FormDetailCard(props: FormDetailCardProps) {
                     </MenuItem>
                   ))}
                 </TextField>
+                <Stack spacing={0.5}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={effectiveOptInOnSubmit}
+                        onChange={(event) =>
+                          setOptInOnSubmit(event.target.checked)
+                        }
+                      />
+                    }
+                    label="This is a sign-up form: submitting it subscribes the person"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {'For a form whose only purpose is subscribing, like a ' +
+                      'newsletter sign-up. Every submission records marketing ' +
+                      'consent and makes the person at least a subscriber, so ' +
+                      'the form should say plainly what they are signing up for.'}
+                  </Typography>
+                </Stack>
                 {violations.length ? (
                   <Alert severity="warning">
                     <AlertTitle>{'This form would stop collecting'}</AlertTitle>

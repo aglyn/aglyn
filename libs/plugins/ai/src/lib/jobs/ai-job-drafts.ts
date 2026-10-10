@@ -144,6 +144,8 @@ export const AI_DRAFT_FIELDS: Readonly<Record<AiDraftKind, readonly string[]>> =
     'slug',
     'fields',
     'consentFieldName',
+    // A sign-up form's opt-in is the merchant's to declare; a job never sends one.
+    'optInOnSubmit',
     'routing',
     'legacyMatch',
     'rootId',
