@@ -150,6 +150,14 @@ export const MIN_USERS = 3
 export const MIN_BEACON_TRUTH = 3
 
 /**
+ * How long after its creation an account's sign-in must land to be a person
+ * coming BACK rather than the creation authenticating itself. Measured
+ * creation-time authentications are 0 ms and 9.7 s (AGL-1497's consent
+ * bounce); see {@link countReturningLogins}.
+ */
+export const RETURN_GAP_MS = 60 * 60 * 1000
+
+/**
  * The property's reporting zone, when the Admin API cannot be asked. GA4's
  * `date` and `dateHour` are in this zone, not UTC — `docs/ANALYTICS.md`.
  */
@@ -333,12 +341,17 @@ export function countWithin(records, field, { startMs, endMs }) {
  * genuine returning sign-in remained, under {@link MIN_BEACON_TRUTH}, and the
  * beacon had been red on every scheduled run for over a day.
  *
- * An account created inside the window is therefore graded by the sign-up
- * beacon and not by this one, which leaves every account on exactly one of
- * the two. A creation whose owner signs in again later in the same window is
- * given up rather than chased — like the `lastLoginAt` under-count above it,
- * that can only make this grade QUIETER, which is the only direction a
- * monitor may be wrong in.
+ * A sign-in is therefore a RETURN when the account predates the window, or
+ * when it lands at least {@link RETURN_GAP_MS} after the account was created.
+ * The creation-time authentications above sit at zero and 9.7 seconds; an
+ * hour clears both by orders of magnitude.
+ *
+ * The gap is not optional. Until 2026-10-10 an account created inside the
+ * window was never counted, and that was wrong the other way: a hotmail
+ * password account created 2026-10-09 21:23:38Z that came back through
+ * /signin at 23:06Z — a real /signin conversion — was invisible, and the
+ * door read "not one person signed in" over a window it was in. An
+ * undercounted door is a false red, which is what this alarm must not raise.
  */
 export function countReturningLogins(records, { startMs, endMs }) {
   let n = 0
@@ -346,10 +359,11 @@ export function countReturningLogins(records, { startMs, endMs }) {
     const at = Number(record?.lastLoginAt)
     if (!Number.isFinite(at) || at < startMs || at > endMs) continue
     // Unreadable creation, uncounted: a sign-in can only be shown to be a
-    // RETURN by the account predating the window, and an unprovable red is
-    // the failure this whole function exists to stop.
+    // RETURN by when the account was born, and an unprovable count is not a
+    // count.
     const created = Number(record?.createdAt)
-    if (!Number.isFinite(created) || created >= startMs) continue
+    if (!Number.isFinite(created)) continue
+    if (created >= startMs && at - created < RETURN_GAP_MS) continue
     n += 1
   }
   return n

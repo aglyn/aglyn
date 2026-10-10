@@ -39,6 +39,7 @@ import {
   MIN_USERS,
   MIN_VIEWS,
   PROCESSING_LAG_DAYS,
+  RETURN_GAP_MS,
   announceDecision,
   beaconWindow,
   countReturningLogins,
@@ -510,6 +511,64 @@ test('tenant accounts never count as accounts created, and keep the returning-lo
     createdAt: 0,
     lastLoginAt: 0,
   })
+})
+
+/**
+ * The 01:48Z run on 2026-10-10 graded 2026-10-09 13:48Z → 2026-10-10 01:48Z
+ * and said nobody signed in. Inside it, a default-tenant password account
+ * created at 21:23:38Z came back through /signin at 23:06Z.
+ */
+const OCTOBER_WINDOW = {
+  startMs: Date.parse('2026-10-09T13:48:00Z'),
+  endMs: Date.parse('2026-10-10T01:48:00Z'),
+}
+const HOTMAIL_RETURN = {
+  createdAt: String(Date.parse('2026-10-09T21:23:38Z')),
+  lastLoginAt: String(Date.parse('2026-10-09T23:06:00Z')),
+}
+
+test('THE 2026-10-09 HOTMAIL RETURN: signed up inside the window, came back 1h43m later — a /signin conversion', () => {
+  assert.equal(countReturningLogins([HOTMAIL_RETURN], OCTOBER_WINDOW), 1)
+  const truth = countTruth(
+    { byCreated: [HOTMAIL_RETURN], byLogin: [HOTMAIL_RETURN] },
+    { door: OCTOBER_WINDOW },
+  )
+  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1 })
+  assert.equal(
+    gradeDoor({ ...signinDoor, views: 9, users: 5, conversions: 1 }).verdict,
+    'green',
+  )
+})
+
+test('the return gap: a creation re-authenticating itself is not a return, a sign-in an hour on is', () => {
+  const created = Date.parse('2026-10-09T21:00:00Z')
+  const at = (ms) => ({
+    createdAt: String(created),
+    lastLoginAt: String(created + ms),
+  })
+  assert.equal(countReturningLogins([at(0)], OCTOBER_WINDOW), 0, 'creation')
+  assert.equal(
+    countReturningLogins([at(9_700)], OCTOBER_WINDOW),
+    0,
+    'the AGL-1497 consent bounce, 9.7 s on',
+  )
+  assert.equal(countReturningLogins([at(RETURN_GAP_MS - 1)], OCTOBER_WINDOW), 0)
+  assert.equal(countReturningLogins([at(RETURN_GAP_MS)], OCTOBER_WINDOW), 1)
+  // The September cohort's two creations stay out under the gap.
+  assert.equal(countReturningLogins(SEPTEMBER_ACCOUNTS, SEPTEMBER_WEEK), 1)
+})
+
+test('an SSO tenant account: its first sign-in is its creation, its later return counts', () => {
+  const created = Date.parse('2026-10-09T15:00:00Z')
+  const first = { createdAt: String(created), lastLoginAt: String(created) }
+  const back = {
+    createdAt: String(created),
+    lastLoginAt: String(created + 3 * RETURN_GAP_MS),
+  }
+  const count = (page) =>
+    countTruth({ tenantLogins: [page] }, { door: OCTOBER_WINDOW }).door
+  assert.deepEqual(count([first]), { createdAt: 0, lastLoginAt: 0 })
+  assert.deepEqual(count([back]), { createdAt: 0, lastLoginAt: 1 })
 })
 
 test('mapBounded keeps order and never runs more than the limit at once', async () => {
