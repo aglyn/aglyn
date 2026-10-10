@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-post-purchase",
-  "version": "1.0.0-beta.240",
+  "version": "1.0.0-beta.241",
   "private": true,
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
@@ -26,13 +26,13 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.240",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.240",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.240",
-    "@aglyn/shared-util-http": "1.0.0-beta.240",
-    "@aglyn/shared-util-tools": "1.0.0-beta.240",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.240",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.240",
+    "@aglyn/aglyn": "1.0.0-beta.241",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.241",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.241",
+    "@aglyn/shared-util-http": "1.0.0-beta.241",
+    "@aglyn/shared-util-tools": "1.0.0-beta.241",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.241",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.241",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
