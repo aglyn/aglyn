@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import {
   checkFormContract,
   formFieldsCanYieldAnEmail,
@@ -806,6 +807,8 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
 
     const draft = check.draftFor(result.value)
     if (!draft) throw new Error('a form the doctrine admitted has no draft from its check')
+    // Never written once the job is canceled (AGL-3616).
+    throwIfAiJobCanceled(signal)
     const write = await writeAiDraft(firestore, {
       kind: 'form',
       hostId,

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
@@ -334,6 +335,8 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
 
+    // Never written once the job is canceled (AGL-3616).
+    throwIfAiJobCanceled(signal)
     const draft = await writeAiDraft(firestore, {
       kind: 'component',
       hostId,

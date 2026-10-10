@@ -23,14 +23,23 @@ import {
   getAiJob,
   writeAiJobAudit,
 } from '../jobs/ai-jobs'
+import { memberHasPermissionOnHost, permissionRefusal } from '@aglyn/tenant-data-admin/server/organizations'
 import { aiJobsGate } from './ai-jobs-gate'
 
 /**
- * Cancel a job (AGL-2904). Idempotent: a job already terminal answers as
- * it is, unchanged. A step in flight is not interrupted — the runner that
- * holds its lease records what it cost and finds the job canceled when it
- * goes to complete it — so a cancel is never a way to spend tokens the
- * document does not show. Audited per cancel that changed something.
+ * Cancel a job (AGL-2904, AGL-3616). `POST /api/ai/jobs/{jobId}/cancel`
+ * `{ orgId }`.
+ *
+ * Who may: a member who holds `ai.generate` on the job's site (the
+ * permission that started it), or staff, member or not. Anyone else is
+ * refused 403 and the job is untouched.
+ *
+ * What it does is `cancelAiJob`'s, in one transaction: a job no step holds
+ * ends `canceled` now; a job whose step is in flight records the cancel and
+ * ends `canceled` when that step finishes or aborts, which the answer's
+ * `job.cancelRequested` says. Idempotent: a job already done, failed or
+ * canceled answers as it is, `changed: false`. Audited per cancel that
+ * changed something.
  */
 export async function POST(
   request: Request,
@@ -42,11 +51,15 @@ export async function POST(
   } catch {
     payload = null
   }
-  const gate = await aiJobsGate(request, String(payload?.orgId ?? ''))
+  const gate = await aiJobsGate(request, String(payload?.orgId ?? ''), { staffWithoutMembership: true })
   if (gate instanceof Response) return gate
   const { jobId } = await context.params
   const existing = await getAiJob(gate.firestore, gate.orgId, jobId)
   if (!existing) return Response.json({ error: 'Unknown job' }, { status: 404 })
+  // The job's own permission, on the job's own site (AGL-3616).
+  if (!gate.staff && !(await memberHasPermissionOnHost(gate.orgId, existing.hostId, gate.member, 'ai.generate'))) {
+    return permissionRefusal('ai.generate')
+  }
   const now = new Date()
   // The machine writes the org feed's row with this actor when the cancel
   // changed something; the staff audit row below is this route's own.
@@ -61,7 +74,12 @@ export async function POST(
       actorEmail: gate.decoded.email ?? null,
       orgId: gate.orgId,
       jobId,
-      after: { status: 'canceled', wasStatus: existing.status, kind: existing.kind },
+      after: {
+        status: job.status,
+        wasStatus: existing.status,
+        kind: existing.kind,
+        ...(gate.staff ? { staff: true } : {}),
+      },
     })
   }
   return Response.json({ job: aiJobSummary(job, now), changed }, { status: 200 })

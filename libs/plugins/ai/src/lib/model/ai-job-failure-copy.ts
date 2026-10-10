@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiJobCanceledCreditsCopy } from './ai-job-cancel-copy'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { AiJobItemLedger, AiJobKind, AiJobReview, AiJobStatus, AiJobSummary } from './ai-jobs.types'
 
@@ -91,7 +92,10 @@ export function aiPlanRetryRefusal(input: { creditsLeft: number; planCredits: nu
  */
 export const AI_SITE_GUIDED_BUILD_FAILED_COPY = 'Something went wrong building your site, and it was not built.'
 
-/** What a person's own cancel says about its credits: they paid for what ran until then. */
+/**
+ * What a person's own cancel said about its credits before AGL-3616, which
+ * now names them: `aiJobCanceledCreditsCopy`.
+ */
 export const AI_JOB_CANCELED_CREDITS_COPY = 'You paid for what was spent up to then.'
 
 /**
@@ -114,7 +118,8 @@ export function aiJobRefundCopy(
       ? `This one’s on us — you weren’t charged. The ${credits} it used ${back} back in your AI credits.`
       : `This one’s on us — you weren’t charged for the part that failed. The ${credits} it used ${back} back in your AI credits.`
   }
-  if (job.status === 'canceled' && (job.creditsSpent ?? 0) > 0) return AI_JOB_CANCELED_CREDITS_COPY
+  // A person's own cancel keeps what ran charged, and says how much (AGL-3616).
+  if (job.status === 'canceled' && (job.creditsSpent ?? 0) > 0) return aiJobCanceledCreditsCopy(job)
   return null
 }
 

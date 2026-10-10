@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import { aiSiteStyleTokens } from '../model/ai-site-kinds'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -424,6 +425,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       const spent = aiGenerationSpent(result)
       if (result.status === 'refused') return { ...spent, refused: true }
       if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+      // Never written once the job is canceled (AGL-3616).
+      throwIfAiJobCanceled(signal)
       const draft = await writeAiDraft(firestore, {
         kind: 'layout',
         hostId,
@@ -480,6 +483,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
 
+    // Never written once the job is canceled (AGL-3616).
+    throwIfAiJobCanceled(signal)
     const draft = await writeAiDraft(firestore, {
       kind: 'layout',
       hostId,

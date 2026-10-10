@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiJobCancelAsked } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
@@ -354,6 +355,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         ...extraPages,
       ]
       if (!pages.length) return outcome
+      // A canceled build never puts anything live (AGL-3616): its pages stay drafts.
+      if (await aiJobCancelAsked(firestore, job, context.signal)) return outcome
       const sitePublish = await publish(firestore, { job, outputs: pages, now: context.now }).catch((error: unknown) => {
         console.error('ai build publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
