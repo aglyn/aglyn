@@ -253,10 +253,14 @@ export function aiLayoutListingsWithDatasets(
     if (listing.kind !== 'records') return [listing]
     const row = inventory?.datasets.find((dataset) => dataset.id === listing.datasetId)
     if (!row) return []
-    const fields = listing.fields?.length
-      ? listing.fields
-      : row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name, type: 'text' }))
-    return fields.length ? [{ ...listing, fields }] : []
+    // The photo field is the card's picture, never its words (AGL-3616).
+    const imageField = listing.imageField ?? row.imageField
+    const fields = (
+      listing.fields?.length
+        ? listing.fields
+        : row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name, type: 'text' }))
+    ).filter((field) => field.id !== imageField)
+    return fields.length ? [{ ...listing, fields, ...(imageField ? { imageField } : {}) }] : []
   })
 }
 
@@ -264,17 +268,22 @@ export function aiLayoutListingsWithDatasets(
  * The page check's context with what a section listing the blog's posts
  * binds (AGL-3676): each post's card links its post and shows its cover by
  * the tokens the page fills per post, which a page's store admits whole only
- * where a listing places them.
+ * where a listing places them. A dataset's card shows its record's photo
+ * the same way (AGL-3616), by `{{item.<photo field>}}`.
  */
 export function aiLayoutListingContext(
   context: AiDoctrineTreeContext,
   targets: AiLayoutTargets,
 ): AiDoctrineTreeContext {
-  const listsPosts = (targets.listings ?? []).some(
-    (listing) => listing.kind === 'posts' && listing.placements.some((placement) => placement.screenId === targets.pageId),
+  const here = (targets.listings ?? []).filter((listing) =>
+    listing.placements.some((placement) => placement.screenId === targets.pageId),
   )
-  if (!listsPosts) return context
-  return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...AI_LAYOUT_POST_ADDRESS_TOKENS])] }
+  const tokens = [
+    ...(here.some((listing) => listing.kind === 'posts') ? AI_LAYOUT_POST_ADDRESS_TOKENS : []),
+    ...here.flatMap((listing) => (listing.kind === 'records' && listing.imageField ? [`{{item.${listing.imageField}}}`] : [])),
+  ]
+  if (!tokens.length) return context
+  return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...tokens])] }
 }
 
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */

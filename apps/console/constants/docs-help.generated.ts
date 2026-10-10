@@ -1012,7 +1012,7 @@ export const DOCS_HELP_ANCHORS = {
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   menusAndNavigation: ['#dropdown-menu', '#mega-menu', '#drawer--menu-button', '#the-mobile-nav-preset', '#the-dropdown-panel-preset', '#interactions-for-menus', '#responsive-visibility', '#related'],
   migrationPatterns: ['#renamed-a-screen', '#consolidated-pages', '#moved-a-site-into-aglyn', '#avoiding-loops', '#related'],
-  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#edit-records', '#tips', '#related'],
+  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#edit-records', '#tips', '#related'],
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],

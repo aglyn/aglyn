@@ -2894,6 +2894,8 @@ const RECORD_KICKER = /\b(category|categories|type|kind|role|title|position|sect
 const RECORD_BODY = /\b(description|summary|details?|about|bio|biography|answer|text|notes?|body|blurb|overview|excerpt|ingredients|includes)\b/i
 /** A dataset of questions and answers, listed as a ruled list rather than cards. */
 const RECORD_QUESTIONS = /\b(faqs?|questions?|q ?& ?a)\b/i
+/** A dataset of people, whose photos are portraits. */
+const RECORD_PEOPLE = /\b(team|staff|people|crew|instructors?|teachers?|stylists?|therapists?|coaches?|trainers?|chefs?|doctors?|dentists?|artists?|founders?|members?)\b/i
 
 /** The fields a record's card shows: its name, a kicker line and its words, each by id. */
 export function aiLayoutRecordCardFields(
@@ -2915,6 +2917,11 @@ export function aiLayoutRecordCardFields(
  * renders once per record — or, for questions and answers, a ruled list.
  * The card binds the record's fields as `{{item.<field>}}`: its name as the
  * item's title, a kicker over it (its category, role or time), and its words.
+ * A dataset whose records carry a photo (AGL-3616) leads each card with it,
+ * an Image bound to the record's photo field — a portfolio's or a
+ * photographer's opening in a lightbox, as one gallery captioned with each
+ * record's name, as the design's own picture cards do (AGL-3717) — so a list
+ * of pieces stays the image-led gallery it was before it was a dataset.
  * A featured band shows the first few; a page of its own, every record.
  */
 function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: number | null): string {
@@ -2938,10 +2945,38 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
   const body = fields.body
     ? tree.add('muiTypography', { children: `{{item.${fields.body}}}`, variant: 'body2', ...textAlign }, muted(scope), null, 'recordBody')
     : null
-  page.settled.push({ at: scope.at, what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : ' as cards'}` })
+  const photoField = !questions && listing.imageField ? listing.imageField : null
+  const opens = Boolean(photoField) && aiOpensGalleriesInLightbox(page)
+  const portrait = page.design?.input.kind === 'photography' || RECORD_PEOPLE.test(listing.name)
+  const picture = photoField
+    ? tree.add(
+        'image',
+        {
+          src: `{{item.${photoField}}}`,
+          alt: fields.title ? `{{item.${fields.title}}}` : aiLayoutFitText(listing.name, 'alt') || 'A photo',
+          objectFit: 'cover',
+          width: '100%',
+          loading: 'lazy',
+          ...(opens ? { ...lightboxProps(scope), ...(fields.title ? { lightboxCaption: `{{item.${fields.title}}}` } : {}) } : {}),
+        },
+        { aspectRatio: portrait ? '4 / 5' : '4 / 3', borderRadius: 2 },
+        null,
+        'recordImage',
+      )
+    : null
+  page.settled.push({
+    at: scope.at,
+    what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : picture ? ' as picture cards' : ' as cards'}`,
+  })
   const card = questions
     ? tree.add('muiStack', { spacing: '1' }, { borderTop: 1, pt: 3 }, [title, body], 'record')
-    : tree.add('muiStack', { spacing: '1', ...(scope.centered ? { alignItems: 'center' } : {}) }, null, [kicker, title, body], 'record')
+    : tree.add(
+        'muiStack',
+        { spacing: picture ? '1.5' : '1', ...(scope.centered ? { alignItems: 'center' } : {}) },
+        null,
+        [picture, kicker, title, body],
+        'record',
+      )
   return tree.add(
     AI_LAYOUT_LISTING_ELEMENTS.records,
     { repeatDataset: listing.datasetId, ...(limit ? { repeatLimit: String(limit) } : {}) },

@@ -33,6 +33,7 @@ import {
   aiResolveLayoutPictures,
 } from '../layout-language/ai-layout-pictures'
 import {
+  AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
   aiStockBusinessWords,
@@ -1093,6 +1094,21 @@ describe('a picture of a thing shows the thing (AGL-3660, the Juniper Clay start
     )
     expect(avoid).toEqual(['media:host-1/m-portrait'])
     expect(read.sort()).toEqual(['about', 'broken'])
+    // What the site's datasets' records show is never placed again either (AGL-3616).
+    expect(
+      await aiJobPagesPlacedPhotos(
+        {} as never,
+        {
+          hostId: 'host-1',
+          job: { inputs: { [AI_STOCK_PHOTO_PAGES_INPUT]: ['about'], [AI_STOCK_PHOTO_AVOID_INPUT]: ['media:host-1/m-bowl', 'not-a-photo'] } },
+          draftId: 'work',
+        },
+        readNodes,
+      ),
+    ).toEqual(['media:host-1/m-bowl', 'media:host-1/m-portrait'])
+    expect(
+      await aiJobPagesPlacedPhotos({} as never, { hostId: 'host-1', job: { inputs: { [AI_STOCK_PHOTO_AVOID_INPUT]: ['media:host-1/m-bowl'] } }, draftId: 'w' }, readNodes),
+    ).toEqual(['media:host-1/m-bowl'])
     expect(
       await aiJobPagesPlacedPhotos(
         {} as never,
