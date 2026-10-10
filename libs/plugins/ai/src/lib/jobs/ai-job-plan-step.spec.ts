@@ -105,7 +105,7 @@ import {
   runAiJobPlanStep,
   type AiJobPlanCandidate,
   registerAiJobPlan,
-  AI_SITE_DATASET_SENTENCE,
+  aiSiteDatasetSentence,
   AI_SITE_STORE_SHOP_CODE,
   AI_SITE_STORE_SHOP_SENTENCE,
   aiPlanSiteLines,
@@ -1021,14 +1021,14 @@ describe('a site plan’s datasets (AGL-3616)', () => {
   it('tells a paid site plan to keep a list of like things as a dataset, named in the sections that list it', () => {
     const scoped = aiPlanCapabilitiesForJob(paid, AI_JOB_PLAN_SCOPES.site)
     expect(scoped.create.dataset.allowed).toBe(true)
-    expect(aiPlanSiteLines(site, null, scoped)).toContain(AI_SITE_DATASET_SENTENCE)
+    expect(aiPlanSiteLines(site, null, scoped)).toContain(aiSiteDatasetSentence(3))
     expect(aiJobPlanPrompt(site, scoped)).toContain('- dataset: yes')
   })
 
   it('tells a Free plan nothing new: its plan includes no datasets', () => {
     const scoped = aiPlanCapabilitiesForJob(free, AI_JOB_PLAN_SCOPES.site)
     expect(scoped.create.dataset).toEqual({ allowed: false, left: 0, reason: "this workspace's plan does not include datasets" })
-    expect(aiPlanSiteLines(site, null, scoped)).not.toContain(AI_SITE_DATASET_SENTENCE)
+    expect(aiPlanSiteLines(site, null, scoped)).not.toContain(aiSiteDatasetSentence(3))
   })
 
   it('keeps a paid plan that creates a dataset and lists it, and a scaffold builds it', () => {

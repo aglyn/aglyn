@@ -60,6 +60,7 @@ import {
   aiSiteThinHomeViolations,
   AI_SITE_GALLERY_SENTENCE,
   aiSiteEmptyGalleryViolations,
+  AI_SITE_DATASETS_MAX,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
@@ -300,7 +301,9 @@ export function aiPlanSiteLines(
   // for its Contact page, without placing it.
   if (aiPlanCanPlaceForm(inventory, capabilities)) lines.push(AI_SITE_FORM_SENTENCE)
   // Structured content is kept as a dataset where one may be made (AGL-3616).
-  if (capabilities?.create.dataset.allowed) lines.push(AI_SITE_DATASET_SENTENCE)
+  if (capabilities?.create.dataset.allowed) {
+    lines.push(aiSiteDatasetSentence(Math.min(capabilities.datasetsMax ?? AI_SITE_DATASETS_MAX, capabilities.create.dataset.left ?? AI_SITE_DATASETS_MAX)))
+  }
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
@@ -322,14 +325,17 @@ export const AI_SITE_FORM_SENTENCE =
   "A section that asks visitors for something (contact, inquiry, commissions, booking, sign-up) places the form: put new:<the form's name> or the site's form id in its uses. One form may be placed on several pages."
 
 /**
- * The sentence a site plan's turn states where it may create datasets
+ * The sentence a site plan's turn states where it may create datasets, with
+ * how many it may (the live eval of 2026-10-10 planned four past a cap of
+ * three it was never told)
  * (AGL-3616): a list of like things is kept as one, named in the sections
  * that list it, and a page of its own per record is that dataset's record
  * template. Only where datasets may be made, so a Free plan's turn, whose
  * length its wall is proven at, is unchanged.
  */
-export const AI_SITE_DATASET_SENTENCE =
-  'Keep structured content as a dataset: where a page lists like things (a menu, a team, services, portfolio pieces, events, questions and answers), create a dataset of them, its fields their field names, and put new:<the dataset\'s name> in the uses of each section that lists them; the platform lists its records there. Where each one deserves a page of its own, plan one page as the dataset\'s record template.'
+export function aiSiteDatasetSentence(max: number): string {
+  return `Keep structured content as a dataset, at most ${max} ${max === 1 ? 'dataset' : 'datasets'}, and only for a list of 4 or more similar items: a menu, a team, services, portfolio pieces, events, questions and answers; never reviews or testimonials. Create the dataset, its fields the items' field names, and put new:<the dataset's name> in the uses of each section that lists them; the platform lists its records there. Where each item deserves a page of its own, plan one page as the dataset's record template. Anything else stays written on its page.`
+}
 
 /**
  * What a site start's home page is held to (AGL-3660): its fewest sections,
@@ -1085,7 +1091,8 @@ export function aiSitePlanCapabilities(
       reason: 'a site start draws its repeated items in their sections',
     },
   }
-  const site = { ...capabilities, reusableComponents: false, create }
+  // At most a start's few datasets, settled in code where a plan names more (AGL-3616).
+  const site = { ...capabilities, reusableComponents: false, create, datasetsMax: AI_SITE_DATASETS_MAX }
   if (!capabilities.freeTaste) return site
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =

@@ -111,6 +111,13 @@ export interface AiPlanCapabilities {
    * typed out twice, and rule 1 asks no component of them (AGL-3660).
    */
   repeatsCompiled?: boolean
+  /**
+   * The most datasets this job's plan keeps (AGL-3616): a site start builds
+   * at most a few. A plan naming more is settled in code before the rules
+   * read it (`aiSettlePlanDatasets`), never re-asked. Absent is no cap beyond
+   * `create.dataset.left`.
+   */
+  datasetsMax?: number
 }
 
 /** What a job of one kind builds from its own plan, where it builds only some creations. */

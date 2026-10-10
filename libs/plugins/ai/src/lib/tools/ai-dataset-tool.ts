@@ -23,7 +23,7 @@ import {
 } from '../model/ai-storefront-claims'
 import type { AiTool } from '../providers/contract'
 import type { AiGenerationCheckResult } from '../runtime/ai-doctrine'
-import { detectOffVoiceCopy, type AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import { AI_DATASET_SAID_NAME, detectOffVoiceCopy, type AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 
 /**
  * The strict tool a site's datasets are designed through (AGL-3616), and the
@@ -135,7 +135,7 @@ const URL = /\bhttps?:\/\/|\bwww\./i
 /** A rating or review score nobody gave. */
 const RATING = /\b\d(?:\.\d)?\s*(?:\/\s*(?:5|10)\b|out of (?:5|five|10|ten)\b|stars?\b)|\b(?:five|5|four|4)[- ]star\b|\brated\b/i
 /** A field that would hold what customers said, which no job writes for them. */
-const SAID_FIELD = /\b(reviews?|testimonials?|ratings?|quotes?|stars?|endorsements?)\b/i
+const SAID_FIELD = AI_DATASET_SAID_NAME
 /** A field holding a price, whose values must be the brief's own. */
 const PRICE_FIELD = /\b(price|prices|cost|costs|fee|fees|rate|rates)\b/i
 const NUMBER = /^-?\d+(?:\.\d+)?$/

@@ -3603,6 +3603,74 @@ export function aiSettlePlanRefs(
 }
 
 /**
+ * What customers say, which no dataset of the site's holds: a review, a
+ * testimonial, a rating, a quote (AGL-3616). A job never writes them for the
+ * people who did not, so a dataset of them is one nothing can seed.
+ */
+export const AI_DATASET_SAID_NAME = /\b(reviews?|testimonials?|ratings?|quotes?|stars?|endorsements?)\b/i
+
+/**
+ * A plan that creates more datasets than this job may make is settled in
+ * code, never re-asked (AGL-3616). The live eval of 2026-10-10 refused a
+ * dental practice's plan four times over for a fourth dataset, and a food
+ * bank's re-ask for one broke a layout rule its first answer had kept.
+ *
+ * A dataset of what customers say (`AI_DATASET_SAID_NAME`, in its name or a
+ * field) is let go first, whatever the cap: both of those plans made one of
+ * testimonials, which nothing may seed.
+ *
+ * The datasets kept are the most useful: the ones the most sections list,
+ * a record template counting double, plan order breaking ties. Each one let
+ * go leaves the plan whole — its `new:` reference comes off every section,
+ * a record template of it becomes a page of its own, and a section that
+ * listed it shows fewer items than rule 8 binds, so its items are written
+ * out on the page. Where the job may create no dataset at all, rule 7 still
+ * asks, as it does for any creation.
+ */
+export function aiSettlePlanDatasets(plan: AiBuildPlan, capabilities: AiPlanCapabilities | null = null): AiBuildPlan {
+  const entry = capabilities?.create.dataset
+  if (!entry?.allowed) return plan
+  const cap = Math.min(capabilities?.datasetsMax ?? Infinity, entry.left ?? Infinity)
+  const datasets = plan.create.filter((one) => one.kind === 'dataset')
+  const said = (one: (typeof datasets)[number]) => AI_DATASET_SAID_NAME.test(one.name) || one.fields.some((field) => AI_DATASET_SAID_NAME.test(field))
+  if (!datasets.some(said) && (!Number.isFinite(cap) || datasets.length <= cap)) return plan
+  const named = (ref: string | null | undefined, name: string) =>
+    !!ref && isAiPlanNewRef(ref) && ref.slice('new:'.length).trim().toLowerCase() === name.trim().toLowerCase()
+  const score = (name: string) =>
+    plan.screens.reduce(
+      (total, screen) =>
+        total +
+        (named(screen.record?.dataset, name) ? 2 : 0) +
+        screen.sections.filter((section) => section.uses.some((ref) => named(ref, name))).length,
+      0,
+    )
+  const ranked = datasets
+    .filter((one) => !said(one))
+    .map((one, index) => ({ name: one.name, index, score: score(one.name) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+  const kept = new Set(ranked.slice(0, Math.max(0, cap)).map((one) => one.name.trim().toLowerCase()))
+  const dropped = new Set(datasets.map((one) => one.name.trim().toLowerCase()).filter((name) => !kept.has(name)))
+  const isDropped = (ref: string | null | undefined) => [...dropped].some((name) => named(ref, name))
+  return {
+    ...plan,
+    create: plan.create.filter((one) => one.kind !== 'dataset' || !dropped.has(one.name.trim().toLowerCase())),
+    screens: plan.screens.map((screen) => ({
+      ...screen,
+      record: screen.record && isDropped(screen.record.dataset) ? null : screen.record,
+      sections: screen.sections.map((section) =>
+        section.uses.some(isDropped)
+          ? {
+              ...section,
+              uses: section.uses.filter((ref) => !isDropped(ref)),
+              items: Math.min(section.items, AI_TYPED_LIST_MIN_ITEMS - 1),
+            }
+          : section,
+      ),
+    })),
+  }
+}
+
+/**
  * A page that names no layout, on a site where only one layout can frame it,
  * is put in that layout before the rules read the plan (2026-10-07). The
  * model sometimes leaves one page's layout empty — a live run's bookkeeper
