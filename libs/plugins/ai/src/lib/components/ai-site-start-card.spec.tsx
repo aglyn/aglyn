@@ -571,6 +571,19 @@ describe('the questions become a site scaffold', () => {
     expect(kindCard(trades).getAttribute('aria-checked')).toBe('false')
   })
 
+  it("selects Music & bands for a band's site as it is typed, and Business only when nothing is named", async () => {
+    await openCard()
+    const music = AI_SITE_KINDS.findIndex((kind) => kind.id === 'music')
+    typeAnswer(
+      /What kind of site are you creating\?/,
+      'A website for an indie folk band from Asheville — tour dates, new album, merch and booking',
+    )
+    expect(kindCard(music).getAttribute('aria-checked')).toBe('true')
+    expect(kindCard(0).getAttribute('aria-checked')).toBe('false')
+    typeAnswer(/What kind of site are you creating\?/, 'a folk trio with a new record out')
+    expect(kindCard(music).getAttribute('aria-checked')).toBe('true')
+  })
+
   it('starts one site job for this site, carrying every answer', async () => {
     await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
