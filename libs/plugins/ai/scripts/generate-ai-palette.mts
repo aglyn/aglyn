@@ -177,8 +177,10 @@ const COMPONENT_EXTRA_IDS = ['icon']
  */
 const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
   // The store's Product grid, which a page lists the site's catalog with
-  // (AGL-3676): bound to the catalog by code, never written by a model.
-  screen: ['icon', 'product-grid'],
+  // (AGL-3676): bound to the catalog by code, never written by a model; and
+  // a selling store's own reviews and its newsletter sign-up, which the
+  // storefront's sections place the same way (AGL-3676).
+  screen: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup'],
   // And a selling site's cart button in its header (AGL-3676).
   layout: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
 }

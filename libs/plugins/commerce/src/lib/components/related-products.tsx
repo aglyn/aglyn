@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { ProductImagePlaceholder } from './product-image-placeholder'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'related-products'
@@ -35,6 +36,12 @@ export interface RelatedProductsProps {
   productId?: string
   heading?: string
   maxItems?: number
+  /**
+   * How the items are drawn: `strip`, the default, a scrolling row of small
+   * cards; `grid`, tall photo cards (4:5) with the name and price under
+   * them in a grid of up to four across — the product grid's photo look.
+   */
+  layout?: 'strip' | 'grid'
 }
 
 interface CatalogItem {
@@ -54,17 +61,23 @@ interface CatalogItem {
  */
 const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
   (props, ref) => {
-    const { productId: productIdProp, heading, maxItems, ...rest } = props
+    const { productId: productIdProp, heading, maxItems, layout, ...rest } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
-    const { hostId } = Aglyn.useSite()
+    const site = Aglyn.useSite()
+    const { hostId } = site
+    // The page's product, when the server seeded it (AGL-659): its id is the
+    // anchor, so the rail skips a product lookup the page already made.
+    const seededProductId = (
+      site.pageData as { commerce?: { product?: { id?: string } } } | undefined
+    )?.commerce?.product?.id
     const [items, setItems] = useState<CatalogItem[] | null>(null)
 
     useEffect(() => {
       if (!hostId) return
       let active = true
       void (async () => {
-        let anchor = productIdProp ?? ''
+        let anchor = productIdProp || seededProductId || ''
         if (!anchor) {
           const match = window.location.pathname.match(/\/products\/([^/?#]+)/)
           if (!match) return
@@ -93,7 +106,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
       return () => {
         active = false
       }
-    }, [hostId, productIdProp])
+    }, [hostId, productIdProp, seededProductId])
 
     if (!hostId) {
       return (
@@ -119,12 +132,23 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
     }
     if (!items || items.length === 0) return <Box ref={ref} {...rest} />
 
+    const grid = layout === 'grid'
     return (
       <Box ref={ref} {...rest}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant={grid ? 'h5' : 'h6'} component="h2" gutterBottom sx={grid ? { mb: 2 } : undefined}>
           {heading || 'You may also like'}
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1.5, overflowX: 'auto', pb: 1 }}>
+        <Box
+          sx={
+            grid
+              ? {
+                  display: 'grid',
+                  gap: 2,
+                  gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+                }
+              : { display: 'flex', gap: 1.5, overflowX: 'auto', pb: 1 }
+          }
+        >
           {items
             .slice(0, maxItems && maxItems > 0 ? maxItems : 6)
             .map((item) => {
@@ -133,15 +157,26 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
               const imageUrl = Aglyn.siteRelativeMediaSrc(item.imageUrl, {
                 hostId,
               })
+              const mediaSx = grid
+                ? { aspectRatio: '4 / 5', borderRadius: 2 }
+                : { height: 110 }
               return (
-              <Card key={item.id} variant="outlined" sx={{ minWidth: 160 }}>
-                <CardActionArea href={`/products/${item.slug}`}>
+              <Card
+                key={item.id}
+                variant={grid ? 'elevation' : 'outlined'}
+                elevation={0}
+                sx={grid ? { bgcolor: 'transparent', overflow: 'visible' } : { minWidth: 160 }}
+              >
+                <CardActionArea
+                  href={`/products/${item.slug}`}
+                  sx={grid ? { borderRadius: 2 } : undefined}
+                >
                   {imageUrl ? (
                     <CardMedia
                       component="img"
                       image={imageUrl}
                       alt={item.name}
-                      sx={{ height: 110, objectFit: 'cover' }}
+                      sx={{ ...mediaSx, objectFit: 'cover' }}
                       // Deferred (AGL-2486). A related-products rail sits at
                       // the BOTTOM of a product page by construction, and it
                       // was fetching eagerly against the gallery hero above
@@ -149,13 +184,15 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                       {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                     />
                   ) : (
-                    <Box sx={{ height: 110, bgcolor: 'action.hover' }} />
+                    // Never a blank tile: a product with no photo yet says
+                    // so, in the theme's colours (AGL-3676 follow-up).
+                    <ProductImagePlaceholder name={item.name} sx={mediaSx} />
                   )}
-                  <CardContent sx={{ py: 1 }}>
-                    <Typography variant="body2" noWrap>
+                  <CardContent sx={grid ? { px: 0.5, pt: 1.5, pb: 1 } : { py: 1 }}>
+                    <Typography variant={grid ? 'subtitle1' : 'body2'} noWrap>
                       {item.name}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant={grid ? 'body2' : 'caption'} color="text.secondary">
                       {item.priceComingSoon ? 'Price coming soon' : `$${item.priceUsd}`}
                     </Typography>
                   </CardContent>
@@ -201,6 +238,17 @@ export const schema: Aglyn.ComponentSchema<RelatedProductsProps> = {
       description: 'Cap the strip (default 6).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
+    },
+    {
+      // Default `strip`, so a page that already places this block keeps it.
+      name: 'layout',
+      label: 'Layout',
+      description: 'A scrolling strip of small cards, or a grid of tall photo cards.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { label: 'Strip', value: 'strip' },
+        { label: 'Photo grid', value: 'grid' },
+      ],
     },
   ],
 }

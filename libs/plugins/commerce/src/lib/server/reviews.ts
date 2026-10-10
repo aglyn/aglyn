@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { AggregateField } from 'firebase-admin/firestore'
 
 export interface PublicProductReview {
   id: string
@@ -85,6 +86,96 @@ export async function readProductReviews(
   }
 }
 
+/** One approved review as the store-wide list shows it. */
+export interface PublicStoreReview {
+  id: string
+  rating: number
+  body: string
+  /** First name and last initial only ("Jane D."), never the full name. */
+  authorName: string
+  verified: boolean
+  createdAtMs: number
+  /** The reviewed product, when it is still on sale. */
+  productName?: string
+  productSlug?: string
+}
+
+/** The most reviews the store-wide list returns. */
+export const STORE_REVIEWS_MAX = 12
+/** What the store-wide list returns when the caller names no limit. */
+export const STORE_REVIEWS_DEFAULT = 6
+
+/** "Jane Doe" → "Jane D."; one word stays as it is. */
+export function reviewerShortName(name: string): string {
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return 'Anonymous'
+  const [first, ...others] = words
+  const last = others[others.length - 1]
+  return last ? `${first} ${last[0].toUpperCase()}.` : first
+}
+
+/**
+ * The store's latest APPROVED reviews across every product, newest first, with
+ * the aggregate over all of them — the store-wide reviews band a storefront
+ * home carries. Approved only: a pending or rejected review never reaches a
+ * page, and nothing here is ever sample text (a published page shows real
+ * reviews or none).
+ *
+ * The list is `status == approved` ordered by `createdAtMs desc`, served by
+ * the COLLECTION composite `reviews (status ASC, createdAtMs DESC)` that the
+ * moderation queue already declares; the aggregate is a count and an average
+ * over the same equality, which the automatic single-field index serves.
+ */
+export async function readStoreReviews(
+  hostId: string,
+  limit: number = STORE_REVIEWS_DEFAULT,
+): Promise<{ reviews: PublicStoreReview[]; aggregate: ProductReviewAggregate }> {
+  const firestore = firebaseAdmin.app().firestore()
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  const approved = hostRef.collection('reviews').where('status', '==', 'approved')
+  const max = Math.min(STORE_REVIEWS_MAX, Math.max(1, Math.floor(Number(limit)) || STORE_REVIEWS_DEFAULT))
+  const [listSnapshot, aggregateSnapshot] = await Promise.all([
+    approved.orderBy('createdAtMs', 'desc').limit(max).get(),
+    approved
+      .aggregate({ count: AggregateField.count(), average: AggregateField.average('rating') })
+      .get(),
+  ])
+  const rows = listSnapshot.docs.map((docSnapshot) => ({
+    id: docSnapshot.id,
+    productId: String(docSnapshot.get('productId') ?? ''),
+    rating: Number(docSnapshot.get('rating') ?? 0),
+    body: String(docSnapshot.get('body') ?? ''),
+    authorName: reviewerShortName(String(docSnapshot.get('authorName') ?? '')),
+    verified: Boolean(docSnapshot.get('verified')),
+    createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+  }))
+  // The reviewed products' names, in one batched read of at most `max` docs.
+  const productIds = [...new Set(rows.map((row) => row.productId).filter(Boolean))]
+  const products = new Map<string, { name: string; slug: string }>()
+  if (productIds.length) {
+    const snapshots = await firestore.getAll(
+      ...productIds.map((id) => hostRef.collection('products').doc(id)),
+    )
+    for (const snapshot of snapshots) {
+      const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null
+      if (!data || data['deletedAt'] || data['status'] !== 'active') continue
+      products.set(snapshot.id, { name: String(data['name'] ?? ''), slug: String(data['slug'] ?? '') })
+    }
+  }
+  const reviews = rows.map(({ productId, ...row }) => {
+    const product = products.get(productId)
+    return {
+      ...row,
+      ...(product?.name ? { productName: product.name } : {}),
+      ...(product?.slug ? { productSlug: product.slug } : {}),
+    }
+  })
+  const data = aggregateSnapshot.data() as { count?: number; average?: number | null }
+  const count = Number(data.count ?? 0)
+  const average = count ? Number(data.average ?? 0) : 0
+  return { reviews, aggregate: { count, average: Math.round(average * 10) / 10 } }
+}
+
 /**
  * Product reviews (AGL-324). GET returns approved reviews + aggregate;
  * POST submits into the moderation queue, marking `verified` when the
@@ -96,6 +187,25 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
   const productId = String(
     (isPost ? req.body?.productId : req.query.productId) ?? '',
   )
+  // Store-wide (`scope=store`, no productId): the latest approved reviews
+  // across the store, for the storefront's reviews band. Read only, and only
+  // where the store's plan has reviews — a store without the feature shows
+  // no band rather than reviews it can no longer collect.
+  if (!isPost && !productId && req.query.scope === 'store') {
+    if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
+    try {
+      const org = await getOrgForHost(hostId)
+      if (!Aglyn.checkEntitlement(org?.org as any, 'productReviews')) {
+        return res.status(200).json({ reviews: [], aggregate: { count: 0, average: 0 } })
+      }
+      const { reviews, aggregate } = await readStoreReviews(hostId, Number(req.query.limit))
+      res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+      return res.status(200).json({ reviews, aggregate })
+    } catch (error) {
+      console.error(error)
+      return res.status(500).json({ error: 'Reviews unavailable' })
+    }
+  }
   if (!hostId || !productId) {
     return res.status(400).json({ error: 'Missing hostId or productId' })
   }

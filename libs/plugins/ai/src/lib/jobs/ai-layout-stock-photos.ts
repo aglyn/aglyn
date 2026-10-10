@@ -596,6 +596,45 @@ export function aiStockOrientation(aspect: number): StockPhotoOrientation {
  */
 export interface AiStockSearch extends StockPhotoSearchRequest {
   broad?: boolean
+  /** The words its hits are scored by, where they are not the slot's own subject (a product's searches, AGL-3676). */
+  subject?: string
+  /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
+  requires?: string
+}
+
+/**
+ * A product's searches (AGL-3676), most specific first: each of its subjects
+ * — its name's noun phrase, then its photo's — with the shop's category
+ * where the phrase does not already say it ("candle gift box"), then the
+ * category alone, a plain photo of what the shop sells. Every one must find a
+ * hit naming the category, so no product is ever filled with a lifestyle shot
+ * of something else: the beta.237 Willow Wick start put a laptop and roses
+ * under "Candle Wick Trimmer" and an antique tea set under "Candle Gift Set".
+ */
+export function aiStockProductSearches(
+  slot: Pick<AiLayoutPictureSlot, 'aspect' | 'product'>,
+  craft: string,
+): AiStockSearch[] {
+  const orientation = aiStockOrientation(slot.aspect)
+  const size = orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
+  const craftStems = stemList(craft)
+  const queries: Array<{ query: string; subject: string }> = []
+  for (const raw of slot.product?.subjects ?? []) {
+    const subject = aiStockSubjectWords(raw, '')
+    if (!subject) continue
+    const says = craftStems.every((stem) => stemList(subject).includes(stem))
+    queries.push({ query: craft && !says ? `${craft} ${subject}` : subject, subject })
+  }
+  if (craft) queries.push({ query: craft, subject: craft })
+  const seen = new Set<string>()
+  const searches: AiStockSearch[] = []
+  for (const entry of queries) {
+    const query = clip(entry.query)
+    if (!query || seen.has(query)) continue
+    seen.add(query)
+    searches.push({ query, orientation, ...size, subject: entry.subject, ...(craft ? { requires: craft } : {}) })
+  }
+  return searches
 }
 
 /** The searches a slot tries, in order, most specific first, each distinct. */
@@ -666,6 +705,8 @@ export interface AiStockJudgement {
    * and an about picture need only name the domain.
    */
   strict?: boolean
+  /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
+  requires?: string
 }
 
 /** The words of a photo's page address at its library, its id dropped: "robin-bird-songbird-garden-winter". */
@@ -718,11 +759,18 @@ export function aiStockRelevance(
 ): number {
   const hit = hitWords(photo)
   if (hit.rejected) return 0
+  const required = stemList(judgement.requires ?? '')
+  if (required.some((stem) => !hit.all.has(stem))) return 0
   const subject = stemList(judgement.subject ?? '')
   const object = judgement.subject ? aiStockObjectWord(judgement.subject) : ''
   const domain = (judgement.domain ?? []).filter((stem) => stem !== object)
-  const world = domain.some((stem) => hit.all.has(stem))
-  const worldLead = domain.some((stem) => hit.lead.has(stem))
+  // A hit naming the word it must name is of the site's world: a product's
+  // category is that world even where it is the product's own object.
+  const world =
+    required.length > 0 || domain.some((stem) => hit.all.has(stem))
+  const worldLead =
+    (required.length > 0 && required.every((stem) => hit.lead.has(stem))) ||
+    domain.some((stem) => hit.lead.has(stem))
   const pair = subject.length >= 2 ? subject.slice(-2).join(' ') : ''
   const phrased =
     Boolean(pair) &&
@@ -856,6 +904,8 @@ export interface AiLayoutStockPhotoSourceInput {
   jobId?: string
   /** Asset srcs or source keys the job's other pages already show. */
   avoid?: readonly string[]
+  /** The most searches this source sends; a page's own bound where absent. A store's products search more (AGL-3676). */
+  searches?: number
   signal?: AbortSignal
 }
 
@@ -912,6 +962,8 @@ export function aiLayoutStockPhotoSource(
     const search = (wanted: AiStockSearch): Promise<StockPhoto[] | null> => {
       const request: StockPhotoSearchRequest = { ...wanted }
       delete (request as AiStockSearch).broad
+      delete (request as AiStockSearch).subject
+      delete (request as AiStockSearch).requires
       const key = JSON.stringify([
         request.query,
         request.orientation,
@@ -919,7 +971,7 @@ export function aiLayoutStockPhotoSource(
       ])
       const known = answers.get(key)
       if (known) return known
-      if (searches >= AI_LAYOUT_STOCK_SEARCHES_PER_PAGE)
+      if (searches >= (input.searches ?? AI_LAYOUT_STOCK_SEARCHES_PER_PAGE))
         return Promise.resolve(null)
       searches += 1
       const asked = provider
@@ -1025,7 +1077,10 @@ export function aiLayoutStockPhotoSource(
         input.sectionNames[slot.sectionIndex] ?? '',
       )
       let choice: AiStockChoice | null = null
-      for (const request of aiStockSearchesFor(slot, terms, subject)) {
+      const requests = slot.product
+        ? aiStockProductSearches(slot, terms.craft)
+        : aiStockSearchesFor(slot, terms, subject)
+      for (const request of requests) {
         if (choice || signal.aborted) break
         const found = await search(request)
         if (found === null) break
@@ -1039,9 +1094,11 @@ export function aiLayoutStockPhotoSource(
           blocked,
           `${input.seed}:${index}:${request.query}`,
           {
-            subject: request.broad ? '' : subject,
+            subject: request.subject ?? (request.broad ? '' : subject),
             domain: terms.domain,
-            strict: slot.role === 'gallery' && !request.broad,
+            strict:
+              (slot.role === 'gallery' && !request.broad) || !!request.requires,
+            ...(request.requires ? { requires: request.requires } : {}),
           },
         )
         if (!ranked.length) continue

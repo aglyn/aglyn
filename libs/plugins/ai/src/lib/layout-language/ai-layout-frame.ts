@@ -76,7 +76,21 @@ export interface AiLayoutFramePlan {
    * from every page — beside the navigation.
    */
   cart?: boolean
+  /**
+   * A selling store's Shop page (AGL-3676), by its id. Its header is a
+   * storefront's: the cart beside the navigation and no call-to-action button
+   * repeating a link the navigation already has, and a thin announcement bar
+   * above it — the line the design gave its header as a note, else one that
+   * opens the shop — linking the Shop page.
+   */
+  shopId?: string | null
 }
+
+/** What a store's announcement bar says where its design gave it no line (AGL-3676): true of every store. */
+export const AI_LAYOUT_STORE_ANNOUNCEMENT = 'Shop the full collection'
+
+/** The way into the shop beside the design's own announcement (AGL-3676). */
+export const AI_LAYOUT_STORE_ANNOUNCEMENT_LINK = 'Shop now'
 
 export interface AiLayoutCompiledFrame {
   tree: AiLayoutRawTree
@@ -259,22 +273,37 @@ export function aiCompileLayoutFrame(
     : null
   // The design's call to action: its first button, where it goes somewhere.
   const ctaBlock = header.blocks.find((block) => block.kind === 'button')
+  // A store's announcement: the first short line the design gave its header (AGL-3676).
+  const store = !!plan.shopId
+  const noteBlock = store ? header.blocks.find((block) => block.kind === 'note' || block.kind === 'text' || block.kind === 'lede') : undefined
   for (const block of header.blocks) {
-    if (block !== ctaBlock)
+    if (block !== ctaBlock && block !== noteBlock)
       page.settled.push({
         at: 'header',
         what: `a ${block.kind} in the header; left out`,
       })
   }
   const ctaLabel = ctaBlock ? aiLayoutFitText(ctaBlock.text, 'label') : ''
-  const ctaTo =
+  const ctaResolved =
     ctaBlock && ctaLabel
       ? aiLayoutResolveLink(ctaBlock.to, ctaLabel, scope.link, page.targets)
       : null
-  if (ctaBlock && !ctaTo)
+  if (ctaBlock && !ctaResolved)
     page.settled.push({
       at: 'header',
       what: `the button "${ctaLabel}" has nowhere to go; left out`,
+    })
+  // A storefront's header is its navigation and its cart (AGL-3676): the
+  // live Willow Wick header's "Shop candles" button repeated its nav's Shop.
+  // A store's button that only repeats a page the navigation links is left
+  // out, and a store that sells carries its cart in that place instead.
+  const repeatsNav =
+    ctaResolved?.kind === 'page' && pages.some((entry) => !entry.href && entry.id === ctaResolved.screenId)
+  const ctaTo = ctaResolved && store && (plan.cart || repeatsNav) ? null : ctaResolved
+  if (ctaResolved && !ctaTo)
+    page.settled.push({
+      at: 'header',
+      what: `the button "${ctaLabel}" left out: a store's header carries its ${plan.cart ? 'cart' : 'navigation'}, not a button repeating it`,
     })
   const ctaProps = ctaTo
     ? {
@@ -387,6 +416,37 @@ export function aiCompileLayoutFrame(
     [toolbar],
     'header',
   )
+  // A selling store's announcement bar, above the header, linking its shop (AGL-3676).
+  const announcement =
+    store && plan.cart && plan.shopId
+      ? (() => {
+          const said = aiLayoutFitText(noteBlock?.text, 'note')
+          if (noteBlock && !said) page.settled.push({ at: 'header', what: 'an announcement with no words left; the shop’s own line instead' })
+          // The design's line, then the way into the shop; else the way in alone.
+          const link = tree.add(
+            'muiScreenLink',
+            {
+              children: said ? AI_LAYOUT_STORE_ANNOUNCEMENT_LINK : AI_LAYOUT_STORE_ANNOUNCEMENT,
+              screenId: plan.shopId,
+              renderAs: 'link',
+              color: 'inherit',
+            },
+            { fontWeight: 700 },
+            null,
+            'announcementLink',
+          )
+          const words = said
+            ? tree.add('muiTypography', { children: said, variant: 'body2', component: 'p' }, null, null, 'announcementText')
+            : null
+          return tree.add(
+            'muiStack',
+            { direction: 'row', spacing: '1.5', justifyContent: 'center', alignItems: 'baseline', useFlexGap: true, flexWrap: 'wrap' },
+            { bgcolor: 'primary.main', color: 'primary.contrastText', typography: 'body2', py: 1, px: 2 },
+            [words, link],
+            'announcement',
+          )
+        })()
+      : null
   // The page grows into the room the window leaves, so a short page keeps
   // its footer at the bottom.
   const slot = tree.add(
@@ -401,7 +461,7 @@ export function aiCompileLayoutFrame(
     'muiStack',
     null,
     { minHeight: '100vh' },
-    [bar, slot, footer],
+    [announcement, bar, slot, footer],
     'frame',
   )
   tree.prune(column, new Set([slot]))

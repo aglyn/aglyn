@@ -50,6 +50,7 @@ import {
   aiSettleCutHeadings,
   aiSettleOffBrandEmailColors,
   aiSettleDisagreeingNodes,
+  aiSettlePlanForms,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
@@ -685,8 +686,13 @@ export function aiDoctrinePlanCheck(
       }
     }
     // A reference or a page's layout that has only one answer is given it,
-    // not refused for it.
-    const plan = aiSettlePlanLayouts(aiSettlePlanRefs(parsed.plan), inventory, capabilities)
+    // not refused for it; so is a section that collects answers with no form
+    // placed, which places the plan's own (AGL-3660).
+    const plan = aiSettlePlanForms(
+      aiSettlePlanLayouts(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+      inventory,
+      capabilities,
+    )
     const violations = [
       ...publish,
       ...validateAiBuildPlan(plan, inventory, framing, capabilities),
