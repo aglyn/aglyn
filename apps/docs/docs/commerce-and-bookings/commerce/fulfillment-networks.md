@@ -1,21 +1,16 @@
 ---
 sidebar_position: 4.6
 title: Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)
-description: Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step. Rolling out.
-unlisted: true
+description: Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.
 ---
 
 # Fulfillment networks: ShipBob, ShipMonk and Amazon Multi-Channel Fulfillment
 
-:::caution Rolling out
-Fulfillment networks are **not yet available** on aglyn.com-hosted
-workspaces. Until they are, no **Fulfillment networks** card appears in your
-store's settings, and your orders are shipped the way they are today.
-:::
-
-If your stock sits in a **ShipBob** or **ShipMonk** warehouse, or in Amazon's
-warehouses as **FBA inventory**, connect that account to your store and Aglyn hands each paid
-order to it:
+If your stock sits in a **ShipMonk** warehouse, connect that account to your
+store and Aglyn hands each paid order to it. **ShipMonk is available now.**
+**ShipBob** and **Amazon Multi-Channel Fulfillment** (FBA inventory) work the
+same way and appear on the card as each is set up for aglyn.com; until then the
+card offers only the networks you can connect. Aglyn then:
 
 - **Paid orders go to the network.** The items it stocks are sent to it to
   pick, pack and ship. Items it does not stock stay with you, so one order can
@@ -29,8 +24,8 @@ order to it:
 ## Connect a network
 
 1. Open your store's **Settings** and find the **Fulfillment networks** card.
-2. Next to **ShipBob** or **Amazon Multi-Channel Fulfillment**, select
-   **Connect**.
+2. Next to **ShipBob** or **Amazon Multi-Channel Fulfillment** (when the card
+   offers them), select **Connect**.
 3. Sign in to that account and allow Aglyn access. You come back to the store
    settings with the network connected.
 

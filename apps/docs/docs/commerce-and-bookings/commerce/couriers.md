@@ -1,17 +1,10 @@
 ---
 sidebar_position: 4.15
 title: Couriers for local delivery (DoorDash Drive)
-description: Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier's tracking link and arrival time on the order. Rolling out.
-unlisted: true
+description: Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier's tracking link and arrival time on the order.
 ---
 
 # Couriers for local delivery: DoorDash Drive
-
-:::caution Rolling out
-Couriers are **not yet available** on aglyn.com-hosted workspaces. Until they
-are, no **Couriers** card appears in your store's settings, and your local
-deliveries go out with your own driver, as they do today.
-:::
 
 When you offer [local delivery](./pickup-and-local-delivery.md), your own
 driver takes each order out. With couriers, you can send a **DoorDash**

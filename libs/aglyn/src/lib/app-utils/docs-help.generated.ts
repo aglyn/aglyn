@@ -45,7 +45,7 @@ export const PLUGIN_DOCS = {
   adConversions: {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
-    excerpt: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising. Rolling out.',
+    excerpt: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
   },
   aglynAssist: {
     path: '/getting-started/aglyn-assist',
@@ -265,7 +265,7 @@ export const PLUGIN_DOCS = {
   couriers: {
     path: '/commerce-and-bookings/commerce/couriers',
     title: 'Couriers for local delivery (DoorDash Drive)',
-    excerpt: 'Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier\'s tracking link and arrival time on the order. Rolling out.',
+    excerpt: 'Send a DoorDash courier for your own local deliveries from your own DoorDash Drive account, with the courier\'s tracking link and arrival time on the order.',
   },
   crmEmailTemplates: {
     path: '/content-and-data/crm/email-templates',
@@ -345,7 +345,7 @@ export const PLUGIN_DOCS = {
   fulfillmentNetworks: {
     path: '/commerce-and-bookings/commerce/fulfillment-networks',
     title: 'Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)',
-    excerpt: 'Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step. Rolling out.',
+    excerpt: 'Send paid orders to ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment, get their shipments and tracking back on the order, and keep stock counts in step.',
   },
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',

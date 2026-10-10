@@ -63,11 +63,6 @@ no copy is sent.
 
 ### By your Trustpilot API key {#trustpilot-api}
 
-:::caution Rolling out
-The API option is **not yet available** on aglyn.com-hosted workspaces. Until it
-is, the card offers the invitation address only.
-:::
-
 If your Trustpilot plan includes API access, you can send invitations through it
 instead:
 
@@ -86,11 +81,6 @@ Invitations sent this way ask for a review of your store, not of each product.
 
 Send each shipped order to your Yotpo Reviews account, so Yotpo asks the customer
 for a review.
-
-:::caution Rolling out
-Yotpo Reviews is **not yet available** on aglyn.com-hosted workspaces. Until it is,
-no Yotpo Reviews card appears.
-:::
 
 1. In your Yotpo Reviews settings, copy the **app key** and **secret key**. These
    are not the keys of Yotpo Loyalty & Referrals, which connects under
