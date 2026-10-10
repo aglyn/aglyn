@@ -64,6 +64,7 @@ import {
   aiPageSectionNodeId,
   aiPageSectionPrompt,
   aiPageSectionSmaller,
+  aiPageSectionWithRecordImage,
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
@@ -613,6 +614,42 @@ describe('a record template’s page (AGL-3475)', () => {
   it('tells the member where the binding is saved, which the job never writes', () => {
     const record = aiPageRecordTemplate(screen.record, inventory, plan)
     expect(aiPageRecordNote(record as never)).toContain('Page Properties → Record pages')
+  })
+
+  describe('a dataset whose records carry photos (AGL-3616)', () => {
+    const pictured = { ...fixture.inventory, datasets: [{ ...inventory.datasets[0], imageField: 'photo' }] }
+    const record = aiPageRecordTemplate(screen.record, pictured, plan)
+    const section = (nodes: Record<string, unknown>): AiPageSection => ({ rootId: 'sec', nodes: nodes as unknown as NodesMap, load: null })
+    const SECTION = section({
+      sec: { componentId: 'muiBox', props: {}, nodes: ['title', 'hero', 'detail'] },
+      title: { componentId: 'muiTypography', props: { children: '{{item.name}}' } },
+      hero: { componentId: 'image', props: { src: '/starter/a.jpg', alt: '{{item.name}}' } },
+      detail: { componentId: 'image', props: { src: '/starter/b.jpg', alt: 'Detail' } },
+    })
+
+    it('knows the photo field, and asks the page to show it as its main Image', () => {
+      expect(record?.imageField).toBe('photo')
+      expect(aiPageSectionPrompt({ job, plan, screen, index: 0, maxElements: 23, record })).toContain(
+        "Each record's photo is {{item.photo}}: the src of the page's main Image.",
+      )
+      // A dataset with no photos is asked nothing of one.
+      expect(aiPageSectionPrompt({ job, plan, screen, index: 0, maxElements: 23, record: aiPageRecordTemplate(screen.record, inventory, plan) })).not.toContain(
+        "record's photo",
+      )
+    })
+
+    it('shows the record’s photo in the section’s first Image, once a page', () => {
+      const bound = aiPageSectionWithRecordImage(SECTION, aiEmptyPage(), record)
+      const nodes = bound.nodes as unknown as Record<string, { props: Record<string, unknown> }>
+      expect(nodes['hero'].props).toEqual({ src: '{{item.photo}}', alt: '{{item.name}}' })
+      expect(nodes['detail'].props['src']).toBe('/starter/b.jpg')
+      // A page already showing it, a dataset with no photos, and a section with no Image are left as they came.
+      const page = { ...aiEmptyPage(), shown: { componentId: 'image', props: { src: '{{item.photo}}' } } } as unknown as NodesMap
+      expect(aiPageSectionWithRecordImage(SECTION, page, record)).toBe(SECTION)
+      expect(aiPageSectionWithRecordImage(SECTION, aiEmptyPage(), aiPageRecordTemplate(screen.record, inventory, plan))).toBe(SECTION)
+      const words = section({ sec: { componentId: 'muiBox', props: {}, nodes: ['title'] }, title: { componentId: 'muiTypography', props: {} } })
+      expect(aiPageSectionWithRecordImage(words, aiEmptyPage(), record)).toBe(words)
+    })
   })
 })
 

@@ -148,6 +148,8 @@ export interface AiPageRecordTemplate {
   name: string
   base: string
   fields: Array<{ id: string; name: string }>
+  /** The field holding each record's photo, where the dataset has one (AGL-3616). */
+  imageField?: string
 }
 
 /** The record template a plan screen is, read against the site's datasets; null for a page that is one page. */
@@ -164,6 +166,7 @@ export function aiPageRecordTemplate(
       name: row.name,
       base: record.base,
       fields: row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name })),
+      ...(row.imageField ? { imageField: row.imageField } : {}),
     }
   }
   const created = aiPlanCreateFor(plan, record.dataset)
@@ -188,7 +191,42 @@ export function aiPageRecordLine(template: AiPageRecordTemplate): string {
         .map((field) => (field.name === field.id ? `{{item.${field.id}}}` : `{{item.${field.id}}} (${field.name})`))
         .join(', ')}.`
     : ''
-  return `This page is the record template of the dataset "${template.name}": it is served once per record, at /${template.base}/<record address>. Write what differs from one record to the next as {{item.<field>}}, never one record's copy, and write out what every record page shares.${fields}`
+  // A record's photo is a picture's address, never its words (AGL-3616).
+  const photo = template.imageField ? ` Each record's photo is {{item.${template.imageField}}}: the src of the page's main Image.` : ''
+  return `This page is the record template of the dataset "${template.name}": it is served once per record, at /${template.base}/<record address>. Write what differs from one record to the next as {{item.<field>}}, never one record's copy, and write out what every record page shares.${fields}${photo}`
+}
+
+/**
+ * A record template's section with the record's own photo (AGL-3616): where
+ * the dataset keeps one and the page shows it nowhere yet, the section's
+ * first Image that names no record's photo shows `{{item.<photo field>}}`,
+ * so each record's page leads with its piece, its dish, its person, as its
+ * card on the list does. Any other section, and a page already showing it,
+ * is returned as it came. Pure.
+ */
+export function aiPageSectionWithRecordImage(
+  section: AiPageSection,
+  page: NodesMap,
+  template: AiPageRecordTemplate | null,
+): AiPageSection {
+  const field = template?.imageField
+  if (!field) return section
+  const token = `{{item.${field}}}`
+  const showsIt = (nodes: NodesMap) =>
+    Object.values(nodes as unknown as Record<string, { componentId?: unknown; props?: Record<string, unknown> }>).some(
+      (node) => node?.componentId === 'image' && node.props?.['src'] === token,
+    )
+  if (showsIt(page) || showsIt(section.nodes)) return section
+  const first = walkTree({ rootId: section.rootId, nodes: section.nodes as unknown as Record<string, AiDoctrineNode> }).find(
+    ({ node }) => node.componentId === 'image',
+  )
+  if (!first) return section
+  const node = (section.nodes as unknown as Record<string, Record<string, unknown>>)[first.id]
+  const props = isRecord(node['props']) ? node['props'] : {}
+  return {
+    ...section,
+    nodes: { ...section.nodes, [first.id]: { ...node, props: { ...props, src: token } } } as unknown as NodesMap,
+  }
 }
 
 /**

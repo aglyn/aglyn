@@ -36,7 +36,16 @@ import {
   type AiLayoutListingField,
   type AiLayoutListingScreen,
 } from '../layout-language/ai-layout-listings'
+import {
+  aiLayoutStarterPhotos,
+  type AiLayoutPicturePhoto,
+  type AiLayoutPictureSlot,
+} from '../layout-language/ai-layout-pictures'
+import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJobAdmissionContext } from './ai-job-admission'
+import { aiOriginJobId } from './ai-job-draft-ids'
+import { aiSiteProductPhotoSrc } from './ai-job-site-content'
+import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
 import { AI_DATASET_DRAFT_RESOURCE } from './ai-build-unit-outcome'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
@@ -66,10 +75,20 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    has: the member's role and `data.manage`, `release_data_store`,
  *    `dataStore` (Starter and up), `datasetsPerOrg` counted inside the create,
  *    `recordsPerDataset` and the storage band.
+ *  - PICTURED where the plan lists it the way a gallery is listed (Zach,
+ *    2026-10-10: a ceramic artist's "Selected work" came back as text-only
+ *    cards, where it had been an image-led gallery): a portfolio's pieces, a
+ *    team, a menu, classes and events, and services or offerings whose
+ *    section says it shows them in pictures (`aiSiteDatasetPicturesOf`). Such
+ *    a dataset gets an Image field, and each record a stock photo of its own
+ *    name in the site's craft, copied into the site's library — never one the
+ *    job already placed, else a starter photo — searched in code, so it
+ *    costs no credits (`aiSiteDatasetRecordPhotos`).
  *  - LISTED by the pages built after it: each section naming it repeats over
  *    the dataset (`aiSiteDatasetListings`, a `records` listing the layout
- *    compiler draws), and a page the plan made its record template binds its
- *    fields by id and keeps the address field the writer added.
+ *    compiler draws, its card led by the record's photo where it has one),
+ *    and a page the plan made its record template binds its fields by id,
+ *    its photo the record's, and keeps the address field the writer added.
  *
  * Where datasets cannot be created — the Free taste, Starter's two used up,
  * the data store not released — the plan is told so and creates none, so its
@@ -101,6 +120,52 @@ export interface AiSiteDatasetInput {
    * name, with that form's planned fields; absent where no form does.
    */
   forForm?: { name: string; fields: string[] }
+  /**
+   * Whether its records carry a photo, and of what (AGL-3616): `things` for a
+   * portfolio's pieces, a menu, classes; `people` for a team. Absent for a
+   * list a visitor reads rather than looks at: questions, steps, hours.
+   */
+  pictures?: AiSiteDatasetPictures
+}
+
+/** What a dataset's records are pictured as: things or people. */
+export type AiSiteDatasetPictures = 'things' | 'people'
+
+/** A list of questions, voices or plain facts: read, never pictured. */
+const READ_ONLY_LIST =
+  /\b(faqs?|questions?|q ?& ?a|answers?|testimonials?|reviews?|quotes?|voices|hours|opening|steps?|process|policies|policy|terms|stats?|numbers|figures|milestones|timeline|values|benefits|reasons|features|requirements|checklist|ingredients|donations?|needs|partners|sponsors|supporters|roles|positions|jobs|openings)\b/i
+/** A list of people: its photos are of the business's people. */
+const PEOPLE_LIST =
+  /\b(team|staff|people|crew|instructors?|teachers?|tutors?|stylists?|barbers?|therapists?|coaches?|trainers?|chefs?|doctors?|dentists?|hygienists?|practitioners?|artists?|musicians?|performers?|speakers?|founders?|members?)\b/i
+/** A list a visitor looks at before reading: pictured wherever it is listed. */
+const PICTURED_LIST =
+  /\b(portfolio|pieces?|works?|projects?|gallery|galleries|collections?|series|menus?|dishes|plates|drinks|cocktails|wines?|beers?|coffees?|pastries|cakes|products?|items|events?|classes|class|workshops?|courses?|retreats?|tours?|trips?|adventures?|experiences?|rooms?|suites?|cabins?|properties|listings|homes|venues?|spaces?|recipes?|artworks?|paintings?|prints?|photos?|photographs?|designs?|commissions?|builds?|vehicles?|animals?|pets?|plants?|flowers?|bouquets?|arrangements?|case studies)\b/i
+/** A section that says it shows its items in pictures: a gallery, a grid of photos, tiles. */
+const PICTURED_SECTION =
+  /\b(gallery|galleries|grid|images?|photos?|photographs?|pictures?|lightbox|portfolio|showcase|tiles?|visuals?|lookbook|carousel|slideshow|mosaic|thumbnails?)\b/i
+
+/**
+ * Whether a dataset's records carry a photo, read off the plan (AGL-3616):
+ * its name and the names of the sections that list it. Questions, voices and
+ * plain facts never; people as people; a list a visitor looks at — pieces,
+ * dishes, classes, events, rooms — always; any other list (services,
+ * offerings, programs) only where a section that lists it says it shows them
+ * in pictures, or names one of those. A dataset no page lists is not
+ * pictured. Pure.
+ */
+export function aiSiteDatasetPicturesOf(
+  dataset: Pick<AiBuildPlanCreate, 'name'>,
+  sections: readonly string[],
+): AiSiteDatasetPictures | null {
+  if (!sections.length) return null
+  const own = dataset.name
+  if (READ_ONLY_LIST.test(own)) return null
+  if (PEOPLE_LIST.test(own)) return 'people'
+  if (PICTURED_LIST.test(own)) return 'things'
+  if (sections.some((section) => READ_ONLY_LIST.test(section) && !PICTURED_SECTION.test(section))) return null
+  if (sections.some((section) => PEOPLE_LIST.test(section))) return 'people'
+  if (sections.some((section) => PICTURED_LIST.test(section) || PICTURED_SECTION.test(section))) return 'things'
+  return null
 }
 
 /** What a dataset row says when its design could not be written: our failure, refunded. */
@@ -145,18 +210,23 @@ export function aiSiteDatasetInputOf(
   create: readonly AiBuildPlanCreate[] = [],
 ): AiSiteDatasetInput {
   const shownIn: string[] = []
+  const sectionNames: string[] = []
   for (const screen of screens) {
     for (const section of screen.sections) {
       if (!section.uses.some((ref) => namesDataset(ref, dataset.name))) continue
       shownIn.push(`${screen.title} › ${section.name}${section.items ? ` (${section.items} items)` : ''}`)
+      sectionNames.push(section.name)
     }
   }
   const recordPages = screens.some((screen) => !!screen.record && namesDataset(screen.record.dataset, dataset.name))
   const form = create.find((entry) => entry.kind === 'form' && !!entry.writesTo && namesDataset(entry.writesTo, dataset.name))
+  // A form's dataset holds its submissions: nobody's photo.
+  const pictures = form ? null : aiSiteDatasetPicturesOf(dataset, sectionNames)
   return {
     shownIn: shownIn.slice(0, 8),
     recordPages,
     ...(form ? { forForm: { name: form.name, fields: form.fields.slice(0, AI_SITE_FORM_DATASET_FIELDS_MAX) } } : {}),
+    ...(pictures ? { pictures } : {}),
   }
 }
 
@@ -180,6 +250,7 @@ function datasetInputOf(job: Pick<AiJob, 'inputs'>): AiSiteDatasetInput {
           },
         }
       : {}),
+    ...(raw.pictures === 'things' || raw.pictures === 'people' ? { pictures: raw.pictures } : {}),
   }
 }
 
@@ -234,9 +305,123 @@ export function aiSiteFormDatasetNote(form: string): string {
 
 const limitReview = (message: string) => ({ reason: 'limit' as const, message, findings: [] })
 
+/** The wall clock a dataset's photos may take inside its pass: the 20 seconds a page's pictures had (AGL-3660). */
+export const AI_SITE_DATASET_PHOTOS_BUDGET_MS = 20_000
+
+/** The field a pictured dataset's photo is kept in, where the plan gave it none. */
+export const AI_SITE_DATASET_IMAGE_FIELD = 'Image'
+
+/** A planned field that already names a record's photo. */
+const IMAGE_FIELD_NAME =
+  /^(?:main |cover |hero |featured? )?(?:image|photo|picture|photograph|thumbnail|headshot|portrait|cover)s?$/i
+
+/** One record's photo: the address its Image shows, and the library asset placed, which no page shows again. */
+export interface AiSiteDatasetRecordPhoto {
+  /** The media library's CDN path, or a starter's site path; `null` for none. */
+  src: string | null
+  /** The `media:` reference of the stock photo placed, or `null` for a starter. */
+  placed: string | null
+}
+
+/**
+ * A photo for each record of a pictured dataset (AGL-3616), in order: a stock
+ * photo of the record's own name, in the site's craft ("ceramic speckled
+ * serving bowl"), copied into the site's library, where the deployment has a
+ * stock library — never twice in the dataset nor one another part of the job
+ * placed, inside {@link AI_SITE_DATASET_PHOTOS_BUDGET_MS} — else a starter
+ * photo, as a page's empty picture takes one. A team is searched as the
+ * business's people. The photo is kept as the asset's CDN path, the form a
+ * product keeps (`aiSiteProductPhotoSrc`), so a replace in the library still
+ * reaches it. No AI model is asked, so no credits; never throws.
+ */
+export async function aiSiteDatasetRecordPhotos(input: {
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  /** The dataset, as the plan named it. */
+  name: string
+  /** Each record's name, by position. */
+  names: readonly string[]
+  pictures: AiSiteDatasetPictures
+  signal?: AbortSignal
+  stockPhotos?: typeof aiLayoutStockPhotoSource
+}): Promise<AiSiteDatasetRecordPhoto[]> {
+  const { job } = input
+  if (!input.names.length || !job.hostId) return input.names.map(() => ({ src: null, placed: null }))
+  const people = input.pictures === 'people'
+  const slots: AiLayoutPictureSlot[] = input.names.map((name, index) => ({
+    imageId: `record${index}`,
+    frameId: null,
+    iconId: null,
+    alt: name.trim() || input.name,
+    // The record card's own shape: a team's portraits stand, pieces sit wide.
+    aspect: people ? 4 / 5 : 4 / 3,
+    sectionIndex: 0,
+    role: people ? ('about' as const) : ('gallery' as const),
+  }))
+  const seed = `${job.$id}:records`
+  let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
+  try {
+    const source = (input.stockPhotos ?? aiLayoutStockPhotoSource)(
+      {
+        hostId: job.hostId,
+        uid: job.createdBy,
+        seed,
+        business: aiSiteWords(job.inputs).about || job.brief,
+        sectionNames: [input.name],
+        jobId: aiOriginJobId(job),
+        // Each record may try its name, its object and the site's world.
+        searches: slots.length * 3,
+        ...(input.signal ? { signal: input.signal } : {}),
+      },
+      { budgetMs: AI_SITE_DATASET_PHOTOS_BUDGET_MS },
+    )
+    if (source) found = await source(slots)
+  } catch (error) {
+    console.warn('ai site dataset: the stock photos failed; starter photos fill them', { error: String(error) })
+  }
+  const starters = aiLayoutStarterPhotos(slots, seed)
+  const hostId = job.hostId
+  return slots.map((_slot, index) => {
+    const stock = aiSiteProductPhotoSrc(found[index]?.src, hostId)
+    if (stock) return { src: stock, placed: found[index]?.src ?? null }
+    return { src: aiSiteProductPhotoSrc(starters[index]?.src, hostId), placed: null }
+  })
+}
+
+/**
+ * A designed dataset's content with its records' photos (AGL-3616): the
+ * planned field that names a photo ("Image", "Photo") becomes the data
+ * plugin's `image` field, else one called "Image" is added after the others,
+ * and each record holds its photo there; a record with none holds nothing.
+ * Pure.
+ */
+export function aiSiteDatasetContentWithPhotos(
+  content: Record<string, unknown>,
+  photos: ReadonlyArray<string | null>,
+): Record<string, unknown> {
+  const fields = (Array.isArray(content['fields']) ? content['fields'] : []) as Array<{ name: string; type?: string }>
+  const named = fields.find((field) => IMAGE_FIELD_NAME.test(str(field.name)))
+  const fieldName = named ? named.name : AI_SITE_DATASET_IMAGE_FIELD
+  const nextFields = named
+    ? fields.map((field) => (field === named ? { ...field, type: 'image' } : field))
+    : [...fields, { name: AI_SITE_DATASET_IMAGE_FIELD, type: 'image' }]
+  const records = (Array.isArray(content['records']) ? content['records'] : []) as Array<Record<string, unknown>>
+  return {
+    ...content,
+    fields: nextFields,
+    records: records.map((record, index) => {
+      const next = { ...record }
+      delete next[fieldName]
+      const photo = photos[index]
+      return photo ? { ...next, [fieldName]: photo } : next
+    }),
+  }
+}
+
 export interface AiSiteDatasetRunnerDeps {
   generate?: typeof generateAiDataset
   writerFor?: typeof pluginResourceDraftWriter
+  /** Where a pictured dataset's photos come from; the stock library, else the starters, otherwise. */
+  photos?: typeof aiSiteDatasetRecordPhotos
 }
 
 /** The fields and record names a written dataset reports, as its output's proposal keeps them. */
@@ -245,6 +430,10 @@ interface AiSiteDatasetProposal {
   /** Each record's name: its first field's value. */
   recordNames: string[]
   addressField: string | null
+  /** The field each record's photo is in, where it has one (AGL-3616). */
+  imageField?: string | null
+  /** The library photos its records show (`media:` references), which no page places again. */
+  photos?: string[]
 }
 
 function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposal {
@@ -255,6 +444,8 @@ function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposa
       : [],
     recordNames: Array.isArray(raw.recordNames) ? raw.recordNames.map(str).filter(Boolean).slice(0, 12) : [],
     addressField: str(raw.addressField) || null,
+    imageField: str(raw.imageField) || null,
+    photos: Array.isArray(raw.photos) ? raw.photos.map(str).filter((src) => src.startsWith('media:')).slice(0, 24) : [],
   }
 }
 
@@ -267,6 +458,7 @@ function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposa
 export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): AiJobStepRunner {
   const generate = deps.generate ?? generateAiDataset
   const writerFor = deps.writerFor ?? pluginResourceDraftWriter
+  const photosFor = deps.photos ?? aiSiteDatasetRecordPhotos
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore, signal } = context
     const model = context.modelFor?.(AI_DATASET_STEP) ?? aiModelForStep(AI_DATASET_STEP)
@@ -290,8 +482,13 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     // Asked again under the same id: the dataset already written.
     const written = await keeper.writer.read({ hostId: job.hostId, id: job.$id })
     if (written) {
-      const facts = written.facts as { fields?: AiLayoutListingField[]; addressField?: string | null }
-      const again = output(written.id, written.name || creation.name, { fields: facts.fields ?? [], recordNames: [], addressField: facts.addressField ?? null }, 0)
+      const facts = written.facts as { fields?: AiLayoutListingField[]; addressField?: string | null; imageField?: string | null }
+      const again = output(
+        written.id,
+        written.name || creation.name,
+        { fields: facts.fields ?? [], recordNames: [], addressField: facts.addressField ?? null, imageField: facts.imageField ?? null },
+        0,
+      )
       return aiUnspentOutcome(model, {
         outputs: [input.forForm ? { ...again, note: aiSiteFormDatasetNote(input.forForm.name) } : again],
       })
@@ -344,7 +541,21 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     const spent = aiGenerationSpent(generation)
     if (generation.status === 'refused') return { ...spent, refused: true }
     if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
-    const content = aiDatasetDraftContent(creation.name, generation.value, { recordPages: input.recordPages })
+    const designed = aiDatasetDraftContent(creation.name, generation.value, { recordPages: input.recordPages })
+    // A list a visitor looks at keeps its records' photos (AGL-3616): searched
+    // in code, never asked of the model, so they cost no credits.
+    const photos = input.pictures
+      ? await photosFor({
+          job,
+          name: creation.name,
+          names: generation.value.records.map((values) => values[0] ?? ''),
+          pictures: input.pictures,
+          ...(signal ? { signal } : {}),
+        }).catch(() => [] as AiSiteDatasetRecordPhoto[])
+      : []
+    const content = input.pictures
+      ? aiSiteDatasetContentWithPhotos(designed, generation.value.records.map((_values, index) => photos[index]?.src ?? null))
+      : designed
     // The data plugin's own rules, before anything is written: content we
     // made that its model refuses is our failure, refunded.
     const checked = keeper.writer.check(content, { hostId: job.hostId })
@@ -367,11 +578,19 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       // The allowance, the role, the plan or the flag: the workspace's to change.
       return { ...spent, review: limitReview(result.error) }
     }
-    const facts = result.facts as { fields?: AiLayoutListingField[]; records?: number; addressField?: string | null }
+    const facts = result.facts as {
+      fields?: AiLayoutListingField[]
+      records?: number
+      addressField?: string | null
+      imageField?: string | null
+    }
+    const placed = photos.flatMap((photo) => (photo.placed ? [photo.placed] : []))
     const proposal: AiSiteDatasetProposal = {
       fields: facts.fields ?? [],
       recordNames: generation.value.records.map((values) => values[0] ?? '').filter(Boolean).slice(0, 12),
       addressField: facts.addressField ?? null,
+      ...(facts.imageField ? { imageField: facts.imageField } : {}),
+      ...(placed.length ? { photos: placed } : {}),
     }
     return { ...spent, outputs: [output(result.id, result.name, proposal, facts.records ?? generation.value.records.length)] }
   }
@@ -440,7 +659,7 @@ export async function aiSitePlanDatasetCapability(
  * site's inventory when the page is designed (`aiLayoutListingsWithDatasets`).
  */
 export function aiDatasetListingsOf(
-  datasets: ReadonlyArray<{ id: string; name: string; records?: string[]; fields?: AiLayoutListingField[] }>,
+  datasets: ReadonlyArray<{ id: string; name: string; records?: string[]; fields?: AiLayoutListingField[]; imageField?: string | null }>,
   screens: readonly AiLayoutListingScreen[],
 ): AiLayoutListing[] {
   return datasets.flatMap((dataset) => {
@@ -454,6 +673,8 @@ export function aiDatasetListingsOf(
         records: dataset.records ?? [],
         datasetId: dataset.id,
         ...(dataset.fields?.length ? { fields: dataset.fields } : {}),
+        // Its card leads with the record's photo (AGL-3616).
+        ...(dataset.imageField ? { imageField: dataset.imageField } : {}),
         placements,
       },
     ]
@@ -486,12 +707,25 @@ export function aiSiteDatasetListings(input: {
         // Placed by the name the plan's sections gave it.
         name: dataset.name,
         records: proposal.recordNames,
-        // The address field is the record page's, never a card's words.
-        fields: proposal.fields.filter((field) => field.id !== proposal.addressField),
+        // The address field is the record page's, never a card's words; the
+        // photo is the card's picture, never its words (AGL-3616).
+        fields: proposal.fields.filter((field) => field.id !== proposal.addressField && field.id !== proposal.imageField),
+        imageField: proposal.imageField ?? null,
       },
     ]
   })
   return aiDatasetListingsOf(made, input.screens)
+}
+
+/** The library photos the site's datasets' records show (AGL-3616), which a page does not place again. */
+export function aiSiteDatasetPlacedPhotos(outputs: readonly AiJobOutput[]): string[] {
+  return [
+    ...new Set(
+      outputs
+        .filter((output) => output.resource === 'draft' && output.draftResource === AI_SITE_DATASET_RESOURCE)
+        .flatMap((output) => proposalOf(output).photos ?? []),
+    ),
+  ]
 }
 
 /** What a page is told about the datasets built before it. */

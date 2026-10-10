@@ -252,9 +252,23 @@ is a decision about the account, not something to build.
   without it and say so, and its record page is skipped.
 - **Estimates.** A dataset is one pass, counted in the plan's estimate and
   range like a form. A build's `dataset` item is planner-filled and costs 0.
-- **Not yet.** Records carry no photos (a portfolio's pieces are words only),
-  and listing cards do not link record pages until the member saves the
-  binding.
+- **Photos.** A list a visitor looks at before reading keeps its records'
+  photos (2026-10-10: beta.239's ceramics portfolio listed "Selected work"
+  as text-only cards). Read off the plan (`aiSiteDatasetPicturesOf`): pieces,
+  work, menus, classes, events, rooms always; a team as people; services or
+  offerings only where a section that lists them says pictures (a gallery,
+  photos, tiles) or names one of those; questions, testimonials, roles and
+  form datasets never. Such a dataset gets the data plugin's Image field
+  (`image`, text storage, a photo address only), and each record a stock
+  photo of its own name in the site's craft, through the page pictures'
+  search and ranking, copied into the site's library as its CDN path, inside
+  20 seconds, never one the job already placed, else a starter. No model call,
+  so no credits; estimates unchanged. The listing's card leads with
+  `{{item.<image>}}` (a lightbox on a portfolio or photography site), the
+  pages after it never place those photos again (`stockPhotoAvoid`), and a
+  record template's first Image shows the record's photo.
+- **Not yet.** Listing cards do not link record pages until the member saves
+  the binding.
 
 ## Forms that write to a dataset
 

@@ -134,6 +134,13 @@ export const AI_LAYOUT_STOCK_MAX_BYTES = 3 * 1024 * 1024
  */
 export const AI_STOCK_PHOTO_PAGES_INPUT = 'stockPhotoPages'
 
+/**
+ * The unit job input naming library photos (`media:` references) another
+ * part of the job already shows outside its pages — a dataset's records
+ * (AGL-3616) — which a page does not place again.
+ */
+export const AI_STOCK_PHOTO_AVOID_INPUT = 'stockPhotoAvoid'
+
 const words = (list: string) => new Set(list.trim().split(/\s+/))
 
 /** Words that carry no subject. */

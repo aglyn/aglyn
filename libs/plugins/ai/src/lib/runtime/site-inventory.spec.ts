@@ -236,6 +236,15 @@ describe('readSiteInventory — what is listed', () => {
       fields: ['name', 'role'],
       visibleTo: [`host:${HOST}`],
     })
+    // A dataset whose records carry photos (AGL-3616): its Image field rides `text`.
+    docs.set(`orgs/${ORG}/datasets/ds-work`, {
+      displayName: 'Work',
+      model: {
+        order: ['title', 'image'],
+        fields: { title: { name: 'Title', type: 'text' }, image: { name: 'Image', type: 'text', customType: 'image' } },
+      },
+      visibleTo: [`host:${HOST}`],
+    })
     docs.set(`orgs/${ORG}/datasets/ds-other`, {
       displayName: 'Elsewhere',
       fields: ['x'],
@@ -262,7 +271,10 @@ describe('readSiteInventory — what is listed', () => {
       templates: [{ id: 'tpl-1', name: 'Service page', kind: 'page' }],
       forms: [{ id: 'frm-live', name: 'contact', fields: ['email', 'message'] }],
       // A v1 dataset's model is derived by the core reader, which names the fields for display.
-      datasets: [{ id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] }],
+      datasets: [
+        { id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] },
+        { id: 'ds-work', name: 'Work', fields: ['Title', 'Image'], fieldIds: ['title', 'image'], imageField: 'image' },
+      ],
       collections: [{ id: 'col-blog', name: 'Blog', slug: 'blog' }],
       screens: [
         { id: 'scr-entry', name: 'Post', slug: 'post', layoutId: null, template: true },

@@ -42,6 +42,7 @@ import { checkDatasetQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { DATASET_IMAGE_FIELD, DATASET_IMAGE_FIELD_TYPE, isDatasetImageValue } from '../model/dataset-image-field'
 import { validateDocument, type DatasetModel } from '../model/dataset-models'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE } from '../record-pages/record-pages'
 import {
@@ -207,7 +208,7 @@ describe('reading what a caller sends', () => {
     })
     expect(read).toEqual({
       ok: false,
-      problems: ['The field "Price" is one of text, number, integer, boolean, list'],
+      problems: ['The field "Price" is one of text, number, integer, boolean, list, image'],
     })
     const values = readDatasetDraftContent({
       name: 'Menu',
@@ -246,8 +247,41 @@ describe('reading what a caller sends', () => {
         ],
         records: 1,
         addressField: null,
+        imageField: null,
       },
     })
+  })
+
+  it('keeps a record’s photo in an image field, as a photo address only (AGL-3616)', () => {
+    const read = readDatasetDraftContent({
+      name: 'Portfolio pieces',
+      fields: [{ name: 'Title' }, { name: 'Image', type: 'image' }],
+      records: [
+        { Title: 'Speckled serving bowl', Image: '/api/media/cdn/host-1/m-1' },
+        { Title: 'Tall bud vase', Image: 'https://images.example.com/vase.jpg' },
+        { Title: 'Nesting bowls' },
+      ],
+    })
+    expect(read.ok).toBe(true)
+    if (read.ok !== true) return
+    expect(read.value.model.fields['image']).toEqual({ name: 'Image', type: 'text', customType: DATASET_IMAGE_FIELD_TYPE })
+    expect(read.value.records.map((values) => values['image'])).toEqual([
+      '/api/media/cdn/host-1/m-1',
+      'https://images.example.com/vase.jpg',
+      undefined,
+    ])
+    expect(checkDatasetDraftContent({ name: 'Pieces', fields: [{ name: 'Title' }, { name: 'Image', type: 'image' }] })).toMatchObject({
+      ok: true,
+      facts: { imageField: 'image', fields: [{ id: 'title' }, { id: 'image', name: 'Image', type: 'text' }] },
+    })
+    for (const bad of ['a bowl on a shelf', 'javascript:alert(1)', 'http://example.com/a.jpg', '//evil.example/a.jpg']) {
+      const refused = readDatasetDraftContent({ name: 'Pieces', fields: [{ name: 'Title' }, { name: 'Image', type: 'image' }], records: [{ Title: 'Bowl', Image: bad }] })
+      expect(refused).toEqual({ ok: false, problems: ['Record 1: Image is not a photo from the media library or an https link'] })
+    }
+    // A page address never fills from a photo.
+    expect(
+      readDatasetDraftContent({ name: 'Pieces', fields: [{ name: 'Image', type: 'image' }], pageAddressFrom: 'Image' }).ok,
+    ).toBe(false)
   })
 })
 
@@ -331,5 +365,19 @@ describe('the dataset writer', () => {
   it('is the data plugin’s writer for the `dataset` resource', () => {
     registerDatasetDraftWriter()
     expect(pluginResourceDraftWriter(DATASET_DRAFT_RESOURCE)?.pluginId).toBe('data')
+  })
+})
+
+describe('the Image field type (AGL-3616)', () => {
+  it('takes a photo the site’s Image shows, and nothing else', () => {
+    for (const ok of ['/api/media/cdn/host-1/m-1', 'media:host-1/m-1', 'media:host-1/m-1@abc123', 'https://images.example.com/a.jpg', '/starter/photos/clay.jpg']) {
+      expect(isDatasetImageValue(ok)).toBe(true)
+      expect(DATASET_IMAGE_FIELD.validate?.(ok)).toBeNull()
+    }
+    for (const bad of ['', 'a bowl', 'http://example.com/a.jpg', '//example.com/a.jpg', 'media:../x', '/a b.jpg', 'data:image/png;base64,AAAA', 7]) {
+      expect(isDatasetImageValue(bad)).toBe(false)
+    }
+    expect(DATASET_IMAGE_FIELD.baseType).toBe('text')
+    expect(DATASET_IMAGE_FIELD.name).toBe(DATASET_IMAGE_FIELD_TYPE)
   })
 })

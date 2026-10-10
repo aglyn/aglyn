@@ -111,6 +111,7 @@ import {
 } from './ai-job-site-content'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
+import { AI_STOCK_PHOTO_AVOID_INPUT } from './ai-layout-stock-photos'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import {
   AI_JOB_STEP_MAX_PASSES,
@@ -1643,7 +1644,7 @@ describe('a site’s datasets (AGL-3616)', () => {
     const outcome = await stepWith({ page: pageRunner() }, { dataset, datasetRefusal })(context(job))
     expect(datasetRefusal).toHaveBeenCalledWith(expect.objectContaining({ job: expect.objectContaining({ $id: 'job-1' }) }))
     expect(seen.map((one) => one.$id)).toEqual(['drftMenu01'])
-    expect(seen[0].inputs['siteDataset']).toEqual({ shownIn: ['Home › From the menu (3 items)'], recordPages: true })
+    expect(seen[0].inputs['siteDataset']).toEqual({ shownIn: ['Home › From the menu (3 items)'], recordPages: true, pictures: 'things' })
     expect(seen[0].brief).toContain('Build the dataset “Menu”: the dishes the pages list')
     expect(outcome.item).toMatchObject({ slot: 'd0', status: 'succeeded', outputs: ['drftMenu01'] })
   })
@@ -1677,6 +1678,32 @@ describe('a site’s datasets (AGL-3616)', () => {
     // The record template binds the dataset it shows by id.
     const template = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, MENU_OUTPUT] }), units.find((unit) => unit.slot === 'p2') as AiSiteUnit, built)
     expect(template.plan?.screens[0].record).toEqual({ dataset: 'drftMenu01', base: 'menu' })
+  })
+
+  it('hands a page the record’s photo field to lead each card with, and the photos the records show, which it never places again (AGL-3616)', () => {
+    const units = aiSiteJobUnits(plan)
+    const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
+    const built = new Map([['menu', { id: 'drftMenu01', label: 'Menu', kind: 'dataset' as const }]])
+    const pictured: AiJobOutput = {
+      ...MENU_OUTPUT,
+      proposal: {
+        fields: [
+          { id: 'dish', name: 'Dish', type: 'text' },
+          { id: 'image', name: 'Image', type: 'text' },
+        ],
+        recordNames: ['Margherita'],
+        addressField: null,
+        imageField: 'image',
+        photos: ['media:host-1/m1', 'media:host-1/m2'],
+      },
+    }
+    const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, pictured] }), home, built)
+    expect(aiLayoutListingsOf(job.inputs)).toEqual([
+      expect.objectContaining({ kind: 'records', imageField: 'image', fields: [{ id: 'dish', name: 'Dish', type: 'text' }] }),
+    ])
+    expect(job.inputs[AI_STOCK_PHOTO_AVOID_INPUT]).toEqual(['media:host-1/m1', 'media:host-1/m2'])
+    // A dataset with no photos names none.
+    expect(aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, MENU_OUTPUT] }), home, built).inputs).not.toHaveProperty(AI_STOCK_PHOTO_AVOID_INPUT)
   })
 
   it('builds no record template for a dataset that was not made, and the page that lists it without it', async () => {
