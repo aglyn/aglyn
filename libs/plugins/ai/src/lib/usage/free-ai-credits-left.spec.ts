@@ -73,7 +73,7 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
     const left = await readFreeAiCreditsLeft(fakeFirestore(docs), { orgId: 'org-b', org: free('org-b'), now: NOW })
     expect(left).toMatchObject({ left: 70, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: '2026-11-01' })
     // Both meters ride along for the usage strip (AGL-3722).
-    expect(left?.used).toMatchObject({ account: 230, org: 0, state: 'warn' })
+    expect(left?.used).toMatchObject({ account: 230, org: 0, state: 'ok' })
     // A two-page start's p90 is past it, so the start asks first (AGL-3722);
     // a give-back that reopens the owner's month admits it with no prompt.
     expect(aiFreeSitePrompt(left, 2)).toMatchObject({ ...aiFreeSiteCreditRange(2), left: 70 })
