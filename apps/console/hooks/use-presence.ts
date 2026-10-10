@@ -32,6 +32,7 @@ import {
   appCheckSiteKey,
   authEmulatorUrl,
   databaseEmulatorHost,
+  keepAppCheckRecaptchaContainer,
 } from '@aglyn/tenant-feature-instance'
 import { useUser, useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
@@ -1083,6 +1084,8 @@ function startPresenceAppCheck(app: FirebaseApp): void {
       provider: new ReCaptchaV3Provider(siteKey),
       isTokenAutoRefreshEnabled: true,
     })
+    // Its own `fire_app_check_<name>` div, exposed to the same body clears.
+    keepAppCheckRecaptchaContainer(app.name)
   } catch (error) {
     console.warn('[presence] app check did not start', error)
   }
