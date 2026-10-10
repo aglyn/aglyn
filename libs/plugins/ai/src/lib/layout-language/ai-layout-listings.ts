@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { aiStorefrontSays } from './ai-layout-storefront'
+
 /**
  * A SITE'S OWN RECORDS, PLACED BY THE PLATFORM (AGL-3676).
  *
@@ -45,6 +47,16 @@
  *    music site, placed EMPTY: its "add your tracks" state, for the owner to
  *    fill from their own media library. No job ever sources a recording, so
  *    a tracks listing has no records and the player no source.
+ *  - `reviews` — a selling store's own customer reviews, through the commerce
+ *    plugin's Product reviews in its store-wide scope (`product-reviews`,
+ *    AGL-3676): approved reviews across the catalog with their star ratings.
+ *    A store that opens has none, and the element then shows nothing at all
+ *    on the published page, so no review is ever written for a shopper who
+ *    did not leave one (the FTC's fake-review rule; rule 14's "never invent
+ *    a customer").
+ *  - `signup` — a selling store's newsletter sign-up, through the commerce
+ *    plugin's Newsletter signup (`newsletter-signup`, AGL-3676): a consented
+ *    email field into the store's contacts, where a section says newsletter.
  *
  * The elements are named by their persisted ids, as the form binding names
  * `form`: a plugin never imports another's internals, and
@@ -54,7 +66,7 @@
  * Model only: shapes and the inputs reader; the compiler draws them.
  */
 
-export type AiLayoutListingKind = 'products' | 'posts' | 'tracks'
+export type AiLayoutListingKind = 'products' | 'posts' | 'tracks' | 'reviews' | 'signup'
 
 /** How a section shows a listing: a few of its records on a page about something else, or all of them on its own page. */
 export type AiLayoutListingRole = 'featured' | 'index'
@@ -108,18 +120,29 @@ export const AI_LAYOUT_LISTING_ELEMENTS: Readonly<Record<AiLayoutListingKind, st
   products: 'product-grid',
   posts: 'collectionEntries',
   tracks: 'musicPlayer',
+  reviews: 'product-reviews',
+  signup: 'newsletter-signup',
 }
 
 /** The header's cart button: the commerce plugin's Cart in its `button` variant. */
 export const AI_LAYOUT_CART_ELEMENT = 'cart'
 
 /** The most records a featured band shows; a page of its own shows them all. */
-export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0 } as const
+export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0, reviews: 3, signup: 0 } as const
 
 const PLACEMENT_ROLES: readonly AiLayoutListingRole[] = ['featured', 'index']
-const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks']
+const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks', 'reviews', 'signup']
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/** What a visitor calls each kind's whole list, where a unit's input names none. */
+const LISTING_NAMES: Readonly<Record<AiLayoutListingKind, string>> = {
+  products: 'the shop',
+  posts: 'the blog',
+  tracks: 'the music',
+  reviews: 'the store',
+  signup: 'the newsletter',
+}
 
 /** A path on the site, as a listing's links are kept. */
 const SITE_PATH = /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
@@ -153,10 +176,11 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     listings.push({
       id: aiLayoutListingId(kind),
       kind,
-      name: text(record['name']) || (kind === 'products' ? 'the shop' : kind === 'posts' ? 'the blog' : 'the music'),
-      // A tracks listing names no records: no job sources a recording (AGL-3716).
+      name: text(record['name']) || LISTING_NAMES[kind],
+      // A tracks listing names no records: no job sources a recording (AGL-3716);
+      // nor do a store's reviews and its sign-up, which shoppers fill (AGL-3676).
       records:
-        kind === 'tracks'
+        kind !== 'products' && kind !== 'posts'
           ? []
           : (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
       ...(SITE_PATH.test(href) ? { href } : {}),
@@ -213,6 +237,35 @@ export function aiLayoutShopGridSection(sections: ReadonlyArray<{ name: string; 
   const most = Math.max(0, ...sections.map((section) => section.items))
   const byItems = most > 0 ? sections.findIndex((section) => section.items === most) : -1
   return byItems !== -1 ? byItems : sections.length > 1 ? 1 : 0
+}
+
+/**
+ * The section of a store's home its bestsellers fill (AGL-3676): the first
+ * after the hero whose name says them ("Bestsellers", "Featured candles", "New
+ * arrivals"), never one about the store's collections, its reviews or its
+ * sign-up; else the first after the hero naming products at all; else the
+ * first after the hero planned with items that is none of those. The
+ * beta.237 Willow Wick home would otherwise have listed products in its
+ * "Shop by collection" tiles.
+ */
+function aiLayoutFeaturedSection(screen: AiLayoutListingScreen): number {
+  // A section about the collections that does not also name the bestsellers.
+  const other = (name: string) =>
+    (aiStorefrontSays('collections', name) && !aiStorefrontSays('featured', name)) ||
+    aiStorefrontSays('reviews', name) ||
+    aiStorefrontSays('signup', name)
+  const first = (test: (name: string, items: number) => boolean) =>
+    screen.sections.findIndex((section, index) => index > 0 && test(section.name, section.items))
+  for (const test of [
+    (name: string) => aiStorefrontSays('featured', name) && !other(name),
+    (name: string) => PRODUCT_SECTION.test(name) && !other(name),
+    (name: string, items: number) => items > 0 && !other(name),
+    (name: string) => PRODUCT_SECTION.test(name),
+  ]) {
+    const found = first(test)
+    if (found !== -1) return found
+  }
+  return -1
 }
 
 /** A section of a shop page that only opens or closes it: "Shop intro heading", "Gift help call to action". */
@@ -274,11 +327,32 @@ export function aiLayoutListingPlacements(
     }
     return placements
   }
+  if (kind === 'reviews' || kind === 'signup') {
+    // A store's own reviews, on its home, in the section named for them; its
+    // newsletter sign-up in any page's section named for it that places no
+    // form of the plan's (AGL-3676). Neither is ever a page's opening.
+    for (const screen of screens) {
+      if (kind === 'reviews' && !isHome(screen.slug)) continue
+      place(
+        screen,
+        afterHero(
+          screen,
+          (name) => aiStorefrontSays(kind, name),
+        ),
+        kind === 'reviews' ? 'featured' : 'index',
+      )
+    }
+    return kind === 'signup'
+      ? placements.filter((placement) => {
+          const screen = screens.find((entry) => entry.id === placement.screenId)
+          return !(screen?.sections[placement.section]?.uses ?? []).some((use) => /form/i.test(use))
+        })
+      : placements
+  }
   if (kind === 'products') {
     for (const screen of screens) {
       if (isHome(screen.slug)) {
-        const named = afterHero(screen, (name) => PRODUCT_SECTION.test(name))
-        place(screen, named !== -1 ? named : afterHero(screen, (_name, items) => items > 0), 'featured')
+        place(screen, aiLayoutFeaturedSection(screen), 'featured')
         continue
       }
       if (!aiLayoutIsShopPage(screen)) continue

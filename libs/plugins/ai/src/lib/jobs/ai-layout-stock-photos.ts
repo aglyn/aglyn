@@ -141,7 +141,7 @@ const VENUES = new Set(
   (
     'studio studios shop shops store stores boutique company co workshop gallery atelier agency brand practice ' +
     'salon house collective lab market services service firm clinic center centre parlor parlour bar ' +
-    'class classes lessons school academy'
+    'class classes lessons school academy online web'
   ).split(' '),
 )
 
@@ -188,9 +188,14 @@ const CLAUSE_BREAK =
  * head of an English noun phrase is at its end).
  */
 export function aiStockBusinessWords(businessType: string): string {
+  // A verb that starts what the business does ends what it is: "a candle
+  // shop SELLING hand-poured soy candles online" is a candle shop (AGL-3676);
+  // read to its end, its words were "soy candles online", its craft "online".
   const clause = businessType
     .toLowerCase()
-    .split(/[,;:.()]|\s[-–—]\s|\b(?:in|for|near|serving|based|located|that|which|who|with|from|since|and|&)\b/)[0]
+    .split(
+      /[,;:.()]|\s[-–—]\s|\b(?:in|for|near|serving|based|located|that|which|who|with|from|since|and|&|selling|sells|sell|offering|offers|specializing|specialising|featuring)\b/,
+    )[0]
   const words = contentWords(clause ?? '')
   return words.slice(-3).join(' ')
 }
@@ -242,6 +247,45 @@ export function aiStockOrientation(aspect: number): StockPhotoOrientation {
  */
 export interface AiStockSearch extends StockPhotoSearchRequest {
   neutral?: boolean
+  /** The words its hits are scored by, where they are not the slot's own subject (a product's searches, AGL-3676). */
+  subject?: string
+  /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
+  requires?: string
+}
+
+/**
+ * A product's searches (AGL-3676), most specific first: each of its subjects
+ * — its name's noun phrase, then its photo's — with the shop's category
+ * where the phrase does not already say it ("candle gift box"), then the
+ * category alone, a plain photo of what the shop sells. Every one must find a
+ * hit naming the category, so no product is ever filled with a lifestyle shot
+ * of something else: the beta.237 Willow Wick start put a laptop and roses
+ * under "Candle Wick Trimmer" and an antique tea set under "Candle Gift Set".
+ */
+export function aiStockProductSearches(
+  slot: Pick<AiLayoutPictureSlot, 'aspect' | 'product'>,
+  craft: string,
+): AiStockSearch[] {
+  const orientation = aiStockOrientation(slot.aspect)
+  const size = orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
+  const craftStems = stems(craft)
+  const queries: Array<{ query: string; subject: string }> = []
+  for (const raw of slot.product?.subjects ?? []) {
+    const subject = aiStockSubjectWords(raw, '')
+    if (!subject) continue
+    const says = [...craftStems].every((stem) => stems(subject).has(stem))
+    queries.push({ query: craft && !says ? `${craft} ${subject}` : subject, subject })
+  }
+  if (craft) queries.push({ query: craft, subject: craft })
+  const seen = new Set<string>()
+  const searches: AiStockSearch[] = []
+  for (const entry of queries) {
+    const query = clip(entry.query)
+    if (!query || seen.has(query)) continue
+    seen.add(query)
+    searches.push({ query, orientation, ...size, subject: entry.subject, ...(craft ? { requires: craft } : {}) })
+  }
+  return searches
 }
 
 /** The searches a slot tries, in order, most specific first, each distinct. */
@@ -326,6 +370,8 @@ export interface AiStockRankOptions {
   craft?: string
   /** A hit naming none of the subject is no candidate at all. */
   strict?: boolean
+  /** A word a hit must name to be a candidate at all (AGL-3676). */
+  requires?: string
 }
 
 /**
@@ -348,6 +394,7 @@ export function aiStockRank(
       score: subject ? aiStockRelevance(photo, { subject, ...(options.craft ? { craft: options.craft } : {}) }) : 0,
     }))
     .filter((entry) => !options.strict || !subject || entry.score > 0)
+    .filter((entry) => !options.requires || aiStockRelevance(entry.photo, { subject: options.requires }) > 0)
   if (!scored.length) return []
   const turn = aiLayoutSeedNumber(seed)
   const ranked: StockPhoto[] = []
@@ -433,6 +480,8 @@ export interface AiLayoutStockPhotoSourceInput {
   jobId?: string
   /** Asset srcs or source keys the job's other pages already show. */
   avoid?: readonly string[]
+  /** The most searches this source sends; a page's own bound where absent. A store's products search more (AGL-3676). */
+  searches?: number
   signal?: AbortSignal
 }
 
@@ -482,7 +531,7 @@ export function aiLayoutStockPhotoSource(
       const key = JSON.stringify([request.query, request.orientation, request.people === true])
       const known = answers.get(key)
       if (known) return known
-      if (searches >= AI_LAYOUT_STOCK_SEARCHES_PER_PAGE) return null
+      if (searches >= (input.searches ?? AI_LAYOUT_STOCK_SEARCHES_PER_PAGE)) return null
       searches += 1
       let found: StockPhoto[]
       try {
@@ -560,7 +609,8 @@ export function aiLayoutStockPhotoSource(
       }
       const subject = aiStockSubjectWords(slot.alt, input.sectionNames[slot.sectionIndex] ?? '')
       let placed: AiLayoutPicturePhoto | null = null
-      for (const request of aiStockSearchesFor(slot, { business, subject, craft })) {
+      const requests = slot.product ? aiStockProductSearches(slot, craft) : aiStockSearchesFor(slot, { business, subject, craft })
+      for (const request of requests) {
         if (placed || signal.aborted) break
         const found = await search(request)
         if (found === null) break
@@ -572,9 +622,10 @@ export function aiLayoutStockPhotoSource(
           if (elsewhere(key)) blocked.add(key)
         }
         const ranked = aiStockRank(found, blocked, `${input.seed}:${index}:${request.query}`, {
-          subject: request.neutral ? craft || business : subject,
+          subject: request.subject ?? (request.neutral ? craft || business : subject),
           craft,
-          strict: slot.role === 'gallery' && !request.neutral,
+          strict: (slot.role === 'gallery' && !request.neutral) || !!request.requires,
+          ...(request.requires ? { requires: request.requires } : {}),
         })
         for (const photo of ranked.slice(0, AI_LAYOUT_STOCK_TRIES_PER_SEARCH)) {
           if (signal.aborted) break

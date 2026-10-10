@@ -61,7 +61,8 @@ import {
   aiSiteEmptyGalleryViolations,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
-import { aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
+import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
+import { aiStorefrontPlanScreens } from '../layout-language/ai-layout-storefront'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -276,7 +277,9 @@ export function aiPlanSiteLines(
   // left to a ceiling the outline is free to stay far under.
   const plansHome = !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))
   if (home.min > 0 && plansHome) {
-    lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${AI_SITE_HOME_BANDS}.`)
+    // A store's home is a storefront (AGL-3676): its own parts, in its own order.
+    const bands = aiSiteKindOfInputs(job.inputs)?.id === 'store' ? AI_SITE_STORE_HOME_BANDS : AI_SITE_HOME_BANDS
+    lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${bands}.`)
   }
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
   // read "at most 8" as leave to plan a home of two.
@@ -342,7 +345,28 @@ export function aiSiteThinHomeCheck(
 
 /** What a store's plan is told about its Shop page (AGL-3676). */
 export const AI_SITE_STORE_SHOP_SENTENCE =
-  'Plan a Shop page at /shop: a short intro, then a section named "Product grid", where the platform lists the store\'s real products with their photos, prices and cart, then at most one or two short sections (care, shipping, gifting help). Never plan the products, the range or its categories as cards of your own.'
+  'Plan a Shop page at /shop: a short title section, then a section named "Product grid" second, where the platform lists the store\'s real products with sort, filters, photos, prices and cart, then at most one or two short sections (care, shipping, gifting help). Never open it with a hero, and never plan the products themselves as cards of your own.'
+
+/** What a store's home is composed of (AGL-3676): a storefront's parts, in a storefront's order. */
+export const AI_SITE_STORE_HOME_BANDS =
+  'a hero that sells first, then "Bestsellers" (the platform lists the real products), "Shop by collection" with 3 or 4 items, the brand story, why buy here with 3 or 4 items, "Customer reviews" (the platform shows the store\'s real ones) and a "Newsletter sign-up" band last'
+
+/**
+ * A store plan held to a storefront (AGL-3676, `ai-layout-storefront.ts`):
+ * on a paid start its home gains the parts a shopper expects that the plan
+ * left out — bestsellers, collections, reviews, a newsletter sign-up —
+ * while the page has room; on any start its Shop page opens on its grid.
+ * Settled, never re-asked: each part has one answer, and the Free wall's
+ * home keeps the sections it planned.
+ */
+export function aiSiteStorefrontPlan<P extends Pick<AiBuildPlan, 'screens'>>(plan: P, options: { paid: boolean }): P {
+  const screens = aiStorefrontPlanScreens(plan.screens, {
+    paid: options.paid,
+    isShopPage: aiLayoutIsShopPage,
+    gridSection: aiLayoutShopGridSection,
+  })
+  return screens.every((screen, index) => screen === plan.screens[index]) ? plan : { ...plan, screens }
+}
 
 /** The code a store plan with no Shop page is re-asked under. */
 export const AI_SITE_STORE_SHOP_CODE = 'plan-store-shop-page'
@@ -966,11 +990,13 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         },
       }
     }
+    // A store's plan is a storefront's (AGL-3676): settled before it is kept and priced.
+    const answered = site && aiSiteKindOfInputs(job.inputs)?.id === 'store' ? aiSiteStorefrontPlan(result.value, { paid: !freeTaste }) : result.value
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
     const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
-      ...result.value,
+      ...answered,
       status: 'proposed',
-      labels: aiPlanLabels(result.value, inventory),
+      labels: aiPlanLabels(answered, inventory),
       // A Date the Admin SDK stores as a timestamp, like every instant the machine writes.
       proposedAt: now as unknown as AiJobPlan['proposedAt'],
       confirmedAt: null,

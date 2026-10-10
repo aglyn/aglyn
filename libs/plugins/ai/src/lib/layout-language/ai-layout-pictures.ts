@@ -58,6 +58,12 @@ export interface AiLayoutPictureSlot {
   /** The plan index of the section it sits in, or -1. */
   sectionIndex: number
   role: AiLayoutPictureRole
+  /**
+   * A product's photo (AGL-3676): what it is of, most specific first — its
+   * name, then what its photo should show — searched for with the shop's
+   * category and held to it, so a wick trimmer is never a laptop on a desk.
+   */
+  product?: { subjects: readonly string[] }
 }
 
 /** A photo a slot is filled with. */

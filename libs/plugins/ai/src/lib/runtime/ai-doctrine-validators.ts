@@ -499,12 +499,15 @@ export function detectRepeatedSubtrees(
   const index = indexShapes(tree)
   /**
    * A compiled picture card (AGL-3660): a Stack that opens with its picture,
-   * in a cell of a grid — or that cell, holding only the card.
+   * in a cell of a grid — or that cell, holding only the card. A storefront's
+   * icon column (AGL-3676), a Stack that opens with its library icon, is the
+   * compiler's the same way: no model writes an Icon on a page.
    */
   const card = (id: string | undefined): boolean => {
     const node = id === undefined ? undefined : tree.nodes[id]
     const first = node?.nodes?.[0]
-    return node?.componentId === 'muiStack' && first !== undefined && tree.nodes[first]?.componentId === 'image'
+    const opens = first === undefined ? undefined : tree.nodes[first]?.componentId
+    return node?.componentId === 'muiStack' && (opens === 'image' || opens === 'icon')
   }
   const pictureCard = (id: string): boolean => {
     const node = tree.nodes[id]

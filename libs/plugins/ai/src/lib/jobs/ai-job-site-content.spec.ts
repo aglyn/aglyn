@@ -515,6 +515,7 @@ describe('what the pages are told, and the posts going live', () => {
     expect(aiSiteContentBriefLines([product, catalog])).toEqual([
       'This store\'s products are: “Mug”.',
       'Where a page features products, feature these by their names; never name another product, and never state a price.',
+      'Where a page shows the shop by collection, group these products into two to four collections by what they are (a kind, a use or an occasion), one item each, named for the group and never for one product.',
     ])
     expect(aiSiteContentBriefLines([])).toEqual([])
   })
