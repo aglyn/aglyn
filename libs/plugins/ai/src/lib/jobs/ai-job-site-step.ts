@@ -77,7 +77,7 @@ import {
   aiLayoutSitePagesOfPlan,
 } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
-import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
+import { AI_LAYOUT_LISTINGS_INPUT, aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
@@ -113,6 +113,19 @@ import {
   runAiSiteDatasetUnit,
 } from './ai-job-site-datasets'
 import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
+import {
+  AI_SITE_STORE_PAGES_INPUT,
+  aiSiteStorePagesRefusal,
+  runAiSiteStorePagesUnit,
+  type AiSiteStorePagesInput,
+} from './ai-job-site-store-pages'
+import {
+  AI_SITE_STORE_LINKS_INPUT,
+  AI_SITE_STORE_PAGES_LABEL,
+  AI_SITE_STORE_PAGES_NOTE,
+  aiStoreFrameLinks,
+  aiStorePagesOfPlan,
+} from '../model/ai-site-store-pages'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
@@ -189,7 +202,9 @@ import {
  * page job's. The site's datasets (AGL-3616) are built after the layout and
  * before the form, which may write its submissions to one; a blog's first
  * posts and a store's first products (AGL-3676) after the form; all of them
- * before the pages, which are told what they are.
+ * before the pages, which are told what they are. A paid store's account,
+ * cart and policy pages (`store`, AGL-3676) come after its planned pages,
+ * which keep the first claim on the site's pages allowance.
  */
 export type AiSiteUnitKind =
   | 'theme'
@@ -200,6 +215,7 @@ export type AiSiteUnitKind =
   | 'posts'
   | 'products'
   | 'page'
+  | 'store'
   | 'email'
 
 export interface AiSiteUnit {
@@ -237,6 +253,8 @@ const UNIT_KINDS: Record<
   // The scaffold's own runner designs it (`ai-job-site-datasets.ts`), and the
   // data plugin's writer keeps it: a draft of another plugin's (AGL-3616).
   dataset: { jobKind: 'text', resource: 'draft' },
+  // The scaffold's own runner writes them, by code (`ai-job-site-store-pages.ts`).
+  store: { jobKind: 'text', resource: 'screen' },
 }
 
 /** The unit kind a creation is built as, where a unit builds it. */
@@ -289,7 +307,7 @@ export const AI_SITE_UNIT_EMPTY_COPY =
  * is not.
  */
 export const AI_SITE_MAX_PASSES =
-  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 1
+  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 2
 
 /**
  * The units a plan implies, in build order: the palette first, because a
@@ -344,6 +362,10 @@ export function aiSiteJobUnits(
       label: screen.title,
     })
   })
+  // A paid store's own pages (AGL-3676): outside the plan's pages, after them.
+  if (options.content === 'products') {
+    units.push({ kind: 'store', ...UNIT_KINDS.store, slot: 'store', label: AI_SITE_STORE_PAGES_LABEL })
+  }
   if (options.welcomeEmail) {
     units.push({
       kind: 'email',
@@ -716,7 +738,15 @@ export function aiSiteUnitJob(
       ...aiSiteDatasetListings({ outputs: job.outputs ?? [], datasets: aiSitePlanDatasets(plan), screens: merged.screens, delivered }),
     )
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
+    // A paid store's header links its account beside the cart, and its footer
+    // its account and policies (AGL-3676), by path: they are written after.
+    if (unit.kind === 'layout' && aiSiteAddsStorePages(job)) {
+      unitInputs[AI_SITE_STORE_LINKS_INPUT] = aiStoreFrameLinks(aiStorePagesOfPlan(merged.screens))
+    }
   }
+  // The store's own pages (AGL-3676): which to write, what their words link,
+  // and the layout they render inside.
+  if (unit.kind === 'store') unitInputs[AI_SITE_STORE_PAGES_INPUT] = aiSiteStorePagesInputOf(plan, built)
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
   if (unit.kind === 'layout' || unit.kind === 'page') {
@@ -772,6 +802,32 @@ export function aiSiteUnitJob(
           : unitInputs,
     brief: brief.join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }
+}
+
+/** What a store pages unit writes (AGL-3676): the plan's store pages, their words' links, and the layout. */
+export function aiSiteStorePagesInputOf(plan: Pick<AiJobPlan, 'screens'>, built: BuiltRefs): AiSiteStorePagesInput {
+  const pages = aiStorePagesOfPlan(plan.screens)
+  const path = (screen: AiBuildPlanScreen | undefined) =>
+    screen ? `/${screen.slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()}` : null
+  const others = plan.screens.filter((screen) => !screen.record && !aiLayoutIsHomeSlug(screen.slug))
+  return {
+    pages,
+    facts: {
+      contactPath: path(others.find((screen) => /\b(contact|get in touch|visit us)\b/i.test(`${screen.slug.replace(/-/g, ' ')} ${screen.title}`))),
+      shopPath: path(others.find((screen) => aiLayoutIsShopPage(screen))) ?? '/shop',
+      shippingPath: pages.find((page) => page.key === 'shipping')?.href ?? '/shipping-returns',
+    },
+    layoutId: aiSiteBuiltLayoutId(built),
+  }
+}
+
+/**
+ * Whether this site start adds a store's own pages (AGL-3676): its ledger
+ * owes them and has not given up on them. The ledger is written before the
+ * layout is built, so the header links the account before the page exists.
+ */
+export function aiSiteAddsStorePages(job: Pick<AiJob, 'items'>): boolean {
+  return (job.items ?? []).some((row) => row.slot === 'store' && row.status !== 'skipped' && row.status !== 'failed')
 }
 
 /**
@@ -931,6 +987,9 @@ export interface AiJobSiteStepDeps {
   products?: AiJobStepRunner
   /** Whether a part may be built for this member, before its first pass. */
   contentRefusal?: typeof aiSiteContentRefusal
+  /** The store's own pages' pass and whether they may be added here (AGL-3676); specs hand in fakes. */
+  storePages?: AiJobStepRunner
+  storePagesRefusal?: typeof aiSiteStorePagesRefusal
   /** A dataset's pass and whether one may be made here (AGL-3616); specs hand in fakes. */
   dataset?: AiJobStepRunner
   datasetRefusal?: typeof aiSiteDatasetRefusal
@@ -988,7 +1047,10 @@ export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
       .map((unit) => unit.slot)
   return units.map((unit) => ({
     slot: unit.slot,
-    op: unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' || unit.kind === 'dataset' ? unit.kind : unit.jobKind,
+    op:
+      unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' || unit.kind === 'dataset' || unit.kind === 'store'
+        ? unit.kind
+        : unit.jobKind,
     label: unit.label,
     ...(unit.creation ? { creation: unit.creation } : {}),
     ...(unit.screen ? { screen: unit.screen } : {}),
@@ -1024,10 +1086,20 @@ function aiSiteOwedUnits(
   freeTaste: boolean,
   runnerFor: typeof aiJobStepRunnerFor,
 ): AiSiteUnit[] {
+  // A start whose ledger was written before the store pages existed (AGL-3676)
+  // is not owed them: its ledger has no row for them to settle.
+  const ledgered = !job.items?.length || job.items.some((row) => row.slot === 'store')
   return aiSiteJobUnits(plan, {
     welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
     content: aiSiteContentPart(job.inputs, freeTaste),
-  }).filter((unit) => unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'dataset' || runnerFor(unit.jobKind))
+  }).filter(
+    (unit) =>
+      (unit.kind === 'store' && ledgered) ||
+      unit.kind === 'theme' ||
+      unit.kind === 'posts' ||
+      unit.kind === 'dataset' ||
+      (unit.kind !== 'store' && runnerFor(unit.jobKind)),
+  )
 }
 
 export function createAiJobSiteStep(
@@ -1039,6 +1111,7 @@ export function createAiJobSiteStep(
   const look = deps.look ?? aiRunSiteLook
   const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
   const datasetRefusal = deps.datasetRefusal ?? aiSiteDatasetRefusal
+  const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
   const publishPosts = deps.publishPosts ?? aiPublishSitePosts
   const dropCache = deps.dropCache ?? dropPluginSiteCache
   return async (context): Promise<AiJobStepOutcome> => {
@@ -1084,6 +1157,8 @@ export function createAiJobSiteStep(
         outputs: pages,
         now: context.now,
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
+        // The store's pages the header and footer link and the start did not write (AGL-3676).
+        ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
@@ -1113,12 +1188,21 @@ export function createAiJobSiteStep(
      * address, where its `{{item.*}}` would show.
      */
     const templates = new Set(units.filter((unit) => unit.kind === 'page' && unit.screen?.record).map((unit) => unit.slot))
+    /** The paths of the store's pages the frame links that are not among the pages going live (AGL-3676). */
+    const unwrittenStoreHrefs = (pages: readonly AiJobOutput[]) => {
+      const live = new Set(pages.map((page) => page.proposal?.['storePage']).filter(Boolean))
+      return aiStorePagesOfPlan(plan.screens)
+        .filter((page) => !page.planned && !live.has(page.key))
+        .map((page) => page.href)
+    }
     const builtPages = (extra: readonly AiJobOutput[] = []) => {
       const ids = new Set(
         units
           .filter(
             (unit) =>
-              unit.kind === 'page' && !templates.has(unit.slot) && aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }),
+              (unit.kind === 'page' || unit.kind === 'store') &&
+              !templates.has(unit.slot) &&
+              aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }),
           )
           .flatMap((unit) => rows.get(unit.slot)?.outputs ?? []),
       )
@@ -1138,7 +1222,9 @@ export function createAiJobSiteStep(
             ? (deps.products ?? (catalog ? createAiSiteProductsRunner({ catalog }) : undefined))
             : unit.kind === 'dataset'
               ? (deps.dataset ?? runAiSiteDatasetUnit)
-              : runnerFor(unit.jobKind)
+              : unit.kind === 'store'
+                ? (deps.storePages ?? runAiSiteStorePagesUnit)
+                : runnerFor(unit.jobKind)
     if (!runner) return { ...aiUnspentOutcome(model), ...init }
     const othersOpen = ledgerUnits.some(
       (one) => one.slot !== unit.slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }),
@@ -1184,6 +1270,15 @@ export function createAiJobSiteStep(
     if (unit.kind === 'dataset' && rows.get(unit.slot)?.status !== 'running') {
       const refusal = await datasetRefusal({ ...context, job }).catch((error: unknown) => {
         console.error('ai site dataset admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // The store's own pages ask the same (AGL-3676): a plan with a store, the
+    // commerce plugin here, and a member who may edit the site's pages.
+    if (unit.kind === 'store' && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await storePagesRefusal({ ...context, job }).catch((error: unknown) => {
+        console.error('ai site store pages admission failed', { orgId: job.orgId, jobId: job.$id, error })
         return AI_SITE_UNIT_EMPTY_COPY
       })
       if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
@@ -1264,7 +1359,12 @@ export function createAiJobSiteStep(
         outputs: outcome.outputs.map((output) => output.id),
         // A store's products are listed before they are priced (AGL-3676):
         // the row says what is left before the store sells.
-        note: unit.kind === 'products' && outcome.outputs.length ? AI_SITE_PRODUCTS_PRICE_NOTE : note,
+        note:
+          unit.kind === 'products' && outcome.outputs.length
+            ? AI_SITE_PRODUCTS_PRICE_NOTE
+            : unit.kind === 'store' && outcome.outputs.length
+              ? AI_SITE_STORE_PAGES_NOTE
+              : note,
         ...(degraded ? { degradedBy: degradation.degradedBy } : {}),
       },
       spent,
@@ -1273,12 +1373,19 @@ export function createAiJobSiteStep(
     rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: degraded ? 'degraded' : 'succeeded' })
     return finish(
       done,
-      builtPages(unit.kind === 'page' && !templates.has(unit.slot) ? outcome.outputs.filter((output) => output.resource === 'screen') : []),
+      builtPages(
+        (unit.kind === 'page' && !templates.has(unit.slot)) || unit.kind === 'store'
+          ? outcome.outputs.filter((output) => output.resource === 'screen')
+          : [],
+      ),
     )
   }
 }
 
 export const runAiJobSiteStep = createAiJobSiteStep()
+
+/** ASSUMED: what the store pages' pass needs — five draft transactions and their search listings, no model. */
+export const AI_SITE_STORE_PAGES_MINIMUM_MS = 15_000
 
 /**
  * The least time a scaffold's next pass needs (AGL-3035). The scaffold asks no
@@ -1300,7 +1407,11 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
     content: aiSiteContentPart(job.inputs, false),
   }).filter(
     (unit) =>
-      (unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'dataset' || aiJobStepRunnerFor(unit.jobKind)) &&
+      (unit.kind === 'theme' ||
+        unit.kind === 'posts' ||
+        unit.kind === 'dataset' ||
+        unit.kind === 'store' ||
+        aiJobStepRunnerFor(unit.jobKind)) &&
       (!owed.size || owed.has(unit.slot)),
   )
   const outputs = job.outputs ?? []
@@ -1311,6 +1422,8 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
   if (unit.kind === 'posts') return AI_SITE_POST_BUDGET.minimumMs
   if (unit.kind === 'dataset') return AI_SITE_DATASET_BUDGET.minimumMs
+  // The store's pages ask no model: five draft writes (AGL-3676).
+  if (unit.kind === 'store') return AI_SITE_STORE_PAGES_MINIMUM_MS
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))
 }
 

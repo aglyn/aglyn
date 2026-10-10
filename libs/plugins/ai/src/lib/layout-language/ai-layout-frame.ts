@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { AiStoreFrameLinks } from '../model/ai-site-store-pages'
 import { AI_ICON_LIBRARY } from '../runtime/ai-icon-library'
 import {
   AI_LAYOUT_MAX_IMAGES,
@@ -84,7 +85,17 @@ export interface AiLayoutFramePlan {
    * opens the shop — linking the Shop page.
    */
   shopId?: string | null
+  /**
+   * A store's own pages (AGL-3676), by path: the header links the account
+   * beside the cart, and the footer the account and the store's policies
+   * under the site's pages. They are written after the layout, so they are
+   * linked by their addresses, as the blog is.
+   */
+  storeLinks?: AiStoreFrameLinks | null
 }
+
+/** What the header's link to a store's account page says (AGL-3676). */
+export const AI_LAYOUT_ACCOUNT_LINK = 'Account'
 
 /** What a store's announcement bar says where its design gave it no line (AGL-3676): true of every store. */
 export const AI_LAYOUT_STORE_ANNOUNCEMENT = 'Shop the full collection'
@@ -167,10 +178,17 @@ export function aiCompileLayoutFrame(
   targets: AiLayoutTargets,
 ): AiLayoutCompiledFrame {
   const tree = new AiLayoutTreeBuilder('lf')
+  // A store's own pages are destinations the footer's list links by path (AGL-3676).
+  const storePages: AiLayoutPage[] = (plan.storeLinks?.footer ?? []).map((link) => ({
+    id: `store:${link.href}`,
+    label: link.label,
+    slug: link.href,
+    href: link.href,
+  }))
   const page: PageScope = {
     tree,
     plan: { title: plan.siteName, sections: [] },
-    targets: { ...targets, pageId: null },
+    targets: { ...targets, pages: [...targets.pages, ...storePages], pageId: null },
     // A footer is drawn compact: its lines are lines, never blocks rule 1 would ask to share.
     options: { reusableComponents: true },
     settled: [],
@@ -327,6 +345,19 @@ export function aiCompileLayoutFrame(
         'cta',
       )
     : null
+  // A store's account, beside its cart and in the phone's menu (AGL-3676).
+  const accountPath = plan.storeLinks?.account ?? null
+  const accountLink = (role: string, interactions?: unknown[], sx?: Record<string, unknown>) => {
+    const id = tree.add(
+      'muiScreenLink',
+      { children: AI_LAYOUT_ACCOUNT_LINK, href: accountPath, renderAs: 'link', color: 'inherit' },
+      { textDecoration: 'none', whiteSpace: 'nowrap', ...sx },
+      null,
+      role,
+    )
+    if (interactions) tree.nodes[id].interactions = interactions
+    return id
+  }
   // A phone's menu: the platform's Drawer, opened by its Menu Button; a link
   // followed from it closes it.
   const close = [AI_LAYOUT_CLOSE_DRAWER]
@@ -348,6 +379,7 @@ export function aiCompileLayoutFrame(
             },
             [
               ...pages.map((entry) => navLink(entry, 'menuLink', close)),
+              accountPath ? accountLink('menuAccount', close) : null,
               ctaProps
                 ? tree.add(
                     'muiButton',
@@ -387,12 +419,14 @@ export function aiCompileLayoutFrame(
   const cart = plan.cart
     ? tree.add(AI_LAYOUT_CART_ELEMENT, { variant: 'button' }, { flexShrink: 0 }, null, 'cart')
     : null
+  // On a phone the account is in the menu, and the cart stays in the bar.
+  const account = accountPath ? accountLink('account', undefined, { display: { xs: 'none', md: 'inline-flex' }, flexShrink: 0 }) : null
   // The row lives in a Container inside the Toolbar Content, which may only sit in an App Bar.
   const row = tree.add(
     'muiContainer',
     { maxWidth: 'lg' },
     { display: 'flex', alignItems: 'center', columnGap: 3 },
-    [brand, middle, cta, cart, toggle, drawer],
+    [brand, middle, cta, account, cart, toggle, drawer],
     'headerRow',
   )
   const toolbar = tree.add(
@@ -550,6 +584,12 @@ function compileFooter(
         })),
       },
     ])
+    weights.push(1)
+  }
+  // A store's account and policies (AGL-3676), as one more list beside the site's pages.
+  const storeLinks = plan.storeLinks?.footer ?? []
+  if (storeLinks.length) {
+    columns.push([{ kind: 'list', items: storeLinks.map((link) => ({ title: link.label, text: '', to: `page:store:${link.href}` })) }])
     weights.push(1)
   }
   const filled = columns

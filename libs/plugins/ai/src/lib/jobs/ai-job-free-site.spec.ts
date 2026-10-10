@@ -121,6 +121,7 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import {
+  AI_SITE_STORE_PAGES_SENTENCE,
   aiPlanSiteLines,
   aiSitePlanCapabilities,
   aiSitePlanHomeRule,
@@ -798,6 +799,16 @@ describe('a paid blog start plans no page that stands in for its blog (AGL-3660)
     const free = aiSitePlanCapabilities(blogJob('free'), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
     expect(aiPlanSiteLines(blogJob('free'), empty, free).join('\n')).not.toContain('first posts at /blog')
     expect(aiPlanSiteLines(siteJob({ pages: 4 }), empty, aiSitePlanCapabilities(siteJob({ pages: 4 }), paidEmpty)).join('\n')).not.toContain('first posts at /blog')
+  })
+
+  it('tells a paid store start’s plan the platform adds its account, cart and policy pages beside its own, and a Free one nothing (AGL-3676)', () => {
+    const storeJob = (org: 'paid' | 'free') => siteJob({ businessType: 'Ember & Oak, hand-poured candles', siteKind: 'store', pages: org === 'paid' ? 6 : 2 })
+    const paid = aiPlanSiteLines(storeJob('paid'), empty, aiSitePlanCapabilities(storeJob('paid'), paidEmpty))
+    expect(paid).toContain(AI_SITE_STORE_PAGES_SENTENCE)
+    expect(AI_SITE_STORE_PAGES_SENTENCE).toMatch(/do not count toward this plan's pages/)
+    const free = aiSitePlanCapabilities(storeJob('free'), aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] }))
+    expect(aiPlanSiteLines(storeJob('free'), empty, free)).not.toContain(AI_SITE_STORE_PAGES_SENTENCE)
+    expect(aiPlanSiteLines(blogJob(), empty, aiSitePlanCapabilities(blogJob(), paidEmpty))).not.toContain(AI_SITE_STORE_PAGES_SENTENCE)
   })
 
   it('re-asks the recorded first answer for its Articles page through the plan step, and keeps the plan that comes back without it', async () => {

@@ -1507,6 +1507,40 @@ nothing itself.
     select only for a real choice, a Details and a Shipping & returns
     accordion from what the product and the store's return settings hold,
     the store's reviews, and related products as photo cards.
+  - **The store's own pages** (third round, Zach 2026-10-10: "make sure all
+    they would have to do is setup the payment info and update products";
+    `model/ai-site-store-pages.ts`, `jobs/ai-job-site-store-pages.ts`). A paid
+    store owes one more unit, `store` ("Adding your account, cart and policy
+    pages"), after its planned pages and before the welcome email, written by
+    CODE in one pass: no model, no credits. It writes, through the same page
+    draft writer and pages allowance as every page: **Your account** at
+    `/account` (the commerce Customer account — sign in, create an account,
+    profile, addresses, order history with status and tracking — and Saved
+    items, the Wishlist the product page's Save fills), **Your cart** at
+    `/cart` (the inline Cart with its checkout, and Continue shopping) — both
+    written UNLISTED (`screen.visibility`, the page Access setting), so the
+    tenant serves them `noindex` and the sitemap leaves them out — and
+    **Shipping & returns** (`/shipping-returns`), **Privacy policy**
+    (`/privacy`) and **Terms of sale** (`/terms`) as Markdown drafts whose
+    every merchant-only fact is a `[bracketed placeholder]` — no window,
+    price, threshold or date is ever invented. A planned page that holds one
+    of those addresses, or a planned shipping page by its words ("Shipping &
+    care"), stands for that store page instead: nothing is written for it and
+    the links go to it. These are STORE PAGES, outside the plan's four to
+    eight: the plan is told the platform adds them and to spend no page on
+    them (`AI_SITE_STORE_PAGES_SENTENCE`), so they never crowd out content.
+    The layout, built first, is told their paths while the ledger owes them
+    (`storeLinks`): the header carries Account beside the cart (and in the
+    phone menu), the footer the account and the policies; a skipped or
+    failed unit's links come out at publish (`unwrittenHrefs`). The pass
+    turns on the site's user accounts (`accounts`, default-off per site)
+    unless the owner switched them off. An order's own page stays the
+    built-in `/order-status` its emails link. Gated like the products: the
+    `commerce` feature (Starter and up), Commerce running on the site, and
+    the editor role; Free gets none. The done page then shows **Finish your
+    store**: connect payments, review products and prices, set shipping and
+    tax (each the commerce plugin's `store-settings` or `product` record
+    route), and fill in the policies (Pages).
   Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent

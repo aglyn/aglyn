@@ -90,6 +90,7 @@ import {
 import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage, aiLayoutDesignOf } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
+import { aiStoreFrameLinksOf } from '../model/ai-site-store-pages'
 
 /**
  * The layout step (AGL-2909): the generation step of a `layout` job, run once
@@ -419,6 +420,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
           targets,
           extend: aiLayoutChecks(inventory, plan, job.brief),
           design: aiLayoutDesignOf(job, '/'),
+          storeLinks: aiStoreFrameLinksOf(job.inputs),
         }),
         ...(signal ? { signal } : {}),
       })

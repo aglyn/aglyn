@@ -119,6 +119,7 @@ step as it happens:
 - **Building your contact form**
 - **Writing your first posts** or **Adding your first products** (a paid blog or store)
 - **Writing your pages**, then **Writing page 2 of 5: About** as each page is written
+- **Adding your account, cart and policy pages** (a paid store)
 - **Writing your welcome email**
 - **Publishing your site**
 
@@ -194,6 +195,26 @@ a placeholder starting price so it can be bought; set its real price, and your o
 **Products**. A product without a price shows **Price coming soon** on the store, with no
 **Add to cart**, until you give it one. See [Product copy and catalogs with
 AI](./products-with-ai.md).
+
+It also gets the pages every store needs, ready to use and published with the rest of the
+site. They do not count toward the pages you asked for:
+
+- **Your account** at `/account`, where shoppers sign in or create an account, see their
+  orders with status and tracking, keep their addresses, and find the items they saved
+  with **Save** on a product page. User accounts are turned on for the site.
+- **Your cart** at `/cart`, with checkout.
+
+  These two are set to **Unlisted**, so search engines don't index them. The policy
+  pages below are listed like the rest of your site.
+- **Shipping & returns**, **Privacy policy** and **Terms of sale**, written as drafts. The
+  facts only you know, such as your return window or where you ship from, are left in
+  [brackets] for you to fill in. If your plan already has a shipping page, it is used
+  instead of a second one.
+
+The header links **Account** beside the cart, and the footer links your account and
+policies. When the site is built, **Finish your store** lists what is left: connect
+payments, review your products and prices, set shipping and tax, and fill in your
+policies, each with a button to the page where you do it.
 
 ## A blog from the start {#a-blog-from-the-start}
 

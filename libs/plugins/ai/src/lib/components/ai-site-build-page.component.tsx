@@ -65,7 +65,8 @@ import { aiSiteStartAnswersFromInputs } from '../model/ai-site-start'
 import { AiSiteStartCard } from './ai-site-start-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
-import { aiCreditsBillingHref, aiSiteBuildDoneLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiSiteBuildDoneLinks, aiStoreFinishLinks } from './ai-job-links'
+import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AiJobPlan } from './ai-job-plan.component'
 import { aiBuildCanRetry, aiBuildRetryCreditRange } from '../model/ai-build-progress'
 import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
@@ -347,6 +348,8 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
+  // A store start's last steps (AGL-3676): only payments, products, shipping and tax, and the policies.
+  const storeFinish = phase === 'done' ? aiStoreFinishLinks(ready, orgSlug) : null
   // Paused by the meter (AGL-3660): out of credits or at a cap, carried on by Resume.
   const paused = ready.status === 'needs_input'
   const retryRefusal = ready.review?.retryRefusal
@@ -533,6 +536,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           )}
         </Stack>
       )}
+      {storeFinish && <AiStoreFinishCard steps={storeFinish} />}
       {paused && (
         // Paused by the meter (AGL-3660): the way to more credits — the
         // workspace's own Billing page, where plans and the AI add-on are
