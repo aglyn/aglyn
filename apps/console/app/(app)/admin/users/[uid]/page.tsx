@@ -72,7 +72,10 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
 import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
-import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
+import {
+  formatStaffActivity,
+  formatStaffTimestamp,
+} from '../../../../../utils/staff-timestamps'
 import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
@@ -113,6 +116,8 @@ interface UserDetail {
     providers: Array<{ providerId: string; email: string | null }>
     createdAt: string | null
     lastSignInAt: string | null
+    /** The later of the last sign-in and the last session refresh. */
+    lastActiveAt?: string | null
     /**
      * The phone the profile holds, and whether we are allowed to use it
      * (AGL-1569). `phoneContact` is null when there is no number on file.
@@ -568,6 +573,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   detail.user.createdAt,
                                 )} · last sign-in ${formatStaffTimestamp(
                                   detail.user.lastSignInAt,
+                                )} · last activity ${formatStaffActivity(
+                                  detail.user.lastActiveAt,
                                 )}`}
                               </Typography>
                               {/* Phone + do-not-contact (AGL-1569). The number is

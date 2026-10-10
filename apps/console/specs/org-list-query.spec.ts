@@ -36,6 +36,7 @@ import {
   type ListQueryDeclaration,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import {
+  ORG_ALWAYS_STAMPED_SORT_PATHS,
   ORG_LIST_COLUMN_SORTS,
   ORG_LIST_FILTER_FIELDS,
   ORG_LIST_QUERY,
@@ -63,7 +64,7 @@ describe('every organization list has the composites its query shapes need', () 
   it('names exactly the merged composites: one per equality, under each header order', () => {
     // In document-id order an equality or the search token merges against
     // the built-in single-field indexes, so only the header orders need any —
-    // Created either way and Organization either way.
+    // Created, Organization and Last activity, each either way.
     const equalities = [
       'billingStatus:ASCENDING',
       'nameLower:ASCENDING',
@@ -78,6 +79,8 @@ describe('every organization list has the composites its query shapes need', () 
       'createdAt:ASCENDING',
       'nameLower:ASCENDING',
       'nameLower:DESCENDING',
+      'lastActivityAt:DESCENDING',
+      'lastActivityAt:ASCENDING',
     ]
     expect(shapes(ORG_LIST_QUERY).sort()).toEqual(
       equalities
@@ -97,6 +100,9 @@ describe('every organization list has the composites its query shapes need', () 
         (field) => [field.path, field.lowerPath],
       ),
     )
+    // …and the ones stamped on every organization without a filter offering
+    // them: Last activity, written at creation and backfilled.
+    for (const path of ORG_ALWAYS_STAMPED_SORT_PATHS) always.add(path)
     expect(ORG_LIST_COLUMN_SORTS.map((sort) => sort.path).filter((path) => !always.has(path))).toEqual(
       [],
     )
@@ -257,5 +263,32 @@ describe('every clause and the search word land on one query', () => {
     expect(answer.refused).toEqual([
       { clause: { field: 'marginPct', op: '<', value: '0.2' }, reason: 'this list does not filter by that' },
     ])
+  })
+})
+
+describe('Last activity (lastActivityAt)', () => {
+  it('sorts the whole list either way, beside every equality', () => {
+    const ask = (
+      direction: 'asc' | 'desc',
+      clauses: Array<{ field: string; op: string; value: string }> = [],
+    ) =>
+      planListQuery(
+        ORG_LIST_QUERY,
+        { clauses, search: [], sort: { path: 'lastActivityAt', direction } },
+        nameSearchNormalizers,
+      )
+    expect(ask('desc').orderBy).toMatchObject({ path: 'lastActivityAt', direction: 'desc' })
+    expect(ask('asc').orderBy).toMatchObject({ path: 'lastActivityAt', direction: 'asc' })
+    const filtered = ask('desc', [{ field: 'plan', op: 'equals', value: 'pro' }])
+    expect(filtered.refused).toEqual([])
+    expect(filtered.orderBy).toMatchObject({ path: 'lastActivityAt', direction: 'desc' })
+  })
+
+  it('is not a filter: a range on it would be the table second range', () => {
+    expect(ORG_LIST_FILTER_FIELDS.map((field) => field.path)).not.toContain('lastActivityAt')
+  })
+
+  it('leaves the default order alone: newest organization first', () => {
+    expect(ORG_LIST_COLUMN_SORTS[0]).toMatchObject({ path: 'createdAt', direction: 'desc' })
   })
 })

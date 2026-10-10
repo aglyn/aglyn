@@ -151,7 +151,37 @@ export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'lastSignInAt',
     operators: MEMORY_DATE_OPERATORS,
   },
+  {
+    // The later of the last sign-in and the last session refresh — see
+    // `accountLastActiveAt`. Every account carries both once it has signed
+    // in, so `isEmpty` here means "never signed in" too.
+    column: 'lastActiveAt',
+    kind: 'date',
+    path: 'lastActiveAt',
+    operators: MEMORY_DATE_OPERATORS,
+  },
 ]
+
+/**
+ * When an account was last active: the later of Firebase Auth's
+ * `lastSignInTime` (a credential sign-in) and `lastRefreshTime` (the last
+ * time a signed-in session renewed its ID token, which the client SDK does
+ * about hourly while the console is open). Both are on every Auth record
+ * that has ever signed in, so the column needs no write and no backfill.
+ *
+ * It is the same "last seen" the retention emails decide on
+ * (`/api/admin/retention-emails`), which is why it is shared rather than
+ * re-derived. `null` for an account that has never signed in.
+ */
+export function accountLastActiveAt(metadata: {
+  lastSignInTime?: string | null
+  lastRefreshTime?: string | null
+}): string | null {
+  const signIn = Date.parse(metadata.lastSignInTime ?? '') || 0
+  const refresh = Date.parse(metadata.lastRefreshTime ?? '') || 0
+  const latest = Math.max(signIn, refresh)
+  return latest > 0 ? new Date(latest).toISOString() : null
+}
 
 /*
  * THE ACCOUNT LIST'S HEADER SORTS (AGL-3680).
@@ -173,6 +203,8 @@ export const USER_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
   { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Created' },
   { path: 'lastSignInAt', direction: 'desc', column: 'lastSignInAt', label: 'Last sign-in' },
   { path: 'lastSignInAt', direction: 'asc', column: 'lastSignInAt', label: 'Last sign-in' },
+  { path: 'lastActiveAt', direction: 'desc', column: 'lastActiveAt', label: 'Last activity' },
+  { path: 'lastActiveAt', direction: 'asc', column: 'lastActiveAt', label: 'Last activity' },
 ]
 
 /**
@@ -210,6 +242,7 @@ interface UserSortRow {
   disabled: boolean
   createdAt: string | null
   lastSignInAt: string | null
+  lastActiveAt?: string | null
 }
 
 const day = (value: string | null) => (value ? new Date(value) : null)
@@ -222,6 +255,7 @@ export const USER_LIST_SORT_VALUES: Readonly<Record<string, ListPageSort<UserSor
     row.staff ? (row.staffRole ?? 'support') : row.disabled ? 'disabled' : null,
   createdAt: (row) => day(row.createdAt),
   lastSignInAt: (row) => day(row.lastSignInAt),
+  lastActiveAt: (row) => day(row.lastActiveAt ?? null),
 }
 
 /** How each account field reads — as a hidden column's header, and on a chip. */
@@ -235,6 +269,7 @@ export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   tenantId: 'SSO pool (empty = none)',
   providers: 'Sign-in providers',
   lastSignInAt: 'Last sign-in',
+  lastActiveAt: 'Last activity',
   disabled: 'Suspended',
 }
 

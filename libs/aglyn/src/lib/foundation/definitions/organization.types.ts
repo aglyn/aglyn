@@ -203,6 +203,13 @@ export interface AglynOrganization extends AglynDocument {
   crm?: OrgCrmSettings
   /** The plan staff asked the workspace to move to (AGL-3466). */
   upgradeProposal?: OrgUpgradeProposal
+  /**
+   * When any member last used the console inside this organization —
+   * stamped at creation, then by `/api/orgs/last-activity` at most once per
+   * 15 minutes. Server-owned: the rules deny it to every client write. The
+   * staff Organizations list sorts by it.
+   */
+  lastActivityAt?: ITimestamp
 }
 
 /**

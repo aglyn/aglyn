@@ -37,7 +37,6 @@ import {
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GridColDef } from '@mui/x-data-grid'
-import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import {
   ListRowActions,
   ListTable,
@@ -88,7 +87,10 @@ import {
   USER_LIST_FILTER_OPTIONS,
 } from '../../../../utils/list-filters'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
-import { formatStaffTimestamp } from '../../../../utils/staff-timestamps'
+import {
+  formatStaffActivity,
+  formatStaffTimestamp,
+} from '../../../../utils/staff-timestamps'
 
 interface AdminUser {
   uid: string
@@ -101,6 +103,8 @@ interface AdminUser {
   staffRole: string | null
   createdAt: string | null
   lastSignInAt: string | null
+  /** The later of the last sign-in and the last session refresh. */
+  lastActiveAt?: string | null
   providers: string[]
   /**
    * GCIP tenant id when the account lives in an enterprise SSO pool, else
@@ -137,7 +141,7 @@ const poolLabel = (tenantId: string | null) =>
  * The filterable fields that get a column. The rest of
  * `USER_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
  */
-const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt']
+const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt', 'lastActiveAt']
 /** The account fields the panel shows as selects over their choices. */
 const USER_SELECT_FIELDS = Object.keys(USER_LIST_FILTER_OPTIONS)
 
@@ -475,7 +479,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       const confirmed = await confirm({
         title: `${description}?`,
         description: `${record.email ?? record.uid} — this is audited.`,
-        confirmationText: 'Confirm',
+        // The button names the action, not a bare "Confirm".
+        confirmationText: description,
       })
         .then(() => true)
         .catch(() => false)
@@ -697,23 +702,59 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           </Typography>
         ),
       },
+      {
+        /*
+         * Last activity: the later of the last sign-in and the last time the
+         * session renewed its token (about hourly while the console is open)
+         * — `accountLastActiveAt`. Sorted by the route over the whole
+         * directory, like every other column here.
+         */
+        field: 'lastActiveAt',
+        headerName: 'Last activity',
+        description:
+          'The later of the last sign-in and the last session refresh (about hourly while the console is open).',
+        flex: 1,
+        minWidth: 200,
+        type: 'date',
+        valueGetter: (_value, row: any) =>
+          row.lastActiveAt ? new Date(row.lastActiveAt) : null,
+        renderCell: ({ row }: any) => (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            title={formatStaffTimestamp(row.lastActiveAt)}
+          >
+            {formatStaffActivity(row.lastActiveAt)}
+          </Typography>
+        ),
+      },
       listActionsColumn((row: any) => (
+        /*
+         * No quick icon (Zach, 2026-10-09: "confusing menu items and
+         * duplicate icon"). Clicking the row already opens the account in
+         * this tab, and a quick action is restated as the menu's first entry
+         * by `ListRowActions` — so the old `↗ View` sat beside the menu AND
+         * inside it, with the new-tab glyph on both sides of the label. The
+         * menu now carries the one new-tab entry, marked once, and every
+         * other entry says what it does to the account; each confirms first.
+         */
         <ListRowActions
           label={row.email ?? row.uid}
-          quick={{
-            icon: mdiOpenInNew.path,
-            label: 'View',
-            newTab: true,
-            to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
-          }}
           items={[
             {
+              key: 'details',
+              label: 'User details',
+              href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
+              external: true,
+            },
+            {
               key: 'staff',
-              label: row.staff ? 'Revoke staff' : 'Grant staff',
+              label: row.staff ? 'Revoke staff access' : 'Grant staff access',
+              destructive: Boolean(row.staff),
               onClick: handleAction(
                 row,
                 row.staff ? 'revokeStaff' : 'grantStaff',
-                row.staff ? 'Revoke staff' : 'Grant staff',
+                row.staff ? 'Revoke staff access' : 'Grant staff access',
               ),
               disabled: busy || notSuper,
               disabledReason: notSuper
@@ -722,7 +763,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             },
             {
               key: 'disable',
-              label: row.disabled ? 'Enable' : 'Disable',
+              label: row.disabled ? 'Enable account' : 'Disable account',
               destructive: !row.disabled,
               onClick: handleAction(
                 row,

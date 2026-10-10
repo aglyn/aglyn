@@ -6442,6 +6442,50 @@ describe('acquisition is the platform\'s to write, never a client\'s (AGL-3289)'
 })
 
 /**
+ * When any member last used the workspace (`orgs/{orgId}.lastActivityAt`).
+ * Stamped only by /api/orgs/last-activity through the Admin SDK, on the
+ * server's clock, and sorted by on the staff Organizations list — so no
+ * client writes it: not the owner (who could make a dormant workspace read as
+ * busy), and not staff from the browser either. The owner's ordinary edits
+ * still land beside it, so the guard cannot be satisfied by closing the doc.
+ */
+describe('lastActivityAt is the platform\'s to write, never a client\'s', () => {
+  it('refuses the owner and staff setting it from a client', async () => {
+    await mustDeny(
+      'the owner stamping it',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { lastActivityAt: new Date() }),
+    )
+    await mustDeny(
+      'the owner merging it beside a field the owner may write',
+      setDoc(
+        doc(authed(OWNER), 'orgs', ORG),
+        { name: 'Acme Goods', lastActivityAt: new Date() },
+        { merge: true },
+      ),
+    )
+    await mustDeny(
+      'super staff stamping it',
+      updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        lastActivityAt: new Date(),
+      }),
+    )
+    await mustDeny(
+      'billing staff stamping it',
+      updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'billing' }), 'orgs', ORG), {
+        lastActivityAt: new Date(),
+      }),
+    )
+  })
+
+  it('still lets the owner edit the workspace name', async () => {
+    await mustAllow(
+      'the owner renaming',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Goods' }),
+    )
+  })
+})
+
+/**
  * The consent-group declaration and its confirmation switch (AGL-3316).
  * `consentGroupForHost` reads both off the org document to decide who a
  * marketing basis covers, whose opt-outs hold a send and — with the switch on
