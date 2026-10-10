@@ -293,6 +293,17 @@ export interface UseBesignerDocumentResult {
    */
   saveWorkingDraft: (author?: BesignerDraftAuthor) => Promise<ServerDraftWrite>
   /**
+   * Puts the canvas back to the stored document and clears the local and
+   * shared drafts (AGL-3723). Not undoable: confirm first. False when no
+   * document is loaded.
+   */
+  discardChanges: () => boolean
+  /**
+   * Something would be discarded: unsaved canvas edits, or a draft on offer.
+   * An editor that tracks its own saved-draft state ORs that in.
+   */
+  canDiscard: boolean
+  /**
    * Refuses, and says why, an action that would leave behind a saved draft
    * this author has been offered and has not opened (AGL-2874). Returns true
    * when the caller must stop.
@@ -882,6 +893,52 @@ export function useBesignerDocument<TData = unknown>(
     [options.firestore, draftIds, updatedAt, saveAvailable],
   )
 
+  /**
+   * DISCARD CHANGES — put the canvas back to the document as it is stored,
+   * and drop every unsaved copy of the work (AGL-3723).
+   *
+   * The stored document is the published tree on the live version and the
+   * last save on any other, so this is "reset to published" there. It clears
+   * the local crash net and the shared working draft with it: an author who
+   * asked for the stored document does not want either offered back on the
+   * next load. The canvas is reloaded from the CURRENT snapshot rather than
+   * the one this session opened, so a colleague's save since is kept, not
+   * rolled back.
+   *
+   * Not undoable — the reload is a fresh baseline — which is why every caller
+   * confirms first. The co-editing mirror is the editor's to clear.
+   *
+   * @returns false when there is no stored document to go back to.
+   */
+  const discardChanges = useCallback((): boolean => {
+    if (!nodes) return false
+    canvas.reset()
+    setLocalNodes(
+      (toCanvasNodes ? toCanvasNodes(nodes) : nodes) as Aglyn.ProcessableNodes,
+    )
+    canvas.updateInitialNodes(undefined, { confirmed: !pendingWrites })
+    baseStampRef.current = versionStamp(updatedAt)
+    baseNodesRef.current = nodes
+    expectOwnWriteRef.current = null
+    setRemoteChanged(false)
+    // `discard` drops the offer as well as both stored drafts; the explicit
+    // clears cover a draft written this session and never offered.
+    draft.discard()
+    if (draftIds) clearBesignerDraft(draftIds)
+    if (draftIds && options.firestore) {
+      void clearServerDraft(options.firestore, draftIds)
+    }
+    return true
+  }, [
+    nodes,
+    toCanvasNodes,
+    pendingWrites,
+    updatedAt,
+    draft,
+    draftIds,
+    options.firestore,
+  ])
+
   // Same expectation `handleSave` records, for writes that do not go through
   // it. Those write OTHER fields — component properties are the first
   // (AGL-1247) — so the echo they produce moves the stamp and leaves `nodes`
@@ -906,6 +963,8 @@ export function useBesignerDocument<TData = unknown>(
     remoteChanged,
     handleSave,
     saveWorkingDraft,
+    discardChanges,
+    canDiscard: saveAvailable || draft.available || draft.sharedDraftUnopened,
     refuseOverUnopenedDraft,
     markOwnWrite,
     draft,

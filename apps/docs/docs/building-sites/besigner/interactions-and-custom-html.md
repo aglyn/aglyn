@@ -49,6 +49,9 @@ configures in one dialog without leaving the besigner:
     [Scroll to element](#scroll-to-element-step).
   - **Play a video** — presses a Video element's poster from anywhere on
     the page. See [Play a video](#play-video-step).
+  - **Show an element** aimed at a [Lightbox element](lightbox.md#lightbox-element)
+    opens it; *Hide* closes it and *Show/hide* toggles it. See
+    [Open a lightbox](#open-a-lightbox).
   - **Make the nav sticky**, **go to a URL / page**, or **show a site
     alert** — navigation and lightweight feedback, no server involved.
 - The remaining actions are the **automations engine** (Pro+, metered —
@@ -155,6 +158,8 @@ yourself).
   *Play a video*, both picking the film.
 - **Section nav**: on each nav item, *When clicked → Scroll to element*
   with the **Offset** set to your sticky header's height.
+- **"Book a call" lightbox**: put a form in a Lightbox element; on the
+  button, *When clicked → Show an element* picking the Lightbox.
 
 ## Scroll to element {#scroll-to-element-step}
 
@@ -191,6 +196,23 @@ Nothing is loaded from the video's host until the action runs, and a Wistia
 video follows the same consent rules as a press on its poster. To be sure the
 film is in view as it starts, put **Scroll to element**, picking the same
 Video, before it.
+
+## Open a lightbox {#open-a-lightbox}
+
+A [Lightbox element](lightbox.md#lightbox-element) answers the visibility
+steps you already use: *When clicked → **Show an element*** with the Lightbox
+as its target opens it, from a button, a link, a picture or anything else
+with an interaction. *Show/hide an element* toggles it, and *Hide an element*
+— on a button inside the Lightbox, say — closes it. They run on every plan,
+like the other visibility steps.
+
+The visitor can also close it with its close button, `Esc` and a click on the
+backdrop, unless you turned those off in its
+[settings](lightbox.md#lightbox-settings); either way the keyboard goes back to
+whatever opened it.
+
+Pictures need no interaction: an Image or an Image List with **Open in a
+lightbox** on opens its own. See [Lightboxes](lightbox.md).
 
 ## Track an analytics event {#analytics-event-step}
 

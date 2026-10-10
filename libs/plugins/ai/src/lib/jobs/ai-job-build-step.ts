@@ -22,7 +22,7 @@ import {
   AI_BUILD_LIMITS,
   AI_BUILD_PUBLISH_INPUT,
   aiArticle,
-  aiBuildCreditEstimate,
+  aiBuildCreditRange,
   aiBuildDegradation,
   aiBuildInitialLedger,
   aiBuildItemDelivered,
@@ -31,6 +31,7 @@ import {
   aiBuildOrder,
   aiBuildPlacedItemLines,
   aiBuildPlanShapeRefusal,
+  aiBuildSmaller,
   aiBuildUnits,
   type AiBuildOps,
   type AiBuildUnit,
@@ -45,7 +46,16 @@ import type {
   AiJobPlan,
 } from '../model/ai-jobs.types'
 import { AI_SITE_MAX_SECTIONS } from '../model/ai-site-job'
-import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import {
+  AI_CREDITS_CONFIRM_CODE,
+  aiCreditsPromptFor,
+  aiCreditsPromptText,
+  type AiCreditRange,
+  type AiCreditsPrompt,
+  type AiCreditsSmaller,
+} from '../model/ai-credit-estimate'
+import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiModelForStep } from '../providers/routing'
 import {
   AI_BUILD_UNIT_EMPTY_COPY,
@@ -54,15 +64,13 @@ import {
   aiUnitFailure,
   aiUnitSpend,
 } from './ai-build-unit-outcome'
-import { assistCreditsFromUsd } from '../usage/assist-credits'
-import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from '../usage/assist-credit-returns'
-import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
 import { aiBuildOps, type AiBuildOpsContext } from './ai-build-capabilities'
 import {
   aiJobAdmissionRefusal,
   registerAiJobAdmission,
   type AiJobAdmission,
   type AiJobAdmissionContext,
+  type AiJobAdmissionRefusal,
 } from './ai-job-admission'
 import { aiOriginJobId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
@@ -547,38 +555,43 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
 }
 
 /**
- * Why a Free build cannot be confirmed: its estimate is more than the owner's
- * Free allowance has left this month. Read off the account month the meter
- * writes, net of give-backs; a read that fails admits, since the reservation
- * still refuses at the wall.
+ * What a Free build's credits say before it runs (AGL-3722), on its measured
+ * p90 rather than its ceiling: `null` when what is left this month covers the
+ * p90 — or when nothing is known about what is left, since each pass's
+ * reservation still decides — and `null` too for a build the person chose
+ * to build as far as it goes (`confirmed`), whose prompt `onConfirmed` is
+ * told so the door records it. Otherwise a 409 carrying the prompt: the
+ * range, what is left, and the smaller first build. Nothing left at all is a
+ * 429. Read off the same two walls the reservation refuses at
+ * (`readFreeAiCreditsLeft`), net of give-backs.
  */
-export async function aiBuildFreeBalanceRefusal(input: {
+export async function aiBuildFreeCreditsRefusal(input: {
   firestore: FirebaseFirestore.Firestore
+  orgId: string
   org: object | null
-  estimate: number
+  range: AiCreditRange
+  smaller?: AiCreditsSmaller | null
+  confirmed?: boolean
+  onConfirmed?: (prompt: AiCreditsPrompt) => void
   now: Date
-}): Promise<string | null> {
-  const account = freeAssistAccount(input.org as AssistMeteredOrg | null)
-  if (!account?.accountUid) return null
-  try {
-    const month = input.now.toISOString().slice(0, 7)
-    const snapshot = await freeAccountUsageRef(input.firestore, account.accountUid, month).get()
-    const spent = assistCreditsFromUsd(
-      assistSpendAfterReturnsUsd(snapshot.get('estCostUsd'), snapshot.get(ASSIST_RETURNED_USD_FIELD)),
-    )
-    const left = Math.max(0, FREE_AI_TASTE_CREDITS_PER_MONTH - spent)
-    return input.estimate > left
-      ? `This plan is estimated at ${input.estimate} credits, and your Free AI credits have ${left} left this month. Ask for less, or upgrade for more.`
-      : null
-  } catch (error) {
-    console.error('ai build free balance read failed', { error })
-    return null
+  freeCreditsLeft?: typeof readFreeAiCreditsLeft
+}): Promise<AiJobAdmissionRefusal | null> {
+  const read = input.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const credits = await read(input.firestore, { orgId: input.orgId, org: input.org, now: input.now })
+  if (!credits) return null
+  if (credits.left <= 0) return { status: 429, error: aiFreeCreditsNoneLeftText(credits.resetsOn) }
+  const prompt = aiCreditsPromptFor(input.range, credits, input.smaller ?? null)
+  if (!prompt) return null
+  if (!input.confirmed) {
+    return { status: 409, error: aiCreditsPromptText(prompt, 'build'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
   }
+  input.onConfirmed?.(prompt)
+  return null
 }
 
 export interface AiBuildAdmissionDeps {
   opsFor?: (context: AiBuildOpsContext) => Promise<AiBuildOps>
-  freeBalanceRefusal?: typeof aiBuildFreeBalanceRefusal
+  freeCreditsLeft?: typeof readFreeAiCreditsLeft
   ownerOf?: typeof resolveOrgIdForHost
   now?: () => Date
 }
@@ -586,12 +599,12 @@ export interface AiBuildAdmissionDeps {
 /**
  * A build is admitted for a site of the job's own org where a page can be
  * built; and confirmed only for a plan it can build here — its shape, its
- * operations as this site has them, and on the Free taste an estimate the
- * month's Free credits still cover.
+ * operations as this site has them, and on the Free taste a measured p90
+ * the month's Free credits still cover — or the person's go-ahead to build
+ * what fits (AGL-3722).
  */
 export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJobAdmission {
   const opsFor = deps.opsFor ?? ((context) => aiBuildOps(context))
-  const freeBalanceRefusal = deps.freeBalanceRefusal ?? aiBuildFreeBalanceRefusal
   const ownerOf = deps.ownerOf ?? resolveOrgIdForHost
   return async (context) => {
     if (!context.hostId) return { status: 400, error: 'Open the site to build on before asking Assist to build' }
@@ -607,13 +620,18 @@ export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJo
     const shape = aiBuildPlanShapeRefusal(plan, { freeTaste, ops })
     if (shape) return { status: 400, error: shape }
     if (freeTaste) {
-      const refusal = await freeBalanceRefusal({
+      const refusal = await aiBuildFreeCreditsRefusal({
         firestore: context.firestore,
+        orgId: context.orgId,
         org,
-        estimate: aiBuildCreditEstimate(plan, { ops }),
+        range: aiBuildCreditRange(plan, { ops }),
+        smaller: aiBuildSmaller(plan, ops),
+        confirmed: context.creditsConfirmed === true,
+        onConfirmed: context.onCreditsConfirmed,
         now: deps.now?.() ?? new Date(),
+        freeCreditsLeft: deps.freeCreditsLeft,
       })
-      if (refusal) return { status: 403, error: refusal }
+      if (refusal) return refusal
     }
     return null
   }

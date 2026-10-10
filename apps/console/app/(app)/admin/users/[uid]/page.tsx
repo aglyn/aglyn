@@ -72,19 +72,37 @@ import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
 import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
-import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
+import {
+  formatStaffActivity,
+  formatStaffTimestamp,
+} from '../../../../../utils/staff-timestamps'
 import StaffUserProductEmail, {
   type StaffUserMarketing,
 } from '../../../../../components/staff-user-product-email.component'
 import StaffTableHead from '../../../../../components/staff-table-head.component'
 import StaffUserSendEmailCard from '../../../../../components/staff-user-send-email-card.component'
 
+/** Where a resolved name or photo came from, as the page says it. */
+const IDENTITY_SOURCE_LABEL = {
+  auth: 'auth record',
+  profile: 'profile',
+  provider: 'sign-in provider',
+  idp: 'SSO directory',
+} as const
+
 interface UserDetail {
   user: {
     uid: string
     email: string | null
+    /** Resolved through the account-identity resolver (AGL-3721). */
     displayName: string | null
+    photoUrl?: string | null
+    /** Where the resolved name came from; `auth` is the record's own. */
+    displayNameSource?: 'auth' | 'profile' | 'provider' | 'idp' | null
+    photoUrlSource?: 'auth' | 'profile' | 'provider' | 'idp' | null
     disabled: boolean
+    /** Whether the account's address is verified; absent from an older deploy. */
+    emailVerified?: boolean
     staff: boolean
     staffRole: string | null
     /**
@@ -98,6 +116,8 @@ interface UserDetail {
     providers: Array<{ providerId: string; email: string | null }>
     createdAt: string | null
     lastSignInAt: string | null
+    /** The later of the last sign-in and the last session refresh. */
+    lastActiveAt?: string | null
     /**
      * The phone the profile holds, and whether we are allowed to use it
      * (AGL-1569). `phoneContact` is null when there is no number on file.
@@ -441,6 +461,20 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             <Stack spacing={1}>
                               <Typography variant="body2">
                                 {detail.user.displayName ?? '—'}
+                                {/* Say when the name is not the Auth
+                                    record's own (AGL-3721) — an SSO record
+                                    holds none until the sign-in fill. */}
+                                {detail.user.displayName &&
+                                detail.user.displayNameSource &&
+                                detail.user.displayNameSource !== 'auth' ? (
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {` · from the ${IDENTITY_SOURCE_LABEL[detail.user.displayNameSource]}`}
+                                  </Typography>
+                                ) : null}
                               </Typography>
                               <Typography variant="body2">
                                 {detail.user.email ?? 'no email'}
@@ -454,6 +488,25 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 ) : (
                                   <Chip size="small" color="success" label="Active" />
                                 )}
+                                {/* Verified or not, at a glance: an unverified
+                                    password account is held at /verify-email
+                                    and cannot use a workspace yet. */}
+                                {detail.user.email && detail.user.emailVerified !== undefined ? (
+                                  detail.user.emailVerified ? (
+                                    <Chip
+                                      size="small"
+                                      color="success"
+                                      variant="outlined"
+                                      label="Email verified"
+                                    />
+                                  ) : (
+                                    <Chip
+                                      size="small"
+                                      color="warning"
+                                      label="Email not verified"
+                                    />
+                                  )
+                                ) : null}
                                 {detail.user.staff ? (
                                   <Chip
                                     size="small"
@@ -520,6 +573,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   detail.user.createdAt,
                                 )} · last sign-in ${formatStaffTimestamp(
                                   detail.user.lastSignInAt,
+                                )} · last activity ${formatStaffActivity(
+                                  detail.user.lastActiveAt,
                                 )}`}
                               </Typography>
                               {/* Phone + do-not-contact (AGL-1569). The number is

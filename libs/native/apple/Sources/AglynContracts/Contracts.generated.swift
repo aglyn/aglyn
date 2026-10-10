@@ -1636,6 +1636,7 @@ public struct ManagedBooking: Codable, Hashable, Sendable {
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum MediaKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case audio = "audio"
   case document = "document"
   case image = "image"
   case pdf = "pdf"

@@ -64,6 +64,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
+import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -293,6 +294,8 @@ function LayoutBesignerPage(props) {
   const clearCanvas = useClearCanvasCallback('layout')
   const repairDocument = useRepairDocumentCallback('layout')
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -667,6 +670,18 @@ function LayoutBesignerPage(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: 'layout',
+    live: editingLiveVersion,
+    canDiscard: canDiscard || draftPending,
+    discardChanges,
+    onDiscarded: useCallback(() => {
+      clearMirrorRef.current?.()
+      setDraftPending(false)
+    }, []),
+  })
+
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
       <ScreenLinkContext.Provider value={screenLinks}>
@@ -749,6 +764,7 @@ function LayoutBesignerPage(props) {
                             onClick: () => setPropsDialogOpen(true),
                             ListItemTextProps: { inset: true },
                           },
+                          discardMenuItem,
                           {
                             id: 'center-nav-file-close',
                             children: 'Close',

@@ -61,9 +61,17 @@ The card shows **Planning what to build on this site…** while the plan is made
 - **Builds the page** with its title, address, layout and sections;
 - any video player a page will carry, and what loading it costs your visitors.
 
-Under the lines is the **Estimated cost** in credits. It is an estimate: what the build
-costs is what its steps spend. If you asked for the new pages to go live, a
-**Publish the new pages when they are built** box is there too, unticked until you tick it.
+Under the lines is the **Estimated cost**, such as *About 106 credits (up to 650)*: about
+what builds like it cost, and the most it can cost. What the build costs is what its steps
+spend. On the Free plan the card also says how many free credits you have left this month.
+If you asked for the new pages to go live, a **Publish the new pages when they are built**
+box is there too, unticked until you tick it.
+
+If the build will likely use more than your credits left, the card says so instead of
+offering **Confirm plan**, and gives you three choices: **Build what fits** (it builds what
+your credits cover and pauses, then **Resume** carries on), **Build the home page first**
+(only the home page and what it needs), or **Upgrade**. See
+[Before a job starts](./ai-credits.md#before-a-job-starts).
 
 Nothing is built while the card waits. The plan follows
 [the building rules](./how-aglyn-ai-builds.md#the-building-rules), and a plan that breaks
@@ -97,7 +105,12 @@ page that places them.
   uses.
 
 When it is done the card says how many parts were built, such as *5 of 6 built; 1 failed*.
-**Try again what failed** builds only the parts that failed.
+**Try again what failed** builds only the parts that failed, and shows what that is likely
+to cost.
+
+If your credits run out partway, the card says **Paused**. What is built so far is kept.
+Choose **Resume** after you upgrade or when your credits renew, and it carries on with the
+next part.
 
 To change something it made, ask in the chat, such as *make the about page shorter*.
 Assist opens that draft and proposes the change there.

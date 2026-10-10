@@ -628,7 +628,7 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy', 'upgradeProposal'])) ||
+             'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -643,7 +643,7 @@ service cloud.firestore {
              'suspendedEnforcement', 'suspended',
              'erasureRequestedAt', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy', 'upgradeProposal'])) ||
+             'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
         // roster ask it — and folding verification in would refuse those.
@@ -719,7 +719,13 @@ service cloud.firestore {
              // only by /api/admin/org-upgrade-proposal and the Stripe webhook,
              // both Admin SDK and audited; on all three lists, because the
              // proposal is the platform's statement to the customer.
-             'upgradeProposal']));
+             'upgradeProposal',
+             // When any member last used the workspace: stamped by
+             // /api/orgs/last-activity (Admin SDK) on the server's clock and
+             // sorted by on the staff Organizations list. A client able to
+             // write it could make a dormant workspace read as busy, or a
+             // busy one as dormant. On all three lists.
+             'lastActivityAt']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site

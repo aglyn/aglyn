@@ -487,6 +487,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'media-ref',
     why: "The server-rendered Event JSON-LD reads coverImage off the document and hands it to resolveSocialImage, which absolutizes a media: reference and passes any other string through. A crawler fetches this one, so no browser policy applies.",
   },
+  'libs/plugins/music/src/lib/components/music-player.tsx': {
+    markers: 1,
+    guard: 'scheme-guard',
+    why: "The Music player's cover art (AGL-3716), only ever musicCoverSrc's answer: a library reference resolved through resolveMediaSrc, or an https: address the owner typed; any other scheme renders no image.",
+  },
+  'libs/plugins/music/src/lib/components/music-sources.ts': {
+    markers: 1,
+    guard: 'scheme-guard',
+    why: 'musicCoverSrc (AGL-3716): media refs and CDN paths through resolveMediaSrc; anything else must be https: or is dropped. Host still open, by AGL-1725.',
+  },
   'libs/plugins/marketing/src/lib/components/site-runtime.tsx': {
     markers: 1,
     guard: 'scheme-guard',
@@ -581,6 +591,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     markers: 3,
     guard: 'media-ref',
     why: 'The video poster frame, now in three places: the inline `<video poster>`, the lightbox trigger\'s `<img>` (AGL-2744), and the poster handed to the lightbox dialog. All three are the same stored `poster` prop through the same resolver — `mediaVariantSrc` for the two single-url sinks and `resolveMediaSrc` for the `<img>` that also gets a `?w=` srcSet — so the host surface is unchanged from when this was one marker. The video src itself is media-src, a different directive, and out of this inventory on purpose.',
+  },
+  'libs/plugins/mui/src/lib/components/image-lightbox.tsx': {
+    markers: 2,
+    guard: 'projection',
+    why: "The picture lightbox (AGL-3717): the full-size picture a visitor opened and the gallery's thumbnail strip. This module resolves nothing itself. Every `src` and `srcset` it renders is read, at the press, off an `<img>` the Image element already put on the page (`image-lightbox-items.ts` `pictureOf`), and that `<img>` took its url from `resolveMediaSrc` and its candidates from `mediaCdnSrcSet` in `image.tsx` — so the lightbox reaches exactly the hosts the page already reached, and is a projection of the `image.tsx` entry rather than a sink with reach of its own.",
   },
   'libs/plugins/mui/src/lib/components/video-lightbox.tsx': {
     markers: 1,

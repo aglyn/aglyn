@@ -105,6 +105,8 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
   ['commerce', 'libs/plugins/commerce/src/lib/plugin.ts'],
   ['bookings', 'libs/plugins/bookings/src/lib/plugin.ts'],
   ['events-calendar', 'libs/plugins/events-calendar/src/lib/plugin.ts'],
+  ['lightbox', 'libs/plugins/lightbox/src/lib/site.ts'],
+  ['music', 'libs/plugins/music/src/lib/plugin.ts'],
 ]
 
 /**
@@ -113,6 +115,11 @@ const BUNDLE_FILES: ReadonlyArray<[pluginId: string, file: string]> = [
  * a model composing the tenant's OWN page may also reach the layout and
  * surface primitives, the media lists and the collection blocks, which are
  * bound to this site's data and so stay out of a listing.
+ *
+ * `musicPlayer` and its `musicTrack` rows play the owner's OWN audio from the
+ * media library (AGL-3716): a model may place an empty player for the owner
+ * to fill, and never a source — `aiOwnerAudioRefusal` drops any `src` that is
+ * not a library reference and every `rightsConfirmed` a model writes.
  *
  * `video` plays a library film or a declared host's link behind a poster,
  * which is the player a featured video binds to (AGL-3433). `videoEmbed`
@@ -147,6 +154,8 @@ const PAGE_EXTRA_IDS = [
   'collectionSearch',
   'videoEmbed',
   'socialLinks',
+  'musicPlayer',
+  'musicTrack',
 ]
 
 /**
@@ -175,6 +184,16 @@ const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
 }
 
 /**
+ * Elements a surface admits from a model but leaves off its catalog
+ * (AGL-3716), because the one door that writes them tells the model their
+ * shape itself. Assist's edit protocol carries the Music player's own line
+ * (`ASSIST_MUSIC_EDIT_LINE`), and a music site's player is placed by the
+ * layout compiler, so no page pass needs it listed. Listed, its lines rode the
+ * cached prefix of every Free page pass and put the largest one past the wall.
+ */
+const UNLISTED_IDS: ReadonlySet<string> = new Set(['musicPlayer', 'musicTrack'])
+
+/**
  * Never offered to a model, whatever list they are on: a raw-HTML escape
  * hatch, a code-invoking widget, the canvas root, a reference into another
  * document, and third-party plugin elements.
@@ -187,6 +206,18 @@ const NEVER_IDS = new Set([
   'emailHtml',
   'emailRichtext',
 ])
+
+/**
+ * Props a model is never offered, by element (AGL-3716): an answer only the
+ * site owner can give. The Music player's rights confirmation says the owner
+ * holds the rights to a recording; `aiOwnerAudioRefusal` drops it from any
+ * tree a model writes as well, so leaving it off the palette is the first
+ * line, not the only one.
+ */
+const PERSON_ONLY_PROPS: Readonly<Record<string, readonly string[]>> = {
+  musicPlayer: ['rightsConfirmed'],
+  musicTrack: ['rightsConfirmed'],
+}
 
 /** Elements whose `children` is a button label. */
 const BUTTON_LIKE_IDS = new Set([
@@ -447,6 +478,13 @@ function holdsLine(entry: Dict): string {
 const CATALOG_PROPS: Readonly<Record<string, readonly string[]>> = {
   video: ['src', 'poster'],
   videoEmbed: ['url'],
+  // The lightbox (AGL-3717): the switch is what a model chooses; the dozen
+  // settings of its look stay at their defaults unless an owner sets them.
+  // An Image's `loading` left the line with it: the element decides which
+  // picture loads first itself (AGL-2486), and a model guessing only undoes it.
+  image: ['src', 'objectFit', 'screenId', 'href', 'lightbox'],
+  muiImageList: ['variant', 'cols', 'gap', 'rowHeight', 'lightbox'],
+  lightbox: ['label', 'lightboxTransition'],
 }
 
 /**
@@ -573,6 +611,7 @@ function buildCatalog(
   lines.push(`Surface: ${surface}. ${rootLine}`)
   lines.push('Elements (id (name): purpose — children — props; * = required):')
   for (const id of definition.allow) {
+    if (UNLISTED_IDS.has(id)) continue
     const entry = palette[id]
     // A name that only spells its id again — `image (Image)`, `searchBox
     // (Search Box)` — teaches the model nothing, and every request that shows
@@ -585,7 +624,8 @@ function buildCatalog(
       `- ${id}${name}: ${entry.summary || entry.category} — ${holdsLine(entry)} — ${catalogProps(id, entry) || 'no props'}`,
     )
   }
-  const allowed = new Set(definition.allow)
+  // An unlisted element's blocks go unlisted with it (AGL-3716).
+  const allowed = new Set(definition.allow.filter((id) => !UNLISTED_IDS.has(id)))
   // De-duplicated: two blocks that print the same name on the same root read
   // as one example to the model, so the second copy is paid-for prompt that
   // teaches nothing — two FAQ blocks both print `FAQ (muiStack)` (AGL-3411).
@@ -646,6 +686,8 @@ async function main(): Promise<void> {
       const propFields: Dict = {}
       const textLimits: Dict = {}
       for (const attribute of flattenAttributes(schema.attributes)) {
+        // A prop only a person may set is not offered at all (AGL-3716).
+        if (PERSON_ONLY_PROPS[id]?.includes(attribute.name)) continue
         const declared = declareProp(id, attribute, AI_TEXT_LIMITS)
         if (!declared) {
           undeclaredFieldKinds.add(String(attribute.component))

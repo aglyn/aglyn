@@ -44,8 +44,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
+  aiFreeCreditsNoneLeftText,
+  aiFreeSitePrompt,
   aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
@@ -58,6 +58,7 @@ import {
   aiSitePlanWithoutBlogStandIns,
 } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -66,6 +67,7 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
+import { AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -75,6 +77,7 @@ import {
 } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
 import {
@@ -614,6 +617,14 @@ export function aiSiteUnitJob(
   // The job the member started travels with every unit, so what the unit
   // writes names it (AGL-3596).
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
+  // A page is told the pages built before it, whose photos it does not place
+  // again (AGL-3660): the maker's portrait in About is never a vase in Work.
+  if (unit.screen) {
+    const pages = (job.outputs ?? [])
+      .filter((output) => output.resource === 'screen' && output.hostId === job.hostId && output.id)
+      .map((output) => output.id)
+    if (pages.length) unitInputs[AI_STOCK_PHOTO_PAGES_INPUT] = pages
+  }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
   // A page is told them too, so its buttons may go to a page built after it.
@@ -646,6 +657,11 @@ export function aiSiteUnitJob(
       outputs: job.outputs ?? [],
       screens: merged.screens,
       sells: aiSiteSellsProducts(job),
+      // A store lists its catalog on its Shop page even when its first
+      // products could not be written, or on the Free taste (AGL-3676).
+      store: aiSiteKindOfInputs(job.inputs)?.id === 'store',
+      // A music site places an empty player for the artist's own tracks (AGL-3716).
+      music: aiSiteKindOfInputs(job.inputs)?.id === 'music',
     })
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
@@ -737,15 +753,24 @@ export function createAiSiteJobAdmission(
     const freeTaste = aiSiteFreeTaste(context.org)
     const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
     if (pages) return { status: 400, error: pages }
-    // A Free start that what is left of the month's Free credits cannot pay for
-    // is refused before it spends (AGL-3660), on the figure the dialog quotes —
-    // the dialog asks the same, and this is what a stale dialog meets. Only at
-    // creation: a resume is the same job carrying on from where it paused.
+    // A Free start is admitted on its measured p90 (AGL-3722), not its worst
+    // case: one that fits what is left of the month starts with no prompt;
+    // one that does not is answered with the prompt — what it is likely to
+    // cost, what is left, and its choices — until the person chooses to build
+    // what fits, which then pauses with Resume where the credits run out.
+    // Nothing left at all is refused outright. Only at creation: a resume is
+    // the same job carrying on from where it paused.
     if (freeTaste && !context.plan) {
       const credits = await freeCreditsLeft(context.firestore, { orgId: context.orgId, org: context.org, now: now() })
-      const shortfall = aiFreeSiteShortfall(credits, inputs.pages)
-      if (credits && shortfall) {
-        return { status: 429, error: aiFreeSiteShortfallText(shortfall, credits.resetsOn) }
+      if (credits && credits.left <= 0) {
+        return { status: 429, error: aiFreeCreditsNoneLeftText(credits.resetsOn) }
+      }
+      const prompt = aiFreeSitePrompt(credits, inputs.pages)
+      if (prompt) {
+        if (!context.creditsConfirmed) {
+          return { status: 409, error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
+        }
+        context.onCreditsConfirmed?.(prompt)
       }
     }
     if (context.plan) {

@@ -1293,6 +1293,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
                       staff={isStaff}
                       onJob={(job) => patchBuild(index, { buildJob: job })}
                       onNotice={(notice) => patchBuild(index, { buildNotice: notice })}
+                      orgSlug={orgSlug}
                     />
                   )}
                   {message.role === 'assistant' &&

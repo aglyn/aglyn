@@ -31,6 +31,7 @@ import {
 import type { ReactNode } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
+import { formatStaffActivity } from '../utils/staff-timestamps'
 
 /**
  * A person resolved server-side by `/api/admin/org-detail` (AGL-938) —
@@ -107,6 +108,8 @@ export interface StaffOrgSummaryCardProps {
     /** Staff overrides; carries the plan comp (AGL-3034). */
     entitlements?: Record<string, unknown> | null
     createdAt?: { seconds?: number } | null
+    /** When any member last used the console here (`utils/org-list-query.ts`). */
+    lastActivityAt?: { seconds?: number } | null
   } | null
   /** The resolved owner, when the detail endpoint could name one. */
   owner?: StaffPerson | null
@@ -210,6 +213,15 @@ const StaffOrgSummaryCard = ({
             {org?.createdAt?.seconds
               ? new Date(org.createdAt.seconds * 1000).toLocaleDateString()
               : '—'}
+          </Typography>
+        </FieldRow>
+        <FieldRow label="Last activity">
+          <Typography variant="body2">
+            {formatStaffActivity(
+              typeof org?.lastActivityAt?.seconds === 'number'
+                ? org.lastActivityAt.seconds * 1000
+                : null,
+            )}
           </Typography>
         </FieldRow>
 

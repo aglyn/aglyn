@@ -192,6 +192,7 @@ doesn't work.
 | **Paper** | A themed surface. **Elevation** 0–24 raises it with a shadow; the **Outlined** variant swaps the shadow for a border (and hides the elevation control, which does nothing there). |
 | **Card** | A surface for one subject, composed from **Card Header** (title + subheader), **Card Content** (the padded body) and **Card Actions** (the button row). Each piece is its own element, so you can select, style and reorder them. |
 | **Accordion** | A header that expands to reveal its details, built from **Accordion Summary** and **Accordion Details**. See [Accordion](#accordion) below. |
+| **Lightbox** | Any elements — text, a form, a video, pictures — hidden until a button, link or picture opens them in a lightbox with a *Show an element* interaction. Nothing inside loads until it opens. See [Lightboxes](lightbox.md#lightbox-element). |
 
 ### Accordion
 
@@ -368,8 +369,9 @@ itself change what the rest of the page shows — wire an
 
 | Element | What it's for |
 | --- | --- |
-| **Image** | An image with fit, size and radius controls, an optional link, and an automatic responsive `srcSet` for media-library URLs. See [Image](#image) below. |
+| **Image** | An image with fit, size and radius controls, an optional link, and an automatic responsive `srcSet` for media-library URLs. **Open in a lightbox** shows it full size when pressed. See [Image](#image) below. |
 | **Video** | A video file from your media library, poster first. See [Video](video.md). |
+| **Music player** | Your own tracks from your media library, one or a playlist of **Track** elements. See [Music player](music-player.md). |
 | **Icon** | Any icon from the icon picker. |
 | **Image List** / **Image List Item** | A dense gallery. See [Image List](#image-list) below. |
 
@@ -423,6 +425,10 @@ Each tile holds an ordinary **Image** element, so galleries get the same respons
 `srcSet` and lazy loading as an image anywhere else. Fill in **Caption** for a caption bar,
 or leave it blank for no bar at all.
 
+Turn on **Open in a lightbox** on the list and pressing any picture opens a gallery of them
+all — previous and next, arrow keys, swipe, a counter, each tile's caption and, if you want
+them, thumbnails. See [Lightboxes](lightbox.md#image-list-gallery).
+
 ## Forms
 
 Forms and their fields, covered with the feature they belong to — see
@@ -457,6 +463,7 @@ plugin you install from the marketplace, and appear under **Input** once it is i
 
 - [The Besigner](overview.md)
 - [Video](video.md) — posters, preload, captions and the lightbox
+- [Music player](music-player.md) — tracks, playlists, rights confirmation and takedowns
 - [Drag-and-drop hierarchy](drag-drop-hierarchy.md) — which elements accept which children
 - [Long documents in markdown](long-form-markdown.md) — the Markdown and Table of contents elements
 - [Responsive styling](responsive-styling.md)

@@ -60,6 +60,7 @@ import {
   STAFF_SITE_LIST_FILTER_HEADERS,
   STAFF_SITE_LIST_FILTER_OPTIONS,
   STAFF_SITE_LIST_QUERY,
+  STAFF_SITE_LIST_SORT,
 } from '../../../../utils/staff-site-list-query'
 
 /**
@@ -72,7 +73,8 @@ const SITE_FILTER_COLUMNS = ['displayName', 'hasCustomDomain', 'createdAt']
 /**
  * The columns the route JOINS or derives — the organization and its owner,
  * the domain, the published-page count — sort the page on screen
- * (AGL-3680); Site and Created order the query (`STAFF_SITE_LIST_COLUMN_SORTS`).
+ * (AGL-3680); Site, Created and Last updated order the query
+ * (`STAFF_SITE_LIST_COLUMN_SORTS`).
  */
 const SITE_PAGE_SORTS = {
   organization: (row: StaffSiteRow) => row.org?.name ?? row.orgId ?? null,
@@ -85,6 +87,34 @@ const SITE_PAGE_SORT_HEADERS = {
   owner: 'Owner',
   hasCustomDomain: 'Custom domain',
   publishedPages: 'Status',
+}
+
+const dateOf = (at: { seconds: number } | null | undefined): Date | null =>
+  at?.seconds ? new Date(at.seconds * 1000) : null
+
+/**
+ * A Created or Last updated cell: the date, and the time under it, so rows
+ * from the same day read in the order the query returned them.
+ */
+function WhenCell({ at }: { at: { seconds: number } | null | undefined }) {
+  const date = dateOf(at)
+  if (!date) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        {'—'}
+      </Typography>
+    )
+  }
+  return (
+    <Stack sx={{ justifyContent: 'center', height: '100%', lineHeight: 1.25 }} title={date.toLocaleString()}>
+      <Typography variant="body2" sx={{ lineHeight: 1.25 }} noWrap>
+        {date.toLocaleDateString()}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.25 }} noWrap>
+        {date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+      </Typography>
+    </Stack>
+  )
 }
 
 /**
@@ -110,7 +140,7 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
    * rest comes back refused and is named above the grid, not applied.
    */
   /*
-   * EVERY HEADER SORTS (AGL-3680): Site and Created on the route's query,
+   * EVERY HEADER SORTS (AGL-3680): Site, Created and Last updated on the query,
    * the joined columns over the page — see `SITE_PAGE_SORTS`. The plan says
    * which order the route will read in, so the header shows that one.
    */
@@ -135,6 +165,7 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
   const { rows: sites, loading, filtering } = pagination
   const columnSort = useListColumnSort<StaffSiteRow>({
     sorts: STAFF_SITE_LIST_COLUMN_SORTS,
+    defaultSort: STAFF_SITE_LIST_SORT,
     sort: askedSort,
     onSortChange: setAskedSort,
     orderBy: orderPlan.orderBy,
@@ -290,17 +321,21 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
             field: 'createdAt',
             headerName: 'Created',
             flex: 0.7,
-            minWidth: 120,
+            minWidth: 130,
             type: 'date',
-            valueGetter: (_value, row: StaffSiteRow) =>
-              row.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000) : null,
-            renderCell: ({ row }: { row: StaffSiteRow }) => (
-              <Typography variant="caption" color="text.secondary">
-                {row.createdAt?.seconds
-                  ? new Date(row.createdAt.seconds * 1000).toLocaleDateString()
-                  : '—'}
-              </Typography>
-            ),
+            valueGetter: (_value, row: StaffSiteRow) => dateOf(row.createdAt),
+            renderCell: ({ row }: { row: StaffSiteRow }) => <WhenCell at={row.createdAt} />,
+          },
+          {
+            field: 'updatedAt',
+            headerName: 'Last updated',
+            flex: 0.7,
+            minWidth: 130,
+            type: 'date',
+            // Sorts on the query (`STAFF_SITE_LIST_COLUMN_SORTS`); no filter.
+            filterable: false,
+            valueGetter: (_value, row: StaffSiteRow) => dateOf(row.updatedAt),
+            renderCell: ({ row }: { row: StaffSiteRow }) => <WhenCell at={row.updatedAt} />,
           },
           listActionsColumn(
             (row: StaffSiteRow) => (
@@ -365,7 +400,7 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
                   rows={columnSort.rows}
                   columns={columns}
                   loading={loading}
-                  // Site and Created order the route's query; the joined
+                  // Site, Created and Last updated order the query; the joined
                   // columns sort this page and say so (`columnSort`).
                   columnSort={columnSort}
                   // The server answers the clauses and the search; a second

@@ -64,6 +64,11 @@ import {
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
+import {
+  AUDIO_RIGHTS_FIELD,
+  audioRightsRefusal,
+  audioRightsVerdict,
+} from '../../../../utils/media-audio-rights'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
@@ -178,6 +183,14 @@ async function handler(request: Request): Promise<Response> {
     if (!isAllowedUploadType(contentType)) {
       return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
     }
+    // Audio needs the uploader's rights confirmation (AGL-3716), asked before
+    // the body is decoded like the video pause below.
+    const rights = audioRightsVerdict({
+      contentType,
+      confirmed: body?.[AUDIO_RIGHTS_FIELD],
+      uid: decoded.uid,
+    })
+    if (rights.refusal) return audioRightsRefusal(rights.refusal)
     // Video ingress is behind a release flag (AGL-2830). Asked before the body
     // is decoded, so a refused video costs no inspection, digest, deny-list
     // read or quota read.
@@ -464,6 +477,8 @@ async function handler(request: Request): Promise<Response> {
       // reason.
       ...videoFields,
       uploadedBy: decoded.uid,
+      // Who confirmed an audio file's rights, and when (AGL-3716).
+      ...rights.fields,
       contentHash,
       contentSha256,
       // `variants`, the encoder generation that made them and the display

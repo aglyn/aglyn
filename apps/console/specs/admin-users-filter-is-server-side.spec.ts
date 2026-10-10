@@ -105,6 +105,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockScanCalls += 1
     return { users: mockScanned, truncated: mockScanTruncated, tenantTruncated: [] }
   },
+  // The account-identity resolver (AGL-3721), over the Auth record alone:
+  // these rows carry no profile, so the answer is the record's own fields.
+  resolveUserRecordIdentities: async (rows: any[]) => {
+    const { resolveAccountIdentity } = jest.requireActual(
+      '@aglyn/shared-util-tools/account-identity',
+    )
+    return new Map(
+      rows.map((row) => [
+        row.record.uid,
+        resolveAccountIdentity({ auth: row.record, email: row.record.email }),
+      ]),
+    )
+  },
   // The collapse has its own specs against the real algorithm; here it must
   // simply not be the thing under test.
   collapseCrossPoolUidRows: (rows: any[]) => rows,

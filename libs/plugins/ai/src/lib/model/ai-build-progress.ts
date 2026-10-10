@@ -17,6 +17,20 @@
 
 import { aiCustomerSafeItem } from './ai-job-failure-copy'
 import { AI_JOB_PLAN_STEP, type AiJobItemLedger, type AiJobSummary } from './ai-jobs.types'
+import { aiBuildCreditRange, aiBuildRetryLedger, aiBuildUnits, aiLedgerUnits } from './ai-build-job'
+import {
+  AI_CREDIT_RANGE_ZERO,
+  aiCreditRangeAdd,
+  aiCreditRangeOf,
+  aiCreditRangeOrdered,
+  type AiCreditRange,
+} from './ai-credit-estimate'
+import {
+  AI_SITE_NOMINAL_SECTIONS,
+  AI_SITE_PASS_CREDITS,
+  aiCreationMeasuredCredits,
+  aiScreenCreditRange,
+} from './ai-site-job'
 
 /**
  * What a `build` job shows of each item (AGL-3616), wherever it is shown —
@@ -170,6 +184,38 @@ export function aiBuildCanRetry(job: Pick<AiJobSummary, 'kind' | 'status' | 'ite
   return (
     finished &&
     (job.items ?? []).some((row) => row.status === 'failed' || (row.status === 'skipped' && !row.degradedBy?.length))
+  )
+}
+
+/**
+ * What Try again is likely to cost (AGL-3722), quoted beside its button: a
+ * build's retried items by `aiBuildCreditRange`; a site's retried rows each
+ * at what its kind measured — a page at the nominal sections — held at the
+ * reserve a row is retried at. `null` when nothing would run.
+ */
+export function aiBuildRetryCreditRange(
+  job: Pick<AiJobSummary, 'kind' | 'items' | 'plan'>,
+): AiCreditRange | null {
+  const items = job.items ?? []
+  if (!items.length) return null
+  if (job.kind === 'build') {
+    if (!job.plan) return null
+    const plan = job.plan as unknown as Parameters<typeof aiBuildUnits>[0]
+    const { retried } = aiBuildRetryLedger(items, aiBuildUnits(plan))
+    return retried.length ? aiBuildCreditRange(plan, { slots: new Set(retried) }) : null
+  }
+  const { retried } = aiBuildRetryLedger(items, aiLedgerUnits(items))
+  if (!retried.length) return null
+  const ops = new Map(items.map((row) => [row.slot, row.op]))
+  return aiCreditRangeOrdered(
+    retried.reduce((total, slot) => {
+      const op = ops.get(slot) ?? ''
+      const row =
+        op === 'page'
+          ? aiScreenCreditRange(AI_SITE_NOMINAL_SECTIONS)
+          : aiCreditRangeOf(aiCreationMeasuredCredits(op), AI_SITE_PASS_CREDITS)
+      return aiCreditRangeAdd(total, row)
+    }, AI_CREDIT_RANGE_ZERO),
   )
 }
 

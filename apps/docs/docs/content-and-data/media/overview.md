@@ -321,6 +321,10 @@ back afterwards, so Aglyn asks first.
   replaced. Videos already in your library keep playing, and the **Video** element can
   still use them. While the pause lasts, the library shows a **Video uploads paused**
   chip beside **Upload media**.
+- Upload **audio** — MP3, M4A, AAC, OGG and WAV — to play your own music with the
+  [Music player](../../building-sites/besigner/music-player.md). Each audio upload first
+  asks you to confirm you own the audio or have a license to use it on your site; see
+  [Your rights to the music](../../building-sites/besigner/music-player.md#rights).
 - **Create images with AI.** **Create with AI**, beside **Upload media**, draws an
   illustration, icon, pattern or logo mark as an SVG from a description, or, where photos
   are on, makes a photo, a piece of art such as a watercolor or a 3D render, or a design

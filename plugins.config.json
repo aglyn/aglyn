@@ -86,6 +86,32 @@
       }
     },
     {
+      "id": "lightbox",
+      "$comment": "AGL-3717: the Lightbox container element — any elements, hidden until the interactions system's existing Show an element / Hide an element / Show/hide an element steps open it, through core's generic `subscribeElementVisibility` (element-ui.ts). Always on, like the component library, so every site can place it; loaded only on a page that places one (`placedComponents`), and its dialog is a chunk fetched on the first open. The picture lightboxes (Image, Image List gallery) are the MUI elements' own; every lightbox opens the one shared shell in @aglyn/shared-ui-jsx/components/lightbox.",
+      "package": "@aglyn/plugins-lightbox",
+      "alwaysOn": true,
+      "register": {
+        "site": "registerLightboxPlugin"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "catalog": {
+        "order": 34,
+        "label": "Lightbox",
+        "alwaysOn": true,
+        "description": "A lightbox you fill with any elements and open from any button, link or picture.",
+        "publishedSiteImpact": "elements"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "lightbox"
+          ]
+        }
+      }
+    },
+    {
       "id": "forms",
       "package": "@aglyn/plugins-forms",
       "register": {
@@ -3791,6 +3817,36 @@
         "site": {
           "features": [
             "weglot-site-runtime"
+          ]
+        }
+      }
+    },
+    {
+      "id": "music",
+      "$comment": "AGL-3716: the Music player element, playing the owner's OWN audio from the media library (or an external URL the author confirms they hold the rights to). Site surface only: the published page loads it where a page places a player. No third-party catalog, no download control, and a copyright takedown is the platform's media quarantine (reason `dmca`), which the CDN answers with a 410 and the player names as an unavailable track.",
+      "package": "@aglyn/plugins-music",
+      "register": {
+        "site": "registerMusicPlugin"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "catalog": {
+        "order": 39,
+        "label": "Music player",
+        "alwaysOnForWorkspace": true,
+        "description": "Play your own tracks from the media library on your site.",
+        "siteOff": {
+          "stops": "Switching the Music player off for this site stops its players rendering on its published pages.",
+          "keeps": "The audio in your media library is kept, and players keep working on the workspace's other sites."
+        },
+        "publishedSiteImpact": "elements"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "musicPlayer",
+            "musicTrack"
           ]
         }
       }

@@ -21,7 +21,8 @@ import { COLLECTION_ENTRIES_COMPONENT_ID } from '@aglyn/aglyn/app-utils/collecti
 import { AI_PALETTE, AI_SURFACES } from '../runtime/ai-palette.generated'
 import { aiLayoutListingContext, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
 import { aiLayoutFrameCheck } from '../jobs/ai-job-layout-language'
-import { AI_LAYOUT_POST_CARD_TOKENS, aiCompileLayoutPage } from './ai-layout-compiler'
+import { aiSiteListings } from '../jobs/ai-job-site-content'
+import { AI_LAYOUT_POST_CARD_TOKENS, AI_LAYOUT_STORE_EMPTY, aiCompileLayoutPage } from './ai-layout-compiler'
 import {
   AI_LAYOUT_CART_ELEMENT,
   AI_LAYOUT_LISTING_ELEMENTS,
@@ -164,7 +165,7 @@ describe('a listing is drawn with the element its plugin declares', () => {
   it('names the Product grid and the Cart by the ids, and the props, the commerce plugin persists', () => {
     const grid = commerce('product-grid.tsx')
     expect(grid).toContain(`export const ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.products}'`)
-    for (const prop of ['source', 'sort', 'columns', 'maxItems', 'pageSize', 'cardStyle', 'emptyText']) {
+    for (const prop of ['source', 'sort', 'columns', 'maxItems', 'pageSize', 'cardStyle', 'emptyText', 'emptyTitle', 'emptyActionLabel', 'emptyActionHref', 'showSort', 'showCategories']) {
       expect(grid).toMatch(new RegExp(`\\b${prop}\\?:`))
     }
     expect(commerce('cart.tsx')).toContain(`export const ID: Aglyn.ComponentId = '${AI_LAYOUT_CART_ELEMENT}'`)
@@ -305,6 +306,91 @@ describe('a section the store’s catalog fills (AGL-3676)', () => {
   })
 })
 
+/*
+ * The live Hearth & Wick store start (job FYNasg1h0S, 2026-10-09): its
+ * products step failed, nothing was listed, and its Shop page compiled
+ * "Product range image cards" as six cards naming kinds of candle — Soy
+ * candles, Wax melts, Gift sets… — with a stock photo and a line each: no
+ * product, no price, no cart. A store's Shop page is its storefront.
+ */
+describe('a store’s Shop page is its storefront (AGL-3676)', () => {
+  const SHOP_SECTIONS = [
+    { name: 'Shop intro heading', uses: [], items: 0 },
+    { name: 'Product range image cards', uses: [], items: 6 },
+    { name: 'Care and burn tips', uses: [], items: 3 },
+    { name: 'Gift help call to action', uses: [], items: 0 },
+  ]
+  const RANGE = [
+    { title: 'Soy candles', text: 'Hand-poured in small batches.' },
+    { title: 'Wax melts', text: 'For a warmer.' },
+    { title: 'Gift sets', text: 'Boxed and ready.' },
+  ]
+  const EMPTY_STORE: AiLayoutListing = {
+    id: 'listing:products',
+    kind: 'products',
+    name: 'the shop',
+    records: [],
+    emptyAction: { label: 'Get in touch', href: '/contact' },
+    placements: aiLayoutListingPlacements('products', [
+      { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero with shop call to action', items: 0 }, { name: 'Featured range of candles, wax melts and gift sets', items: 3 }] },
+      { id: 'shop', title: 'Shop', slug: '/shop', sections: SHOP_SECTIONS },
+    ]),
+  }
+  const compileShop = (listings: AiLayoutListing[]) =>
+    aiCompileLayoutPage(
+      [
+        { blocks: [{ kind: 'heading', text: 'Shop hand-poured soy candles' }] },
+        { blocks: [{ kind: 'heading', text: 'The range' }, { kind: 'cards', items: RANGE }] },
+        { blocks: [{ kind: 'heading', text: 'Care and burn tips' }, { kind: 'list', items: [{ title: 'Trim the wick', text: 'To a quarter inch before each burn.' }] }] },
+        { blocks: [{ kind: 'heading', text: 'Need help with a gift?' }, { kind: 'button', text: 'Contact us', to: 'page:contact' }] },
+      ],
+      { title: 'Shop', sections: SHOP_SECTIONS },
+      targets('shop', listings),
+      { reusableComponents: false },
+    )
+
+  it('compiles the Shop page’s range section to the Product grid over the catalog, in place of invented cards', () => {
+    expect(EMPTY_STORE.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'shop', section: 1, role: 'index' },
+    ])
+    const compiled = compileShop([EMPTY_STORE])
+    const grids = Object.values(compiled.tree.nodes).filter((node) => node.componentId === 'product-grid')
+    expect(grids).toHaveLength(1)
+    expect(grids[0].props).toMatchObject({ source: 'all', cardStyle: 'photo', pageSize: '12', showSort: true, showCategories: true })
+    // The range drawn as cards is gone: the grid shows the store's products.
+    expect(JSON.stringify(compiled.tree.nodes)).not.toContain('Boxed and ready.')
+  })
+
+  it('says, with no products yet, that new pieces are on the way, with a way to get in touch', () => {
+    const grid = Object.values(compileShop([EMPTY_STORE]).tree.nodes).find((node) => node.componentId === 'product-grid')
+    expect(grid?.props).toMatchObject({
+      emptyTitle: 'New pieces are on the way',
+      emptyText: AI_LAYOUT_STORE_EMPTY.text,
+      emptyActionLabel: 'Get in touch',
+      emptyActionHref: '/contact',
+    })
+    const alone = Object.values(compileShop([{ ...EMPTY_STORE, emptyAction: undefined }]).tree.nodes).find((node) => node.componentId === 'product-grid')
+    expect(alone?.props).toMatchObject({ emptyTitle: 'New pieces are on the way', emptyText: AI_LAYOUT_STORE_EMPTY.textAlone })
+    expect(alone?.props?.['emptyActionHref']).toBeUndefined()
+  })
+
+  it('keeps the empty state’s action through a listing’s round trip, and only as a site path', () => {
+    const read = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [EMPTY_STORE] })
+    expect(read[0].emptyAction).toEqual({ label: 'Get in touch', href: '/contact' })
+    const unsafe = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...EMPTY_STORE, emptyAction: { label: 'Go', href: 'https://evil.example' } }] })
+    expect(unsafe[0].emptyAction).toBeUndefined()
+  })
+
+  it('lists the catalog in the shop section that names the products over a framing one', () => {
+    expect(
+      aiLayoutListingPlacements('products', [
+        { id: 'shop', title: 'Shop', slug: '/shop', sections: [{ name: 'Shop intro', items: 0 }, { name: 'Why soy', items: 4 }, { name: 'Product grid', items: 0 }] },
+      ]),
+    ).toEqual([{ screenId: 'shop', section: 2, role: 'index' }])
+  })
+})
+
 describe('a section the blog’s posts fill (AGL-3676)', () => {
   const BLOG_SCREEN = {
     ...HOME_SCREEN,
@@ -368,5 +454,130 @@ describe('a selling site’s header carries the cart (AGL-3676)', () => {
 
   it('carries no cart where the site does not sell', () => {
     expect(nodesOf(frame([]).value?.nodes).some((node) => node.componentId === 'cart')).toBe(false)
+  })
+
+  it('carries no cart for a store that lists its catalog but cannot sell yet', () => {
+    expect(nodesOf(frame([{ ...PRODUCTS, records: [], cart: false }]).value?.nodes).some((node) => node.componentId === 'cart')).toBe(false)
+  })
+})
+
+/*
+ * A music site's player (AGL-3716). A user asked Assist for "playable musics
+ * like daniel Caesar" on a music site and could only be offered a Video. A
+ * music site now places the Music player itself, EMPTY — its "add your
+ * tracks" state — for the artist to fill with their own uploads. No job
+ * sources a recording.
+ */
+const MUSIC_SCREENS = [
+  {
+    id: 'home',
+    title: 'Home',
+    slug: '/',
+    sections: [
+      { name: 'Hero', items: 0 },
+      { name: 'Latest release', items: 0 },
+      { name: 'Upcoming shows', items: 3 },
+    ],
+  },
+  {
+    id: 'music',
+    title: 'Music',
+    slug: '/music',
+    sections: [
+      { name: 'Music intro', items: 0 },
+      { name: 'Listen to the tracks', items: 0 },
+    ],
+  },
+  { id: 'booking', title: 'Booking', slug: '/booking', sections: [{ name: 'Book the band', items: 0 }] },
+]
+
+describe('a music site places an empty player for the artist’s own tracks (AGL-3716)', () => {
+  const [tracks] = aiSiteListings({ outputs: [], screens: MUSIC_SCREENS, music: true })
+
+  it('places it on the Music page, in the section about the recordings, and on a home section named for them', () => {
+    expect(tracks).toMatchObject({ id: 'listing:tracks', kind: 'tracks', records: [] })
+    expect(tracks.placements).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'music', section: 1, role: 'index' },
+    ])
+  })
+
+  it('falls back to the home, after the opening, on a site with no music page or section', () => {
+    const [only] = aiSiteListings({
+      outputs: [],
+      screens: [{ id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'About the band', items: 0 }] }],
+      music: true,
+    })
+    expect(only.placements).toEqual([{ screenId: 'home', section: 1, role: 'featured' }])
+  })
+
+  it('is placed only on a music site', () => {
+    expect(aiSiteListings({ outputs: [], screens: MUSIC_SCREENS }).some((listing) => listing.kind === 'tracks')).toBe(false)
+  })
+
+  it('round-trips with no records, whatever a unit input claims', () => {
+    const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...tracks, records: ['Get You — Daniel Caesar'] }] })
+    expect(read.kind).toBe('tracks')
+    expect(read.records).toEqual([])
+  })
+
+  it('names the Music player by the id the music plugin persists, and offers it to a model', () => {
+    const source = readFileSync(join(__dirname, '../../../../music/src/lib/components/music-player.tsx'), 'utf8')
+    expect(source).toContain(`export const MUSIC_PLAYER_ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.tracks}'`)
+    expect(AI_PALETTE['musicPlayer']?.pluginId).toBe('music')
+    expect(AI_SURFACES.screen.allow).toEqual(expect.arrayContaining(['musicPlayer', 'musicTrack']))
+    // The rights confirmation is the owner's answer: never offered to a model.
+    expect(AI_PALETTE['musicPlayer']?.propsSchema.properties['rightsConfirmed']).toBeUndefined()
+    expect(AI_PALETTE['musicTrack']?.propsSchema.properties['rightsConfirmed']).toBeUndefined()
+  })
+
+  it('compiles the section to an empty player — no source — under the words the design gave it', () => {
+    const compiled = aiCompileLayoutPage(
+      [
+        { blocks: [{ kind: 'heading', text: 'Our music' }] },
+        {
+          blocks: [
+            { kind: 'heading', text: 'Listen' },
+            { kind: 'cards', items: [{ title: 'Get You', text: 'Daniel Caesar' }] },
+          ],
+        },
+      ],
+      { title: 'Music', sections: MUSIC_SCREENS[1].sections.map((section) => ({ ...section, uses: [] })) },
+      targets('music', [tracks]),
+      { reusableComponents: false },
+    )
+    const nodes = nodesOf(compiled.tree.nodes)
+    const player = nodes.find((node) => node.componentId === 'musicPlayer')
+    expect(player).toBeTruthy()
+    expect(player?.props?.['src']).toBeUndefined()
+    // The cards naming another artist's song are gone.
+    expect(JSON.stringify(compiled.tree.nodes)).not.toContain('Daniel Caesar')
+    expect(JSON.stringify(compiled.tree.nodes)).toContain('Listen')
+  })
+
+  it('stores the player through the same validator every generated page passes', () => {
+    const result = homeCheck([tracks])(HOME_ANSWER)
+    expect(result.violations).toEqual([])
+    const player = nodesOf(result.value?.nodes).find((node) => node.componentId === 'musicPlayer')
+    expect(player).toBeTruthy()
+    expect(player?.props?.['src']).toBeUndefined()
+  })
+
+  it('tells the model the platform places the player, so it names no songs', () => {
+    const screen = {
+      ...HOME_SCREEN,
+      id: 'music',
+      title: 'Music',
+      slug: '/music',
+      sections: MUSIC_SCREENS[1].sections.map((section) => ({ ...section, uses: [] })),
+    }
+    const prompt = aiLayoutPagePrompt({
+      job: { $id: 'job-1', brief: 'A band site', inputs: {} },
+      plan: { reuse: [], create: [], screens: [screen] } as never,
+      screen: screen as never,
+      targets: targets('music', [tracks]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain('2. "Listen to the tracks"; the platform places a music player here for the artist\'s own tracks')
   })
 })

@@ -57,11 +57,14 @@ import {
   AI_SITE_PAGES,
   aiSiteBlogNavPage,
   aiFreeSiteCreditEstimate,
-  aiFreeSiteShortfallText,
+  aiFreeSitePrompt,
+  aiFreeSiteCreditRange,
+  aiFreeCreditsNoneLeftText,
 } from '../model/ai-site-job'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSiteAliases, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutPageTargets } from './ai-job-page-language'
 import { aiLayoutRenamedLabel, aiLayoutResolveLink } from '../layout-language/ai-layout-links'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -1022,7 +1025,7 @@ describe('what a scaffold is admitted with', () => {
     })
   })
 
-  it('refuses a Free start what is left of the month cannot pay for, before it spends, with what is left and when it resets (AGL-3660)', async () => {
+  it('admits a Free start on its p90, asks first past it, starts it on the go-ahead, and refuses only when nothing is left (AGL-3722)', async () => {
     const seen: unknown[] = []
     const admission = (left: number) =>
       createAiSiteJobAdmission({
@@ -1039,13 +1042,30 @@ describe('what a scaffold is admitted with', () => {
       org: { plan: 'free' },
       ...extra,
     })
-    const refused = await admission(70)(context(2))
-    expect(refused).toEqual({ status: 429, error: aiFreeSiteShortfallText({ needed: aiFreeSiteCreditEstimate(2), left: 70 }, '2026-11-01') })
-    expect(refused?.error).toMatch(/up to about 282 AI credits, and only 70 are left .* reset on November 1\. Upgrade this workspace/)
+    // Past what is left: not refused, ASKED — the prompt rides a 409, and no job starts.
+    const asked = await admission(70)(context(2))
+    const prompt = aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 2)
+    expect(asked).toEqual({ status: 409, error: aiCreditsPromptText(prompt!, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt })
+    expect(asked?.error).toBe(
+      'This site is about 137 credits (up to 282). You have 70 left, so it will build as much as it can and pause ' +
+        'when your credits run out. You can upgrade or resume when they renew on November 1.',
+    )
     expect(seen).toEqual(['org-1'])
-    // Enough left for the figure the dialog quotes: admitted.
-    await expect(admission(aiFreeSiteCreditEstimate(2))(context(2))).resolves.toBeNull()
-    await expect(admission(aiFreeSiteCreditEstimate(1))(context(1))).resolves.toBeNull()
+    // The go-ahead admits it, and the door is told what was confirmed.
+    const confirmed: unknown[] = []
+    await expect(
+      admission(70)(context(2, { creditsConfirmed: true, onCreditsConfirmed: (one: unknown) => confirmed.push(one) })),
+    ).resolves.toBeNull()
+    expect(confirmed).toEqual([prompt])
+    // Its p90 fits: admitted with no prompt — and the old worst-case hold (282) is gone.
+    await expect(admission(aiFreeSiteCreditRange(2).p90)(context(2))).resolves.toBeNull()
+    await expect(admission(aiFreeSiteCreditRange(1).p90)(context(1))).resolves.toBeNull()
+    expect(aiFreeSiteCreditRange(2).p90).toBeLessThan(aiFreeSiteCreditEstimate(2))
+    // Nothing left at all: refused, confirmed or not.
+    await expect(admission(0)(context(2, { creditsConfirmed: true }))).resolves.toEqual({
+      status: 429,
+      error: aiFreeCreditsNoneLeftText('2026-11-01'),
+    })
     // Nothing known about what is left: admitted, and the reservation decides.
     await expect(createAiSiteJobAdmission({ freeCreditsLeft: async () => null })(context(2))).resolves.toBeNull()
     // A resume carries on the same job: not asked again.
@@ -1449,7 +1469,13 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     const sells = aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: owed as never }), layout, aiSiteBuiltRefs(units, []))
     expect(listingsOf(sells).map((listing) => listing.kind)).toEqual(['products'])
     const skipped = owed.map((row) => (row.slot === 'products' ? { ...row, status: 'skipped' } : row))
-    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
+    // A store whose products were skipped still lists its catalog, as a storefront
+    // that says new pieces are on the way, but carries no cart (AGL-3676).
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: storeInputs, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([
+      expect.objectContaining({ kind: 'products', records: [], cart: false }),
+    ])
+    const portfolio = { ...storeInputs, siteKind: 'portfolio' }
+    expect(listingsOf(aiSiteUnitJob(siteJob({ plan, inputs: portfolio, items: skipped as never }), layout, aiSiteBuiltRefs(units, [])))).toEqual([])
   })
 
   it('tells each page the posts and the products built before it, by name', () => {

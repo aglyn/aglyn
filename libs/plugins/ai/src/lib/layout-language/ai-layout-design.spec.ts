@@ -193,6 +193,38 @@ describe('a site design (AGL-3660)', () => {
     expect(hero?.alt).toBe('A sunlit studio with mats on a wooden floor')
     expect((stored.nodes as unknown as Record<string, { props?: Record<string, unknown> }>)[hero?.imageId as string].props?.['decorative']).toBeUndefined()
   })
+
+  type Stored = Record<string, { componentId?: string; props?: Record<string, unknown> }>
+  const sectionPictures = (stored: { nodes: unknown }, slots: ReturnType<typeof build>['slots'], index: number) =>
+    slots
+      .filter((slot) => slot.sectionIndex === index)
+      .map((slot) => (stored.nodes as Stored)[slot.imageId as string].props ?? {})
+
+  it.each(['portfolio', 'photography'])('opens a %s gallery in a lightbox, one gallery per section, captioned (AGL-3717)', (kind) => {
+    const { sections, plan } = page('Selected work', 4)
+    const { slots, stored, report } = build(sections, plan, { kind, seed: 3, home: true })
+    expect(report.violations).toEqual([])
+    const pictures = sectionPictures(stored, slots, 1)
+    expect(pictures).toHaveLength(4)
+    for (const [index, props] of pictures.entries()) {
+      expect(props).toMatchObject({ lightbox: true, lightboxGallery: 'Selected work', lightboxCaption: `piece number ${index + 1}` })
+    }
+  })
+
+  it('leaves another kind’s pictures plain unless the design asks (AGL-3717)', () => {
+    const { sections, plan } = page('Shop by collection', 4)
+    const { slots, stored } = build(sections, plan, { kind: 'store', seed: 3, home: true })
+    for (const props of sectionPictures(stored, slots, 1)) expect(props['lightbox']).toBeUndefined()
+  })
+
+  it('opens an image block large when its to is lightbox (AGL-3717)', () => {
+    const { sections, plan } = page('Why people come', 3)
+    sections[2] = { ...sections[2], blocks: [...sections[2].blocks, { kind: 'image', text: 'The studio at dusk', to: 'lightbox' }] }
+    const { slots, stored, report } = build(sections, plan, { kind: 'yoga', seed: 5, home: true })
+    expect(report.violations).toEqual([])
+    const [picture] = sectionPictures(stored, slots, 2)
+    expect(picture).toMatchObject({ lightbox: true, lightboxGallery: 'About the studio' })
+  })
 })
 
 describe('a site design on a workspace that keeps components (AGL-3660)', () => {

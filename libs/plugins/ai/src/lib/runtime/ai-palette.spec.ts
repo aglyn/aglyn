@@ -348,6 +348,8 @@ describe('auditNodeCapabilities reports a capability the palette lost (AGL-3156)
   })
 })
 
+const UNLISTED = new Set(['musicPlayer', 'musicTrack'])
+
 describe('AI_PALETTE_CATALOG stays inside its prompt budget (AGL-2905)', () => {
   it.each(AI_SURFACE_NAMES)('%s is under the token ceiling', (surface) => {
     const catalog = AI_PALETTE_CATALOG[surface]
@@ -356,6 +358,9 @@ describe('AI_PALETTE_CATALOG stays inside its prompt budget (AGL-2905)', () => {
     )
     // Every allowed element has its line, named where its name is more than its id spelled again.
     for (const id of AI_SURFACES[surface].allow) {
+      // The Music player is admitted but unlisted (AGL-3716): Assist's edit
+      // protocol names it, and a music site's player is placed by the compiler.
+      if (UNLISTED.has(id)) continue
       expect([id, new RegExp(`^- ${id}(?: \\([^)]+\\))?: `, 'm').test(catalog)]).toEqual([id, true])
     }
     expect(catalog).toContain(`Surface: ${surface}.`)

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import { canManageOrg } from '@aglyn/aglyn'
 import { mdiAccountOutline } from '@aglyn/shared-data-mdi'
 import {
@@ -254,7 +255,13 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
     [user, currentOrg?.$id, uid],
   )
 
-  const displayName = member?.displayName || member?.email || uid
+  // The roster row through the one account-identity resolver (AGL-3721),
+  // the same answer the staff surfaces give for this person.
+  const identity = resolveAccountIdentity({
+    idp: { displayName: member?.displayName, photoURL: member?.photoURL },
+    email: member?.email,
+  })
+  const displayName = identity.label || uid
   const isOwnerRow = member?.role === 'owner'
 
   return (
@@ -299,7 +306,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                       of split-brain the app bar and the Profile-image card
                       had in AGL-1127. */}
                   <MemberAvatar
-                    photoURL={member?.photoURL}
+                    photoURL={identity.photoUrl}
                     email={member?.email}
                     name={String(displayName)}
                     size={48}
@@ -512,6 +519,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               orgId={currentOrg.$id}
               targetId={uid}
               header={'Changes to this member'}
+              help={docsHelp('inviteTeammates', { anchor: '#member-changes' })}
             />
           ) : null}
           {currentOrg?.$id ? (

@@ -26,8 +26,10 @@ import {
   type ContactChannel,
   type LegalAcceptanceStatus,
 } from '@aglyn/tenant-data-admin'
+import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
+import { accountLastActiveAt } from '../../../../../utils/list-filters'
 import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'
 // From the LEAF: the barrel above reaches the admin SDK and is mocked wholesale
 // by route specs, and a mocked-away reader renders an empty email history that
@@ -330,6 +332,9 @@ async function handler(request: Request): Promise<Response> {
       // throws — a failed read comes back `unreadable`.
       readPlatformMarketingReach({ email: record.email }),
     ])
+    // What the IdP sent at sign-in, as the roster rows captured it — the last
+    // source the identity resolver falls back to (AGL-3721).
+    const rosterIdentity: { displayName?: string | null; photoURL?: string | null } = {}
     const memberships = await Promise.all(
       reverse.docs.map(async (entry) => {
         const orgId = entry.id
@@ -339,6 +344,14 @@ async function handler(request: Request): Promise<Response> {
           .collection('members')
           .doc(uid)
           .get()
+        const rosterName = member.get('displayName')
+        const rosterPhoto = member.get('photoURL')
+        if (!rosterIdentity.displayName && typeof rosterName === 'string') {
+          rosterIdentity.displayName = rosterName
+        }
+        if (!rosterIdentity.photoURL && typeof rosterPhoto === 'string') {
+          rosterIdentity.photoURL = rosterPhoto
+        }
         return {
           orgId,
           orgName: entry.get('orgName') ?? null,
@@ -357,21 +370,38 @@ async function handler(request: Request): Promise<Response> {
      * page and filter it themselves through `/api/admin/users/audit`, every
      * clause on the query (AGL-3321).
      */
+    /*
+     * The name and photo through the one account-identity resolver
+     * (AGL-3721): the Auth record, then `users/{uid}`, then a provider entry
+     * (Google's avatar lives there when the top-level photoURL was never
+     * mirrored, AGL-877), then what the IdP sent as the roster captured it.
+     * An SSO account's Auth record holds neither field, so this page showed
+     * "Z" and a blank Display name for a person the account menu names.
+     * `authDisplayName`/`authPhotoUrl` say what the record itself holds, so
+     * the page can tell a resolved value from a stored one.
+     */
+    const identity = resolveAccountIdentity({
+      auth: record,
+      profile: profile.exists ? (profile.data() ?? null) : null,
+      idp: rosterIdentity,
+      email: record.email ?? null,
+    })
     return Response.json({
       user: {
         uid: record.uid,
         email: record.email ?? null,
-        displayName: record.displayName ?? null,
-        // The auth record's photo, falling back to a provider photo (e.g.
-        // Google's avatar, which lives on providerData when the top-level
-        // photoURL was never mirrored) so the identity editor shows it
-        // (AGL-877). The page reads `photoUrl`.
-        photoUrl:
-          record.photoURL ??
-          record.providerData.find((provider) => provider.photoURL)
-            ?.photoURL ??
-          null,
+        displayName: identity.displayName,
+        photoUrl: identity.photoUrl,
+        displayNameSource: identity.displayNameSource,
+        photoUrlSource: identity.photoUrlSource,
+        authDisplayName: record.displayName ?? null,
+        authPhotoUrl: record.photoURL ?? null,
         disabled: record.disabled,
+        // Whether the address has been proven (AGL-3706). An
+        // unverified password account cannot use a workspace yet, and the
+        // identity card said nothing either way, so staff read "stuck at
+        // verification" off an account that had already verified.
+        emailVerified: record.emailVerified === true,
         // Phone + do-not-contact state (AGL-1569). See `readPhoneDisclosure`
         // for why this is the profile's field and not the Auth record's, and
         // why the opt-out answer is inseparable from the number.
@@ -397,6 +427,8 @@ async function handler(request: Request): Promise<Response> {
         })),
         createdAt: record.metadata.creationTime ?? null,
         lastSignInAt: record.metadata.lastSignInTime ?? null,
+        /** The later of the last sign-in and the last session refresh. */
+        lastActiveAt: accountLastActiveAt(record.metadata),
         /** GCIP tenant id, or null for a project-pool account (AGL-1122). */
         tenantId,
       },

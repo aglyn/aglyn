@@ -308,6 +308,12 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "lightbox",
+    "label": "Lightbox",
+    "alwaysOn": true,
+    "description": "A lightbox you fill with any elements and open from any button, link or picture."
+  },
+  {
     "id": "live-chat",
     "label": "Live chat",
     "alwaysOnForWorkspace": true,
@@ -337,6 +343,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "siteOff": {
       "stops": "Stops loading Weglot and its language switcher on this site's pages.",
       "keeps": "Your Weglot settings and your Weglot account's translations are kept."
+    }
+  },
+  {
+    "id": "music",
+    "label": "Music player",
+    "alwaysOnForWorkspace": true,
+    "description": "Play your own tracks from the media library on your site.",
+    "siteOff": {
+      "stops": "Switching the Music player off for this site stops its players rendering on its published pages.",
+      "keeps": "The audio in your media library is kept, and players keep working on the workspace's other sites."
     }
   },
   {
@@ -385,9 +401,11 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "delivery-apps": "console-only",
   "loyalty": "console-only",
   "couriers": "console-only",
+  "lightbox": "elements",
   "live-chat": "elements",
   "review-platforms": "console-only",
   "weglot": "elements",
+  "music": "elements",
   "ad-conversions": "console-only",
 }
 

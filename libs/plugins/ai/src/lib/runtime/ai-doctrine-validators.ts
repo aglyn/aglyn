@@ -2536,6 +2536,13 @@ function embedVerdict(
 }
 
 /**
+ * Containers whose empty state is something they draw themselves, so an empty
+ * one is a placement and not a gap (AGL-3716): the Music player, placed with
+ * no tracks, asks its owner to add their own; a model never fills it.
+ */
+const OWNS_ITS_EMPTY_STATE: ReadonlySet<string> = new Set(['musicPlayer'])
+
+/**
  * Rule 16. The flattest tree that renders the design: no container that
  * wraps one other container and adds nothing, no empty containers, no inline
  * style repeated where a token or a component prop would carry it, no font
@@ -2575,7 +2582,9 @@ export function detectHeavyDocument(
       wrappers.push(id)
     }
     const boundForm = node.componentId === 'form' && typeof node.props?.['formId'] === 'string'
-    if (entry?.acceptsChildren && !children.length && !boundForm) empty.push(id)
+    if (entry?.acceptsChildren && !children.length && !boundForm && !OWNS_ITS_EMPTY_STATE.has(node.componentId)) {
+      empty.push(id)
+    }
     if (outputKind !== 'email' && node.sx?.['fontFamily'] !== undefined) fonts.push(id)
     if (node.componentId === 'image') {
       images += 1

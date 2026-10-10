@@ -19,6 +19,8 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { AiEffort } from '../providers/contract'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiBuildPlan } from './ai-build-plan'
+import type { AiFreeCreditsLeft } from './ai-site-job'
+import type { AiJobCreditsConfirmation } from './ai-credit-estimate'
 
 /**
  * AI generation jobs (AGL-2904).
@@ -401,6 +403,13 @@ export interface AiJobReview {
    * disabled with this beside it.
    */
   retryRefusal?: string
+  /**
+   * What a Free workspace had left when a build's plan was kept (AGL-3722),
+   * so its plan card says, before Confirm, whether the build fits and offers
+   * the go-ahead or a smaller first build when it does not. The confirm door
+   * reads what is left again; this is what the card shows.
+   */
+  freeCredits?: AiFreeCreditsLeft
 }
 
 export type AiJobPlanStatus = 'proposed' | 'confirmed'
@@ -565,6 +574,12 @@ export interface AiJob {
   items?: AiJobItemLedger[] | null
   /** A `build` job's planning spend and how it settled (AGL-3616). */
   orchestration?: AiJobOrchestration | null
+  /**
+   * A Free job started past what was left (AGL-3722): the person chose to
+   * build what fits, knowing it pauses where the credits run out. Who, when,
+   * what was left and the range they were shown; absent on every job that fit.
+   */
+  creditsConfirmed?: AiJobCreditsConfirmation | null
 }
 
 /**

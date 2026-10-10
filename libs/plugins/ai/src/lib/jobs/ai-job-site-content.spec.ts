@@ -44,12 +44,14 @@ jest.mock('../providers/routing', () => ({
 
 import type { PluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
+import { aiUnitFailure } from './ai-build-unit-outcome'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_SITE_BLOG_NAME,
   AI_SITE_CONTENT_INPUT,
   AI_SITE_PRODUCT_NOTE,
   AI_SITE_PRODUCTS,
+  AI_SITE_PRODUCTS_NOT_WRITTEN_COPY,
   aiPublishSitePosts,
   aiSiteContentBriefLines,
   aiSiteContentPart,
@@ -58,6 +60,7 @@ import {
   aiSitePostCover,
   aiSiteProductDescriptionWithoutGaps,
   aiSiteProductPhotos,
+  aiSiteProductPhotoSrc,
   aiSiteProductsBriefLine,
   createAiSitePostsRunner,
   createAiSiteProductsRunner,
@@ -275,6 +278,63 @@ describe('the first products, from the catalog', () => {
     expect(none.review).toMatchObject({ reason: 'limit', message: expect.stringContaining('Your plan includes 0 products') })
   })
 
+  /** The product rules' photo check, as `product-drafts.ts` holds it: an https address or a site path. */
+  const photoRule = (content: Readonly<Record<string, unknown>>) =>
+    ((content['mediaUrls'] as string[] | undefined) ?? []).every((url) => /^(?:https:\/\/[^\s"'<>]+|\/[^\s"'<>]*)$/.test(url))
+  const strict: PluginResourceDraftWriter = {
+    ...writer,
+    check: (content) => (photoRule(content) ? { ok: true, facts: {} } : { ok: false, problems: ['A photo is an https address or a path on this site'] }),
+    write: async (request) => {
+      if (!photoRule(request.content)) return { ok: false, status: 400, error: 'A photo is an https address or a path on this site' }
+      return writer.write(request)
+    },
+  }
+
+  it('writes a store’s products with the stock library’s photos, as the paths a product keeps (FYNasg1h0S, 2026-10-09)', async () => {
+    // The stock source hands back what a page's picture holds: the library's `media:` reference.
+    const stockPhotos = () => async (slots: readonly unknown[]) => slots.map((_slot, index) => ({ src: `media:host-1/med${index}`, width: 800, height: 1000 }))
+    const photos = (input: Parameters<typeof aiSiteProductPhotos>[0]) => aiSiteProductPhotos({ ...input, stockPhotos: stockPhotos as never })
+    const run = createAiSiteProductsRunner({ catalog: async () => spent([catalogOutput(3)]), writerFor: () => ({ pluginId: 'commerce', writer: strict }), photos })
+    const outcome = await run(context(unitJob({}, { $id: 'job-candles', kind: 'products', inputs: { siteKind: 'store' } })))
+    expect(outcome.review).toBeUndefined()
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.outputs).toHaveLength(3)
+    expect(writes.map((write) => (write['content'] as Record<string, unknown>)['mediaUrls'])).toEqual([
+      ['/api/media/cdn/host-1/med0'],
+      ['/api/media/cdn/host-1/med1'],
+      ['/api/media/cdn/host-1/med2'],
+    ])
+  })
+
+  it('drops a photo the product refuses and still writes the product', async () => {
+    const photos = async ({ names }: { names: readonly string[] }) => names.map(() => 'media:not a reference')
+    const run = createAiSiteProductsRunner({ catalog: async () => spent([catalogOutput(2)]), writerFor: () => ({ pluginId: 'commerce', writer: strict }), photos })
+    const outcome = await run(context(unitJob()))
+    expect(outcome.outputs).toHaveLength(2)
+    expect(writes.every((write) => !('mediaUrls' in (write['content'] as Record<string, unknown>)))).toBe(true)
+  })
+
+  it('makes a product its rules refuse outright our failure, refunded, never the person’s review; the rest are still written', async () => {
+    const refusing = (refuse: (index: number) => boolean): PluginResourceDraftWriter => ({
+      ...writer,
+      write: async (request) =>
+        refuse(Number(request.id.split('-').pop())) ? { ok: false, status: 400, error: 'A product needs a name' } : writer.write(request),
+    })
+    const all = createAiSiteProductsRunner({ catalog: async () => spent([catalogOutput(3)]), writerFor: () => ({ pluginId: 'commerce', writer: refusing(() => true) }) })
+    const none = await all(context(unitJob()))
+    expect(none.outputs).toEqual([])
+    expect(none.review).toBeUndefined()
+    expect(none.failure).toBe(AI_SITE_PRODUCTS_NOT_WRITTEN_COPY)
+    // The item's row: failed on our side, so its credits come back.
+    expect(aiUnitFailure('products', none)).toMatchObject({ status: 'failed', failure: { ours: true, reason: 'step-failure' } })
+
+    const one = createAiSiteProductsRunner({ catalog: async () => spent([catalogOutput(3)]), writerFor: () => ({ pluginId: 'commerce', writer: refusing((index) => index === 1) }) })
+    const some = await one(context(unitJob()))
+    expect(some.outputs).toHaveLength(2)
+    expect(some.outputs[1].note).toContain('2 of 3 added.')
+    expect(aiUnitFailure('products', some)).toBeNull()
+  })
+
   it('passes the catalog’s own refusal or failure through, writing nothing', async () => {
     const run = createAiSiteProductsRunner({ catalog: async () => ({ ...spent([]), refused: true }), writerFor })
     expect(await run(context(unitJob()))).toMatchObject({ refused: true })
@@ -342,9 +402,38 @@ describe('the records the pages list, and their photos (AGL-3676)', () => {
 
   it('tells a layout built before the products that the site sells, so its header carries the cart', () => {
     expect(aiSiteListings({ outputs: [], screens, sells: true })).toEqual([
-      { id: 'listing:products', kind: 'products', name: 'the shop', records: [], placements: [] },
+      expect.objectContaining({ id: 'listing:products', kind: 'products', name: 'the shop', records: [] }),
     ])
     expect(aiSiteListings({ outputs: [], screens })).toEqual([])
+  })
+
+  /*
+   * The live Hearth & Wick start (job FYNasg1h0S, 2026-10-09): its products
+   * step failed, so nothing was listed and its Shop page compiled "Product
+   * range image cards" as six cards naming kinds of candle — no product,
+   * price or cart. A store's Shop page lists its catalog whatever its first
+   * products came to; the grid says when there is nothing in it yet.
+   */
+  it('lists a store’s catalog on its Shop page and home even with no products written', () => {
+    const hearth = [
+      { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero with shop call to action', items: 0 }, { name: 'Featured range of candles, wax melts and gift sets', items: 3 }, { name: 'Why small-batch soy', items: 3 }] },
+      { id: 'shop', title: 'Shop', slug: '/shop', sections: [{ name: 'Shop intro heading', items: 0 }, { name: 'Product range image cards', items: 6 }, { name: 'Care and burn tips', items: 3 }, { name: 'Gift help call to action', items: 0 }] },
+      { id: 'contact', title: 'Contact', slug: '/contact', sections: [{ name: 'Contact intro heading', items: 0 }, { name: 'Contact form', items: 0, uses: ['new:Contact form'] }] },
+    ]
+    expect(aiSiteListings({ outputs: [], screens: hearth, store: true })).toEqual([
+      {
+        id: 'listing:products',
+        kind: 'products',
+        name: 'the shop',
+        records: [],
+        emptyAction: { label: 'Get in touch', href: '/contact' },
+        cart: false,
+        placements: [
+          { screenId: 'home', section: 1, role: 'featured' },
+          { screenId: 'shop', section: 1, role: 'index' },
+        ],
+      },
+    ])
   })
 
   it('lists no product with a gap for the owner in its description', () => {
@@ -365,6 +454,18 @@ describe('the records the pages list, and their photos (AGL-3676)', () => {
     // No stock library on this deployment: every slot takes a starter.
     const starters = await aiSiteProductPhotos({ job, names: ['A'], stockPhotos: (() => null) as never })
     expect(starters[0]).toMatch(/^\/_static\/starter\//)
+  })
+
+  it('keeps a library photo as the CDN path the console’s picker writes, never the page’s `media:` reference', () => {
+    expect(aiSiteProductPhotoSrc('media:host-1/med1', 'host-1')).toBe('/api/media/cdn/host-1/med1')
+    // An org-library asset is qualified for the site, as the picker's own path is.
+    expect(aiSiteProductPhotoSrc('media:org:org-1/med1', 'host-1')).toBe('/api/media/cdn/org:org-1:host-1/med1')
+    expect(aiSiteProductPhotoSrc('/_static/starter/gallery-craft.jpg', 'host-1')).toBe('/_static/starter/gallery-craft.jpg')
+    expect(aiSiteProductPhotoSrc('https://cdn.example.com/a.jpg', 'host-1')).toBe('https://cdn.example.com/a.jpg')
+    // Nothing a product would refuse.
+    for (const bad of ['media:not a ref', 'http://insecure.example/a.jpg', 'data:image/png;base64,AAAA', '', null, undefined]) {
+      expect(aiSiteProductPhotoSrc(bad, 'host-1')).toBeNull()
+    }
   })
 
   it('covers a post with a stock photo of its title, else its starter, which a failed search falls back to', async () => {

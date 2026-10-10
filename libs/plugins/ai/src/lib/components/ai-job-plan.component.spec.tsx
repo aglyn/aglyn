@@ -36,7 +36,9 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { AI_SITE_PASS_CREDITS, aiPlanCreditEstimate } from '../model/ai-site-job'
+import { AI_SITE_PASS_CREDITS, aiJobPlanCreditRange, aiPlanCreditEstimate, aiPlanCreditRange } from '../model/ai-site-job'
+import { aiBuildCreditRange, aiBuildFirstPagePlan } from '../model/ai-build-job'
+import { aiCreditRangeText } from '../model/ai-credit-estimate'
 import { AiJobPlan, aiJobReviewDetails, aiPlanEmbedLine } from './ai-job-plan.component'
 
 const PLAN = {
@@ -100,11 +102,12 @@ function job(patch: Partial<AiJobSummary> = {}): AiJobSummary {
 
 it('shows what the plan is estimated to cost beside the button that confirms it', () => {
   render(<AiJobPlan job={job()} onResume={jest.fn()} />)
-  const expected = aiPlanCreditEstimate(PLAN)
+  // What it is likely to cost, as builds like it measured, and its ceiling (AGL-3722).
+  const range = aiPlanCreditRange(PLAN)
+  expect(range.ceiling).toBe(aiPlanCreditEstimate(PLAN))
+  expect(range.likely).toBeLessThan(range.ceiling)
   expect(
-    screen.getByText(
-      new RegExp(`about ${expected.toLocaleString('en-US')} credits`),
-    ),
+    screen.getByText(new RegExp(`About ${range.likely} credits \\(up to ${range.ceiling.toLocaleString('en-US')}\\)`)),
   ).toBeTruthy()
   expect(screen.getByText(/what its steps spend/)).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Confirm plan' })).toBeTruthy()
@@ -176,9 +179,12 @@ it('counts, for a page job, every creation it builds before its page, beside wha
     ],
   }
   render(<AiJobPlan job={job({ kind: 'page', plan: pagePlan })} onResume={jest.fn()} />)
-  // Two sections and the page's last pass, and one pass a creation.
+  // Two sections and the page's last pass, and one pass a creation: the ceiling.
   const expected = (2 + 1 + 3) * AI_SITE_PASS_CREDITS
-  expect(screen.getByText(new RegExp(`about ${expected.toLocaleString('en-US')} credits`))).toBeTruthy()
+  const range = aiJobPlanCreditRange('page', pagePlan)
+  expect(range.ceiling).toBe(expected)
+  expect(screen.getByText(new RegExp(`up to ${expected.toLocaleString('en-US')}\\)`))).toBeTruthy()
+  expect(screen.getByText(new RegExp(`About ${range.likely} credits`))).toBeTruthy()
   expect(screen.getByText(/Creates the component Price tier/)).toBeTruthy()
   expect(screen.getByText(/Creates the form Quote request/)).toBeTruthy()
 })
@@ -331,5 +337,79 @@ describe('a guided start that did not work out offers the starter instead (AGL-3
   it('is drawn only where the surface hands it the signed-in user', () => {
     render(<AiJobPlan job={REFUSED} onResume={jest.fn()} />)
     expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
+  })
+})
+
+describe('a Free build against what is left (AGL-3722)', () => {
+  // The StillWing brief: a home of six sections and a quote page of three,
+  // drawn in one layout, the quote page placing a form.
+  const section = (name: string, uses: string[] = []) => ({ name, uses, items: 0 })
+  const page = (title: string, slug: string, sections: ReturnType<typeof section>[]) => ({
+    ...PLAN.screens[0],
+    title,
+    slug,
+    seoTitle: title,
+    sections,
+  })
+  const STILLWING = {
+    ...PLAN,
+    create: [
+      { kind: 'layout' as const, name: 'Frame', why: 'shared header and footer', duplicateOf: null, fields: [] },
+      { kind: 'form' as const, name: 'Quote', why: 'quote requests', duplicateOf: null, fields: [] },
+    ],
+    screens: [
+      page('Home', '/', ['hero', 'services', 'process', 'work', 'reviews', 'cta'].map((name) => section(name))),
+      page('Get a quote', '/quote', [section('intro'), section('form', ['new:Quote']), section('faq')]),
+    ],
+  }
+  const build = (left: number) =>
+    job({
+      kind: 'build',
+      plan: STILLWING,
+      review: {
+        reason: 'plan',
+        message: 'The plan is ready.',
+        findings: [],
+        freeCredits: { left, total: 300, resetsOn: '2026-11-01' },
+      },
+    })
+
+  it('quotes the StillWing brief at about 106 credits (up to 650), not the 650 it was refused at', () => {
+    expect(aiBuildCreditRange(STILLWING)).toEqual({ likely: 106, p90: 127, ceiling: 650 })
+  })
+
+  it('confirms with no prompt when its p90 fits, and shows what is left', () => {
+    const onResume = jest.fn()
+    render(<AiJobPlan job={build(164)} onResume={onResume} orgSlug="acme" />)
+    expect(screen.getByText(/About 106 credits \(up to 650\)/).textContent).toContain(
+      'You have 164 of your free AI credits left this month, until November 1.',
+    )
+    expect(screen.queryByText(/Build what fits/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
+    expect(onResume).toHaveBeenCalledWith(expect.objectContaining({ id: 'job-1' }), undefined)
+  })
+
+  it('asks before it starts when its p90 is past what is left: build what fits, the home page first, or upgrade — nothing starts until one is chosen', () => {
+    const onResume = jest.fn()
+    render(<AiJobPlan job={build(90)} onResume={onResume} orgSlug="acme" />)
+    expect(screen.getByRole('alert').textContent).toContain(
+      'This build is about 106 credits (up to 650). You have 90 left, so it will build as much as it can and pause when your credits run out. You can upgrade or resume when they renew on November 1.',
+    )
+    // No plain Confirm: only an explicit choice starts it.
+    expect(screen.queryByRole('button', { name: 'Confirm plan' })).toBeNull()
+    expect(onResume).not.toHaveBeenCalled()
+    const home = aiBuildCreditRange(aiBuildFirstPagePlan(STILLWING)!)
+    // The home page and the layout it is drawn in; the quote page and its form wait.
+    expect(home).toEqual({ likely: 36 + 23, p90: 48 + 24, ceiling: 350 + 50 })
+    expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toContain('#plans')
+    fireEvent.click(screen.getByRole('button', { name: `Build the home page first (about ${home.likely} credits)` }))
+    expect(onResume).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'job-1' }), { creditsConfirmed: true, reduce: 'first-page' })
+    fireEvent.click(screen.getByRole('button', { name: 'Build what fits' }))
+    expect(onResume).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'job-1' }), { creditsConfirmed: true })
+  })
+
+  it('quotes a range the same way everywhere', () => {
+    expect(aiCreditRangeText({ likely: 180, p90: 220, ceiling: 600 })).toBe('About 180 credits (up to 600)')
+    expect(aiCreditRangeText({ likely: 50, p90: 50, ceiling: 50 })).toBe('About 50 credits')
   })
 })

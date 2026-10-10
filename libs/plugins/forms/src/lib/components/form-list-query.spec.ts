@@ -274,7 +274,9 @@ describe('the grid offers every visible column, typed', () => {
     expect(operators('status')).toEqual(['is'])
     expect(operators('leadRouting')).toEqual(['is'])
     const campaign = typed.find((entry) => entry.field === 'campaignIds')
-    expect([campaign?.filterable, campaign?.hideable]).toEqual([true, false])
+    // Hidden by default, but an ordinary column in Manage columns, never locked.
+    expect(campaign?.filterable).toBe(true)
+    expect(campaign?.hideable).not.toBe(false)
     expect(operators('campaignIds')).toEqual(['isAnyOf'])
   })
 

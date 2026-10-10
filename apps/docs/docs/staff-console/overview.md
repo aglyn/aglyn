@@ -373,19 +373,23 @@ so they take a seat like anyone else from then on.
 server-side with the Admin SDK so it shows sites you are not a member of. Each
 row names the site and its subdomain, the **Organization** it belongs to (a link
 to that organization's staff page), the organization's **Owner**, the custom
-domain, how many pages it publishes, and when it was created. Clicking a row
-opens the site's staff page.
+domain, how many pages it publishes, when it was created and when it was last
+updated (each with its time, so sites from the same day read in order). Clicking
+a row opens the site's staff page.
 
 The row menu holds the ways out of the list:
 
 - **Visit live site** opens the site's public address in a new tab — its custom
   domain when it has one, otherwise its platform subdomain.
-- **Open preview** opens the site's home page as its draft renders, in a new
-  tab, without joining the site or impersonating anyone. It is unavailable, and
-  says so, for a site that publishes no home page; open the site to preview any
-  other page.
-- **Open organization** and **Open owner** go to the staff pages for the
+- **Site details** opens the site's staff page.
+- **Preview home page** opens the site's home page as its draft renders, in a
+  new tab, without joining the site or impersonating anyone. For a site with no
+  published home page it is unavailable and says so under its name; open the
+  site to preview any other page.
+- **Organization details** and **Owner details** go to the staff pages for the
   organization and its owner.
+
+**Visit live site** is also the icon beside the menu.
 
 #### Filter the site list {#filter-the-site-list}
 
@@ -399,8 +403,12 @@ after, or before a day). A site whose organization is suspended is filtered by
 its own takedown only: filter the organizations list to find those. **Search** matches the start of any word of the site's name, its
 subdomain or its custom domain, so `bakery` finds `harbor-bakery.com`.
 
-The list is in site-id order, except while **Created** is filtered, when it runs
-newest first. A filter one query cannot hold alongside the rest is named above
+The list runs newest created first, across every page. Click **Site**, **Created**
+or **Last updated** to order every site by that column instead; **Site**, oldest
+**Created** and **Last updated** order the whole list only with no filter or
+search on, and fall back to newest created first, with a note, while one is.
+**Organization**, **Owner**, **Custom domain** and **Status** sort the page on
+screen, and say so. A filter one query cannot hold alongside the rest is named above
 the grid with its reason and not applied. Organization name and owner are not
 filters because a site does not store them: filter by **Org ID**, or open the
 organization, whose page lists its sites.
@@ -873,6 +881,13 @@ custom price shows it at the top of the card.
 The staff audit entries that reference this organization, from the latest 200 in the
 log: each shows the action, who did it, when, and the reason they gave. The full,
 filterable record is on the [Audit log](#audit-log).
+
+#### Organization activity {#org-activity}
+
+What the organization did itself — invites, role changes, billing edits and its sites'
+changes — newest first: the same feed its owner reads, with each row's details adding
+the stored code and path and linking to the staff pages. Use it beside **Recent admin
+actions**, which lists only what staff did.
 
 #### Success manager {#success-manager}
 

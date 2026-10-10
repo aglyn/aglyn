@@ -1121,6 +1121,40 @@ export function destinationProps(
  * `ai-layout-pictures.ts` fills the slot with a photo the site serves itself
  * once the page is checked.
  */
+/**
+ * The site kinds whose galleries open in a lightbox by default (AGL-3717): a
+ * portfolio's or a photographer's work is looked at, not skimmed, and a
+ * visitor who presses a picture expects to see it large and step through the
+ * rest. Every other kind opens a picture only where the design says so.
+ */
+export const AI_LIGHTBOX_GALLERY_KINDS: ReadonlySet<string> = new Set([
+  'portfolio',
+  'photography',
+])
+
+/** The `to` that opens an image block's picture in a lightbox (AGL-3717). */
+export const AI_LAYOUT_LIGHTBOX_TO = 'lightbox'
+
+/** Whether this page's galleries open in a lightbox by default. */
+export function aiOpensGalleriesInLightbox(page: { design: PageScope['design'] }): boolean {
+  const kind = page.design?.input.kind
+  return Boolean(kind && AI_LIGHTBOX_GALLERY_KINDS.has(kind))
+}
+
+/**
+ * The Image props that make a picture open in a lightbox: as one gallery
+ * with the section's other pictures, named for the section, and with the
+ * item's title as its caption. The Image element reads exactly these.
+ */
+function lightboxProps(scope: SectionScope, caption?: string): Record<string, unknown> {
+  const name =
+    aiLayoutFitText(scope.heading, 'alt') ||
+    aiLayoutFitText(scope.page.plan.sections[scope.index]?.name, 'alt') ||
+    `Gallery ${scope.index + 1}`
+  const words = aiLayoutFitText(caption, 'alt')
+  return { lightbox: true, lightboxGallery: name, ...(words ? { lightboxCaption: words } : {}) }
+}
+
 function image(
   scope: SectionScope,
   block: AiLayoutBlock,
@@ -1146,9 +1180,12 @@ function image(
     null,
     'imageIcon',
   )
+  // `to: lightbox` opens the picture large (AGL-3717); one picture is its
+  // own gallery, so it opens alone unless the section has more.
+  const opensLarge = block.to?.trim().toLowerCase() === AI_LAYOUT_LIGHTBOX_TO
   const picture = tree.add(
     'image',
-    { alt, objectFit: 'cover' },
+    { alt, objectFit: 'cover', ...(opensLarge ? lightboxProps(scope) : {}) },
     { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
     null,
     'image',
@@ -2371,7 +2408,15 @@ function designedGroup(
     const span = !mosaic ? 12 / perRow : lone ? 12 : wide ? 7 : 5
     const aspect = !mosaic ? (variant === 'articles' ? '3 / 2' : portrait ? '4 / 5' : '4 / 3') : lone ? '21 / 9' : wide ? '4 / 3' : '4 / 5'
     // The picture is its own frame: its shape its one style, so a grid of them repeats no inline style.
-    const photo = designImage(scope, { alt: standInAlt(scope, item.title || item.text), given: false }, { width: '100%' }, { aspectRatio: { xs: '4 / 3', md: aspect } })
+    // A portfolio's or a photographer's gallery opens in a lightbox, its
+    // pictures one gallery with the item's title as each caption (AGL-3717).
+    const opens = variant === 'pictures' && aiOpensGalleriesInLightbox(page)
+    const photo = designImage(
+      scope,
+      { alt: standInAlt(scope, item.title || item.text), given: false },
+      { width: '100%', ...(opens ? lightboxProps(scope, item.title) : {}) },
+      { aspectRatio: { xs: '4 / 3', md: aspect } },
+    )
     const id = tree.add(
       'muiStack',
       { spacing: '1.5' },
@@ -2430,7 +2475,8 @@ export const AI_LAYOUT_POST_ADDRESS_TOKENS: readonly string[] = ['{{entry.url}}'
 function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBlock | null {
   if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
   const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
-  return index ? { kind: 'button', text: 'Shop all', to: `page:${index.screenId}`, style: 'secondary' } : null
+  if (!index) return null
+  return { kind: 'button', text: listing.kind === 'tracks' ? 'All music' : 'Shop all', to: `page:${index.screenId}`, style: 'secondary' }
 }
 
 function listingSection(
@@ -2517,6 +2563,16 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
   const shown = featured ? AI_LAYOUT_FEATURED_RECORDS[listing.kind] : 12
   const element = AI_LAYOUT_LISTING_ELEMENTS[listing.kind]
   let id: string
+  if (listing.kind === 'tracks') {
+    // An empty player (AGL-3716): its "add your tracks" state, which the owner
+    // fills from their own media library. No source, ever — the section's
+    // heading and words are the model's, the recordings the owner's.
+    id = tree.add(element, null, null, null, 'player')
+    page.settled.push({ at: scope.at, what: 'an empty music player placed for the owner’s own tracks' })
+    // The player is what the section shows: its tracks are the owner's to add.
+    noted(scope, [id, id])
+    return id
+  }
   if (listing.kind === 'products') {
     id = tree.add(
       element,
@@ -2524,9 +2580,15 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
         source: 'all',
         sort: 'newest',
         columns: String(featured ? Math.min(AI_LAYOUT_FEATURED_RECORDS.products, Math.max(3, listing.records.length)) : 3),
-        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown) }),
+        // The shop's own page browses: a sort and the store's categories as
+        // filter chips (shown once it has any), never categories drawn as cards.
+        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown), showSort: true, showCategories: true }),
         cardStyle: 'photo',
-        emptyText: 'New products are on their way.',
+        // A store that opens before its first products are in says so, with a
+        // way to hear when they land (AGL-3676): never placeholder products.
+        emptyTitle: AI_LAYOUT_STORE_EMPTY.title,
+        emptyText: listing.emptyAction ? AI_LAYOUT_STORE_EMPTY.text : AI_LAYOUT_STORE_EMPTY.textAlone,
+        ...(listing.emptyAction ? { emptyActionLabel: listing.emptyAction.label, emptyActionHref: listing.emptyAction.href } : {}),
       },
       null,
       null,
@@ -2540,6 +2602,14 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
   noted(scope, Array.from({ length: Math.max(2, Math.min(shown, listing.records.length)) }, () => id))
   return id
 }
+
+/** What a store's Product grid says while the store lists nothing yet (AGL-3676). */
+export const AI_LAYOUT_STORE_EMPTY = {
+  title: 'New pieces are on the way',
+  text: 'Our first pieces are being finished now. Get in touch and we will let you know the moment they land.',
+  /** Said where the site has no page to get in touch on. */
+  textAlone: 'Our first pieces are being finished now. Check back soon.',
+} as const
 
 /** The most posts a page of the site lists where it is the writing's own page. */
 const COLLECTION_INDEX_POSTS = 9

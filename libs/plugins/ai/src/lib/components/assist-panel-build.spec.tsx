@@ -219,7 +219,8 @@ describe('a build asked in the chat (AGL-3616)', () => {
     await waitFor(() => expect(posts.some(([url]) => url === '/api/ai/jobs/job-1/resume')).toBe(true))
     expect(await screen.findByText(/Page: About — failed/)).toBeTruthy()
     expect(screen.getByText(/you weren’t charged/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Try again what failed' })).toBeTruthy()
+    // Try again says what it is likely to cost, and at most (AGL-3722).
+    expect(screen.getByRole('button', { name: /^Try again what failed · About \d+ credits \(up to \d+\)$/ })).toBeTruthy()
   })
 
   it('a turn that proposed nothing starts no job', async () => {

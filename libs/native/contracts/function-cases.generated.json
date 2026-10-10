@@ -17529,9 +17529,11 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "live-chat",
             "review-platforms",
             "weglot",
+            "music",
             "ad-conversions"
           ]
         },
@@ -17573,9 +17575,11 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "live-chat",
             "review-platforms",
             "weglot",
+            "music",
             "ad-conversions"
           ]
         },
@@ -17604,8 +17608,10 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "live-chat",
             "review-platforms",
+            "music",
             "ad-conversions"
           ]
         },
@@ -17638,8 +17644,10 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "live-chat",
             "review-platforms",
+            "music",
             "ad-conversions",
             "crm",
             "commerce"
@@ -17674,8 +17682,10 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "live-chat",
             "review-platforms",
+            "music",
             "ad-conversions",
             "accounts",
             "commerce",
@@ -17725,7 +17735,9 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "review-platforms",
+            "music",
             "ad-conversions"
           ]
         },
@@ -17759,7 +17771,9 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "review-platforms",
+            "music",
             "ad-conversions",
             "commerce",
             "crm"
@@ -17799,7 +17813,9 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "review-platforms",
+            "music",
             "ad-conversions",
             "commerce",
             "accounts",
@@ -17844,7 +17860,9 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "review-platforms",
+            "music",
             "ad-conversions",
             "commerce",
             "accounts"
@@ -17895,7 +17913,9 @@
             "delivery-apps",
             "loyalty",
             "couriers",
+            "lightbox",
             "review-platforms",
+            "music",
             "ad-conversions"
           ]
         }

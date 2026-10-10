@@ -67,6 +67,7 @@ import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
 import useFirestoreDoc from '../../../../../../../../hooks/use-firestore-doc'
+import useDiscardChangesMenuItem from '../../../../../../../../hooks/use-discard-changes-menu-item'
 import { useIsStaff } from '../../../../../../../../hooks/use-is-staff'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -269,6 +270,8 @@ function SystemEmailBesignerPage() {
   const clearCanvas = useClearCanvasCallback('email')
   const repairDocument = useRepairDocumentCallback('email')
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -307,6 +310,14 @@ function SystemEmailBesignerPage() {
     },
     notify: enqueueSnackbar,
     queueLoading,
+  })
+
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: 'email',
+    live: false,
+    canDiscard,
+    discardChanges,
   })
 
   const handlePropertiesSave = useCallback(async () => {
@@ -447,6 +458,7 @@ function SystemEmailBesignerPage() {
                 children: saveAvailable ? 'Save' : 'Up to Date',
                 onClick: handleSave,
               },
+              discardMenuItem,
               {
                 id: 'center-nav-file-close',
                 children: 'Close',

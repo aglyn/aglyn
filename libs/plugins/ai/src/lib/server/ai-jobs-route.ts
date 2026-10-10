@@ -43,10 +43,37 @@ import {
 } from '../jobs/ai-jobs'
 import { releaseAssistMessage } from '../usage/assist-usage'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
+import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
 import { withoutErasedSites } from './ai-jobs-live-sites'
 import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
+import { reportServerError } from '@aglyn/tenant-data-admin/server/client-error-report'
+
+/**
+ * A caught fault on this door, reported as well as logged (AGL-1921).
+ *
+ * `onRequestError` sees only an UNCAUGHT throw, and the Vercel log drain
+ * forwards the status line but not a `console.error`, so the three 500s
+ * this route answered on 2026-10-06 at 17:41–17:47Z reached the alert as
+ * START/END/REPORT with no reason anywhere. Never throws.
+ */
+async function reportJobFault(what: string, error: unknown): Promise<void> {
+  try {
+    await reportServerError(
+      {
+        message: `${what}: ${error instanceof Error ? error.message : String(error)}`,
+        stack: error instanceof Error ? error.stack : undefined,
+        route: '/api/ai/jobs',
+        routeType: 'route',
+        method: 'POST',
+      },
+      { service: 'console-web' },
+    )
+  } catch {
+    // The console line beside each call is the record of last resort.
+  }
+}
 
 /**
  * AI generation jobs: create and list (AGL-2904).
@@ -193,6 +220,9 @@ export async function POST(request: Request): Promise<Response> {
   // needs, inputs it reads, an allowance its draft counts against. Asked
   // before the job exists, so a refusal spends nothing.
   let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
+  // A Free start past what is left, which the person chose to build as far as
+  // it goes (AGL-3722): the prompt they confirmed, kept on the job.
+  let confirmedCredits: AiCreditsPrompt | null = null
   try {
     // A site that switched AI off first (AGL-3028), then the kind's own check.
     refusal =
@@ -208,19 +238,29 @@ export async function POST(request: Request): Promise<Response> {
         inputs: parsed.inputs,
         org: gate.org,
         uid: gate.uid,
+        creditsConfirmed: (payload as Record<string, unknown> | null)?.['creditsConfirmed'] === true,
+        onCreditsConfirmed: (prompt) => {
+          confirmedCredits = prompt
+        },
       }))
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
       () => undefined,
     )
     console.error('ai job admission failed', { orgId: gate.orgId, kind: parsed.kind, error })
+    await reportJobFault('ai job admission failed', error)
     return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
   }
   if (refusal) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
       () => undefined,
     )
-    return Response.json({ error: refusal.error }, { status: refusal.status })
+    // A Free start past what is left asks before it starts (AGL-3722): the
+    // prompt rides the 409, so the dialog offers its choices.
+    return Response.json(
+      { error: refusal.error, ...(refusal.code ? { code: refusal.code } : {}), ...(refusal.credits ? { credits: refusal.credits } : {}) },
+      { status: refusal.status },
+    )
   }
 
   const now = new Date()
@@ -244,6 +284,7 @@ export async function POST(request: Request): Promise<Response> {
         model: parsed.model,
         createdBy: gate.uid,
         createdByEmail: gate.decoded.email ?? null,
+        creditsConfirmed: aiCreditsConfirmation(confirmedCredits, gate.uid, now),
       },
       now,
     )
@@ -252,6 +293,7 @@ export async function POST(request: Request): Promise<Response> {
       () => undefined,
     )
     console.error('ai job create failed', { orgId: gate.orgId, error })
+    await reportJobFault('ai job create failed', error)
     return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
   }
   const jobId = created.$id
@@ -295,6 +337,7 @@ export async function POST(request: Request): Promise<Response> {
       () => undefined,
     )
     console.error('ai job first step not claimable', { orgId: gate.orgId, jobId })
+    await reportJobFault('ai job first step not claimable', new Error(`job ${jobId}`))
     return Response.json({ error: 'The AI job could not be started' }, { status: 500 })
   }
   return Response.json(

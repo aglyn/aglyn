@@ -171,6 +171,7 @@ async function handler(request: Request): Promise<Response> {
         suspended: suspensionInForce(docSnap.get('suspendedAt'), docSnap.get('suspendedUntilMs')),
         maintenance: Boolean(docSnap.get('maintenance')),
         createdAt: ts(docSnap.get('createdAt')),
+        updatedAt: ts(docSnap.get('updatedAt')),
       }
     })
     return Response.json(

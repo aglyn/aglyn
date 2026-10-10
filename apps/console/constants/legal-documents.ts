@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v12'
+export const LEGAL_DOCUMENT_VERSION = 'v13'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -708,6 +708,37 @@ export interface LegalDocumentManifestEntry {
  * pin (44131 bytes / `c48915…`) byte for byte before and after publication,
  * and keeps that pin.
  *
+ * v13 (2026-10-09): staff review of AI requests, and audio-rights
+ * confirmations (AGL-3716).
+ *
+ *   - Privacy §1.1 "Content & data you submit" says that an audio upload asks
+ *     the uploader to confirm they own the audio or have a license to use it
+ *     on their site, and that the confirmation is stored with the file: the
+ *     statement confirmed, who confirmed it (the user identifier, or the API
+ *     key used), and when. That is exactly `rightsConfirmation { uid, atMs,
+ *     statement }` in `utils/media-audio-rights.ts`.
+ *   - Privacy §2 "Aglyn Assist conversations" lists five purposes instead of
+ *     three, adding support and the investigation of abuse, security
+ *     incidents and violations of our terms; "AI generation jobs" says the
+ *     record serves the same two uses, and that authorized Aglyn staff may
+ *     review an account's or Organization's AI requests for them, each review
+ *     recorded in the staff access log.
+ *   - The Terms, AUP, DMCA, DPA, Cookie Policy and Subprocessors are unchanged.
+ *
+ * Privacy and its `/legal` index card move "Last updated" to October 9, 2026,
+ * published at 21:39 Central that day. Zach approved publishing v13 with
+ * re-acceptance on 2026-10-09; the wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-10-09-staff-ai-review/PROPOSAL.md`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through the
+ * Docs API, the pages were published, the live pages confirmed serving the new
+ * text, and only then was privacy captured: 26874 bytes (`a88960…`), identical
+ * across two requests and a cache-busting query, in two rounds (the first
+ * served stale-while-revalidate, the second fresh). The Terms did not change,
+ * so they were the control: the live terms page reproduced its `v9` pin
+ * (44131 bytes / `c48915…`) byte for byte before and after publication, and
+ * keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -774,7 +805,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '02d60d28bd44a8433a8e7379897049b3adafd5ee296d17a925e69e7b5623167c',
-    bytes: 25972,
+      'a88960fa9d4ebd92003a96c0f2aa8b5beb82fc751cd3c6189f8fa1bc3f468469',
+    bytes: 26874,
   },
 ]

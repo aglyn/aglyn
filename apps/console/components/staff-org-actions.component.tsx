@@ -959,6 +959,9 @@ const StaffOrgActions = ({
   return (
     <>
       {rowActions ? (
+        // Row-menu labels name what happens to the organization, and a "…"
+        // marks the ones that open a dialog or confirm first (Zach,
+        // 2026-10-09). The detail page's buttons below keep their short names.
         <ListRowActions
           label={rowActions.label}
           quick={rowActions.quick}
@@ -966,14 +969,14 @@ const StaffOrgActions = ({
             ...(rowActions.items ?? []),
             {
               key: 'override',
-              label: 'Override',
+              label: 'Override plan and limits…',
               onClick: handleOverrideOpen,
               disabled: !org || overrideGate.blocked,
               disabledReason: overrideGate.reason,
             },
             {
               key: 'suspend',
-              label: org?.suspendedAt ? 'Unsuspend' : 'Suspend',
+              label: org?.suspendedAt ? 'Lift suspension…' : 'Suspend organization…',
               destructive: !org?.suspendedAt,
               onClick: openSuspender,
               disabled: !org || suspendGate.blocked,
@@ -981,7 +984,9 @@ const StaffOrgActions = ({
             },
             {
               key: 'erasure',
-              label: org?.erasureRequestedAt ? 'Cancel erasure' : 'Erasure',
+              label: org?.erasureRequestedAt
+                ? 'Cancel data erasure request…'
+                : 'Request data erasure…',
               destructive: !org?.erasureRequestedAt,
               onClick: () => void handleToggleErasure(),
               disabled: !org,
@@ -990,7 +995,7 @@ const StaffOrgActions = ({
               ? [
                   {
                     key: 'ai-pause',
-                    label: aiPaused ? 'Resume AI' : 'Pause AI',
+                    label: aiPaused ? 'Resume AI…' : 'Pause AI…',
                     destructive: !aiPaused,
                     onClick: openAiPauser,
                     disabled: !org || suspendGate.blocked,

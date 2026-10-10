@@ -26,6 +26,8 @@ import {
   getOrgForUser,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { resolveIdpDisplayName } from '@aglyn/aglyn/app-utils/idp-profile'
+import { resolveAccountIdentity } from '@aglyn/shared-util-tools/account-identity'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
@@ -92,12 +94,17 @@ async function handler(request: Request): Promise<Response> {
         firestore.collection('users').doc(decoded.uid).get(),
         firestore.collection('profiles').doc(decoded.uid).get(),
       ])
-      const fullName = [account.get('firstName'), account.get('lastName')]
-        .filter((part) => typeof part === 'string' && part.trim())
-        .join(' ')
-        .trim()
+      // The one account-identity resolver (AGL-3721): `users/{uid}`, then the
+      // token's name claim or what an SSO IdP sent in its SAML attributes —
+      // which an SSO account's Auth record never holds. `resolveIdpDisplayName`
+      // reads the top-level claim first, so it is never read raw here (AGL-1131).
+      const { displayName } = resolveAccountIdentity({
+        auth: null,
+        profile: account.exists ? (account.data() ?? null) : null,
+        idp: { displayName: resolveIdpDisplayName(decoded) || null },
+      })
       return (
-        fullName ||
+        displayName ||
         profile.get('displayName') ||
         profile.get('handle') ||
         (decoded.email ? String(decoded.email).split('@')[0] : 'member')

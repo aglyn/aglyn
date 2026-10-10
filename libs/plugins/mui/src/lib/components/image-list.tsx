@@ -17,14 +17,45 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiImageMultiple, mdiImageMultipleOutline } from '@aglyn/shared-data-mdi'
+import {
+  type LightboxAppearanceProps,
+  splitLightboxAppearanceProps,
+} from '@aglyn/shared-ui-jsx/components/lightbox/lightbox-appearance'
 import MuiImageList from '@mui/material/ImageList'
 import MuiImageListItem from '@mui/material/ImageListItem'
 import MuiImageListItemBar from '@mui/material/ImageListItemBar'
-import { forwardRef, type ReactNode } from 'react'
+import useForkRef from '@mui/utils/useForkRef'
+import {
+  forwardRef,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  lightboxAppearanceAttributes,
+  WHEN_LIGHTBOX_ON,
+} from '../utils/lightbox-attributes'
 import { toCount } from '../utils/to-count'
+import {
+  type ImageLightboxGalleryApi,
+  ImageLightboxGalleryContext,
+  type LightboxGallery,
+  listGalleryOf,
+} from './image-lightbox-items'
+
+/** The gallery dialog, loaded only once a visitor opens a picture (AGL-3717). */
+const ImageLightbox = lazy(() =>
+  import('./image-lightbox').then((module) => ({
+    default: module.ImageLightbox,
+  })),
+)
 
 // Component ids are persisted in screen documents; never rename.
 export const IMAGE_LIST_ID: Aglyn.ComponentId = 'muiImageList'
@@ -32,7 +63,14 @@ export const IMAGE_LIST_ITEM_ID: Aglyn.ComponentId = 'muiImageListItem'
 
 export type ImageListVariant = 'standard' | 'quilted' | 'masonry' | 'woven'
 
-export interface ImageListElementProps {
+export interface ImageListElementProps extends LightboxAppearanceProps {
+  /**
+   * Opens a gallery lightbox when a visitor presses any picture in the list
+   * (AGL-3717): previous and next, swipe, arrow keys, a counter, captions.
+   */
+  lightbox?: boolean | string
+  /** A strip of thumbnails under the gallery's picture. */
+  lightboxThumbnails?: boolean | string
   cols?: number | string
   gap?: number | string
   /** Row height in px, or blank for `auto`. */
@@ -65,17 +103,60 @@ const ImageListElement = forwardRef<HTMLUListElement, ImageListElementProps>(
   (rawProps, ref) => {
     // Cleared props dropped before the resolvers below read them
     // (AGL-1451); `rest` also spreads straight into MUI.
-    const props = dropClearedProps(rawProps)
-    const { cols, gap, rowHeight, variant, children, ...rest } = props
+    const { appearance, rest: props } = splitLightboxAppearanceProps(
+      dropClearedProps(rawProps),
+    )
+    const {
+      cols,
+      gap,
+      rowHeight,
+      variant,
+      children,
+      lightbox,
+      lightboxThumbnails,
+      ...rest
+    } = props
+    /**
+     * The gallery (AGL-3717). The list does not know its pictures ahead of
+     * time and does not need to: every Image inside reads the context below,
+     * marks its `<img>` and hands itself here when pressed, and the gallery
+     * is read off the list's own DOM at that moment, in the order the visitor
+     * sees the tiles.
+     */
+    const galleryOn = Aglyn.readYesNoValue(lightbox) === true
+    const listRef = useRef<HTMLUListElement>(null)
+    const rootRef = useForkRef(ref, listRef)
+    const [open, setOpen] = useState(false)
+    const [gallery, setGallery] = useState<LightboxGallery>({
+      pictures: [],
+      index: 0,
+    })
+    const api = useMemo<ImageLightboxGalleryApi>(
+      () => ({
+        open: (trigger) => {
+          const list = listRef.current
+          if (!list) return
+          const next = listGalleryOf(list, trigger)
+          if (!next.pictures.length) return
+          setGallery(next)
+          setOpen(true)
+        },
+      }),
+      [],
+    )
+    const close = useCallback(() => setOpen(false), [])
+    const prefetch = useCallback(() => {
+      void import('./image-lightbox').catch(() => undefined)
+    }, [])
     const resolvedVariant: ImageListVariant = (
       ['standard', 'quilted', 'masonry', 'woven'] as const
     ).includes(variant as ImageListVariant)
       ? (variant as ImageListVariant)
       : 'standard'
     const height = toCount(rowHeight)
-    return (
+    const list = (
       <MuiImageList
-        ref={ref}
+        ref={rootRef}
         variant={resolvedVariant}
         cols={toCount(cols, 3)}
         gap={toCount(gap, 4)}
@@ -83,10 +164,40 @@ const ImageListElement = forwardRef<HTMLUListElement, ImageListElementProps>(
         // rowHeight silently defeats the whole variant.
         rowHeight={resolvedVariant === 'masonry' ? 'auto' : height ?? 'auto'}
         {...rest}
+        // The dialog's chunk is asked for when a visitor first goes near
+        // the gallery, so it is usually there by the time they press.
+        {...(galleryOn ? { onPointerEnter: prefetch, onFocusCapture: prefetch } : {})}
         // MUI types ImageList's children as NonNullable; the renderer
         // always supplies the tile subtree.
-        children={children as NonNullable<ReactNode>}
+        children={
+          (galleryOn ? (
+            <ImageLightboxGalleryContext.Provider value={api}>
+              {children}
+            </ImageLightboxGalleryContext.Provider>
+          ) : (
+            children
+          )) as NonNullable<ReactNode>
+        }
       />
+    )
+    if (!galleryOn) return list
+    return (
+      <>
+        {list}
+        {/* Mounted at the first press, never before: a list of pictures
+            fetches no dialog code until a visitor opens one. */}
+        {gallery.pictures.length ? (
+          <Suspense fallback={null}>
+            <ImageLightbox
+              open={open}
+              onClose={close}
+              gallery={gallery}
+              appearance={appearance}
+              thumbnails={Aglyn.readYesNoValue(lightboxThumbnails) === true}
+            />
+          </Suspense>
+        ) : null}
+      </>
     )
   },
 )
@@ -183,6 +294,23 @@ export const imageListSchema: Aglyn.ComponentSchema<ImageListElementProps> = {
       type: 'number',
       condition: NOT_MASONRY,
     },
+    {
+      name: 'lightbox',
+      label: 'Open in a lightbox',
+      description:
+        'Clicking a picture opens a gallery of every picture in the list, ' +
+        'with previous and next, swipe, arrow keys and a counter. Captions ' +
+        'come from each tile.',
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
+    {
+      name: 'lightboxThumbnails',
+      label: 'Gallery thumbnails',
+      description: 'Shows a strip of thumbnails under the gallery picture.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      condition: WHEN_LIGHTBOX_ON,
+    },
+    ...lightboxAppearanceAttributes(WHEN_LIGHTBOX_ON),
   ],
 }
 

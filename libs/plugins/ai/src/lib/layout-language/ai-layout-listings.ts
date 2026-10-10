@@ -41,6 +41,10 @@
  *  - `posts` — the content plugin's Collection Entries (`collectionEntries`)
  *    over the blog's collection, its card a cover, the date and byline, the
  *    title and the excerpt, linking each post.
+ *  - `tracks` — the music plugin's Music player (`musicPlayer`, AGL-3716) on a
+ *    music site, placed EMPTY: its "add your tracks" state, for the owner to
+ *    fill from their own media library. No job ever sources a recording, so
+ *    a tracks listing has no records and the player no source.
  *
  * The elements are named by their persisted ids, as the form binding names
  * `form`: a plugin never imports another's internals, and
@@ -50,7 +54,7 @@
  * Model only: shapes and the inputs reader; the compiler draws them.
  */
 
-export type AiLayoutListingKind = 'products' | 'posts'
+export type AiLayoutListingKind = 'products' | 'posts' | 'tracks'
 
 /** How a section shows a listing: a few of its records on a page about something else, or all of them on its own page. */
 export type AiLayoutListingRole = 'featured' | 'index'
@@ -77,6 +81,17 @@ export interface AiLayoutListing {
   href?: string
   /** The content collection a posts listing repeats, by its slug. */
   collectionSlug?: string
+  /**
+   * Where a visitor goes from a store with nothing listed yet (AGL-3676): the
+   * site's contact page, by its path. The empty state names it as its one
+   * action, so a shop that opens empty still answers a visitor.
+   */
+  emptyAction?: { label: string; href: string }
+  /**
+   * `false` for a store that lists its catalog but cannot sell yet (its first
+   * products were skipped or failed, AGL-3676): the header carries no cart.
+   */
+  cart?: boolean
   placements: AiLayoutListingPlacement[]
 }
 
@@ -92,18 +107,22 @@ export function aiLayoutListingId(kind: AiLayoutListingKind): string {
 export const AI_LAYOUT_LISTING_ELEMENTS: Readonly<Record<AiLayoutListingKind, string>> = {
   products: 'product-grid',
   posts: 'collectionEntries',
+  tracks: 'musicPlayer',
 }
 
 /** The header's cart button: the commerce plugin's Cart in its `button` variant. */
 export const AI_LAYOUT_CART_ELEMENT = 'cart'
 
 /** The most records a featured band shows; a page of its own shows them all. */
-export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3 } as const
+export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0 } as const
 
 const PLACEMENT_ROLES: readonly AiLayoutListingRole[] = ['featured', 'index']
-const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts']
+const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks']
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/** A path on the site, as a listing's links are kept. */
+const SITE_PATH = /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
 
 /** A site's listings as its unit inputs carry them; nothing that does not read is kept. */
 export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutListing[] {
@@ -116,6 +135,9 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     const kind = record['kind'] as AiLayoutListingKind
     if (!KINDS.includes(kind) || listings.some((listing) => listing.kind === kind)) continue
     const href = text(record['href'])
+    const action = (record['emptyAction'] ?? {}) as Record<string, unknown>
+    const actionLabel = text(action['label']).slice(0, 40)
+    const actionHref = text(action['href'])
     const collectionSlug = text(record['collectionSlug'])
     // A posts listing with no collection to repeat shows nothing.
     if (kind === 'posts' && !/^[a-z0-9-]{1,100}$/.test(collectionSlug)) continue
@@ -131,10 +153,16 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     listings.push({
       id: aiLayoutListingId(kind),
       kind,
-      name: text(record['name']) || (kind === 'products' ? 'the shop' : 'the blog'),
-      records: (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
-      ...(/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(href) ? { href } : {}),
+      name: text(record['name']) || (kind === 'products' ? 'the shop' : kind === 'posts' ? 'the blog' : 'the music'),
+      // A tracks listing names no records: no job sources a recording (AGL-3716).
+      records:
+        kind === 'tracks'
+          ? []
+          : (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
+      ...(SITE_PATH.test(href) ? { href } : {}),
       ...(kind === 'posts' ? { collectionSlug } : {}),
+      ...(kind === 'products' && record['cart'] === false ? { cart: false } : {}),
+      ...(kind === 'products' && actionLabel && SITE_PATH.test(actionHref) ? { emptyAction: { label: actionLabel, href: actionHref } } : {}),
       placements,
     })
   }
@@ -162,13 +190,38 @@ export interface AiLayoutListingScreen {
   id?: string | null
   title: string
   slug: string
-  sections: ReadonlyArray<{ name: string; items: number }>
+  sections: ReadonlyArray<{ name: string; items: number; uses?: readonly string[] }>
 }
 
 const PRODUCT_PAGE = /\b(shop|store|products?|catalog(?:ue)?|collections?|range|browse)\b/i
 const PRODUCT_SECTION =
   /\b(shop|store|products?|catalog(?:ue)?|collections?|range|bestsellers?|best[- ]sellers?|new arrivals|arrivals|featured|favou?rites|signature)\b/i
 const POST_SECTION = /\b(blog|posts?|articles?|writing|journal|stories|essays?|latest|recent|news|featured)\b/i
+/** A music site's page or section about its recordings (AGL-3716). */
+const MUSIC_PAGE = /\b(music|listen|tracks?|songs?|releases?|discography|albums?|eps?|singles?|sounds?)\b/i
+
+/**
+ * The section of a shop's own page the whole catalog fills (AGL-3676): the
+ * first after its opening whose name says products ("Product grid", "The
+ * range"), else the section planned with the most items, else its second.
+ * The live Hearth & Wick start (2026-10-09) planned "Product range image
+ * cards" — six cards naming kinds of candle, with no product, price or cart.
+ */
+export function aiLayoutShopGridSection(sections: ReadonlyArray<{ name: string; items: number }>): number {
+  const named = sections.findIndex((section, index) => index > 0 && PRODUCT_SECTION.test(section.name) && !SHOP_FRAMING.test(section.name))
+  if (named !== -1) return named
+  const most = Math.max(0, ...sections.map((section) => section.items))
+  const byItems = most > 0 ? sections.findIndex((section) => section.items === most) : -1
+  return byItems !== -1 ? byItems : sections.length > 1 ? 1 : 0
+}
+
+/** A section of a shop page that only opens or closes it: "Shop intro heading", "Gift help call to action". */
+const SHOP_FRAMING = /\b(hero|intro(?:duction)?|heading|banner|cta|call to action|contact)\b/i
+
+/** Whether a planned page is the store's own Shop page: its address or its name says it sells. */
+export function aiLayoutIsShopPage(screen: { slug: string; title: string }): boolean {
+  return !isHome(screen.slug) && PRODUCT_PAGE.test(`${firstSegment(screen.slug)} ${screen.title}`)
+}
 
 const firstSegment = (slug: string) => slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()
 const isHome = (slug: string) => firstSegment(slug) === ''
@@ -201,6 +254,26 @@ export function aiLayoutListingPlacements(
   }
   const afterHero = (screen: AiLayoutListingScreen, test: (name: string, items: number) => boolean) =>
     screen.sections.findIndex((section, index) => index > 0 && test(section.name, section.items))
+  if (kind === 'tracks') {
+    // A music site's player (AGL-3716): on its Music page, in the section that
+    // says it is about the recordings, else the one after the opening; on the
+    // home, only in a section named for them. A site with neither gets it on
+    // its home, after the opening.
+    for (const screen of screens) {
+      if (isHome(screen.slug)) {
+        place(screen, afterHero(screen, (name) => MUSIC_PAGE.test(name)), 'featured')
+        continue
+      }
+      if (!MUSIC_PAGE.test(`${firstSegment(screen.slug)} ${screen.title}`)) continue
+      const named = afterHero(screen, (name) => MUSIC_PAGE.test(name))
+      place(screen, named !== -1 ? named : screen.sections.length > 1 ? 1 : 0, 'index')
+    }
+    if (!placements.length) {
+      const home = screens.find((screen) => isHome(screen.slug))
+      if (home) place(home, home.sections.length > 1 ? 1 : 0, 'featured')
+    }
+    return placements
+  }
   if (kind === 'products') {
     for (const screen of screens) {
       if (isHome(screen.slug)) {
@@ -208,11 +281,8 @@ export function aiLayoutListingPlacements(
         place(screen, named !== -1 ? named : afterHero(screen, (_name, items) => items > 0), 'featured')
         continue
       }
-      if (!PRODUCT_PAGE.test(`${firstSegment(screen.slug)} ${screen.title}`)) continue
-      const most = Math.max(0, ...screen.sections.map((section) => section.items))
-      const byItems = most > 0 ? screen.sections.findIndex((section) => section.items === most) : -1
-      const index = byItems !== -1 ? byItems : screen.sections.length > 1 ? 1 : 0
-      place(screen, index, 'index')
+      if (!aiLayoutIsShopPage(screen)) continue
+      place(screen, aiLayoutShopGridSection(screen.sections), 'index')
     }
     return placements
   }

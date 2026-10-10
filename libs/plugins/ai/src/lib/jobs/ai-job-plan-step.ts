@@ -24,7 +24,8 @@ import {
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
-import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
+import type { AiJob, AiJobKind, AiJobPlan, AiJobReview, AiJobStatus } from '../model/ai-jobs.types'
+import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
   aiTemplateShownTokens,
@@ -60,6 +61,7 @@ import {
   aiSiteEmptyGalleryViolations,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
+import { aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -88,6 +90,7 @@ import {
 } from '../model/ai-build-job'
 import { aiBuildOpLines, aiBuildOps } from './ai-build-capabilities'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
+import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
 import { readAiPlanCapabilities } from './ai-job-drafts'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -291,6 +294,9 @@ export function aiPlanSiteLines(
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
+  // A store's Shop page IS its storefront (AGL-3676): the platform lists the
+  // real products there, so the plan names the section and draws no range.
+  if (kind?.id === 'store') lines.push(AI_SITE_STORE_SHOP_SENTENCE)
   lines.push(
     "Keep the plan an outline: each page's title, address, a short search title and description, and its sections named in a few words. The build writes the copy.",
   )
@@ -331,6 +337,43 @@ export function aiSiteThinHomeCheck(
     answers += 1
     if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
     return aiSiteThinHomeViolations(plan, rule)
+  }
+}
+
+/** What a store's plan is told about its Shop page (AGL-3676). */
+export const AI_SITE_STORE_SHOP_SENTENCE =
+  'Plan a Shop page at /shop: a short intro, then a section named "Product grid", where the platform lists the store\'s real products with their photos, prices and cart, then at most one or two short sections (care, shipping, gifting help). Never plan the products, the range or its categories as cards of your own.'
+
+/** The code a store plan with no Shop page is re-asked under. */
+export const AI_SITE_STORE_SHOP_CODE = 'plan-store-shop-page'
+
+/**
+ * A store plan of two or more pages with no Shop page (AGL-3676): the page
+ * the platform lists the catalog on is the one a shopper looks for. A
+ * one-page Free taste lists its products on the home instead.
+ */
+export function aiSiteStoreShopPageViolations(
+  plan: Pick<AiBuildPlan, 'screens'>,
+): Array<{ rule: null; code: string; message: string; paths: string[] }> {
+  if (plan.screens.length < 2 || plan.screens.some((screen) => aiLayoutIsShopPage(screen))) return []
+  return [
+    {
+      rule: null,
+      code: AI_SITE_STORE_SHOP_CODE,
+      message:
+        'This store has no Shop page. Plan one at /shop, its second section named "Product grid": the platform lists the real products there.',
+      paths: ['screens'],
+    },
+  ]
+}
+
+/** A store plan's missing Shop page, asked about on the FIRST answer only, like a thin home. */
+export function aiSiteStoreShopCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  let answers = 0
+  return (plan) => {
+    answers += 1
+    if (answers >= AI_GENERATION_MAX_ATTEMPTS) return []
+    return aiSiteStoreShopPageViolations(plan)
   }
 }
 
@@ -441,8 +484,10 @@ function planViolations(
   home: { min: number; across: number | null } | null = null,
   blog = false,
   site = false,
+  store = false,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   const thinHome = home && home.min > 0 ? aiSiteThinHomeCheck(home) : null
+  const storeShop = store ? aiSiteStoreShopCheck() : null
   const blogStandIn = blog ? aiSiteBlogStandInCheck() : null
   const emptyGallery = site ? aiSiteEmptyGalleryCheck() : null
   return (plan) => {
@@ -458,6 +503,7 @@ function planViolations(
       ...(thinHome ? thinHome(plan) : []),
       ...(blogStandIn ? blogStandIn(plan) : []),
       ...(emptyGallery ? emptyGallery(plan) : []),
+      ...(storeShop ? storeShop(plan) : []),
     ]
   }
 }
@@ -673,6 +719,11 @@ export interface AiJobPlanStepDeps {
    * turns it off.
    */
   readSiteContext?: AiSiteContextReader | null
+  /**
+   * What a Free workspace has left (AGL-3722), read when a build's plan is
+   * kept so its card can say whether it fits; `null` turns it off.
+   */
+  readFreeCredits?: typeof readFreeAiCreditsLeft | null
 }
 
 /** What a job's site context is read with (AGL-3661). */
@@ -725,6 +776,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
   const readOps = deps.readOps ?? readAiBuildOps
   const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
+  const readFreeCredits = deps.readFreeCredits === undefined ? readFreeAiCreditsLeft : deps.readFreeCredits
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
     const [inventory, workspace, siteContext] = await Promise.all([
@@ -745,6 +797,14 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // A build's operations, as this site has them (AGL-3616).
     const ops = job.kind === 'build' ? await readOps({ job, org, firestore, freeTaste }) : null
     const site = job.kind === 'site'
+    // A kept plan waits for its confirmation; a Free build's card is told what
+    // is left, so it says before Confirm whether the build fits (AGL-3722).
+    const planReview = async (): Promise<AiJobReview> => {
+      const review: AiJobReview = { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] }
+      if (job.kind !== 'build' || !freeTaste || !readFreeCredits) return review
+      const credits = await readFreeCredits(firestore, { orgId: job.orgId, org, now })
+      return credits ? { ...review, freeCredits: credits } : review
+    }
     // The model switch's answer for this job (AGL-2942): the creator's pick
     // where the plan, the org restriction and the allotment allowlists allow
     // it, and Auto held to those same lists otherwise. Without a resolver the
@@ -760,6 +820,16 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
      * door hands it. A refusal fails the job with the door's sentence; a door
      * that could not answer keeps the plan, since the resume door asks again
      * before anything is built.
+     *
+     * Two answers are about the month's Free credits, not the plan (AGL-3722):
+     * - the 409 credits prompt KEEPS the plan. The card is told what is left
+     *   (`planReview`) and offers Build what fits / the home page first /
+     *   Upgrade, and the confirm door asks with the person's choice. Failing
+     *   here instead failed every Free build past its p90 before the card
+     *   could offer them — and paged staff with `ai.jobFailed`, as at
+     *   2026-10-09 16:38Z (600 credits estimated, 164 left).
+     * - the 429 "nothing left" still fails the job with its sentence, but as
+     *   the customer's limit, which raises no staff alert.
      */
     const refusalOnKeep = async (plan: AiJobPlan, outcome: AiJobStepOutcome): Promise<AiJobStepOutcome | null> => {
       let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>> = null
@@ -776,7 +846,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       } catch (error) {
         console.error('ai plan admission failed', { orgId: job.orgId, jobId: job.$id, error })
       }
-      return refusal ? { ...outcome, failure: refusal.error } : null
+      if (!refusal || refusal.code === AI_CREDITS_CONFIRM_CODE) return null
+      return {
+        ...outcome,
+        failure: refusal.error,
+        ...(refusal.status === 429 ? { customerLimit: true } : {}),
+      }
     }
 
     // Reuse before asking (AGL-2937). The key covers the whole request, so a
@@ -824,7 +899,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         (await refusalOnKeep(plan, unspent)) ?? {
           ...unspent,
           plan,
-          review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+          review: await planReview(),
         }
       )
     }
@@ -854,6 +929,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         site ? aiSitePlanHomeRule(inventory, capabilities) : null,
         site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
         site,
+        site && aiSiteKindOfInputs(job.inputs)?.id === 'store',
       ),
     })
     const spent: AiJobStepOutcome = {
@@ -905,7 +981,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,
         plan,
-        review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+        review: await planReview(),
       }
     )
   }

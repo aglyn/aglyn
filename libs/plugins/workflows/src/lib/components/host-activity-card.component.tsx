@@ -142,12 +142,7 @@ export function HostActivityCard(props: HostActivityCardProps) {
     targetId,
     header = 'Recent Activity',
     viewAllHref,
-    help = pluginDocsHelp('consoleTour', {
-      anchor: '#a-sites-dashboard',
-      excerpt:
-        'Changes made to this site from the console — publishes, media ' +
-        'saves, member changes — newest first.',
-    }),
+    help = pluginDocsHelp('consoleTour', { anchor: '#recent-activity' }),
   } = props
   const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const firestore = useFirestore()
