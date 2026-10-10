@@ -434,6 +434,34 @@ interface AiSiteDatasetProposal {
   imageField?: string | null
   /** The library photos its records show (`media:` references), which no page places again. */
   photos?: string[]
+  /**
+   * The fields most of its first records leave empty, by id (AGL-3616): a
+   * tour's venues not yet known. A card never binds one — it would print
+   * nothing on most records — so its listing leaves them out.
+   */
+  sparseFields?: string[]
+}
+
+/**
+ * The fields of a designed dataset that its records leave empty on most of
+ * them — every record, or more than half — by the id the data plugin gave
+ * each (AGL-3616). Its first field is the record's name and is never one. The
+ * live low-tide-hollow start (beta.239) seeded its tour dates with no venue,
+ * rightly inventing none, and its cards bound the venue as their eyebrow.
+ */
+export function aiDatasetSparseFields(
+  dataset: { fields: ReadonlyArray<{ name: string }>; records: ReadonlyArray<ReadonlyArray<string | undefined>> },
+  written: readonly AiLayoutListingField[],
+): string[] {
+  if (!dataset.records.length) return []
+  const idOf = (name: string, column: number) =>
+    written.find((field) => field.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? written[column]?.id ?? null
+  return dataset.fields.flatMap((field, column) => {
+    if (column === 0) return []
+    const filled = dataset.records.filter((values) => (values[column] ?? '').trim()).length
+    const id = idOf(field.name, column)
+    return id && filled * 2 <= dataset.records.length ? [id] : []
+  })
 }
 
 function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposal {
@@ -446,6 +474,7 @@ function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposa
     addressField: str(raw.addressField) || null,
     imageField: str(raw.imageField) || null,
     photos: Array.isArray(raw.photos) ? raw.photos.map(str).filter((src) => src.startsWith('media:')).slice(0, 24) : [],
+    sparseFields: Array.isArray(raw.sparseFields) ? raw.sparseFields.map(str).filter(Boolean) : [],
   }
 }
 
@@ -591,6 +620,7 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       addressField: facts.addressField ?? null,
       ...(facts.imageField ? { imageField: facts.imageField } : {}),
       ...(placed.length ? { photos: placed } : {}),
+      sparseFields: aiDatasetSparseFields(generation.value, facts.fields ?? []),
     }
     return { ...spent, outputs: [output(result.id, result.name, proposal, facts.records ?? generation.value.records.length)] }
   }
@@ -708,8 +738,14 @@ export function aiSiteDatasetListings(input: {
         name: dataset.name,
         records: proposal.recordNames,
         // The address field is the record page's, never a card's words; the
-        // photo is the card's picture, never its words (AGL-3616).
-        fields: proposal.fields.filter((field) => field.id !== proposal.addressField && field.id !== proposal.imageField),
+        // photo is the card's picture, never its words; a field most records
+        // leave empty is no card's either (AGL-3616).
+        fields: proposal.fields.filter(
+          (field, index) =>
+            field.id !== proposal.addressField &&
+            field.id !== proposal.imageField &&
+            (index === 0 || !proposal.sparseFields?.includes(field.id)),
+        ),
         imageField: proposal.imageField ?? null,
       },
     ]
