@@ -17,6 +17,7 @@
 'use client'
 
 import { installErrorBeacon } from '@aglyn/aglyn/app-utils/error-beacon'
+import { installForeignDomGuard } from '@aglyn/aglyn/app-utils/foreign-dom-guard'
 
 /**
  * Mounts the first-party error beacon (AGL-1538). Renders nothing; the
@@ -26,6 +27,9 @@ import { installErrorBeacon } from '@aglyn/aglyn/app-utils/error-beacon'
  * catch. The installer no-ops during SSR and on repeat evaluation.
  */
 installErrorBeacon()
+// A browser translator's rewritten text must not crash a commit; see the
+// module (2026-10-09 22:30Z console landing crash).
+installForeignDomGuard()
 
 export default function ErrorBeacon(): null {
   return null
