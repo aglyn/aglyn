@@ -29,8 +29,8 @@ import { AI_DATASET_DRAFT_RESOURCE } from './ai-build-unit-outcome'
 /**
  * A FORM THAT WRITES TO A DATASET (AGL-3616; Zach, 2026-10-10: Aglyn AI's
  * forms can write to datasets — a volunteer sign-up into a Volunteers
- * dataset, an RSVP into an event's attendees, a catering enquiry into
- * Enquiries).
+ * dataset, an RSVP into an event's attendees, a catering inquiry into
+ * Inquiries).
  *
  * The plan says which dataset a form writes to (`writesTo` on its creation);
  * it is never inferred from what a section places. The dataset is built
@@ -191,7 +191,7 @@ export async function aiReadFormDataset(
 /** What the form's generation is told about the dataset it writes to. */
 export function aiFormDatasetPromptLine(dataset: AiFormDataset): string {
   const fields = dataset.fields.map((field) => `${field.name} (${NUMBER_TYPES.has(field.type) ? 'a number' : 'text'})`)
-  return `Each submission is also saved as a record of the dataset “${dataset.name}”, whose fields are: ${fields.join(', ')}. Draw a field for each one a visitor can answer, labelled with the field's name.`
+  return `Each submission is also saved as a record of the dataset “${dataset.name}”, whose fields are: ${fields.join(', ')}. Draw a field for each one a visitor can answer, labeled with the field's name.`
 }
 
 /** What the form's row says about where its submissions are also saved. */

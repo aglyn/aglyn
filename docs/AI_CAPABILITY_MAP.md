@@ -260,7 +260,7 @@ is a decision about the account, not something to build.
 
 Zach, 2026-10-10: Aglyn AI's forms can write to datasets — a volunteer
 sign-up into a Volunteers dataset, an RSVP into an event's attendees, a
-catering enquiry into Enquiries.
+catering inquiry into Inquiries.
 
 - **The plan says so.** The plan tool that carries record templates (offered
   only where the job may bind a dataset) gives each creation a `writesTo`:

@@ -345,7 +345,7 @@ export function aiSiteDatasetSentence(max: number): string {
  * sent the form.
  */
 export const AI_SITE_FORM_DATASET_SENTENCE =
-  "Where each submission of the form should also be kept as a record (volunteer sign-ups, RSVPs, enquiries), the form writes to a dataset: create the dataset, its fields the form's field names, and set the form's writesTo to new:<the dataset's name>; that dataset counts toward the same limit and no section lists it. Otherwise writesTo is null."
+  "Where each submission of the form should also be kept as a record (volunteer sign-ups, RSVPs, inquiries), the form writes to a dataset: create the dataset, its fields the form's field names, and set the form's writesTo to new:<the dataset's name>; that dataset counts toward the same limit and no section lists it. Otherwise writesTo is null."
 
 
 /**

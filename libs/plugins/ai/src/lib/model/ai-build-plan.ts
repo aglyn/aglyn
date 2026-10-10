@@ -495,7 +495,7 @@ const RECORD_SCHEMA = {
 }
 
 const WRITES_TO_SCHEMA = nullableString(
-  'A form only, and only where each submission should also be kept as a record (a volunteer sign-up, an RSVP, an enquiry): the dataset it writes to, as new:<name> of a dataset this plan creates or a dataset id from the inventory. Otherwise null.',
+  'A form only, and only where each submission should also be kept as a record (a volunteer sign-up, an RSVP, an inquiry): the dataset it writes to, as new:<name> of a dataset this plan creates or a dataset id from the inventory. Otherwise null.',
 )
 
 /**
