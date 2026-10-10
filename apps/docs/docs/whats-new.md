@@ -37,19 +37,12 @@ for the how-to.
   visitors: they are not indexed as separate pages, so use locale variants for
   languages that need to rank. Business and above.
 
-<!--
-AGL-3694: held unpublished until the deployment sets AD_CONVERSIONS_TOKEN_KEY on
-the console, like the guide it links (`unlisted: true`). Once the key is set on
-aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
-"Rolling out" note from marketing-and-automation/analytics/connect-conversions-api.md.
-
 ## October 2026 — server-side ad conversions
 
 - **[Server-side ad conversions](marketing-and-automation/analytics/connect-conversions-api.md)** —
   connect the Meta Conversions API, the TikTok Events API or the Pinterest
   Conversions API and purchases and leads are also sent from the server, for
   visitors who allow advertising, paired with the browser tag so each is counted once.
--->
 
 ## October 2026 — your own TikTok and Pinterest tags
 
@@ -64,8 +57,9 @@ aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
   paste your Trustpilot invitation address and each customer who agreed to your
   marketing email is invited to review your store once their order ships, or once
   it arrives: one order email is blind-copied to Trustpilot, once per order, never
-  for a test, canceled or refunded order. Your store's own product reviews stay on
-  your product pages.
+  for a test, canceled or refunded order. Prefer the API? Paste your Trustpilot API
+  key instead, or send shipped orders to [Yotpo Reviews](commerce-and-bookings/commerce/review-platforms.md#yotpo-reviews)
+  with your own keys. Your store's own product reviews stay on your product pages.
 
 ## October 2026 — live chat with Tidio or LiveChat
 
@@ -282,14 +276,6 @@ aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
   their units off the same shelf, and the tracking goes back when you ship.
 -->
 
-<!--
-  AGL-3695 — Couriers are built and hidden until a deployment sets
-  COURIERS_TOKEN_KEY on the console. This entry is held unpublished, like the
-  guide it links (`unlisted: true`): once it is set on aglyn.com, remove this
-  comment's markers, move "(newest)" here from the top heading, and delete
-  `unlisted: true` and the "Rolling out" note from
-  commerce-and-bookings/commerce/couriers.md.
-
 ## October 2026 — send a DoorDash courier for your local deliveries
 
 - **[Couriers](commerce-and-bookings/commerce/couriers.md)** — connect your own
@@ -297,25 +283,15 @@ aglyn.com, remove this comment's markers, and delete `unlisted: true` and the
   Pickup & delivery queue or the order. Get a quote, send the courier, and follow its
   progress, tracking link and arrival time on the order and your buyer's status page.
   DoorDash bills your own account; your buyers pay your delivery zone's fee as before.
--->
 
-<!--
-  AGL-3634 — Fulfillment networks are built and hidden until a deployment holds a
-  ShipBob developer app or an Amazon selling-partner app, or sets SHIPMONK_ENABLED
-  (AGL-3697), and sets FULFILLMENT_NETWORKS_TOKEN_KEY on the console. This entry is held unpublished,
-  like the guide it links (`unlisted: true`): once a network is configured on
-  aglyn.com, remove this comment's markers, move "(newest)" here from the top
-  heading, and delete `unlisted: true` and the "Rolling out" note from
-  commerce-and-bookings/commerce/fulfillment-networks.md.
-
-## October 2026 — ShipBob, ShipMonk and Amazon ship your orders
+## October 2026 — ShipMonk ships your orders
 
 - **[Fulfillment networks](commerce-and-bookings/commerce/fulfillment-networks.md)** —
-  connect your own ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account and paid orders
-  go to it to pick, pack and ship. Items it does not stock stay with you, each parcel
-  it ships comes back to the order with its tracking, canceling an order cancels it
-  there, and your stock counts can follow the warehouse's.
--->
+  connect your own ShipMonk account and paid orders go to it to pick, pack and
+  ship. Items it does not stock stay with you, each parcel it ships comes back to
+  the order with its tracking, canceling an order cancels it there, and your stock
+  counts can follow the warehouse's. ShipBob and Amazon Multi-Channel Fulfillment
+  join the same card as each is set up.
 
 ## October 2026 — the register takes every payment
 

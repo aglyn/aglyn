@@ -201,6 +201,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/custom-domains/connect-a-domain',
     title: 'Connect a domain',
   },
+  connectConversionsApi: {
+    path: '/marketing-and-automation/analytics/connect-conversions-api',
+    title: 'Server-side ad conversions',
+  },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
     title: 'Guide: console extensions & site surfaces',
@@ -232,6 +236,10 @@ export const DOCS_HELP_TOPICS = {
   copyPaste: {
     path: '/building-sites/besigner/copy-paste',
     title: 'Copy & paste elements',
+  },
+  couriers: {
+    path: '/commerce-and-bookings/commerce/couriers',
+    title: 'Couriers for local delivery (DoorDash Drive)',
   },
   createARedirect: {
     path: '/building-sites/redirects/create-a-redirect',
@@ -360,6 +368,10 @@ export const DOCS_HELP_TOPICS = {
   forms: {
     path: '/content-and-data/forms/overview',
     title: 'Forms & Lead Capture',
+  },
+  fulfillmentNetworks: {
+    path: '/commerce-and-bookings/commerce/fulfillment-networks',
+    title: 'Fulfillment networks (ShipBob, ShipMonk and Amazon MCF)',
   },
   funnels: {
     path: '/marketing-and-automation/analytics/funnels',
@@ -919,6 +931,7 @@ export const DOCS_HELP_ANCHORS = {
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#make-a-property-conditional', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#override-an-attribute-on-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#component-details-card', '#duplicate', '#reusable-email-blocks', '#make-a-header-or-footer', '#add-one-to-an-email', '#change-a-block-in-one-email', '#emails-you-have-not-designed', '#email-theme-colors', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
+  connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
@@ -927,6 +940,7 @@ export const DOCS_HELP_ANCHORS = {
   cookieConsent: ['#how-it-works', '#what-needs-consent', '#campaign-touch', '#videos-that-load-with-the-page', '#privacy-choices--the-persistent-control', '#where-the-choice-is-kept', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],
   copyAssist: ['#use-it', '#what-you-get-back', '#tips', '#who-can-use-it', '#related'],
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
+  couriers: ['#who-pays', '#connect-doordash-drive', '#webhook', '#send-a-courier', '#cancel', '#what-your-buyer-sees'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
   createImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
   createWithAi: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
@@ -957,6 +971,7 @@ export const DOCS_HELP_ANCHORS = {
   firstPartySurfaces: ['#register', '#include', '#what-the-capture-does-so-you-can-check-it', '#on-a-self-hosted-install'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#place-a-saved-form', '#saved-forms-per-site', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#consent-group-disclosure', '#where-submissions-go', '#the-inbox', '#filter-the-inbox', '#who-a-submission-is-from', '#what-it-links-to', '#where-this-one-went', '#replying-to-a-submission', '#inbox-card', '#every-sites-inbox-at-once', '#one-forms-own-page', '#form-details', '#form-crm-routing', '#form-versions', '#form-collected', '#form-submissions', '#form-saves-to-contact-fields', '#export-submissions', '#find-a-form', '#duplicate-a-form', '#switch-forms-off-for-one-site', '#related'],
+  fulfillmentNetworks: ['#connect-a-network', '#shipmonk-connect-with-your-api-key', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
   funnels: ['#step-types', '#how-it-counts', '#what-is-a-visit', '#identified-visitors', '#create', '#create-with-ai', '#drafts', '#act-on-drop-off', '#ask-ai'],
   generateAComponentWithAglynAi: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   generateAForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
@@ -1312,6 +1327,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   cookieConsent: {
     '#how-it-works': 'How it works',
+  },
+  couriers: {
+    '#connect-doordash-drive': 'Connect DoorDash Drive',
   },
   crm: {
     '#at-the-organization-level': 'At the organization level',

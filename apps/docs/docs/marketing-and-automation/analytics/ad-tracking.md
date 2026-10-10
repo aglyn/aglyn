@@ -88,5 +88,6 @@ consent-gated by Aglyn and is never removed by a withdrawal.
 
 ## Related
 
+- [Server-side ad conversions](./connect-conversions-api.md) — send purchases and leads from the server too
 - [Cookie consent](./cookie-consent.md) — the advertising question and the consent modes
 - [Google Analytics events](./google-analytics.md) — the same moments, in your GA4 property
