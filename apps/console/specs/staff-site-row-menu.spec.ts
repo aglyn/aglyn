@@ -51,6 +51,19 @@ describe('the staff Sites row menu', () => {
     expect(items.some((item) => /^Open /.test(item.label))).toBe(false)
   })
 
+  it('leads every item with its own icon (Zach, 2026-10-10)', () => {
+    for (const site of [
+      { $id: 'h1', orgId: 'o1', homeScreenId: 'home', ownerUid: 'u1', subdomain: 'harbor' },
+      { $id: 'h1', orgId: null, homeScreenId: null, ownerUid: null },
+    ]) {
+      const items = staffSiteMenuItems(site)
+      const paths = items.map((item) => (item.icon as { path?: string })?.path)
+      expect(paths.every((path) => typeof path === 'string' && path.length > 0)).toBe(true)
+      // Five destinations, five different glyphs.
+      expect(new Set(paths).size).toBe(items.length)
+    }
+  })
+
   it('says on screen why an item is unavailable', () => {
     const items = staffSiteMenuItems({
       $id: 'h1',
