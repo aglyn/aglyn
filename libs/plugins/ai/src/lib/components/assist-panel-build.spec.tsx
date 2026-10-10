@@ -56,6 +56,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 import '../declarations'
 import AssistPanelComponent from './assist-panel.component'
 import { resetAiJobsStoreForTests } from './ai-jobs-store'
+import { resetAiUsageMetersForTests } from './use-ai-usage-meter'
 
 const BUILD = {
   id: 'build',
@@ -112,10 +113,10 @@ const job = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-function chatStream(build: unknown) {
+function chatStream(build: unknown, meter: unknown = null) {
   const frames = [
     `data: ${JSON.stringify({ type: 'delta', text: 'I will plan that.' })}\n\n`,
-    `data: ${JSON.stringify({ type: 'done', exchangeId: 'exchange-1', docs: [], proposal: null, edit: null, build })}\n\n`,
+    `data: ${JSON.stringify({ type: 'done', exchangeId: 'exchange-1', docs: [], proposal: null, edit: null, build, ...(meter ? { meter } : {}) })}\n\n`,
   ]
   const chunks = frames.map((frame) => new TextEncoder().encode(frame))
   return {
@@ -161,6 +162,8 @@ beforeEach(() => {
   chatBuild = BUILD
   sessionStorage.clear()
   resetAiJobsStoreForTests()
+  resetAiUsageMetersForTests()
+  localStorage.clear()
   global.fetch = jest.fn(async (url: string, init: RequestInit) => {
     const path = String(url)
     if (path.startsWith('/api/ai/jobs?')) return { ok: true, status: 200, json: async () => ({ jobs: [] }) }
@@ -243,5 +246,56 @@ describe('a build asked in the chat (AGL-3616)', () => {
     fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
     expect(await screen.findByText('This build was not started. Ask again to plan it.')).toBeTruthy()
     expect(jobPosts()).toEqual([])
+  })
+})
+
+/** A Free reader's strip envelope: `used` of 300 on both meters, the last request's credits. */
+const freeMeter = (used: number, last: number) => ({
+  month: new Date().toISOString().slice(0, 7),
+  pool: { used, limit: 300 },
+  mine: { used, limit: 300, mode: 'hard', scope: null, free: true },
+  last,
+  refused: false,
+  state: 'ok',
+  model: null,
+})
+
+describe('the usage strip and the plan card say one number (AGL-3722)', () => {
+  it('moves the strip by the plan’s own spend, once: 117 after the chat turn, 71 after the 46-credit plan', async () => {
+    // zachary1748, 2026-10-10: the chat turn (31 credits) left 117; the build's
+    // plan then spent 46, and its card, read after that spend, said 71 — while
+    // the strip, moved only by the chat turn, still said 117.
+    const left = { left: 71, total: 300, resetsOn: '2026-11-01', used: { account: 229, org: 229, orgBand: 300, state: 'warn' } }
+    const fetchMock = global.fetch as jest.Mock
+    const base = fetchMock.getMockImplementation() as (url: string, init: RequestInit) => Promise<unknown>
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      const path = String(url)
+      if (path === '/api/assist/chat') {
+        posts.push([path, JSON.parse(String(init?.body ?? '{}'))])
+        return chatStream(BUILD, freeMeter(183, 31))
+      }
+      if (path === '/api/ai/jobs') {
+        posts.push([path, JSON.parse(String(init?.body ?? '{}'))])
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            job: job({ creditsSpent: 46, review: { reason: 'plan', message: 'The plan is ready.', findings: [], freeCredits: left } }),
+            meter: { ...freeMeter(229, 46), state: 'warn' },
+          }),
+        }
+      }
+      return base(url, init)
+    })
+    render(<AssistPanelComponent {...dockProps()} />)
+    await ask('Add three pages: About us, Custom cakes and Catering')
+    expect(await screen.findByRole('button', { name: /Confirm plan|Build what fits/ })).toBeTruthy()
+    expect(await screen.findByText('You have 71 free AI credits left this month')).toBeTruthy()
+    expect(screen.queryByText('You have 117 free AI credits left this month')).toBeNull()
+    expect(screen.getByText('Last request: 46 credits')).toBeTruthy()
+    // The card quotes the same figure, never the plan's cost taken off it again (25).
+    const card = screen.getByLabelText('Build plan')
+    expect(card.textContent).toMatch(/You have 71 (of your free AI credits )?left/)
+    expect(card.textContent).not.toMatch(/You have 25 /)
   })
 })
