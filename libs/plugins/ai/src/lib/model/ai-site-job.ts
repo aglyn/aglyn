@@ -244,6 +244,19 @@ export interface AiFreeCreditsLeft {
   left: number
   total: number
   resetsOn: string
+  /**
+   * Both meters `left` is the lesser of, in credits net of give-backs, for the
+   * usage strip's live read (AGL-3722): the owner's Free allowance across
+   * their Free workspaces (`account`, `null` with no owner) and this
+   * workspace's band.
+   */
+  used?: {
+    account: number | null
+    org: number
+    orgBand: number | null
+    /** The strip's warn state for these figures, worked out where the strip's own rule is not shipped to the browser. */
+    state: 'ok' | 'warn' | 'capped'
+  }
 }
 
 /** The first UTC day of the month after `now`, `YYYY-MM-DD`: when the Free credits come back. */
