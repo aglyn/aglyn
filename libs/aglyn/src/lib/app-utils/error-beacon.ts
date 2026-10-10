@@ -67,6 +67,15 @@ export interface ErrorBeaconEvent {
   col?: number
   /** Page URL, scrubbed to origin + pathname. */
   url: string
+  /**
+   * On a `hydration` event only: the page translator whose rewrite is
+   * visible in the document when React gave up — see
+   * {@link pageTranslationSignal}. Absent when nothing visibly translated
+   * the page, which is the case that is worth reading.
+   */
+  translated?: string
+  /** On a `hydration` event only: `navigator.language`, clamped. */
+  language?: string
 }
 
 export interface ErrorBeaconOptions {
@@ -296,6 +305,60 @@ export function isHydrationMismatch(message: string): boolean {
 }
 
 /**
+ * WHICH TRANSLATOR rewrote this page's text, read off the document, or
+ * undefined when none visibly did.
+ *
+ * A hydration report on its own cannot say whether React disagreed with our
+ * server render or with a translator that rewrote the server's text before
+ * React reached it, and the two look identical in `client-errors`: the
+ * minified #418, a stack inside the react-dom chunk, the page URL, nothing
+ * else. aglyn.com/ carried eight of them between 2026-09-22 and 2026-10-10.
+ * The visitor at 2026-10-09 22:28Z went on to sign up two minutes later with
+ * Chrome Translate rewriting the console (the `<font>` crash #1342 fixed); the
+ * two on 2026-09-22/23 were desktop Chrome OS in Hyderabad, while every other
+ * Indian, Pakistani and Turkish home-page visit in GA that fortnight hydrated
+ * without a report — so neither the build nor the time zone was the variable,
+ * and the beacon had nothing to say which visitor it was.
+ *
+ * The signatures are the ones each translator leaves on the DOM it rewrote:
+ *
+ * - Chrome (and every Chromium that ships Google Translate) sets
+ *   `translated-ltr` / `translated-rtl` on `<html>` and wraps each rewritten
+ *   run in `<font style="vertical-align: inherit;">`.
+ * - Microsoft Translator (Edge) stamps `_msttexthash` / `_msthash` on every
+ *   element whose text it replaced.
+ * - Any translator that does the job properly rewrites `<html lang>`, which is
+ *   compared against the `servedLang` the beacon read at install, before
+ *   hydration began.
+ *
+ * Never throws: it runs inside the error handler.
+ */
+export function pageTranslationSignal(
+  doc: Document,
+  servedLang: string | null | undefined,
+): string | undefined {
+  try {
+    const root = doc.documentElement
+    if (!root) return undefined
+    if (
+      root.classList.contains('translated-ltr') ||
+      root.classList.contains('translated-rtl') ||
+      doc.querySelector('font[style*="vertical-align: inherit"]')
+    ) {
+      return 'chrome'
+    }
+    if (doc.querySelector('[_msttexthash], [_msthash]')) return 'microsoft'
+    const lang = root.getAttribute('lang')
+    if (servedLang && lang && lang.toLowerCase() !== servedLang.toLowerCase()) {
+      return `lang:${clamp(lang, 16)}`
+    }
+  } catch {
+    // An unreadable document leaves the event unlabeled, never unreported.
+  }
+  return undefined
+}
+
+/**
  * WHAT A REJECTED PROMISE ACTUALLY CARRIED (AGL-3279).
  *
  * `unhandledrejection` hands over whatever was passed to `reject`, and only
@@ -449,6 +512,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   // (the rejection handler below), because a tab left on a dead deploy is a
   // visitor's problem whether or not its errors are counted.
   const sampled = Math.random() < sampleRate
+  // The document's language as SERVED, read before hydration and before any
+  // translator has had a chance to rewrite it (`pageTranslationSignal`).
+  const servedLang = document.documentElement?.getAttribute('lang') ?? null
   if (sampled) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
 
   const seen = new Set<string>()
@@ -510,19 +576,29 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // clamp still makes the error ours.
       if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
       const stack = fullStack ? clamp(fullStack, MAX_STACK) : undefined
+      // MARKED, not dropped: a translator causes a hydration mismatch and so
+      // does a real render divergence, and a recovered fault is still a
+      // fault. Only a rate tells either apart from noise — and the
+      // translator's own mark on the DOM, when it left one.
+      const kind =
+        recoveredErrorKind(error ?? { message }) ??
+        (isHydrationMismatch(message) ? 'hydration' : 'error')
+      const translated =
+        kind === 'hydration'
+          ? pageTranslationSignal(document, servedLang)
+          : undefined
       enqueue({
-        // MARKED, not dropped: a translator causes a hydration mismatch and
-        // so does a real render divergence, and a recovered fault is still a
-        // fault. Only a rate tells either apart from noise.
-        kind:
-          recoveredErrorKind(error ?? { message }) ??
-          (isHydrationMismatch(message) ? 'hydration' : 'error'),
+        kind,
         message,
         stack,
         source: scrubUrl(event.filename) || undefined,
         line: typeof event.lineno === 'number' ? event.lineno : undefined,
         col: typeof event.colno === 'number' ? event.colno : undefined,
         url: pageUrl,
+        ...(translated ? { translated } : {}),
+        ...(kind === 'hydration' && navigator.language
+          ? { language: clamp(navigator.language, 16) }
+          : {}),
       })
     } catch {
       // Never rethrow from an error handler.

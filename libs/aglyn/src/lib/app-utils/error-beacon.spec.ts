@@ -43,6 +43,7 @@ import {
   isBenignBrowserNotice,
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
+  pageTranslationSignal,
   raiseStackTraceLimit,
   recoveredErrorKind,
 } from './error-beacon'
@@ -461,6 +462,44 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(events[0]['kind']).toBe('hydration')
   })
 
+  it("names the translator a hydration report's page carries", () => {
+    const root = document.documentElement
+    root.classList.add('translated-ltr')
+    try {
+      throwInPage(
+        'Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]=',
+        OWN_STACK,
+      )
+    } finally {
+      root.classList.remove('translated-ltr')
+    }
+    const [event] = reported()
+    expect(event).toMatchObject({ kind: 'hydration', translated: 'chrome' })
+    expect(event['language']).toBe(navigator.language)
+  })
+
+  it('leaves an untranslated hydration report unlabeled — the one to read', () => {
+    throwInPage(
+      'Minified React error #423; visit https://react.dev/errors/423',
+      OWN_STACK,
+    )
+    const [event] = reported()
+    expect(event['kind']).toBe('hydration')
+    expect(event).not.toHaveProperty('translated')
+  })
+
+  it('labels only hydration reports', () => {
+    document.documentElement.classList.add('translated-ltr')
+    try {
+      throwInPage('not a hydration error, translated page', OWN_STACK)
+    } finally {
+      document.documentElement.classList.remove('translated-ltr')
+    }
+    const [event] = reported()
+    expect(event).not.toHaveProperty('translated')
+    expect(event).not.toHaveProperty('language')
+  })
+
   it('reports a stackless error rather than guessing about it', () => {
     throwInPage('stackless boom', undefined)
     expect(reported()).toHaveLength(1)
@@ -718,5 +757,47 @@ describe('describeRejectionReason', () => {
     expect(describeRejectionReason(hostile)).toBe(
       'Unhandled promise rejection (undescribable)',
     )
+  })
+})
+
+describe('pageTranslationSignal', () => {
+  function page(html: string, lang = 'en'): Document {
+    const doc = document.implementation.createHTMLDocument('')
+    doc.documentElement.setAttribute('lang', lang)
+    doc.body.innerHTML = html
+    return doc
+  }
+
+  it("reads Chrome Translate's <html> class", () => {
+    const doc = page('<p>Merhaba</p>')
+    doc.documentElement.classList.add('translated-rtl')
+    expect(pageTranslationSignal(doc, 'en')).toBe('chrome')
+  })
+
+  it("reads Chrome Translate's <font> wrapper", () => {
+    const doc = page(
+      '<p><font style="vertical-align: inherit;">Web sitenizi oluşturun</font></p>',
+    )
+    expect(pageTranslationSignal(doc, 'en')).toBe('chrome')
+  })
+
+  it("reads Microsoft Translator's hash attributes", () => {
+    expect(
+      pageTranslationSignal(page('<p _msttexthash="123">Hola</p>'), 'en'),
+    ).toBe('microsoft')
+  })
+
+  it('reads a rewritten <html lang>', () => {
+    expect(pageTranslationSignal(page('<p>Merhaba</p>', 'tr'), 'en')).toBe(
+      'lang:tr',
+    )
+  })
+
+  it('says nothing about a page as it was served', () => {
+    expect(
+      pageTranslationSignal(page('<p>Build your website.</p>'), 'en'),
+    ).toBeUndefined()
+    expect(pageTranslationSignal(page('<p>x</p>', 'EN'), 'en')).toBeUndefined()
+    expect(pageTranslationSignal(page('<p>x</p>', 'tr'), null)).toBeUndefined()
   })
 })
