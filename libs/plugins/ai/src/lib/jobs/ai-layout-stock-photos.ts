@@ -115,6 +115,18 @@ import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
  *    to its photographer. A copy that fails tries the slot's next accepted
  *    hit.
  *
+ * 6. **Fall back to the craft, never off it** (the beta.241 Saltmarsh Soap
+ *    Co start, a store "for handmade cold-process soap": its craft read as
+ *    nothing, its hero searched "shop" and took a florist's bouquet, and four
+ *    of five products took the starters' laptop desk and living room). A
+ *    business that is only a place takes its craft from what it is for
+ *    ("soap shop"); a hero names the craft itself ({@link AiStockSiteTerms.core});
+ *    a product, after its own searches, tries its head noun anywhere among
+ *    the tags, its gift wrapper with the craft and the craft's broad
+ *    searches, and then — a product or a hero only — reuses an on-topic photo
+ *    the job already shows rather than take a starter. Every slot of a
+ *    craft's site tries the craft's broad searches last.
+ *
  * A slot nothing acceptable answered — the library down, refusing, or out
  * of time — is left `null` for the starter photos. A named object is never
  * given one while the library answers anything of the site's world: the
@@ -179,6 +191,8 @@ const FILLER = words(
     'single pair collection assortment selection group few various array range large tiny big little ' +
     'tall short wide narrow everyday classic signature original favorite favourite bestselling best-selling ' +
     'small-batch batch limited edition custom bespoke ' +
+    // How a soap is made, never what it shows: "cold" and "process" named a supermarket fridge (Saltmarsh, 2026-10-10).
+    'cold-process cold-processed hot-process hot-processed melt-and-pour ' +
     'white black grey gray beige cream ivory brown tan blue green red pink yellow orange purple speckled ' +
     'gentle airy inviting welcoming cheerful happy smiling friendly',
 )
@@ -524,6 +538,26 @@ const OBJECT_KIN: ReadonlyArray<{
     ],
     queries: ['wax melts', 'wax melt warmer', 'scented wax cubes'],
   },
+  {
+    // A "bar" is a pub's before it is a soap's (the Saltmarsh "cold-process
+    // soap bar" search answered a pint of beer second): a soap bar is named
+    // by soap, and searched by it.
+    objects: ['bar'],
+    within: ['soap', 'soapmaker', 'skincare'],
+    qualifier: 'soap',
+    kin: [
+      'soap bar',
+      'soap bars',
+      'bar of soap',
+      'bars of soap',
+      'soap',
+      'soaps',
+      'handmade soap',
+      'soap block',
+      'soap cubes',
+    ],
+    queries: ['soap bars', 'handmade soap bar'],
+  },
 ]
 
 /** An object's kin where the site or the subject is of its world, else `null`. */
@@ -630,9 +664,31 @@ const CRAFT_KIN: ReadonlyArray<{
   },
   {
     match: ['soap', 'soapmaker', 'skincare'],
-    kin: ['soap', 'skincare', 'lotion', 'bath', 'spa', 'natural', 'cosmetic'],
+    // Never "natural": a florist's bouquet tagged "natural" was the
+    // Saltmarsh Soap Co hero (2026-10-10).
+    kin: ['soap', 'skincare', 'lotion', 'cream', 'bath', 'spa', 'cosmetic'],
     broad: ['handmade soap', 'natural skincare'],
-    making: ['soap making'],
+    // "Soap making" is answered with soap bubbles; a bar is what a soapmaker makes.
+    making: ['soap making', 'handmade soap'],
+    // Soap bubbles, a dispenser and detergent are soap, never a soapmaker's:
+    // the same start's story band showed bubbles in flight.
+    rivals: {
+      words: ['bubble', 'bubbles', 'soapy', 'dispenser', 'detergent', 'dishwashing', 'laundry'],
+      core: [
+        'bar',
+        'bars',
+        'handmade',
+        'homemade',
+        'loaf',
+        'lye',
+        'glycerin',
+        'skincare',
+        'lotion',
+        'cosmetic',
+        'spa',
+        'artisan',
+      ],
+    },
   },
   {
     match: [
@@ -847,15 +903,24 @@ export interface AiStockSiteTerms {
   named: string[]
   /** Rival crafts' words, each with the words that must then be named too ({@link CRAFT_KIN}). */
   rivals: Array<{ words: string[]; core: string[] }>
+  /**
+   * The stems a photo of the craft ITSELF names, one of which a hero and a
+   * product's fallbacks must name (AGL-3660): the craft and, for a listed
+   * craft, its own names ("soap", "soapmaker", "skincare"). Empty where the
+   * site names no craft.
+   */
+  core: string[]
 }
 
 /** The site's terms, read from its business type. */
 export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
-  const business = aiStockBusinessWords(businessType)
-  const craft = aiStockCraftWords(business)
+  let business = aiStockBusinessWords(businessType)
+  let craft = aiStockCraftWords(business)
   const domain = new Set<string>()
   /** The things it makes, by their head nouns. */
   const made = new Set<string>()
+  /** The last word of the first clause that names the world: "soap" of "for handmade cold-process soap". */
+  let firstWorld = ''
   let named = false
   let making = false
   for (const { opener, words: clause } of businessClauses(businessType)) {
@@ -878,23 +943,41 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     )
     for (const word of world)
       for (const stem of stemList(word)) domain.add(stem)
+    const last = world[world.length - 1]
+    if (!firstWorld && last) firstWorld = aiStockStem(last)
     if (making)
       for (const word of kept.slice(-1))
         for (const stem of stemList(word)) made.add(stem)
   }
-  if (craft) domain.add(craft)
   // A business named only by what it sells ("a shop selling pottery") is of that world.
   if (!domain.size) for (const stem of made) domain.add(stem)
+  const groups = CRAFT_KIN.filter((group) =>
+    group.match.some(
+      (word) =>
+        domain.has(aiStockStem(word)) ||
+        made.has(aiStockStem(word)) ||
+        aiStockStem(word) === craft,
+    ),
+  )
+  // A business that is only a place ("an online shop for handmade
+  // cold-process soap") takes its craft from what it is for: the Saltmarsh
+  // Soap Co start (2026-10-10) read its craft as nothing, so its hero searched
+  // "shop" (a florist's bouquet) and no product was held to soap.
+  if (!craft) {
+    const listed = groups[0]?.match
+      .map(aiStockStem)
+      .find((stem) => domain.has(stem) || made.has(stem))
+    craft = listed || firstWorld || [...made][0] || ''
+    if (craft && !stemList(business).includes(craft))
+      business = `${craft} ${business}`.trim()
+  }
+  if (craft) domain.add(craft)
   const broad: string[] = []
   const makingSearches: string[] = []
   const rivals: Array<{ words: string[]; core: string[] }> = []
-  for (const group of CRAFT_KIN) {
-    if (
-      !group.match.some(
-        (word) => domain.has(aiStockStem(word)) || made.has(aiStockStem(word)),
-      )
-    )
-      continue
+  const core = new Set<string>(craft ? [craft] : [])
+  for (const group of groups) {
+    for (const word of group.match) core.add(aiStockStem(word))
     for (const word of group.kin) domain.add(aiStockStem(word))
     broad.push(...group.broad)
     makingSearches.push(...group.making)
@@ -913,6 +996,7 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     making: [...new Set(makingSearches)],
     named: [...new Set(stemList(businessType))],
     rivals,
+    core: [...core],
   }
 }
 
@@ -972,12 +1056,20 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
   subject?: string
   /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
   requires?: string
+  /**
+   * Words of which a hit must name ONE, `requires` among them (AGL-3660): a
+   * shop's category or the slot's own word of its world, so a soap shop's
+   * body lotion is held to "lotion", never to "soap".
+   */
+  category?: readonly string[]
   /** The thing every hit must name, where it is not the subject's own: a product's head noun (AGL-3660). */
   object?: string
   /** Phrases that name the object where its own word is not enough: "wax melt" ({@link OBJECT_KIN}). */
   kin?: readonly string[]
   /** Whether the object must be among the hit's first tags, what the photo is OF (AGL-3660). */
   lead?: boolean
+  /** Whether the hit's first tags must name the site's world, where the object need not lead (AGL-3660). */
+  leadWorld?: boolean
 }
 
 /** A slot's part of a page, where it asks for more than its role: a collection tile or a story of the craft (AGL-3660). */
@@ -1008,71 +1100,154 @@ export function aiStockSlotPart(
 const kinStems = (entry: (typeof OBJECT_KIN)[number] | null): string[] =>
   entry ? [...new Set(entry.kin.map((phrase) => stemList(phrase).join(' ')))] : []
 
+/** What a product falls back to once its own searches find nothing ({@link aiStockProductSearches}). */
+export interface AiStockProductFallback {
+  /** The site's broad searches ({@link AiStockSiteTerms.broad}): "handmade soap". */
+  broad?: readonly string[]
+  /** The words a photo of the craft itself names ({@link AiStockSiteTerms.core}). */
+  core?: readonly string[]
+}
+
+/** The wrapper words a gift is named by, searched with the craft: "soap gift box". */
+const GIFT_WRAPPERS = words('gift gifts box boxes basket baskets hamper hampers')
+
 /**
  * A product's searches (AGL-3676), most specific first: each of its subjects
  * — its name's noun phrase, then its photo's — with the shop's category
- * where the phrase does not already say it ("candle gift box"), then the
- * category alone, a plain photo of what the shop sells. Every one must find a
- * hit naming the category, so no product is ever filled with a lifestyle shot
- * of something else: the beta.237 Willow Wick start put a laptop and roses
- * under "Candle Wick Trimmer" and an antique tea set under "Candle Gift Set".
+ * where the phrase does not already name the shop's world ("candle gift
+ * box"), then the category alone, a plain photo of what the shop sells. Every
+ * one must find a hit naming the category — or the product's own word of the
+ * shop's world, "lotion" in a soap shop — so no product is ever filled with a
+ * lifestyle shot of something else: the beta.237 Willow Wick start put a
+ * laptop and roses under "Candle Wick Trimmer" and an antique tea set under
+ * "Candle Gift Set".
  *
- * And every one must find a hit naming the product's own head noun among its
+ * And each must find a hit naming the product's own head noun among its
  * first tags (AGL-3660): the beta.239 Ember & Oak start put a bed with a book,
  * a mug and a camera (its candle a last tag) under "Hand-Poured Soy Candle".
  * An object whose own word is not enough ({@link OBJECT_KIN}) is searched by
  * its kin instead of the category alone, and named by them: a single taper
  * candle filled "Wax Melt Gift Set".
+ *
+ * Then, before a product is ever given a photo of something else, it falls
+ * back to its own craft (AGL-3660). The Saltmarsh Soap Co start (2026-10-10)
+ * found no hit naming "bar" or "box" among the first tags, and four of its
+ * five products took the starter photos — a laptop and roses, a living room
+ * of plants. So, in order:
+ *
+ * 1. The same searches again, the head noun named anywhere among the tags
+ *    (no extra search: the page remembers its answers), and a gift's own
+ *    wrapper with the craft ("soap gift box").
+ * 2. The site's broad searches ("handmade soap", "natural skincare"), any hit
+ *    naming the craft itself ({@link AiStockSiteTerms.core}).
+ *
+ * The source then reuses an on-topic photo another slot of the job already
+ * shows before it gives up ({@link aiLayoutStockPhotoSource}).
  */
 export function aiStockProductSearches(
   slot: Pick<AiLayoutPictureSlot, 'aspect' | 'product'>,
   craft: string,
   domain: readonly string[] = [],
+  fallback: AiStockProductFallback = {},
 ): AiStockSearch[] {
   const orientation = aiStockOrientation(slot.aspect)
   const size = orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
   const craftStems = stemList(craft)
+  const world = new Set([...domain, ...craftStems])
   const subjects = (slot.product?.subjects ?? [])
     .map((raw) => aiStockSubjectWords(raw, ''))
     .filter(Boolean)
   // The product's head noun is its name's: "candle" of "Hand-Poured Soy Candle".
-  const object = aiStockObjectWord(subjects[0] ?? '')
+  const own = subjects[0] ?? ''
+  const object = aiStockObjectWord(own)
   const kin = object
     ? objectKin(object, [...craftStems, ...domain, ...stemList(subjects.join(' '))])
     : null
   const kinPhrases = kinStems(kin)
-  const queries: Array<{ query: string; subject: string; object: string }> = []
+  // A product of the shop's world beside its category is held to either:
+  // a soap shop's body lotion names "lotion", never "soap".
+  const ownWorld = stemList(own).filter(
+    (stem) => world.has(stem) && !WRAPPERS.has(stem) && !craftStems.includes(stem),
+  )
+  const category = craft && ownWorld.length ? [...craftStems, ...ownWorld] : []
+  type Query = {
+    query: string
+    subject: string
+    object: string
+    lead: boolean
+    broad?: boolean
+  }
+  const queries: Query[] = []
   for (const subject of subjects) {
     const stems = stemList(subject)
     const query = kin
       ? stems.includes(aiStockStem(kin.qualifier))
         ? subject
         : `${kin.qualifier} ${subject}`
-      : craft && !craftStems.every((stem) => stems.includes(stem))
+      : craft && !stems.some((stem) => world.has(stem))
         ? `${craft} ${subject}`
         : subject
-    queries.push({ query, subject, object })
+    queries.push({ query, subject, object, lead: true })
   }
-  // The category alone stands in only for a thing that is no more than of it.
-  // Its hits are still scored by the product's own words: a soy candle over a taper.
-  const own = subjects[0] ?? ''
-  if (kin) for (const query of kin.queries) queries.push({ query, subject: own || query, object })
-  else if (craft) queries.push({ query: craft, subject: own || craft, object: craft })
+  // The category alone stands in only for a thing that is no more than of
+  // it; a thing that is its own word of the shop's world is searched by that
+  // word ("lotion"). Its hits are still scored by the product's own words: a
+  // soy candle over a taper.
+  if (kin)
+    for (const query of kin.queries)
+      queries.push({ query, subject: own || query, object, lead: true })
+  else if (object && ownWorld.includes(object))
+    queries.push({ query: object, subject: own, object, lead: true })
+  else if (craft)
+    queries.push({ query: craft, subject: own || craft, object: craft, lead: true })
+  // 1. The head noun anywhere among the tags, by the same searches.
+  for (const entry of [...queries]) queries.push({ ...entry, lead: false })
+  // A gift is its craft's: "bath gift box" asks for a "soap gift box".
+  const wrapped = own
+    .split(/\s+/)
+    .filter((word) => WRAPPERS.has(word) && aiStockStem(word) !== object)
+  const gift = wrapped.find((word) => GIFT_WRAPPERS.has(word))
+  if (craft && gift && !kin)
+    queries.push({
+      query: `${craft} ${wrapped.join(' ')}`,
+      subject: own,
+      object: aiStockStem(gift),
+      lead: false,
+    })
+  // 2. The craft's own broad searches, any hit naming the craft.
+  for (const query of fallback.broad ?? [])
+    queries.push({ query, subject: own, object: '', lead: false, broad: true })
+  const core = [...new Set([...craftStems, ...(fallback.core ?? [])])]
   const seen = new Set<string>()
   const searches: AiStockSearch[] = []
   for (const entry of queries) {
     const query = clip(entry.query)
-    if (!query || seen.has(query)) continue
-    seen.add(query)
+    const key = `${query}|${entry.lead}|${entry.object}|${entry.broad === true}`
+    if (!query || seen.has(key)) continue
+    seen.add(key)
+    if (entry.broad) {
+      searches.push({
+        query,
+        orientation,
+        ...size,
+        broad: true,
+        subject: entry.subject,
+        ...(core.length ? { category: core } : {}),
+      })
+      continue
+    }
     searches.push({
       query,
       orientation,
       ...size,
       subject: entry.subject,
-      lead: true,
+      // Named anywhere, the hit's first tags are still of the shop's world:
+      // a bed with a book, its candle a last tag, is not a candle's photo.
+      ...(entry.lead ? { lead: true } : { leadWorld: true }),
       ...(entry.object ? { object: entry.object } : {}),
-      ...(kinPhrases.length ? { kin: kinPhrases } : {}),
+      ...(kinPhrases.length && entry.object === object ? { kin: kinPhrases } : {}),
       ...(craft ? { requires: craft } : {}),
+      ...(category.length ? { category } : {}),
     })
   }
   return searches
@@ -1082,7 +1257,7 @@ export function aiStockProductSearches(
 export function aiStockSearchesFor(
   slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect'>,
   terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'> &
-    Partial<Pick<AiStockSiteTerms, 'making'>>,
+    Partial<Pick<AiStockSiteTerms, 'making' | 'core'>>,
   subject: string,
   part?: AiStockSlotPart,
 ): AiStockSearch[] {
@@ -1100,6 +1275,14 @@ export function aiStockSearchesFor(
   const kinPhrases = kinStems(kin)
   // The craft qualifies a subject that does not already name the site's world.
   const namesWorld = subjectStems.some((stem) => domain.has(stem))
+  // A tile of the shop's world beside its category is held to either: a soap
+  // shop's "Body care" tile names "body", never "soap" (AGL-3660).
+  const ownWorld = subjectStems.filter(
+    (stem) => domain.has(stem) && !WRAPPERS.has(stem) && stem !== terms.craft,
+  )
+  // A hero of a craft names the craft itself: the Saltmarsh Soap Co hero
+  // (2026-10-10) was a florist's bouquet tagged "natural" (AGL-3660).
+  const core = terms.core ?? []
   const qualify = (phrase: string) =>
     terms.craft && !namesWorld && !stemList(phrase).includes(terms.craft)
       ? `${terms.craft} ${phrase}`
@@ -1165,8 +1348,12 @@ export function aiStockSearchesFor(
       ...(held && kinPhrases.length ? { kin: kinPhrases } : {}),
       ...(held && collection ? { lead: true } : {}),
       ...(terms.craft && (raw.category || (raw.held && collection))
-        ? { requires: terms.craft }
+        ? {
+            requires: terms.craft,
+            ...(ownWorld.length ? { category: [terms.craft, ...ownWorld] } : {}),
+          }
         : {}),
+      ...(slot.role === 'hero' && core.length ? { category: core } : {}),
     })
   }
   return searches
@@ -1185,12 +1372,16 @@ export interface AiStockJudgement {
   strict?: boolean
   /** A word every hit must name: a product's photo names the shop's category (AGL-3676). */
   requires?: string
+  /** Words of which a hit must name one, `requires` among them ({@link AiStockSearch.category}). */
+  category?: readonly string[]
   /** The thing a hit must name, where it is not the subject's own (AGL-3660). */
   object?: string
   /** Phrases naming the object where its word is not enough; one of them is then required, and stands for the category. */
   kin?: readonly string[]
   /** Whether the object must be among the hit's first tags (AGL-3660). */
   lead?: boolean
+  /** Whether the hit's first tags must name the site's world ({@link AiStockSearch.leadWorld}). */
+  leadWorld?: boolean
   /** The stems of the site's business type or brief, which let a sensitive topic in ({@link AiStockSiteTerms.named}). */
   named?: readonly string[]
   /** Rival crafts: a hit naming one is rejected unless it names the site's core words ({@link AiStockSiteTerms.rivals}). */
@@ -1293,8 +1484,14 @@ export function aiStockRelevance(
   const kinNamed = kin.some((phrase) => among(hit.phrases, phrase))
   const kinLead = kin.some((phrase) => among(hit.leadPhrases, phrase))
   const required = stemList(judgement.requires ?? '')
+  const category = (judgement.category ?? []).flatMap(stemList)
+  const anyOf = category.length ? [...new Set([...required, ...category])] : []
+  const demanded = required.length > 0 || anyOf.length > 0
+  const meets = anyOf.length
+    ? anyOf.some((stem) => hit.all.has(stem))
+    : required.every((stem) => hit.all.has(stem))
   // An object's kin stands for the category: a wax melt is the candle shop's.
-  if (!kinNamed && required.some((stem) => !hit.all.has(stem))) return 0
+  if (demanded && !kinNamed && !meets) return 0
   const subject = stemList(judgement.subject ?? '')
   const object =
     judgement.object ??
@@ -1303,11 +1500,14 @@ export function aiStockRelevance(
   // A hit naming the word it must name is of the site's world: a product's
   // category is that world even where it is the product's own object.
   const world =
-    required.length > 0 || kinNamed || domain.some((stem) => hit.all.has(stem))
+    demanded || kinNamed || domain.some((stem) => hit.all.has(stem))
   const worldLead =
-    (required.length > 0 && required.every((stem) => hit.lead.has(stem))) ||
+    (anyOf.length
+      ? anyOf.some((stem) => hit.lead.has(stem))
+      : required.length > 0 && required.every((stem) => hit.lead.has(stem))) ||
     kinLead ||
     domain.some((stem) => hit.lead.has(stem))
+  if (judgement.leadWorld && !worldLead) return 0
   const pair = subject.length >= 2 ? subject.slice(-2).join(' ') : ''
   const phrased = Boolean(pair) && among(hit.phrases, pair)
   let score = 0
@@ -1460,6 +1660,8 @@ export interface AiLayoutStockPhotoDeps {
 interface AiStockChoice {
   candidates: StockPhoto[]
   query: string
+  /** A photo another slot of the job already shows, reused rather than an off-topic one (AGL-3660). */
+  repeat?: boolean
 }
 
 /**
@@ -1508,6 +1710,8 @@ export function aiLayoutStockPhotoSource(
       delete (request as AiStockSearch).object
       delete (request as AiStockSearch).kin
       delete (request as AiStockSearch).lead
+      delete (request as AiStockSearch).leadWorld
+      delete (request as AiStockSearch).category
       const key = JSON.stringify([
         request.query,
         request.orientation,
@@ -1530,6 +1734,7 @@ export function aiLayoutStockPhotoSource(
       photo: StockPhoto,
       slot: AiLayoutPictureSlot,
       query: string,
+      repeat = false,
     ): Promise<AiLayoutPicturePhoto | null> => {
       const sourceKey = stockPhotoSourceKey(photo)
       try {
@@ -1539,7 +1744,8 @@ export function aiLayoutStockPhotoSource(
         })
         if (kept) {
           // Held because a slot of this page or another page of the job shows it.
-          if (placedSrcs.has(kept.src) || elsewhere(kept.src)) return null
+          if (!repeat && (placedSrcs.has(kept.src) || elsewhere(kept.src)))
+            return null
           remember(sourceKey, kept.src)
           return {
             src: kept.src,
@@ -1608,6 +1814,48 @@ export function aiLayoutStockPhotoSource(
       return null
     }
 
+    /** How a search's hits are judged for a slot. */
+    const judgementFor = (
+      slot: AiLayoutPictureSlot,
+      request: AiStockSearch,
+      subject: string,
+    ): AiStockJudgement => ({
+      subject: request.subject ?? (request.broad ? '' : subject),
+      domain: terms.domain,
+      strict:
+        (slot.role === 'gallery' && !request.broad) || !!request.requires,
+      named: terms.named,
+      rivals: terms.rivals,
+      ...(request.requires ? { requires: request.requires } : {}),
+      ...(request.category ? { category: request.category } : {}),
+      ...(request.object ? { object: request.object } : {}),
+      ...(request.kin ? { kin: request.kin } : {}),
+      ...(request.lead ? { lead: true } : {}),
+      ...(request.leadWorld ? { leadWorld: true } : {}),
+    })
+    /**
+     * The craft's own photos, the last thing a slot of a craft's site is
+     * filled from (AGL-3660): its broad searches, any hit naming the craft
+     * itself. Never a desk, a laptop or a living room for a soap shop.
+     */
+    const craftSearches = (slot: AiLayoutPictureSlot): AiStockSearch[] => {
+      if (!terms.core.length) return []
+      const orientation = aiStockOrientation(slot.aspect)
+      const size =
+        slot.role === 'hero'
+          ? { minWidth: 1600 }
+          : orientation === 'vertical'
+            ? { minHeight: 900 }
+            : { minWidth: 900 }
+      return terms.broad.map((query) => ({
+        query: clip(query),
+        orientation,
+        ...size,
+        broad: true,
+        category: terms.core,
+      }))
+    }
+
     // 1. Choose, slot by slot, so the page's choices never collide: each
     //    slot claims its best accepted hit before the next slot looks.
     const choices: Array<AiStockChoice | null> = []
@@ -1619,40 +1867,46 @@ export function aiLayoutStockPhotoSource(
       const sectionName = input.sectionNames[slot.sectionIndex] ?? ''
       const subject = aiStockSubjectWords(slot.alt, sectionName)
       let choice: AiStockChoice | null = null
-      const requests = slot.product
-        ? aiStockProductSearches(slot, terms.craft, terms.domain)
-        : aiStockSearchesFor(
-            slot,
-            terms,
-            subject,
-            aiStockSlotPart(slot, sectionName),
-          )
-      for (const request of requests) {
-        if (choice || signal.aborted) break
+      const requests = [
+        ...(slot.product
+          ? aiStockProductSearches(slot, terms.craft, terms.domain, {
+              broad: terms.broad,
+              core: terms.core,
+            })
+          : aiStockSearchesFor(
+              slot,
+              terms,
+              subject,
+              aiStockSlotPart(slot, sectionName),
+            )),
+        ...craftSearches(slot),
+      ]
+      /** The slot's accepted hits for a search; `null` once the page's searches are spent. */
+      const accepted = async (
+        request: AiStockSearch,
+        repeat: boolean,
+      ): Promise<StockPhoto[] | null> => {
         const found = await search(request)
-        if (found === null) break
-        const blocked = new Set(claimed)
-        for (const hit of found) {
-          const key = stockPhotoSourceKey(hit)
-          if (elsewhere(key)) blocked.add(key)
+        if (found === null) return null
+        const blocked = new Set<string>()
+        if (!repeat) {
+          for (const key of claimed) blocked.add(key)
+          for (const hit of found) {
+            const key = stockPhotoSourceKey(hit)
+            if (elsewhere(key)) blocked.add(key)
+          }
         }
-        const ranked = aiStockRank(
+        return aiStockRank(
           found,
           blocked,
           `${input.seed}:${index}:${request.query}`,
-          {
-            subject: request.subject ?? (request.broad ? '' : subject),
-            domain: terms.domain,
-            strict:
-              (slot.role === 'gallery' && !request.broad) || !!request.requires,
-            named: terms.named,
-            rivals: terms.rivals,
-            ...(request.requires ? { requires: request.requires } : {}),
-            ...(request.object ? { object: request.object } : {}),
-            ...(request.kin ? { kin: request.kin } : {}),
-            ...(request.lead ? { lead: true } : {}),
-          },
+          judgementFor(slot, request, subject),
         )
+      }
+      for (const request of requests) {
+        if (choice || signal.aborted) break
+        const ranked = await accepted(request, false)
+        if (ranked === null) break
         if (!ranked.length) continue
         const first = ranked[0] as StockPhoto
         claimed.add(stockPhotoSourceKey(first))
@@ -1661,12 +1915,32 @@ export function aiLayoutStockPhotoSource(
           query: request.query,
         }
       }
+      // 2. Nothing new of its own: a product or a hero reuses an on-topic
+      //    photo another slot of the job already shows (a product may repeat
+      //    a collection tile's photo) before the starters' desk or living
+      //    room fills it (AGL-3660). Only the searches already answered are
+      //    asked again, from memory. Any other picture keeps "never twice".
+      if (!choice && (slot.product || slot.role === 'hero')) {
+        for (const request of requests) {
+          if (choice || signal.aborted) break
+          const ranked = await accepted(request, true)
+          if (!ranked?.length) continue
+          choice = {
+            candidates: ranked.slice(0, AI_LAYOUT_STOCK_TRIES_PER_SLOT),
+            query: request.query,
+            repeat: true,
+          }
+        }
+      }
       choices.push(choice)
     }
 
-    // 2. Keep, a few at a time; a copy that fails tries the slot's next
-    //    accepted hit no other slot has claimed.
+    // 3. Keep, a few at a time; a copy that fails tries the slot's next
+    //    accepted hit no other slot has claimed. A repeat waits for the
+    //    slot it repeats, so the library never holds a photo twice.
     const photos: Array<AiLayoutPicturePhoto | null> = slots.map(() => null)
+    /** What this pass placed, by source key. */
+    const placedByKey = new Map<string, AiLayoutPicturePhoto>()
     const fill = async (index: number) => {
       const choice = choices[index]
       const slot = slots[index]
@@ -1674,31 +1948,46 @@ export function aiLayoutStockPhotoSource(
       for (const [rank, candidate] of choice.candidates.entries()) {
         if (signal.aborted) return
         const key = stockPhotoSourceKey(candidate)
+        if (choice.repeat) {
+          const placed =
+            placedByKey.get(key) ?? (await keep(candidate, slot, choice.query, true))
+          if (placed) {
+            photos[index] = placed
+            return
+          }
+          continue
+        }
         if (rank > 0) {
           if (claimed.has(key)) continue
           claimed.add(key)
         }
         const placed = await keep(candidate, slot, choice.query)
         if (placed) {
+          placedByKey.set(key, placed)
           photos[index] = placed
           return
         }
       }
     }
+    const firsts = slots
+      .map((_slot, index) => index)
+      .filter((index) => !choices[index]?.repeat)
     let next = 0
     const worker = async () => {
-      while (next < slots.length) {
-        const index = next
+      while (next < firsts.length) {
+        const index = firsts[next] as number
         next += 1
         await fill(index)
       }
     }
     await Promise.all(
       Array.from(
-        { length: Math.min(AI_LAYOUT_STOCK_COPIES_AT_ONCE, slots.length) },
+        { length: Math.min(AI_LAYOUT_STOCK_COPIES_AT_ONCE, firsts.length) },
         worker,
       ),
     )
+    for (const [index, choice] of choices.entries())
+      if (choice?.repeat) await fill(index)
     return photos
   }
 }
