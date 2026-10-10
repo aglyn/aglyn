@@ -355,6 +355,61 @@ export function countReturningLogins(records, { startMs, endMs }) {
   return n
 }
 
+/**
+ * The truth counts for every window, from the default tenant's two pages and
+ * one sign-in page per Identity Platform tenant.
+ *
+ * An organisation with SSO signs its people in through its own GCIP tenant
+ * (`aglyn-org-…`), and those accounts are invisible to a default-tenant
+ * `accounts:query`. Reading only the default tenant graded every SSO sign-in
+ * on /signin — the founder's own among them — as nobody signing in, and the
+ * door was red for hours on 2026-10-09 while sign-in worked.
+ *
+ * Tenant accounts add to `lastLoginAt` only, through the same
+ * {@link countReturningLogins}. They never add to `createdAt`: a tenant
+ * account is born by an SSO sign-in, not by /signup, and counting it as an
+ * account created would hand the sign-up beacon a truth GA4's `sign_up` is
+ * right never to report.
+ *
+ * @param {{byCreated?:object[], byLogin?:object[], tenantLogins?:object[][]}} pages
+ * @param {Record<string,{startMs:number,endMs:number}>} windows
+ */
+export function countTruth({ byCreated, byLogin, tenantLogins = [] }, windows) {
+  const counts = {}
+  for (const [name, window] of Object.entries(windows)) {
+    let lastLoginAt = countReturningLogins(byLogin, window)
+    for (const page of tenantLogins) {
+      lastLoginAt += countReturningLogins(page, window)
+    }
+    counts[name] = {
+      createdAt: countWithin(byCreated, 'createdAt', window),
+      lastLoginAt,
+    }
+  }
+  return counts
+}
+
+/**
+ * `fn` over every item, at most `limit` at a time, results in input order.
+ * Per-org tenants are many and mostly empty; reading them all at once would
+ * be a burst the Identity Toolkit quota notices, and one by one would not fit
+ * the job's timeout.
+ */
+export async function mapBounded(items, limit, fn) {
+  const results = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i], i)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker),
+  )
+  return results
+}
+
 /* ========================================================================= *
  * GRADING
  * ========================================================================= */

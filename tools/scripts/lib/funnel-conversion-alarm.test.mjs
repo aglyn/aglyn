@@ -42,6 +42,7 @@ import {
   announceDecision,
   beaconWindow,
   countReturningLogins,
+  countTruth,
   countWithin,
   doorWindow,
   doorWindowLabel,
@@ -49,6 +50,7 @@ import {
   gradeDoor,
   gradeFunnel,
   hourBuckets,
+  mapBounded,
   recoveryPayload,
   slackPayload,
   zonedHourInstant,
@@ -452,6 +454,83 @@ test('countReturningLogins still reds a real sign-in drought, and never guesses'
     'signed in after the window',
   )
   assert.equal(countReturningLogins(undefined, window), 0)
+})
+
+/* ========================================================================= *
+ * SSO TENANTS — a sign-in through an org's GCIP tenant is a sign-in.
+ * ========================================================================= */
+
+test('THE 2026-10-09 FALSE RED: SSO sign-ins in a per-org tenant open the sign-in door', () => {
+  const window = { startMs: 2000, endMs: 3000 }
+  const pages = {
+    byCreated: [],
+    byLogin: [],
+    tenantLogins: [
+      // aglyn-org-…: an SSO member who has been signing in for months.
+      [{ createdAt: '500', lastLoginAt: '2600' }],
+      [],
+      [{ createdAt: '900', lastLoginAt: '2100' }],
+    ],
+  }
+  const truth = countTruth(pages, { door: window })
+  assert.equal(truth.door.lastLoginAt, 2, 'every tenant is read')
+  const graded = gradeDoor({
+    ...signinDoor,
+    views: 9,
+    users: 5,
+    conversions: truth.door[signinDoor.truthField],
+  })
+  assert.equal(graded.verdict, 'green')
+  assert.equal(
+    countTruth({ ...pages, tenantLogins: [] }, { door: window }).door
+      .lastLoginAt,
+    0,
+    'default tenant alone: the red the alarm used to raise',
+  )
+})
+
+test('tenant accounts never count as accounts created, and keep the returning-login rule', () => {
+  const window = { startMs: 2000, endMs: 3000 }
+  const truth = countTruth(
+    {
+      byCreated: [{ createdAt: '2500' }],
+      byLogin: [{ createdAt: '1000', lastLoginAt: '2200' }],
+      tenantLogins: [
+        // Born by an SSO sign-in inside the window: not a sign-up, and not
+        // provably a return either.
+        [{ createdAt: '2400', lastLoginAt: '2400' }],
+        [{ createdAt: '1000', lastLoginAt: '9000' }],
+      ],
+    },
+    { door: window, beacon: { startMs: 0, endMs: 1500 } },
+  )
+  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1 })
+  assert.deepEqual(truth.beacon, { createdAt: 0, lastLoginAt: 0 })
+  assert.deepEqual(countTruth({}, { door: window }).door, {
+    createdAt: 0,
+    lastLoginAt: 0,
+  })
+})
+
+test('mapBounded keeps order and never runs more than the limit at once', async () => {
+  let running = 0
+  let peak = 0
+  const out = await mapBounded([5, 1, 4, 2, 3], 2, async (n) => {
+    running += 1
+    peak = Math.max(peak, running)
+    await new Promise((resolve) => setTimeout(resolve, n))
+    running -= 1
+    return n * 10
+  })
+  assert.deepEqual(out, [50, 10, 40, 20, 30])
+  assert.equal(peak, 2)
+  assert.deepEqual(await mapBounded([], 8, async () => 1), [])
+})
+
+test('the network half reads every SSO tenant, not just the default one', () => {
+  assert.match(NETWORK_HALF, /v2\/projects\/\$\{projectId\}\/tenants/)
+  assert.match(NETWORK_HALF, /tenantId/)
+  assert.match(NETWORK_HALF, /countTruth\(/)
 })
 
 /* ========================================================================= *

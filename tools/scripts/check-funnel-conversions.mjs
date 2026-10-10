@@ -16,7 +16,8 @@
  */
 // The views-to-conversions alarm (AGL-2587, re-timed to the hour by
 // AGL-2609): reads page views from the GA4 Data API and conversions from
-// Firebase Auth through the Identity Toolkit admin API, grades each funnel
+// Firebase Auth through the Identity Toolkit admin API — the default tenant
+// and every per-org SSO tenant — grades each funnel
 // door, and tells Slack when a door is taking traffic and converting nobody.
 // The grading — windows, thresholds, the say-it-once rule, the messages —
 // lives in `lib/funnel-conversion-alarm.mjs`, where it is unit-tested against
@@ -56,13 +57,13 @@ import {
   PROPERTY_TIME_ZONE_FALLBACK,
   announceDecision,
   beaconWindow,
-  countReturningLogins,
-  countWithin,
+  countTruth,
   doorWindow,
   doorWindowLabel,
   gradeFunnel,
   hourBuckets,
   isoDay,
+  mapBounded,
   recoveryPayload,
   slackPayload,
   verdictLines,
@@ -82,6 +83,12 @@ const TIMEOUT_MS = 20_000
 // same as a small one; when a whole page lands inside a window the count is
 // a floor, which is already past every threshold that reads it.
 const TRUTH_PAGE = 500
+
+// Per-org SSO tenants: how many are read, and how many at once. Most hold no
+// one; each costs one request. Past the cap the sign-in count is a floor and
+// the run says so.
+const MAX_TENANTS = 2000
+const TENANT_CONCURRENCY = 8
 
 const args = process.argv.slice(2)
 const TEST = args.includes('--test')
@@ -253,8 +260,11 @@ async function measureEvents(token, window) {
   return byEvent
 }
 
-/** One newest-first page of Auth records, sorted on the field asked for. */
-async function truthPage(token, projectId, sortBy) {
+/**
+ * One newest-first page of Auth records, sorted on the field asked for — in
+ * the default tenant, or in the Identity Platform tenant named.
+ */
+async function truthPage(token, projectId, sortBy, tenantId) {
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:query`,
     {
@@ -268,6 +278,7 @@ async function truthPage(token, projectId, sortBy) {
         sortBy,
         order: 'DESC',
         limit: TRUTH_PAGE,
+        ...(tenantId ? { tenantId } : {}),
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     },
@@ -277,15 +288,58 @@ async function truthPage(token, projectId, sortBy) {
     // The error body names the project at most; a success body is never
     // logged, because it carries every account's address and hash.
     throw new Error(
-      `accounts:query failed: ${JSON.stringify(payload).slice(0, 300)}`,
+      `accounts:query failed${tenantId ? ' (a tenant)' : ''}: ${JSON.stringify(payload).slice(0, 300)}`,
     )
   }
   return payload.userInfo ?? []
 }
 
 /**
+ * Every Identity Platform tenant's id — the per-org SSO tenants. Up to
+ * {@link MAX_TENANTS}; a project with none answers an empty list.
+ */
+async function listTenantIds(token, projectId) {
+  const ids = []
+  let pageToken = ''
+  do {
+    const url = new URL(
+      `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/tenants`,
+    )
+    url.searchParams.set('pageSize', '1000')
+    if (pageToken) url.searchParams.set('pageToken', pageToken)
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(
+        `tenants list failed: ${JSON.stringify(payload).slice(0, 300)}`,
+      )
+    }
+    for (const tenant of payload.tenants ?? []) {
+      // `projects/{p}/tenants/{id}`
+      const id = String(tenant.name ?? '')
+        .split('/')
+        .pop()
+      if (id) ids.push(id)
+    }
+    pageToken = payload.nextPageToken ?? ''
+  } while (pageToken && ids.length < MAX_TENANTS)
+  if (pageToken || ids.length > MAX_TENANTS) {
+    say(
+      `more than ${MAX_TENANTS} tenants — read the first ${MAX_TENANTS}; ` +
+        'the sign-in count is a floor',
+    )
+  }
+  return ids.slice(0, MAX_TENANTS)
+}
+
+/**
  * What Firebase Auth knows happened: accounts created and people signed in,
- * counted inside each window. Two pages, one per sort, then only numbers.
+ * counted inside each window. Two default-tenant pages, one per sort, plus
+ * one sign-in page per SSO tenant, then only numbers — `countTruth` in the
+ * lib says why tenants add sign-ins and never creations.
  *
  * `lastLoginAt` is a person's LATEST sign-in, so for a settled window it
  * under-counts anyone who signed in again after it — which only ever makes
@@ -293,23 +347,23 @@ async function truthPage(token, projectId, sortBy) {
  *
  * The keys are the Auth FIELD each number is read from, which is what
  * `door.truthField` selects. `lastLoginAt` is counted through
- * {@link countReturningLogins} rather than {@link countWithin}: the field
- * also moves when an account is created, and a creation is a `sign_up` to
- * every door here, never a `login`.
+ * `countReturningLogins` rather than `countWithin`: the field also moves when
+ * an account is created, and a creation is a `sign_up` to every door here,
+ * never a `login`.
  */
 async function measureTruth(token, projectId, windows) {
-  const [byCreated, byLogin] = await Promise.all([
+  const [byCreated, byLogin, tenantIds] = await Promise.all([
     truthPage(token, projectId, 'CREATED_AT'),
     truthPage(token, projectId, 'LAST_LOGIN_AT'),
+    listTenantIds(token, projectId),
   ])
-  const counts = {}
-  for (const [name, window] of Object.entries(windows)) {
-    counts[name] = {
-      createdAt: countWithin(byCreated, 'createdAt', window),
-      lastLoginAt: countReturningLogins(byLogin, window),
-    }
-  }
-  return counts
+  const tenantLogins = await mapBounded(tenantIds, TENANT_CONCURRENCY, (id) =>
+    truthPage(token, projectId, 'LAST_LOGIN_AT', id),
+  )
+  say(
+    `read sign-ins from the default tenant and ${tenantIds.length} SSO tenants`,
+  )
+  return countTruth({ byCreated, byLogin, tenantLogins }, windows)
 }
 
 async function announce(payload) {
