@@ -38,7 +38,9 @@ import {
 import { AI_STEP_TIERS } from '../providers/catalog'
 import type { AiGenerationCheck, AiValidatedTree } from '../runtime/ai-doctrine'
 import {
+  aiSettleMechanicalRules,
   validateAiDoctrineTree,
+  type AiDoctrineNode,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
@@ -253,7 +255,12 @@ export function aiLayoutFrameCheck(input: {
       },
       last,
     )
-    const { nodes, dropped } = copy
+    const { dropped } = copy
+    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
+    const nodes = aiSettleMechanicalRules(
+      { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+      'layout',
+    ).nodes as unknown as typeof copy.nodes
     const report = validateAiDoctrineTree(
       { rootId: stored.rootId, nodes },
       'layout',

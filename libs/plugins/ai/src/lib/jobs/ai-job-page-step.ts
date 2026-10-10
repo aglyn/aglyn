@@ -34,7 +34,7 @@ import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
-import { validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import { aiSettleMechanicalRules, validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -615,7 +615,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 
     const stored = written ? await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: draftId }) : null
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
-    const page = stored?.nodes ?? aiEmptyPage()
+    let page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
     // A workspace whose component allowance is finite — Free's one — draws
     // its repeats inline, and every pass is held to the rules that way
@@ -655,6 +655,31 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
+      // An attribute a rule has one answer for is settled on the stored page
+      // and stored (AGL-3660): this pass asks no model, so a page refused
+      // here for one would be refused the same way on every Try again. A
+      // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
+      const settled = aiSettleMechanicalRules(
+        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
+        'page',
+      )
+      if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
+        // Never written once the job is canceled (AGL-3616).
+        throwIfAiJobCanceled(signal)
+        const update = await updateAiDraftNodes(firestore, {
+          kind: 'screen',
+          hostId,
+          id: draftId,
+          now,
+          update: (nodes) => {
+            const tree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as AiDoctrineTree['nodes'] }
+            const next = aiSettleMechanicalRules(tree, 'page')
+            return next === tree ? null : (next.nodes as unknown as typeof nodes)
+          },
+        })
+        if (update.ok === false) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
+        page = settled.nodes as unknown as typeof page
+      }
       // A link the page carries to one of its sections goes there, now every section is built.
       const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
         ...context,
