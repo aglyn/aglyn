@@ -342,6 +342,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the layout language's prompt and reader (AGL-3660), used by the AI job steps that design a page or a header and footer (jobs/ai-job-page-language.ts, jobs/ai-job-layout-language.ts), which run for a job on the console's AI job doors and from the job beat (jobs/ai-jobs-beat.ts). The marker is the `image:` line of the INSTRUCTION TEXT, telling the model an image block is a description that becomes alt text and that the owner adds the picture. It is prose handed to the model, not a value: the compiler (ai-layout-compiler.ts) writes no src for an image block, so no URL is produced here.",
   },
+  'libs/plugins/ai/src/lib/runtime/site-inventory.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the AI job's server-side read of what a site already holds (AGL-3080), which the plan and page steps (jobs/ai-job-plan-step.ts, jobs/ai-job-site-step.ts) call for a job on the console's AI job doors and from the job beat. The marker is `image:` in readIndexedDatasets — a BOOLEAN saying a dataset field is the data plugin's Image type (AGL-3616), so the job knows which field holds a record's photo. No URL is read or produced here; the photo itself reaches a page through the repeat binding and resolveMediaSrc on render.",
+  },
   'libs/plugins/ai/src/lib/runtime/seo-fields.ts': {
     markers: 1,
     guard: 'off-tenant',

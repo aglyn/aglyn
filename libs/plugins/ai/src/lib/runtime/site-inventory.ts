@@ -198,13 +198,20 @@ async function readIndexedDatasets(
   return {
     rows: records.map((record) => {
       const fields = (Array.isArray(record.facts['fields']) ? (record.facts['fields'] as Data[]) : [])
-        .map((field) => ({ id: text(field?.['id']), name: text(field?.['name']) || text(field?.['id']) }))
+        .map((field) => ({
+          id: text(field?.['id']),
+          name: text(field?.['name']) || text(field?.['id']),
+          image: text(field?.['customType']) === 'image',
+        }))
         .filter((field) => field.name)
+      // A record's photo (AGL-3616), the data plugin's `image` field type.
+      const image = fields.find((field) => field.image && field.id)
       return {
         id: record.id,
         name: record.name,
         fields: fields.map((field) => field.name),
         fieldIds: fields.map((field) => field.id || field.name),
+        ...(image ? { imageField: image.id } : {}),
       }
     }),
     truncated,

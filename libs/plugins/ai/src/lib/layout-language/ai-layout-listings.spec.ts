@@ -680,6 +680,92 @@ describe('a section one of the site’s datasets fills (AGL-3616)', () => {
     expect(read.map((listing) => listing.id)).toEqual(['listing:records:ds-menu', 'listing:records:ds-team'])
   })
 
+  /*
+   * beta.239's ceramics portfolio listed "Selected work" from its dataset as
+   * text-only cards, where it had been an image-led gallery (AGL-3616).
+   */
+  describe('a dataset whose records carry photos (AGL-3616)', () => {
+    const PIECES: AiLayoutListing = {
+      ...MENU,
+      id: 'listing:records:ds-pieces',
+      name: 'Portfolio pieces',
+      records: ['Speckled serving bowl', 'Tall bud vase'],
+      datasetId: 'ds-pieces',
+      fields: [
+        { id: 'title', name: 'Title', type: 'text' },
+        { id: 'description', name: 'Description', type: 'text' },
+      ],
+      imageField: 'image',
+    }
+    const piecesCheck = (design?: { kind: string; seed: number; home: boolean }) => {
+      const sectionIds = ['sec-0', 'sec-1']
+      const listed = { ...targets('home', [PIECES]), pages: [...targets('home', [PIECES]).pages, { id: 'menu', label: 'Work', slug: '/work' }] }
+      return aiLayoutPageCheck({
+        screen: MENU_SCREEN as never,
+        sectionIds,
+        targets: listed,
+        context: { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds: ['ds-pieces'], codeBuilt: true, scrollTargetIds: sectionIds },
+        reusableComponents: false,
+        ...(design ? { design: design as never } : {}),
+      })(answer)
+    }
+    const MENU_SCREEN = {
+      ...HOME_SCREEN,
+      sections: [
+        { name: 'Hero', uses: [], items: 0 },
+        { name: 'Selected work', uses: ['ds-pieces'], items: 3 },
+      ],
+    }
+    const answer = {
+      sections: [
+        { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Juniper Clay Works')] },
+        { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'Selected work'), block('cards', '', [{ title: 'Bowl', text: 'A bowl.' }])] },
+      ],
+    }
+
+    it('leads each card with the record’s photo, bound to its photo field, its name as the alt text', () => {
+      const result = piecesCheck()
+      expect(result.violations).toEqual([])
+      const nodes = nodesOf(result.value?.nodes)
+      const repeat = nodes.find((node) => node.props?.['repeatDataset'] === 'ds-pieces')
+      expect(repeat).toBeDefined()
+      const picture = nodes.find((node) => node.componentId === 'image' && node.props?.['src'] === '{{item.image}}')
+      expect(picture?.props).toMatchObject({ src: '{{item.image}}', alt: '{{item.title}}', objectFit: 'cover', loading: 'lazy' })
+      // Not a lightbox on a kind whose galleries do not open.
+      expect(picture?.props?.['lightbox']).toBeUndefined()
+      // The photo is the card's picture; the title and words stay its words.
+      const stored = JSON.stringify(result.value?.nodes)
+      for (const token of ['{{item.title}}', '{{item.description}}']) expect(stored).toContain(token)
+      expect(nodes.filter((node) => node.props?.['children'] === '{{item.image}}')).toEqual([])
+    })
+
+    it('opens a portfolio’s pieces in a lightbox, one gallery captioned with each record’s name (AGL-3717)', () => {
+      const result = piecesCheck({ kind: 'portfolio', seed: 3, home: true })
+      expect(result.violations).toEqual([])
+      const picture = nodesOf(result.value?.nodes).find((node) => node.componentId === 'image' && node.props?.['src'] === '{{item.image}}')
+      expect(picture?.props).toMatchObject({ lightbox: true, lightboxCaption: '{{item.title}}' })
+      expect(typeof picture?.props?.['lightboxGallery']).toBe('string')
+    })
+
+    it('admits the photo token only on a page that lists the dataset', () => {
+      const here = aiLayoutListingContext({}, targets('home', [{ ...PIECES, placements: [{ screenId: 'home', section: 1, role: 'featured' }] }]))
+      expect(here.bindingTokens).toEqual(['{{item.image}}'])
+      const elsewhere = aiLayoutListingContext({}, targets('about', [{ ...PIECES, placements: [{ screenId: 'home', section: 1, role: 'featured' }] }]))
+      expect(elsewhere.bindingTokens).toBeUndefined()
+    })
+
+    it('keeps the photo field off the card’s words when read off the inventory, and round-trips it', () => {
+      const inventory = { datasets: [{ id: 'ds-pieces', name: 'Portfolio pieces', fields: ['Title', 'Image'], fieldIds: ['title', 'image'], imageField: 'image' }] }
+      expect(aiLayoutListingsWithDatasets([{ ...PIECES, fields: [], imageField: undefined }], inventory)[0]).toMatchObject({
+        fields: [{ id: 'title', name: 'Title', type: 'text' }],
+        imageField: 'image',
+      })
+      const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [PIECES] })
+      expect(read.imageField).toBe('image')
+      expect(aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...PIECES, imageField: '{{x}}' }] })[0]).not.toHaveProperty('imageField')
+    })
+  })
+
   it('draws questions and answers as a ruled list, and a card from the fields its names say', () => {
     expect(
       aiLayoutRecordCardFields([

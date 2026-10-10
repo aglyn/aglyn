@@ -68,7 +68,7 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
-import { AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
+import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -106,6 +106,7 @@ import {
   aiSiteDatasetBriefLines,
   aiSiteDatasetInputOf,
   aiSiteDatasetListings,
+  aiSiteDatasetPlacedPhotos,
   aiSiteDatasetRefusal,
   aiSitePlanDatasets,
   aiSiteRecordTemplateOf,
@@ -689,6 +690,9 @@ export function aiSiteUnitJob(
       .filter((output) => output.resource === 'screen' && output.hostId === job.hostId && output.id)
       .map((output) => output.id)
     if (pages.length) unitInputs[AI_STOCK_PHOTO_PAGES_INPUT] = pages
+    // Nor a photo the site's datasets' records already show (AGL-3616).
+    const records = aiSiteDatasetPlacedPhotos(job.outputs ?? [])
+    if (records.length) unitInputs[AI_STOCK_PHOTO_AVOID_INPUT] = records
   }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
