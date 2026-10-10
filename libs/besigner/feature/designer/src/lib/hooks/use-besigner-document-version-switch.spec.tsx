@@ -133,4 +133,28 @@ describe('switching versions with unsaved edits', () => {
       'EDITED in v1',
     )
   })
+
+  it('Discard changes puts back the stored version and drops its drafts', () => {
+    const { result, rerender, view } = setup()
+    const v1 = tree('one')
+    rerender(view('v1', v1, 1))
+    act(() => editCanvas('EDITED in v1'))
+    rerender(view('v1', v1, 1))
+    act(() => jest.advanceTimersByTime(2_000))
+    expect(readBesignerDraft(ids('v1'))).not.toBeNull()
+    expect(result.current.canDiscard).toBe(true)
+
+    let discarded = false
+    act(() => {
+      discarded = result.current.discardChanges()
+    })
+    rerender(view('v1', v1, 1))
+    act(() => jest.advanceTimersByTime(2_000))
+
+    expect(discarded).toBe(true)
+    expect(canvasText()).toBe('one')
+    expect(Aglyn.canvas.isInitialSame).toBe(true)
+    expect(result.current.canDiscard).toBe(false)
+    expect(readBesignerDraft(ids('v1'))).toBeNull()
+  })
 })

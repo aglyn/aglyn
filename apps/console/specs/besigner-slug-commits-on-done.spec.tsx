@@ -312,6 +312,8 @@ jest.mock('@aglyn/shared-ui-theme', () => ({
   },
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  // File ▸ Discard changes… confirms first (AGL-3723).
+  useConfirmationContext: () => ({ confirm: jest.fn() }),
   AppLink: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   useLoading: () => ({ queueLoading: () => () => undefined, loading: false }),
   HelpTip: jest.requireActual(

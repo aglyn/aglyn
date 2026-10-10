@@ -69,6 +69,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
+import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
 import { Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
@@ -339,6 +340,8 @@ function PluginDocumentBesignerPage() {
   // the size-guarded save (AGL-678) are shared by every besigner editor
   // (AGL-746). What stays here is what is actually about a plugin document.
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -689,6 +692,17 @@ function PluginDocumentBesignerPage() {
     }
   }, [enqueueSnackbar, hasError, error, notFound, nounTitle])
 
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: noun,
+    live: editingLiveVersion,
+    canDiscard: canDiscard || draftPending,
+    discardChanges,
+    onDiscarded: useCallback(() => {
+      setDraftPending(false)
+    }, []),
+  })
+
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
       <ScreenLinkContext.Provider value={screenLinks}>
@@ -766,6 +780,7 @@ function PluginDocumentBesignerPage() {
                                 }),
                             onClick: handleSaveAndPublish,
                           },
+                          discardMenuItem,
                           {
                             id: 'center-nav-file-close',
                             children: 'Close',
