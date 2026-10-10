@@ -55,6 +55,8 @@ export interface StaffSiteRow {
   suspended: boolean
   maintenance: boolean
   createdAt: { seconds: number } | null
+  /** The host document's `updatedAt`: the Sites list's Last updated column. */
+  updatedAt?: { seconds: number } | null
 }
 
 /**

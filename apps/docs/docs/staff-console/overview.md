@@ -373,8 +373,9 @@ so they take a seat like anyone else from then on.
 server-side with the Admin SDK so it shows sites you are not a member of. Each
 row names the site and its subdomain, the **Organization** it belongs to (a link
 to that organization's staff page), the organization's **Owner**, the custom
-domain, how many pages it publishes, and when it was created. Clicking a row
-opens the site's staff page.
+domain, how many pages it publishes, when it was created and when it was last
+updated (each with its time, so sites from the same day read in order). Clicking
+a row opens the site's staff page.
 
 The row menu holds the ways out of the list:
 
@@ -399,8 +400,12 @@ after, or before a day). A site whose organization is suspended is filtered by
 its own takedown only: filter the organizations list to find those. **Search** matches the start of any word of the site's name, its
 subdomain or its custom domain, so `bakery` finds `harbor-bakery.com`.
 
-The list is in site-id order, except while **Created** is filtered, when it runs
-newest first. A filter one query cannot hold alongside the rest is named above
+The list runs newest created first, across every page. Click **Site**, **Created**
+or **Last updated** to order every site by that column instead; **Site**, oldest
+**Created** and **Last updated** order the whole list only with no filter or
+search on, and fall back to newest created first, with a note, while one is.
+**Organization**, **Owner**, **Custom domain** and **Status** sort the page on
+screen, and say so. A filter one query cannot hold alongside the rest is named above
 the grid with its reason and not applied. Organization name and owner are not
 filters because a site does not store them: filter by **Org ID**, or open the
 organization, whose page lists its sites.
