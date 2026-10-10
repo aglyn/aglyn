@@ -384,3 +384,51 @@ describe('the consent-group key a form posts', () => {
     expect(mockContactUpserts[0]).not.toHaveProperty('disclosedConsentGroup')
   })
 })
+
+describe('a SIGN-UP form: submitting it is the opt-in', () => {
+  /**
+   * The one exception to the rule above, and it is the merchant's to make:
+   * `optInOnSubmit` on the stored form, for a form whose only purpose is
+   * subscribing. Asserted from the verified document only, so the exception
+   * cannot leak to a form that did not declare it.
+   */
+  const signUp = (flag: unknown) => {
+    mockStore[`hosts/${HOST_ID}/forms/signup-1`] = {
+      displayName: 'Product updates',
+      fields: [{ fieldName: 'email', fieldType: 'email', label: 'Email' }],
+      optInOnSubmit: flag,
+    }
+    return submit({
+      formId: 'signup-1',
+      formName: 'Product updates',
+      fields: { email: 'visitor@example.com' },
+    })
+  }
+
+  it('records the opt-in and makes the person at least a subscriber', async () => {
+    const response = await signUp(true)
+    expect(response.status).toBe(200)
+    expect(mockContactUpserts).toHaveLength(1)
+    expect(mockContactUpserts[0]).toMatchObject({
+      marketingConsent: true,
+      initialLifecycleStage: 'subscriber',
+    })
+  })
+
+  it('records nothing for any stored value but the literal true', async () => {
+    for (const flag of [false, 'true', 1, undefined]) {
+      mockContactUpserts = []
+      await signUp(flag)
+      expect(mockContactUpserts[0]).not.toHaveProperty('marketingConsent')
+      expect(mockContactUpserts[0]).not.toHaveProperty('initialLifecycleStage')
+    }
+  })
+
+  it('cannot be claimed by the request', async () => {
+    await submit({
+      optInOnSubmit: true,
+      fields: { email: 'visitor@example.com', optInOnSubmit: 'true' },
+    })
+    expect(mockContactUpserts[0]).not.toHaveProperty('marketingConsent')
+  })
+})
