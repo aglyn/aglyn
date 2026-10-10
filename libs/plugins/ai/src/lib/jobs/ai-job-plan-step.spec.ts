@@ -56,6 +56,7 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobPlanStep: jest.fn(),
 }))
 
+import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -626,6 +627,32 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
     expect(outcome.review).toBeUndefined()
     // What the plan spent is on the bill all the same.
     expect(outcome).toMatchObject({ usage: USAGE, estCostUsd: 0.0105 })
+  })
+
+  it('keeps a Free build past what is left for its card to ask about, rather than failing it (2026-10-09 16:38Z)', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => ({
+        status: 409,
+        error: 'This build is about 106 credits (up to 650). You have 90 left.',
+        code: AI_CREDITS_CONFIRM_CODE,
+      }),
+    })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.customerLimit).toBeUndefined()
+    expect(outcome.plan).toMatchObject({ status: 'proposed' })
+    expect(outcome.review?.reason).toBe('plan')
+  })
+
+  it('fails a plan when no Free credits are left at all, as the customer’s limit rather than ours', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => ({ status: 429, error: 'You have no free AI credits left this month.' }),
+    })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(outcome).toMatchObject({ failure: 'You have no free AI credits left this month.', customerLimit: true })
+    expect(outcome.plan).toBeUndefined()
   })
 
   it('holds a reused plan to the same door, and spends nothing on it', async () => {

@@ -90,6 +90,7 @@ import {
 } from '../model/ai-build-job'
 import { aiBuildOpLines, aiBuildOps } from './ai-build-capabilities'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
+import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
 import { readAiPlanCapabilities } from './ai-job-drafts'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -819,6 +820,16 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
      * door hands it. A refusal fails the job with the door's sentence; a door
      * that could not answer keeps the plan, since the resume door asks again
      * before anything is built.
+     *
+     * Two answers are about the month's Free credits, not the plan (AGL-3722):
+     * - the 409 credits prompt KEEPS the plan. The card is told what is left
+     *   (`planReview`) and offers Build what fits / the home page first /
+     *   Upgrade, and the confirm door asks with the person's choice. Failing
+     *   here instead failed every Free build past its p90 before the card
+     *   could offer them — and paged staff with `ai.jobFailed`, as at
+     *   2026-10-09 16:38Z (600 credits estimated, 164 left).
+     * - the 429 "nothing left" still fails the job with its sentence, but as
+     *   the customer's limit, which raises no staff alert.
      */
     const refusalOnKeep = async (plan: AiJobPlan, outcome: AiJobStepOutcome): Promise<AiJobStepOutcome | null> => {
       let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>> = null
@@ -835,7 +846,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       } catch (error) {
         console.error('ai plan admission failed', { orgId: job.orgId, jobId: job.$id, error })
       }
-      return refusal ? { ...outcome, failure: refusal.error } : null
+      if (!refusal || refusal.code === AI_CREDITS_CONFIRM_CODE) return null
+      return {
+        ...outcome,
+        failure: refusal.error,
+        ...(refusal.status === 429 ? { customerLimit: true } : {}),
+      }
     }
 
     // Reuse before asking (AGL-2937). The key covers the whole request, so a
