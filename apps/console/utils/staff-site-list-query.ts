@@ -40,12 +40,11 @@ import {
  *
  * ## One order, merged indexes
  *
- * The document id, as the organization list: an `orderBy` on a data field
- * drops every site that lacks it. Equalities and the search token merge
- * against the built-in single-field indexes in that order. The one range is
- * Created, which leads the order (`createdAt` DESC) while it is in force,
- * and each equality has its `(field, createdAt DESC)` composite, pinned by
- * `specs/staff-site-list-query.spec.ts`.
+ * Created, newest first (`createdAt` DESC): the default order, and the one
+ * the Created range imposes while it is in force. Each equality and the
+ * search token has its `(field, createdAt DESC)` composite, pinned by
+ * `specs/staff-site-list-query.spec.ts`. An `orderBy` drops every site that
+ * lacks the field, so the field is on every site (see "The header sorts").
  *
  * ## Suspended
  *
@@ -151,30 +150,42 @@ export const STAFF_SITE_LIST_FILTER_OPTIONS = {
   ],
 }
 
-/** The list's order while no range is in force. */
-export const STAFF_SITE_LIST_SORT: ListQuerySort = { path: LIST_QUERY_ID_PATH, direction: 'asc' }
-
 /*
  * ## The header sorts (AGL-3680)
  *
- * Site (`nameLower`, stamped on every site — see above) and Created order the
- * QUERY. Created newest first is a full order: it is the order the Created
- * range already imposes, so every equality already has its composite. The
- * rest are `alone` — served only with no filter or search on, falling back to
- * Created newest first with a notice — so on this top-level collection they
- * need no composite at all. Organization, Owner, Custom domain and Status are
- * joined or derived by the route, and sort the page on screen.
+ * NEWEST CREATED FIRST BY DEFAULT. The first order is the one the query reads
+ * in while no header is asked, and the Created header shows its arrow. It
+ * used to be the document id ascending, which no header names: the list read
+ * in id order (random for every site since push ids) while the grid looked
+ * date-ordered. Every site carries `createdAt` — `provision-host.ts` stamps
+ * it at creation, and the one legacy site without it was stamped 2026-10-08
+ * — so ordering by it drops nothing.
+ *
+ * Created newest first is a full order: it is the order the Created range
+ * already imposes, so every equality already has its `(field, createdAt
+ * DESC)` composite. Site (`nameLower`, stamped on every site — see above)
+ * and Last updated (`updatedAt`, stamped at creation and by the writers
+ * since) order the QUERY too, `alone` — served only with no filter or search
+ * on, falling back to Created newest first with a notice — so on this
+ * top-level collection they need no composite at all. Organization, Owner,
+ * Custom domain and Status are joined or derived by the route, and sort the
+ * page on screen.
  */
 export const STAFF_SITE_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
   { path: 'createdAt', direction: 'desc', column: 'createdAt', label: 'Created' },
   { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Created', alone: true },
   { path: 'nameLower', direction: 'asc', column: 'displayName', label: 'Site', alone: true },
   { path: 'nameLower', direction: 'desc', column: 'displayName', label: 'Site', alone: true },
+  { path: 'updatedAt', direction: 'desc', column: 'updatedAt', label: 'Last updated', alone: true },
+  { path: 'updatedAt', direction: 'asc', column: 'updatedAt', label: 'Last updated', alone: true },
 ]
+
+/** The list's order while no header is asked: Created, newest first. */
+export const STAFF_SITE_LIST_SORT: ListQuerySort = STAFF_SITE_LIST_COLUMN_SORTS[0]
 
 /** The staff Sites list's query: every field above, and the search. */
 export const STAFF_SITE_LIST_QUERY: ListQueryDeclaration = {
   fields: STAFF_SITE_LIST_FILTER_FIELDS,
-  sorts: [STAFF_SITE_LIST_SORT, ...STAFF_SITE_LIST_COLUMN_SORTS],
+  sorts: STAFF_SITE_LIST_COLUMN_SORTS,
   search: { tokensPath: 'searchTokens' },
 }

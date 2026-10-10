@@ -942,7 +942,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#enterprise-custom-billing': 'Before. A warning that the rollups could not be read means a failed read, not zero usage.',
     '#existing-coupons': 'Unlimited cannot be costed, so a deal on one cannot be provisioned until an entitlement override bounds it.',
     '#filter-the-directory': 'Ld leave it out of the list. AI spend (month) sorts the page on screen by this month\'s figures.',
-    '#filter-the-site-list': '*Open organization and Open owner go to the staff pages for the organization and its owner.',
+    '#filter-the-site-list': 'Pages for the organization and its owner. Visit live site is also the icon beside the menu.',
     '#first-party-hosts': 'T" is a real answer. Today that is done by raising the platform number; there is no per-account override.',
     '#free-workspace-limit': 'In a new tab.',
     '#import-delivery-history': 'Ged keeps its older mail under the old one. An empty table is not proof that nothing was sent.',

@@ -232,7 +232,7 @@ export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   displayName: 'Display name',
   staff: 'Staff claim',
   staffRole: 'Staff role',
-  tenantId: 'SSO pool (empty = none)',
+  tenantId: 'SSO pool',
   providers: 'Sign-in providers',
   lastSignInAt: 'Last sign-in',
   disabled: 'Suspended',
