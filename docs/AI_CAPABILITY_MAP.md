@@ -173,7 +173,7 @@ gap.
 | Site search | search box, search page | no |
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page; no references, import or record edits after the build |
-| Forms | forms, submissions inbox, write submissions into a dataset | partial: makes forms; never binds one to a dataset (the form step strips a binding by design: "stays the person's choice") |
+| Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
 | Events calendar | events, publish to pages, event schema | no |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; no records, pipelines, custom fields or views |
@@ -198,8 +198,9 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    header links. There is no op for dropdown, mega or drawer menus.
 3. **Blog collections and posts.** Collections can't be created outside a
    site start, and there are no authors or scheduled posts.
-4. **Forms that write to a dataset.** The docs teach it; the form step
-   deliberately strips a binding. It needs a product decision to change.
+4. **Forms that write to a dataset. CLOSED (Zach, 2026-10-10).** A form's
+   creation says the dataset it writes to (`writesTo`); see "Forms that write
+   to a dataset" below.
 5. **Events calendar.** No `event` capability. It is an add-on on every plan.
 6. **Redirects.** No capability. Starter includes 25.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
@@ -252,5 +253,46 @@ is a decision about the account, not something to build.
 - **Estimates.** A dataset is one pass, counted in the plan's estimate and
   range like a form. A build's `dataset` item is planner-filled and costs 0.
 - **Not yet.** Records carry no photos (a portfolio's pieces are words only),
-  listing cards do not link record pages until the member saves the binding,
-  and forms are not bound to a dataset (gap 4).
+  and listing cards do not link record pages until the member saves the
+  binding.
+
+## Forms that write to a dataset
+
+Zach, 2026-10-10: Aglyn AI's forms can write to datasets — a volunteer
+sign-up into a Volunteers dataset, an RSVP into an event's attendees, a
+catering inquiry into Inquiries.
+
+- **The plan says so.** The plan tool that carries record templates (offered
+  only where the job may bind a dataset) gives each creation a `writesTo`:
+  on a form, `new:<name>` of a dataset the plan makes (a site start's dataset
+  creation or a build's `dataset` item) or a dataset id from the inventory;
+  null otherwise. It is never inferred from a section's `uses`. A paid site
+  plan's turn says when to use it (`AI_SITE_FORM_DATASET_SENTENCE`); the Free
+  plan's tool and turn are unchanged.
+- **Settled in code** (`aiSettlePlanFormDatasets`, before the dataset cap):
+  a `writesTo` naming nothing the form can write to comes off; one naming an
+  inventory dataset by name gets its id; a dataset made for a form is listed
+  on no page and is no record template, because its records are the people
+  who sent it. The dataset cap counts a form's dataset like a record
+  template, and lets go of the form's `writesTo` if it lets go of its dataset.
+- **Built first.** A site start builds its datasets after the layout and
+  before the form (`aiSiteJobUnits`); the form unit depends on its dataset.
+  A build orders the form after its dataset item. A form's dataset is
+  designed with no model and no records (`aiSiteFormDatasetContent`): its
+  planned fields (or the form's), in a person's words, text unless typed
+  `Name:type`, none required. It is not a pass of the estimate.
+- **Bound by the form step** (`jobs/ai-job-form-dataset.ts`): the form node's
+  `datasetId` and each field's `datasetFieldId`, matched by `fieldName` then
+  label against the dataset's fields, where the type can hold the answer
+  (any answer in text, a rating in a number). A field the dataset lacks is
+  left unbound — the Form element's mapping does the same — and the row's
+  note says that answer stays in the Inbox. The generation is told the
+  dataset's fields so it draws them.
+- **Gates.** Bound only where the plan includes `dataStore`, the data
+  plugin's writer is loaded and reads the dataset, and the dataset is one
+  this job made or one the site's inventory shows. Records, `recordsPerDataset`
+  and storage are held at each submission by the data plugin's record target.
+  A dataset that could not be made leaves the form built as it always was,
+  its row noting that submissions arrive in the Inbox only.
+- **Not yet.** A copied form (`duplicateOf`) keeps the copy's own binding,
+  and no form adds a field to a dataset it writes to.

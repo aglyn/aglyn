@@ -497,3 +497,70 @@ describe('a build’s datasets (AGL-3616)', () => {
     expect(aiLayoutListingsOf(derived.inputs)).toEqual([])
   })
 })
+
+describe('a build’s form that writes to a dataset (AGL-3616)', () => {
+  const DATASET_OP: PluginAiCapability = {
+    op: 'dataset',
+    noun: 'dataset',
+    where: 'Data',
+    intents: ['a list of like things'],
+    argsSchema: { type: 'object', properties: {}, additionalProperties: true } as never,
+    maxPerPlan: 3,
+    freeAllowed: false,
+    feature: 'dataStore',
+    draftResource: 'dataset',
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  }
+  const ops: AiBuildOps = new Map([...OPS, ['dataset', DATASET_OP]])
+  const rsvpPlan = (writesTo: string): AiJobPlan => ({
+    ...plan(),
+    create: [{ kind: 'form', name: 'RSVP', why: 'Guests say they are coming.', duplicateOf: null, fields: ['fullName', 'guests'], writesTo, id: 'frm-rsvp' }],
+    screens: [{ ...plan().screens[0], title: 'RSVP', slug: '/rsvp', sections: [{ name: 'rsvp', uses: ['new:RSVP'], items: 0 }], id: 'page-rsvp' }],
+    items: [{ slot: 'i0', op: 'dataset', name: 'Attendees', why: 'Each RSVP kept.', dependsOn: [], degrade: 'omit', args: { name: 'Attendees', fields: ['Full name', 'Guests'] }, id: 'ds-att' }],
+  })
+
+  it('builds the dataset item before the form that writes to it', () => {
+    const units = aiBuildUnits(rsvpPlan('new:Attendees'))
+    expect(units.find((unit) => unit.slot === 'c0')?.deps).toEqual(['i0'])
+  })
+
+  it('hands the form the dataset the build made, by id, or one the site has', () => {
+    const units = aiBuildUnits(rsvpPlan('new:Attendees'))
+    const ledger = aiBuildInitialLedger(units).map((row) => (row.slot === 'i0' ? { ...row, status: 'succeeded' as const, outputs: ['ds-att'] } : row))
+    const outputs = [{ resource: 'draft' as const, draftResource: 'dataset', id: 'ds-att', hostId: 'host-1', label: 'Attendees' }]
+    const form = units.find((unit) => unit.slot === 'c0') as (typeof units)[number]
+    const derived = aiBuildUnitJob(job({ plan: rsvpPlan('new:Attendees'), outputs }), form, { kind: 'form', units, ledger, ops })
+    expect(derived.plan?.create).toEqual([expect.objectContaining({ kind: 'form', writesTo: 'ds-att' })])
+    expect(derived.inputs['formDatasetMade']).toBe('ds-att')
+    // A dataset the site already has is named as it is, and is no dataset this build made.
+    const existing = aiBuildUnits(rsvpPlan('dsGuests'))
+    const onSite = aiBuildUnitJob(job({ plan: rsvpPlan('dsGuests') }), existing[0], { kind: 'form', units: existing, ledger: aiBuildInitialLedger(existing), ops })
+    expect(onSite.plan?.create[0]?.writesTo).toBe('dsGuests')
+    expect(onSite.inputs['formDatasetMade']).toBeUndefined()
+  })
+
+  it('builds the form without the binding where its dataset item failed, and says so', async () => {
+    const units = aiBuildUnits(rsvpPlan('new:Attendees'))
+    const items = aiBuildInitialLedger(units).map((row) => (row.slot === 'i0' ? { ...row, status: 'failed' as const } : row))
+    const seen: AiJob[] = []
+    const formRunner: AiJobStepRunner = async ({ job: handed }) => {
+      seen.push(handed)
+      return { outputs: [{ resource: 'form', id: 'frm-rsvp', hostId: 'host-1', label: 'RSVP' }], usage: AI_JOB_ZERO_USAGE, estCostUsd: 0, model: 'm', stopReason: 'end_turn' }
+    }
+    const outcome = await createAiJobBuildStep({
+      runnerFor: ((kind: string) => (kind === 'form' ? formRunner : kind === 'page' ? pageRunner([]) : null)) as never,
+      writerFor: () => null,
+      opsFor: async () => ops,
+      admissionFor: async () => null,
+      readNodes: readNodes as never,
+    })(context(job({ plan: rsvpPlan('new:Attendees'), items })))
+    expect(outcome.item).toMatchObject({
+      slot: 'c0',
+      status: 'degraded',
+      degradedBy: ['i0'],
+      note: 'Its submissions arrive in the Inbox only: the dataset “Attendees” could not be created.',
+    })
+    expect(seen[0].plan?.create[0]?.writesTo).toBeNull()
+  })
+})

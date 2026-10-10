@@ -41,7 +41,9 @@ import {
   AI_PLAN_ASKS_FOR_VIDEO,
   aiEmbedHostOf,
   aiEmbedVideoKey,
+  AI_PLAN_DATASET_ITEM_OP,
   aiPlanCreateFor,
+  aiPlanFormDatasetNames,
   aiPlanItemFor,
   aiPlanSlugKey,
   aiPlanUndeclaredRefs,
@@ -3632,11 +3634,19 @@ export function aiSettlePlanDatasets(plan: AiBuildPlan, capabilities: AiPlanCapa
   if (!entry?.allowed) return plan
   const cap = Math.min(capabilities?.datasetsMax ?? Infinity, entry.left ?? Infinity)
   const datasets = plan.create.filter((one) => one.kind === 'dataset')
-  const said = (one: (typeof datasets)[number]) => AI_DATASET_SAID_NAME.test(one.name) || one.fields.some((field) => AI_DATASET_SAID_NAME.test(field))
+  // A dataset a form writes to holds what visitors send (AGL-3616): its
+  // fields may well be a rating or a quote request, and nothing seeds it.
+  const forForms = aiPlanFormDatasetNames(plan)
+  const said = (one: (typeof datasets)[number]) =>
+    !forForms.has(one.name.trim().toLowerCase()) &&
+    (AI_DATASET_SAID_NAME.test(one.name) || one.fields.some((field) => AI_DATASET_SAID_NAME.test(field)))
   if (!datasets.some(said) && (!Number.isFinite(cap) || datasets.length <= cap)) return plan
   const named = (ref: string | null | undefined, name: string) =>
     !!ref && isAiPlanNewRef(ref) && ref.slice('new:'.length).trim().toLowerCase() === name.trim().toLowerCase()
+  // A form's dataset counts as much as a record template: the form the
+  // person asked for is built around it.
   const score = (name: string) =>
+    (forForms.has(name.trim().toLowerCase()) ? 2 : 0) +
     plan.screens.reduce(
       (total, screen) =>
         total +
@@ -3653,7 +3663,10 @@ export function aiSettlePlanDatasets(plan: AiBuildPlan, capabilities: AiPlanCapa
   const isDropped = (ref: string | null | undefined) => [...dropped].some((name) => named(ref, name))
   return {
     ...plan,
-    create: plan.create.filter((one) => one.kind !== 'dataset' || !dropped.has(one.name.trim().toLowerCase())),
+    create: plan.create
+      .filter((one) => one.kind !== 'dataset' || !dropped.has(one.name.trim().toLowerCase()))
+      // A form whose dataset was let go sends its submissions to the Inbox only.
+      .map((one) => (one.kind === 'form' && isDropped(one.writesTo) ? withoutWritesTo(one) : one)),
     screens: plan.screens.map((screen) => ({
       ...screen,
       record: screen.record && isDropped(screen.record.dataset) ? null : screen.record,
@@ -3668,6 +3681,76 @@ export function aiSettlePlanDatasets(plan: AiBuildPlan, capabilities: AiPlanCapa
       ),
     })),
   }
+}
+
+/** A creation with no `writesTo`, as a plan that never said one reads. */
+function withoutWritesTo<T extends { writesTo?: string | null }>(creation: T): T {
+  const rest = { ...creation }
+  delete rest.writesTo
+  return rest
+}
+
+/**
+ * A form's dataset, settled in code before the rules read the plan
+ * (AGL-3616, Zach 2026-10-10: Aglyn AI's forms write to its datasets).
+ *
+ *  - A `writesTo` that names nothing the form can write to comes off: a
+ *    `new:` of no dataset this plan creates, an id the inventory does not
+ *    hold, or a dataset this job may not create. The form is then the
+ *    form it always was, its submissions in the Inbox. A dataset the
+ *    inventory holds, named by its name rather than its id, is given its id.
+ *  - A dataset this plan creates for a form holds the people who send it:
+ *    no page lists it and none is its record template, so its `new:` comes
+ *    off every section and record that named it, and a section that listed
+ *    it shows fewer items than rule 8 binds.
+ */
+export function aiSettlePlanFormDatasets(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  if (!plan.create.some((one) => one.kind === 'form' && one.writesTo)) return plan
+  const held = inventory?.datasets ?? []
+  const creatable = !capabilities || capabilities.create.dataset.allowed
+  let changed = false
+  const create = plan.create.map((one) => {
+    if (one.kind !== 'form' || !one.writesTo) return one
+    const ref = one.writesTo.trim()
+    if (isAiPlanNewRef(ref)) {
+      if (creatable && aiPlanCreateFor(plan, ref)?.kind === 'dataset') return one
+      // A build's dataset item, which the data plugin's operation makes.
+      if (aiPlanItemFor(plan, ref)?.op === AI_PLAN_DATASET_ITEM_OP) return one
+    } else {
+      if (held.some((row) => row.id === ref)) return one
+      const byName = held.find((row) => aiNamesMatch(row.name, ref))
+      if (byName) {
+        changed = true
+        return { ...one, writesTo: byName.id }
+      }
+    }
+    changed = true
+    return withoutWritesTo(one)
+  })
+  const settled = { ...plan, create }
+  const forForms = aiPlanFormDatasetNames(settled)
+  const listsOne = (ref: string | null | undefined) =>
+    isAiPlanNewRef(ref) && forForms.has(ref.slice('new:'.length).trim().toLowerCase())
+  const screens = plan.screens.map((screen) => {
+    const record = screen.record && listsOne(screen.record.dataset) ? null : screen.record
+    const sections = screen.sections.map((section) =>
+      section.uses.some(listsOne)
+        ? {
+            ...section,
+            uses: section.uses.filter((ref) => !listsOne(ref)),
+            items: Math.min(section.items, AI_TYPED_LIST_MIN_ITEMS - 1),
+          }
+        : section,
+    )
+    if (record === screen.record && sections.every((section, index) => section === screen.sections[index])) return screen
+    changed = true
+    return { ...screen, record, sections }
+  })
+  return changed ? { ...settled, screens } : plan
 }
 
 /**

@@ -54,7 +54,8 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  * it follows. On a workspace that may create datasets, the site plan creates
  * one for such content (`create`, kind `dataset`) and names it in the `uses`
  * of each section that lists it. The scaffold then builds each dataset as a
- * unit of its own, after the form and before the pages:
+ * unit of its own, after the layout and before the form (which may write
+ * its submissions to one) and the pages:
  *
  *  - DESIGNED by the `submit_dataset` generation (`ai-dataset-generation.ts`):
  *    the planned fields typed, at most a few more, and 3 to 12 records seeded
@@ -95,6 +96,11 @@ export interface AiSiteDatasetInput {
   shownIn: string[]
   /** Whether a page of the plan is its record template. */
   recordPages: boolean
+  /**
+   * The form of the plan that writes its submissions to it (AGL-3616), by
+   * name, with that form's planned fields; absent where no form does.
+   */
+  forForm?: { name: string; fields: string[] }
 }
 
 /** What a dataset row says when its design could not be written: our failure, refunded. */
@@ -132,10 +138,11 @@ export function aiSitePlanDatasets(plan: Pick<AiJobPlan, 'create'>): AiBuildPlan
   return plan.create.filter((entry) => entry.kind === 'dataset').slice(0, AI_SITE_DATASETS_MAX)
 }
 
-/** Where the plan lists a dataset, in words its design reads, and whether a page is its record template. */
+/** Where the plan lists a dataset, in words its design reads, whether a page is its record template, and the form that writes to it. */
 export function aiSiteDatasetInputOf(
   dataset: Pick<AiBuildPlanCreate, 'name'>,
   screens: readonly AiBuildPlanScreen[],
+  create: readonly AiBuildPlanCreate[] = [],
 ): AiSiteDatasetInput {
   const shownIn: string[] = []
   for (const screen of screens) {
@@ -145,7 +152,12 @@ export function aiSiteDatasetInputOf(
     }
   }
   const recordPages = screens.some((screen) => !!screen.record && namesDataset(screen.record.dataset, dataset.name))
-  return { shownIn: shownIn.slice(0, 8), recordPages }
+  const form = create.find((entry) => entry.kind === 'form' && !!entry.writesTo && namesDataset(entry.writesTo, dataset.name))
+  return {
+    shownIn: shownIn.slice(0, 8),
+    recordPages,
+    ...(form ? { forForm: { name: form.name, fields: form.fields.slice(0, AI_SITE_FORM_DATASET_FIELDS_MAX) } } : {}),
+  }
 }
 
 /** Whether a plan screen is the record template of a dataset the plan creates, and which. */
@@ -156,10 +168,68 @@ export function aiSiteRecordTemplateOf(screen: Pick<AiBuildPlanScreen, 'record'>
 
 function datasetInputOf(job: Pick<AiJob, 'inputs'>): AiSiteDatasetInput {
   const raw = (job.inputs?.[AI_SITE_DATASET_INPUT] ?? {}) as Partial<AiSiteDatasetInput>
+  const form = raw.forForm && typeof raw.forForm === 'object' ? raw.forForm : null
   return {
     shownIn: Array.isArray(raw.shownIn) ? raw.shownIn.map(str).filter(Boolean).slice(0, 8) : [],
     recordPages: raw.recordPages === true,
+    ...(form && str(form.name)
+      ? {
+          forForm: {
+            name: str(form.name),
+            fields: Array.isArray(form.fields) ? form.fields.map(str).filter(Boolean).slice(0, AI_SITE_FORM_DATASET_FIELDS_MAX) : [],
+          },
+        }
+      : {}),
   }
+}
+
+/** The most fields a form's dataset is designed with: the data plugin writer's own ceiling is higher. */
+export const AI_SITE_FORM_DATASET_FIELDS_MAX = 12
+
+/** The field types a planned `Name:type` may name, as the data plugin's writer takes them. */
+const FORM_DATASET_FIELD_TYPES = ['text', 'number', 'integer', 'boolean', 'list'] as const
+
+/** A planned field as a person reads it: `fullName` and `full_name` are "Full name". */
+export function aiSiteDatasetFieldName(planned: string): string {
+  const words = planned
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1).toLowerCase() : ''
+}
+
+/**
+ * A dataset a form writes to, as the data plugin's writer takes it
+ * (AGL-3616): designed with no model, since its records are the
+ * submissions. Its fields are its planned ones — or, where the plan gave it
+ * none, the form's — each a person's words for it, text unless the plan
+ * typed it as `Name:type`, never required, so a submission that leaves one
+ * blank is still a record. It starts with no records. Pure.
+ */
+export function aiSiteFormDatasetContent(
+  name: string,
+  planned: readonly string[],
+  form: { fields: readonly string[] },
+): Record<string, unknown> {
+  const specs = (planned.length ? planned : form.fields).slice(0, AI_SITE_FORM_DATASET_FIELDS_MAX)
+  const seen = new Set<string>()
+  const fields: Array<{ name: string; type: string }> = []
+  for (const spec of specs) {
+    const at = spec.lastIndexOf(':')
+    const typed = at > 0 ? spec.slice(at + 1).trim().toLowerCase() : ''
+    const type = (FORM_DATASET_FIELD_TYPES as readonly string[]).includes(typed) ? typed : 'text'
+    const fieldName = aiSiteDatasetFieldName(type === typed ? spec.slice(0, at) : spec).slice(0, 60)
+    if (!fieldName || seen.has(fieldName.toLowerCase())) continue
+    seen.add(fieldName.toLowerCase())
+    fields.push({ name: fieldName, type })
+  }
+  return { name, fields, records: [] }
+}
+
+/** The note a form's dataset carries on the job's page. */
+export function aiSiteFormDatasetNote(form: string): string {
+  return `Empty to start: each submission of the form “${form}” is added here, in Data.`
 }
 
 const limitReview = (message: string) => ({ reason: 'limit' as const, message, findings: [] })
@@ -216,15 +286,49 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       note: aiSiteDatasetNote(records),
       proposal: proposal as unknown as Record<string, unknown>,
     })
+    const input = datasetInputOf(job)
     // Asked again under the same id: the dataset already written.
     const written = await keeper.writer.read({ hostId: job.hostId, id: job.$id })
     if (written) {
       const facts = written.facts as { fields?: AiLayoutListingField[]; addressField?: string | null }
+      const again = output(written.id, written.name || creation.name, { fields: facts.fields ?? [], recordNames: [], addressField: facts.addressField ?? null }, 0)
       return aiUnspentOutcome(model, {
-        outputs: [output(written.id, written.name || creation.name, { fields: facts.fields ?? [], recordNames: [], addressField: facts.addressField ?? null }, 0)],
+        outputs: [input.forForm ? { ...again, note: aiSiteFormDatasetNote(input.forForm.name) } : again],
       })
     }
-    const input = datasetInputOf(job)
+    // A form's dataset (AGL-3616): its records are the submissions, so it is
+    // designed from the plan with no model, and starts empty.
+    if (input.forForm) {
+      const content = aiSiteFormDatasetContent(creation.name, creation.fields, input.forForm)
+      const checked = keeper.writer.check(content, { hostId: job.hostId })
+      if (checked.ok === false) {
+        console.error('ai site dataset: the dataset writer refused a form dataset we made', { orgId: job.orgId, jobId: job.$id, problems: checked.problems })
+        return { ...aiUnspentOutcome(model), failure: AI_SITE_DATASET_NOT_WRITTEN_COPY }
+      }
+      const result = await keeper.writer.write({
+        orgId: job.orgId,
+        hostId: job.hostId,
+        uid: job.createdBy,
+        org: (context.org ?? null) as Readonly<Record<string, unknown>> | null,
+        now: context.now,
+        id: job.$id,
+        name: creation.name,
+        content,
+      })
+      if (result.ok === false) {
+        if (result.status === 400) return { ...aiUnspentOutcome(model), failure: AI_SITE_DATASET_NOT_WRITTEN_COPY }
+        return { ...aiUnspentOutcome(model), review: limitReview(result.error) }
+      }
+      const facts = result.facts as { fields?: AiLayoutListingField[]; addressField?: string | null }
+      return aiUnspentOutcome(model, {
+        outputs: [
+          {
+            ...output(result.id, result.name, { fields: facts.fields ?? [], recordNames: [], addressField: null }, 0),
+            note: aiSiteFormDatasetNote(input.forForm.name),
+          },
+        ],
+      })
+    }
     const generation = await generate({
       brief: job.brief,
       merchantWords: job.brief,

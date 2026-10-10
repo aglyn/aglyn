@@ -334,8 +334,19 @@ export const AI_SITE_FORM_SENTENCE =
  * length its wall is proven at, is unchanged.
  */
 export function aiSiteDatasetSentence(max: number): string {
-  return `Keep structured content as a dataset, at most ${max} ${max === 1 ? 'dataset' : 'datasets'}, and only for a list of 4 or more similar items: a menu, a team, services, portfolio pieces, events, questions and answers; never reviews or testimonials. Create the dataset, its fields the items' field names, and put new:<the dataset's name> in the uses of each section that lists them; the platform lists its records there. Where each item deserves a page of its own, plan one page as the dataset's record template. Anything else stays written on its page.`
+  return `Keep structured content as a dataset, at most ${max} ${max === 1 ? 'dataset' : 'datasets'}, and only for a list of 4 or more similar items: a menu, a team, services, portfolio pieces, events, questions and answers; never reviews or testimonials. Create the dataset, its fields the items' field names, and put new:<the dataset's name> in the uses of each section that lists them; the platform lists its records there. Where each item deserves a page of its own, plan one page as the dataset's record template. Anything else stays written on its page. ${AI_SITE_FORM_DATASET_SENTENCE}`
 }
+
+/**
+ * What a paid site plan is told about a form that writes to a dataset
+ * (AGL-3616, Zach 2026-10-10): only where the person would want each
+ * submission kept as a record, the dataset created with the form's own
+ * field names, and never listed, because its records are the people who
+ * sent the form.
+ */
+export const AI_SITE_FORM_DATASET_SENTENCE =
+  "Where each submission of the form should also be kept as a record (volunteer sign-ups, RSVPs, inquiries), the form writes to a dataset: create the dataset, its fields the form's field names, and set the form's writesTo to new:<the dataset's name>; that dataset counts toward the same limit and no section lists it. Otherwise writesTo is null."
+
 
 /**
  * What a site start's home page is held to (AGL-3660): its fewest sections,
