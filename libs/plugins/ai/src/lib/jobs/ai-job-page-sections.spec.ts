@@ -162,14 +162,29 @@ describe('a section that breaks the page’s rules', () => {
     return aiPageWithSection(aiEmptyPage(), first.value as AiPageSection, sectionIds)
   }
 
-  it('is refused for a second h1, naming and quoting only its own node by the model’s id', () => {
+  it('renders a second h1 as an h2 in code, asking nothing of the model (AGL-3660)', () => {
     const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(fixture.answers[0]),
     })
+    expect(result.violations).toEqual([])
+    const headings = Object.values((result.value as AiPageSection).nodes as unknown as Record<string, { componentId: string; props?: Record<string, unknown> }>)
+      .filter((node) => node.componentId === 'muiTypography' && node.props?.['variant'] === 'h1')
+    // The look is kept: only the element the heading renders as steps down.
+    expect(headings.map((node) => node.props?.['component'])).toEqual(['h2'])
+  })
+
+  it('is refused for an image with no alt text, naming and quoting only its own node by the model’s id', () => {
+    const answer = structuredClone(fixture.answers[0]) as { nodes: Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }> }
+    const [sectionId] = Object.entries(answer.nodes).find(([, node]) => node.componentId === 'section') ?? []
+    answer.nodes['bare'] = { componentId: 'image', props: { src: '/_static/starter/hero.jpg' } }
+    answer.nodes[sectionId as string].nodes = [...(answer.nodes[sectionId as string].nodes ?? []), 'bare']
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
     expect(result.violations.map(({ code, nodeIds }) => ({ code, nodeIds }))).toEqual([
-      { code: 'multiple-h1', nodeIds: ['a1'] },
+      { code: 'missing-alt', nodeIds: ['bare'] },
     ])
-    expect(Object.keys(result.offending ?? {})).toEqual(['a1'])
+    expect(Object.keys(result.offending ?? {})).toEqual(['bare'])
   })
 
   // THE TWO PASSES A LIVE FREE PAGE DIED ON (AGL-3143). Its practice-areas
@@ -976,11 +991,12 @@ describe('a repeated item written once (AGL-3053)', () => {
   })
 
   it('names the node the model wrote for a rule every copy breaks, once', () => {
-    // An h4 under the section's h2 skips a level, on every card the item draws.
-    const result = checkCards(cardsWith('b1', (node) => ({ ...node, props: { variant: 'h4', children: '{{1}}', component: 'h4' } })))
+    // A heading left unfinished, on every card the item draws. (A skipped
+    // heading level, which this once used, is settled in code: AGL-3660.)
+    const result = checkCards(cardsWith('b1', (node) => ({ ...node, props: { ...(node['props'] as Record<string, unknown>), children: '{{1}} and' } })))
     expect(result.value).not.toBeNull()
     expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
-      { rule: 11, code: 'skipped-heading', nodeIds: ['b1'] },
+      { rule: 14, code: 'dangling-word', nodeIds: ['b1'] },
     ])
     expect(Object.keys(result.offending ?? {})).toEqual(['b1'])
   })

@@ -48,6 +48,7 @@ import {
 } from '../runtime/ai-doctrine'
 import type { AiUsage } from '../providers/contract'
 import {
+  aiSettleMechanicalRules,
   validateAiDoctrineTree,
   type AiDoctrineNode,
   type AiDoctrineTreeContext,
@@ -558,7 +559,12 @@ export function aiLayoutPageCheck(
       },
       last,
     )
-    const { nodes, dropped } = copy
+    const { dropped } = copy
+    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
+    const nodes = aiSettleMechanicalRules(
+      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+      'page',
+    ).nodes as unknown as typeof copy.nodes
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',

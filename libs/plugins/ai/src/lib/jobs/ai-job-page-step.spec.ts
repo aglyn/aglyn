@@ -698,6 +698,49 @@ describe('the passes', () => {
     expect(done.outputs).toEqual([])
   })
 
+  it('settles a stored page whose second image loads eagerly, stores it, and finishes asking no model (AGL-3660)', async () => {
+    // A live Free portfolio start (2026-10-10): every opening photo was set to
+    // load eagerly, and this pass, which asks no model, refused the page for
+    // rule 16 on every try.
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    const versionPath = `${DRAFT}/versions/${mockDocs.get(DRAFT)?.['versionId']}`
+    const nodes = storedPage() as Record<string, Record<string, unknown> & { nodes?: string[] }>
+    const shape = nodes[SECTION_IDS[0]]
+    const photo = (id: string, parentId: string, alt: string) => ({
+      ...('type' in shape ? { type: shape['type'] } : {}),
+      $id: id,
+      componentId: 'image',
+      pluginId: 'mui',
+      parentId,
+      props: { src: '/_static/starter/hero.jpg', alt, loading: 'eager' },
+    })
+    nodes['imgLead'] = photo('imgLead', SECTION_IDS[0], 'A roofer on a ladder at dawn')
+    nodes['imgLater'] = photo('imgLater', SECTION_IDS[1], 'New shingles after a storm')
+    nodes[SECTION_IDS[0]] = { ...shape, nodes: ['imgLead', ...(shape.nodes ?? [])] }
+    nodes[SECTION_IDS[1]] = { ...nodes[SECTION_IDS[1]], nodes: [...(nodes[SECTION_IDS[1]].nodes ?? []), 'imgLater'] }
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes as never) })
+    seoFields.mockResolvedValueOnce({
+      status: 'ok',
+      value: { title: 'Spring Roof Inspections in Springfield', description: 'A licensed roofer checks shingles, flashing and gutters.' },
+      attempts: 1,
+      usage: { inputTokens: 700, outputTokens: 80, cacheReadTokens: 900, cacheWriteTokens: 0 },
+      effort: null,
+      estCostUsd: 0.001,
+      model: 'claude-haiku-4-5',
+      stopReason: 'tool_use',
+    })
+
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome.review).toBeUndefined()
+    expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'screen', id: SCREEN_ID })])
+    // The draft stores the settled page: the lead image eager, the later one left to load when reached.
+    const stored = storedPage() as Record<string, { props?: Record<string, unknown> }>
+    expect(stored['imgLead'].props?.['loading']).toBe('eager')
+    expect(stored['imgLater'].props).not.toHaveProperty('loading')
+  })
+
   it('names a placed component’s bracketed defaults once, where the page sets nothing of its own (AGL-3056)', () => {
     const area = (title: string, summary?: string) => ({
       componentId: 'reusableInstance',

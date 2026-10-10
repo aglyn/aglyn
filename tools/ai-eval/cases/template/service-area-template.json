@@ -67,21 +67,6 @@
   ],
   "controls": [
     {
-      "why": "Two top-level headings on one template (rule 11).",
-      "answer": {
-        "tree": {
-          "rootId": "_@_",
-          "nodes": {
-            "_@_": { "componentId": "div", "nodes": ["intro"] },
-            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "subtitle"] },
-            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in [town]" } },
-            "subtitle": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Serving [county]" } }
-          }
-        }
-      },
-      "fails": ["rules"]
-    },
-    {
       "why": "The service cards in a Stack that is a row at every width, which no rule of the tree refuses: every town page would show a phone two cards at half its width each (rule 12, measured at the switcher's widths, AGL-3020).",
       "answer": {
         "tree": {

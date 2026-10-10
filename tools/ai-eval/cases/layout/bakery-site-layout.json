@@ -99,27 +99,6 @@
   ],
   "controls": [
     {
-      "why": "A footer link that sets no color on the primary band, so its words are drawn in the band's own primary color and cannot be read (AGL-3056).",
-      "answer": {
-        "tree": {
-          "rootId": "_@_",
-          "nodes": {
-            "_@_": { "componentId": "div", "nodes": ["header", "slot", "footer"] },
-            "header": { "componentId": "muiAppBar", "props": { "position": "static", "color": "default" }, "nodes": ["toolbar"] },
-            "toolbar": { "componentId": "muiToolbar", "nodes": ["brand", "search"] },
-            "brand": { "componentId": "muiTypography", "props": { "variant": "h6", "component": "p", "children": "Tidewater Bakery" } },
-            "search": { "componentId": "searchBox", "props": { "placeholder": "Search the menu" } },
-            "slot": { "componentId": "layoutSlot", "props": { "component": "main" } },
-            "footer": { "componentId": "section", "props": { "element": "footer", "ariaLabel": "Site footer" }, "sx": { "bgcolor": "primary.main", "color": "primary.contrastText", "py": 4 }, "nodes": ["hours", "social", "home"] },
-            "hours": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "Open every day from 7 am to 2 pm at 14 Harbor Street." } },
-            "social": { "componentId": "socialLinks", "props": { "instagram": "tidewaterbakery" } },
-            "home": { "componentId": "muiScreenLink", "props": { "children": "Back to home", "screenId": "scr-home", "renderAs": "link" } }
-          }
-        }
-      },
-      "fails": ["rules"]
-    },
-    {
       "why": "A footer link for custom cake orders sent to the home page, because the site has no screen for them (AGL-3056).",
       "answer": {
         "tree": {

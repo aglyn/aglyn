@@ -56,6 +56,7 @@ import {
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
+  aiSettleWrittenMechanicalRules,
   validateAiBuildPlan,
   validateAiDoctrineTree,
   type AiCopyFraming,
@@ -622,7 +623,11 @@ export function aiDoctrineTreeCheck(
     // whose first clause fits its ceiling and a Grid container's unsized items
     // are settled where each has one reading before the tree is read (AGL-3596),
     // and so is an email's color outside the brand (AGL-3676).
-    const settled = aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer))))
+    // An attribute a rule has one answer for is applied too (AGL-3660).
+    const settled = aiSettleWrittenMechanicalRules(
+      aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer)))),
+      kind,
+    )
     const input = kind === 'email' ? aiSettleOffBrandEmailColors(settled, context.brand) : settled
     const report = validateAiDoctrineTree(input, kind, context, otherPages)
     if (!report.tree || !report.score) {
