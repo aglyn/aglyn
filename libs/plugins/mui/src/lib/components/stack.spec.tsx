@@ -139,6 +139,28 @@ describe('the rendered Stack applies the new props', () => {
     }
   })
 
+  it('spaces with `gap` alone when `sx` sets one or the row wraps', () => {
+    // The aglyn.com footer's links row: spacing "3" beside an `sx` gap of
+    // 24px. With margins too, every link sat 48px from the last and the row
+    // grew too wide to share a line with the copyright.
+    for (const props of [
+      { spacing: '3', sx: { gap: '24px', flexWrap: 'wrap', rowGap: '8px' } },
+      { spacing: 3, sx: [{ columnGap: '24px' }] },
+      { spacing: 3, flexWrap: 'wrap' },
+      { spacing: 3, sx: { flexWrap: { xs: 'wrap', md: 'nowrap' } } },
+    ]) {
+      const { container, unmount } = render(
+        <Stack direction="row" {...(props as never)}>
+          <div>{'a'}</div>
+          <div>{'b'}</div>
+        </Stack>,
+      )
+      for (const child of Array.from(root(container).children))
+        expect(getComputedStyle(child).marginLeft).toBe('')
+      unmount()
+    }
+  })
+
   it('leaves a flex stack on margins, and an explicit OFF alone', () => {
     // The control: the detector has to be reading `display`, not turning
     // `gap` on for every stack that carries an `sx` at all.

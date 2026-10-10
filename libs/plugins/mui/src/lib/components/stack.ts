@@ -122,6 +122,31 @@ function hasNonFlexDisplay(sx: unknown): boolean {
   return false
 }
 
+/**
+ * Whether the stack's layout already spaces or wraps its children itself, so
+ * MUI's `spacing` margins would stack on top of it.
+ *
+ * An `sx` gap is a second spacing: with margins as well, every child sits a
+ * gap AND a margin from the last, doubling the space (the aglyn.com footer's
+ * links row, 48px apart instead of 24px, too wide to sit beside the
+ * copyright line). And a wrapping row carries its first-child margin reset
+ * onto no line but the first, so every later line starts a spacing-step in.
+ * `gap` is right for both.
+ */
+function spacesItself(sx: unknown, flexWrap: unknown): boolean {
+  const wraps = (value: unknown): boolean =>
+    typeof value === 'string'
+      ? value.startsWith('wrap')
+      : Array.isArray(value)
+        ? value.some(wraps)
+        : !!value && typeof value === 'object' && Object.values(value).some(wraps)
+  if (wraps(flexWrap)) return true
+  if (Array.isArray(sx)) return sx.some((part) => spacesItself(part, undefined))
+  if (!sx || typeof sx !== 'object') return false
+  const style = sx as Record<string, unknown>
+  return style.gap != null || style.columnGap != null || wraps(style.flexWrap)
+}
+
 const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
   // repeatDataset/repeatLimit are compose-time attributes (AGL-103): the
   // tenant expands them before render; strip so they never hit the DOM.
@@ -156,7 +181,13 @@ const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
       // for grid, multi-column and flex alike, and an author's own `sx` gap
       // still wins over it. A cleared switch persists as null, which is why
       // this reads `??` and not `||` — an author's explicit OFF stands.
-      useFlexGap: useFlexGap ?? (hasNonFlexDisplay(sx) || undefined),
+      // The same holds when the stack spaces or wraps on its own terms —
+      // see {@link spacesItself}. Text spacing made this live (AGL-3660):
+      // a "3" used to space nothing, so an `sx` gap beside it was the only
+      // spacing; read as 3 it doubled every gap on the footer.
+      useFlexGap:
+        useFlexGap ??
+        (hasNonFlexDisplay(sx) || spacesItself(sx, flexWrap) || undefined),
     }),
 )
 
