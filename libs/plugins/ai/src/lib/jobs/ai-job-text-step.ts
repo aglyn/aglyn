@@ -128,6 +128,14 @@ export interface AiJobStepOutcome {
    */
   uncredited?: boolean
   /**
+   * The `failure` is the workspace's own limit, not a fault of ours: the
+   * month's Free AI credits are spent (a 429 from the kind's admission, asked
+   * when the plan is kept). The machine fails the job and gives the step's
+   * credits back exactly as for our failure, but announces it as NOT ours, so
+   * no staff alert is raised for a customer reaching their allowance.
+   */
+  customerLimit?: boolean
+  /**
    * What a guided site start put live on its last pass (AGL-3596), kept on
    * the job by the machine in the write that records the pass: a step never
    * writes the job document itself.

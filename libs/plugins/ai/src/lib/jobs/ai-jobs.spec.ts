@@ -1103,9 +1103,18 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
         registerAiJobStep('insight', spent({ refused: true, stopReason: 'refusal' }) as never)
         const declined = await freeJob()
         await runAiJobStep(firestore, 'org-free', declined.$id, { owner: 'route-1', now: NOW })
+        // The month's Free credits are spent: the customer's limit, given back
+        // like ours but announced as theirs, so no staff alert is raised.
+        registerAiJobStep('insight', spent({ failure: 'You have no free AI credits left.', customerLimit: true }) as never)
+        const limited = await freeJob()
+        await runAiJobStep(firestore, 'org-free', limited.$id, { owner: 'route-1', now: NOW })
+        expect(await getAiJob(firestore, 'org-free', limited.$id)).toMatchObject({
+          status: 'failed', refundedCredits: 6, refundReason: 'step-failure',
+        })
         expect(causes).toEqual([
           { ours: true, error: 'step failure: It could not be built.' },
           { ours: false, error: 'stop_reason refusal' },
+          { ours: false, error: 'step failure: You have no free AI credits left.' },
         ])
       } finally {
         registerAiJobTransitionListener(null)

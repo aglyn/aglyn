@@ -1379,7 +1379,7 @@ async function failOurFailure(
   orgId: string,
   jobId: string,
   message: string,
-  detail: { stepIndex?: number; error?: unknown },
+  detail: { stepIndex?: number; error?: unknown; ours?: boolean },
   refund: { reason: AiJobRefundReason; stepCredits: number; free?: FreeAssistAccount | null },
   now: Date,
 ): Promise<AiJob> {
@@ -1397,7 +1397,9 @@ async function failOurFailure(
   if (current && !isAiJobTerminal(current.status)) {
     await refundOurFailure(firestore, orgId, current, { ...refund, now })
   }
-  return failAiJob(firestore, orgId, jobId, message, { ...detail, ours: true }, now)
+  // Given back as ours either way; ANNOUNCED as ours unless the step said the
+  // failure is the customer's own limit (`customerLimit`), which pages no one.
+  return failAiJob(firestore, orgId, jobId, message, { ...detail, ours: detail.ours ?? true }, now)
 }
 
 // ── A build's settlement (AGL-3616) ──────────────────────────────────────
@@ -2164,6 +2166,7 @@ export async function runAiJobStep(
       job: await failOurFailure(firestore, orgId, jobId, outcome.failure, {
         stepIndex,
         error: `step failure before the provider: ${outcome.failure}`,
+        ...(outcome.customerLimit ? { ours: false } : {}),
       }, { reason: 'step-failure', stepCredits: 0, free: reservation.free ?? null }, now),
     }
   }
@@ -2230,6 +2233,7 @@ export async function runAiJobStep(
     const detail = {
       stepIndex,
       error: outcome.refused ? 'stop_reason refusal' : `step failure: ${message}`,
+      ...(outcome.customerLimit ? { ours: false } : {}),
     }
     // A model declining the brief is not our failure; a step's own is (AGL-3594).
     return {
