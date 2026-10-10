@@ -85,6 +85,9 @@ import {
 import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { aiDatasetListingsOf } from './ai-job-site-datasets'
+import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
+import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
   type AiJobItemOutcome,
@@ -200,7 +203,15 @@ export function aiBuildUnitJob(
   const placedByScreens = new Set(plan.screens.flatMap((screen) => screen.sections.flatMap((section) => section.uses)))
   if (unit.creation) {
     unitPlan.reuse = plan.reuse.filter((entry) => !placedByScreens.has(entry.id))
-    unitPlan.create = [{ ...unit.creation, duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built) }]
+    unitPlan.create = [
+      {
+        ...unit.creation,
+        duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built),
+        // The dataset a form writes to, new or the site's own (AGL-3616); one
+        // this build failed to make leaves the form as it always was.
+        ...(unit.creation.writesTo ? { writesTo: aiSiteResolvedRef(unit.creation.writesTo, built) } : {}),
+      },
+    ]
     brief.push(`Build the ${unit.creation.kind} “${unit.creation.name}”: ${unit.creation.why}`)
   }
   if (unit.screen) {
@@ -248,6 +259,9 @@ export function aiBuildUnitJob(
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // A dataset this build made for its form, which the form may bind (AGL-3616).
+  const madeFor = unit.creation?.kind === 'form' && isAiPlanNewRef(unit.creation.writesTo) ? unitPlan.create[0]?.writesTo : null
+  if (madeFor) inputs[AI_FORM_DATASET_MADE_INPUT] = madeFor
   // A build's pages and layouts are designed in the layout language and
   // compiled (AGL-3660), told the pages the build plans and where its form is.
   if (context.kind === 'page' || context.kind === 'layout') {
@@ -256,6 +270,12 @@ export function aiBuildUnitJob(
     if (pages.length) inputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) inputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
+    // The datasets this build made, repeated in the sections that name them (AGL-3616).
+    const datasets = [...built.entries()]
+      .filter(([, entry]) => entry.kind === 'dataset')
+      .map(([name, entry]) => ({ id: entry.id, name: context.units.find((one) => one.item?.name.toLowerCase() === name)?.label ?? entry.label }))
+    const listings = aiDatasetListingsOf(datasets, plan.screens)
+    if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   return {
     ...job,
@@ -345,9 +365,11 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     /** The build's last pass puts its pages live, where it was asked and confirmed. */
     const finish = async (outcome: AiJobStepOutcome, extraPages: readonly AiJobOutput[] = []): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesBuild(job) || job.sitePublish || !job.hostId) return outcome
+      // A record template renders once per record only once its binding is
+      // saved, so it is never published at its own address (AGL-3616).
       const pageIds = new Set(
         units
-          .filter((one) => one.screen && aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }))
+          .filter((one) => one.screen && !one.screen.record && aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }))
           .flatMap((one) => rows.get(one.slot)?.outputs ?? []),
       )
       const pages = [

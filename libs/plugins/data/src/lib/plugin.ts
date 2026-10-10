@@ -28,6 +28,7 @@ import { DATASET_TRANSFER_RESOURCE } from './transfer/dataset-transfer-key'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 import { RECORD_PAGE_SOURCE } from './record-pages/record-page-source'
+import { registerDataRecordRoutes } from './model/data-record-routes'
 import RecordTemplateRowChip from './record-pages/record-template-row-chip.component'
 import RecordTemplateSection from './record-pages/record-template-section.component'
 
@@ -63,6 +64,9 @@ export function registerDataConsole(): void {
   registerPageRecordSource(RECORD_PAGE_SOURCE)
   // The workspace's datasets, for another plugin's picker (AGL-3080).
   registerDatasetRecordList()
+  // …and where one is read, for a surface that links it (AGL-3616): an AI
+  // job's dataset opens on the Data page.
+  registerDataRecordRoutes()
   // A dataset's records in the import wizard and the export dialog
   // (AGL-3530); the Data card names the dataset when it opens them.
   registerPluginTransferResourceUi(

@@ -50,6 +50,8 @@ import {
   aiSettleCutHeadings,
   aiSettleOffBrandEmailColors,
   aiSettleDisagreeingNodes,
+  aiSettlePlanDatasets,
+  aiSettlePlanFormDatasets,
   aiSettlePlanForms,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
@@ -299,6 +301,8 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'site-look': 'fields',
   // A site's first posts (AGL-3676): an entry's fields, which its own check holds.
   'blog-post': 'fields',
+  // A site's datasets (AGL-3616): a dataset's fields and records, which its own check holds.
+  dataset: 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
@@ -688,8 +692,18 @@ export function aiDoctrinePlanCheck(
     // A reference or a page's layout that has only one answer is given it,
     // not refused for it; so is a section that collects answers with no form
     // placed, which places the plan's own (AGL-3660).
+    // A plan past the datasets this job may make keeps the most useful
+    // (AGL-3616), once a form's dataset is one it can write to and no page
+    // lists it.
     const plan = aiSettlePlanForms(
-      aiSettlePlanLayouts(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+      aiSettlePlanLayouts(
+        aiSettlePlanDatasets(
+          aiSettlePlanFormDatasets(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+          capabilities,
+        ),
+        inventory,
+        capabilities,
+      ),
       inventory,
       capabilities,
     )

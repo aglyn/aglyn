@@ -59,6 +59,7 @@ import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_CATALOG_TOOL, AI_CATEGORIES_TOOL, AI_PRODUCT_COPY_TOOL } from '../tools/ai-products-tool'
 import { AI_BLOG_POST_TOOL } from '../tools/ai-blog-post-tool'
+import { AI_DATASET_TOOL } from '../tools/ai-dataset-tool'
 import { aiSeoFieldsTool, aiSeoFixesTool, aiSeoSiteTool } from '../tools/ai-seo-tool'
 import { aiThemeTool } from '../tools/ai-theme-tool'
 import { aiOverlayTool } from '../tools/ai-overlay-tool'
@@ -154,6 +155,7 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   },
   // A site's first posts (AGL-3676).
   'runtime/ai-blog-post-generation.ts': { post: () => [AI_BLOG_POST_TOOL] },
+  'runtime/ai-dataset-generation.ts': { dataset: () => [AI_DATASET_TOOL] },
   'jobs/ai-job-plan-step.ts': { plan: () => [AI_BUILD_PLAN_TOOL, aiInventoryLookupTool()] },
   'jobs/ai-job-layout-step.ts': {
     layout: () => [aiDoctrineTreeTool('layout'), aiInventoryLookupTool()],

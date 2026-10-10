@@ -18,6 +18,7 @@
 import { aiSiteKind } from './ai-site-kinds'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
+  aiPlanFormDatasetNames,
   aiPlanUndeclaredRefs,
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
@@ -244,6 +245,19 @@ export interface AiFreeCreditsLeft {
   left: number
   total: number
   resetsOn: string
+  /**
+   * Both meters `left` is the lesser of, in credits net of give-backs, for the
+   * usage strip's live read (AGL-3722): the owner's Free allowance across
+   * their Free workspaces (`account`, `null` with no owner) and this
+   * workspace's band.
+   */
+  used?: {
+    account: number | null
+    org: number
+    orgBand: number | null
+    /** The strip's warn state for these figures, worked out where the strip's own rule is not shipped to the browser. */
+    state: 'ok' | 'warn' | 'capped'
+  }
 }
 
 /** The first UTC day of the month after `now`, `YYYY-MM-DD`: when the Free credits come back. */
@@ -858,14 +872,20 @@ export function aiSiteWords(
 
 /**
  * What a scaffold builds for itself: the layout its pages render inside, the
- * form they place, and the palette suggestion a member applies in the Theme
- * section. Anything else a plan asks to create is a job of its own.
+ * form they place, the palette suggestion a member applies in the Theme
+ * section, and the datasets its structured content is kept in (AGL-3616),
+ * which the data plugin writes. Anything else a plan asks to create is a job
+ * of its own.
  */
 export const AI_SITE_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'layout',
   'form',
   'theme-change',
+  'dataset',
 ]
+
+/** The most datasets one site start creates (AGL-3616). */
+export const AI_SITE_DATASETS_MAX = 3
 
 /** The creations a scaffold cannot build, in the order the plan lists them, each named once. */
 export function aiSitePlanPrerequisites(
@@ -926,6 +946,10 @@ export function aiSitePlanShapeRefusal(
   if (!screens.some((screen) => screen.nav)) {
     return 'No page in this plan is in the site navigation. Describe the site again.'
   }
+  const datasets = plan.create.filter((entry) => entry.kind === 'dataset').length
+  if (datasets > AI_SITE_DATASETS_MAX) {
+    return `This plan creates ${datasets} datasets, and a site scaffold creates at most ${AI_SITE_DATASETS_MAX}. Keep the others' items on their pages.`
+  }
   return null
 }
 
@@ -962,6 +986,15 @@ export interface AiPlanPassOptions {
 }
 
 /**
+ * Whether a creation is built with no model: a dataset a form of the plan
+ * writes to (AGL-3616) starts empty, designed from its planned fields, so it
+ * is no pass of the estimate.
+ */
+function aiPlanCreationIsModelFree(plan: Pick<AiBuildPlan, 'create'>, entry: AiBuildPlan['create'][number]): boolean {
+  return entry.kind === 'dataset' && aiPlanFormDatasetNames(plan).has(entry.name.trim().toLowerCase())
+}
+
+/**
  * The passes a plan implies: one per section of every screen, one more per
  * screen for its search listing and its draft, and one for each thing the
  * plan creates that the job builds. What the estimate is counted in.
@@ -972,7 +1005,7 @@ export function aiPlanPasses(plan: AiBuildPlan, options: AiPlanPassOptions = {})
     0,
   )
   const creates = options.creates ?? AI_SITE_CREATE_KINDS
-  const creations = plan.create.filter((entry) => creates.includes(entry.kind)).length
+  const creations = plan.create.filter((entry) => creates.includes(entry.kind) && !aiPlanCreationIsModelFree(plan, entry)).length
   return screens + creations + (options.welcomeEmail ? 1 : 0)
 }
 
@@ -1063,7 +1096,7 @@ export function aiPlanCreditRange(plan: AiBuildPlan, options: AiPlanPassOptions 
   const screenRange = options.standalonePages ? aiStandaloneScreenCreditRange : aiScreenCreditRange
   for (const screen of plan.screens) range = aiCreditRangeAdd(range, screenRange(screen.sections.length))
   for (const entry of plan.create) {
-    if (!creates.includes(entry.kind)) continue
+    if (!creates.includes(entry.kind) || aiPlanCreationIsModelFree(plan, entry)) continue
     range = aiCreditRangeAdd(
       range,
       aiCreditRangeOf(aiCreationMeasuredCredits(entry.kind, { standalone: options.standalonePages }), AI_SITE_PASS_CREDITS),

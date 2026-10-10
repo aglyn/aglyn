@@ -166,7 +166,14 @@ export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
   plan.create.forEach((creation, index) => {
     if (!AI_BUILD_CREATE_KINDS.includes(creation.kind)) return
     const slot = `c${index}`
-    units.push({ slot, op: creationOp(creation), label: creation.name, creation, deps: depsOf([creation.duplicateOf], slot) })
+    // A form is built after the dataset it writes to (AGL-3616).
+    units.push({
+      slot,
+      op: creationOp(creation),
+      label: creation.name,
+      creation,
+      deps: depsOf([creation.duplicateOf, creation.kind === 'form' ? (creation.writesTo ?? null) : null], slot),
+    })
   })
   for (const item of plan.items ?? []) {
     units.push({ slot: item.slot, op: item.op, label: item.name, item, deps: depsOf(item.dependsOn, item.slot) })
@@ -518,6 +525,13 @@ export function aiBuildDegradation(
       : (context.ops?.get(dep.op)?.noun ?? dep.op)
     const capability = dep.item ? context.ops?.get(dep.op) : undefined
     const degrade = dep.item?.degrade ?? capability?.degrade ?? (dep.creation?.kind === 'layout' ? 'fallback' : 'omit')
+    // A form whose dataset could not be made is built without it (AGL-3616):
+    // its submissions reach the Inbox, as any form's do.
+    if (aiBuildUnitWritesTo(unit) === dep.label.toLowerCase()) {
+      result.degradedBy.push(slot)
+      result.notes.push(`Its submissions arrive in the Inbox only: the dataset “${dep.label}” could not be created.`)
+      continue
+    }
     if (!unit.screen && degrade === 'omit') {
       result.skip = `Not built: the ${noun} “${dep.label}” it needs could not be created.`
       result.degradedBy.push(slot)
@@ -545,6 +559,12 @@ export function aiBuildDegradation(
     }
   }
   return result
+}
+
+/** The dataset a form unit writes to, by its `new:` name lowercased; `null` for any other unit (AGL-3616). */
+export function aiBuildUnitWritesTo(unit: Pick<AiBuildUnit, 'creation'>): string | null {
+  const ref = unit.creation?.kind === 'form' ? unit.creation.writesTo : null
+  return isAiPlanNewRef(ref) ? aiBuildRefName(ref) : null
 }
 
 /** What each creation is called in a note. */
