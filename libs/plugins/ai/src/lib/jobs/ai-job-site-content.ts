@@ -369,6 +369,8 @@ export interface AiSiteProductsRunnerDeps {
 export async function aiSiteProductPhotos(input: {
   job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
   names: readonly string[]
+  /** What each product's photo should show, as its catalog proposed it, by position (AGL-3676). */
+  shows?: readonly string[]
   signal?: AbortSignal
   stockPhotos?: typeof aiLayoutStockPhotoSource
 }): Promise<Array<string | null>> {
@@ -382,6 +384,9 @@ export async function aiSiteProductPhotos(input: {
     aspect: 4 / 5,
     sectionIndex: 0,
     role: 'gallery' as const,
+    // Searched for by its own name, then what its photo shows, with the shop's
+    // category, and held to that category (AGL-3676).
+    product: { subjects: [name, input.shows?.[index] ?? ''].filter((words) => words.trim()) },
   }))
   const seed = `${input.job.$id}:products`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
@@ -393,6 +398,8 @@ export async function aiSiteProductPhotos(input: {
       business: aiSiteWords(input.job.inputs).about || input.job.brief,
       sectionNames: ['Products'],
       jobId: aiOriginJobId(input.job),
+      // Each product may try its name, its photo's subject and its category.
+      searches: slots.length * 4,
       ...(input.signal ? { signal: input.signal } : {}),
     })
     if (source) found = await source(slots)
@@ -401,6 +408,8 @@ export async function aiSiteProductPhotos(input: {
   }
   const starters = aiLayoutStarterPhotos(slots, seed)
   const hostId = input.job.hostId
+  // Every product has a photo (AGL-3676): a starter where no stock photo
+  // named its category, never an empty tile.
   return slots.map(
     (_slot, index) =>
       aiSiteProductPhotoSrc(found[index]?.src, hostId) ?? aiSiteProductPhotoSrc(starters[index]?.src, hostId),
@@ -424,6 +433,24 @@ export function aiSiteProductPhotoSrc(src: string | null | undefined, hostId: st
   const path = resolveMediaSrc(src, { hostId })
   if (!path || path.length > 2_000 || /[\s"'<>]/.test(path)) return null
   return path.startsWith('/') || path.startsWith('https://') ? path : null
+}
+
+/**
+ * A proposed product's real choices (AGL-3676): each option with two or more
+ * distinct values. An option of one value is no choice for a shopper to make
+ * — the beta.237 Willow Wick gift set's "Scent" select offered nothing — so
+ * it is left out, and its one value stays in the product's own words.
+ */
+export function aiSiteProductChoices(
+  options: ReadonlyArray<{ name: string; values: readonly string[] }> | null | undefined,
+): Array<{ name: string; values: string[] }> {
+  return (options ?? []).flatMap((option) => {
+    const seen = new Set<string>()
+    const values = option.values
+      .map((value) => value.trim())
+      .filter((value) => value && !seen.has(value.toLowerCase()) && !!seen.add(value.toLowerCase()))
+    return option.name.trim() && values.length >= 2 ? [{ name: option.name.trim(), values }] : []
+  })
 }
 
 /** The sentence the products unit's brief ends with, which the catalog's rules read as how many. */
@@ -461,6 +488,7 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
     const photos = await (deps.photos ?? aiSiteProductPhotos)({
       job,
       names: proposed.map((product) => product.name),
+      shows: proposed.map((product) => product.photo ?? ''),
       ...(context.signal ? { signal: context.signal } : {}),
     }).catch(() => proposed.map(() => null))
     const outputs: AiJobOutput[] = []
@@ -475,7 +503,9 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         // a sentence that leaves a fact for the owner is left out.
         description: aiSiteProductDescriptionWithoutGaps(product.description),
         tags: product.tags,
-        options: product.options,
+        // A choice is two values or more (AGL-3676): a "Scent" of one value
+        // drew a select with nothing to pick on the live Willow Wick page.
+        options: aiSiteProductChoices(product.options),
         seoTitle: product.seoTitle,
         seoDescription: product.seoDescription,
         comingSoon: true,
@@ -686,6 +716,16 @@ export function aiSiteListings(input: {
       ...(products.length || input.sells ? {} : { cart: false }),
       placements: aiLayoutListingPlacements('products', input.screens),
     })
+    // A store that sells shows its customers' reviews and takes newsletter
+    // sign-ups where its pages name them (AGL-3676): both commerce elements,
+    // so only where the store's commerce runs, never on a store that cannot
+    // sell yet.
+    if (products.length || input.sells) {
+      for (const kind of ['reviews', 'signup'] as const) {
+        const placements = aiLayoutListingPlacements(kind, input.screens)
+        if (placements.length) listings.push({ id: aiLayoutListingId(kind), kind, name: kind === 'reviews' ? 'the store' : 'the newsletter', records: [], placements })
+      }
+    }
   }
   const posts = input.outputs.filter((output) => output.resource === 'entry')
   const slug = str(posts[0]?.proposal?.['collectionSlug'])
@@ -764,6 +804,8 @@ export function aiSiteContentBriefLines(outputs: readonly AiJobOutput[]): string
     lines.push(
       `This store's products are: ${products.map((product) => `“${product.label}”`).join(', ')}.`,
       'Where a page features products, feature these by their names; never name another product, and never state a price.',
+      // The collection tiles a storefront home shows (AGL-3676): its own range, grouped.
+      'Where a page shows the shop by collection, group these products into two to four collections by what they are (a kind, a use or an occasion), one item each, named for the group and never for one product.',
     )
   }
   return lines

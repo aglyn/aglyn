@@ -145,7 +145,8 @@ describe('a site design (AGL-3660)', () => {
     // A store's products are its Product grid's (AGL-3676): only how its range is grouped is drawn as pictures.
     expect(at('store', 'Shop by collection')).toBe('pictures')
     expect(at('store', 'Gift sets')).toBe('pictures')
-    expect(at('store', 'Candle care and burn notes')).toBe('ruled')
+    // A store's reasons to buy are icon-led columns, never a band of text alone (AGL-3676).
+    expect(at('store', 'Candle care and burn notes')).toBe('icons')
     expect(['cards', 'ruled']).toContain(at('blog', 'What you will find'))
     expect(['cards', 'ruled']).toContain(at('professional', 'Practice areas'))
   })

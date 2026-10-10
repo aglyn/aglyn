@@ -27,7 +27,7 @@ import { ORDER_STATUS_COMPONENT_ID } from '../constants/order-status'
 import { RETURN_REQUEST_COMPONENT_ID, RETURN_REQUEST_PATH } from '../constants/return-request'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { collectSocialImageFacts } from '@aglyn/tenant-runtime/social-image-facts'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { toPublicProductDetail } from './product'
 import { readProductReviews } from './reviews'
@@ -210,6 +210,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
         host,
         productSnapshot.docs[0].id,
         CommerceModel.liftLegacyProduct(productRaw),
+        storeSettings.get('returns'),
       )
     }
   }
@@ -325,14 +326,21 @@ export function productPriceText(
 }
 
 const PRODUCT_PAGE_NODE = 'pdp__detail'
+const PRODUCT_PAGE_REVIEWS_NODE = 'pdp__reviews'
 const PRODUCT_PAGE_RELATED_NODE = 'pdp__related'
 
 /**
  * The store's built-in product page (AGL-3676), root first, for the layout's
- * slot: the product block for the routed slug and the related products under
- * it — the two blocks a product template is made of.
+ * slot: the product block for the routed slug — with its Details and
+ * Shipping & returns folds under the description, as a designer theme's
+ * product page has them — then the product's reviews where the store's plan
+ * collects them, then the related products as a grid of photo cards.
  */
-export function buildProductPageNodes(slug: string): Record<string, Aglyn.AglynNodeSchema> {
+export function buildProductPageNodes(
+  slug: string,
+  options: { reviews?: boolean } = {},
+): Record<string, Aglyn.AglynNodeSchema> {
+  const reviews = Boolean(options.reviews)
   return {
     [Aglyn.NODE_ROOT_ID]: {
       $id: Aglyn.NODE_ROOT_ID,
@@ -345,22 +353,68 @@ export function buildProductPageNodes(slug: string): Record<string, Aglyn.AglynN
       componentId: 'muiContainer',
       pluginId: 'mui',
       props: { maxWidth: 'lg', sx: { paddingTop: 6, paddingBottom: 10 } },
-      nodes: [PRODUCT_PAGE_NODE, PRODUCT_PAGE_RELATED_NODE],
+      nodes: [
+        PRODUCT_PAGE_NODE,
+        ...(reviews ? [PRODUCT_PAGE_REVIEWS_NODE] : []),
+        PRODUCT_PAGE_RELATED_NODE,
+      ],
     } as Aglyn.AglynNodeSchema,
     [PRODUCT_PAGE_NODE]: {
       $id: PRODUCT_PAGE_NODE,
       parentId: 'pdp__container',
       componentId: 'product-detail',
       pluginId: 'commerce',
-      props: { slug },
+      props: { slug, showDetails: true, showShipping: true },
     } as Aglyn.AglynNodeSchema,
+    ...(reviews
+      ? {
+          [PRODUCT_PAGE_REVIEWS_NODE]: {
+            $id: PRODUCT_PAGE_REVIEWS_NODE,
+            parentId: 'pdp__container',
+            componentId: 'product-reviews',
+            pluginId: 'commerce',
+            props: { heading: 'Reviews', sx: { marginTop: 8 } },
+          } as Aglyn.AglynNodeSchema,
+        }
+      : {}),
     [PRODUCT_PAGE_RELATED_NODE]: {
       $id: PRODUCT_PAGE_RELATED_NODE,
       parentId: 'pdp__container',
       componentId: 'related-products',
       pluginId: 'commerce',
-      props: { heading: 'You may also like', maxItems: 4, sx: { marginTop: 8 } },
+      props: {
+        heading: 'You may also like',
+        maxItems: 4,
+        layout: 'grid',
+        sx: { marginTop: 8 },
+      },
     } as Aglyn.AglynNodeSchema,
+  }
+}
+
+/**
+ * The store's return window for this product, when the store takes returns of
+ * its kind: the settings the return form enforces (`readReturnSettings`), so
+ * the page never states a policy the store does not keep.
+ */
+export function productReturnWindow(
+  product: Pick<CommerceModel.HostProduct, 'type'>,
+  rawReturns: unknown,
+): { windowDays: number } | undefined {
+  const settings = CommerceModel.readReturnSettings(rawReturns)
+  if (!settings.enabled || settings.windowDays <= 0) return undefined
+  if (!settings.eligibleTypes.includes(product.type ?? 'physical')) return undefined
+  return { windowDays: settings.windowDays }
+}
+
+/** Whether the store's plan collects reviews; a failed read leaves them off. */
+async function storeTakesReviews(hostId: string): Promise<boolean> {
+  try {
+    const org = await getOrgForHost(hostId)
+    return Aglyn.checkEntitlement(org?.org as never, 'productReviews')
+  } catch (error) {
+    console.error('reviews entitlement read failed', error)
+    return false
   }
 }
 
@@ -369,13 +423,18 @@ async function composeBuiltInProductPage(
   host: unknown,
   productId: string,
   product: ReturnType<typeof CommerceModel.liftLegacyProduct>,
+  rawReturns?: unknown,
 ) {
   try {
-    const layoutId = await resolveBuiltInPageLayoutId({ hostId, host: host as never })
-    const productReviews = await readProductReviews(hostId, productId).catch((error) => {
-      console.error('product review aggregate failed', error)
-      return { reviews: [], aggregate: { count: 0, average: 0 } }
-    })
+    const [layoutId, productReviews, reviewsOn] = await Promise.all([
+      resolveBuiltInPageLayoutId({ hostId, host: host as never }),
+      readProductReviews(hostId, productId).catch((error) => {
+        console.error('product review aggregate failed', error)
+        return { reviews: [], aggregate: { count: 0, average: 0 } }
+      }),
+      storeTakesReviews(hostId),
+    ])
+    const returns = productReturnWindow(product, rawReturns)
     const card = collectSocialImageFacts([
       product.mediaUrls?.[0] ?? product.imageUrl,
       (host as { seo?: { image?: string } } | null)?.seo?.image,
@@ -383,7 +442,7 @@ async function composeBuiltInProductPage(
     const nodes = await composeNodesWithChrome({
       hostId,
       layoutId,
-      screenNodes: buildProductPageNodes(product.slug),
+      screenNodes: buildProductPageNodes(product.slug, { reviews: reviewsOn }),
       socialImages: card.socialImages,
       host: host as Aglyn.HostTokenSource,
     })
@@ -397,6 +456,9 @@ async function composeBuiltInProductPage(
             commerce: {
               product: toPublicProductDetail(productId, product),
               ...(productReviews.aggregate.count ? { reviews: productReviews } : {}),
+              // The Shipping & returns fold's return line, only when the
+              // store takes returns of this product's kind.
+              ...(returns ? { returns } : {}),
             },
           },
           data: {
