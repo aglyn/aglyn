@@ -397,8 +397,8 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     label: 'Music & bands',
     blurb: 'Artists, bands and DJs, loud and visual',
     icon: 'music',
-    keywords: ['band', 'musician', 'music', 'dj', 'singer', 'songwriter', 'singer-songwriter', 'rapper', 'music producer', 'recording studio', 'record label', 'orchestra', 'choir', 'composer', 'jazz', 'ensemble', 'quartet', 'pianist', 'guitarist', 'drummer', 'violinist', 'tour dates', 'album', 'live music', 'music artist'],
-    hints: ['concert', 'gig', 'tour', 'song', 'shows', 'tracks', 'producer', 'fans', 'listen'],
+    keywords: ['band', 'musician', 'music', 'dj', 'singer', 'songwriter', 'singer-songwriter', 'rapper', 'music producer', 'recording studio', 'record label', 'orchestra', 'choir', 'composer', 'jazz', 'ensemble', 'quartet', 'pianist', 'guitarist', 'drummer', 'violinist', 'tour dates', 'album', 'live music', 'music artist', 'folk band', 'rock band', 'punk band', 'metal band', 'country band', 'bluegrass band', 'cover band', 'wedding band', 'party band', 'duo', 'trio', 'hip hop', 'hip hop artist', 'rap', 'mixtape', 'ep', 'gig', 'discography', 'setlist', 'bandcamp'],
+    hints: ['folk', 'indie', 'bluegrass', 'punk', 'metal', 'record', 'concert', 'tour', 'song', 'shows', 'tracks', 'producer', 'fans', 'listen'],
     starter: 'landing',
     look: { bases: ['carbon', 'minimal', 'material-ui'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'cool', 'tinted'], fonts: ['anton', 'syne', 'grotesk', 'archivo'], corners: ['sharp'], buttons: 'caps', headingScale: 1.3, density: 'regular' },
     design: 'Loud and visual: the name huge in the opening, an image band, a listen section where the platform places a music player for the artist’s own tracks, releases or shows as image cards only as the brief gives them, a short bio, and a booking or contact section. Dark bands are welcome. Never name or link songs by other artists.',
@@ -480,7 +480,7 @@ const tokens = (text: string): string[] =>
  * ABOUT cooking", "a pottery studio: stoneware…"). What comes before is what
  * the site IS; what follows describes it.
  */
-const HEAD_END = /[:;,.()—–]|\s-\s|\b(?:with|for|about|that|who|which|where|in|on|at|of|offering|selling|serving|near|from|by|to)\b/i
+const HEAD_END = /[:;,.()—–]|\s-\s|\b(?:with|for|about|that|who|which|where|in|on|at|of|offering|selling|serving|near|from|by|to|booking|touring|playing|performing)\b/i
 
 /**
  * What a match is worth. A specific one-word keyword picks a kind alone; a
@@ -609,7 +609,10 @@ function aiSiteHeadKind(head: readonly AiSiteKindMatch[], specific: boolean): Ai
  * noun that only one kind has may decide ("a bike shop" is a store, "a hiking
  * group" a community). The audience counts half. The highest score wins; of two equal,
  * the one named later, since English puts the noun last ("a food blog" is a
- * blog). A best score of no more than a stray hint, or a tie that order
+ * blog). Tricky ones, decided: a band that sells merch is music (the band is
+ * the head and the merch only a mention); booking a DJ is music; a music
+ * teacher or music lessons are education; a guitar shop or band merch store
+ * is a store. A best score of no more than a stray hint, or a tie that order
  * cannot settle, is `business`, the most general kind.
  */
 export function aiSiteKindFor(siteType: string, audience = ''): AiSiteKind {
