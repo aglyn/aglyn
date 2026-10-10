@@ -21,6 +21,8 @@
  * not only in a tooltip.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { staffSiteMenuItems } from '../components/staff-site-row-actions.component'
 
 describe('the staff Sites row menu', () => {
@@ -30,8 +32,12 @@ describe('the staff Sites row menu', () => {
       orgId: 'o1',
       homeScreenId: 'home',
       ownerUid: 'u1',
+      subdomain: 'harbor',
+      cname: null,
+      cnameAttachmentPending: false,
     })
     expect(items.map((item) => item.label)).toEqual([
+      'Visit live site',
       'Site details',
       'Preview home page',
       'Organization details',
@@ -39,18 +45,50 @@ describe('the staff Sites row menu', () => {
     ])
     expect(items.every((item) => item.href && !item.disabled)).toBe(true)
     // Only the preview leaves the console's tab.
-    expect(items.filter((item) => item.external).map((item) => item.key)).toEqual(['preview'])
+    expect(
+      items.filter((item) => item.external).map((item) => item.key),
+    ).toEqual(['live', 'preview'])
     expect(items.some((item) => /^Open /.test(item.label))).toBe(false)
   })
 
   it('says on screen why an item is unavailable', () => {
-    const items = staffSiteMenuItems({ $id: 'h1', orgId: null, homeScreenId: null, ownerUid: null })
-    for (const item of items.slice(1)) {
+    const items = staffSiteMenuItems({
+      $id: 'h1',
+      orgId: null,
+      homeScreenId: null,
+      ownerUid: null,
+    })
+    expect(items[0].label).toBe('Visit live site')
+    expect(items[0].description).toBe('This site has no address yet')
+    for (const item of items.filter((i) => i.key !== 'open')) {
       expect(item.disabled).toBe(true)
       expect(item.href).toBeUndefined()
       expect(item.description).toBeTruthy()
       expect(item.description).toBe(item.disabledReason)
     }
-    expect(items[1].description).toBe('No home page published yet')
+    expect(items[2].description).toBe('No home page published yet')
+  })
+})
+
+describe('"Visit live site" lives only in the row menu', () => {
+  it('has no quick icon beside the menu', () => {
+    const source = readFileSync(
+      join(__dirname, '../components/staff-site-row-actions.component.tsx'),
+      'utf8',
+    )
+    expect(source).not.toMatch(/\bquick=/)
+  })
+
+  it('opens the live address in a new tab', () => {
+    const [live] = staffSiteMenuItems({
+      $id: 'h1',
+      orgId: null,
+      homeScreenId: null,
+      subdomain: 'harbor',
+      cname: 'harbor.test',
+      cnameAttachmentPending: false,
+    })
+    expect(live.href).toBeTruthy()
+    expect(live.external).toBe(true)
   })
 })
