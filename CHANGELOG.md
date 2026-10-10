@@ -9,6 +9,36 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.239 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.238...v1.0.0-beta.239)
+
+### Added
+
+- **ai:** the forms Aglyn AI builds write to its datasets ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** site starts create and use datasets for structured content ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **data:** a dataset draft writer and build operation for Aglyn AI ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Fixed
+
+- **ai:** a form's dataset copy uses American spellings ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** the Assist usage strip stays current while jobs spend ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **ai:** a site plan past its datasets is settled in code, never re-asked ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** another plugin's draft opens where its owner lists it ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **data:** datasets open via the record-route registry; seeded records take minted ids ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Documentation
+
+- **ai:** the capability map says how datasets are routed and what is left ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** map every documented capability against what Aglyn AI can do ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **ai:** 230 of 300 is below the warn line ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+
+</details>
+
 ## v1.0.0-beta.238 — 2026-10-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.237...v1.0.0-beta.238)
