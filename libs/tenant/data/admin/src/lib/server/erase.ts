@@ -18,7 +18,10 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { eraseMediaDeliveryScope } from './media-delivery'
-import { deleteHostProjectionForAllMembers } from './host-memberships'
+import {
+  deleteHostProjectionForAllMembers,
+  deleteHostProjectionForUids,
+} from './host-memberships'
 import { detachWorkspaceDomain } from './workspace-domains'
 import {
   CONSOLE_DOMAINS_COLLECTION,
@@ -300,6 +303,13 @@ export async function eraseHost(
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   const orgId = hostSnapshot.get('orgId') as string | undefined
+  // Everyone holding a role on the site itself, org member or not: each has a
+  // `users/{uid}/hostMemberships/{hostId}` row the switcher and the console's
+  // address resolution read, so each must lose it with the site.
+  const hostMemberUids = Object.keys(
+    (hostSnapshot.get('memberRoles') as Record<string, unknown> | undefined) ??
+      {},
+  )
 
   /*==========================================
    * A SITE ITS CONSENT GROUP STILL NEEDS IS NOT ERASED (AGL-3320).
@@ -389,12 +399,26 @@ export async function eraseHost(
       .catch(() => undefined)
     // Drop every member's reverse-index row for this host (AGL-844); the
     // members still exist here (recursiveDelete of the org, if any, is later).
-    await deleteHostProjectionForAllMembers(orgId, hostId).catch(() => undefined)
+    await deleteHostProjectionForAllMembers(
+      orgId,
+      hostId,
+      hostMemberUids,
+    ).catch((error) => {
+      console.error(`eraseHost: projection cleanup failed for ${hostId}`, error)
+    })
     await eraseHostOwnedOrgDocuments(orgId, hostId)
   }
 
   // The host document tree (screens/layouts/versions/counters/products/…).
   await firestore.recursiveDelete(hostRef)
+
+  // Once more now the site is gone: a membership sync that was mid-flight when
+  // the first pass ran can write the row back afterwards, and a row for a
+  // deleted site keeps it in the switcher and mapped to its subdomain. Last
+  // thing that touches the rows, so nothing can follow it.
+  await deleteHostProjectionForUids(hostId, hostMemberUids).catch(
+    () => undefined,
+  )
 
   // The site's names no longer serve it (AGL-3629): plugins undo what they
   // registered for each — commerce's Stripe payment method domains. Raised
