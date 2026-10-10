@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { AppLink } from './app-link'
 import { MdiIcon } from './mdi-icon/mdi-icon'
 import {
@@ -145,14 +146,20 @@ export interface ListRowActionsProps {
 function quickActionMenuItem(
   quick: ListQuickAction,
 ): RowActionsMenuItem {
+  const external = opensInNewTab(quick)
   return {
     key: 'quick',
     label: quick.label,
-    icon: <MdiIcon path={quick.icon} size={0.8} />,
+    // A new-tab item already ends in the open-in-new mark, so an open-in-new
+    // glyph in front of it drew the same arrow on both sides of one label.
+    icon:
+      external && quick.icon === mdiOpenInNew.path ? undefined : (
+        <MdiIcon path={quick.icon} size={0.8} />
+      ),
     // `href` is off-site and opens a new tab; `to` is an in-app route,
     // which a preview opens in a new tab too.
     href: quick.href ?? quick.to,
-    external: opensInNewTab(quick),
+    external,
     onClick: quick.href || quick.to ? undefined : quick.onClick,
     disabled: Boolean(quick.unavailableReason),
     disabledReason: quick.unavailableReason,

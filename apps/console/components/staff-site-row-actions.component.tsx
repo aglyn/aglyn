@@ -19,6 +19,7 @@
 
 import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { buildRoute, Route } from '../constants/route-links'
 import { buildSiteLiveUrl } from '../constants/tenant-links'
 import { staffSitePreviewHref } from '../utils/staff-site-links'
@@ -73,6 +74,59 @@ export const staffSiteLiveUrl = (
   })
 
 /**
+ * The menu under the row's ⋮, after "Visit live site" (the quick action,
+ * which `ListRowActions` restates first). Each label names where it goes —
+ * a staff page, or a new tab — rather than "Open …" four times over (Zach,
+ * 2026-10-09: "confusing menu items"). An item a row cannot use says why on
+ * a second line, not only in a tooltip nobody hovers: the preview of a site
+ * with no published home page, a site with no organization, an organization
+ * with no owner.
+ */
+export function staffSiteMenuItems(
+  site: Pick<StaffSiteRow, '$id' | 'orgId' | 'homeScreenId'> & { ownerUid?: string | null },
+): RowActionsMenuItem[] {
+  const unavailable = (reason: string) => ({
+    disabled: true,
+    disabledReason: reason,
+    description: reason,
+  })
+  return [
+    {
+      key: 'open',
+      label: 'Site details',
+      href: buildRoute(Route.ADMIN_SITE_DETAIL, { hostId: site.$id }),
+    },
+    site.homeScreenId
+      ? {
+          key: 'preview',
+          label: 'Preview home page',
+          href: staffSitePreviewHref(site.$id, 'screen', site.homeScreenId),
+          external: true,
+        }
+      : {
+          key: 'preview',
+          label: 'Preview home page',
+          external: true,
+          ...unavailable('No home page published yet'),
+        },
+    site.orgId
+      ? {
+          key: 'org',
+          label: 'Organization details',
+          href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: site.orgId }),
+        }
+      : { key: 'org', label: 'Organization details', ...unavailable('Belongs to no organization') },
+    site.ownerUid
+      ? {
+          key: 'owner',
+          label: 'Owner details',
+          href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.ownerUid }),
+        }
+      : { key: 'owner', label: 'Owner details', ...unavailable('The organization records no owner') },
+  ]
+}
+
+/**
  * The row's ways out: the live site and the preview in a new tab, and the
  * staff pages for the site, its organization and its owner. Shared with the
  * organization page's Sites card so both lists offer the same menu.
@@ -94,43 +148,7 @@ export function StaffSiteRowActions(props: {
         href: liveUrl,
         unavailableReason: liveUrl ? undefined : 'This site has no address yet',
       }}
-      items={[
-        {
-          key: 'open',
-          label: 'Open site',
-          href: buildRoute(Route.ADMIN_SITE_DETAIL, { hostId: site.$id }),
-        },
-        {
-          key: 'preview',
-          label: 'Open preview',
-          href: site.homeScreenId
-            ? staffSitePreviewHref(site.$id, 'screen', site.homeScreenId)
-            : undefined,
-          external: true,
-          disabled: !site.homeScreenId,
-          disabledReason: site.homeScreenId
-            ? undefined
-            : 'No home page is published — open the site to preview another page',
-        },
-        {
-          key: 'org',
-          label: 'Open organization',
-          href: site.orgId
-            ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: site.orgId })
-            : undefined,
-          disabled: !site.orgId,
-          disabledReason: site.orgId ? undefined : 'This site belongs to no organization',
-        },
-        {
-          key: 'owner',
-          label: 'Open owner',
-          href: site.ownerUid
-            ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.ownerUid })
-            : undefined,
-          disabled: !site.ownerUid,
-          disabledReason: site.ownerUid ? undefined : 'The organization records no owner',
-        },
-      ]}
+      items={staffSiteMenuItems(site)}
     />
   )
 }

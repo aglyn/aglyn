@@ -65,6 +65,12 @@ export interface RowActionsMenuItem {
    * nothing on its own, and an absent one and an inapplicable one look alike.
    */
   disabledReason?: string
+  /**
+   * A short second line under the label, always on screen — where a
+   * disabled item says why without waiting for a hover, or an item says
+   * where it goes when its label alone cannot.
+   */
+  description?: string
 }
 
 /**
@@ -169,6 +175,7 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
                     ? { primary: { color: 'error.main' } }
                     : undefined
                 }
+                secondary={item.description}
               >
                 {item.label}
               </ListItemText>

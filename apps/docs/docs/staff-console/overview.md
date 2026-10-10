@@ -381,12 +381,15 @@ The row menu holds the ways out of the list:
 
 - **Visit live site** opens the site's public address in a new tab — its custom
   domain when it has one, otherwise its platform subdomain.
-- **Open preview** opens the site's home page as its draft renders, in a new
-  tab, without joining the site or impersonating anyone. It is unavailable, and
-  says so, for a site that publishes no home page; open the site to preview any
-  other page.
-- **Open organization** and **Open owner** go to the staff pages for the
+- **Site details** opens the site's staff page.
+- **Preview home page** opens the site's home page as its draft renders, in a
+  new tab, without joining the site or impersonating anyone. For a site with no
+  published home page it is unavailable and says so under its name; open the
+  site to preview any other page.
+- **Organization details** and **Owner details** go to the staff pages for the
   organization and its owner.
+
+**Visit live site** is also the icon beside the menu.
 
 #### Filter the site list {#filter-the-site-list}
 
