@@ -45,10 +45,11 @@ import {
  * order, so they need no composite at all.
  *
  * The Organizations grid sorts by its column headers (`ORG_LIST_COLUMN_SORTS`):
- * Organization A to Z and back (`nameLower`) and Created either way. An
+ * Organization A to Z and back (`nameLower`), Created either way and Last
+ * activity either way (`lastActivityAt`, see "Last activity" below). An
  * `orderBy` on a data field drops every organization that lacks it, so only
- * fields EVERY organization carries are offered — `nameLower` and `createdAt`
- * are stamped by `createOrganization`. The stored plan and the billing status
+ * fields EVERY organization carries are offered — `nameLower`, `createdAt`
+ * and `lastActivityAt` are stamped by `createOrganization`. The stored plan and the billing status
  * are absent on an org that never had one, so their columns do not sort: the
  * sort would hide exactly those orgs — so Plan, Subscription and Site limit,
  * which the row DERIVES (the effective plan, the billing subcollection, the
@@ -204,7 +205,56 @@ export const ORG_LIST_COLUMN_SORTS: readonly ListQuerySort[] = [
   { path: 'createdAt', direction: 'asc', column: 'createdAt', label: 'Created' },
   { path: 'nameLower', direction: 'asc', column: 'name', label: 'Organization' },
   { path: 'nameLower', direction: 'desc', column: 'name', label: 'Organization' },
+  {
+    path: 'lastActivityAt',
+    direction: 'desc',
+    column: 'lastActivityAt',
+    label: 'Last activity',
+  },
+  {
+    path: 'lastActivityAt',
+    direction: 'asc',
+    column: 'lastActivityAt',
+    label: 'Last activity',
+  },
 ]
+
+/*
+ * LAST ACTIVITY.
+ *
+ * `orgs/{orgId}.lastActivityAt` — when any member last used the console
+ * inside this organization. Stamped by `/api/orgs/last-activity`, which the
+ * org shell calls on real input (a click, a key, a scroll) at most once per
+ * `ORG_LAST_ACTIVITY_INTERVAL_MS` per tab, and which itself writes at most
+ * once per interval per organization however many members and tabs are
+ * active — so the field is accurate to that interval and costs at most four
+ * writes an hour for the busiest workspace. An impersonation session does
+ * not stamp it: that is staff, not the customer.
+ *
+ * `createOrganization` stamps it at birth, so a workspace nobody has opened
+ * yet reads its creation as its last activity rather than lacking the field;
+ * `tools/scripts/backfill-org-last-activity.mjs` seeds every organization
+ * written before then. That is what makes it safe to sort by: an `orderBy`
+ * drops every organization that lacks the field, so — like `nameLower` and
+ * `createdAt` — it is a field EVERY organization carries. It is not a
+ * filter: a range on it would be the table's second range.
+ */
+
+/** Where an organization's last activity is stored. */
+export const ORG_LAST_ACTIVITY_PATH = 'lastActivityAt'
+
+/**
+ * How stale `lastActivityAt` may be before an active member's next input
+ * writes it again. The client throttles its calls to this, and the route
+ * refuses to write a value fresher than it.
+ */
+export const ORG_LAST_ACTIVITY_INTERVAL_MS = 15 * 60_000
+
+/**
+ * Fields every organization carries that the grid sorts by without a filter
+ * offering them — stamped at creation and backfilled (see above).
+ */
+export const ORG_ALWAYS_STAMPED_SORT_PATHS: readonly string[] = [ORG_LAST_ACTIVITY_PATH]
 
 /** Where an organization's search tokens are stored. */
 export const ORG_NAME_TOKENS_PATH = 'nameTokens'

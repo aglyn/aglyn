@@ -168,6 +168,8 @@ async function handler(request: Request): Promise<Response> {
             }
           : null,
         createdAt: ts(data['createdAt']),
+        // When any member last used the console in this org (`utils/org-list-query.ts`).
+        lastActivityAt: ts(data['lastActivityAt']),
         // In force NOW — the chip and the Suspended filter give one answer.
         suspended: suspensionInForce(data['suspendedAt'], data['suspendedUntilMs']),
         suspendedAt: ts(data['suspendedAt']),

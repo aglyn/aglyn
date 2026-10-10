@@ -65,7 +65,6 @@ import {
   ORG_LIST_QUERY,
   ORG_SUSPENDED_FILTER_OPTIONS,
 } from '../../../../utils/org-list-query'
-import { mdiChartLine } from '@aglyn/shared-data-mdi'
 import {
   ListTable,
   listActionsColumn,
@@ -93,6 +92,10 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import {
+  formatStaffActivity,
+  formatStaffTimestamp,
+} from '../../../../utils/staff-timestamps'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -558,32 +561,63 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           </Typography>
         ),
       },
+      {
+        /*
+         * When any member last used the console in this organization
+         * (`lastActivityAt`, `utils/org-list-query.ts`). Sorted by the
+         * route's query over every organization, like Created.
+         */
+        field: 'lastActivityAt',
+        headerName: 'Last activity',
+        description:
+          'When any member last used the console in this organization (accurate to 15 minutes).',
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (_value, row: any) =>
+          row.lastActivityAt?.seconds ? new Date(row.lastActivityAt.seconds * 1000) : null,
+        renderCell: ({ row }: any) => {
+          const at = row.lastActivityAt?.seconds ? row.lastActivityAt.seconds * 1000 : null
+          return (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              title={formatStaffTimestamp(at)}
+            >
+              {formatStaffActivity(at)}
+            </Typography>
+          )
+        },
+      },
       listActionsColumn(
         (row: any) => (
           <StaffOrgActions
             org={row}
             onChanged={refresh}
+            /*
+             * No quick icon (Zach, 2026-10-09: "confusing menu items and
+             * duplicate icon"). `ListRowActions` restates a quick action as
+             * the menu's first entry, so the old chart button was the same
+             * action twice, and the menu's "Open" repeated the row's own
+             * click. The menu now holds one new-tab entry, marked once, and
+             * every entry names what it does to the organization.
+             */
             rowActions={{
               label: row.name ?? row.$id,
-              // Opening the org is the row's own click; the quick action is
-              // the one other thing worth a direct press.
-              quick: {
-                icon: mdiChartLine.path,
-                label: 'Usage',
-                onClick: () => void handleShowUsage(row.$id)(),
-                // Renders it disabled WITH the reason, rather than removing
-                // it: an absent control and a busy one look identical, and
-                // only one of them is honest.
-                unavailableReason:
-                  usageLoading === row.$id ? 'Loading usage…' : undefined,
-              },
               items: [
                 {
-                  key: 'open',
-                  label: 'Open',
+                  key: 'details',
+                  label: 'Organization details',
                   href: buildRoute(Route.ADMIN_ORG_DETAIL, {
                     orgId: row.$id,
                   }),
+                  external: true,
+                },
+                {
+                  key: 'usage',
+                  label:
+                    usageLoading === row.$id ? 'Loading usage…' : 'View usage',
+                  onClick: () => void handleShowUsage(row.$id)(),
+                  disabled: usageLoading === row.$id,
                 },
               ],
             }}

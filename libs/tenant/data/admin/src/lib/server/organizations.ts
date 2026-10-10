@@ -396,6 +396,10 @@ export async function createOrganization(
       suspended: false,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+      // Creating the workspace is its owner's first activity in it, and the
+      // staff Organizations list sorts by this field: an `orderBy` drops a
+      // document that lacks it, so it is written from birth, never later.
+      lastActivityAt: FieldValue.serverTimestamp(),
     })
     tx.set(
       db.collection('orgs').doc(orgId).collection('members').doc(ownerUid),

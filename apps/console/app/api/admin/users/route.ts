@@ -40,6 +40,7 @@ import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-pla
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import {
+  accountLastActiveAt,
   userListSort,
   USER_LIST_FILTER_FIELDS,
   USER_LIST_SORT_VALUES,
@@ -175,6 +176,8 @@ async function handler(request: Request): Promise<Response> {
       staffRole: record.customClaims?.['staffRole'] ?? null,
       createdAt: record.metadata.creationTime ?? null,
       lastSignInAt: record.metadata.lastSignInTime ?? null,
+      // Last activity: the later of that sign-in and the last session refresh.
+      lastActiveAt: accountLastActiveAt(record.metadata),
       providers: record.providerData.map((provider) => provider.providerId),
       /** GCIP tenant id, or null for a project-pool (non-SSO) account. */
       tenantId,
