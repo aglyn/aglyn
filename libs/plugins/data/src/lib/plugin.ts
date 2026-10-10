@@ -26,6 +26,7 @@ import { registerPageRecordSource } from '@aglyn/aglyn/app-utils/page-record-sou
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { DATASET_TRANSFER_RESOURCE } from './transfer/dataset-transfer-key'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
+import { DATASET_IMAGE_FIELD } from './model/dataset-image-field'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 import { RECORD_PAGE_SOURCE } from './record-pages/record-page-source'
 import { registerDataRecordRoutes } from './model/data-record-routes'
@@ -60,6 +61,8 @@ export function registerDataConsole(): void {
   // The "Page address" field type (AGL-3475), for the schema dialog's type
   // list and the record editor's checks.
   Aglyn.registerCustomFieldType(RECORD_PAGE_ADDRESS_FIELD)
+  // A record's photo (AGL-3616), which a page's Image binds.
+  Aglyn.registerCustomFieldType(DATASET_IMAGE_FIELD)
   // A record template draws on the canvas for one of its records (AGL-3475).
   registerPageRecordSource(RECORD_PAGE_SOURCE)
   // The workspace's datasets, for another plugin's picker (AGL-3080).

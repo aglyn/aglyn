@@ -218,6 +218,30 @@ describe('a deleted site renders as gone, with nothing beneath it (AGL-3596)', (
     expect(screen.queryByText(/site page/)).toBeNull()
   })
 
+  it('REGRESSION — a stale projection row naming a site whose doc is gone shows "doesn\'t exist anymore", not an endless spinner', async () => {
+    // The server keeps answering with the deleted id (the user's
+    // hostMemberships row outlived the site), so re-resolving cannot clear it.
+    mockGetDocsFromServer.mockResolvedValue(snap([{ id: DELETED_ID }]))
+    renderShell()
+    await settle()
+
+    hostDocBecomes({
+      data: undefined,
+      status: 'success',
+      fromCache: false,
+      serverDenied: false,
+    })
+    await settle()
+    await settle()
+
+    expect(screen.getByText('This site doesn’t exist anymore')).toBeTruthy()
+    expect(
+      screen.getByRole('link', { name: 'Back to Sites' }).getAttribute('href'),
+    ).toBe('/acme/hosts')
+    expect(screen.queryByText(/site page/)).toBeNull()
+    expect(document.querySelector('[role="progressbar"]')).toBeNull()
+  })
+
   it('a refused host doc is re-resolved the same way', async () => {
     mockGetDocsFromServer.mockResolvedValue(snap([{ id: 'host-1' }]))
     renderShell()

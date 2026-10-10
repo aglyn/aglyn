@@ -31,6 +31,7 @@ import {
   DATASET_STEP_TYPES,
   DATASET_STORAGE_METER_ID,
 } from './constants/bundle-common'
+import { DATASET_IMAGE_FIELD } from './model/dataset-image-field'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 import { datasetsSitePackage } from './site-bundle/datasets-package'
 
@@ -121,6 +122,8 @@ export function registerDataServerDeclarations(): void {
   // A record's page address (AGL-3475) is checked on every server path that
   // writes a record, the tenant's form and automation writes included.
   registerCustomFieldType(RECORD_PAGE_ADDRESS_FIELD)
+  // A record's photo (AGL-3616), the address an Image binds, checked the same way.
+  registerCustomFieldType(DATASET_IMAGE_FIELD)
   // Record pages in the sitemap and `/llms.txt` (AGL-3475), declared as the
   // `records` family in `plugins.config.json`; the reads load with the first
   // sitemap a crawler asks for.

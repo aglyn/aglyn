@@ -33,6 +33,7 @@ import {
   aiResolveLayoutPictures,
 } from '../layout-language/ai-layout-pictures'
 import {
+  AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
   aiStockBusinessWords,
@@ -314,12 +315,15 @@ describe('the stock photo searches (AGL-3660)', () => {
     const yoga = aiStockSiteTerms(
       'A family-owned yoga studio in Austin for busy parents',
     )
-    expect(yoga).toEqual({
+    expect(yoga).toMatchObject({
       business: 'yoga studio',
       craft: 'yoga',
       domain: ['yoga'],
       broad: ['yoga studio', 'yoga'],
+      // No craft kin, so no maker at work; its words let in what they name ("parents").
+      making: [],
     })
+    expect(yoga.named).toEqual(expect.arrayContaining(['yoga', 'parent']))
     expect(
       aiStockSearchesFor(
         { role: 'hero', alt: 'x', aspect: 16 / 9 },
@@ -1093,6 +1097,21 @@ describe('a picture of a thing shows the thing (AGL-3660, the Juniper Clay start
     )
     expect(avoid).toEqual(['media:host-1/m-portrait'])
     expect(read.sort()).toEqual(['about', 'broken'])
+    // What the site's datasets' records show is never placed again either (AGL-3616).
+    expect(
+      await aiJobPagesPlacedPhotos(
+        {} as never,
+        {
+          hostId: 'host-1',
+          job: { inputs: { [AI_STOCK_PHOTO_PAGES_INPUT]: ['about'], [AI_STOCK_PHOTO_AVOID_INPUT]: ['media:host-1/m-bowl', 'not-a-photo'] } },
+          draftId: 'work',
+        },
+        readNodes,
+      ),
+    ).toEqual(['media:host-1/m-bowl', 'media:host-1/m-portrait'])
+    expect(
+      await aiJobPagesPlacedPhotos({} as never, { hostId: 'host-1', job: { inputs: { [AI_STOCK_PHOTO_AVOID_INPUT]: ['media:host-1/m-bowl'] } }, draftId: 'w' }, readNodes),
+    ).toEqual(['media:host-1/m-bowl'])
     expect(
       await aiJobPagesPlacedPhotos(
         {} as never,

@@ -60,6 +60,15 @@ numbers joined by hyphens, up to 64 characters.
 See [Service and location pages from a dataset](../../guides/service-and-location-pages-from-a-dataset.md)
 for how the pages are built.
 
+### Image fields {#image-fields}
+
+An **Image** field holds a record's photo: a portfolio piece, a dish, a team member.
+Pick **Image** in the field's type list. Its value is a photo from your media library
+or an `https://` link to one. To show it, bind an Image's source to the field, such as
+`{{item.image}}`, inside a repeat or on a record template. When Aglyn AI builds a
+dataset for a list people look at, such as pieces, a menu or classes, it adds this
+field and gives each record a stock photo you can replace.
+
 ## Edit records
 
 Open the **typed document editor** to add and edit records. Each field renders the input for

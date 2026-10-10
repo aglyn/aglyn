@@ -386,13 +386,34 @@ export async function deleteMemberHostProjections(
 export async function deleteHostProjectionForAllMembers(
   orgId: string,
   hostId: string,
+  /**
+   * Holders to clear besides the org's members: the host's own `memberRoles`
+   * keys. A site collaborator who is not an org member has a row too, and
+   * the site switcher kept listing a deleted site for them.
+   */
+  extraUids: readonly string[] = [],
 ): Promise<void> {
   const db = firestore()
   const members = await readOrgMembers(db, orgId)
+  const uids = new Set<string>([
+    ...members.map((member) => member.$id),
+    ...extraUids.filter(Boolean),
+  ])
+  await deleteHostProjectionForUids(hostId, [...uids])
+}
+
+/** Delete the projection row of one host for exactly these users. */
+export async function deleteHostProjectionForUids(
+  hostId: string,
+  uids: readonly string[],
+): Promise<void> {
+  const db = firestore()
   await commitChunked(
     db,
-    members.map((member) => (batch: FirebaseFirestore.WriteBatch) => {
-      batch.delete(membershipRef(db, member.$id, hostId))
-    }),
+    [...new Set(uids.filter(Boolean))].map(
+      (uid) => (batch: FirebaseFirestore.WriteBatch) => {
+        batch.delete(membershipRef(db, uid, hostId))
+      },
+    ),
   )
 }
