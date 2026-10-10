@@ -88,6 +88,13 @@ export function publishAiUsageMeter(
   for (const listener of listeners.get(key) ?? []) listener(meter)
 }
 
+/** The envelope a reader holds now (hydrated from the browser if need be), for the jobs list's refresh. */
+export function readAiUsageMeter(uid: string, orgId: string): AiUsageMeterWire | null {
+  const key = keyOf(uid, orgId)
+  if (!meters.has(key)) meters.set(key, hydrate(uid, orgId))
+  return meters.get(key) ?? null
+}
+
 /** Forget every envelope; specs start each case from nothing. */
 export function resetAiUsageMetersForTests(): void {
   meters.clear()
@@ -107,8 +114,7 @@ export function useAiUsageMeter(orgId: string | null | undefined): AiUsageMeterW
       setMeter(null)
       return undefined
     }
-    if (!meters.has(key)) meters.set(key, hydrate(uid, orgId))
-    setMeter(meters.get(key) ?? null)
+    setMeter(readAiUsageMeter(uid, orgId))
     const subscribed = listeners.get(key) ?? new Set<Listener>()
     listeners.set(key, subscribed)
     subscribed.add(setMeter)

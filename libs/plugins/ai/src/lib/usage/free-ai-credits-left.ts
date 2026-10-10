@@ -17,6 +17,7 @@
 
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiFreeCreditsResetOn, type AiFreeCreditsLeft } from '../model/ai-site-job'
+import { aiUsageMeterState } from './ai-usage-wire'
 import { assistCreditsFromUsd, resolveAssistCreditBudget } from './assist-credits'
 import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from './assist-credit-returns'
 import {
@@ -94,7 +95,7 @@ export async function readFreeAiCreditsLeft(
       account.accountUid ? freeAccountUsageRef(firestore, account.accountUid, month).get() : Promise.resolve(null),
     ])
     const pending = Number.isFinite(input.pendingUsd) && (input.pendingUsd ?? 0) > 0 ? (input.pendingUsd as number) : 0
-    const left = freeAiCreditsLeftFrom({
+    const spend: FreeAiSpend = {
       accountSpentUsd: accountMonth
         ? assistSpendAfterReturnsUsd(accountMonth.get('estCostUsd'), accountMonth.get(ASSIST_RETURNED_USD_FIELD)) +
           pending
@@ -102,8 +103,21 @@ export async function readFreeAiCreditsLeft(
       orgSpentUsd:
         assistSpendAfterReturnsUsd(orgMonth.get('estCostUsd'), orgMonth.get(ASSIST_RETURNED_USD_FIELD)) + pending,
       orgBandCredits: resolveAssistCreditBudget(org),
+    }
+    const left = freeAiCreditsLeftFrom(spend)
+    const accountCredits = spend.accountSpentUsd === null ? null : assistCreditsFromUsd(spend.accountSpentUsd)
+    const orgCredits = assistCreditsFromUsd(spend.orgSpentUsd)
+    const state = aiUsageMeterState({
+      mine: { used: accountCredits ?? orgCredits, limit: FREE_AI_TASTE_CREDITS_PER_MONTH, mode: 'hard', scope: null, free: true },
+      pool: { used: orgCredits, limit: spend.orgBandCredits },
+      refused: left <= 0,
     })
-    return { left, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: aiFreeCreditsResetOn(input.now) }
+    return {
+      left,
+      total: FREE_AI_TASTE_CREDITS_PER_MONTH,
+      resetsOn: aiFreeCreditsResetOn(input.now),
+      used: { account: accountCredits, org: orgCredits, orgBand: spend.orgBandCredits, state },
+    }
   } catch (error) {
     console.error('free ai credits read failed', { orgId: input.orgId, error })
     return null

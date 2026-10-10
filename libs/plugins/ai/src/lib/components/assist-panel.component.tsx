@@ -104,6 +104,7 @@ import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
 import { useAiModelChoice } from './use-ai-model-choice'
+import { followAiJobsForUsageMeter } from './ai-usage-meter-refresh'
 import { usePublishAiUsageMeter } from './use-ai-usage-meter'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
@@ -756,6 +757,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // plan's `aiGenerative` and their own `ai.generate`, as the drawer's gate.
   const jobsVisible = Boolean(scopedOrgId) && editRungHint
   const inFlight = useAiJobsInFlight(user, scopedOrgId, jobsVisible)
+  // The same read tells the usage strip what a Free workspace has left, so
+  // jobs that spend between chat messages move it (AGL-3722).
+  useEffect(() => followAiJobsForUsageMeter(), [])
   const jobsActivity = aiJobsActivity(inFlight)
   // Any surface asking to open AI jobs — an "Open AI jobs" button, the
   // indicator, a notification's link — opens the panel on its drawer.
