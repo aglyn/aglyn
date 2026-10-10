@@ -315,12 +315,15 @@ describe('the stock photo searches (AGL-3660)', () => {
     const yoga = aiStockSiteTerms(
       'A family-owned yoga studio in Austin for busy parents',
     )
-    expect(yoga).toEqual({
+    expect(yoga).toMatchObject({
       business: 'yoga studio',
       craft: 'yoga',
       domain: ['yoga'],
       broad: ['yoga studio', 'yoga'],
+      // No craft kin, so no maker at work; its words let in what they name ("parents").
+      making: [],
     })
+    expect(yoga.named).toEqual(expect.arrayContaining(['yoga', 'parent']))
     expect(
       aiStockSearchesFor(
         { role: 'hero', alt: 'x', aspect: 16 / 9 },

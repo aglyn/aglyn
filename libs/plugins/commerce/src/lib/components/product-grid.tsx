@@ -487,9 +487,9 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       gridTemplateColumns: {
         // Photo cards pair up on a phone, as a shop's catalog does; an
         // outlined card with its photo strip takes the row.
-        xs: photoCards ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)',
-        sm: 'repeat(2, 1fr)',
-        md: `repeat(${desktopColumns}, 1fr)`,
+        xs: photoCards ? 'repeat(2, minmax(0, 1fr))' : 'repeat(1, minmax(0, 1fr))',
+        sm: 'repeat(2, minmax(0, 1fr))',
+        md: `repeat(${desktopColumns}, minmax(0, 1fr))`,
       },
     }
     // The rows the query returned, as returned (AGL-3321).
@@ -807,7 +807,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
             key={item.id}
             variant={photoCards ? 'elevation' : 'outlined'}
             elevation={0}
-            sx={photoCards ? { bgcolor: 'transparent', overflow: 'visible' } : undefined}
+            sx={photoCards ? { bgcolor: 'transparent', overflow: 'visible', minWidth: 0 } : { minWidth: 0 }}
           >
             <CardActionArea
               href={hostId ? `/products/${item.slug}` : undefined}
@@ -822,6 +822,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   sx={
                     photoCards
                       ? {
+                          width: '100%',
                           aspectRatio: '4 / 5',
                           objectFit: 'cover',
                           borderRadius: 2,
