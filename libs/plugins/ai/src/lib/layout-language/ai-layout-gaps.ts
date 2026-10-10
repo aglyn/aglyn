@@ -284,12 +284,31 @@ function repeatedByEntries(nodes: GapNodes): Set<string> {
   return repeated
 }
 
+/** A record's own token, which a repeat over a dataset fills per record when the page renders. */
+const ITEM_TOKEN = /\{\{\s*item\.[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)?\s*\}\}/g
+
+/** Every node a repeat over a dataset copies once per record (AGL-3616), the repeating node included. */
+function repeatedByDataset(nodes: GapNodes): Set<string> {
+  const repeated = new Set<string>()
+  for (const [id, node] of Object.entries(nodes)) {
+    const key = node.props?.['repeatDataset']
+    if (typeof key !== 'string' || !key.trim()) continue
+    for (const each of subtree(nodes, id)) repeated.add(each)
+  }
+  return repeated
+}
+
 function refsOf(nodes: GapNodes, names: AiLayoutRefNames): Array<{ id: string; refs: string[]; text: string }> {
   // A post's card names its post by the entry's tokens, which the page fills
   // per post: words a visitor reads as the post's own, never a reference.
+  // A dataset's card names its record by the record's, the same way (AGL-3616).
   const repeated = repeatedByEntries(nodes)
+  const records = repeatedByDataset(nodes)
   return Object.entries(nodes).flatMap(([id, node]) => {
-    const texts = shownTexts(node).map((slot) => (repeated.has(id) ? slot.get().replace(ENTRY_TOKEN, '') : slot.get()))
+    const texts = shownTexts(node).map((slot) => {
+      const text = repeated.has(id) ? slot.get().replace(ENTRY_TOKEN, '') : slot.get()
+      return records.has(id) ? text.replace(ITEM_TOKEN, '') : text
+    })
     const refs = [...new Set(texts.flatMap((text) => refsIn(text, names)))]
     return refs.length ? [{ id, refs, text: texts.filter((text) => refsIn(text, names).length).join(' ') }] : []
   })

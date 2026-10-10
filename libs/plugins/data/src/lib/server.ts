@@ -19,6 +19,8 @@ import {
   registerPluginApiRoute,
   type PluginApiSubjectResolver,
 } from '@aglyn/aglyn/server'
+import { registerDatasetAiCapability } from './server/dataset-ai-capability'
+import { registerDatasetDraftWriter } from './server/dataset-drafts'
 import { datasetsHandler } from './server/datasets-route'
 import { recordPagesHandler } from './record-pages/record-pages-route'
 
@@ -53,4 +55,10 @@ export function registerDataConsoleApi(): void {
   })
   // A site's record templates (AGL-3475): `POST /api/hosts/record-pages`.
   registerPluginApiRoute('hosts/record-pages', { web: recordPagesHandler })
+  // A dataset another plugin asks for by name (AGL-3616): Aglyn AI keeping a
+  // menu, a team or a list of services as records, under this plugin's rules.
+  // The console runs AI jobs (AGL-3026).
+  registerDatasetDraftWriter()
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerDatasetAiCapability()
 }

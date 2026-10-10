@@ -85,6 +85,8 @@ import {
 import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { aiDatasetListingsOf } from './ai-job-site-datasets'
+import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
   type AiJobItemOutcome,
@@ -256,6 +258,12 @@ export function aiBuildUnitJob(
     if (pages.length) inputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) inputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
+    // The datasets this build made, repeated in the sections that name them (AGL-3616).
+    const datasets = [...built.entries()]
+      .filter(([, entry]) => entry.kind === 'dataset')
+      .map(([name, entry]) => ({ id: entry.id, name: context.units.find((one) => one.item?.name.toLowerCase() === name)?.label ?? entry.label }))
+    const listings = aiDatasetListingsOf(datasets, plan.screens)
+    if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   return {
     ...job,
@@ -345,9 +353,11 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     /** The build's last pass puts its pages live, where it was asked and confirmed. */
     const finish = async (outcome: AiJobStepOutcome, extraPages: readonly AiJobOutput[] = []): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesBuild(job) || job.sitePublish || !job.hostId) return outcome
+      // A record template renders once per record only once its binding is
+      // saved, so it is never published at its own address (AGL-3616).
       const pageIds = new Set(
         units
-          .filter((one) => one.screen && aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }))
+          .filter((one) => one.screen && !one.screen.record && aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }))
           .flatMap((one) => rows.get(one.slot)?.outputs ?? []),
       )
       const pages = [

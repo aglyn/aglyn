@@ -858,14 +858,20 @@ export function aiSiteWords(
 
 /**
  * What a scaffold builds for itself: the layout its pages render inside, the
- * form they place, and the palette suggestion a member applies in the Theme
- * section. Anything else a plan asks to create is a job of its own.
+ * form they place, the palette suggestion a member applies in the Theme
+ * section, and the datasets its structured content is kept in (AGL-3616),
+ * which the data plugin writes. Anything else a plan asks to create is a job
+ * of its own.
  */
 export const AI_SITE_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'layout',
   'form',
   'theme-change',
+  'dataset',
 ]
+
+/** The most datasets one site start creates (AGL-3616). */
+export const AI_SITE_DATASETS_MAX = 3
 
 /** The creations a scaffold cannot build, in the order the plan lists them, each named once. */
 export function aiSitePlanPrerequisites(
@@ -925,6 +931,10 @@ export function aiSitePlanShapeRefusal(
   }
   if (!screens.some((screen) => screen.nav)) {
     return 'No page in this plan is in the site navigation. Describe the site again.'
+  }
+  const datasets = plan.create.filter((entry) => entry.kind === 'dataset').length
+  if (datasets > AI_SITE_DATASETS_MAX) {
+    return `This plan creates ${datasets} datasets, and a site scaffold creates at most ${AI_SITE_DATASETS_MAX}. Keep the others' items on their pages.`
   }
   return null
 }

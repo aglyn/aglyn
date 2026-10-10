@@ -2499,7 +2499,8 @@ function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBl
   if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
   const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
   if (!index) return null
-  return { kind: 'button', text: listing.kind === 'tracks' ? 'All music' : 'Shop all', to: `page:${index.screenId}`, style: 'secondary' }
+  const text = listing.kind === 'tracks' ? 'All music' : listing.kind === 'records' ? 'See all' : 'Shop all'
+  return { kind: 'button', text, to: `page:${index.screenId}`, style: 'secondary' }
 }
 
 function listingSection(
@@ -2809,6 +2810,8 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
       null,
       'products',
     )
+  } else if (listing.kind === 'records') {
+    id = recordsElement(scope, listing, featured ? shown : null)
   } else {
     id = postsElement(scope, listing, featured ? shown : COLLECTION_INDEX_POSTS)
   }
@@ -2880,6 +2883,73 @@ function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: numb
     ruled ? null : { display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 5 },
     [card],
     'posts',
+  )
+}
+
+// ── A dataset's records (AGL-3616) ───────────────────────────────────────
+
+/** A field whose name says it is a record's kicker: its category, role, time or place. */
+const RECORD_KICKER = /\b(category|categories|type|kind|role|title|position|section|course|date|dates|time|times|when|day|days|location|place|where|venue|city|duration|level|tag|tags)\b/i
+/** A field whose name says it is a record's words: its description, bio or answer. */
+const RECORD_BODY = /\b(description|summary|details?|about|bio|biography|answer|text|notes?|body|blurb|overview|excerpt|ingredients|includes)\b/i
+/** A dataset of questions and answers, listed as a ruled list rather than cards. */
+const RECORD_QUESTIONS = /\b(faqs?|questions?|q ?& ?a)\b/i
+
+/** The fields a record's card shows: its name, a kicker line and its words, each by id. */
+export function aiLayoutRecordCardFields(
+  fields: readonly { id: string; name: string; type: string }[],
+): { title: string | null; kicker: string | null; body: string | null } {
+  const texts = fields.filter((field) => field.type === 'text' || field.type === 'sorted')
+  const title = texts.find((field) => field.type === 'text')?.id ?? null
+  const rest = texts.filter((field) => field.id !== title)
+  const body = rest.find((field) => field.type === 'text' && RECORD_BODY.test(field.name))?.id ?? null
+  const kicker = rest.find((field) => field.id !== body && RECORD_KICKER.test(field.name))?.id ?? null
+  // Failing a named one, the next text field is the record's words.
+  const words = body ?? rest.find((field) => field.type === 'text' && field.id !== kicker)?.id ?? null
+  return { title, kicker, body: words }
+}
+
+/**
+ * A dataset's records, as the site's design lists them: a Box that repeats
+ * its one card over the dataset — the platform's own repeat, which the page
+ * renders once per record — or, for questions and answers, a ruled list.
+ * The card binds the record's fields as `{{item.<field>}}`: its name as the
+ * item's title, a kicker over it (its category, role or time), and its words.
+ * A featured band shows the first few; a page of its own, every record.
+ */
+function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: number | null): string {
+  const { page } = scope
+  const tree = page.tree
+  const fields = aiLayoutRecordCardFields(listing.fields ?? [])
+  const questions = RECORD_QUESTIONS.test(listing.name)
+  const textAlign = scope.centered && !questions ? { align: 'center' } : {}
+  const kicker = fields.kicker
+    ? tree.add('muiTypography', { children: `{{item.${fields.kicker}}}`, variant: 'overline', component: 'p', ...textAlign }, accent(scope), null, 'recordKicker')
+    : null
+  const title = fields.title
+    ? tree.add(
+        'muiTypography',
+        { children: `{{item.${fields.title}}}`, variant: questions ? 'h6' : 'h5', component: itemElement(scope), ...textAlign },
+        null,
+        null,
+        'recordTitle',
+      )
+    : null
+  const body = fields.body
+    ? tree.add('muiTypography', { children: `{{item.${fields.body}}}`, variant: 'body2', ...textAlign }, muted(scope), null, 'recordBody')
+    : null
+  page.settled.push({ at: scope.at, what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : ' as cards'}` })
+  const card = questions
+    ? tree.add('muiStack', { spacing: '1' }, { borderTop: 1, pt: 3 }, [title, body], 'record')
+    : tree.add('muiStack', { spacing: '1', ...(scope.centered ? { alignItems: 'center' } : {}) }, null, [kicker, title, body], 'record')
+  return tree.add(
+    AI_LAYOUT_LISTING_ELEMENTS.records,
+    { repeatDataset: listing.datasetId, ...(limit ? { repeatLimit: String(limit) } : {}) },
+    questions
+      ? { display: 'grid', gap: 3 }
+      : { display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 5 },
+    [card],
+    'records',
   )
 }
 

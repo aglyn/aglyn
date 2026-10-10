@@ -50,6 +50,8 @@ import { aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuild
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
 import { registerAiJobStep } from './ai-jobs'
+import { aiBuildBuiltRefs } from './ai-build-unit-outcome'
+import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 
 const NOW = new Date('2026-10-06T12:00:00.000Z')
 
@@ -434,5 +436,64 @@ describe('a Free build is admitted on its measured p90, and asks before it start
     reads.length = 0
     await expect(ask(0, { org: { plan: 'pro' } })).resolves.toBeNull()
     expect(reads).toEqual([])
+  })
+})
+
+describe('a build’s datasets (AGL-3616)', () => {
+  /** The data plugin's operation, as it registers it: a draft its own writer makes. */
+  const DATASET: PluginAiCapability = {
+    op: 'dataset',
+    noun: 'dataset',
+    where: 'Data',
+    intents: ['a menu, a team, services'],
+    argsSchema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Name' }, fields: { type: 'array', description: 'Fields', items: { type: 'string' } } },
+      required: ['name', 'fields'],
+      additionalProperties: false,
+    },
+    maxPerPlan: 3,
+    freeAllowed: false,
+    feature: 'dataStore',
+    draftResource: 'dataset',
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  }
+  const menuPlan = (): AiJobPlan => ({
+    ...plan(),
+    screens: [
+      { ...plan().screens[0], title: 'Menu', slug: '/menu', sections: [{ name: 'The menu', uses: ['new:Menu'], items: 12 }], id: 'page-menu' },
+      { ...plan().screens[0], title: 'Dish', slug: '/dish', nav: false, sections: [{ name: 'Dish', uses: [], items: 0 }], record: { dataset: 'new:Menu', base: 'menu' }, id: 'page-dish' },
+    ],
+    items: [{ slot: 'i0', op: 'dataset', name: 'Menu', why: 'The dishes.', dependsOn: [], degrade: 'omit', args: { name: 'Menu', fields: ['Dish'] }, id: 'ds-menu' }],
+  })
+
+  it('names the dataset item a page lists, and the one a record template shows, by the id its writer gave it', () => {
+    const units = aiBuildUnits(menuPlan())
+    const ledger = aiBuildInitialLedger(units).map((row) => (row.slot === 'i0' ? { ...row, status: 'succeeded' as const, outputs: ['ds-menu'] } : row))
+    const outputs = [{ resource: 'draft' as const, draftResource: 'dataset', id: 'ds-menu', hostId: 'host-1', label: 'Menu' }]
+    expect(aiBuildBuiltRefs(units, ledger, outputs).get('menu')).toEqual({ id: 'ds-menu', label: 'Menu', kind: 'dataset' })
+    const ops: AiBuildOps = new Map([...OPS, ['dataset', DATASET]])
+    const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
+    const derived = aiBuildUnitJob(job({ plan: menuPlan(), outputs }), page, { kind: 'page', units, ledger, ops })
+    expect(derived.plan?.screens[0].sections[0].uses).toEqual(['ds-menu'])
+    expect(aiLayoutListingsOf(derived.inputs)).toEqual([
+      expect.objectContaining({ kind: 'records', datasetId: 'ds-menu', name: 'Menu', placements: [{ screenId: 'page-menu', section: 0, role: 'index' }] }),
+    ])
+    const template = aiBuildUnitJob(job({ plan: menuPlan(), outputs }), units.find((unit) => unit.slot === 'p1') as (typeof units)[number], {
+      kind: 'page',
+      units,
+      ledger,
+      ops,
+    })
+    expect(template.plan?.screens[0].record).toEqual({ dataset: 'ds-menu', base: 'menu' })
+  })
+
+  it('lists nothing for a dataset item that was not made', () => {
+    const units = aiBuildUnits(menuPlan())
+    const ledger = aiBuildInitialLedger(units).map((row) => (row.slot === 'i0' ? { ...row, status: 'failed' as const } : row))
+    const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
+    const derived = aiBuildUnitJob(job({ plan: menuPlan() }), page, { kind: 'page', units, ledger, ops: OPS })
+    expect(aiLayoutListingsOf(derived.inputs)).toEqual([])
   })
 })

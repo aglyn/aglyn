@@ -24,7 +24,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
-import { aiLayoutListingAt, aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
+import { aiLayoutListingAt, aiLayoutListingsOf, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
   AI_LAYOUT_PAGE_TOOL,
@@ -231,9 +231,32 @@ export function aiLayoutPageTargets(input: {
       props: component.props,
     })),
     facts: aiLayoutFacts(job),
-    // The site's catalog and blog, and the sections that list them (AGL-3676).
-    listings: aiLayoutListingsOf(job.inputs),
+    // The site's catalog and blog, and the sections that list them (AGL-3676),
+    // and its datasets (AGL-3616).
+    listings: aiLayoutListingsWithDatasets(aiLayoutListingsOf(job.inputs), inventory),
   }
+}
+
+/**
+ * A page's listings with each dataset's held to the site's inventory
+ * (AGL-3616): a records listing is kept only where the site has the dataset —
+ * the tree check admits a repeat over no other, and a card left repeating
+ * over nothing would show its `{{item.*}}` — and one that names no fields
+ * takes the inventory's, in the dataset's order.
+ */
+export function aiLayoutListingsWithDatasets(
+  listings: readonly AiLayoutListing[],
+  inventory: Pick<AiSiteInventory, 'datasets'> | null,
+): AiLayoutListing[] {
+  return listings.flatMap((listing) => {
+    if (listing.kind !== 'records') return [listing]
+    const row = inventory?.datasets.find((dataset) => dataset.id === listing.datasetId)
+    if (!row) return []
+    const fields = listing.fields?.length
+      ? listing.fields
+      : row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name, type: 'text' }))
+    return fields.length ? [{ ...listing, fields }] : []
+  })
 }
 
 /**
@@ -282,6 +305,11 @@ export function aiLayoutPagePrompt(input: {
     if (listed?.listing.kind === 'signup') {
       // A store's newsletter field (AGL-3676), placed by the platform.
       return `${index + 1}. "${section.name}"${places}; the platform places the newsletter sign-up field here: write its heading and one line on what subscribers hear about, from the brief, and no form, button or offer the brief does not make`
+    }
+    if (listed?.listing.kind === 'records') {
+      // One of the site's datasets (AGL-3616), repeated by the platform over its records.
+      const names = listed.listing.records.length ? ` (${listed.listing.records.slice(0, 6).map((name) => `“${name}”`).join(', ')})` : ''
+      return `${index + 1}. "${section.name}"${places}; the platform lists the records of the dataset “${listed.listing.name}”${names} here itself, one card each: write only its heading and a line about them, and no cards, list or images for them`
     }
     if (listed) {
       return `${index + 1}. "${section.name}"${places}; the platform lists ${listed.listing.name}'s ${listed.listing.kind} here itself, with their photos and links: write only its heading and a line about them, and no cards, list or images for them`
