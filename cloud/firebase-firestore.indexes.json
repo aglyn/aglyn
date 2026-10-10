@@ -1321,6 +1321,20 @@
       ]
     },
     {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "rating",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "orgs",
       "queryScope": "COLLECTION",
       "fields": [
