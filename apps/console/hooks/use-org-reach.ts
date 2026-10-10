@@ -26,6 +26,7 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { reachableSitesSettled } from '../utils/collaborator-navigation'
 import { useOrgScope } from './use-org-scope'
 
 /**
@@ -94,7 +95,16 @@ export function useReachableSites(enabled: boolean): {
         where('orgId', '==', orgId),
         limit(2),
       ),
+      // Metadata changes too, so the server's confirmation of a cached
+      // answer arrives even when the rows did not change.
+      { includeMetadataChanges: true },
       (snapshot) => {
+        // A cached single row is not this member's reach (see
+        // `reachableSitesSettled`): acting on it sent a member of several
+        // sites from the sites list into the one they last opened.
+        if (!reachableSitesSettled(snapshot.metadata.fromCache, snapshot.size)) {
+          return
+        }
         setState({
           sites: snapshot.docs.map(
             (entry) => ({ $id: entry.id, ...entry.data() }) as ReachableSite,
