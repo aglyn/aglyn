@@ -28,12 +28,14 @@ import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   AI_CREDIT_RANGE_ZERO,
   AI_MEASURED_PASS_CREDITS,
+  AI_MEASURED_STANDALONE_CREATION_CREDITS,
   AI_MEASURED_UNIT_CREDITS,
   aiCreditRangeAdd,
   aiCreditRangeOf,
   aiCreditRangeOrdered,
   aiCreditsPromptFor,
   aiMeasuredPageCredits,
+  aiMeasuredStandalonePageCredits,
   type AiCreditRange,
   type AiCreditsPrompt,
   type AiMeasuredCredits,
@@ -955,6 +957,8 @@ export interface AiPlanPassOptions {
   welcomeEmail?: boolean
   /** The creation kinds the job builds itself; a scaffold's when absent. */
   creates?: readonly AiBuildPlanCreateKind[]
+  /** Each page and creation written on its own (`aiStandaloneScreenCreditRange`), not as a site start’s (AGL-3722). */
+  standalonePages?: boolean
 }
 
 /**
@@ -1018,9 +1022,13 @@ export function aiSiteCreditEstimate(
  * The measured cost of one creation a plan builds (AGL-3722): a layout's or
  * a form's as measured, a theme's as the site start's look measured, and
  * any other kind at the stand-in a single-answer creation is priced at.
+ * `standalone` for one written on its own — a build's, a page job's — rather
+ * than inside a site start's warm run.
  */
-export function aiCreationMeasuredCredits(kind: string): AiMeasuredCredits {
-  if (kind === 'layout') return AI_MEASURED_UNIT_CREDITS.layout
+export function aiCreationMeasuredCredits(kind: string, options: { standalone?: boolean } = {}): AiMeasuredCredits {
+  if (kind === 'layout') {
+    return options.standalone ? AI_MEASURED_STANDALONE_CREATION_CREDITS.layout : AI_MEASURED_UNIT_CREDITS.layout
+  }
   if (kind === 'form') return AI_MEASURED_UNIT_CREDITS.form
   if (kind === 'theme' || kind === 'theme-change') return AI_MEASURED_UNIT_CREDITS.theme
   return AI_MEASURED_PASS_CREDITS
@@ -1032,6 +1040,19 @@ export function aiScreenCreditRange(sections: number): AiCreditRange {
 }
 
 /**
+ * A page written on its own — an Assist build's, a page job's — as a range
+ * (AGL-3722): a fixed cost and one per section as such pages measured
+ * (`AI_MEASURED_STANDALONE_PAGE`), never a site start's later, cheaper
+ * pages; the ceiling as `aiScreenCreditRange`'s.
+ */
+export function aiStandaloneScreenCreditRange(sections: number): AiCreditRange {
+  return aiCreditRangeOf(
+    aiMeasuredStandalonePageCredits(sections),
+    (Math.max(0, sections) + 1) * AI_SITE_PASS_CREDITS,
+  )
+}
+
+/**
  * What a plan is likely to cost, its p90 and its ceiling (AGL-3722): the
  * same units `aiPlanCreditEstimate` counts, each at what it measured; the
  * ceiling IS `aiPlanCreditEstimate`.
@@ -1039,20 +1060,28 @@ export function aiScreenCreditRange(sections: number): AiCreditRange {
 export function aiPlanCreditRange(plan: AiBuildPlan, options: AiPlanPassOptions = {}): AiCreditRange {
   const creates = options.creates ?? AI_SITE_CREATE_KINDS
   let range = AI_CREDIT_RANGE_ZERO
-  for (const screen of plan.screens) range = aiCreditRangeAdd(range, aiScreenCreditRange(screen.sections.length))
+  const screenRange = options.standalonePages ? aiStandaloneScreenCreditRange : aiScreenCreditRange
+  for (const screen of plan.screens) range = aiCreditRangeAdd(range, screenRange(screen.sections.length))
   for (const entry of plan.create) {
     if (!creates.includes(entry.kind)) continue
-    range = aiCreditRangeAdd(range, aiCreditRangeOf(aiCreationMeasuredCredits(entry.kind), AI_SITE_PASS_CREDITS))
+    range = aiCreditRangeAdd(
+      range,
+      aiCreditRangeOf(aiCreationMeasuredCredits(entry.kind, { standalone: options.standalonePages }), AI_SITE_PASS_CREDITS),
+    )
   }
   if (options.welcomeEmail) range = aiCreditRangeAdd(range, aiCreditRangeOf(AI_MEASURED_PASS_CREDITS, AI_SITE_PASS_CREDITS))
   return aiCreditRangeOrdered(range)
 }
 
-/** `aiJobPlanCreditEstimate` as a range (AGL-3722): the same kinds, each at what it measured. */
+/**
+ * `aiJobPlanCreditEstimate` as a range (AGL-3722): the same kinds, each at
+ * what it measured. Only a site start writes its pages in one warm run; every
+ * other kind's page is written on its own.
+ */
 export function aiJobPlanCreditRange(kind: string, plan: AiBuildPlan): AiCreditRange {
   const creates =
     kind === 'page' ? AI_PAGE_CREATE_KINDS : AI_JOB_CREATE_KINDS[kind as keyof typeof AI_JOB_CREATE_KINDS]
-  return aiPlanCreditRange(plan, creates ? { creates } : {})
+  return aiPlanCreditRange(plan, { ...(creates ? { creates } : {}), standalonePages: kind !== 'site' })
 }
 
 /**

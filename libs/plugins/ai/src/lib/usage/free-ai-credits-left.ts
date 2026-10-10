@@ -71,7 +71,18 @@ export function freeAiCreditsLeftFrom(spend: FreeAiSpend): number {
  */
 export async function readFreeAiCreditsLeft(
   firestore: FirebaseFirestore.Firestore,
-  input: { orgId: string; org: object | null; now: Date },
+  input: {
+    orgId: string
+    org: object | null
+    now: Date
+    /**
+     * Spend already made but not yet on either meter, in billed USD: the plan
+     * step asks what is left from inside the step, before the machine meters
+     * what that step just spent (AGL-3722). Without it the plan card quoted
+     * 101 left when the plan's own 54 credits made it 48.
+     */
+    pendingUsd?: number
+  },
 ): Promise<AiFreeCreditsLeft | null> {
   const org = input.org as AssistMeteredOrg | null
   const account = freeAssistAccount(org)
@@ -82,11 +93,14 @@ export async function readFreeAiCreditsLeft(
       firestore.collection('orgs').doc(input.orgId).collection('assistUsage').doc(month).get(),
       account.accountUid ? freeAccountUsageRef(firestore, account.accountUid, month).get() : Promise.resolve(null),
     ])
+    const pending = Number.isFinite(input.pendingUsd) && (input.pendingUsd ?? 0) > 0 ? (input.pendingUsd as number) : 0
     const left = freeAiCreditsLeftFrom({
       accountSpentUsd: accountMonth
-        ? assistSpendAfterReturnsUsd(accountMonth.get('estCostUsd'), accountMonth.get(ASSIST_RETURNED_USD_FIELD))
+        ? assistSpendAfterReturnsUsd(accountMonth.get('estCostUsd'), accountMonth.get(ASSIST_RETURNED_USD_FIELD)) +
+          pending
         : null,
-      orgSpentUsd: assistSpendAfterReturnsUsd(orgMonth.get('estCostUsd'), orgMonth.get(ASSIST_RETURNED_USD_FIELD)),
+      orgSpentUsd:
+        assistSpendAfterReturnsUsd(orgMonth.get('estCostUsd'), orgMonth.get(ASSIST_RETURNED_USD_FIELD)) + pending,
       orgBandCredits: resolveAssistCreditBudget(org),
     })
     return { left, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: aiFreeCreditsResetOn(input.now) }

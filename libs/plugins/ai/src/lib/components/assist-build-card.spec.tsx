@@ -149,10 +149,10 @@ it('a Free Try again past what is left asks first, and runs only on Build what f
     ],
   })
   card(finished)
-  const retry = screen.getByRole('button', { name: /^Try again what failed · About 6 credits \(up to 100\)$/ })
-  const prompt = { likely: 6, p90: 8, ceiling: 100, left: 5, resetsOn: '2026-11-01', smaller: null }
+  const retry = screen.getByRole('button', { name: /^Try again what failed · About 22 credits \(up to 100\)$/ })
+  const prompt = { likely: 22, p90: 42, ceiling: 100, left: 5, resetsOn: '2026-11-01', smaller: null }
   mockFetch.mockResolvedValueOnce(
-    json({ error: 'This build is about 6 credits (up to 100).', code: AI_CREDITS_CONFIRM_CODE, credits: prompt, job: finished }, 409),
+    json({ error: 'This build is about 22 credits (up to 100).', code: AI_CREDITS_CONFIRM_CODE, credits: prompt, job: finished }, 409),
   )
   fireEvent.click(retry)
   const go = await screen.findByRole('button', { name: 'Build what fits' })

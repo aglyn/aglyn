@@ -374,15 +374,17 @@ describe('a Free build against what is left (AGL-3722)', () => {
       },
     })
 
-  it('quotes the StillWing brief at about 106 credits (up to 650), not the 650 it was refused at', () => {
-    expect(aiBuildCreditRange(STILLWING)).toEqual({ likely: 106, p90: 127, ceiling: 650 })
+  it('quotes the StillWing brief at about 141 credits (up to 650), each page as a page written on its own costs', () => {
+    // Home 6 sections 16 + 6×6 = 52 (p90 30 + 6×12 = 102), quote 3 sections
+    // 34 (p90 66), a build's own layout 26 (30) and the form 29 (31) — AGL-3722.
+    expect(aiBuildCreditRange(STILLWING)).toEqual({ likely: 141, p90: 229, ceiling: 650 })
   })
 
   it('confirms with no prompt when its p90 fits, and shows what is left', () => {
     const onResume = jest.fn()
-    render(<AiJobPlan job={build(164)} onResume={onResume} orgSlug="acme" />)
-    expect(screen.getByText(/About 106 credits \(up to 650\)/).textContent).toContain(
-      'You have 164 of your free AI credits left this month, until November 1.',
+    render(<AiJobPlan job={build(240)} onResume={onResume} orgSlug="acme" />)
+    expect(screen.getByText(/About 141 credits \(up to 650\)/).textContent).toContain(
+      'You have 240 of your free AI credits left this month, until November 1.',
     )
     expect(screen.queryByText(/Build what fits/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
@@ -393,19 +395,65 @@ describe('a Free build against what is left (AGL-3722)', () => {
     const onResume = jest.fn()
     render(<AiJobPlan job={build(90)} onResume={onResume} orgSlug="acme" />)
     expect(screen.getByRole('alert').textContent).toContain(
-      'This build is about 106 credits (up to 650). You have 90 left, so it will build as much as it can and pause when your credits run out. You can upgrade or resume when they renew on November 1.',
+      'This build is about 141 credits (up to 650). You have 90 left, so it will build as much as it can and pause when your credits run out. You can upgrade or resume when they renew on November 1.',
     )
     // No plain Confirm: only an explicit choice starts it.
     expect(screen.queryByRole('button', { name: 'Confirm plan' })).toBeNull()
     expect(onResume).not.toHaveBeenCalled()
     const home = aiBuildCreditRange(aiBuildFirstPagePlan(STILLWING)!)
     // The home page and the layout it is drawn in; the quote page and its form wait.
-    expect(home).toEqual({ likely: 36 + 23, p90: 48 + 24, ceiling: 350 + 50 })
+    expect(home).toEqual({ likely: 52 + 26, p90: 102 + 30, ceiling: 350 + 50 })
     expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toContain('#plans')
-    fireEvent.click(screen.getByRole('button', { name: `Build the home page first (about ${home.likely} credits)` }))
+    // One set of option buttons: a short label, its figure under it (Zach, 2026-10-10).
+    const smaller = screen.getByRole('button', { name: 'Build the home page first' })
+    expect(smaller.textContent).toContain(`About ${home.likely} credits`)
+    expect(screen.getByRole('button', { name: 'Build what fits' }).textContent).toContain('Uses your 90 credits left, then pauses')
+    expect(screen.getByRole('link', { name: 'Upgrade' }).textContent).toContain('Get more credits')
+    fireEvent.click(smaller)
     expect(onResume).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'job-1' }), { creditsConfirmed: true, reduce: 'first-page' })
     fireEvent.click(screen.getByRole('button', { name: 'Build what fits' }))
     expect(onResume).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'job-1' }), { creditsConfirmed: true })
+  })
+
+  // The Maple Street Bakery build of 2026-10-10: "About us" and "Custom cakes",
+  // four sections each, reusing the layout and the contact form. Quoted at
+  // about 48 when its pages were priced as a site start's later pages.
+  const BAKERY = {
+    ...PLAN,
+    create: [],
+    screens: [
+      page('About us', '/about-us', ['hero', 'story', 'team', 'cta'].map((name) => section(name))),
+      page('Custom cakes', '/custom-cakes', ['hero', 'gallery', 'how', 'inquiry'].map((name) => section(name))),
+    ],
+  }
+
+  it('quotes two new 4-section pages at about 80 credits, not 48, and their first page at about 40', () => {
+    expect(aiBuildCreditRange(BAKERY)).toEqual({ likely: 80, p90: 156, ceiling: 500 })
+    expect(aiBuildCreditRange(aiBuildFirstPagePlan(BAKERY)!)).toEqual({ likely: 40, p90: 78, ceiling: 250 })
+  })
+
+  it('asks on the card, before Confirm, when the plan’s p90 is past what is left — the figure net of the plan', () => {
+    render(
+      <AiJobPlan
+        job={job({
+          kind: 'build',
+          plan: BAKERY,
+          review: { reason: 'plan', message: 'The plan is ready.', findings: [], freeCredits: { left: 48, total: 300, resetsOn: '2026-11-01' } },
+        })}
+        onResume={jest.fn()}
+        orgSlug="acme"
+      />,
+    )
+    expect(screen.getByRole('alert').textContent).toContain('This build is about 80 credits (up to 500). You have 48 left,')
+    expect(screen.queryByRole('button', { name: 'Confirm plan' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Build the About us page first' }).textContent).toContain('About 40 credits')
+    // Two pages is a Free build's cap: the card says so, since a third asked for was left out.
+    expect(screen.getByText(/A Free workspace’s build makes up to 2 pages at a time/)).toBeTruthy()
+  })
+
+  it('says nothing of the page cap on a paid build', () => {
+    render(<AiJobPlan job={job({ kind: 'build', plan: BAKERY })} onResume={jest.fn()} />)
+    expect(screen.queryByText(/makes up to 2 pages/)).toBeNull()
   })
 
   it('quotes a range the same way everywhere', () => {

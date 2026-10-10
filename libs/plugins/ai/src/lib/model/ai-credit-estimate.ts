@@ -92,12 +92,58 @@ export function aiMeasuredPageCredits(sections: number): AiMeasuredCredits {
 }
 
 /**
+ * What a page costs when it is written ON ITS OWN — a page an Assist build or
+ * a page job writes, rather than one of a site start's pages (AGL-3722).
+ *
+ * The table's page item is a site start's: its pages are written one after
+ * another inside one job, the later ones reading the prompt the first one
+ * paid to write, so a 2-section second page measured 19–28. A page written on
+ * its own pays that prompt itself and reads the site it lands on, and costs
+ * what a site start's FIRST page costs: a 5-section home page measured 39–78
+ * (median 40, p90 78), standalone page jobs' writing step 82–105 for a
+ * 2-section page, and the Assist build pages of 2026-10-09 22–89 each. Quoting
+ * a build's pages at the site start's scaled median told a Free workspace
+ * "about 48 credits" for two 4-section pages (AGL-3722, 2026-10-10).
+ *
+ * So it is priced as a fixed cost — the prompt, the site, the listing — and a
+ * cost per section: a 4-section page about 40 (p90 78), a 5-section 46 (p90 90).
+ */
+export const AI_MEASURED_STANDALONE_PAGE = {
+  fixed: { median: 16, p90: 30 },
+  perSection: { median: 6, p90: 12 },
+} as const satisfies Record<string, AiMeasuredCredits>
+
+/** What a page of this many sections written on its own is likely to cost. */
+export function aiMeasuredStandalonePageCredits(sections: number): AiMeasuredCredits {
+  const count = Math.max(1, Math.floor(Number.isFinite(sections) ? sections : AI_MEASURED_PAGE_SECTIONS))
+  const { fixed, perSection } = AI_MEASURED_STANDALONE_PAGE
+  return {
+    median: fixed.median + perSection.median * count,
+    p90: fixed.p90 + perSection.p90 * count,
+  }
+}
+
+/**
+ * What a creation costs when it is written ON ITS OWN (AGL-3722), where it
+ * measured apart from a site start's: an Assist build's layout came to 24–28
+ * (2026-10-09/10), against a site start's 23/24 written in its warm prompt.
+ * A form measured the same either way (25–30 on its own, 29/31 in a site
+ * start), so it keeps the table's figure.
+ */
+export const AI_MEASURED_STANDALONE_CREATION_CREDITS = {
+  layout: { median: 26, p90: 30 },
+} as const satisfies Record<string, AiMeasuredCredits>
+
+/**
  * What one pass of a kind with no measurement of its own is likely to cost
  * (a component, an email design, a template, an item another runner
- * builds): a form's, the measured single-answer creation closest to them.
- * A declared stand-in, replaced the day those kinds are measured.
+ * builds), written on its own: a component job's writing step measured
+ * 52–65, a form job's 37, a layout job's 63, and the Assist build of
+ * 2026-10-09 a welcome email at 46 and a products step at 60. Until
+ * 2026-10-10 this was a site start's form (29/31), which is written inside a
+ * site job's warm prompt and is the cheapest single answer there is.
  */
-export const AI_MEASURED_PASS_CREDITS: AiMeasuredCredits = AI_MEASURED_UNIT_CREDITS.form
+export const AI_MEASURED_PASS_CREDITS: AiMeasuredCredits = { median: 50, p90: 65 }
 
 /** A job's cost as it is quoted: likely, nine times in ten, and at its worst. */
 export interface AiCreditRange {
@@ -182,6 +228,55 @@ export const AI_CREDITS_BUILD_WHAT_FITS = 'Build what fits'
 /** The smaller first build's button: "Build the home page first (about 64 credits)". */
 export function aiCreditsSmallerText(smaller: Pick<AiCreditsSmaller, 'label' | 'likely'>): string {
   return `${smaller.label} (about ${n(smaller.likely)} credits)`
+}
+
+/** Which way on a prompt offers, in the order it offers them. */
+export type AiCreditsChoiceKey = 'fits' | 'smaller' | 'upgrade'
+
+/** One way on, as its option button reads it: a short label and the figure under it (AGL-3722). */
+export interface AiCreditsChoice {
+  key: AiCreditsChoiceKey
+  label: string
+  detail: string
+  /** The one choice drawn as the primary button. */
+  recommended: boolean
+}
+
+const credit = (count: number) => `${n(count)} ${count === 1 ? 'credit' : 'credits'}`
+
+/**
+ * The prompt's ways on, as its three option buttons read them (Zach,
+ * 2026-10-10: "more appealing and consistent"): build what fits, the smaller
+ * first build when there is one, and Upgrade when it can be offered — each a
+ * short sentence-case label with its figure under it. The smaller build is
+ * the recommended one when its p90 fits what is left, since it then finishes;
+ * otherwise building what fits is.
+ */
+export function aiCreditsChoices(
+  prompt: Pick<AiCreditsPrompt, 'left' | 'smaller'>,
+  offers: { smaller: boolean; upgrade: boolean },
+): AiCreditsChoice[] {
+  const left = Math.max(0, Math.floor(prompt.left))
+  const smaller = offers.smaller ? prompt.smaller : null
+  const smallerFits = smaller !== null && smaller.p90 <= left
+  const choices: AiCreditsChoice[] = [
+    {
+      key: 'fits',
+      label: AI_CREDITS_BUILD_WHAT_FITS,
+      detail: `Uses your ${credit(left)} left, then pauses`,
+      recommended: !smallerFits,
+    },
+  ]
+  if (smaller) {
+    choices.push({
+      key: 'smaller',
+      label: smaller.label,
+      detail: smallerFits ? `About ${credit(smaller.likely)}, fits what you have left` : `About ${credit(smaller.likely)}`,
+      recommended: smallerFits,
+    })
+  }
+  if (offers.upgrade) choices.push({ key: 'upgrade', label: 'Upgrade', detail: 'Get more credits', recommended: false })
+  return choices
 }
 
 /** A reset day as a person reads it: "November 1". */

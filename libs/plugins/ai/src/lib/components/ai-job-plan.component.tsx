@@ -22,7 +22,7 @@ import {
   type AiBuildPlanEmbed,
 } from '../model/ai-build-plan'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
-import { aiBuildSmaller, aiJobCreditRange } from '../model/ai-build-job'
+import { aiBuildFreePageCapNote, aiBuildSmaller, aiJobCreditRange } from '../model/ai-build-job'
 import { aiCreditRangeText, aiCreditsPromptFor } from '../model/ai-credit-estimate'
 import { aiFreeCreditsResetLabel } from '../model/ai-site-job'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
@@ -147,6 +147,11 @@ export function AiJobPlan({
   const freeCredits = review?.freeCredits ?? null
   const prompt =
     plan && range && job.kind === 'build' ? aiCreditsPromptFor(range, freeCredits, aiBuildSmaller(plan)) : null
+  // A Free build at its page cap says so (AGL-3722): pages past it were left for a later request.
+  const pageCapNote =
+    plan && waiting && review.reason === 'plan' && job.kind === 'build'
+      ? aiBuildFreePageCapNote(plan, Boolean(freeCredits))
+      : null
   const offersPublish = job.kind === 'build' && job.publishAsked === true && waiting && review.reason === 'plan'
   const publishing = offersPublish && publish ? { publish: true } : {}
   return (
@@ -255,6 +260,11 @@ export function AiJobPlan({
           {freeCredits && !prompt
             ? ` You have ${freeCredits.left.toLocaleString('en-US')} of your free AI credits left this month, until ${aiFreeCreditsResetLabel(freeCredits.resetsOn)}.`
             : ''}
+        </Typography>
+      )}
+      {pageCapNote && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          {pageCapNote}
         </Typography>
       )}
       {waiting && review.retryRefusal && review.reason !== 'plan' && (
