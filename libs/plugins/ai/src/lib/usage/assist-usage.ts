@@ -377,6 +377,13 @@ export interface AssistReservation extends AssistQuotaVerdict {
    */
   free: FreeAssistAccount | null
   /**
+   * The Free account's month in billed USD, net of give-backs, as read inside
+   * the transaction (AGL-3722) — the allowance every Free workspace of the
+   * person draws on. `null` for a paid workspace and for a reservation that
+   * did not read it. Optional so a double without it reads as not read.
+   */
+  freeAccountCostUsd?: number | null
+  /**
    * Measured provider spend for `monthKey` in USD as read inside the
    * transaction, or `null` when the transaction did not consult it.
    *
@@ -687,6 +694,14 @@ async function reserveInTransaction(
           monthlySnapshot.get(ASSIST_RETURNED_USD_FIELD),
         )
       : null
+    // The person's Free allowance, net of give-backs (AGL-3722): what the
+    // usage strip says is theirs, never the workspace's gross per-member row.
+    const freeAccountCostUsd = accountSnapshot
+      ? assistSpendAfterReturnsUsd(
+          accountSnapshot.get('estCostUsd'),
+          accountSnapshot.get(ASSIST_RETURNED_USD_FIELD),
+        )
+      : null
     if (!(used < limit)) {
       recordAssistRefusal(firestore, orgId, month, 'messages')
       return {
@@ -702,6 +717,7 @@ async function reserveInTransaction(
         costLimitUsd,
         budgetUsd,
         free,
+        freeAccountCostUsd,
       }
     }
     // The dollar ceiling, checked AFTER the message cap so the cheaper and
@@ -723,6 +739,7 @@ async function reserveInTransaction(
         costLimitUsd,
         budgetUsd,
         free,
+        freeAccountCostUsd,
       }
     }
     // The org's ceiling on its OVERAGE (AGL-2898), checked after the band
@@ -756,6 +773,7 @@ async function reserveInTransaction(
         costLimitUsd,
         budgetUsd,
         free,
+        freeAccountCostUsd,
       }
     }
     // AGLYN'S OWN OVERAGE GUARDS (AGL-3011), after the workspace's own
@@ -803,6 +821,7 @@ async function reserveInTransaction(
         costLimitUsd,
         budgetUsd,
         free,
+        freeAccountCostUsd,
       }
     }
     // The allotments that apply to the person asking (AGL-2942): read only
@@ -833,6 +852,7 @@ async function reserveInTransaction(
         costLimitUsd,
         budgetUsd,
         free,
+        freeAccountCostUsd,
         allotment,
       }
     }
@@ -857,6 +877,7 @@ async function reserveInTransaction(
         costLimitUsd,
         budgetUsd,
         free,
+        freeAccountCostUsd,
         allotment,
       }
     }
@@ -888,6 +909,7 @@ async function reserveInTransaction(
       costLimitUsd,
       budgetUsd,
       free,
+      freeAccountCostUsd,
       allotment,
     }
   })

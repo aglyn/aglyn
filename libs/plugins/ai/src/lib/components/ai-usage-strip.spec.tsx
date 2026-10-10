@@ -174,6 +174,59 @@ describe('the usage strip', () => {
     expect(screen.queryByTestId('ai-usage-strip')).toBeNull()
   })
 
+  // The Maple Street Bakery panel of 2026-10-10 said "You: 401 credits this
+  // month" beside "Workspace: 200 of 300": the first was the workspace's gross
+  // per-member row, the second this workspace's band. A Free reader now reads
+  // what is LEFT — the less of their own 300 and the workspace's — and both
+  // meters, each used of its limit (AGL-3722).
+  it('on the Free plan says what is left, the less of the person’s 300 and the workspace’s band', () => {
+    render(<AiUsageStrip orgId="org-1" orgSlug="acme" />)
+    act(() =>
+      publishAiUsageMeter(
+        'reader-1',
+        'org-1',
+        meter({
+          pool: { used: 200, limit: 300 },
+          mine: { used: 252, limit: 300, mode: 'hard', scope: null, free: true },
+        }),
+      ),
+    )
+    expect(screen.getByText('You have 48 free AI credits left this month')).toBeTruthy()
+    expect(
+      screen.getByText(/Used: you 252 of 300 across your Free workspaces · this workspace 200 of 300/),
+    ).toBeTruthy()
+    expect(screen.getByRole('progressbar').getAttribute('aria-label')).toBe('84% of your free AI credits used')
+    expect(screen.queryByText(/401/)).toBeNull()
+  })
+
+  it('on the Free plan reads the workspace’s band when it is the nearer wall, and says when both are spent', () => {
+    const { unmount } = render(<AiUsageStrip orgId="org-1" />)
+    act(() =>
+      publishAiUsageMeter(
+        'reader-1',
+        'org-1',
+        meter({ pool: { used: 260, limit: 300 }, mine: { used: 100, limit: 300, mode: 'hard', scope: null, free: true } }),
+      ),
+    )
+    expect(screen.getByText('You have 40 free AI credits left this month')).toBeTruthy()
+    unmount()
+    render(<AiUsageStrip orgId="org-1" orgSlug="acme" />)
+    act(() =>
+      publishAiUsageMeter(
+        'reader-1',
+        'org-1',
+        meter({
+          pool: { used: 300, limit: 300 },
+          mine: { used: 300, limit: 300, mode: 'hard', scope: null, free: true },
+          state: 'capped',
+        }),
+      ),
+    )
+    expect(screen.getByText('You have 0 free AI credits left this month')).toBeTruthy()
+    expect(screen.getByText(/Your free AI credits for this month are used/)).toBeTruthy()
+    expect(screen.queryByText(/Billing → Usage/)).toBeNull()
+  })
+
   it('ignores something that is not an envelope', () => {
     render(<AiUsageStrip orgId="org-1" />)
     act(() => publishAiUsageMeter('reader-1', 'org-1', { pool: {}, error: 'nope' }))

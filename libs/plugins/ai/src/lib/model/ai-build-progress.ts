@@ -29,7 +29,7 @@ import {
   AI_SITE_NOMINAL_SECTIONS,
   AI_SITE_PASS_CREDITS,
   aiCreationMeasuredCredits,
-  aiScreenCreditRange,
+  aiStandaloneScreenCreditRange,
 } from './ai-site-job'
 
 /**
@@ -190,8 +190,8 @@ export function aiBuildCanRetry(job: Pick<AiJobSummary, 'kind' | 'status' | 'ite
 /**
  * What Try again is likely to cost (AGL-3722), quoted beside its button: a
  * build's retried items by `aiBuildCreditRange`; a site's retried rows each
- * at what its kind measured — a page at the nominal sections — held at the
- * reserve a row is retried at. `null` when nothing would run.
+ * at what its kind measured — a page at the nominal sections, written on its
+ * own as a retry is — held at the reserve a row is retried at. `null` when nothing would run.
  */
 export function aiBuildRetryCreditRange(
   job: Pick<AiJobSummary, 'kind' | 'items' | 'plan'>,
@@ -212,8 +212,8 @@ export function aiBuildRetryCreditRange(
       const op = ops.get(slot) ?? ''
       const row =
         op === 'page'
-          ? aiScreenCreditRange(AI_SITE_NOMINAL_SECTIONS)
-          : aiCreditRangeOf(aiCreationMeasuredCredits(op), AI_SITE_PASS_CREDITS)
+          ? aiStandaloneScreenCreditRange(AI_SITE_NOMINAL_SECTIONS)
+          : aiCreditRangeOf(aiCreationMeasuredCredits(op, { standalone: true }), AI_SITE_PASS_CREDITS)
       return aiCreditRangeAdd(total, row)
     }, AI_CREDIT_RANGE_ZERO),
   )

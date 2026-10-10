@@ -835,10 +835,14 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const site = job.kind === 'site'
     // A kept plan waits for its confirmation; a Free build's card is told what
     // is left, so it says before Confirm whether the build fits (AGL-3722).
-    const planReview = async (): Promise<AiJobReview> => {
+    // Net of what THIS plan just spent: the machine meters the step after it
+    // returns, so the meters read here do not hold it yet, and a card told
+    // the figure from before the plan (101) offered Confirm to a person with
+    // 48 left, who met the prompt only after pressing it (2026-10-10).
+    const planReview = async (spentUsd = 0): Promise<AiJobReview> => {
       const review: AiJobReview = { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] }
       if (job.kind !== 'build' || !freeTaste || !readFreeCredits) return review
-      const credits = await readFreeCredits(firestore, { orgId: job.orgId, org, now })
+      const credits = await readFreeCredits(firestore, { orgId: job.orgId, org, now, pendingUsd: spentUsd })
       return credits ? { ...review, freeCredits: credits } : review
     }
     // The model switch's answer for this job (AGL-2942): the creator's pick
@@ -1019,7 +1023,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,
         plan,
-        review: await planReview(),
+        review: await planReview(result.estCostUsd),
       }
     )
   }
