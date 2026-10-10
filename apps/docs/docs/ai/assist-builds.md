@@ -115,6 +115,30 @@ next part.
 To change something it made, ask in the chat, such as *make the about page shorter*.
 Assist opens that draft and proposes the change there.
 
+## When a build makes your site a store {#a-store}
+
+When you ask Assist to *add a shop* or *make this a store*, and the build makes products,
+a product page template or a Shop page, it also adds the pages every store needs. It adds
+only the ones your site does not already have:
+
+- **Your account** at `/account`, where shoppers sign in, see their orders and find what
+  they saved;
+- **Your cart** at `/cart`;
+- **Shipping & returns**, **Privacy policy** and **Terms of sale**, as drafts with the
+  details only you know left in [brackets] for you to fill in.
+
+A page you already have stands in for its store page, at its own address or by what it is
+called. For example, an existing *Privacy Policy* page at `/privacy-policy` is used, and no
+second one is added. The plan card lists the pages it will add as *added for your store
+automatically*. They are built without AI and use no credits. The account and cart pages are
+hidden from search engines. Your site's user accounts are turned on so that shoppers can
+sign in, unless you turned them off. If the build makes a header, the header links the
+account page and the footer links the policies.
+
+This needs a plan that includes a store, with **Commerce** on for the site, and the editor
+role. When the build is done, the card shows **Finish your store**: connect payments, review
+your products, set shipping and tax, and fill in your policies.
+
 ## What it costs {#what-it-costs}
 
 A build spends [AI credits](./ai-credits.md) for each part it makes, and the card shows the

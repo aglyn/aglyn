@@ -25,7 +25,8 @@ import { useEffect, useRef, useState } from 'react'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine, aiBuildRetryCreditRange } from '../model/ai-build-progress'
 import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
-import { aiCreditsBillingHref } from './ai-job-links'
+import { aiCreditsBillingHref, aiStoreFinishLinks } from './ai-job-links'
+import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import type { AssistBuildProposal } from '../model/assist-build'
 import { followAiJobEvents } from './ai-job-events'
@@ -117,6 +118,8 @@ export function AssistBuildCard({
 
   const settled = job ? AI_JOB_TERMINAL_STATUSES.includes(job.status) : false
   const outcome = job ? aiBuildOutcomeLine(job) : null
+  // A build that made the site a store (AGL-3676) ends with what is left before it sells.
+  const storeFinish = job && orgSlug ? aiStoreFinishLinks(job, orgSlug) : null
   return (
     <Paper variant="outlined" sx={{ mt: 1, p: 1.5 }} aria-label="Build plan">
       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
@@ -201,6 +204,11 @@ export function AssistBuildCard({
         <Typography variant="body2" sx={{ mt: 0.5 }}>
           {outcome ?? job?.error ?? ''}
         </Typography>
+      )}
+      {storeFinish && (
+        <Box sx={{ mt: 1 }}>
+          <AiStoreFinishCard steps={storeFinish} />
+        </Box>
       )}
       {job && (
         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>

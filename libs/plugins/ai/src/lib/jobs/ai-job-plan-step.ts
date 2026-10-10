@@ -25,6 +25,7 @@ import {
   type AiBuildPlan,
 } from '../model/ai-build-plan'
 import type { AiJob, AiJobKind, AiJobPlan, AiJobReview, AiJobStatus } from '../model/ai-jobs.types'
+import { AI_BUILD_PRODUCT_OP, aiBuildStorePagesFor } from '../model/ai-build-store-pages'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
@@ -835,6 +836,32 @@ export const readAiBuildOps: AiBuildOpsReader = async ({ job, org, firestore, fr
 }
 
 /**
+ * A build plan with the store pages it adds (AGL-3676): where it turns the
+ * site into a store and the site can have one — its operations include the
+ * commerce plugin's products, which they do only on a plan with commerce and
+ * a site Commerce runs on — the account, cart and policy pages neither the
+ * plan nor the site already has. Worked out here by code, never by the
+ * model, so the plan card shows them before Confirm. Every other plan, and a
+ * build that adds none, carries none.
+ */
+export function aiPlanWithStorePages<T extends AiBuildPlan>(
+  kind: AiJob['kind'],
+  ops: AiBuildOps | null,
+  inventory: Pick<AiSiteInventory, 'screens'> | null,
+  plan: T,
+): T {
+  if (kind !== 'build') return plan
+  // A reused plan's store pages were the other job's site's; this one's are worked out again.
+  const rest: T = { ...plan }
+  delete rest.storePages
+  const storePages = aiBuildStorePagesFor(plan, {
+    store: Boolean(ops?.has(AI_BUILD_PRODUCT_OP)),
+    pages: (inventory?.screens ?? []).map((screen) => ({ id: screen.id, slug: screen.slug, title: screen.name, template: screen.template })),
+  })
+  return storePages ? { ...rest, storePages } : rest
+}
+
+/**
  * A build plan's items with what each can cost (AGL-3616), from its
  * capability, recorded as the plan is kept so the console's estimate and the
  * confirm door read one figure without the registry.
@@ -970,7 +997,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       : null
     if (reused) {
       // The reused plan's draft ids name the other job's drafts; this job's are its own.
-      const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
+      const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
         ...reused.plan,
         status: 'proposed',
         labels: aiPlanLabels(reused.plan, inventory),
@@ -979,7 +1006,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         confirmedBy: null,
         key,
         reusedFrom: reused.jobId,
-      }))
+      })))
       const unspent = aiUnspentOutcome(resolved)
       return (
         (await refusalOnKeep(plan, unspent)) ?? {
@@ -1055,7 +1082,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // A store's plan is a storefront's (AGL-3676): settled before it is kept and priced.
     const answered = site && aiSiteKindOfInputs(job.inputs)?.id === 'store' ? aiSiteStorefrontPlan(result.value, { paid: !freeTaste }) : result.value
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
-    const plan: AiJobPlan = aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
+    const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
       ...answered,
       status: 'proposed',
       labels: aiPlanLabels(answered, inventory),
@@ -1064,7 +1091,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       confirmedAt: null,
       confirmedBy: null,
       key,
-    }))
+    })))
     return (
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,

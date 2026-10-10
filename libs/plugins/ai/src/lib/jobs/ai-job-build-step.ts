@@ -89,6 +89,26 @@ import { aiDatasetListingsOf } from './ai-job-site-datasets'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import {
+  AI_BUILD_STORE_OP,
+  AI_BUILD_STORE_PAGES_PRESENT_NOTE,
+  aiBuildStorePagesOf,
+  aiBuildStorePagesStillMissing,
+  type AiStoreSitePage,
+} from '../model/ai-build-store-pages'
+import {
+  AI_SITE_STORE_LINKS_INPUT,
+  AI_SITE_STORE_PAGES_NOTE,
+  aiStoreFrameLinks,
+  aiStorePagesToWrite,
+} from '../model/ai-site-store-pages'
+import {
+  AI_SITE_STORE_PAGES_INPUT,
+  aiSiteStorePageId,
+  aiSiteStorePagesRefusal,
+  runAiSiteStorePagesUnit,
+  type AiSiteStorePagesInput,
+} from './ai-job-site-store-pages'
+import {
   AI_JOB_BRIEF_MAX_CHARS,
   type AiJobItemOutcome,
   type AiJobStepOutcome,
@@ -152,7 +172,7 @@ export const AI_BUILD_PAGE_NOT_WRITTEN_COPY = 'The page was not written from its
  * sections and its listing — so a runner that never finishes is still
  * bounded while the largest plan is not. Try again starts the count over.
  */
-export const AI_BUILD_MAX_PASSES = AI_BUILD_LIMITS.units * (AI_SITE_MAX_SECTIONS + 1)
+export const AI_BUILD_MAX_PASSES = AI_BUILD_LIMITS.units * (AI_SITE_MAX_SECTIONS + 1) + 1
 
 /** The job kind a creation of the build is built by. */
 const CREATION_JOB_KINDS: Partial<Record<AiBuildPlanCreateKind, AiJobKind>> = {
@@ -277,6 +297,10 @@ export function aiBuildUnitJob(
     const listings = aiDatasetListingsOf(datasets, plan.screens)
     if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
+  // A build that makes the site a store links its account and policies from
+  // the layout it makes (AGL-3676), by path: they are written after it.
+  const storePages = aiBuildStorePagesOf(plan)
+  if (context.kind === 'layout' && storePages) inputs[AI_SITE_STORE_LINKS_INPUT] = aiStoreFrameLinks(storePages.pages)
   return {
     ...job,
     $id: aiBuildUnitJobId(job, unit),
@@ -314,6 +338,47 @@ export interface AiJobBuildStepDeps {
   readNodes?: typeof readAiDraftNodes
   /** The publish a build asked for and confirmed. */
   publish?: typeof aiPublishGuidedSite
+  /** A store's own pages' pass and whether they may be added here (AGL-3676); specs hand in fakes. */
+  storePages?: AiJobStepRunner
+  storePagesRefusal?: typeof aiSiteStorePagesRefusal
+  /** The site's pages as they are now, which a store's own pages are checked against before they are written. */
+  readSitePages?: typeof readAiStoreSitePages
+}
+
+/** The site's pages as a store's own pages are checked against them (AGL-3676): every page that is not deleted. */
+export async function readAiStoreSitePages(firestore: FirebaseFirestore.Firestore, hostId: string): Promise<AiStoreSitePage[]> {
+  const snapshot = await firestore.collection('hosts').doc(hostId).collection('screens').select('displayName', 'slug', 'kind', 'deletedAt').get()
+  return snapshot.docs.flatMap((doc) => {
+    const kind = doc.get('kind')
+    if (doc.get('deletedAt') || (kind && kind !== 'template')) return []
+    const slug = String(doc.get('slug') ?? '')
+    return slug ? [{ id: doc.id, slug, title: String(doc.get('displayName') ?? ''), template: kind === 'template' }] : []
+  })
+}
+
+/**
+ * What a build's store pages unit is told (AGL-3676): the pages its plan kept,
+ * less any the site has gained since — never counting the pages this unit
+ * wrote itself on an earlier pass, which it finds again by their ids — what
+ * their words link, and the layout the plan's Shop page renders inside, the
+ * site's own otherwise.
+ */
+export function aiBuildStorePagesInput(
+  job: AiJob,
+  context: { unitJobId: string; sitePages: readonly AiStoreSitePage[]; units: readonly AiBuildUnit[]; ledger: readonly AiJobItemLedger[] },
+): AiSiteStorePagesInput | null {
+  const plan = job.plan as AiJobPlan
+  const kept = aiBuildStorePagesOf(plan)
+  if (!kept) return null
+  const own = new Set(kept.pages.map((page) => aiSiteStorePageId(context.unitJobId, page.key)))
+  const pages = aiBuildStorePagesStillMissing(
+    kept.pages,
+    context.sitePages.filter((page) => !page.id || !own.has(page.id)),
+  )
+  const built = aiBuildBuiltRefs(context.units, context.ledger, job.outputs ?? [])
+  const shop = plan.screens.find((screen) => !screen.record && screen.slug.replace(/^\/+/, '').split('/')[0].toLowerCase() === kept.facts.shopPath.slice(1))
+  const layout = shop ? aiSiteResolvedRef(shop.layout, built) : null
+  return { pages, facts: kept.facts, layoutId: layout && !isAiPlanNewRef(layout) ? layout : null }
 }
 
 /** Whether a build's workspace spends the Free taste. */
@@ -335,6 +400,9 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
   const pluginAdmission = deps.pluginAdmission ?? aiPluginDraftAdmissionRefusal
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
+  const storePagesRunner = deps.storePages ?? runAiSiteStorePagesUnit
+  const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
+  const readSitePages = deps.readSitePages ?? readAiStoreSitePages
 
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore } = context
@@ -367,9 +435,14 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       if (!aiJobPublishesBuild(job) || job.sitePublish || !job.hostId) return outcome
       // A record template renders once per record only once its binding is
       // saved, so it is never published at its own address (AGL-3616).
+      // A store's own pages (AGL-3676) go live with the pages the build planned.
       const pageIds = new Set(
         units
-          .filter((one) => one.screen && !one.screen.record && aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }))
+          .filter(
+            (one) =>
+              ((one.screen && !one.screen.record) || one.op === AI_BUILD_STORE_OP) &&
+              aiBuildItemDelivered(rows.get(one.slot) ?? { status: 'pending' }),
+          )
           .flatMap((one) => rows.get(one.slot)?.outputs ?? []),
       )
       const pages = [
@@ -379,7 +452,18 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       if (!pages.length) return outcome
       // A canceled build never puts anything live (AGL-3616): its pages stay drafts.
       if (await aiJobCancelAsked(firestore, job, context.signal)) return outcome
-      const sitePublish = await publish(firestore, { job, outputs: pages, now: context.now }).catch((error: unknown) => {
+      // The store pages a layout this build made links and that were not written come out of it.
+      const storePages = aiBuildStorePagesOf(plan)
+      const live = new Set(pages.map((page) => page.proposal?.['storePage']).filter(Boolean))
+      const unwrittenHrefs = storePages
+        ? aiStorePagesToWrite(storePages.pages).filter((page) => !live.has(page.key)).map((page) => page.href)
+        : []
+      const sitePublish = await publish(firestore, {
+        job,
+        outputs: pages,
+        now: context.now,
+        ...(unwrittenHrefs.length ? { unwrittenHrefs } : {}),
+      }).catch((error: unknown) => {
         console.error('ai build publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
@@ -400,6 +484,54 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     if (degradation.skip) {
       return settle({ slot: unit.slot, status: 'skipped', note: degradation.skip, degradedBy: degradation.degradedBy })
     }
+    // A store's own pages (AGL-3676): written by code, behind the site start's gate.
+    if (unit.op === AI_BUILD_STORE_OP) {
+      if (!job.hostId) return settle({ slot: unit.slot, status: 'skipped', note: 'Not built: open the site first.' })
+      if (rows.get(unit.slot)?.status !== 'running') {
+        const refusal = await storePagesRefusal({ ...context, job }).catch((error: unknown) => {
+          console.error('ai build store pages admission failed', { orgId: job.orgId, jobId: job.$id, error })
+          return AI_BUILD_UNIT_EMPTY_COPY
+        })
+        if (refusal) return settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` })
+      }
+      const unitJobId = aiBuildUnitJobId(job, unit)
+      const input = aiBuildStorePagesInput(job, {
+        unitJobId,
+        sitePages: await readSitePages(firestore, job.hostId),
+        units,
+        ledger,
+      })
+      if (!input) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy('store page') })
+      if (!aiStorePagesToWrite(input.pages).length) {
+        return settle({ slot: unit.slot, status: 'skipped', note: AI_BUILD_STORE_PAGES_PRESENT_NOTE })
+      }
+      const derived: AiJob = {
+        ...job,
+        $id: unitJobId,
+        kind: 'text',
+        steps: [],
+        outputs: [],
+        items: null,
+        plan: null,
+        inputs: { ...job.inputs, originJobId: aiOriginJobId(job), [AI_SITE_STORE_PAGES_INPUT]: input },
+      }
+      let outcome: AiJobStepOutcome
+      try {
+        outcome = await storePagesRunner({ ...context, job: derived })
+      } catch (error) {
+        if (aiUnitErrorRetryable(error)) throw error
+        console.error('ai build store pages threw', { orgId: job.orgId, jobId: job.$id, error })
+        return settle(failed(unit.slot, { ours: true, reason: 'step-failure', message: AI_BUILD_UNIT_EMPTY_COPY }))
+      }
+      const stopped = aiUnitFailure(unit.slot, outcome)
+      if (stopped) return settle(stopped, aiUnitSpend(outcome))
+      const ids = outcome.outputs.map((output) => output.id)
+      const done = settle({ slot: unit.slot, status: 'succeeded', outputs: ids, note: AI_SITE_STORE_PAGES_NOTE }, aiUnitSpend(outcome))
+      if (done.continue) return done
+      rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: 'succeeded', outputs: ids })
+      return finish(done, outcome.outputs.filter((output) => output.resource === 'screen'))
+    }
+
     const capability = ops.get(unit.op)
     const noun = capability?.noun ?? unit.op
     if (!capability) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy(noun) })
