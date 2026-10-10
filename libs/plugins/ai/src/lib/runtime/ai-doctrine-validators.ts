@@ -37,10 +37,12 @@ import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
   AI_BUILD_PLAN_EMBED_HOST_NAMES,
+  AI_BUILD_PLAN_LIMITS,
   AI_PLAN_ASKS_FOR_VIDEO,
   aiEmbedHostOf,
   aiEmbedVideoKey,
   aiPlanCreateFor,
+  aiPlanItemFor,
   aiPlanSlugKey,
   aiPlanUndeclaredRefs,
   isAiPlanNewRef,
@@ -3560,12 +3562,22 @@ function creationKey(name: string): string {
  * creation before the rules read the plan, when exactly one creation matches
  * it with case, spaces and punctuation ignored. Two that match, or none, are
  * left for the rules to ask about.
+ *
+ * So is a creation named without its prefix — `Contact form` in a section's
+ * uses for the "Contact form" the plan creates — where the name is no record
+ * the site has (AGL-3660). A re-asked plan told to place its form "by id"
+ * can answer with the form's bare name, which is no reference at all.
  */
-export function aiSettlePlanRefs(plan: AiBuildPlan): AiBuildPlan {
+export function aiSettlePlanRefs(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null = null,
+): AiBuildPlan {
   if (!plan.create.length) return plan
+  const kinds = inventoryKinds(inventory)
   const resolve = (ref: string | null): string | null => {
-    if (!isAiPlanNewRef(ref) || aiPlanCreateFor(plan, ref)) return ref
-    const key = creationKey(ref.slice('new:'.length))
+    if (!ref || kinds.has(ref) || aiPlanCreateFor(plan, ref)) return ref
+    const key = creationKey(isAiPlanNewRef(ref) ? ref.slice('new:'.length) : ref)
+    if (!key) return ref
     const matches = plan.create.filter((entry) => creationKey(entry.name) === key)
     return matches.length === 1 ? `new:${matches[0].name}` : ref
   }
@@ -3638,6 +3650,166 @@ export function aiSettlePlanLayouts(
     ],
     screens: plan.screens.map((screen) => ({ ...screen, layout: `new:${name}` })),
   }
+}
+
+/** A saved form a plan section could place: one the plan creates, or one the site has. */
+interface AiPlanFormChoice {
+  /** As a section's uses names it: `new:<name>` or the inventory id. */
+  ref: string
+  name: string
+  created: boolean
+}
+
+/** Every saved form a plan could place, the plan's own creations first. */
+function planFormChoices(plan: AiBuildPlan, inventory: AiSiteInventory | null): AiPlanFormChoice[] {
+  return [
+    ...plan.create
+      .filter((entry) => entry.kind === 'form')
+      .map((entry) => ({ ref: `new:${entry.name}`, name: entry.name, created: true })),
+    ...(inventory?.forms ?? []).map((form) => ({ ref: form.id, name: form.name, created: false })),
+  ]
+}
+
+/** The form a plan's own words would name for a section's reference, so placements count alike. */
+function formChoiceKey(ref: string, plan: AiBuildPlan): string {
+  const created = isAiPlanNewRef(ref) ? aiPlanCreateFor(plan, ref) : undefined
+  return created ? `new:${created.name}` : ref
+}
+
+/**
+ * The form a section that collects answers places: the one whose name shares
+ * the most words with the section's ("Commission inquiry" → "Commission
+ * inquiry form"), then the one the plan already places most, then the plan's
+ * own creation over a form the site has. `null` when there is none.
+ */
+function bestPlanForm(
+  section: AiBuildPlanSection,
+  choices: readonly AiPlanFormChoice[],
+  placed: ReadonlyMap<string, number>,
+): AiPlanFormChoice | null {
+  const words = new Set(nameTokens(section.name).filter((word) => word !== 'form'))
+  const score = (choice: AiPlanFormChoice) =>
+    nameTokens(choice.name).filter((word) => word !== 'form' && words.has(word)).length
+  const ranked = [...choices].sort(
+    (a, b) =>
+      score(b) - score(a) ||
+      (placed.get(b.ref) ?? 0) - (placed.get(a.ref) ?? 0) ||
+      Number(b.created) - Number(a.created),
+  )
+  return ranked[0] ?? null
+}
+
+/** The contact form a plan is given when a section collects answers and the plan makes no form. */
+export const AI_PLAN_SETTLED_FORM = {
+  name: 'Contact form',
+  why: 'Visitors need a way to reach the owner, and the site has no saved form for it.',
+  fields: ['name', 'email', 'message'],
+} as const
+
+/**
+ * A section that collects answers and places no saved form is given one
+ * before the rules read the plan (AGL-3660), rather than failing the build.
+ * A production guided start for a ceramic artist's portfolio (2026-10-09,
+ * five pages, 94 credits refunded) planned a section that asks for
+ * commissions on its work page without placing the contact form the plan
+ * made for its Contact page; the answer and its re-ask both did, and rule 3
+ * failed the whole site for one section.
+ *
+ * The section places, in order of preference:
+ * 1. the form whose name best matches it, among those the plan creates and
+ *    the site has, preferring one the plan already places — so a guided
+ *    start, which makes one form, places that same form again rather than a
+ *    second one;
+ * 2. where there is no form at all and this job may create one, a form the
+ *    plan now creates: named for the `new:` reference the section already
+ *    holds when it names a form it never declared, the contact form
+ *    otherwise.
+ *
+ * Nothing is taken out of the plan: the section keeps its name, its other
+ * uses and its items. Where the site has no form and the job may create none,
+ * rule 3 asks for nothing (AGL-3596), and neither does this. A section whose
+ * uses are already full is left for the rule to ask about.
+ */
+export function aiSettlePlanForms(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  if (!aiPlanCanPlaceForm(inventory, capabilities)) return plan
+  const kinds = inventoryKinds(inventory)
+  const unbound = (current: AiBuildPlan) =>
+    sectionPaths(current).filter(
+      ({ section }) =>
+        FORM_SECTION_NAME.test(section.name) &&
+        section.uses.length < AI_BUILD_PLAN_LIMITS.uses &&
+        !section.uses.some((ref) => refKind(ref, current, kinds) === 'form'),
+    )
+  const first = unbound(plan)
+  if (!first.length) return plan
+  let next = plan
+  if (!planFormChoices(next, inventory).length) {
+    if (capabilities && !capabilities.create.form.allowed) return plan
+    // A form the section already names and the plan never declared is the form it meant.
+    const named = first
+      .flatMap(({ section }) => section.uses)
+      .find((ref) => isAiPlanNewRef(ref) && !aiPlanCreateFor(next, ref) && !aiPlanItemFor(next, ref))
+    const taken = new Set(next.create.map((entry) => entry.name.toLowerCase()))
+    const name = named
+      ? named.slice('new:'.length).trim()
+      : taken.has(AI_PLAN_SETTLED_FORM.name.toLowerCase())
+        ? 'Get in touch form'
+        : AI_PLAN_SETTLED_FORM.name
+    next = {
+      ...next,
+      create: [
+        ...next.create,
+        {
+          kind: 'form',
+          name,
+          why: AI_PLAN_SETTLED_FORM.why,
+          duplicateOf: null,
+          fields: [...AI_PLAN_SETTLED_FORM.fields],
+        },
+      ],
+    }
+  }
+  const choices = planFormChoices(next, inventory)
+  const placed = new Map<string, number>()
+  for (const { section } of sectionPaths(next)) {
+    for (const ref of section.uses) {
+      if (refKind(ref, next, kinds) !== 'form') continue
+      const key = formChoiceKey(ref, next)
+      placed.set(key, (placed.get(key) ?? 0) + 1)
+    }
+  }
+  const settle = new Map<string, string>()
+  for (const { section, path } of unbound(next)) {
+    const form = bestPlanForm(section, choices, placed)
+    if (form) settle.set(path, form.ref)
+  }
+  if (!settle.size) return next
+  return {
+    ...next,
+    screens: next.screens.map((screen, screenIndex) => ({
+      ...screen,
+      sections: screen.sections.map((section, sectionIndex) => {
+        const ref = settle.get(`screens[${screenIndex}].sections[${sectionIndex}]`)
+        if (!ref) return section
+        // The undeclared reference the form was named for now names it; any other stays.
+        const uses = section.uses.some((use) => formChoiceKey(use, next) === ref) ? section.uses : [...section.uses, ref]
+        return { ...section, uses }
+      }),
+    })),
+  }
+}
+
+/** The forms a section that collects answers can place, as the re-ask names them. */
+function planFormChoicesText(plan: AiBuildPlan, inventory: AiSiteInventory | null): string {
+  const choices = planFormChoices(plan, inventory)
+  if (!choices.length) return 'Plan one in create as a form, and put new:<its name> in the section\'s uses.'
+  return `Put one of these in the section's uses: ${choices
+    .map((choice) => (choice.created ? choice.ref : `${choice.ref} (${choice.name})`))
+    .join(', ')}.`
 }
 
 /**
@@ -3727,6 +3899,7 @@ export function detectPlanInlineForms(
           code: 'plan-form-not-placed',
           message:
             'A section collects answers without a form. Reuse a form from the Forms page, or plan one there, and place it by id.',
+          detail: planFormChoicesText(plan, inventory),
           paths: unbound.map((entry) => entry.path),
         },
       ]
