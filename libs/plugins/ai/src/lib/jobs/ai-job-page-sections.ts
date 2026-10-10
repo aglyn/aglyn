@@ -38,6 +38,7 @@ import {
   aiSettleCutHeadings,
   aiSettleDisagreeingNodes,
   aiSettleGridItems,
+  aiSettleMechanicalRules,
   detectCutLines,
   detectDisagreeingNodes,
   isAiLinkElement,
@@ -636,7 +637,21 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     }
     const section: AiPageSection = { rootId: sectionId, nodes: sectionNodes as unknown as NodesMap, load: null }
 
-    const page = aiPageWithSection(input.page, section, input.sectionIds)
+    // An attribute a rule has one answer for is applied on the page with the
+    // section added, since the first image and the one h1 are the page's
+    // (AGL-3660). The section keeps what that settled of its own nodes; what
+    // it settled of an earlier pass's is the last pass's to store.
+    const settledPage = aiSettleMechanicalRules(
+      {
+        rootId: CANVAS_ROOT_ELEMENT_ID,
+        nodes: aiPageWithSection(input.page, section, input.sectionIds) as unknown as Record<string, AiDoctrineNode>,
+      },
+      'page',
+    )
+    for (const id of Object.keys(sectionNodes)) {
+      sectionNodes[id] = settledPage.nodes[id] as unknown as Record<string, unknown>
+    }
+    const page = settledPage.nodes as unknown as NodesMap
     const own = new Set(Object.keys(sectionNodes))
     // The page check reads the section as the page stores it, where the palette
     // validator has already dropped what it could not read, such as a

@@ -82,6 +82,34 @@ describe('parseClientErrorEvents (AGL-1538)', () => {
     })
     expect(event.url).toBeUndefined()
   })
+
+  it("keeps a hydration report's translator and language labels", () => {
+    const [event] = parseClientErrorEvents({
+      events: [
+        {
+          kind: 'hydration',
+          message: 'Minified React error #418',
+          translated: 'lang:tr',
+          language: 'tr-TR',
+        },
+      ],
+    })
+    expect(event).toMatchObject({ translated: 'lang:tr', language: 'tr-TR' })
+  })
+
+  it('refuses a label that is not one the beacon writes', () => {
+    const [event] = parseClientErrorEvents({
+      events: [
+        {
+          message: 'boom',
+          translated: 'chrome <script>',
+          language: { value: 'en' },
+        },
+      ],
+    })
+    expect(event.translated).toBeUndefined()
+    expect(event.language).toBeUndefined()
+  })
 })
 
 /**

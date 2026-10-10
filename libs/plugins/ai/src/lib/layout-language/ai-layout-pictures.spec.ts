@@ -23,6 +23,7 @@
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiLayoutPageCheck } from '../jobs/ai-job-page-language'
+import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import {
   AI_LAYOUT_STARTER_PHOTOS,
   aiLayoutPictureSlots,
@@ -143,7 +144,40 @@ describe('a language page fills its picture slots with photos the site serves it
     const [hero, about, gallery] = imagesOf(after)
     expect(about.props?.['src']).toBe(AI_LAYOUT_STARTER_PHOTOS.about.src)
     expect(hero.props?.['loading']).toBe('eager')
-    expect(gallery.props?.['loading']).toBe('lazy')
+    // A later picture leaves loading unset, which the renderer loads when reached (rule 16).
+    expect(gallery.props).not.toHaveProperty('loading')
+  })
+
+  it('loads only the first of an opening section’s several photos eagerly, so the page passes rule 16 (AGL-3660)', async () => {
+    // A live Free portfolio start (2026-10-10): every photo of the hero is a
+    // hero slot, each was loaded eagerly, and the last pass refused the page.
+    const result = aiLayoutPageCheck({
+      screen: { title: 'Portfolio', slug: 'portfolio', template: null, sections: SECTIONS.slice(0, 1) } as never,
+      sectionIds: SECTION_IDS.slice(0, 1),
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'A wedding photographer.' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, scrollTargetIds: SECTION_IDS.slice(0, 1) },
+      reusableComponents: false,
+    })({
+      sections: [
+        {
+          band: 'plain',
+          align: 'start',
+          cols: [6, 6],
+          blocks: [
+            block('heading', 'Weddings, held still', 0),
+            block('image', 'A bride laughing under a veil at dusk', 0),
+            block('image', 'A couple walking a field at sunset', 1),
+          ],
+        },
+      ],
+    })
+    if (!result.value) throw new Error(JSON.stringify(result.violations))
+    const after = await aiResolveLayoutPictures(result.value.nodes, { ...input('job-c:portfolio'), sectionIds: SECTION_IDS.slice(0, 1) })
+    const images = imagesOf(after)
+    expect(images).toHaveLength(2)
+    expect(images.map((photo) => photo.props?.['loading'])).toEqual(['eager', undefined])
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: after }, 'page', { codeBuilt: true, repeatsCompiled: true })
+    expect(report.violations.map((violation) => violation.code)).not.toContain('eager-image')
   })
 
   it('repeats no photo on a page while one is unused, and starts again past the last', () => {

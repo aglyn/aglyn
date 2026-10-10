@@ -104,8 +104,8 @@ import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
 import { useAiModelChoice } from './use-ai-model-choice'
-import { followAiJobsForUsageMeter } from './ai-usage-meter-refresh'
-import { usePublishAiUsageMeter } from './use-ai-usage-meter'
+import { followAiJobsForUsageMeter, refreshAiUsageMeterFree } from './ai-usage-meter-refresh'
+import { readAiUsageMeter, usePublishAiUsageMeter } from './use-ai-usage-meter'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 
@@ -977,6 +977,17 @@ export function AssistPanelComponent(props: AssistDockProps) {
       // through the job door, and plans inline; its card shows the plan.
       if (proposedBuild) {
         const decision = await startAssistBuildRequest(user, scopedOrgId, proposedBuild)
+        // The plan the door ran inline has just spent (AGL-3722), so the strip
+        // moves with it, to the figure the plan card quotes. Left to the jobs
+        // list's next read it said what was left BEFORE the plan, under a card
+        // that had it right: "117 free AI credits left" over "You have 71
+        // left", 2026-10-10. The card's figure is read after the plan's spend
+        // is counted once, so the strip takes it as it is.
+        publishMeter(decision.meter)
+        const uid = user?.uid
+        if (uid && scopedOrgId) {
+          refreshAiUsageMeterFree(uid, scopedOrgId, decision.job?.review?.freeCredits, readAiUsageMeter(uid, scopedOrgId))
+        }
         patchAnswer((message) => ({ ...message, buildJob: decision.job, buildNotice: decision.error }))
       }
     } catch (error) {

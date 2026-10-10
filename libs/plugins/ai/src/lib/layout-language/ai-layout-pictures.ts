@@ -278,18 +278,25 @@ export function aiLayoutPlacePictures(
   photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
 ): NodesMap {
   const next = { ...(nodes as unknown as Record<string, Record<string, unknown>>) }
+  // Only the page's first picture loads eagerly (rule 16, AGL-3660): a hero
+  // of several photos loaded them all eagerly, and a live Portfolio page was
+  // refused for it (2026-10-10). The slots are in document order; every later
+  // picture leaves `loading` unset, which the renderer loads when reached.
+  const lead = slots.findIndex((_, index) => Boolean(photos[index] && next[slots[index].imageId]))
   slots.forEach((slot, index) => {
     const photo = photos[index]
     const node = next[slot.imageId]
     if (!photo || !node) return
+    const props = { ...((node['props'] as Record<string, unknown> | undefined) ?? {}) }
+    delete props['loading']
     next[slot.imageId] = {
       ...node,
       props: {
-        ...((node['props'] as Record<string, unknown> | undefined) ?? {}),
+        ...props,
         src: photo.src,
         intrinsicWidth: photo.width,
         intrinsicHeight: photo.height,
-        loading: slot.role === 'hero' ? 'eager' : 'lazy',
+        ...(index === lead && slot.role === 'hero' ? { loading: 'eager' } : {}),
       },
     }
     if (slot.iconId && slot.frameId && next[slot.frameId]) {

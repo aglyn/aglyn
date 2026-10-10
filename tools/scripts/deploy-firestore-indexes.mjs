@@ -118,6 +118,14 @@ const allowDirty = args.allowDirty
 const fileLabel =
   filePath === DEFAULT_FILE ? 'cloud/firebase-firestore.indexes.json' : filePath
 
+// `process.exit` does not wait for a piped stdout to drain: a plan long
+// enough to fill the pipe (the dry-run lists every index) was cut off before
+// its last lines, so exits after printing wait for the write to finish.
+const exitFlushed = (code) =>
+  new Promise((resolve) => process.stdout.write('', resolve)).then(() =>
+    process.exit(code),
+  )
+
 // The same dirty-tree refusal the rules deploys carry (AGL-1489): this ships
 // the WORKTREE copy of the file, so an uncommitted edit — including another
 // session's work in progress in a shared checkout — would go live as a side
@@ -267,7 +275,7 @@ if (plan.ttlAtRisk.length > 0) {
 if (plan.empty) {
   console.log(`\nNothing to deploy: ${auth.projectId} already matches ${fileLabel}.`)
   reportTtlOwed()
-  process.exit(0)
+  await exitFlushed(0)
 }
 
 if (dryRun) {
@@ -279,7 +287,7 @@ if (dryRun) {
     )
   }
   reportTtlOwed()
-  process.exit(0)
+  await exitFlushed(0)
 }
 
 let failures = 0
@@ -356,7 +364,7 @@ if (failures > 0) {
       `re-run after fixing the cause; the accepted writes are idempotent and ` +
       `will not be duplicated.`,
   )
-  process.exit(1)
+  await exitFlushed(1)
 }
 
 console.log(

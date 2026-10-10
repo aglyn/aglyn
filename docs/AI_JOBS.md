@@ -2299,8 +2299,11 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   draws from the wide photos, an about picture leads with the owner, and the
   gallery from the rest. The hero's and the gallery's pools are rotated by the
   job's seed (its origin job id and the page), so sites do not all open with
-  the same photo, and no photo repeats on a page while one is unused. The hero
-  loads eagerly; the others lazily. These are the platform's own files on the
+  the same photo, and no photo repeats on a page while one is unused. The page's
+  first picture loads eagerly when it is the hero's; every other leaves
+  `loading` unset, which the renderer loads when reached (rule 16). A hero of
+  several photos once loaded them all eagerly, and a live Portfolio page was
+  refused at its last pass for it (AGL-3660). These are the platform's own files on the
   site's own origin, so the tenant image-sink inventory needs no new entry.
 - **A source of found photos.** `aiResolveLayoutPictures` takes an optional
   source that answers a photo, or nothing, per slot; a slot it leaves empty, or
@@ -2506,6 +2509,27 @@ the same way, in a Grid with a row direction and no container.
   the model wrote it (`aiSettleWrittenGridItems`), so a layout, a template or a component
   is held to them alike. `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
   section pass with the real model (`AGLYN_LIVE_AI=1`).
+- **Mechanical rules settled in code (AGL-3660).** A finding whose fix is one attribute,
+  level or key is applied before the check reads the tree (`aiSettleMechanicalRules`,
+  and `aiSettleWrittenMechanicalRules` on an answer as written), never re-asked and never
+  a reason to refuse: only the first image loads eagerly (`eager-image`); a film's
+  `autoPlay` and `preload: auto` come off (`autoplay-video`; a film with no poster is
+  still re-asked); an `sx` font family comes off outside an email (`extra-font`); every
+  h1 after a page's first renders as an h2, and a later heading that skips a level
+  renders one below the heading before it, by `component` only, so the look is kept
+  (`multiple-h1`, `skipped-heading`; a heading before the h1 and a page with no h1 are
+  still re-asked); a `main` landmark after the first, or in a fragment, is unset
+  (`multiple-main`, `landmark-in-fragment`); a Grid container's `sx` gap becomes its
+  `spacing` (`grid-gap`); and a link drawn in its band's own family takes the band's
+  contrast text (`link-color-on-band`). The tree check, the page section check (on the
+  page with the section added, since the first image and the one h1 are the page's),
+  the layout language's page and layout checks, and the page's last pass all settle;
+  the last pass also stores what it settled, since it asks no model and a page it
+  refused for one of these would be refused the same way on every Try again (a live
+  Free Portfolio page, 2026-10-10, `eager-image`). The eval controls whose only fault
+  was one of these (two h1s on a card and on a template, the bakery footer's link on its
+  band, the Free About page's gapped container) were retired with their device-audit
+  records.
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -2514,12 +2538,13 @@ the same way, in a Grid with a row direction and no container.
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
   refusal: the goldens' old shape and the live page's shape (`grid-not-container`), a
-  container spaced by an sx gap (`grid-gap`), a heading and its lead grouped in a Grid and
+  heading and its lead grouped in a Grid and
   an intro stacked in a Grid with a column direction (`grid-as-stack`) and items wrapped in
   a Box inside their container (`grid-item-outside-container`). `ai-eval.spec.ts` holds
   each Grid control to its own finding. Its controls for items sized `"4"` at every width
   and a container written as the text `"True"` were retired when both came to be settled
-  rather than refused (AGL-3596).
+  rather than refused (AGL-3596), and its control for a container spaced by an sx gap
+  when that was (AGL-3660).
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:

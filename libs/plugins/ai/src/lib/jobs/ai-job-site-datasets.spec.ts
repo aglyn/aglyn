@@ -38,6 +38,7 @@ import {
   AI_SITE_DATASET_INPUT,
   AI_SITE_DATASET_NOT_WRITTEN_COPY,
   AI_SITE_DATASETS_MAX,
+  aiDatasetSparseFields,
   aiSiteDatasetBriefLines,
   aiSiteDatasetInputOf,
   aiSiteDatasetListings,
@@ -409,6 +410,59 @@ describe('what the pages built after a dataset are told', () => {
         ],
       },
     ])
+  })
+
+  /**
+   * AGL-3616: low-tide-hollow.aglyn.app (beta.239) seeded its tour dates with
+   * no venue — rightly inventing none — and its cards bound `{{item.venue}}`
+   * as their eyebrow, which printed raw. A field most records leave empty is
+   * no card's to bind.
+   */
+  it('binds no field its records leave empty on most of them', () => {
+    const tour: AiJobOutput = {
+      ...written,
+      id: 'drftTour01',
+      label: 'Tour dates',
+      proposal: {
+        fields: [
+          { id: 'show', name: 'Show', type: 'text' },
+          { id: 'venue', name: 'Venue', type: 'text' },
+          { id: 'details', name: 'Details', type: 'text' },
+        ],
+        recordNames: ['Date to be announced: Asheville show'],
+        addressField: null,
+        sparseFields: ['venue'],
+      },
+    }
+    const [listing] = aiSiteDatasetListings({
+      outputs: [tour],
+      datasets: [MENU],
+      screens: SCREENS,
+      delivered: new Map([['menu', 'drftTour01']]),
+    })
+    expect(listing.fields?.map((field) => field.id)).toEqual(['show', 'details'])
+  })
+
+  it('reads the fields most records leave empty off the designed dataset, by their written ids', () => {
+    const written = [
+      { id: 'show', name: 'Show', type: 'text' },
+      { id: 'venue', name: 'Venue', type: 'text' },
+      { id: 'city', name: 'City', type: 'text' },
+      { id: 'details', name: 'Details', type: 'text' },
+    ]
+    const dataset = {
+      fields: [{ name: 'Show' }, { name: 'Venue' }, { name: 'City' }, { name: 'Details' }],
+      records: [
+        ['Date to be announced: Asheville show', '', 'Asheville', 'Songs from the new record.'],
+        ['Date to be announced: Durham show', ' ', 'Durham', ''],
+        ['Date to be announced: Boone show', 'The Hollow', '', 'An evening set.'],
+      ],
+    }
+    // Venue: one of three. City and details: two of three, so kept.
+    expect(aiDatasetSparseFields(dataset, written)).toEqual(['venue'])
+    // Never the record's name, and nothing for no records.
+    expect(aiDatasetSparseFields({ fields: dataset.fields, records: [['', '', '', '']] }, written)).toEqual(['venue', 'city', 'details'])
+    expect(aiDatasetSparseFields({ fields: dataset.fields, records: [] }, written)).toEqual([])
   })
 
   it('lists nothing for a dataset not made, so its sections write the items out', () => {

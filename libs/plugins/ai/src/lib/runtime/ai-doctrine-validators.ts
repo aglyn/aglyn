@@ -3183,6 +3183,174 @@ export function aiSettleCutHeadings(input: unknown): unknown {
   return nodes ? { ...input, nodes } : input
 }
 
+// ── Mechanical rules, settled in code (AGL-3660) ─────────────────────────
+
+/**
+ * THE RULES A CHECK WOULD REFUSE FOR AN ATTRIBUTE, SETTLED IN CODE (AGL-3660).
+ *
+ * A finding whose fix is one attribute, one level or one key, with nothing to
+ * decide about what the page says, is applied before the check reads the
+ * tree, as `aiSettleGridItems` sizes a container's items. A live Free guided
+ * start's Portfolio page (2026-10-10) was refused for rule 16's `eager-image`:
+ * the pictures step loaded every photo of the opening section eagerly, the
+ * last pass reads the stored page and asks no model, and Try again could only
+ * refuse the same page for the same reason. None of these is a choice a model
+ * makes better than the code that knows the answer:
+ *
+ * - `eager-image` (16): only the tree's first image may load eagerly; every
+ *   later one has `loading` unset, so the renderer loads it when reached;
+ * - `autoplay-video` (16), its attribute half: `autoPlay` and `preload: auto`
+ *   are taken off. A film with no poster still needs a picture, and is left;
+ * - `extra-font` (16): an `sx` font family outside an email is taken off, so
+ *   the element reads the theme's typography;
+ * - `multiple-h1` and `skipped-heading` (11): every top-level heading after a
+ *   page's first renders as an h2 (a layout's all do, a component's after its
+ *   first), and a heading after it that skips a level renders one below the
+ *   heading before it. Only the element changes (`component`): the variant,
+ *   and so the look, is kept. A heading before a page's h1, and a page with no
+ *   h1, are the model's to mend;
+ * - `multiple-main` and `landmark-in-fragment` (11): a `main` landmark after
+ *   the first, and any in a component, a form or an email, is unset;
+ * - `grid-gap` (12): a Grid container's `sx` gap is taken off and becomes its
+ *   `spacing` where it sets none, a number gap as itself, anything else 2,
+ *   which is what the re-ask asks for;
+ * - `link-color-on-band` (5): a link or a button whose words are drawn in its
+ *   band's own family is given that family's contrast text as its `sx` color,
+ *   which is what the re-ask asks for.
+ *
+ * A tree with nothing to settle comes back as the same object, so settling is
+ * idempotent; a node that is changed is copied, never edited in place.
+ */
+export function aiSettleMechanicalRules<T extends AiDoctrineTree>(tree: T, outputKind: AiOutputKind): T {
+  if (!tree.nodes[tree.rootId]) return tree
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const copied = new Set<string>()
+  const edit = (id: string): AiDoctrineNode => {
+    if (!copied.has(id)) {
+      const node = nodes[id]
+      nodes[id] = {
+        ...node,
+        ...(node.props ? { props: { ...node.props } } : {}),
+        ...(node.sx ? { sx: { ...node.sx } } : {}),
+      }
+      copied.add(id)
+    }
+    return nodes[id]
+  }
+  const unsetProp = (id: string, name: string): void => {
+    if (nodes[id].props?.[name] === undefined) return
+    delete (edit(id).props as Record<string, unknown>)[name]
+  }
+  const setProp = (id: string, name: string, value: unknown): void => {
+    if (nodes[id].props?.[name] === value) return
+    const node = edit(id)
+    node.props = { ...(node.props ?? {}), [name]: value }
+  }
+  const unsetSx = (id: string, name: string): void => {
+    if (nodes[id].sx?.[name] === undefined) return
+    delete (edit(id).sx as Record<string, unknown>)[name]
+  }
+  const visits = walkTree(tree)
+  const email = outputKind === 'email'
+  const framed = !email && outputKind !== 'form'
+  const fragment = outputKind === 'component' || email || outputKind === 'form'
+
+  let images = 0
+  let mains = 0
+  for (const { id, node } of visits) {
+    // Rule 16: one eager image, the first; the rest load when they are reached.
+    if (node.componentId === 'image') {
+      images += 1
+      if (images > 1 && node.props?.['loading'] === 'eager') unsetProp(id, 'loading')
+    }
+    // Rule 16: a film loads nothing before it is played.
+    if (node.componentId === 'video') {
+      if (node.props?.['autoPlay'] === true) unsetProp(id, 'autoPlay')
+      if (node.props?.['preload'] === 'auto') unsetProp(id, 'preload')
+    }
+    // Rule 16: the theme's typography, outside an email.
+    if (!email && node.sx?.['fontFamily'] !== undefined) unsetSx(id, 'fontFamily')
+    // Rule 11: one main landmark, and none in what is placed inside pages.
+    if (elementOf(node) === 'main') {
+      mains += 1
+      if (fragment || mains > 1) {
+        if (node.props?.['component'] === 'main') unsetProp(id, 'component')
+        if (node.props?.['element'] === 'main') unsetProp(id, 'element')
+      }
+    }
+    // Rule 12: a container is spaced by its `spacing`, never an sx gap.
+    if (framed && node.componentId === GRID && node.props?.['container'] === true) {
+      const gap = GRID_GAP_SX_KEYS.find((key) => node.sx?.[key] !== undefined)
+      if (gap) {
+        const value = node.sx?.[gap]
+        for (const key of GRID_GAP_SX_KEYS) unsetSx(id, key)
+        if (node.props?.['spacing'] === undefined) setProp(id, 'spacing', typeof value === 'number' ? value : 2)
+      }
+    }
+  }
+
+  // Rule 11: the heading outline, in document order.
+  if (framed) {
+    const headings = visits
+      .map((visit) => ({ id: visit.id, level: aiHeadingLevel(nodes[visit.id]) }))
+      .filter((entry): entry is { id: string; level: number } => entry.level !== null)
+    const page = outputKind === 'page' || outputKind === 'template'
+    const firstH1 = headings.findIndex((heading) => heading.level === 1)
+    // A page's outline is settled from its h1 on; a layout's and a component's from their first heading.
+    const start = page ? firstH1 : 0
+    let previous: number | null = page ? 0 : null
+    for (let index = Math.max(start, 0); start >= 0 && index < headings.length; index += 1) {
+      const heading = headings[index]
+      // A page keeps its first h1, a component its first, and a layout none.
+      const keepsH1 = outputKind !== 'layout' && index === firstH1
+      let level = heading.level === 1 && !keepsH1 ? 2 : heading.level
+      previous ??= level - 1
+      if (level > previous + 1) level = previous + 1
+      if (level !== heading.level) setProp(heading.id, 'component', `h${level}`)
+      previous = level
+    }
+  }
+
+  // Rule 5: a link's words in its band's contrast text, read on the tree as settled so far.
+  if (framed) {
+    const settled: AiDoctrineTree = { rootId: tree.rootId, nodes }
+    for (const visit of walkTree(settled)) {
+      if (!LINK_COMPONENTS.has(visit.node.componentId)) continue
+      const family = linkWordsFamily(visit.node)
+      const band = family ? bandOf(settled, visit) : null
+      if (!band || band.family !== family) continue
+      const node = edit(visit.id)
+      node.sx = { ...(node.sx ?? {}), color: `${family}.contrastText` }
+    }
+  }
+  return copied.size ? ({ ...tree, nodes } as T) : tree
+}
+
+/**
+ * `aiSettleMechanicalRules` on a tree as the model wrote it, before the
+ * palette validator reads it (AGL-3660), as `aiSettleWrittenGridItems` settles
+ * its items. Anything that is no flat node map comes back as it was, and a
+ * node whose shape is not a palette node's is read as nothing and left as written.
+ */
+export function aiSettleWrittenMechanicalRules(input: unknown, outputKind: AiOutputKind): unknown {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
+  const readable = Object.entries(input['nodes']).filter(
+    ([, node]) =>
+      isRecord(node) &&
+      typeof node['componentId'] === 'string' &&
+      (node['props'] === undefined || isRecord(node['props'])) &&
+      (node['sx'] === undefined || isRecord(node['sx'])) &&
+      (node['nodes'] === undefined ||
+        (Array.isArray(node['nodes']) && node['nodes'].every((child) => typeof child === 'string'))),
+  )
+  const tree = {
+    rootId: input['rootId'],
+    nodes: Object.fromEntries(readable) as unknown as Record<string, AiDoctrineNode>,
+  }
+  const settled = aiSettleMechanicalRules(tree, outputKind)
+  return settled === tree ? input : { ...input, nodes: { ...input['nodes'], ...settled.nodes } }
+}
+
 export interface AiDoctrineTreeReport {
   ok: boolean
   /** The palette validator's result: the tree to store, its repairs and its id map. */

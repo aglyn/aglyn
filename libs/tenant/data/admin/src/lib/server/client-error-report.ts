@@ -75,6 +75,20 @@ export interface ClientErrorEvent {
   source?: string
   line?: number
   url?: string
+  /** Hydration only: the translator the beacon saw on the page. */
+  translated?: string
+  /** Hydration only: the visitor's `navigator.language`. */
+  language?: string
+}
+
+/**
+ * A short label the beacon wrote itself (`chrome`, `lang:tr`, `en-US`) —
+ * anything else is refused rather than logged, since the field is free text
+ * from any caller of a public endpoint.
+ */
+function label(value: unknown): string | undefined {
+  const text = clampString(value, 24)
+  return /^[A-Za-z0-9:_-]+$/.test(text) ? text : undefined
 }
 
 function clampString(value: unknown, max: number): string {
@@ -137,6 +151,8 @@ export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
       source: scrubUrl(event.source) || undefined,
       line: typeof event.line === 'number' ? Math.trunc(event.line) : undefined,
       url: scrubUrl(event.url) || undefined,
+      translated: label(event.translated),
+      language: label(event.language),
     })
   }
   return parsed
@@ -185,6 +201,8 @@ function toReportedEvent(
     // than "any entry at all". That is why it pages for one visitor whose
     // webview rewrote the DOM.
     kind: clampString(event.kind, 32) || 'error',
+    ...(event.translated ? { translated: event.translated } : {}),
+    ...(event.language ? { language: event.language } : {}),
     context: {
       httpRequest: event.url ? { url: event.url } : undefined,
       ...(hasStack

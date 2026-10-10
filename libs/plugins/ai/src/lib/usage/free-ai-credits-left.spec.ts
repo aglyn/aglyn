@@ -107,3 +107,34 @@ describe('readFreeAiCreditsLeft — two Free workspaces of one owner', () => {
     expect(await readFreeAiCreditsLeft(broken, { orgId: 'org-b', org: free('org-b'), now: NOW })).toBeNull()
   })
 })
+
+describe('readFreeAiCreditsLeft — a plan step’s own spend, counted once (AGL-3722)', () => {
+  // zachary1748, 2026-10-10: the chat turn's 31 credits were on both meters
+  // (183 used, 117 left) when the build's plan step asked, and the plan's own
+  // 46 were not yet — the machine meters a step after it returns.
+  const before = {
+    [`orgs/org-a/assistUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(183) },
+    [`users/${owner}/aiUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(183) },
+  }
+  const after = {
+    [`orgs/org-a/assistUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(229) },
+    [`users/${owner}/aiUsage/${MONTH}`]: { estCostUsd: assistUsdFromCredits(229) },
+  }
+
+  it('reads 117 before the plan, and 71 from inside the plan step net of its 46', async () => {
+    const firestore = fakeFirestore(before)
+    expect((await readFreeAiCreditsLeft(firestore, { orgId: 'org-a', org: free('org-a'), now: NOW }))?.left).toBe(117)
+    const inside = await readFreeAiCreditsLeft(firestore, {
+      orgId: 'org-a',
+      org: free('org-a'),
+      now: NOW,
+      pendingUsd: assistUsdFromCredits(46),
+    })
+    expect(inside).toMatchObject({ left: 71, used: { account: 229, org: 229 } })
+  })
+
+  it('reads the same 71 once the machine has metered the plan, which is what the strip then shows', async () => {
+    const metered = await readFreeAiCreditsLeft(fakeFirestore(after), { orgId: 'org-a', org: free('org-a'), now: NOW })
+    expect(metered).toMatchObject({ left: 71, used: { account: 229, org: 229 } })
+  })
+})

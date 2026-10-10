@@ -16,6 +16,13 @@
  */
 'use client'
 
+import {
+  mdiAccountCancelOutline,
+  mdiAccountCheckOutline,
+  mdiAccountOutline,
+  mdiShieldAccountOutline,
+  mdiShieldOffOutline,
+} from '@aglyn/shared-data-mdi'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink,
@@ -744,12 +751,18 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             {
               key: 'details',
               label: 'User details',
+              icon: { path: mdiAccountOutline.path },
               href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
               external: true,
             },
             {
               key: 'staff',
               label: row.staff ? 'Revoke staff access' : 'Grant staff access',
+              icon: {
+                path: row.staff
+                  ? mdiShieldOffOutline.path
+                  : mdiShieldAccountOutline.path,
+              },
               destructive: Boolean(row.staff),
               onClick: handleAction(
                 row,
@@ -764,6 +777,11 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             {
               key: 'disable',
               label: row.disabled ? 'Enable account' : 'Disable account',
+              icon: {
+                path: row.disabled
+                  ? mdiAccountCheckOutline.path
+                  : mdiAccountCancelOutline.path,
+              },
               destructive: !row.disabled,
               onClick: handleAction(
                 row,

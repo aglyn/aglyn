@@ -21,25 +21,24 @@ import { MdiIcon } from './mdi-icon/mdi-icon'
 import { mdiDotsVertical, mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { newTabLinkProps, withNewTabHint } from '../utils/new-tab'
 import {
-  IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Tooltip,
-} from '@mui/material'
-import {
-  forwardRef,
-  useCallback,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from 'react'
+  hasMenuRowIcon,
+  MENU_POPUP_SX,
+  MENU_ROW_SX,
+  MenuRowContent,
+  type MenuRowIcon,
+} from './menu-row.component'
+import { IconButton, Menu, MenuItem, Tooltip } from '@mui/material'
+import { forwardRef, useCallback, useState, type MouseEvent } from 'react'
 
 export interface RowActionsMenuItem {
   key: string
   label: string
-  icon?: ReactNode
+  /**
+   * The leading icon, left of the label as in the besigner's File menu
+   * (Zach, 2026-10-10): an mdi glyph (`{ path }`) or a rendered icon. An
+   * `external` item without one leads with the open-in-new glyph.
+   */
+  icon?: MenuRowIcon
   /**
    * Where the item navigates. An item that carries one renders as a real
    * anchor, so it can be middle-clicked into a new tab, copied, or opened
@@ -51,7 +50,8 @@ export interface RowActionsMenuItem {
    * Open `href` in a new tab: a page off the console, or a preview / view of
    * something the reader is glancing at beside this list (AGL-3660). The item
    * gains `noopener noreferrer`, an "(opens in a new tab)" accessible name,
-   * and a small open-in-new mark after its label.
+   * and — when it names no icon of its own — the open-in-new glyph as its
+   * leading icon.
    */
   external?: boolean
   /** For items that open a dialog rather than navigate. */
@@ -107,6 +107,10 @@ export interface RowActionsMenuProps {
  * renders as a menu item: the anchor is the MenuItem's own root element, so
  * it inherits the item's colour, padding and focus ring rather than the
  * browser's link styling.
+ *
+ * Every row is the besigner File menu's row (`menu-row.component`): dense,
+ * a leading icon on the left, the label and its second line, one left edge
+ * for the whole menu (Zach, 2026-10-10).
  */
 export function RowActionsMenu(props: RowActionsMenuProps) {
   const { items, label } = props
@@ -119,6 +123,9 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
   }, [])
   const handleClose = useCallback(() => setAnchorEl(null), [])
   if (!items.length) return null
+  const iconOf = (item: RowActionsMenuItem): MenuRowIcon | undefined =>
+    item.icon ?? (item.external ? { path: mdiOpenInNew.path } : undefined)
+  const gutter = items.some((item) => hasMenuRowIcon(iconOf(item)))
   return (
     <>
       <IconButton
@@ -134,6 +141,14 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
         open={Boolean(anchorEl)}
         onClose={handleClose}
         onClick={(event) => event.stopPropagation()}
+        slotProps={{
+          paper: {
+            elevation: 0,
+            sx: { ...MENU_POPUP_SX, minWidth: '30ch' },
+          },
+          // The paper carries the vertical padding, as the besigner's does.
+          list: { dense: true, disablePadding: true },
+        }}
       >
         {items.map((item) => {
           // A disabled item is never a link: an anchor whose destination is
@@ -156,36 +171,29 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
             <MenuItem
               key={item.key}
               {...(linkProps as any)}
+              dense
+              sx={MENU_ROW_SX}
               disabled={item.disabled}
               onClick={() => {
                 handleClose()
                 item.onClick?.()
               }}
             >
-              {item.icon ? (
-                <ListItemIcon
-                  sx={item.destructive ? { color: 'error.main' } : undefined}
-                >
-                  {item.icon}
-                </ListItemIcon>
-              ) : null}
-              <ListItemText
-                slotProps={
+              <MenuRowContent
+                icon={iconOf(item)}
+                gutter={gutter}
+                secondary={item.description}
+                ListItemIconProps={
+                  item.destructive ? { sx: { color: 'error.main' } } : undefined
+                }
+                ListItemTextProps={
                   item.destructive
-                    ? { primary: { color: 'error.main' } }
+                    ? { slotProps: { primary: { color: 'error.main' } } }
                     : undefined
                 }
-                secondary={item.description}
               >
                 {item.label}
-              </ListItemText>
-              {item.external && item.href ? (
-                <MdiIcon
-                  path={mdiOpenInNew.path}
-                  aria-hidden
-                  sx={{ fontSize: '0.875rem', ml: 1, color: 'text.secondary' }}
-                />
-              ) : null}
+              </MenuRowContent>
             </MenuItem>
           )
           // span: a disabled item takes no pointer events, so the tooltip

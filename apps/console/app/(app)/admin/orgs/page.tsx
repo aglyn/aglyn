@@ -25,6 +25,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
+import { mdiChartBar, mdiDomain } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -607,6 +608,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 {
                   key: 'details',
                   label: 'Organization details',
+                  icon: { path: mdiDomain.path },
                   href: buildRoute(Route.ADMIN_ORG_DETAIL, {
                     orgId: row.$id,
                   }),
@@ -614,6 +616,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 },
                 {
                   key: 'usage',
+                  icon: { path: mdiChartBar.path },
                   label:
                     usageLoading === row.$id ? 'Loading usage…' : 'View usage',
                   onClick: () => void handleShowUsage(row.$id)(),

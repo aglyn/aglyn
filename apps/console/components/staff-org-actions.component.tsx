@@ -40,6 +40,15 @@ import {
 } from '@aglyn/aglyn'
 import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import { pluginPlanQuotas } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
+import {
+  mdiDeleteForeverOutline,
+  mdiDeleteRestore,
+  mdiPauseCircleOutline,
+  mdiPlayCircleOutline,
+  mdiRobotOffOutline,
+  mdiRobotOutline,
+  mdiTune,
+} from '@aglyn/shared-data-mdi'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -970,6 +979,7 @@ const StaffOrgActions = ({
             {
               key: 'override',
               label: 'Override plan and limits…',
+              icon: { path: mdiTune.path },
               onClick: handleOverrideOpen,
               disabled: !org || overrideGate.blocked,
               disabledReason: overrideGate.reason,
@@ -977,6 +987,11 @@ const StaffOrgActions = ({
             {
               key: 'suspend',
               label: org?.suspendedAt ? 'Lift suspension…' : 'Suspend organization…',
+              icon: {
+                path: org?.suspendedAt
+                  ? mdiPlayCircleOutline.path
+                  : mdiPauseCircleOutline.path,
+              },
               destructive: !org?.suspendedAt,
               onClick: openSuspender,
               disabled: !org || suspendGate.blocked,
@@ -984,6 +999,11 @@ const StaffOrgActions = ({
             },
             {
               key: 'erasure',
+              icon: {
+                path: org?.erasureRequestedAt
+                  ? mdiDeleteRestore.path
+                  : mdiDeleteForeverOutline.path,
+              },
               label: org?.erasureRequestedAt
                 ? 'Cancel data erasure request…'
                 : 'Request data erasure…',
@@ -996,6 +1016,11 @@ const StaffOrgActions = ({
                   {
                     key: 'ai-pause',
                     label: aiPaused ? 'Resume AI…' : 'Pause AI…',
+                    icon: {
+                      path: aiPaused
+                        ? mdiRobotOutline.path
+                        : mdiRobotOffOutline.path,
+                    },
                     destructive: !aiPaused,
                     onClick: openAiPauser,
                     disabled: !org || suspendGate.blocked,
