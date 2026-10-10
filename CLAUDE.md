@@ -38,8 +38,11 @@ merged PR (number, title, one line on what it does) and each direct commit
 PR (a CI fix, a `git merge origin/main`, another PR riding the promotion, a
 single commit), `gh pr edit <n> --body-file …` goes out in the same step as the
 push, before you do anything else — and the TITLE is updated too, so it
-names what the PR now carries (a promotion's title names its main themes). A body that lags the branch by even one commit,
+names what the PR now carries. A body that lags the branch by even one commit,
 says "plus a few fixes", or lists only the headline PRs, is incomplete.
+
+⛔ A promotion PR's title is exactly `Release v1.0.0-beta.N` and never
+changes; its themes go in the body, not the title (Zach, 2026-10-09).
 
 ## Verify in the cheapest tier that can see the mistake
 
