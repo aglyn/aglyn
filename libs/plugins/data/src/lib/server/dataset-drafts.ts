@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { memberCanSee } from '@aglyn/aglyn/app-utils/organizations'
 import { checkDatasetQuota, checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { defaultScopeForNewResource, newResourceScopeFields } from '@aglyn/aglyn/app-utils/scope-tokens'
@@ -439,6 +440,8 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
         return { ok: false, status: 403, error: DATASET_DRAFT_STORAGE_REFUSAL }
       }
       const visibleTo = scopeOf(request)
+      // Minted before the transaction, so a retried attempt writes the same rows.
+      const recordIds = records.map(() => createResourceUid())
       return db.runTransaction(async (tx): Promise<PluginDraftWrite> => {
         // Every read before any write, which Firestore requires.
         const existing = await tx.get(datasetRef)
@@ -456,8 +459,7 @@ export function createDatasetDraftWriter(deps: DatasetDraftWriterDeps = {}): Plu
           createdBy: request.uid,
         })
         records.forEach((values, order) => {
-          // Under ids of the dataset's own, so a retried transaction writes the same rows.
-          tx.create(datasetRef.collection('records').doc(`${request.id}-${order}`), {
+          tx.create(datasetRef.collection('records').doc(recordIds[order]), {
             values,
             ...datasetIntegrityFields(model, values),
             order,
