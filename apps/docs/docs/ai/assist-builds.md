@@ -132,8 +132,15 @@ called. For example, an existing *Privacy Policy* page at `/privacy-policy` is u
 second one is added. The plan card lists the pages it will add as *added for your store
 automatically*. They are built without AI and use no credits. The account and cart pages are
 hidden from search engines. Your site's user accounts are turned on so that shoppers can
-sign in, unless you turned them off. If the build makes a header, the header links the
-account page and the footer links the policies.
+sign in, unless you turned them off.
+
+The header links the account page, and the cart page too if the header has no cart. The
+footer links the account and policy pages. If the build makes a header and footer, they
+come with these links. If it doesn't, Aglyn adds them to your site's existing layout as a
+new draft version. Links already there are not added again. The version you have live is
+not changed: the new one goes live when the build publishes, or when you publish it. If
+your header or footer has no list of links to add to, the layout is left as it is, and
+**Finish your store** asks you to add the links yourself.
 
 This needs a plan that includes a store, with **Commerce** on for the site, and the editor
 role. When the build is done, the card shows **Finish your store**: connect payments, review

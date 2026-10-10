@@ -16,10 +16,13 @@
  */
 
 import type { AiBuildItem, AiBuildPlanScreen } from './ai-build-plan'
+import type { AiStoreLayoutLinks } from './ai-layout-store-links'
 import {
   AI_STORE_PAGES,
+  aiStoreFrameLinks,
   aiStorePagesOfPlan,
   aiStorePagesToWrite,
+  type AiStoreFinishStep,
   type AiStorePageFacts,
   type AiStorePageKey,
   type AiStorePagePlan,
@@ -77,6 +80,8 @@ export interface AiStoreSitePage {
   title: string
   /** A record template or entry template, which is no page at its own address. */
   template?: boolean
+  /** The layout the page renders inside, where it is one of the site's own. */
+  layoutId?: string | null
 }
 
 const firstSegment = (slug: string) => slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()
@@ -193,4 +198,63 @@ export function aiBuildStorePagesOf(plan: { storePages?: unknown } | null | unde
 /** The store pages a build's plan card lists as added for the store: the ones written, not the ones a page stands for. */
 export function aiBuildStorePagesAdded(plan: { storePages?: unknown } | null | undefined): AiStorePagePlan[] {
   return aiStorePagesToWrite(aiBuildStorePagesOf(plan)?.pages ?? [])
+}
+
+// ── The store's links in the site's own layout ────────────────────────────
+
+/**
+ * What a store's links in a layout record on the build's outputs (AGL-3676),
+ * as `proposal.storeLinks`: `draft` on the layout version written with them,
+ * `missing` where the layout had no header or footer list to add them to.
+ */
+export type AiBuildStoreLinksState = 'draft' | 'missing'
+
+/** What a header's link to the store's account and cart say (`AI_LAYOUT_ACCOUNT_LINK`). */
+export const AI_BUILD_STORE_ACCOUNT_LINK = 'Account'
+export const AI_BUILD_STORE_CART_LINK = 'Cart'
+
+/**
+ * The links a build adds to the site's own layout for these store pages:
+ * Account in the header, the cart there too where the header has none, and
+ * the account and the policies in the footer — only for the pages that are
+ * there, written by the build or stood for by a page the site has.
+ */
+export function aiBuildStoreLayoutLinks(pages: readonly AiStorePagePlan[], written: ReadonlySet<string>): AiStoreLayoutLinks {
+  const there = pages.filter((page) => page.planned || written.has(page.key))
+  const account = there.find((page) => page.key === 'account')
+  const cart = there.find((page) => page.key === 'cart')
+  return {
+    header: account ? [{ label: AI_BUILD_STORE_ACCOUNT_LINK, href: account.href }] : [],
+    cart: cart ? { label: AI_BUILD_STORE_CART_LINK, href: cart.href } : null,
+    footer: aiStoreFrameLinks(there).footer,
+  }
+}
+
+/** The layout a build's store pages render inside, and its links go in: the Shop page's, else the home page's, else the one most of the site's pages use. */
+export function aiBuildStoreLayoutOf(shopLayoutId: string | null, sitePages: readonly AiStoreSitePage[]): string | null {
+  if (shopLayoutId) return shopLayoutId
+  const pages = sitePages.filter((page) => !page.template && page.layoutId)
+  const home = pages.find((page) => firstSegment(page.slug) === '')
+  if (home?.layoutId) return home.layoutId
+  const counts = new Map<string, number>()
+  for (const page of pages) counts.set(page.layoutId as string, (counts.get(page.layoutId as string) ?? 0) + 1)
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+}
+
+/** The finish card's step where the site's layout had no list for the store's links: add them by hand. */
+export const AI_BUILD_STORE_LINKS_MISSING_STEP: AiStoreFinishStep = {
+  id: 'links',
+  title: 'Add Account and policy links to your header and footer',
+  text: 'Your header and footer have no list of links to add them to. Add links to your account, cart and policy pages.',
+  opens: 'layouts',
+  action: 'Open layouts',
+}
+
+/** The finish card's step where the store's links wait in a draft version of the site's layout: publish it. */
+export const AI_BUILD_STORE_LINKS_DRAFT_STEP: AiStoreFinishStep = {
+  id: 'links',
+  title: 'Publish your header and footer links',
+  text: 'Account and policy links are in a new draft version of your layout. Open it and publish that version so shoppers see them.',
+  opens: 'layout',
+  action: 'Open the layout',
 }

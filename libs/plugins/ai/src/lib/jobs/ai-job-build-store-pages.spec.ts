@@ -29,7 +29,7 @@ import type { AiJob, AiJobItemLedger, AiJobOutput, AiJobPlan } from '../model/ai
 import { AI_SITE_STORE_LINKS_INPUT, AI_SITE_STORE_PAGES_NOTE } from '../model/ai-site-store-pages'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
-import { aiBuildUnitJob, createAiJobBuildStep } from './ai-job-build-step'
+import { aiBuildStoreLinksOutputs, aiBuildUnitJob, createAiJobBuildStep } from './ai-job-build-step'
 import { aiPlanWithStorePages } from './ai-job-plan-step'
 import { AI_SITE_STORE_PAGES_INPUT, type AiSiteStorePagesInput } from './ai-job-site-store-pages'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
@@ -157,8 +157,9 @@ function storeRunner(seen: AiJob[]): AiJobStepRunner {
 function step(deps: {
   seen: AiJob[]
   refusal?: string | null
-  sitePages?: Array<{ id?: string; slug: string; title: string }>
+  sitePages?: Array<{ id?: string; slug: string; title: string; layoutId?: string | null }>
   publish?: jest.Mock
+  writeStoreLinks?: jest.Mock
 }) {
   return createAiJobBuildStep({
     runnerFor: (() => null) as never,
@@ -166,6 +167,7 @@ function step(deps: {
     storePages: storeRunner(deps.seen),
     storePagesRefusal: async () => deps.refusal ?? null,
     readSitePages: async () => deps.sitePages ?? [],
+    writeStoreLinks: deps.writeStoreLinks ?? (async () => ({ status: 'present', layoutId: 'layout-site' })),
     ...(deps.publish ? { publish: deps.publish } : {}),
   })
 }
@@ -267,5 +269,79 @@ describe('the plan a store build keeps (AGL-3676)', () => {
     const reused = { ...basePlan(), storePages: aiBuildStorePagesFor(basePlan(), { store: true, pages: [] }) ?? undefined }
     const all = ['account', 'cart', 'shipping-returns', 'privacy', 'terms'].map((slug) => ({ name: slug, slug }))
     expect(aiPlanWithStorePages('build', OPS, inventory(all), reused).storePages).toBeUndefined()
+  })
+})
+
+describe('the store’s links in the site’s own header and footer (AGL-3676)', () => {
+  const written = (versionId = 'build-1-store-links') =>
+    jest.fn(async () => ({ status: 'written', layoutId: 'layout-site', versionId, name: 'Site header and footer' }))
+
+  it('drafts Account, Cart and the policies into the layout the store pages render inside', async () => {
+    const writeStoreLinks = written()
+    const outcome = await step({ seen: [], writeStoreLinks, sitePages: [{ id: 'priv', slug: 'privacy', title: 'Privacy' }] })(context(job()))
+    expect(writeStoreLinks).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        hostId: 'host-1',
+        layoutId: 'layout-site',
+        versionId: 'build-1-store-links',
+        aiJobId: 'build-1',
+        screenPaths: { priv: 'privacy' },
+        links: {
+          header: [{ label: 'Account', href: '/account' }],
+          cart: { label: 'Cart', href: '/cart' },
+          footer: [
+            { label: 'Your account', href: '/account' },
+            { label: 'Shipping & returns', href: '/shipping-returns' },
+            { label: 'Privacy', href: '/privacy' },
+            { label: 'Terms of sale', href: '/terms' },
+          ],
+        },
+      }),
+    )
+    const layout = outcome.outputs.find((output) => output.resource === 'layout')
+    expect(layout).toMatchObject({ id: 'layout-site', versionId: 'build-1-store-links', hostSubdomain: 'ember', proposal: { storeLinks: 'draft' } })
+    expect(outcome.item?.outputs).toContain('layout-site')
+  })
+
+  it('says so on the first page where the layout has no list for them', async () => {
+    const writeStoreLinks = jest.fn(async () => ({ status: 'unrecognized', layoutId: 'layout-site', versionId: null, name: 'Site' }))
+    const outcome = await step({ seen: [], writeStoreLinks })(context(job()))
+    expect(outcome.outputs[0].proposal).toMatchObject({ storePage: 'account', storeLinks: 'missing' })
+    expect(outcome.outputs.some((output) => output.resource === 'layout')).toBe(false)
+  })
+
+  it('leaves a layout the build made, which was told the links, and says so where there is no layout at all', async () => {
+    const writeStoreLinks = written()
+    const store: AiSiteStorePagesInput = {
+      pages: aiBuildStorePagesFor(basePlan(), { store: true, pages: [] })?.pages ?? [],
+      facts: { contactPath: null, shopPath: '/shop', shippingPath: '/shipping-returns' },
+      layoutId: 'lay-new',
+    }
+    const outputs: AiJobOutput[] = [{ resource: 'screen', id: 'build-1-store-account', hostId: 'host-1', label: 'Your account', proposal: { storePage: 'account' } }]
+    const base = { job: job(), unitJobId: 'build-1-store', outputs, sitePages: [], now: NOW }
+    expect(await aiBuildStoreLinksOutputs(firestore, { ...base, store, builtLayouts: new Set(['lay-new']) }, writeStoreLinks as never)).toEqual(outputs)
+    const none = await aiBuildStoreLinksOutputs(firestore, { ...base, store: { ...store, layoutId: null }, builtLayouts: new Set() }, writeStoreLinks as never)
+    expect(none[0].proposal).toMatchObject({ storeLinks: 'missing' })
+    expect(writeStoreLinks).not.toHaveBeenCalled()
+  })
+
+  it('renders the store pages in the site’s home page’s layout where the plan’s Shop page names none', async () => {
+    const seen: AiJob[] = []
+    const plain = plan()
+    plain.screens = plain.screens.map((one) => ({ ...one, layout: null }))
+    await step({ seen, sitePages: [{ id: 'home', slug: '/', title: 'Home', layoutId: 'lay-home' }] })(context(job({ plan: plain })))
+    expect((seen[0].inputs[AI_SITE_STORE_PAGES_INPUT] as AiSiteStorePagesInput).layoutId).toBe('lay-home')
+  })
+
+  it('hands the draft to the build’s publish, which puts it live', async () => {
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    await step({ seen: [], publish, writeStoreLinks: written() })(context(job({ inputs: { publish: true, publishConfirmed: true } })))
+    expect(publish).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        storeLinks: expect.objectContaining({ layoutId: 'layout-site', versionId: 'build-1-store-links', links: expect.objectContaining({ cart: { label: 'Cart', href: '/cart' } }) }),
+      }),
+    )
   })
 })

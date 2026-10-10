@@ -132,4 +132,48 @@ describe('what is left to finish a store an Assist build made (AGL-3676)', () =>
   it('leaves out the policies where the build wrote none of them: the site had its own', () => {
     expect(aiStoreFinishLinks(buildJob(['account', 'cart']), 'acme')?.map((step) => step.id)).toEqual(['payments', 'products', 'shipping'])
   })
+
+  /** The build's job with the outputs its links step recorded on the store row. */
+  const withLinks = (extra: Array<Record<string, unknown>>, flag?: 'missing') => {
+    const base = buildJob(['account', 'terms'])
+    const outputs = base.outputs.map((output, index) =>
+      index === 0 && flag ? { ...output, proposal: { ...output.proposal, storeLinks: flag } } : output,
+    )
+    const row = (base.items ?? [])[0] as unknown as { outputs: string[] }
+    return {
+      ...base,
+      outputs: [...outputs, ...(extra as never[])],
+      items: [{ ...row, outputs: [...row.outputs, ...extra.map((one) => String(one['id']))] } as never],
+    }
+  }
+  const layoutDraft = {
+    resource: 'layout',
+    id: 'lay-site',
+    versionId: 'build-1-store-links',
+    hostId: 'host-1',
+    hostSubdomain: 'ember',
+    label: 'Site header and footer',
+    proposal: { storeLinks: 'draft' },
+  }
+
+  it('asks to add the links by hand where the site’s layout had no list for them', () => {
+    const steps = aiStoreFinishLinks(withLinks([], 'missing'), 'acme')
+    expect(steps?.at(-1)).toMatchObject({
+      id: 'links',
+      title: 'Add Account and policy links to your header and footer',
+      href: '/acme/hosts/ember/layouts',
+    })
+    render(<AiStoreFinishCard steps={steps ?? []} />)
+    expect(screen.getByText('Add Account and policy links to your header and footer')).toBeTruthy()
+  })
+
+  it('asks to publish the layout version the links were drafted into, until the build published it', () => {
+    expect(aiStoreFinishLinks(withLinks([layoutDraft]), 'acme')?.at(-1)).toMatchObject({
+      id: 'links',
+      title: 'Publish your header and footer links',
+      href: '/acme/hosts/ember/layouts/lay-site/versions/build-1-store-links/besigner',
+    })
+    const published = { ...withLinks([layoutDraft]), sitePublish: { liveUrl: null, published: [{ id: 'x', label: 'x', path: '/account' }], drafts: [] } }
+    expect(aiStoreFinishLinks(published, 'acme')?.some((step) => step.id === 'links')).toBe(false)
+  })
 })

@@ -31,6 +31,22 @@ import { sendGa4SitePublished } from '@aglyn/tenant-data-admin/server/ga4-measur
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
+import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
+import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
+
+/**
+ * A store's links a build drafted into the site's own layout (AGL-3676): the
+ * draft version, the links in it, and the site's page addresses they were
+ * checked against. Its publish makes that version the live one, or — where
+ * the layout changed since the draft was made — adds the same links to the
+ * version that is live now.
+ */
+export interface AiSitePublishStoreLinks {
+  layoutId: string
+  versionId: string
+  links: AiStoreLayoutLinks
+  screenPaths?: Readonly<Record<string, string>>
+}
 
 /**
  * A guided site start publishes what it built (AGL-3596).
@@ -232,6 +248,8 @@ export async function aiPublishGuidedSite(
     blogUnwritten?: boolean
     /** Paths the layout links that the start did not write, such as a store page (AGL-3676): their links come out. */
     unwrittenHrefs?: readonly string[]
+    /** A store's links a build drafted into the site's own layout (AGL-3676), which go live with its pages. */
+    storeLinks?: AiSitePublishStoreLinks | null
   },
   deps: AiSitePublishDeps = {},
 ): Promise<AiJobSitePublish> {
@@ -304,10 +322,28 @@ export async function aiPublishGuidedSite(
     homeId: home?.id ?? null,
     jobId: job.$id,
     now,
+    storeLinks: input.storeLinks ?? null,
   }).catch((error: unknown) => {
     console.error('ai site publish: navigation not applied', { hostId, jobId: job.$id, error })
     return null
   })
+  // A store's links drafted into a layout the pages' navigation did not touch go live on their own.
+  const storeLinks = input.storeLinks ?? null
+  const storeLinksWrite =
+    storeLinks && layoutWrite?.layoutRef.id !== storeLinks.layoutId
+      ? await aiLayoutVersionWrite(firestore, {
+          hostId,
+          layoutId: storeLinks.layoutId,
+          transform: () => null,
+          storeLinks,
+          jobId: job.$id,
+          now,
+        }).catch((error: unknown) => {
+          console.error('ai site publish: store links not applied', { hostId, jobId: job.$id, error })
+          return null
+        })
+      : null
+  const layoutWrites = [layoutWrite, storeLinksWrite].filter((write): write is LayoutWrite => Boolean(write))
 
   const paths = [
     ...new Set(
@@ -335,9 +371,9 @@ export async function aiPublishGuidedSite(
   for (const page of accepted) {
     batch.set(hostRef.collection('screens').doc(page.id), { slug: page.slug, publishedAt: now }, { merge: true })
   }
-  if (layoutWrite) {
-    batch.create(layoutWrite.versionRef, layoutWrite.version)
-    batch.set(layoutWrite.layoutRef, { versionId: layoutWrite.versionRef.id, updatedAt: now }, { merge: true })
+  for (const write of layoutWrites) {
+    if (write.version) batch.create(write.versionRef, write.version)
+    batch.set(write.layoutRef, { versionId: write.versionRef.id, updatedAt: now }, { merge: true })
   }
   // The announce, written down in the publish's own batch (AGL-2575): a
   // layout change reaches every page, so it asks for the whole site.
@@ -347,7 +383,7 @@ export async function aiPublishGuidedSite(
     paths: paths.length ? paths : [SCREEN_ROOT_PATH],
     createdAt: FieldValue.serverTimestamp(),
     attempts: 0,
-    ...(layoutWrite ? { entireHost: true } : {}),
+    ...(layoutWrites.length ? { entireHost: true } : {}),
   })
   try {
     await batch.commit()
@@ -363,7 +399,7 @@ export async function aiPublishGuidedSite(
   const dropped = await dropCache({
     hostIds: [hostId],
     reason: 'guided AI site start published',
-    ...(layoutWrite ? {} : { paths: { [hostId]: paths } }),
+    ...(layoutWrites.length ? {} : { paths: { [hostId]: paths } }),
   })
   if (dropped.complete) await outboxRef.delete().catch(() => undefined)
   // A site that came alive with nobody's browser on the publish (AGL-1589).
@@ -374,7 +410,8 @@ export async function aiPublishGuidedSite(
 interface LayoutWrite {
   layoutRef: FirebaseFirestore.DocumentReference
   versionRef: FirebaseFirestore.DocumentReference
-  version: Record<string, unknown>
+  /** The new version to create; `null` where the live version becomes one already written (a store's links draft). */
+  version: Record<string, unknown> | null
 }
 
 /**
@@ -393,9 +430,10 @@ async function aiNavigationLayoutWrite(
     homeId: string | null
     jobId: string
     now: Date
+    storeLinks?: AiSitePublishStoreLinks | null
   },
 ): Promise<LayoutWrite | null> {
-  if (!input.entries.length && !input.retiredHomeId && !input.droppedHrefs.length) return null
+  if (!input.entries.length && !input.retiredHomeId && !input.droppedHrefs.length && !input.storeLinks) return null
   const hostRef = firestore.collection('hosts').doc(input.hostId)
   const layoutIds = new Set<string>()
   for (const id of input.pageIds) {
@@ -410,16 +448,55 @@ async function aiNavigationLayoutWrite(
   }
   if (layoutIds.size !== 1) return null
   const [layoutId] = [...layoutIds]
-  const layoutRef = hostRef.collection('layouts').doc(layoutId)
+  return aiLayoutVersionWrite(firestore, {
+    hostId: input.hostId,
+    layoutId,
+    transform: (nodes) => aiLayoutWithNavigation(nodes, input),
+    storeLinks: input.storeLinks ?? null,
+    jobId: input.jobId,
+    now: input.now,
+  })
+}
+
+/**
+ * The new live version of one layout: `transform` applied to the version
+ * live now. A store's links drafted into this layout (AGL-3676) start it from
+ * that draft while the draft was made from the live version, and are added
+ * to the live version otherwise; a draft with nothing more to add becomes
+ * the live version as it is. `null` when nothing changes.
+ */
+async function aiLayoutVersionWrite(
+  firestore: Firestore,
+  input: {
+    hostId: string
+    layoutId: string
+    transform: (nodes: NodesMap) => NodesMap | null
+    storeLinks: AiSitePublishStoreLinks | null
+    jobId: string
+    now: Date
+  },
+): Promise<LayoutWrite | null> {
+  const { layoutId } = input
+  const layoutRef = firestore.collection('hosts').doc(input.hostId).collection('layouts').doc(layoutId)
   const layout = await layoutRef.get()
   const currentVersionId = layout.get('versionId')
   if (!layout.exists || layout.get('deletedAt') != null || typeof currentVersionId !== 'string') return null
   const current = await layoutRef.collection('versions').doc(currentVersionId).get()
-  const nodes = current.exists ? decodeStoredNodes<NodesMap>(current.get('nodes')) : null
+  const links = input.storeLinks?.layoutId === layoutId ? input.storeLinks : null
+  const draftRef = links ? layoutRef.collection('versions').doc(links.versionId) : null
+  const draft = draftRef ? await draftRef.get() : null
+  const fromDraft = Boolean(draft?.exists && draft.get(STORE_LINKS_SOURCE_FIELD) === currentVersionId)
+  const base = fromDraft && draft ? draft : current
+  const nodes = base.exists ? decodeStoredNodes<NodesMap>(base.get('nodes')) : null
   if (!nodes) return null
-  const next = aiLayoutWithNavigation(nodes, input)
-  const packed = next ? encodeStoredNodes(next) : null
-  if (!next || !packed) return null
+  let next = input.transform(nodes)
+  if (links && !fromDraft) {
+    const added = aiLayoutWithStoreLinks((next ?? nodes) as never, links.links, links.screenPaths)
+    next = (added.nodes as NodesMap | null) ?? next
+  }
+  if (!next) return fromDraft && draftRef ? { layoutRef, versionRef: draftRef, version: null } : null
+  const packed = encodeStoredNodes(next)
+  if (!packed) return null
   const versionRef = layoutRef.collection('versions').doc(createResourceUid())
   return {
     layoutRef,

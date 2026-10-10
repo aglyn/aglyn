@@ -376,11 +376,15 @@ export function aiStorePageNodes(key: AiStorePageKey, facts: AiStorePageFacts): 
 
 /** One thing left before an AI-built store sells, as its done page lists it. */
 export interface AiStoreFinishStep {
-  id: 'payments' | 'products' | 'shipping' | 'policies'
+  id: 'payments' | 'products' | 'shipping' | 'policies' | 'links'
   title: string
   text: string
-  /** The record route kind whose list the step opens (`plugin-record-routes`), or `pages` for the site's Pages. */
-  opens: 'store-settings' | 'product' | 'pages'
+  /**
+   * The record route kind whose list the step opens (`plugin-record-routes`),
+   * `pages` for the site's Pages, `layouts` for its Layouts, or `layout` for
+   * the layout version a build drafted its store's links into (AGL-3676).
+   */
+  opens: 'store-settings' | 'product' | 'pages' | 'layouts' | 'layout'
   action: string
 }
 

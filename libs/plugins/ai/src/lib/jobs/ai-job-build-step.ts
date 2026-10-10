@@ -91,10 +91,16 @@ import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import {
   AI_BUILD_STORE_OP,
   AI_BUILD_STORE_PAGES_PRESENT_NOTE,
+  aiBuildStoreLayoutLinks,
+  aiBuildStoreLayoutOf,
   aiBuildStorePagesOf,
   aiBuildStorePagesStillMissing,
+  type AiBuildStoreLinksState,
   type AiStoreSitePage,
 } from '../model/ai-build-store-pages'
+import type { AiStoreLayoutLinks } from '../model/ai-layout-store-links'
+import { writeAiStoreLinksLayoutDraft } from './ai-job-store-links-layout'
+import type { AiSitePublishStoreLinks } from './ai-site-publish'
 import {
   AI_SITE_STORE_LINKS_INPUT,
   AI_SITE_STORE_PAGES_NOTE,
@@ -343,16 +349,26 @@ export interface AiJobBuildStepDeps {
   storePagesRefusal?: typeof aiSiteStorePagesRefusal
   /** The site's pages as they are now, which a store's own pages are checked against before they are written. */
   readSitePages?: typeof readAiStoreSitePages
+  /** The draft version of the site's layout a store's links are written into. */
+  writeStoreLinks?: typeof writeAiStoreLinksLayoutDraft
 }
 
 /** The site's pages as a store's own pages are checked against them (AGL-3676): every page that is not deleted. */
 export async function readAiStoreSitePages(firestore: FirebaseFirestore.Firestore, hostId: string): Promise<AiStoreSitePage[]> {
-  const snapshot = await firestore.collection('hosts').doc(hostId).collection('screens').select('displayName', 'slug', 'kind', 'deletedAt').get()
+  const snapshot = await firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('screens')
+    .select('displayName', 'slug', 'kind', 'deletedAt', 'layoutId')
+    .get()
   return snapshot.docs.flatMap((doc) => {
     const kind = doc.get('kind')
     if (doc.get('deletedAt') || (kind && kind !== 'template')) return []
     const slug = String(doc.get('slug') ?? '')
-    return slug ? [{ id: doc.id, slug, title: String(doc.get('displayName') ?? ''), template: kind === 'template' }] : []
+    const layoutId = doc.get('layoutId')
+    return slug
+      ? [{ id: doc.id, slug, title: String(doc.get('displayName') ?? ''), template: kind === 'template', layoutId: typeof layoutId === 'string' && layoutId ? layoutId : null }]
+      : []
   })
 }
 
@@ -360,8 +376,8 @@ export async function readAiStoreSitePages(firestore: FirebaseFirestore.Firestor
  * What a build's store pages unit is told (AGL-3676): the pages its plan kept,
  * less any the site has gained since — never counting the pages this unit
  * wrote itself on an earlier pass, which it finds again by their ids — what
- * their words link, and the layout the plan's Shop page renders inside, the
- * site's own otherwise.
+ * their words link, and the layout they render inside: the plan's Shop
+ * page's, else the site's own (`aiBuildStoreLayoutOf`).
  */
 export function aiBuildStorePagesInput(
   job: AiJob,
@@ -378,7 +394,91 @@ export function aiBuildStorePagesInput(
   const built = aiBuildBuiltRefs(context.units, context.ledger, job.outputs ?? [])
   const shop = plan.screens.find((screen) => !screen.record && screen.slug.replace(/^\/+/, '').split('/')[0].toLowerCase() === kept.facts.shopPath.slice(1))
   const layout = shop ? aiSiteResolvedRef(shop.layout, built) : null
-  return { pages, facts: kept.facts, layoutId: layout && !isAiPlanNewRef(layout) ? layout : null }
+  return {
+    pages,
+    facts: kept.facts,
+    layoutId: aiBuildStoreLayoutOf(layout && !isAiPlanNewRef(layout) ? layout : null, context.sitePages),
+  }
+}
+
+/**
+ * Adds a store's links to the site's own layout (AGL-3676), as a draft
+ * version, where the build made no layout of its own for its store pages: the
+ * outputs that record it — the layout version written (`storeLinks: draft`),
+ * and on the first page `storeLinks: missing` where the layout had no header
+ * or footer list to add them to, or there is no layout at all.
+ */
+export async function aiBuildStoreLinksOutputs(
+  firestore: FirebaseFirestore.Firestore,
+  input: {
+    job: AiJob
+    unitJobId: string
+    store: AiSiteStorePagesInput
+    outputs: readonly AiJobOutput[]
+    sitePages: readonly AiStoreSitePage[]
+    builtLayouts: ReadonlySet<string>
+    now: Date
+  },
+  write: typeof writeAiStoreLinksLayoutDraft = writeAiStoreLinksLayoutDraft,
+): Promise<AiJobOutput[]> {
+  const outputs = input.outputs.map((output) => ({ ...output }))
+  const layoutId = input.store.layoutId
+  // A layout this build made was told the store's links as it was compiled.
+  if (layoutId && input.builtLayouts.has(layoutId)) return outputs
+  const written = new Set(outputs.map((output) => output.proposal?.['storePage']).filter((key): key is string => typeof key === 'string'))
+  const links = aiBuildStoreLayoutLinks(input.store.pages, written)
+  const missing = (): AiJobOutput[] => {
+    const [first, ...rest] = outputs
+    const state: AiBuildStoreLinksState = 'missing'
+    return first ? [{ ...first, proposal: { ...(first.proposal ?? {}), storeLinks: state } }, ...rest] : outputs
+  }
+  if (!layoutId || !input.job.hostId) return missing()
+  const hrefs = new Set([...links.header, ...(links.cart ? [links.cart] : []), ...links.footer].map((link) => link.href.slice(1)))
+  const screenPaths: Record<string, string> = {}
+  for (const page of input.sitePages) {
+    const slug = page.slug.replace(/^\/+/, '').split('/')[0].toLowerCase()
+    if (page.id && hrefs.has(slug)) screenPaths[page.id] = slug
+  }
+  const draft = await write(firestore, {
+    hostId: input.job.hostId,
+    layoutId,
+    versionId: `${input.unitJobId}-links`.slice(0, 64),
+    links,
+    screenPaths,
+    uid: input.job.createdBy,
+    aiJobId: aiOriginJobId(input.job),
+    now: input.now,
+  })
+  if (draft.status === 'present') return outputs
+  if (draft.status === 'gone') return missing()
+  const versionId = draft.versionId
+  const layout: AiJobOutput[] = versionId
+    ? [
+        {
+          resource: 'layout',
+          id: draft.layoutId,
+          versionId,
+          hostId: input.job.hostId,
+          hostSubdomain: outputs.find((output) => output.hostSubdomain)?.hostSubdomain,
+          label: draft.name,
+          note: 'A new draft version with Account and policy links. Visitors see it once it is published.',
+          proposal: { storeLinks: 'draft' satisfies AiBuildStoreLinksState, links, screenPaths },
+        },
+      ]
+    : []
+  return [...(draft.status === 'unrecognized' ? missing() : outputs), ...layout]
+}
+
+/** The store's links a build drafted into the site's layout (AGL-3676), as its publish puts them live; `null` where it drafted none. */
+export function aiBuildStoreLinksToPublish(outputs: readonly AiJobOutput[]): AiSitePublishStoreLinks | null {
+  const draft = outputs.find((output) => output.resource === 'layout' && output.proposal?.['storeLinks'] === 'draft' && output.versionId)
+  if (!draft?.versionId) return null
+  return {
+    layoutId: draft.id,
+    versionId: draft.versionId,
+    links: draft.proposal?.['links'] as AiStoreLayoutLinks,
+    screenPaths: (draft.proposal?.['screenPaths'] ?? {}) as Record<string, string>,
+  }
 }
 
 /** Whether a build's workspace spends the Free taste. */
@@ -403,6 +503,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
   const storePagesRunner = deps.storePages ?? runAiSiteStorePagesUnit
   const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
   const readSitePages = deps.readSitePages ?? readAiStoreSitePages
+  const writeStoreLinks = deps.writeStoreLinks ?? writeAiStoreLinksLayoutDraft
 
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore } = context
@@ -431,7 +532,11 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       ordered.some((one) => one.slot !== slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }))
 
     /** The build's last pass puts its pages live, where it was asked and confirmed. */
-    const finish = async (outcome: AiJobStepOutcome, extraPages: readonly AiJobOutput[] = []): Promise<AiJobStepOutcome> => {
+    const finish = async (
+      outcome: AiJobStepOutcome,
+      extraPages: readonly AiJobOutput[] = [],
+      extraOutputs: readonly AiJobOutput[] = [],
+    ): Promise<AiJobStepOutcome> => {
       if (!aiJobPublishesBuild(job) || job.sitePublish || !job.hostId) return outcome
       // A record template renders once per record only once its binding is
       // saved, so it is never published at its own address (AGL-3616).
@@ -458,11 +563,13 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       const unwrittenHrefs = storePages
         ? aiStorePagesToWrite(storePages.pages).filter((page) => !live.has(page.key)).map((page) => page.href)
         : []
+      const storeLinks = aiBuildStoreLinksToPublish([...(job.outputs ?? []), ...extraOutputs])
       const sitePublish = await publish(firestore, {
         job,
         outputs: pages,
         now: context.now,
         ...(unwrittenHrefs.length ? { unwrittenHrefs } : {}),
+        ...(storeLinks ? { storeLinks } : {}),
       }).catch((error: unknown) => {
         console.error('ai build publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
@@ -495,12 +602,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         if (refusal) return settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` })
       }
       const unitJobId = aiBuildUnitJobId(job, unit)
-      const input = aiBuildStorePagesInput(job, {
-        unitJobId,
-        sitePages: await readSitePages(firestore, job.hostId),
-        units,
-        ledger,
-      })
+      const sitePages = await readSitePages(firestore, job.hostId)
+      const input = aiBuildStorePagesInput(job, { unitJobId, sitePages, units, ledger })
       if (!input) return settle({ slot: unit.slot, status: 'skipped', note: aiBuildUnavailableCopy('store page') })
       if (!aiStorePagesToWrite(input.pages).length) {
         return settle({ slot: unit.slot, status: 'skipped', note: AI_BUILD_STORE_PAGES_PRESENT_NOTE })
@@ -525,11 +628,28 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       }
       const stopped = aiUnitFailure(unit.slot, outcome)
       if (stopped) return settle(stopped, aiUnitSpend(outcome))
-      const ids = outcome.outputs.map((output) => output.id)
-      const done = settle({ slot: unit.slot, status: 'succeeded', outputs: ids, note: AI_SITE_STORE_PAGES_NOTE }, aiUnitSpend(outcome))
+      // The site's own header and footer link them (AGL-3676), in a draft
+      // version of its layout; a layout this build made already does.
+      const builtLayouts = new Set(
+        [...aiBuildBuiltRefs(units, ledger, job.outputs ?? []).values()].filter((entry) => entry.kind === 'layout').map((entry) => entry.id),
+      )
+      const outputs = await aiBuildStoreLinksOutputs(
+        firestore,
+        { job, unitJobId, store: input, outputs: outcome.outputs, sitePages, builtLayouts, now: context.now },
+        writeStoreLinks,
+      ).catch((error: unknown) => {
+        console.error('ai build store links not written', { orgId: job.orgId, jobId: job.$id, error })
+        return outcome.outputs
+      })
+      const ids = outputs.map((output) => output.id)
+      const done = settle({ slot: unit.slot, status: 'succeeded', outputs: ids, note: AI_SITE_STORE_PAGES_NOTE }, { ...aiUnitSpend(outcome), outputs })
       if (done.continue) return done
       rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: 'succeeded', outputs: ids })
-      return finish(done, outcome.outputs.filter((output) => output.resource === 'screen'))
+      return finish(
+        done,
+        outputs.filter((output) => output.resource === 'screen'),
+        outputs,
+      )
     }
 
     const capability = ops.get(unit.op)

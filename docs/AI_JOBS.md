@@ -1560,7 +1560,25 @@ nothing itself.
     live with the planned pages and drops the links of any that were not
     written. The done card shows **Finish your store**, where the products step
     says the products are drafts to price. It leaves out the policies step when
-    the build wrote no policy page. The build plan prompt is unchanged.
+    the build wrote no policy page. Where the build makes no layout for them,
+    the store pages render inside the layout of the plan's Shop page, else the
+    home page's layout, else the layout most of the site's pages use. Code adds
+    the links to that layout (`model/ai-layout-store-links.ts`,
+    `jobs/ai-job-store-links-layout.ts`) as a NEW DRAFT VERSION beside the
+    live one. Account goes into each list of links in the header (the bar's and
+    the phone menu's), or into a Toolbar that holds a link. Cart is added too
+    where the layout has no `cart` element. The account and the policies go
+    into the footer's longest list of links. Each new link is a copy of its
+    neighbour, and a link already there, by href or by the page at that
+    address, is skipped. The version that is live is never touched. A build's
+    publish makes the draft the live version while the live one is still the
+    version it was made from (`aiStoreLinksSourceVersionId`). Otherwise it
+    adds the same links to the version that is live then. A layout with no
+    header or footer list is left as it is: the first store page's output
+    carries `storeLinks: missing`, and the finish card asks the owner to "Add
+    Account and policy links to your header and footer". A draft the build did
+    not publish adds "Publish your header and footer links". The build plan
+    prompt is unchanged.
   Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent
