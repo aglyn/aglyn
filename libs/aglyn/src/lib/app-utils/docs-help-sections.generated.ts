@@ -75,7 +75,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   aiCredits: {
     '#before-a-job-starts': 'Photos.md) in an AI site | Nothing | A model you choose with the Model switch can cost more or less than Auto; the switch shows each model\'s cost.',
     '#past-the-band': 'N hour. See Paused, or out of credits.',
-    '#see-your-credits': 'Re not given back when you cancel a job yourself (you pay for what ran until then), or when the AI declines what the brief asked for.',
+    '#see-your-credits': 'At never ran are released; see Cancel a job), or when the AI declines what the brief asked for.',
   },
   aiCrm: {
     '#draft-an-email': 'New timeline entry, a new or finished task, or an edited note makes the next summary a new one.',
@@ -104,7 +104,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#asking-a-question': 'Ws is left out.',
   },
   aiJobs: {
-    '#ai-jobs-in-assist': 'To build only the parts that failed; For a new site this is the Building your site page; see Start a new site with AI.',
+    '#ai-jobs-in-assist': '(see Cancel a job); For a new site this is the Building your site page; see Start a new site with AI.',
   },
   aiLayout: {
     '#generate-a-layout-with-aglyn-ai': 'Copy until you assign it, so nothing on the live site changes.',
