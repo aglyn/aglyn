@@ -307,6 +307,37 @@ describe('the Kiln & Clover start’s photos (AGL-3660)', () => {
       expect(aiStockSensitive(at(['art', word]), terms.named)).toBe(true)
     }
     expect(aiStockRelevance(NUDE_TORSO, { domain: terms.domain, named: terms.named })).toBe(0)
+    // "Body" alone is not nudity: body lotion, body wash, body butter.
+    for (const tags of [['body lotion', 'skincare'], ['body wash', 'bath'], ['body butter', 'jar']]) {
+      expect(aiStockSensitive(at(tags), terms.named)).toBe(false)
+    }
+  })
+
+  it('gives a skincare shop’s body lotion a body-lotion photo, never the torso sculpture', async () => {
+    const SHOP = 'A natural skincare shop selling body lotions, body butters and soaps'
+    const LOTION = {
+      ...STONEWARE_BOWLS,
+      id: '9200005',
+      pageUrl: 'https://pixabay.com/photos/body-lotion-lotion-skincare-9200005/',
+      tags: ['body lotion', 'lotion', 'skincare', 'bottle', 'body', 'natural'],
+    }
+    const TORSO = { ...NUDE_TORSO, tags: ['torso', 'body', 'lotion', 'skincare', 'nude', 'sculpture'] }
+    const { provider, ingest } = fakes()
+    const source = aiLayoutStockPhotoSource(
+      { hostId: 'h', uid: 'u', seed: 'skincare:products', business: SHOP, sectionNames: ['Products'], searches: 20 },
+      {
+        provider: () => ({
+          ...provider,
+          search: async (request) => ({
+            photos: /lotion|skincare/.test(request.query) ? [TORSO, LOTION] : [],
+            cached: true,
+          }),
+        }),
+        ingest: () => ingest,
+      },
+    )
+    const photos = (await source?.([productSlot('Body Lotion')])) ?? []
+    expect(photos.map((found) => found?.src?.replace('media:h/', ''))).toEqual([LOTION.id])
   })
 
   it('never reads glass art as pottery: a hit naming glass names the potter’s own words too', () => {

@@ -403,6 +403,7 @@ const SENSITIVE_TOPICS: ReadonlyArray<{
   {
     // Nudity, for every business: no word of a brief lets it in (Kiln &
     // Clover, 2026-10-10: a nude torso sculpture filled "About the artist").
+    // Never bare "body": a skincare shop's body lotion is its product.
     words: [
       'nude',
       'nudes',
@@ -411,7 +412,6 @@ const SENSITIVE_TOPICS: ReadonlyArray<{
       'torso',
       'breast',
       'breasts',
-      'body',
       'erotic',
       'sensual',
       'lingerie',
