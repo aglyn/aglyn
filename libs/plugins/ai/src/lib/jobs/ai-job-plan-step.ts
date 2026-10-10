@@ -291,6 +291,10 @@ export function aiPlanSiteLines(
   // A section that shows the work counts its pieces (AGL-3660): a planned
   // gallery of no items let a page about the work show none.
   lines.push(AI_SITE_GALLERY_SENTENCE)
+  // A section that asks for something places the form (AGL-3660): a live
+  // portfolio start planned a commissions inquiry beside the form it made
+  // for its Contact page, without placing it.
+  if (aiPlanCanPlaceForm(inventory, capabilities)) lines.push(AI_SITE_FORM_SENTENCE)
   // The kind of site the person picked (AGL-3660): the pages it usually has.
   const kind = aiSiteKindOfInputs(job.inputs)
   if (kind) lines.push(`This is a ${kind.label.toLowerCase()} site. ${kind.pages}`)
@@ -302,6 +306,14 @@ export function aiPlanSiteLines(
   )
   return lines
 }
+
+/**
+ * The sentence a site plan's turn states about a section that collects
+ * answers (AGL-3660): it places the saved form by reference, and one form
+ * may be placed on more than one page.
+ */
+export const AI_SITE_FORM_SENTENCE =
+  "A section that asks visitors for something (contact, inquiry, commissions, booking, sign-up) places the form: put new:<the form's name> or the site's form id in its uses. One form may be placed on several pages."
 
 /**
  * What a site start's home page is held to (AGL-3660): its fewest sections,
