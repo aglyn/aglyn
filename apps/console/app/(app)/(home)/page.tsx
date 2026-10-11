@@ -68,6 +68,7 @@ import {
   releaseSignUpLanding,
 } from '../../../utils/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
+import { currentConsoleLandingHref } from '../../../utils/console-landing'
 
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */
@@ -342,7 +343,13 @@ function OrgJump() {
     // Failing that, the intent the ACCOUNT remembers from signup: this is the
     // landing the email-verification bounce discards, and it arrives here as a
     // bare `/` with nothing to read off the URL (AGL-1535).
-    router.replace(enterOrg(slug))
+    //
+    // Under the auth host the org lives on another origin (AGL-3724): a
+    // client-side replace there asks `auth.` for a page it refuses with a 404.
+    const destination = enterOrg(slug)
+    const landing = currentConsoleLandingHref(destination)
+    if (landing !== destination) return void hardNavigate(landing)
+    router.replace(destination)
   }, [loading, confirmed, orgs, router, storedIntent, enterOrg])
 
   return (
