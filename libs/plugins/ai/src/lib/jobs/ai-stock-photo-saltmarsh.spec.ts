@@ -238,14 +238,16 @@ describe('the Saltmarsh Soap Co start’s photos (AGL-3660, beta.241)', () => {
     expect(new Set(stored.map((request) => request.stockPhoto?.key)).size).toBe(
       stored.length,
     )
-    // What each now gets, from the start's own answers: a stack of soap bars,
-    // a handmade bar, a lotion bottle, soap cubes, a soap gift flat lay.
+    // What each now gets, from the start's own answers: a handmade bar, a
+    // hand-milled bar, a hand cream (since the Tidewater start, never the
+    // perfume bottle tagged "lotion", 7639482), soap cubes, and an artisan
+    // gift soap borrowed from the craft's "handmade soap".
     expect({ bar, trio, lotion, giftSet, giftBox }).toEqual({
-      bar: '9243',
+      bar: '4523469',
       trio: '8429699',
-      lotion: '7639482',
+      lotion: '6391400',
       giftSet: '8227622',
-      giftBox: '3123468',
+      giftBox: '5079181',
     })
   })
 

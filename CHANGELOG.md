@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.243 — 2026-10-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.242...v1.0.0-beta.243)
+
+### Fixed
+
+- **ai:** weak product photos borrow their category's; no saunas, colognes or dispensers ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
 ## v1.0.0-beta.242 — 2026-10-11
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.241...v1.0.0-beta.242)

@@ -120,20 +120,29 @@ describe('a store’s product photos (AGL-3676)', () => {
     expect(queries(['Candle Wick Trimmer'])).toEqual(['candle wick trimmer', 'candle'])
     expect(queries(['Candle Gift Set', 'A gift box of three soy candles tied with twine'])).toEqual(['candle gift set', 'candle gift box', 'candle'])
     expect(queries(['Travel Tin Soy Candle'])).toEqual(['tin soy candle', 'candle'])
-    // Then the same, the head noun anywhere; a gift's wrapper with the craft; the craft's broad searches.
-    const fallbacks = aiStockProductSearches(
+    // Then, by how sure each is (AGL-3660): a photo OF the category (the
+    // category alone, the craft's broad searches, a candle among the first
+    // tags); then the head noun anywhere, a gift's wrapper with the craft,
+    // and the craft's broad searches, any hit naming the craft.
+    const all = aiStockProductSearches(
       { aspect: 4 / 5, product: { subjects: ['Candle Gift Set'] } },
       'candle',
       [],
       { broad: ['handmade candles'], core: ['candle'] },
-    ).filter((search) => !search.lead)
-    expect(fallbacks.map((search) => [search.query, search.object ?? null, search.broad === true])).toEqual([
-      ['candle gift set', 'candle', false],
-      ['candle', 'candle', false],
-      ['candle gift set', 'gift', false],
-      ['handmade candles', null, true],
+    )
+    expect(all.map((search) => [search.query, search.object ?? null, search.broad === true, search.tier ?? 'own'])).toEqual([
+      ['candle gift set', 'candle', false, 'own'],
+      ['candle', 'candle', false, 'borrow'],
+      ['handmade candles', null, true, 'borrow'],
+      ['candle gift set', 'candle', false, 'weak'],
+      ['candle', 'candle', false, 'weak'],
+      ['candle gift set', 'gift', false, 'weak'],
+      ['handmade candles', null, true, 'weak'],
     ])
-    expect(fallbacks.at(-1)).toMatchObject({ category: ['candle'] })
+    expect(all[2]).toMatchObject({ leadAny: ['candle'], category: ['candle'] })
+    expect(all.at(-1)).toMatchObject({ category: ['candle'] })
+    expect(all.at(-1)).not.toHaveProperty('leadAny')
+    for (const search of all) expect(search.product).toBe(true)
     for (const search of aiStockProductSearches({ aspect: 4 / 5, product: { subjects: ['Wick Trimmer'] } }, 'candle')) {
       expect(search).toMatchObject({ requires: 'candle', orientation: 'vertical' })
     }
