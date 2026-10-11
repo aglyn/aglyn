@@ -126,6 +126,16 @@ import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
  *    searches, and then — a product or a hero only — reuses an on-topic photo
  *    the job already shows rather than take a starter. Every slot of a
  *    craft's site tries the craft's broad searches last.
+ * 7. **A product takes the surest photo, even a borrowed one** (the beta.242
+ *    Tidewater Soap Works start: a sauna for "Bath Gift Set", colognes for
+ *    "Natural Body Lotion", a bathroom shelf for "Soap Bar Trio" and a soap
+ *    dispenser for its starter size, while the collection tiles beside them
+ *    were good). A product's searches are ranked by how sure they are: its
+ *    own photo (the head noun or its kin among the first tags), then a photo
+ *    OF its category, new or one the job already shows, then a weak hit of
+ *    its own. No product shows a room or a scene, a fragrance bottle, or what
+ *    its kin shuns (a pump for a bar) unless it names it; "bath" in a bath
+ *    gift set is what the set is for; a size is never the product.
  *
  * A slot nothing acceptable answered — the library down, refusing, or out
  * of time — is left `null` for the starter photos. A named object is never
@@ -244,6 +254,47 @@ const WRAPPERS = words(
 const REJECTED_TAGS = words(
   'mockup mock-up mock blank template templates clipart clip-art illustration vector logo icon ' +
     'ai-generated generated render rendering 3d',
+)
+
+/**
+ * Rooms and scenes, never a product (AGL-3660): the beta.242 Tidewater Soap
+ * Works start put a wooden sauna under "Bath Gift Set" and a bathroom shelf of
+ * baskets under "Soap Bar Trio". A product's hit whose first tags name one of
+ * these is turned down unless the product or the brief names it too.
+ */
+const PRODUCT_SCENES = new Set(
+  [
+    'sauna',
+    'bathroom',
+    'bathtub',
+    'shower',
+    'toilet',
+    'sink',
+    'washbasin',
+    'faucet',
+    'tap',
+    'shelf',
+    'shelves',
+    'interior',
+    'bedroom',
+    'kitchen',
+    'room',
+    'livingroom',
+    'hotel',
+    'lobby',
+  ].map(aiStockStem),
+)
+
+/**
+ * A fragrance's bottle, never a lotion, a cream or a soap (AGL-3660): the same
+ * start's "Natural Body Lotion" showed blue cologne bottles tagged "perfume,
+ * bottle, lotion". Turned down among a product's first tags unless the
+ * product or the brief is a fragrance.
+ */
+const FRAGRANCE_BOTTLES = new Set(
+  ['perfume', 'perfumes', 'perfumery', 'cologne', 'colognes', 'parfum', 'eau', 'atomizer', 'fragrance'].map(
+    aiStockStem,
+  ),
 )
 
 /**
@@ -396,7 +447,8 @@ const SENSITIVE_TOPICS: ReadonlyArray<{
   },
   {
     // Tobacco and drugs.
-    words: ['cigarette', 'smoking', 'tobacco', 'cannabis', 'marijuana', 'drug', 'drugs'],
+    // "cbd" and "cannabinoid": a hemp cream tube was the next "body lotion" answer (Tidewater, 2026-10-11).
+    words: ['cigarette', 'smoking', 'tobacco', 'cannabis', 'marijuana', 'drug', 'drugs', 'cbd', 'cannabinoid', 'thc'],
     allow: ['dispensary', 'vape', 'cigar'],
   },
   {
@@ -512,9 +564,14 @@ function saysMadeByHand(text: string): boolean {
 const OBJECT_KIN: ReadonlyArray<{
   objects: readonly string[]
   within: readonly string[]
-  qualifier: string
+  /** The word a product's search adds where its subject lacks it; none where the subject is enough. */
+  qualifier?: string
+  /** Whether the qualifier follows the subject: "bath gift set soap". */
+  after?: boolean
   kin: readonly string[]
   queries: readonly string[]
+  /** Words a photo of the object never carries unless the product names them: a pump for a bar of soap. */
+  shun?: readonly string[]
 }> = [
   {
     objects: ['melt', 'tart', 'cube'],
@@ -557,6 +614,59 @@ const OBJECT_KIN: ReadonlyArray<{
       'soap cubes',
     ],
     queries: ['soap bars', 'handmade soap bar'],
+    // A bar is never a pump or a liquid soap (the beta.242 Tidewater start).
+    shun: ['pump', 'pumps', 'liquid', 'dispenser', 'dispensers'],
+  },
+  {
+    // "Bath" in "bath gift set", "bath bomb" or "bath salts" is what the
+    // products are for, never the room: the beta.242 Tidewater Soap Works
+    // start (2026-10-11) put a wooden sauna under "Bath Gift Set", its tags
+    // "sauna, steam, bath". A bath set is named by soap and bath products,
+    // and searched with soap.
+    objects: ['bath'],
+    within: ['soap', 'soapmaker', 'skincare', 'spa', 'cosmetic'],
+    qualifier: 'soap',
+    after: true,
+    kin: [
+      'soap',
+      'soaps',
+      'soap bar',
+      'soap bars',
+      'handmade soap',
+      'bath bomb',
+      'bath bombs',
+      'bath salt',
+      'bath salts',
+      'bath product',
+      'bath products',
+      'bath set',
+      'toiletries',
+    ],
+    queries: ['soap gift set', 'bath products', 'bath bombs'],
+    shun: ['pump', 'pumps', 'liquid', 'dispenser', 'dispensers'],
+  },
+  {
+    // A lotion is any cream for the skin; a perfume bottle tagged "lotion"
+    // is not one (the same start's "Natural Body Lotion" showed colognes).
+    objects: ['lotion', 'moisturizer', 'moisturiser'],
+    within: ['soap', 'soapmaker', 'skincare', 'lotion', 'cosmetic', 'beauty', 'spa'],
+    kin: [
+      'lotion',
+      'lotions',
+      'body lotion',
+      'hand lotion',
+      'cream',
+      'creams',
+      'hand cream',
+      'body cream',
+      'skin cream',
+      'face cream',
+      'cream jar',
+      'body butter',
+      'moisturizer',
+      'moisturiser',
+    ],
+    queries: ['body lotion', 'hand cream', 'cream jar', 'moisturizer'],
   },
 ]
 
@@ -593,6 +703,13 @@ const CRAFT_KIN: ReadonlyArray<{
    * "vase" too).
    */
   rivals?: { words: readonly string[]; core: readonly string[] }
+  /**
+   * Words no photo of this craft carries unless the slot or the brief names
+   * them (AGL-3660): the beta.242 Tidewater start put a black soap dispenser
+   * under "Bath Gift Set Starter Size", let in as a rival because its tags
+   * also said "cosmetics".
+   */
+  shun?: readonly string[]
 }> = [
   {
     match: [
@@ -689,6 +806,7 @@ const CRAFT_KIN: ReadonlyArray<{
         'artisan',
       ],
     },
+    shun: ['dispenser', 'dispensers'],
   },
   {
     match: [
@@ -910,6 +1028,8 @@ export interface AiStockSiteTerms {
    * site names no craft.
    */
   core: string[]
+  /** Words no photo of the site's craft carries unless the slot or the brief names them ({@link CRAFT_KIN}). */
+  shun: string[]
 }
 
 /** The site's terms, read from its business type. */
@@ -976,7 +1096,9 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   const makingSearches: string[] = []
   const rivals: Array<{ words: string[]; core: string[] }> = []
   const core = new Set<string>(craft ? [craft] : [])
+  const shun = new Set<string>()
   for (const group of groups) {
+    for (const word of group.shun ?? []) shun.add(aiStockStem(word))
     for (const word of group.match) core.add(aiStockStem(word))
     for (const word of group.kin) domain.add(aiStockStem(word))
     broad.push(...group.broad)
@@ -997,6 +1119,7 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     named: [...new Set(stemList(businessType))],
     rivals,
     core: [...core],
+    shun: [...shun],
   }
 }
 
@@ -1070,6 +1193,19 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
   lead?: boolean
   /** Whether the hit's first tags must name the site's world, where the object need not lead (AGL-3660). */
   leadWorld?: boolean
+  /** Phrases (as stems) of which one must be among the hit's first tags: a borrowed photo is OF the product's category (AGL-3660). */
+  leadAny?: readonly string[]
+  /** Whether it fills a product: no room, no scene, no fragrance bottle ({@link PRODUCT_SCENES}, AGL-3660). */
+  product?: boolean
+  /** Words its hits never carry unless the slot or the brief names them ({@link AiStockSiteTerms.shun}). */
+  shun?: readonly string[]
+  /**
+   * How sure a product's search is (AGL-3660). Absent: its own photo, the
+   * head noun among the first tags. `borrow`: a photo OF its category, which
+   * may repeat one the job already shows. `weak`: the head noun anywhere, or
+   * the category anywhere — taken only once nothing surer is left.
+   */
+  tier?: 'borrow' | 'weak'
 }
 
 /** A slot's part of a page, where it asks for more than its role: a collection tile or a story of the craft (AGL-3660). */
@@ -1108,6 +1244,14 @@ export interface AiStockProductFallback {
   core?: readonly string[]
 }
 
+/**
+ * A size never names a product (AGL-3660): the Tidewater start searched
+ * "soap set starter size" for "Bath Gift Set Starter Size", its head noun
+ * read as "size", and took a soap dispenser.
+ */
+const PRODUCT_SIZES =
+  /\b(?:(?:starter|travel|trial|sample|mini|full|half|family|value|jumbo|large|small|regular|standard|big)[- ])?sized?s?\b/gi
+
 /** The wrapper words a gift is named by, searched with the craft: "soap gift box". */
 const GIFT_WRAPPERS = words('gift gifts box boxes basket baskets hamper hampers')
 
@@ -1133,16 +1277,29 @@ const GIFT_WRAPPERS = words('gift gifts box boxes basket baskets hamper hampers'
  * back to its own craft (AGL-3660). The Saltmarsh Soap Co start (2026-10-10)
  * found no hit naming "bar" or "box" among the first tags, and four of its
  * five products took the starter photos — a laptop and roses, a living room
- * of plants. So, in order:
+ * of plants. And the beta.242 Tidewater Soap Works start (2026-10-11) showed
+ * that the head noun anywhere is not enough: its own weak hits put a sauna
+ * under "Bath Gift Set", colognes under "Natural Body Lotion", a bathroom
+ * shelf under "Soap Bar Trio" and a soap dispenser under its starter size,
+ * while the collection tiles beside them, searched for the category, were
+ * good. So the searches are ranked by how sure they are ({@link AiStockSearch.tier}):
  *
- * 1. The same searches again, the head noun named anywhere among the tags
- *    (no extra search: the page remembers its answers), and a gift's own
- *    wrapper with the craft ("soap gift box").
- * 2. The site's broad searches ("handmade soap", "natural skincare"), any hit
- *    naming the craft itself ({@link AiStockSiteTerms.core}).
+ * 1. Its own: the head noun (or its kin) among the first tags, as above.
+ * 2. `borrow`: a photo OF its category — the category alone, then the craft's
+ *    broad searches ("handmade soap", "natural skincare"), one of the
+ *    product's kin or the craft's own names among the first tags. A product
+ *    may repeat one the job already shows, a collection tile's photo or
+ *    another product's ({@link aiLayoutStockPhotoSource}): a borrowed
+ *    on-topic photo beats a weak specific one.
+ * 3. `weak`: the same searches again, the head noun named anywhere among the
+ *    tags (no extra search: the page remembers its answers), a gift's own
+ *    wrapper with the craft ("soap gift box"), and the craft's broad searches,
+ *    any hit naming the craft itself ({@link AiStockSiteTerms.core}).
  *
- * The source then reuses an on-topic photo another slot of the job already
- * shows before it gives up ({@link aiLayoutStockPhotoSource}).
+ * Every one of them turns down a room or a scene, a fragrance bottle, and
+ * what the product's kin shuns (a pump for a bar of soap), unless the
+ * product names it. A size never names the product: "Bath Gift Set Starter
+ * Size" is a bath gift set.
  */
 export function aiStockProductSearches(
   slot: Pick<AiLayoutPictureSlot, 'aspect' | 'product'>,
@@ -1155,7 +1312,7 @@ export function aiStockProductSearches(
   const craftStems = stemList(craft)
   const world = new Set([...domain, ...craftStems])
   const subjects = (slot.product?.subjects ?? [])
-    .map((raw) => aiStockSubjectWords(raw, ''))
+    .map((raw) => aiStockSubjectWords(raw.replace(PRODUCT_SIZES, ' '), ''))
     .filter(Boolean)
   // The product's head noun is its name's: "candle" of "Hand-Poured Soy Candle".
   const own = subjects[0] ?? ''
@@ -1170,20 +1327,26 @@ export function aiStockProductSearches(
     (stem) => world.has(stem) && !WRAPPERS.has(stem) && !craftStems.includes(stem),
   )
   const category = craft && ownWorld.length ? [...craftStems, ...ownWorld] : []
+  const core = [...new Set([...craftStems, ...(fallback.core ?? [])])]
+  const shun = (kin?.shun ?? []).map(aiStockStem)
   type Query = {
     query: string
     subject: string
     object: string
     lead: boolean
     broad?: boolean
+    tier?: 'borrow' | 'weak'
   }
   const queries: Query[] = []
   for (const subject of subjects) {
     const stems = stemList(subject)
+    const qualifier = kin?.qualifier ?? ''
     const query = kin
-      ? stems.includes(aiStockStem(kin.qualifier))
+      ? !qualifier || stems.includes(aiStockStem(qualifier))
         ? subject
-        : `${kin.qualifier} ${subject}`
+        : kin.after
+          ? `${subject} ${qualifier}`
+          : `${qualifier} ${subject}`
       : craft && !stems.some((stem) => world.has(stem))
         ? `${craft} ${subject}`
         : subject
@@ -1199,9 +1362,13 @@ export function aiStockProductSearches(
   else if (object && ownWorld.includes(object))
     queries.push({ query: object, subject: own, object, lead: true })
   else if (craft)
-    queries.push({ query: craft, subject: own || craft, object: craft, lead: true })
-  // 1. The head noun anywhere among the tags, by the same searches.
-  for (const entry of [...queries]) queries.push({ ...entry, lead: false })
+    queries.push({ query: craft, subject: own || craft, object: craft, lead: true, tier: 'borrow' })
+  const held = [...queries]
+  // 2. A photo OF its category, which may be one the job already shows.
+  for (const query of fallback.broad ?? [])
+    queries.push({ query, subject: own, object: '', lead: true, broad: true, tier: 'borrow' })
+  // 3. The head noun anywhere among the tags, by the same searches.
+  for (const entry of held) queries.push({ ...entry, lead: false, tier: 'weak' })
   // A gift is its craft's: "bath gift box" asks for a "soap gift box".
   const wrapped = own
     .split(/\s+/)
@@ -1213,34 +1380,48 @@ export function aiStockProductSearches(
       subject: own,
       object: aiStockStem(gift),
       lead: false,
+      tier: 'weak',
     })
-  // 2. The craft's own broad searches, any hit naming the craft.
+  // The craft's own broad searches, any hit naming the craft.
   for (const query of fallback.broad ?? [])
-    queries.push({ query, subject: own, object: '', lead: false, broad: true })
-  const core = [...new Set([...craftStems, ...(fallback.core ?? [])])]
+    queries.push({ query, subject: own, object: '', lead: false, broad: true, tier: 'weak' })
+  // What a borrowed photo is OF: the product's kin, its own word of the shop's world, else the craft.
+  const borrowed = kinPhrases.length ? kinPhrases : ownWorld.length ? ownWorld : core
   const seen = new Set<string>()
   const searches: AiStockSearch[] = []
   for (const entry of queries) {
     const query = clip(entry.query)
-    const key = `${query}|${entry.lead}|${entry.object}|${entry.broad === true}`
+    const key = `${query}|${entry.lead}|${entry.object}|${entry.broad === true}|${entry.tier ?? ''}`
     if (!query || seen.has(key)) continue
     seen.add(key)
-    if (entry.broad) {
-      searches.push({
-        query,
-        orientation,
-        ...size,
-        broad: true,
-        subject: entry.subject,
-        ...(core.length ? { category: core } : {}),
-      })
-      continue
-    }
-    searches.push({
+    const common = {
       query,
       orientation,
       ...size,
       subject: entry.subject,
+      product: true,
+      ...(entry.tier ? { tier: entry.tier } : {}),
+      ...(shun.length ? { shun } : {}),
+    }
+    if (entry.broad) {
+      const heldTo = [...new Set([...core, ...ownWorld])]
+      searches.push({
+        ...common,
+        broad: true,
+        ...(entry.lead
+          ? {
+              leadAny: borrowed,
+              ...(kinPhrases.length ? { kin: kinPhrases } : {}),
+              ...(heldTo.length ? { category: heldTo } : {}),
+            }
+          : core.length
+            ? { category: core }
+            : {}),
+      })
+      continue
+    }
+    searches.push({
+      ...common,
       // Named anywhere, the hit's first tags are still of the shop's world:
       // a bed with a book, its candle a last tag, is not a candle's photo.
       ...(entry.lead ? { lead: true } : { leadWorld: true }),
@@ -1386,6 +1567,12 @@ export interface AiStockJudgement {
   named?: readonly string[]
   /** Rival crafts: a hit naming one is rejected unless it names the site's core words ({@link AiStockSiteTerms.rivals}). */
   rivals?: ReadonlyArray<{ words: readonly string[]; core: readonly string[] }>
+  /** Phrases of which one must be among the hit's first tags ({@link AiStockSearch.leadAny}). */
+  leadAny?: readonly string[]
+  /** Whether it judges for a product: no room, no scene, no fragrance bottle (AGL-3660). */
+  product?: boolean
+  /** Words a hit never carries unless the subject or the brief names them ({@link AiStockSiteTerms.shun}). */
+  shun?: readonly string[]
 }
 
 /** The words of a photo's page address at its library, its id dropped: "robin-bird-songbird-garden-winter". */
@@ -1418,6 +1605,8 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
     ...tags.slice(0, 3).map((tag) => stemList(tag).join(' ')),
     stemList(slug).join(' '),
   ]
+  /** The first tag: what the photo is most of all. */
+  const firstPhrase = stemList(tags[0] ?? '').join(' ')
   const rejected = tags.some(
     (tag) =>
       REJECTED_TAGS.has(tag) ||
@@ -1431,7 +1620,7 @@ function hitWords(photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>) {
       .filter((word) => word.length > 1)
       .map(aiStockStem),
   )
-  return { lead, all, phrases, leadPhrases, rejected, words }
+  return { lead, all, phrases, leadPhrases, firstPhrase, rejected, words }
 }
 
 /** Whether a phrase is among a hit's phrases, word for word. */
@@ -1480,6 +1669,27 @@ export function aiStockRelevance(
       !rival.core.some((word) => hit.all.has(word))
     )
       return 0
+  const subject = stemList(judgement.subject ?? '')
+  // What the slot or the brief names lets a shunned word, a room or a fragrance in.
+  const owned = new Set([...subject, ...(judgement.named ?? [])])
+  // A dispenser is not a soapmaker's, nor a pump a bar's (AGL-3660).
+  if ((judgement.shun ?? []).some((word) => hit.all.has(word) && !owned.has(word)))
+    return 0
+  if (judgement.product) {
+    // A sauna, a bathroom shelf: a room is never the product.
+    for (const word of hit.lead)
+      if (PRODUCT_SCENES.has(word) && !owned.has(word)) return 0
+    // Colognes are not a lotion: a fragrance's bottle only for a fragrance.
+    if (
+      ![...FRAGRANCE_BOTTLES].some((word) => owned.has(word)) &&
+      [...hit.lead].some((word) => FRAGRANCE_BOTTLES.has(word))
+    )
+      return 0
+  }
+  // A borrowed photo is OF the product's category.
+  const leadAny = judgement.leadAny ?? []
+  if (leadAny.length && !leadAny.some((phrase) => among(hit.leadPhrases, phrase)))
+    return 0
   const kin = judgement.kin ?? []
   const kinNamed = kin.some((phrase) => among(hit.phrases, phrase))
   const kinLead = kin.some((phrase) => among(hit.leadPhrases, phrase))
@@ -1492,7 +1702,6 @@ export function aiStockRelevance(
     : required.every((stem) => hit.all.has(stem))
   // An object's kin stands for the category: a wax melt is the candle shop's.
   if (demanded && !kinNamed && !meets) return 0
-  const subject = stemList(judgement.subject ?? '')
   const object =
     judgement.object ??
     (judgement.subject ? aiStockObjectWord(judgement.subject) : '')
@@ -1508,6 +1717,9 @@ export function aiStockRelevance(
     kinLead ||
     domain.some((stem) => hit.lead.has(stem))
   if (judgement.leadWorld && !worldLead) return 0
+  // What the photo is most of all: its first tag names the object, its kin or what it must be OF.
+  const firstNamed = (phrases: readonly string[]) =>
+    phrases.some((phrase) => Boolean(phrase) && among([hit.firstPhrase], phrase))
   const pair = subject.length >= 2 ? subject.slice(-2).join(' ') : ''
   const phrased = Boolean(pair) && among(hit.phrases, pair)
   let score = 0
@@ -1521,9 +1733,11 @@ export function aiStockRelevance(
     if (domain.length && !world && !phrased) return 0
     score += leading ? 4 : 2
     if (kinNamed) score += 3
+    if (firstNamed(kin.length ? kin : [object])) score += 1
   } else if (domain.length) {
     if (!world) return 0
   }
+  if (leadAny.length && firstNamed(leadAny)) score += 1
   if (phrased) score += 3
   for (const word of new Set(subject))
     if (word !== object && hit.all.has(word)) score += 1
@@ -1826,6 +2040,11 @@ export function aiLayoutStockPhotoSource(
         (slot.role === 'gallery' && !request.broad) || !!request.requires,
       named: terms.named,
       rivals: terms.rivals,
+      ...(terms.shun.length || request.shun?.length
+        ? { shun: [...new Set([...terms.shun, ...(request.shun ?? [])])] }
+        : {}),
+      ...(request.product ? { product: true } : {}),
+      ...(request.leadAny?.length ? { leadAny: request.leadAny } : {}),
       ...(request.requires ? { requires: request.requires } : {}),
       ...(request.category ? { category: request.category } : {}),
       ...(request.object ? { object: request.object } : {}),
@@ -1853,6 +2072,7 @@ export function aiLayoutStockPhotoSource(
         ...size,
         broad: true,
         category: terms.core,
+        ...(slot.product ? { product: true, tier: 'weak' as const } : {}),
       }))
     }
 
@@ -1903,34 +2123,52 @@ export function aiLayoutStockPhotoSource(
           judgementFor(slot, request, subject),
         )
       }
-      for (const request of requests) {
-        if (choice || signal.aborted) break
-        const ranked = await accepted(request, false)
-        if (ranked === null) break
-        if (!ranked.length) continue
-        const first = ranked[0] as StockPhoto
-        claimed.add(stockPhotoSourceKey(first))
-        choice = {
-          candidates: ranked.slice(0, AI_LAYOUT_STOCK_TRIES_PER_SLOT),
-          query: request.query,
+      /** The first of these searches with a hit to take: a new one, or one the job already shows. */
+      const choose = async (
+        tried: readonly AiStockSearch[],
+        repeat: boolean,
+      ): Promise<AiStockChoice | null> => {
+        for (const request of tried) {
+          if (signal.aborted) return null
+          // Spent searches answer nothing; those already asked still answer from memory.
+          const ranked = await accepted(request, repeat)
+          if (!ranked?.length) continue
+          if (!repeat) claimed.add(stockPhotoSourceKey(ranked[0] as StockPhoto))
+          return {
+            candidates: ranked.slice(0, AI_LAYOUT_STOCK_TRIES_PER_SLOT),
+            query: request.query,
+            ...(repeat ? { repeat: true } : {}),
+          }
         }
+        return null
       }
       // 2. Nothing new of its own: a product or a hero reuses an on-topic
       //    photo another slot of the job already shows (a product may repeat
-      //    a collection tile's photo) before the starters' desk or living
-      //    room fills it (AGL-3660). Only the searches already answered are
-      //    asked again, from memory. Any other picture keeps "never twice".
-      if (!choice && (slot.product || slot.role === 'hero')) {
-        for (const request of requests) {
-          if (choice || signal.aborted) break
-          const ranked = await accepted(request, true)
-          if (!ranked?.length) continue
-          choice = {
-            candidates: ranked.slice(0, AI_LAYOUT_STOCK_TRIES_PER_SLOT),
-            query: request.query,
-            repeat: true,
-          }
-        }
+      //    a collection tile's photo, or another product's) before the
+      //    starters' desk or living room fills it (AGL-3660). Any other
+      //    picture keeps "never twice". A product goes by how sure each
+      //    search is: its own and its category's photos, new and then
+      //    repeated, before a weak hit of its own (the Tidewater sauna).
+      const repeats = Boolean(slot.product) || slot.role === 'hero'
+      const sure = slot.product
+        ? requests.filter((request) => request.tier !== 'weak')
+        : requests
+      const unsure = slot.product
+        ? requests.filter((request) => request.tier === 'weak')
+        : []
+      const phases: Array<[readonly AiStockSearch[], boolean]> = [
+        [sure, false],
+        ...(repeats ? [[sure, true] as [readonly AiStockSearch[], boolean]] : []),
+        ...(unsure.length
+          ? [
+              [unsure, false] as [readonly AiStockSearch[], boolean],
+              [unsure, true] as [readonly AiStockSearch[], boolean],
+            ]
+          : []),
+      ]
+      for (const [tried, repeat] of phases) {
+        if (choice || signal.aborted) break
+        choice = await choose(tried, repeat)
       }
       choices.push(choice)
     }
