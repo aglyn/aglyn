@@ -1016,7 +1016,9 @@ export function signupLandingHealth(
   }
   // `!(n > 0)` rather than `n === 0`, so a corrupt count (NaN, a string)
   // reads as "no site" and cannot hide a stranded org.
-  const strandedOrgs = orgs.filter((org) => !(Number(org.hostCount) > 0)).length
+  const strandedOrgs = orgs.filter(
+    (landing) => !(Number(landing.hostCount) > 0),
+  ).length
   const stranded = strandedOrgs >= maxStranded
   return {
     ok: !stranded,
