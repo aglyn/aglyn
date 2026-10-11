@@ -43,6 +43,8 @@ import {
   MIN_SIGNUP_TRAFFIC_FOR_DROUGHT,
   SIGNUP_DROUGHT_WINDOW_MINUTES,
   signupDroughtHealth,
+  signupLandingHealth,
+  MAX_STRANDED_SIGNUPS,
   MAX_SERVER_ERRORS_PER_WINDOW,
   SERVER_ERROR_WINDOW_MINUTES,
   serverErrorsHealth,
@@ -2314,5 +2316,52 @@ describe('appCheckAttestationHealth (AGL-2715)', () => {
     // MISSING_UNKNOWN_ORIGIN is the allowlist shape; INVALID is a bad token.
     // Which one dominates is the first thing worth knowing.
     expect(check.deniedBy).toEqual({ MISSING_UNKNOWN_ORIGIN: 300, INVALID: 100 })
+  })
+})
+
+describe('signupLandingHealth (AGL-3725)', () => {
+  const orgs = (...siteCounts: number[]) => siteCounts.map((hostCount) => ({ hostCount }))
+
+  it('is green when every org made a site', () => {
+    expect(signupLandingHealth(orgs(1, 2, 1), 5)).toMatchObject({
+      ok: true,
+      strandedOrgs: 0,
+      orgsInWindow: 3,
+    })
+  })
+
+  it('is green for one org with no site: people sign up and leave', () => {
+    const check = signupLandingHealth(orgs(0, 1, 1), 5)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.strandedOrgs).toBe(1)
+  })
+
+  it('reds at two stranded orgs, the AGL-3724 night', () => {
+    expect(MAX_STRANDED_SIGNUPS).toBe(2)
+    expect(signupLandingHealth(orgs(0, 1, 0), 5)).toMatchObject({
+      ok: false,
+      code: 'signups-stranded',
+      strandedOrgs: 2,
+      orgsInWindow: 3,
+    })
+  })
+
+  it('counts a corrupt site count as no site, so it cannot hide one', () => {
+    const corrupt = [{ hostCount: Number.NaN }, { hostCount: '3' as unknown as number }, { hostCount: 0 }]
+    expect(signupLandingHealth(corrupt, 5).strandedOrgs).toBe(2)
+  })
+
+  it('is degraded, never calm, when the orgs could not be read', () => {
+    expect(signupLandingHealth(null, 5)).toMatchObject({
+      ok: false,
+      code: 'orgs-unavailable',
+      strandedOrgs: null,
+      orgsInWindow: null,
+    })
+  })
+
+  it('is green on a window with no sign-ups at all', () => {
+    expect(signupLandingHealth([], 5)).toMatchObject({ ok: true, strandedOrgs: 0, orgsInWindow: 0 })
   })
 })
