@@ -157,6 +157,18 @@ export interface UsageQuotaCheck {
   approach: string
   /** Replaces the generic title at 100%, when that would not be true. */
   reachedTitle?: string
+  /**
+   * Replaces the figures in the opening sentence at 100%, after the
+   * workspace's name ("has used its free AI credits for this month."). For a
+   * band nothing is ever sold past, where "442 — more than the 300 your plan
+   * includes" reads like a charge that cannot happen.
+   */
+  reachedLead?: string
+  /**
+   * At 100%, link the plans page instead of the usage section: the band is
+   * an allowance that only an upgrade adds to, and the notice says so.
+   */
+  reachedLinksUpgrade?: boolean
 }
 
 /** What the sweep hands a contributor's quota checks for one org. */
