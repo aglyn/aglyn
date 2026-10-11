@@ -77,6 +77,7 @@ import {
   localCacheFor,
   pruneSharedClientStateFor,
 } from './firestore-cache'
+import { keepAppCheckRecaptchaContainer } from './app-check-recaptcha-container'
 import { markMultiTabFirestore } from './firestore-multitab-wedge'
 import { firestorePersistencePrefix } from './firestore-shared-client-state'
 import { startFirestoreTabHandoff } from './firestore-tab-handoff'
@@ -532,6 +533,10 @@ function bootFirebaseCore(
           provider: new ReCaptchaV3Provider(siteKey),
           isTokenAutoRefreshEnabled: true,
         })
+        // The widget renders into the SDK's <body> div only once Google's
+        // script loads; a body cleared before then (hydration fallback,
+        // global-error) made that render throw unhandled.
+        keepAppCheckRecaptchaContainer(app.name)
       } catch (error) {
         console.error(error)
       }

@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.242 — 2026-10-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.241...v1.0.0-beta.242)
+
+### Fixed
+
+- **ai:** store product and hero photos fall back to the shop's own craft ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **console:** reCAPTCHA never renders into a container that's gone ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **ai:** baseline the Saltmarsh recordings' Pixabay tags "spelt" and "mould" ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+</details>
+
 ## v1.0.0-beta.241 — 2026-10-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.240...v1.0.0-beta.241)
