@@ -20,11 +20,21 @@
  */
 
 const docs = new Map<string, Record<string, unknown>>()
+let writes = 0
 const raised: Array<{ type: string; options: Record<string, any> }> = []
 
 const fakeFirestore = {
   collection: (name: string) => ({
-    doc: (id: string) => ({ path: `${name}/${id}` }),
+    doc: (id: string) => {
+      const path = `${name}/${id}`
+      return {
+        path,
+        get: async () => ({
+          exists: docs.has(path),
+          get: (field: string) => docs.get(path)?.[field],
+        }),
+      }
+    },
   }),
   runTransaction: async (work: (transaction: any) => Promise<unknown>) =>
     work({
@@ -33,9 +43,11 @@ const fakeFirestore = {
         data: () => docs.get(ref.path),
       }),
       set: (ref: { path: string }, data: Record<string, unknown>) => {
+        writes += 1
         docs.set(ref.path, { ...data })
       },
       update: (ref: { path: string }, data: Record<string, unknown>) => {
+        writes += 1
         docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...data })
       },
     }),
@@ -61,6 +73,7 @@ import {
 
 beforeEach(() => {
   docs.clear()
+  writes = 0
   raised.length = 0
   resetOperatorHealthCacheForTests()
 })
@@ -91,6 +104,15 @@ describe('recordHealthState (AGL-3377)', () => {
         options: { dedupeKey: 'crons', context: { check: 'Scheduled jobs', duration: '1 h 5 min' } },
       },
     ])
+  })
+
+  it('a new instance that finds the stored status unchanged writes nothing', async () => {
+    await recordHealthState('crons', 'ok', 'fine')
+    expect(writes).toBe(1)
+    resetOperatorHealthCacheForTests()
+    expect(await recordHealthState('crons', 'ok', 'fine again')).toBeNull()
+    expect(writes).toBe(1)
+    expect(docs.get('operatorHealthState/crons')).toMatchObject({ detail: 'fine' })
   })
 
   it('an install broken before anybody watched is told', async () => {
