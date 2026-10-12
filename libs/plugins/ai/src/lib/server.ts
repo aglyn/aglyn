@@ -38,6 +38,7 @@ import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { registerAiLogicJob } from './jobs/ai-job-logic-step'
 import { registerAiEditJob } from './jobs/ai-job-edit-step'
 import { registerAiNavigationJob } from './jobs/ai-job-navigation-step'
+import { registerAiDuplicateJob } from './jobs/ai-job-duplicate-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -135,6 +136,9 @@ function registerAiJobKinds(): void {
   // A change to a site's header or footer menu, made by code from a build's
   // item and saved beside the live layout (AGL-3728).
   registerAiNavigationJob()
+  // A copy of something a site already has, through core's duplicate — the
+  // console's own Duplicate… — as a build's item (AGL-3740).
+  registerAiDuplicateJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()

@@ -60,6 +60,7 @@ checks the member's role and the allowance when the item runs.
 | `function` (2) | ai | logic runner, logic `function` writer | | `functionsPerHost` | yes |
 | `edit` (3) | ai | edit runner (a version, unpublished) | | | no |
 | `navigation` (1), AGL-3728 | ai | navigation runner, no model (a layout version, unpublished) | `versioning` | | no |
+| `duplicate` (3), AGL-3740 | ai | duplicate runner, no model, core's `duplicateResource` (an unpublished copy) | the kind's own, checked by the copy | the kind's create counter | yes |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
 | `variable` | logic | `variable` writer | | `variablesPerHost` | yes |
@@ -89,10 +90,10 @@ The tools in `tools/` that a job or a console request calls:
 - inventory: `look_up_site_inventory`
 - datasets: `submit_dataset`, **new in this PR** (`tools/ai-dataset-tool.ts`)
 - duplicate: `duplicate_resource` (`tools/ai-duplicate-resource-tool.ts`).
-  **Nothing calls it.** It is defined and specced, and
-  `libs/aglyn/src/lib/app-utils/duplicate-resource.ts` calls it "the AI runtime
-  tool that opens this door for the planner", but neither Assist nor any job
-  offers it. Plans copy a page through `duplicateOf` instead.
+  No model is offered the tool itself; its input reader
+  (`parseAiDuplicateResourceInput`) is what the `duplicate` build op
+  (AGL-3740) reads an item with, and both make the copy through core's
+  `duplicateResource`. See "Duplicating" below.
 
 ### Console entry points
 
@@ -217,9 +218,11 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
 10. **Integrations.** No webhooks, Zapier or GA4/conversions setup.
 11. **Media library.** No tags, folders or metadata, and no video, music or
     lightbox placement ops.
-12. **Duplicating.** `duplicate_resource` exists and nothing calls it. Wiring
-    it into Assist would let "make another page like Services" copy instead
-    of regenerate.
+12. **Duplicating.** `duplicate_resource` exists and nothing calls it.
+    **CLOSED (AGL-3740):** a build's `duplicate` op copies a page, component,
+    layout, template, form, email design or workflow the site has, so "make
+    another page like Services" copies instead of regenerating. See
+    "Duplicating" below.
 
 ### Out of scope by design
 
@@ -334,6 +337,43 @@ is a decision about the account, not something to build.
   (`aiLayoutWithNavigation`) rather than through this op; mega menu panels'
   columns and new drawers are not made, and a menu change never publishes on
   its own, even in a build that publishes its pages.
+
+## Duplicating (AGL-3740)
+
+- **What can be copied** is exactly what the console's Duplicate… copies on a
+  site: `DUPLICABLE_HOST_RESOURCE_KINDS` in
+  `libs/aglyn/src/lib/app-utils/duplicate-resource.ts` — a page (`screen`), a
+  component, a layout, a template, a form, an email design and a workflow
+  (the workflow's recipe is the workflows plugin's declaration). Nothing else:
+  a product's Duplicate is a client-side create in the commerce card with no
+  server function to reuse, and datasets, email templates and campaigns have
+  no site-level copy door, so the op does not offer them.
+- **The op.** `duplicate` (`jobs/ai-build-capabilities.ts`, at most three a
+  plan) takes `kind`, `source` (an inventory id, or the exact name where the
+  inventory lists none — email designs and workflows) and an optional
+  `name`. A source this build is making (`new:`) is refused: only what the
+  site already has is copied. The planner sees the op and its arguments in
+  the op catalog and Assist's build intents, so the plan prompt changed with
+  it.
+- **Made by core** (`jobs/ai-job-duplicate-step.ts`): the same
+  `duplicateResource` the row menus and `/api/hosts/resources` (`action:
+  'duplicate'`) call — the same fields, unique name and slug, the kind's plan
+  counter and feature met inside the copy's transaction, and the
+  `*.duplicated` activity row. The job's id is the attempt key, so a pass
+  asked again makes no second copy. A source named by name must be the one
+  live row of that name, among rows of that kind (pages and email designs
+  share `screens`).
+- **Gates.** The console door's: a member with the admin, editor or author
+  role on the site, while no lockdown freezes it, at the door and again
+  before the copy; the job's `ai.generate` gate as for every job. A plan
+  counter or a missing feature comes back as a plan limit.
+- **Cost.** No model, so 0 credits. Free may ask for one: the copy meets the
+  plan's own counters exactly as the console's Duplicate does.
+- **Draft only.** A page copy has no address, a workflow copy no trigger, and
+  nothing places a component, layout or form copy until a person does.
+- **Not yet.** A later item or page in the same plan cannot cite the copy as
+  `new:<name>`; a page that should start from another is still the page
+  runner's `duplicateOf`.
 
 ## Forms that write to a dataset
 

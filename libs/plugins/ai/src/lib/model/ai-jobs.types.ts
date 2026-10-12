@@ -81,6 +81,8 @@ export type AiJobKind =
   | 'build'
   /** A change to a site's header or footer menu, made by code (AGL-3728). */
   | 'navigation'
+  /** A copy of something a site already has, made by core's duplicate (AGL-3740). */
+  | 'duplicate'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -105,6 +107,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'theme',
   'build',
   'navigation',
+  'duplicate',
 ]
 
 /**
