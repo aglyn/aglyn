@@ -39,6 +39,8 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { firstTouchField } from '../utils/account-acquisition'
+import { currentConsoleLandingHref } from '../utils/console-landing'
+import hardNavigate from '../utils/hard-navigate'
 import { SITE_START_PARAM, SITE_START_VALUE } from './host-first-run-gate.component'
 
 export interface CreateHostDialogProps {
@@ -57,6 +59,14 @@ export interface CreateHostDialogProps {
    * sites list and the host switcher, which have no intent — keep the default.
    */
   destination?: (orgSlug: string) => string
+  /**
+   * Told the site exists, before the dialog closes and navigates. The
+   * zero-org home page answers it by dropping its own "one workspace, go to
+   * its sites" redirect: the create just made that one workspace, and the
+   * redirect raced this dialog's landing and won, so a first site landed on
+   * the sites list instead of its AI start (AGL-3742).
+   */
+  onCreated?: () => void
 }
 
 /**
@@ -65,7 +75,7 @@ export interface CreateHostDialogProps {
  * the new host's Setup page.
  */
 export function CreateHostDialog(props: CreateHostDialogProps) {
-  const { open, onClose, destination } = props
+  const { open, onClose, destination, onCreated } = props
   const router = useRouter()
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
@@ -121,6 +131,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         variant: 'success',
         persist: false,
       })
+      onCreated?.()
       // The site exists: the dialog closes now rather than standing, with
       // Create clickable again, until the dashboard has loaded behind it.
       onClose()
@@ -136,12 +147,17 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           orgSlug,
           host: payload.subdomain ?? subdomain,
         })
-        void router.push(
+        const target =
           destination?.(orgSlug) ??
-            (payload.guidedStart === true
-              ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_VALUE}`
-              : dashboard),
-        )
+          (payload.guidedStart === true
+            ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_VALUE}`
+            : dashboard)
+        // A first site made on the auth host (a Google sign-up can finish
+        // there) lands on the console host: `auth.` refuses console paths
+        // with a 404 (AGL-3090, AGL-3742).
+        const landing = currentConsoleLandingHref(target)
+        if (landing !== target) hardNavigate(landing)
+        else void router.push(target)
       }
     } catch (error) {
       console.error(error)
@@ -161,6 +177,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
     currentOrg,
     router,
     destination,
+    onCreated,
     enqueueSnackbar,
     onClose,
   ])
