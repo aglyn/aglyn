@@ -39,7 +39,10 @@ import {
 import {
   claimHostForOrg,
   findSubdomainConflict,
+  HostRegistrationIncompleteError,
+  isTransientFirestoreError,
   NEW_SITE_ENABLED_PLUGINS,
+  resumeUnfinishedCreate,
 } from '../../../../utils/server/provision-host'
 import { guidedStartOffered } from '../../../../utils/server/guided-start-offered'
 import { reportServerError } from '../../../../utils/report-server-error'
@@ -153,6 +156,52 @@ async function handler(request: Request): Promise<Response> {
     // (AGL-147): name-2, name-<year>, …
     const conflict = await findSubdomainConflict(firestore, subdomain)
     if (conflict) {
+      // The caller's own create that claimed this name and never finished
+      // registering (AGL-3734): a retry finishes it instead of answering 409
+      // for a site they were told failed. Same lockdown verdict a create gets.
+      const resumable = await resumeUnfinishedCreate(
+        firestore,
+        orgMembership.orgId,
+        subdomain,
+      )
+      if (resumable) {
+        const resumedOrg = (
+          await firestore.collection('orgs').doc(orgMembership.orgId).get()
+        ).data()
+        const resumeLocked = await lockdownRefusal({
+          request,
+          staff: decoded['staff'] === true,
+          uid: decoded.uid,
+          org: resumedOrg,
+        })
+        if (resumeLocked) return resumeLocked
+        await logHostActivity(
+          resumable.hostId,
+          { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+          'Created the site',
+          { type: 'host', id: resumable.hostId, name: resumable.displayName },
+        )
+        await announceNewSite({
+          hostId: resumable.hostId,
+          displayName: resumable.displayName,
+          subdomain,
+          orgSlug: (resumedOrg?.['slug'] as string | undefined) ?? null,
+          createdBy: decoded.email ? String(decoded.email) : null,
+        })
+        return Response.json(
+          {
+            hostId: resumable.hostId,
+            subdomain,
+            orgId: orgMembership.orgId,
+            orgSlug: resumedOrg?.['slug'] ?? null,
+            guidedStart: resumable.guidedStart,
+            // The workspace, if this door made one, was made by the attempt
+            // that claimed the site, and reported then or never.
+            orgCreated: false,
+          },
+          { status: 200 },
+        )
+      }
       return Response.json(
         { error: 'That subdomain is taken', suggestions: conflict.suggestions },
         { status: 409 },
@@ -356,6 +405,13 @@ async function handler(request: Request): Promise<Response> {
     const capped = freeWorkspaceCapRefusalResponse(error)
     if (capped) return capped
     console.error(error)
+    const incomplete = error instanceof HostRegistrationIncompleteError
+    // Nothing was claimed and a second try can succeed: contention the admin
+    // SDK's own transaction retries did not clear, an unreachable backend, a
+    // deadline (AGL-3734). Answered 503 with copy the dialog shows as is,
+    // after the report below. A claimed site is never this branch: it exists,
+    // and "try again" there means the resume path, not a fresh create.
+    const transient = !incomplete && isTransientFirestoreError(error)
     // Reported, not only logged (AGL-1921, AGL-3689). `onRequestError` fires for an
     // UNCAUGHT throw and this one is caught, and the log drain forwards the
     // status line but never a `console.error`, so the 2026-10-08 500 reached
@@ -372,6 +428,23 @@ async function handler(request: Request): Promise<Response> {
       },
       { service: 'console-web' },
     )
+    if (incomplete) {
+      return Response.json(
+        {
+          error:
+            'Your site was created but its setup did not finish. Select ' +
+            'Create again with the same address to finish it.',
+          hostId: error.hostId,
+        },
+        { status: 500 },
+      )
+    }
+    if (transient) {
+      return Response.json(
+        { error: 'Aglyn is busy right now. Wait a few seconds and try again.' },
+        { status: 503, headers: { 'Retry-After': '5' } },
+      )
+    }
     return Response.json({ error: 'Site creation failed' }, { status: 500 })
   }
 }
