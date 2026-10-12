@@ -31,9 +31,12 @@ import { AI_LAYOUT_FRAMES, aiLayoutSpans } from './ai-layout-tree'
  * a publish taking out links to pages that were never written, a menu change
  * taking a link out — and once more on what a publish writes:
  *
- *  - in the footer, a heading with no content under it is taken out, then a
- *    column holding nothing (or nothing but headings) is, and the columns
- *    left reflow across the row's twelve;
+ *  - in the footer, a column of only a heading followed by a column of only
+ *    links with no heading (the Tidewater shape) becomes one column: the
+ *    heading over those links;
+ *  - then a heading with no content under it is taken out, then a column
+ *    holding nothing (or nothing but headings) is, and the columns left
+ *    reflow across the row's twelve;
  *  - the footer's rows are top-aligned;
  *  - in the header, a Dropdown Menu left holding no link is taken out.
  *
@@ -79,7 +82,13 @@ export interface AiLayoutFrameHollows {
   headerMenus: string[]
 }
 
-function inspect(map: NodeMap): AiLayoutFrameHollows & { rows: string[] } {
+/** A heading-only footer column and the heading-less column of links right after it, which it heads. */
+interface HeadingOverLinks {
+  heading: string
+  links: string
+}
+
+function inspect(map: NodeMap): AiLayoutFrameHollows & { rows: string[]; merges: HeadingOverLinks[] } {
   const subtree = (id: string): string[] => {
     const out: string[] = []
     const visit = (at: string) => {
@@ -103,6 +112,18 @@ function inspect(map: NodeMap): AiLayoutFrameHollows & { rows: string[] } {
   const rows = [...footerIds].filter((id) => map[id].componentId === 'muiGrid' && map[id].props?.['container'])
   const columns = rows.flatMap((row) => (map[row].nodes ?? []).filter((id) => map[id]?.componentId === 'muiGrid'))
   const footerColumns = columns.filter((id) => leaves(id).every((leaf) => isHeading(map[leaf])))
+  // The Tidewater shape: a column of only a heading, then a column of only
+  // links with no heading. The links are what the heading heads.
+  const merges: HeadingOverLinks[] = []
+  for (const row of rows) {
+    const inRow = (map[row].nodes ?? []).filter((id) => map[id]?.componentId === 'muiGrid')
+    inRow.forEach((id, at) => {
+      const next = inRow[at + 1]
+      if (!next || !footerColumns.includes(id) || !leaves(id).length) return
+      const read = leaves(next)
+      if (read.length && read.every((leaf) => map[leaf].componentId === LINK)) merges.push({ heading: id, links: next })
+    })
+  }
   // A heading is hollow when nothing but headings follow it before the next
   // heading of its own (an overline labels the heading after it, so it
   // reaches one heading further).
@@ -127,7 +148,7 @@ function inspect(map: NodeMap): AiLayoutFrameHollows & { rows: string[] } {
   const headerMenus = [...headerIds].filter(
     (id) => DROPDOWNS.has(String(map[id].componentId)) && !subtree(id).some((at) => at !== id && map[at].componentId === LINK),
   )
-  return { footerColumns, footerHeadings, footerCenteredRows, headerMenus, rows }
+  return { footerColumns, footerHeadings, footerCenteredRows, headerMenus, rows, merges }
 }
 
 /** What is still hollow in a frame (AGL-3735); every list empty when nothing is. */
@@ -186,12 +207,45 @@ export function aiLayoutRepairFrameHollows(nodes: Record<string, unknown>): bool
       changed = true
     }
     for (const id of hollows.headerMenus) if (map[id]) remove(id)
+    const headed = new Set<string>()
+    for (const merge of hollows.merges) {
+      if (map[merge.heading] && map[merge.links] && headOver(map, merge)) {
+        headed.add(merge.heading)
+        changed = true
+      }
+    }
     for (const id of hollows.footerHeadings) if (map[id]) remove(id)
-    for (const id of hollows.footerColumns) if (map[id]) remove(id)
+    for (const id of hollows.footerColumns) if (map[id] && !headed.has(id)) remove(id)
     // Every row that lost a column, however it lost it, reflows.
     for (const row of hollows.rows) if (map[row] && reflow(map, row)) changed = true
   }
   return changed
+}
+
+/**
+ * A heading-only column takes in the heading-less column of links after it,
+ * as one flow (heading, then links), and the links' column goes; whether it
+ * changed. The row it leaves one column short reflows after.
+ */
+function headOver(map: NodeMap, { heading, links }: HeadingOverLinks): boolean {
+  const moved = (map[links].nodes ?? []).filter((id) => map[id])
+  if (!moved.length) return false
+  const own = (map[heading].nodes ?? []).filter((id) => map[id])
+  const flow = own.length === 1 && map[own[0]].componentId === 'muiStack' ? own[0] : null
+  if (flow) {
+    map[flow].nodes = [...(map[flow].nodes ?? []), ...moved]
+  } else {
+    let id = `${heading}-flow`
+    for (let n = 2; map[id]; n += 1) id = `${heading}-flow${n}`
+    // The compiler's flow of a column (`compileFlow`): a stack, 2.5 apart.
+    map[id] = { componentId: 'muiStack', props: { spacing: '2.5' }, nodes: [...own, ...moved] }
+    map[heading].nodes = [id]
+  }
+  delete map[links]
+  for (const node of Object.values(map)) {
+    if (node.nodes?.includes(links)) node.nodes = node.nodes.filter((at) => at !== links)
+  }
+  return true
 }
 
 /** The columns a row has left, spread across its twelve as their widths were; whether it changed. */

@@ -87,17 +87,55 @@ describe('a frame with nothing hollow in it (AGL-3735)', () => {
     expect(hollows.footerHeadings).toEqual([])
   })
 
-  it('takes the heading-only column out, reflows the three left across the row and top-aligns them', () => {
+  it('puts "Our shop" over the heading-less store links after it, as one column, and top-aligns the row', () => {
     const fixed = aiLayoutWithoutFrameHollows(tidewaterLiveFooter()) as Record<string, Node>
     expect(fixed).not.toBeNull()
-    expect(fixed['c3']).toBeUndefined()
-    expect(fixed['ourShop']).toBeUndefined()
-    expect(fixed['row'].nodes).toEqual(['c1', 'c2', 'c4'])
-    expect(['c1', 'c2', 'c4'].map((id) => fixed[id].props?.['size'])).toEqual(['xs:12 md:4', 'xs:12 md:4', 'xs:12 md:4'])
+    expect(fixed['c4']).toBeUndefined()
+    expect(fixed['row'].nodes).toEqual(['c1', 'c2', 'c3'])
+    const flow = fixed['c3'].nodes ?? []
+    expect(flow).toHaveLength(1)
+    expect(fixed[flow[0]].componentId).toBe('muiStack')
+    expect(fixed[flow[0]].nodes).toEqual(['ourShop', 'storeList'])
+    expect(fixed['storeList'].nodes).toEqual(['account', 'shipping', 'privacy', 'terms'])
+    expect(['c1', 'c2', 'c3'].map((id) => fixed[id].props?.['size'])).toEqual(['xs:12 md:4', 'xs:12 md:4', 'xs:12 md:4'])
     expect(fixed['row'].sx?.['alignItems']).toBe('flex-start')
+    expect(fixed['row'].sx?.['alignItems']).not.toBe('center')
     expect(hollowOf(fixed)).toEqual(NONE)
     // The original is a copy's source, never changed.
     expect(tidewaterLiveFooter()['row'].nodes).toHaveLength(4)
+  })
+
+  it('appends the links into the heading column’s own flow when it already has one', () => {
+    const nodes = tidewaterLiveFooter()
+    nodes['c3'].nodes = ['c3flow']
+    nodes['c3flow'] = { componentId: 'muiStack', props: { spacing: '2.5' }, nodes: ['ourShop'] }
+    const fixed = aiLayoutWithoutFrameHollows(nodes) as Record<string, Node>
+    expect(fixed['c3'].nodes).toEqual(['c3flow'])
+    expect(fixed['c3flow'].nodes).toEqual(['ourShop', 'storeList'])
+    expect(fixed['c4']).toBeUndefined()
+    expect(hollowOf(fixed)).toEqual(NONE)
+  })
+
+  it('takes a heading-only column out when what follows it is not a column of links alone', () => {
+    const nodes = tidewaterLiveFooter()
+    nodes['c4'].nodes = ['c4text']
+    nodes['c4text'] = { componentId: 'muiTypography', props: { children: 'Open Saturdays.', variant: 'body1' } }
+    const fixed = aiLayoutWithoutFrameHollows(nodes) as Record<string, Node>
+    expect(fixed['c3']).toBeUndefined()
+    expect(fixed['ourShop']).toBeUndefined()
+    expect(fixed['row'].nodes).toEqual(['c1', 'c2', 'c4'])
+    expect(hollowOf(fixed)).toEqual(NONE)
+  })
+
+  it('takes an empty footer column out and reflows the rest', () => {
+    const nodes = tidewaterLiveFooter()
+    nodes['c3'].nodes = []
+    delete nodes['ourShop']
+    expect(aiLayoutFrameHollows(nodes).footerColumns).toEqual(['c3'])
+    const fixed = aiLayoutWithoutFrameHollows(nodes) as Record<string, Node>
+    expect(fixed['c3']).toBeUndefined()
+    expect(fixed['row'].nodes).toEqual(['c1', 'c2', 'c4'])
+    expect(hollowOf(fixed)).toEqual(NONE)
   })
 
   it('takes out a heading left last in a column with nothing under it, and keeps the column its words hold', () => {
@@ -126,6 +164,22 @@ describe('a frame with nothing hollow in it (AGL-3735)', () => {
     const fixed = aiLayoutWithoutFrameHollows(nodes) as Record<string, Node>
     expect(fixed['menu']).toBeUndefined()
     expect(fixed['nav'].nodes).toEqual(['a'])
+  })
+
+  it('keeps a header dropdown that holds a link, and takes only the empty one out', () => {
+    const nodes: Record<string, Node> = {
+      bar: { componentId: 'section', props: { element: 'header' }, nodes: ['nav'] },
+      nav: { componentId: 'muiStack', props: { component: 'nav' }, nodes: ['full', 'empty'] },
+      full: { componentId: 'muiNavMenu', props: { label: 'Shop' }, nodes: ['soap'] },
+      soap: { componentId: 'muiScreenLink', props: { children: 'Soap', screenId: 'soap' } },
+      empty: { componentId: 'muiMegaMenu', props: { label: 'Gifts' }, nodes: ['col'] },
+      col: { componentId: 'muiStack', nodes: [] },
+    }
+    expect(aiLayoutFrameHollows(nodes).headerMenus).toEqual(['empty'])
+    const fixed = aiLayoutWithoutFrameHollows(nodes) as Record<string, Node>
+    expect(fixed['nav'].nodes).toEqual(['full'])
+    expect(fixed['full'].nodes).toEqual(['soap'])
+    expect(hollowOf(fixed)).toEqual(NONE)
   })
 })
 
