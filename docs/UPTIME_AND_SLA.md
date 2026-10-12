@@ -1317,6 +1317,15 @@ Notes that keep these honest:
   folded into `message` on the stackless path only, so every stacked error
   arrived unclassifiable and the policy could express nothing narrower than
   "any entry at all".
+  ⚑ **A mismatch on a page a translator rewrote never arrives (AGL-3738).**
+  React reports a mismatch only after its recovery render has reset `<html>`
+  and replaced every translated node, so a translator's marks are gone by the
+  time the report is built; the six es-US #418s of 2026-10-12 arrived with
+  none. The beacon now watches for the marks from install
+  (`watchPageTranslation`: Chrome's `translated-*` class and `<font>`
+  wrappers, Microsoft's `_msttexthash`, a rewritten `<html lang>`) and drops a
+  hydration report from a page that carried one. An UNMARKED mismatch is still
+  reported, and is the one to read.
 - **Every beacon entry names a coarse browser family (AGL-3732).**
   `jsonPayload.browser` is exactly one of `safari | chrome | firefox | edge |
   samsung | webview | other`, classified in the browser by
