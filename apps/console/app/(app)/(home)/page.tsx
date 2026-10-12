@@ -124,6 +124,16 @@ function OrgJump() {
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [creatingSite, setCreatingSite] = useState(false)
   /**
+   * A site was just created from this page (AGL-3742). The create made the
+   * account's one workspace, and the dialog is already navigating to the
+   * site's start. The single-org redirect below must not race it to the
+   * sites list.
+   */
+  const siteCreatedRef = useRef(false)
+  const markSiteCreated = useCallback(() => {
+    siteCreatedRef.current = true
+  }, [])
+  /**
    * A workspace this page tried to create for a sign-up, and could not
    * (AGL-1523).
    *
@@ -329,6 +339,7 @@ function OrgJump() {
   // undo — and the chooser they wanted is exactly what it navigates away from.
   useEffect(() => {
     if (loading || !confirmed || orgs.length !== 1) return
+    if (siteCreatedRef.current) return
     // The remembered intent has not been answered yet (AGL-1535) — hold. The
     // ordinary jump below is the one that drops it.
     if (storedIntent === undefined) return
@@ -449,6 +460,7 @@ function OrgJump() {
                   open={creatingSite}
                   onClose={() => setCreatingSite(false)}
                   destination={intent ? enterOrg : undefined}
+                  onCreated={markSiteCreated}
                 />
               </Stack>
             ) : (
@@ -491,6 +503,7 @@ function OrgJump() {
                   open={creatingSite}
                   onClose={() => setCreatingSite(false)}
                   destination={intent ? enterOrg : undefined}
+                  onCreated={markSiteCreated}
                 />
               </>
             )
