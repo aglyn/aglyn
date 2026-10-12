@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.244 — 2026-10-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.243...v1.0.0-beta.244)
+
+### Added
+
+- **health:** a sign-up that gets a workspace and no site goes red (AGL-3725) (#1392) ([AGL-3725](https://linear.app/aglyn/issue/AGL-3725), [AGL-3724](https://linear.app/aglyn/issue/AGL-3724))
+
+### Fixed
+
+- **ai:** usage notice counts AI credits net of returns; Free copy never reads as billing ([AGL-3726](https://linear.app/aglyn/issue/AGL-3726))
+
 ## v1.0.0-beta.243 — 2026-10-11
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.242...v1.0.0-beta.243)
