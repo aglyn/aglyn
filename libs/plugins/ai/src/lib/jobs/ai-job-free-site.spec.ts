@@ -652,9 +652,36 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
       expect(wall(fivePlusThree)).toEqual([])
     })
 
-    it('keeps the home’s five through the plan step: 6 + 4, then 5 + 3', async () => {
+    // Three past the wall, where the trim (AGL-3737) leaves the plan to the re-ask.
+    const sixPlusFive: AiBuildPlan = {
+      ...AI_YOGA_SITE_PLAN_FIRST_ANSWER,
+      screens: [
+        AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[0],
+        {
+          ...AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1],
+          sections: [
+            ...AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1].sections.slice(0, 3),
+            { name: 'Meet the Teachers', uses: [], items: 0 },
+            AI_YOGA_SITE_PLAN_FIRST_ANSWER.screens[1].sections[3],
+          ],
+        },
+      ],
+    }
+
+    it('settles the recorded 6 + 4 — two past the wall — to 5 + 3 in code, with no re-ask (AGL-3737)', async () => {
       mockRunAiRequest.mockReset()
-      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER))
+      const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.sections.map((section) => section.name))).toEqual([
+        ['Hero', 'What is Yoga & Mindfulness', 'Our Drop-In Classes', 'Why Beginners Choose Still Point', 'Start Your Practice'],
+        ['Classes Hero', 'Class Schedule', 'Get Started'],
+      ])
+    })
+
+    it('keeps the home’s five through the plan step: 6 + 5, then 5 + 3', async () => {
+      mockRunAiRequest.mockReset()
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(sixPlusFive)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
       const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
       const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
       expect(sent).toHaveLength(2)
@@ -665,7 +692,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     it('keeps the recorded 4 + 2 redo rather than stopping the start: it is the loop’s last answer, and a third ask is past the plan’s two', async () => {
       mockRunAiRequest.mockReset()
       mockRunAiRequest
-        .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_FIRST_ANSWER))
+        .mockResolvedValueOnce(toolAnswer(sixPlusFive))
         .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_REDO_ANSWER))
         .mockResolvedValueOnce(toolAnswer(fivePlusThree))
       const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
