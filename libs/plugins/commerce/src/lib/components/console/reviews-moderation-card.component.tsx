@@ -35,14 +35,49 @@ import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helper
 import { usePagedCollection } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  REVIEW_MODERATION_REASONS,
+  REVIEW_MODERATION_REASON_LABELS,
+  type ReviewModerationReason,
+} from '../../model/product-reviews'
 
 export interface ReviewsModerationCardProps {
   hostId: string
 }
 
 /**
- * Review moderation (AGL-324): pending queue with approve/reject and
- * inline seller replies; approved reviews render on the product-reviews
+ * The status a "Hide" writes (AGL-3736): a published review is hidden, a
+ * pending one is rejected. Either way a content reason goes with it.
+ */
+export function hiddenStatusFor(review: { status?: string }): 'hidden' | 'rejected' {
+  return review.status === 'pending' ? 'rejected' : 'hidden'
+}
+
+/**
+ * The fields a moderation decision writes. Exactly the keys the Firestore
+ * rules let a site editor change on a review: never `verified`, the rating
+ * or the text. Approving clears the reason; hiding records it.
+ */
+export function moderationUpdate(
+  status: 'approved' | 'hidden' | 'rejected',
+  reason: ReviewModerationReason | null,
+  nowMs: number,
+): Record<string, unknown> {
+  return {
+    status,
+    moderationReason: status === 'approved' ? null : reason,
+    moderatedAtMs: nowMs,
+  }
+}
+
+/**
+ * Review moderation (AGL-324, AGL-3736): the queue of reviews waiting for
+ * approval (unverified ones, under the store's "anyone" policy), with
+ * approve, hide-for-a-reason and inline seller replies. Verified reviews
+ * publish on their own; the merchant may hide one only for a content reason
+ * (spam, abuse, off topic, private information) — the FTC's 2024 rule bars
+ * suppressing an honest review for being negative — and the reason is kept.
+ * Seller replies; approved reviews render on the product-reviews
  * block with the aggregate in JSON-LD.
  *
  * Gated on `productReviews` since AGL-2080. `server/reviews.ts:108` enforces
@@ -50,7 +85,7 @@ export interface ReviewsModerationCardProps {
  * moderation queue whose approvals the renderer would never honour.
  */
 
-const reviewsHelp = pluginDocsHelp('catalog', { anchor: '#product-reviews' })
+const reviewsHelp = pluginDocsHelp('catalog', { anchor: '#review-moderation' })
 
 export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props
@@ -94,18 +129,25 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   )
   const [replyFor, setReplyFor] = useState<string | null>(null)
   const [reply, setReply] = useState('')
+  const [hideFor, setHideFor] = useState<string | null>(null)
+  const [hideReason, setHideReason] = useState<ReviewModerationReason>('spam')
 
   // An approved review is on the product page — its star aggregate and its
   // reply — so moderating one carries the site's cache drop (AGL-3386).
-  const setStatus = (review: any, status: string) =>
+  const setStatus = (
+    review: any,
+    status: 'approved' | 'hidden' | 'rejected',
+    reason: ReviewModerationReason | null = null,
+  ) =>
     writeSiteWideChange({
       firestore,
       user,
       hostId,
       write: (batch) =>
-        batch.update(doc(firestore, 'hosts', hostId, 'reviews', review.$id), {
-          status,
-        }),
+        batch.update(
+          doc(firestore, 'hosts', hostId, 'reviews', review.$id),
+          moderationUpdate(status, reason, Date.now()),
+        ),
     })
 
   return (
@@ -136,7 +178,8 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
           sx={{ maxWidth: 180 }}
         >
           <MenuItem value="pending">{'Pending'}</MenuItem>
-          <MenuItem value="approved">{'Approved'}</MenuItem>
+          <MenuItem value="approved">{'Published'}</MenuItem>
+          <MenuItem value="hidden">{'Hidden'}</MenuItem>
           <MenuItem value="rejected">{'Rejected'}</MenuItem>
           <MenuItem value="all">{'All'}</MenuItem>
         </TextField>
@@ -157,6 +200,16 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
                 ) : null}
                 <Chip label={review.status} size="small" variant="outlined" />
               </Stack>
+              {review.moderationReason &&
+              review.moderationReason in REVIEW_MODERATION_REASON_LABELS ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`Hidden: ${
+                    REVIEW_MODERATION_REASON_LABELS[
+                      review.moderationReason as ReviewModerationReason
+                    ]
+                  }`}
+                </Typography>
+              ) : null}
               <Typography variant="body2" color="text.secondary">
                 {review.body}
               </Typography>
@@ -166,13 +219,16 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
                     {'Approve'}
                   </Button>
                 ) : null}
-                {review.status !== 'rejected' ? (
+                {review.status !== 'rejected' && review.status !== 'hidden' ? (
                   <Button
                     size="small"
                     color="error"
-                    onClick={() => setStatus(review, 'rejected')}
+                    onClick={() => {
+                      setHideFor(review.$id)
+                      setHideReason('spam')
+                    }}
                   >
-                    {'Reject'}
+                    {review.status === 'pending' ? 'Reject…' : 'Hide…'}
                   </Button>
                 ) : null}
                 <Button
@@ -185,6 +241,41 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
                   {review.reply ? 'Edit reply' : 'Reply'}
                 </Button>
               </Stack>
+              {hideFor === review.$id ? (
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <TextField
+                    label="Reason"
+                    value={hideReason}
+                    onChange={(event) =>
+                      setHideReason(event.target.value as ReviewModerationReason)
+                    }
+                    size="small"
+                    select
+                    sx={{ minWidth: 220 }}
+                    helperText="Reviews can't be hidden for being negative."
+                  >
+                    {REVIEW_MODERATION_REASONS.map((reason) => (
+                      <MenuItem key={reason} value={reason}>
+                        {REVIEW_MODERATION_REASON_LABELS[reason]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="error"
+                    onClick={async () => {
+                      await setStatus(review, hiddenStatusFor(review), hideReason)
+                      setHideFor(null)
+                    }}
+                  >
+                    {review.status === 'pending' ? 'Reject' : 'Hide'}
+                  </Button>
+                  <Button size="small" onClick={() => setHideFor(null)}>
+                    {'Cancel'}
+                  </Button>
+                </Stack>
+              ) : null}
               {replyFor === review.$id ? (
                 <Stack direction="row" spacing={1}>
                   <TextField

@@ -240,4 +240,12 @@ export const TTL_POLICIES = Object.freeze([
     // connection, hashed user data while pending (`EVENT_TTL_MS`).
     why: 'ad conversion events owed to a merchant ad account, 14 days',
   },
+  {
+    collection: 'reviewTokens',
+    field: 'expiresAt',
+    // AGL-3736 — a review-request email's single-use review link, stored
+    // hashed and bound to one order, product and email (`server/review-tokens.ts`);
+    // also refused by age on read.
+    why: 'single-use review links from review-request emails, 60 days',
+  },
 ])

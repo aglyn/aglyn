@@ -3742,6 +3742,40 @@ service cloud.firestore {
           (hostMemberRole(hostId) == 'admin' && isVerified() &&
             !hostWritesFrozen(hostId)));
       }
+      // Storefront product reviews (AGL-3736). Every review is CREATED by
+      // `/api/commerce/reviews` (Admin SDK), which alone decides `verified`:
+      // a signed-in member whose proven email bought the product, or a
+      // single-use review link from the review-request email. Before this
+      // block `reviews` fell under the catch-all, so any content writer on
+      // the site could create a review with `verified: true` and
+      // `status: 'approved'`, or flip a stored review's badge.
+      //
+      // The console's moderation path re-granted here is exactly what the
+      // moderation card writes: the status, the seller's reply and the
+      // moderation reason. Never `verified`, the rating, the text, the
+      // author or the product. A VERIFIED review can only be hidden or
+      // rejected for a content reason (the FTC's 2024 rule bars suppressing
+      // honest negative reviews), and never sent back to `pending`. No client
+      // creates or deletes one; `reviews` joins the catch-all's create,
+      // update and delete exclusions below, which is what makes this block
+      // narrow anything (sibling matches are OR'd).
+      //
+      // `reviewTokens` (the hashed review links) has no block and is named in
+      // all four catch-all guards: a writer who could add a row could mint a
+      // verified review, and a reader would see buyers' emails.
+      match /reviews/{reviewId} {
+        allow read: if isStaff() || isHostMember(hostId);
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'reply', 'moderationReason', 'moderatedAtMs']) &&
+            request.resource.data.status in ['pending', 'approved', 'hidden', 'rejected'] &&
+            (resource.data.get('verified', false) != true ||
+              (request.resource.data.status != 'pending' &&
+                (request.resource.data.status == 'approved' ||
+                  request.resource.data.get('moderationReason', '') in
+                    ['spam', 'abusive', 'off_topic', 'private_information']))));
+      }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc
       // itself too — which would let editors delete the host through
@@ -3769,6 +3803,7 @@ service cloud.firestore {
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
           subcollection != 'salesChannels' &&
+          subcollection != 'reviewTokens' &&
           (isStaff() || (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones', 'packageImports',
               'returns', 'orderWebhooks', 'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnelJourneys', 'funnelResults'])));
@@ -3899,7 +3934,8 @@ service cloud.firestore {
         allow create: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
-          subcollection != 'salesChannels' && (isStaff() ||
+          subcollection != 'salesChannels' &&
+          subcollection != 'reviewTokens' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
@@ -3918,7 +3954,7 @@ service cloud.firestore {
               'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-              'aiMemory']) &&
+              'aiMemory', 'reviews', 'reviewTokens']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
@@ -4068,7 +4104,8 @@ service cloud.firestore {
         allow update: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
-          subcollection != 'salesChannels' && (isStaff() ||
+          subcollection != 'salesChannels' &&
+          subcollection != 'reviewTokens' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -4087,7 +4124,7 @@ service cloud.firestore {
               'siteMemberCredentials', 'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers',
               'printJobs', 'returns', 'orderWebhooks',
               'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults',
-              'aiMemory'])));
+              'aiMemory', 'reviews', 'reviewTokens'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -4127,7 +4164,8 @@ service cloud.firestore {
         allow delete: if subcollection != 'siteMemberCredentials' &&
           subcollection != 'orderWebhookSecrets' &&
           subcollection != 'posStaffPins' &&
-          subcollection != 'salesChannels' && (isStaff() ||
+          subcollection != 'salesChannels' &&
+          subcollection != 'reviewTokens' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -4144,7 +4182,7 @@ service cloud.firestore {
               'flowEnrollments', 'siteMembers', 'siteMemberCredentials',
               'posStaffPins', 'posOfflineSales', 'salesChannels', 'recordPages', 'printers', 'printJobs', 'returns',
               'orderWebhooks',
-              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults'])));
+              'orderWebhookSecrets', 'orderWebhookDeliveries', 'funnels', 'funnelJourneys', 'funnelResults', 'reviews', 'reviewTokens'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

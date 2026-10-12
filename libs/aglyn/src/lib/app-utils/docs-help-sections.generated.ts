@@ -208,7 +208,8 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   catalog: {
     '#categories-and-tags': 'Heir suggested prices, and proposed discounts are created switched off.',
-    '#product-reviews': ', so that collection\'s grid is in price order — high to low if that is the sort chosen, low to high otherwise.',
+    '#review-moderation': 'Ff or change the delay on the Reviews card, and change its wording under Emails → Review request.',
+    '#review-settings': '1 to 5 and write a review in the Product reviews block on your product page template.',
   },
   commerce: {
     '#commerce-analytics': 'Hat was refunded, and leaves out test-mode orders. The card lists the five latest orders, and Open store takes you to the products hub.',
