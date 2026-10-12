@@ -49,6 +49,7 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_SITE_BLOG_NAME,
   AI_SITE_CONTENT_INPUT,
+  AI_SITE_POSTS,
   AI_SITE_PRODUCT_NOTE,
   AI_SITE_PRODUCTS,
   AI_SITE_PRODUCTS_NOT_WRITTEN_COPY,
@@ -66,6 +67,7 @@ import {
   createAiSitePostsRunner,
   createAiSiteProductsRunner,
 } from './ai-job-site-content'
+import { AI_SITE_START_POSTS, aiSiteStartContent } from '../model/ai-site-job'
 import type { AiJobStepContext, AiJobStepOutcome } from './ai-job-text-step'
 
 const NOW = new Date('2026-10-07T21:00:00.000Z')
@@ -115,6 +117,13 @@ describe('which part a site gets', () => {
     expect(aiSiteContentPart({ siteKind: 'store' }, true)).toBeNull()
     expect(aiSiteContentPart({ siteKind: 'restaurant' }, false)).toBeNull()
     expect(aiSiteContentPart(null, false)).toBeNull()
+  })
+
+  it('is the part a paid start’s estimate counts, by the same kind', () => {
+    for (const siteKind of ['blog', 'store', 'restaurant', '']) {
+      expect(aiSiteStartContent(siteKind)).toBe(aiSiteContentPart({ siteKind }, false))
+    }
+    expect(AI_SITE_START_POSTS).toBe(AI_SITE_POSTS)
   })
 })
 

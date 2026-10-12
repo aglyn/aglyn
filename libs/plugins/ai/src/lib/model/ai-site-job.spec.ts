@@ -506,9 +506,31 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
 
   it('quotes a paid start and a kept plan as ranges whose ceiling is the old figure (AGL-3722)', () => {
     expect(aiSiteCreditRange(6).ceiling).toBe(aiSiteCreditEstimate(6))
-    expect(aiSiteCreditRange(6).likely).toBe(21 + 4 + 23 + 29 + 6 * 30)
+    // A paid start at what paid starts measured: plan, look, layout, form, pages.
+    expect(aiSiteCreditRange(6).likely).toBe(81 + 4 + 29 + 32 + 6 * 29)
     const kept = plan({ screens: [screen(), screen({ slug: '/about' })] })
     expect(aiJobPlanCreditRange('site', kept).ceiling).toBe(aiJobPlanCreditEstimate('site', kept))
     expect(aiJobPlanCreditRange('site', kept).likely).toBeLessThan(aiJobPlanCreditEstimate('site', kept))
+  })
+
+  /*
+   * A paid 5-page store with its welcome email (Brinewood Soap Co,
+   * d0ME89B7tB, 2026-10-12) was quoted about 277 and came to 423: its plan
+   * counted at a Free start's 21 where it ran 84 on the paid routing, and its
+   * first products (66) not counted at all. The other paid stores of the
+   * window came to 413 and 448.
+   */
+  it('quotes a paid store its first products and a paid plan, near what such stores came to', () => {
+    const store = aiSiteCreditRange(5, { welcomeEmail: true, siteKind: 'store' })
+    expect(store.likely).toBe(81 + 4 + 29 + 32 + 5 * 29 + 49 + 64)
+    expect(store.likely).toBeGreaterThan(400)
+    expect(store.p90).toBeGreaterThanOrEqual(423)
+    expect(store.ceiling).toBe(aiSiteCreditEstimate(5, { welcomeEmail: true }) + AI_SITE_PASS_CREDITS)
+    // A blog's three first posts at the stand-in pass, each a pass of the ceiling.
+    const blog = aiSiteCreditRange(5, { siteKind: 'blog' })
+    expect(blog.likely).toBe(aiSiteCreditRange(5).likely + 50)
+    expect(blog.ceiling).toBe(aiSiteCreditEstimate(5) + 3 * AI_SITE_PASS_CREDITS)
+    // Any other kind writes no first content.
+    expect(aiSiteCreditRange(5, { siteKind: 'restaurant' })).toEqual(aiSiteCreditRange(5))
   })
 })

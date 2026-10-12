@@ -68,6 +68,38 @@ export const AI_MEASURED_UNIT_CREDITS = {
   plan: { median: 21, p90: 70 },
 } as const satisfies Record<string, AiMeasuredCredits>
 
+/**
+ * MEASURED IN PRODUCTION, credits per unit of a PAID site start, whose plan
+ * and parts run on the paid routing (Sonnet) rather than a Free start's
+ * (Haiku) the table above is mostly made of: every `done` paid site job
+ * since 2026-10-01, read 2026-10-12 (6 jobs; products from the 4 stores; AGL-3739).
+ *
+ *   plan step   81 / 86   (a Free start's plan: 20 / 42)
+ *   page item   29 / 49   (about `AI_MEASURED_PAGE_SECTIONS` sections)
+ *   form        32 / 39
+ *   layout      29 / 29
+ *   theme        4 /  4
+ *   email       49 / 51
+ *   products    64 / 66   (a store's first products, one answer)
+ *
+ * A 5-page store with its welcome email was quoted about 277 off the table
+ * above: its plan at a Free start's 21 where paid plans run about 81, and its
+ * first products not counted at all where they run about 64. Those stores
+ * came to 413-448; this table quotes one at about 404.
+ *
+ * Re-measure as the table above says, keeping only jobs whose plan step's
+ * `tokens.model` is the paid routing's.
+ */
+export const AI_MEASURED_PAID_SITE_CREDITS = {
+  plan: { median: 81, p90: 86 },
+  page: { median: 29, p90: 49 },
+  form: { median: 32, p90: 39 },
+  layout: { median: 29, p90: 29 },
+  theme: { median: 4, p90: 4 },
+  email: { median: 49, p90: 51 },
+  products: { median: 64, p90: 66 },
+} as const satisfies Record<string, AiMeasuredCredits>
+
 /** When the table above was read, and from when its jobs ran. */
 export const AI_MEASURED_AT = { read: '2026-10-09', since: '2026-10-01' } as const
 
