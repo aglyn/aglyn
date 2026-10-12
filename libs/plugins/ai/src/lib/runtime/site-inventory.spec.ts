@@ -240,8 +240,13 @@ describe('readSiteInventory — what is listed', () => {
     docs.set(`orgs/${ORG}/datasets/ds-work`, {
       displayName: 'Work',
       model: {
-        order: ['title', 'image'],
-        fields: { title: { name: 'Title', type: 'text' }, image: { name: 'Image', type: 'text', customType: 'image' } },
+        order: ['title', 'image', 'slug'],
+        fields: {
+          title: { name: 'Title', type: 'text' },
+          image: { name: 'Image', type: 'text', customType: 'image' },
+          // A record page's address (AGL-3727): what a listing's card links by.
+          slug: { name: 'Page address', type: 'text', customType: 'pageAddress' },
+        },
       },
       visibleTo: [`host:${HOST}`],
     })
@@ -273,7 +278,14 @@ describe('readSiteInventory — what is listed', () => {
       // A v1 dataset's model is derived by the core reader, which names the fields for display.
       datasets: [
         { id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] },
-        { id: 'ds-work', name: 'Work', fields: ['Title', 'Image'], fieldIds: ['title', 'image'], imageField: 'image' },
+        {
+          id: 'ds-work',
+          name: 'Work',
+          fields: ['Title', 'Image', 'Page address'],
+          fieldIds: ['title', 'image', 'slug'],
+          imageField: 'image',
+          addressField: 'slug',
+        },
       ],
       collections: [{ id: 'col-blog', name: 'Blog', slug: 'blog' }],
       screens: [

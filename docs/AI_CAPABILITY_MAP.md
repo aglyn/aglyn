@@ -174,7 +174,7 @@ gap.
 | Multilingual | locale variants, hreflang, Weglot | no |
 | Site search | search box, search page | no |
 | Live chat | Tidio, LiveChat | no |
-| **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page; no references, import or record edits after the build |
+| **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
 | Events calendar | events, publish to pages, event schema | no |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
@@ -195,7 +195,8 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    `dataset` build operation, both written by the data plugin's `dataset`
    draft writer: typed fields, records seeded from the brief, a list section
    that repeats over the dataset, a drafted record page (Starter and up), and
-   static copy where datasets are not allowed. See below.
+   static copy where datasets are not allowed. See below. Its listed cards
+   link their record pages (AGL-3727).
 2. **Navigation and menus.** Navigation is written only at publish, as flat
    header links. There is no op for dropdown, mega or drawer menus.
 3. **Blog collections and posts.** Collections can't be created outside a
@@ -269,8 +270,22 @@ is a decision about the account, not something to build.
   `{{item.<image>}}` (a lightbox on a portfolio or photography site), the
   pages after it never place those photos again (`stockPhotoAvoid`), and a
   record template's first Image shows the record's photo.
-- **Not yet.** Listing cards do not link record pages until the member saves
-  the binding.
+- **Cards link their record's page (AGL-3727).** Where the plan makes a page
+  the record template of a dataset that a section lists, the listing carries
+  the template's base (`recordBase`, read off the plan by
+  `aiLayoutRecordBaseOf`) and the dataset's page-address field
+  (`addressField`: the writer's, on a site start; the inventory's
+  `pageAddress` field, on a build). The layout compiler then puts a
+  "View details" link on every card, and links the card's photo where it does
+  not open in a lightbox, to `/{base}/{{item.<address>}}`
+  (`aiLayoutRecordHref`), which the page fills per record as it repeats the
+  card. It is code, never the model's: the page's prompt is unchanged, and
+  the link token is admitted only on a page that lists the dataset. The link
+  answers once the member saves the binding (rule 13), as the record page's
+  row says.
+- **Not yet.** A dataset with a record page saved earlier and no record
+  template in the plan is not linked: the inventory does not read the data
+  plugin's bindings.
 
 ## Forms that write to a dataset
 

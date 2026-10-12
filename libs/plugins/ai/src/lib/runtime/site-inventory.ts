@@ -202,16 +202,20 @@ async function readIndexedDatasets(
           id: text(field?.['id']),
           name: text(field?.['name']) || text(field?.['id']),
           image: text(field?.['customType']) === 'image',
+          // A record page's address, the data plugin's `pageAddress` type (AGL-3727).
+          address: text(field?.['customType']) === 'pageAddress',
         }))
         .filter((field) => field.name)
       // A record's photo (AGL-3616), the data plugin's `image` field type.
       const image = fields.find((field) => field.image && field.id)
+      const address = fields.find((field) => field.address && field.id)
       return {
         id: record.id,
         name: record.name,
         fields: fields.map((field) => field.name),
         fieldIds: fields.map((field) => field.id || field.name),
         ...(image ? { imageField: image.id } : {}),
+        ...(address ? { addressField: address.id } : {}),
       }
     }),
     truncated,

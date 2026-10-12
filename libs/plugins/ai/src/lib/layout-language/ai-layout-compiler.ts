@@ -52,6 +52,7 @@ import {
   AI_LAYOUT_FEATURED_RECORDS,
   AI_LAYOUT_LISTING_ELEMENTS,
   aiLayoutListingAt,
+  aiLayoutRecordHref,
   type AiLayoutListing,
   type AiLayoutListingRole,
 } from './ai-layout-listings'
@@ -2888,6 +2889,9 @@ function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: numb
 
 // ── A dataset's records (AGL-3616) ───────────────────────────────────────
 
+/** The words of the link under each record's card to its own page (AGL-3727). */
+export const AI_LAYOUT_RECORD_LINK_LABEL = 'View details'
+
 /** A field whose name says it is a record's kicker: its category, role, time or place. */
 const RECORD_KICKER = /\b(category|categories|type|kind|role|title|position|section|course|date|dates|time|times|when|day|days|location|place|where|venue|city|duration|level|tag|tags)\b/i
 /** A field whose name says it is a record's words: its description, bio or answer. */
@@ -2947,6 +2951,9 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
     : null
   const photoField = !questions && listing.imageField ? listing.imageField : null
   const opens = Boolean(photoField) && aiOpensGalleriesInLightbox(page)
+  // Each card opens its record's own page where the dataset has one (AGL-3727):
+  // `/{base}/{{item.<address>}}`, filled per record as the card repeats.
+  const recordHref = aiLayoutRecordHref(listing)
   const portrait = page.design?.input.kind === 'photography' || RECORD_PEOPLE.test(listing.name)
   const picture = photoField
     ? tree.add(
@@ -2958,23 +2965,36 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
           width: '100%',
           loading: 'lazy',
           ...(opens ? { ...lightboxProps(scope), ...(fields.title ? { lightboxCaption: `{{item.${fields.title}}}` } : {}) } : {}),
+          // A photo that does not open in a lightbox opens the record's page.
+          ...(recordHref && !opens ? { href: recordHref } : {}),
         },
         { aspectRatio: portrait ? '4 / 5' : '4 / 3', borderRadius: 2 },
         null,
         'recordImage',
       )
     : null
+  const more = recordHref
+    ? tree.add(
+        'muiScreenLink',
+        { children: AI_LAYOUT_RECORD_LINK_LABEL, href: recordHref, renderAs: 'link', color: 'inherit' },
+        { alignSelf: scope.centered && !questions ? 'center' : 'flex-start' },
+        null,
+        'recordLink',
+      )
+    : null
   page.settled.push({
     at: scope.at,
-    what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : picture ? ' as picture cards' : ' as cards'}`,
+    what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : picture ? ' as picture cards' : ' as cards'}${
+      recordHref ? `, each linking its page under /${listing.recordBase}` : ''
+    }`,
   })
   const card = questions
-    ? tree.add('muiStack', { spacing: '1' }, { borderTop: 1, pt: 3 }, [title, body], 'record')
+    ? tree.add('muiStack', { spacing: '1' }, { borderTop: 1, pt: 3 }, [title, body, more], 'record')
     : tree.add(
         'muiStack',
         { spacing: picture ? '1.5' : '1', ...(scope.centered ? { alignItems: 'center' } : {}) },
         null,
-        [picture, kicker, title, body],
+        [picture, kicker, title, body, more],
         'record',
       )
   return tree.add(
