@@ -22,6 +22,7 @@ import { Alert, Button, Chip, CircularProgress, Stack, Typography } from '@mui/m
 import { useCallback, useMemo, useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
+  aiCatalogPrice,
   aiProductCopyProposals,
   aiProductsBulkCount,
   aiProductsProposalOfKind,
@@ -221,8 +222,16 @@ export function AiCatalogReview(props: {
         headerName: 'Price',
         width: 130,
         sortable: false,
-        // Never proposed: prices are the merchant's to set.
-        renderCell: () => <Chip size="small" color="warning" variant="outlined" label="Set a price" />,
+        // A suggested price by what the product is (Zach, 2026-10-12), the
+        // merchant's to change; a proposal without one takes the default.
+        renderCell: ({ row }: { row: { product: { price?: number | null } } }) => {
+          const price = aiCatalogPrice(row.product.price)
+          return price === null ? (
+            <Chip size="small" variant="outlined" label="Default price" />
+          ) : (
+            <Chip size="small" variant="outlined" label={`$${price.toFixed(2)} suggested`} />
+          )
+        },
       },
       {
         field: 'photo',
@@ -266,6 +275,7 @@ export function AiCatalogReview(props: {
           options: product.options,
           seoTitle: product.seoTitle,
           seoDescription: product.seoDescription,
+          priceUsd: aiCatalogPrice(product.price),
         })),
       )
       const passed = picks.length - created.length
@@ -273,7 +283,7 @@ export function AiCatalogReview(props: {
         severity: 'success',
         text:
           `Created ${created.length} draft ${created.length === 1 ? 'product' : 'products'}. ` +
-          'Each needs a price and a photo before you activate it.' +
+          'Review each price and add a photo before you activate it.' +
           (passed ? ` ${passed} already in your catalog ${passed === 1 ? 'was' : 'were'} left as they are.` : ''),
       })
       setSelected([])
@@ -291,8 +301,8 @@ export function AiCatalogReview(props: {
       {rows.length ? (
         <>
           <Typography variant="body2" color="text.secondary">
-            {'Each is created as a draft with its price left empty and no photo. Set both in the product editor, ' +
-              'then activate it.'}
+            {'Each is created as a draft at its suggested price, with no photo. Review the price and add a photo ' +
+              'in the product editor, then activate it.'}
           </Typography>
           <ListTable
             rows={rows}

@@ -148,7 +148,11 @@ export interface ConsoleProductSummary {
   hasPhoto: boolean
 }
 
-/** A new product a widget asks the hub to create, always as a draft with no price. */
+/**
+ * A new product a widget asks the hub to create, always as a draft, at its
+ * suggested price when it carries one in range, else the default price
+ * (`proposedProductPriceUsd`, Zach 2026-10-12).
+ */
 export interface ConsoleProposedProduct {
   name: string
   type: ConsoleProductType
@@ -157,6 +161,8 @@ export interface ConsoleProposedProduct {
   options: ConsoleProductOption[]
   seoTitle: string
   seoDescription: string
+  /** The suggested price for every variant, in dollars; absent or `null` is the default price. */
+  priceUsd?: number | null
 }
 
 /** A discount a widget asks the hub to create, always switched off. */

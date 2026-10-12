@@ -22,6 +22,7 @@ import {
   AI_CATALOG_OPTION_VALUES_MAX,
   AI_CATALOG_OPTIONS_MAX,
   AI_CATALOG_PHOTO_MAX_CHARS,
+  AI_CATALOG_PRICE_USD,
   AI_CATALOG_PRODUCTS,
   AI_CATALOG_TAGS_MAX,
   AI_CATEGORIES_MAX,
@@ -38,6 +39,7 @@ import {
   AI_PRODUCT_TAGS_MAX,
   AI_PRODUCT_TYPES,
   AI_PROPOSAL_WHY_MAX_CHARS,
+  aiCatalogPrice,
   type AiCatalogProduct,
   type AiCategoriesProposal,
   type AiDiscountKind,
@@ -67,7 +69,9 @@ import { detectOffVoiceCopy, type AiDoctrineViolation } from '../runtime/ai-doct
  *   discounts, from a brief.
  *
  * Each schema is kept small, and no field is nullable: "none" is an empty
- * string, an empty list or zero. A strict schema accepts no length keyword,
+ * string, an empty list or zero. A catalog product's `price` is the one field
+ * no answer is refused for: code keeps it in range or drops it to the
+ * store's default (`aiCatalogPrice`). A strict schema accepts no length keyword,
  * so every bound is stated in a description and enforced here. A check
  * returns a value only when nothing in the answer is broken, and otherwise
  * the violations and the parts at fault, for the generation call's one
@@ -332,7 +336,7 @@ export const AI_CATALOG_TOOL: AiTool = {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['name', 'type', 'description', 'tags', 'options', 'seoTitle', 'seoDescription', 'photo'],
+          required: ['name', 'type', 'description', 'tags', 'options', 'seoTitle', 'seoDescription', 'photo', 'price'],
           properties: {
             name: string(`Distinct within the list, at most ${AI_PRODUCT_NAME_MAX_CHARS} characters.`),
             type: { type: 'string', enum: [...AI_PRODUCT_TYPES] },
@@ -356,6 +360,10 @@ export const AI_CATALOG_TOOL: AiTool = {
             seoTitle: string(`At most ${SEO_TITLE_MAX} characters.`),
             seoDescription: string(`At most ${SEO_DESCRIPTION_MAX} characters.`),
             photo: string(`What the product photo should show, in one sentence of at most ${AI_CATALOG_PHOTO_MAX_CHARS} characters.`),
+            price: {
+              type: 'number',
+              description: `Its suggested price in US dollars, from ${AI_CATALOG_PRICE_USD.min} to ${AI_CATALOG_PRICE_USD.max}.`,
+            },
           },
         },
       },
@@ -437,6 +445,9 @@ export function checkAiCatalog(
       seoTitle,
       seoDescription,
       photo,
+      // Kept by code, never re-asked (Zach, 2026-10-12): a price that is
+      // missing or out of range is `null`, and the store's default stands in.
+      price: aiCatalogPrice(entry['price']),
     })
   })
   findings.violations.push(...claimViolations(samples, context.merchantWords), ...detectOffVoiceCopy(samples, null))

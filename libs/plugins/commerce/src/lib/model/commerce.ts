@@ -814,6 +814,20 @@ export function defaultPricedProductDraft(
   return { ...draft, ...productSearchFields({ name: draft.name, variants }), variants }
 }
 
+/**
+ * The price a proposed product is created at (Zach, 2026-10-12): a price an
+ * AI proposal suggests for what the product is, when it is a real one — a
+ * finite amount above $0, at most `COMMERCE_MAX_PRICE_USD`, rounded to whole
+ * cents — else the default price (`COMMERCE_DEFAULT_PRICE_USD`). Never $0,
+ * negative or past the ceiling, whatever a proposal carries; the owner
+ * changes it like any price.
+ */
+export function proposedProductPriceUsd(suggested: unknown): number {
+  if (typeof suggested !== 'number' || !Number.isFinite(suggested)) return COMMERCE_DEFAULT_PRICE_USD
+  const cents = Math.round(suggested * 100)
+  return cents > 0 && cents <= COMMERCE_MAX_PRICE_USD * 100 ? cents / 100 : COMMERCE_DEFAULT_PRICE_USD
+}
+
 /** Variant whose option selections match exactly; undefined if none. */
 export function findVariant(
   product: Pick<HostProduct, 'variants'>,

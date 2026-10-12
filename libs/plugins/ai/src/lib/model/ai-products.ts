@@ -31,7 +31,8 @@ import type { AiJobOutput, AiJobSummary } from './ai-jobs.types'
  * - `bulk` — the copy of up to `AI_PRODUCTS_BULK_MAX` saved products, one
  *   product a pass, each read from the catalog as it is reached.
  * - `catalog` — a store's first products from the brief: names, copy, tags
- *   and options, and what each photo should show. No price and no picture.
+ *   and options, what each photo should show, and a suggested price by what
+ *   the product is (`aiCatalogPrice`, Zach 2026-10-12). No picture.
  * - `categories` — store categories and a first set of discounts from the brief.
  *
  * Every output is a PROPOSAL (`resource: 'product'`, with `proposal`), and the
@@ -89,6 +90,39 @@ export const AI_CATALOG_OPTION_VALUE_MAX_CHARS = 30
 
 /** What a proposed product's photo should show, in one sentence. */
 export const AI_CATALOG_PHOTO_MAX_CHARS = 160
+
+/**
+ * A proposed product's suggested price, in US dollars — the one currency a
+ * catalog prices in (`priceUsd`) — and the range code keeps it to (Zach,
+ * 2026-10-12): a store's first products priced by what each one is (a bar
+ * of handmade soap about $8–12, a candle $18–32, a gift set $30–45) instead
+ * of every one at the commerce default. Never $0 or less, nothing past what
+ * a small shop's first product plausibly lists at; a price outside the range,
+ * or none, is no price, and the writer gives the product its default price.
+ * Below the commerce ceiling (`COMMERCE_MAX_PRICE_USD`, $10,000) by design.
+ */
+export const AI_CATALOG_PRICE_USD = { min: 1, max: 5_000 } as const
+
+/**
+ * A proposed price as code keeps it: a finite number of dollars (or a plain
+ * "$12.50" a model wrote as text) inside `AI_CATALOG_PRICE_USD`, rounded to
+ * whole cents; anything else — missing, zero, negative, absurd, not a number
+ * — is `null`, so the product takes the store's default price for the owner
+ * to change. The model is never re-asked for a price: a bad one costs the
+ * product only its suggestion.
+ */
+export function aiCatalogPrice(raw: unknown): number | null {
+  let value: number | null = null
+  if (typeof raw === 'number') value = raw
+  else if (typeof raw === 'string') {
+    const match = /^\s*(?:US\s*)?\$?\s*(\d{1,6}(?:\.\d{1,2})?)\s*(?:USD)?\s*$/i.exec(raw)
+    value = match ? Number(match[1]) : null
+  }
+  if (value === null || !Number.isFinite(value)) return null
+  const cents = Math.round(value * 100)
+  if (cents < AI_CATALOG_PRICE_USD.min * 100 || cents > AI_CATALOG_PRICE_USD.max * 100) return null
+  return cents / 100
+}
 
 export const AI_CATEGORIES_MAX = 12
 export const AI_DISCOUNTS_MAX = 5
@@ -338,6 +372,12 @@ export interface AiCatalogProduct {
   seoDescription: string
   /** What the product's photo should show; nothing is uploaded or linked. */
   photo: string
+  /**
+   * The suggested price for every variant, in US dollars, as `aiCatalogPrice`
+   * kept it; `null` (or absent, on a proposal made before 2026-10-12) when
+   * the model gave none in range, and the store's default price stands in.
+   */
+  price?: number | null
 }
 
 export interface AiCatalogProposal {

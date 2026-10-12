@@ -405,7 +405,7 @@ export const AI_STORE_FINISH_STEPS: readonly AiStoreFinishStep[] = [
   {
     id: 'products',
     title: 'Review your products and prices',
-    text: 'Your first products are listed with a starting price. Set your real prices, photos and stock.',
+    text: 'Your first products are listed at suggested prices. Review your prices, photos and stock.',
     opens: 'product',
     action: 'Open products',
   },
