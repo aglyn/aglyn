@@ -236,6 +236,43 @@ export function isBenignBrowserNotice(message: string): boolean {
 }
 
 /**
+ * A rejection that says only "this was cancelled" (AGL-3734).
+ *
+ * `AbortError` is what a request rejects with when its `AbortSignal` fires —
+ * a deadline we set, a component that unmounted, a search the author typed
+ * past — and what the browser rejects every in-flight fetch with when the
+ * document goes away under it. On 2026-10-10 one arrived from
+ * `/edit-access`, the page a published site opens in a popup or a hidden
+ * iframe and then CLOSES itself the moment it has its answer. The report had
+ * no stack and no message past the name, so there was no call site to fix:
+ * the page's own mint was already caught, and whatever else the console shell
+ * had in flight was cut off by the site ending the page, which is the flow
+ * working.
+ *
+ * Why the classifier rather than each call site: every request on every
+ * console page can be the one in flight when a page is torn down, and the
+ * abort is the intended outcome in every case. There is nothing a fix of ours
+ * could change, and nothing in the report to locate it by.
+ *
+ * Narrow on purpose. Only `name === 'AbortError'`, and only for an UNHANDLED
+ * REJECTION — not `TimeoutError`, which is `AbortSignal.timeout` saying a
+ * deadline was MISSED (a real slowness), and not an uncaught `error` event or
+ * a `reportHandledError` call, where somebody chose to report it.
+ */
+export function isAbortRejection(reason: unknown): boolean {
+  try {
+    return (
+      typeof reason === 'object' &&
+      reason !== null &&
+      (reason as { name?: unknown }).name === 'AbortError'
+    )
+  } catch {
+    // A getter that throws leaves the rejection reported, never dropped.
+    return false
+  }
+}
+
+/**
  * `kind` for Firebase's `auth/tenant-id-mismatch` — a sibling tab signed in to
  * another account pool (AGL-3280). The console recovers the tab by reloading
  * it once it is hidden and deliberately leaves the rejection unhandled so it
@@ -628,6 +665,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // `recoverStaleBuildRejection`. A tab whose recovery is spent still
       // reports it, as `chunk-load`.
       if (recoverStaleBuildRejection(event.reason)) return
+      // A cancelled request, ours or the browser's on teardown: see
+      // `isAbortRejection` for why this is dropped and how narrowly.
+      if (isAbortRejection(event.reason)) return
       const reason = event.reason as Error | undefined
       const message = clamp(describeRejectionReason(event.reason), MAX_MESSAGE)
       if (!message) return

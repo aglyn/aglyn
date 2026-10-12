@@ -604,6 +604,31 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(events[0]['kind']).toBe('unhandledrejection')
   })
 
+  it('DROPS a cancelled request: an AbortError rejection (AGL-3734)', () => {
+    // The 2026-10-10 /edit-access shape: name only, no message, no stack.
+    rejectInPage(new DOMException('', 'AbortError'))
+    rejectInPage({ name: 'AbortError' })
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('still REPORTS a TimeoutError rejection: a missed deadline (AGL-3734)', () => {
+    rejectInPage(new DOMException('signal timed out', 'TimeoutError'))
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ kind: 'unhandledrejection' })
+  })
+
+  it('still REPORTS an uncaught AbortError thrown, not rejected (AGL-3734)', () => {
+    const error = new Error('aborted by hand')
+    error.name = 'AbortError'
+    error.stack = `AbortError: aborted by hand\n${OWN_FRAME}`
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: error.message, filename: PAGE }),
+    )
+    jest.runOnlyPendingTimers()
+    expect(reported()).toHaveLength(1)
+  })
+
   it('DROPS a rejection an automation driver raised (AGL-3423)', () => {
     const error = new Error('Refused to evaluate a string as JavaScript')
     error.name = 'EvalError'
