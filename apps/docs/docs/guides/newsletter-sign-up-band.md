@@ -81,7 +81,7 @@ an empty **Form** at its root.
 | **Field name** | `email` | The key the address is stored under. |
 | **Type** | **Email** | The browser checks it is an address before sending. |
 | **Label** | `Email address` | Keep it set, even though step 3 hides it from view. It is the field's name for screen readers. |
-| **Placeholder** | `you@company.com` | The grey hint inside the empty field. |
+| **Placeholder** | `you@company.com` | The gray hint inside the empty field. |
 | **Required?** | On | No empty sign-ups. |
 
 3. Select the **Form** itself and set **Submit label** to `Subscribe` and
@@ -164,7 +164,7 @@ What each part does:
 - The label is **visually hidden, not removed**. It still names the field for
   assistive technology, which a placeholder cannot do.
 - The field is white with dark text on any background, has no outline until it
-  has focus, and its placeholder is a readable grey.
+  has focus, and its placeholder is a readable gray.
 
 :::tip Why these values are tokens
 Every value above is a theme token, not a hard-coded value:
