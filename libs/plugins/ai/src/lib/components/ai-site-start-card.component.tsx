@@ -119,7 +119,7 @@ import {
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+import { AI_SITE_KINDS, aiSiteKindOfInputs } from '../model/ai-site-kinds'
 
 /** The icon each kind of site's card shows. */
 const AI_SITE_KIND_ICONS: Record<string, string> = {
@@ -602,7 +602,13 @@ export function AiSiteStartCard({
   })
   const estimate = freeTaste
     ? aiFreeSiteCreditRange(answers.pages)
-    : scaled(aiSiteCreditRange(answers.pages, { welcomeEmail: answers.welcomeEmail }))
+    : scaled(
+        aiSiteCreditRange(answers.pages, {
+          welcomeEmail: answers.welcomeEmail,
+          // A store's first products and a blog's first posts are part of the start (AGL-3676).
+          siteKind: aiSiteKindOfInputs(aiSiteStartInputs(answers))?.id ?? null,
+        }),
+      )
   // A Free start quotes what is LEFT (AGL-3660), shared across the owner's
   // Free workspaces — never the month's whole allowance as if none were spent.
   const estimateText = freeTaste

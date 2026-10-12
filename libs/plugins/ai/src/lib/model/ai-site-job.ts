@@ -28,6 +28,7 @@ import { AI_PAGE_CREATE_KINDS } from './ai-page-job'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   AI_CREDIT_RANGE_ZERO,
+  AI_MEASURED_PAID_SITE_CREDITS,
   AI_MEASURED_PASS_CREDITS,
   AI_MEASURED_STANDALONE_CREATION_CREDITS,
   AI_MEASURED_UNIT_CREDITS,
@@ -1040,15 +1041,31 @@ export function aiJobPlanCreditEstimate(kind: string, plan: AiBuildPlan): number
  */
 export function aiSiteCreditEstimate(
   pages: number,
-  options: { welcomeEmail?: boolean } = {},
+  options: { welcomeEmail?: boolean; siteKind?: string | null } = {},
 ): number {
   const screens = Math.max(0, Math.floor(pages))
+  const content = aiSiteStartContent(options.siteKind)
   const passes =
     1 +
     screens * (AI_SITE_NOMINAL_SECTIONS + 1) +
     2 +
-    (options.welcomeEmail ? 1 : 0)
+    (options.welcomeEmail ? 1 : 0) +
+    (content === 'products' ? 1 : content === 'posts' ? AI_SITE_START_POSTS : 0)
   return passes * AI_SITE_PASS_CREDITS
+}
+
+/** How many first posts a paid blog start writes, one pass each (`AI_SITE_POSTS`, held equal by `ai-site-job.spec.ts`). */
+export const AI_SITE_START_POSTS = 3
+
+/**
+ * The first content a paid start of this kind writes (AGL-3676): a store's
+ * first products, a blog's first posts, or nothing. `aiSiteContentPart`'s
+ * answer for a paid start, by the kind's id.
+ */
+export function aiSiteStartContent(siteKind: string | null | undefined): 'posts' | 'products' | null {
+  if (siteKind === 'store') return 'products'
+  if (siteKind === 'blog') return 'posts'
+  return null
 }
 
 /**
@@ -1122,13 +1139,27 @@ export function aiJobPlanCreditRange(kind: string, plan: AiBuildPlan): AiCreditR
  * layout and form, and each page at the nominal sections, as measured; the
  * ceiling is `aiSiteCreditEstimate`.
  */
-export function aiSiteCreditRange(pages: number, options: { welcomeEmail?: boolean } = {}): AiCreditRange {
+export function aiSiteCreditRange(
+  pages: number,
+  options: { welcomeEmail?: boolean; siteKind?: string | null } = {},
+): AiCreditRange {
   const count = Math.max(0, Math.floor(pages))
-  const measured = aiSiteStartMeasured(count)
-  const email = options.welcomeEmail ? AI_MEASURED_PASS_CREDITS : { median: 0, p90: 0 }
+  // A paid start plans and writes on the paid routing, measured apart (AGL-3739).
+  const { plan, theme, layout, form, page, email, products } = AI_MEASURED_PAID_SITE_CREDITS
+  const content = aiSiteStartContent(options.siteKind)
+  // A blog's posts have no measurement of their own yet: the stand-in pass.
+  const parts: AiMeasuredCredits[] = [
+    plan,
+    theme,
+    layout,
+    form,
+    ...Array.from({ length: count }, () => page),
+    ...(options.welcomeEmail ? [email] : []),
+    ...(content === 'products' ? [products] : content === 'posts' ? [AI_MEASURED_PASS_CREDITS] : []),
+  ]
   return aiCreditRangeOrdered({
-    likely: measured.likely + email.median,
-    p90: measured.p90 + email.p90,
+    likely: parts.reduce((total, part) => total + part.median, 0),
+    p90: parts.reduce((total, part) => total + part.p90, 0),
     ceiling: aiSiteCreditEstimate(count, options),
   })
 }

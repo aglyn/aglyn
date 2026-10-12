@@ -1151,13 +1151,20 @@ export function createAiJobSiteStep(
      * or the announce again, merged into the record of the first.
      */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
-      if (!aiJobPublishesSite(job) || !job.hostId || !pages.length) return outcome
+      if (!aiJobPublishesSite(job) || !job.hostId) return outcome
       const previous = job.sitePublish ?? null
+      const wasLive = Boolean(previous?.published.length)
       const live = new Set((previous?.published ?? []).map((page) => page.id))
       const fresh = pages.filter((page) => !live.has(page.id))
-      if (!fresh.length) return outcome
+      // Posts Try again wrote for a site already live go live too, pages or not (AGL-3739).
+      const postsRetried = wasLive && postsRebuilt()
+      if (!fresh.length && !postsRetried) return outcome
       // A canceled start never puts the site live (AGL-3616): its pages stay drafts.
       if (await aiJobCancelAsked(context.firestore, job, context.signal)) return outcome
+      if (!fresh.length) {
+        await finishPosts()
+        return outcome
+      }
       // A blog the header links by path before its posts exist (AGL-3660):
       // owed and not delivered, its links come out of what is published.
       const postsRow = rows.get('posts')
@@ -1168,16 +1175,26 @@ export function createAiJobSiteStep(
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
         // The store's pages the header and footer link and the start did not write (AGL-3676).
         ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
-        ...(previous?.published.length ? { retry: true } : {}),
+        ...(wasLive ? { retry: true } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
-      // The blog's posts went live with the first publish that put a page live.
-      if (sitePublish?.published.length && !previous?.published.length) await finishPosts()
+      // The blog's posts go live with the first publish that puts a page
+      // live, and on a site already live, when Try again wrote them.
+      if (wasLive ? postsRetried : sitePublish?.published.length) await finishPosts()
       if (!sitePublish) return outcome
       return { ...outcome, sitePublish: previous ? aiMergeSitePublish(previous, sitePublish) : sitePublish }
+    }
+    /**
+     * Whether the blog's posts part was written by Try again: delivered on a
+     * later attempt than its first. Publishing them again on a later retry
+     * leaves a post already published as it is.
+     */
+    const postsRebuilt = (): boolean => {
+      const row = rows.get('posts')
+      return Boolean(row && row.attempt > 1 && aiBuildItemDelivered(row) && row.outputs?.length)
     }
     /** The blog's posts go live with its pages (AGL-3676), as a person's Publish would put them. */
     const finishPosts = async () => {

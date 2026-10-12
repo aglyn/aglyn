@@ -45,7 +45,7 @@ import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
+import { aiBuildStoreLinksToPublish, aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
 import { AI_BUILD_MADE_INPUT, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
@@ -242,6 +242,75 @@ describe('the build step (AGL-3616)', () => {
       context(job({ items, inputs: { publish: true, publishConfirmed: true } })),
     )
     expect(publish).toHaveBeenCalledWith(firestore, expect.objectContaining({ outputs: [expect.objectContaining({ id: 'page-1' })] }))
+  })
+
+  /*
+   * Try again on a build (the AGL-3730 fix, for a build): a build that had
+   * published once skipped the publish, so a page Try again rebuilt stayed a
+   * draft. Its last pass puts the pages the retry built live, only those, as
+   * a retry, merged into what the first publish put live.
+   */
+  it('publishes the pages Try again built, only those, as a retry, merged into the first publish', async () => {
+    const items = aiBuildInitialLedger(aiBuildUnits(plan())).map((row) =>
+      row.slot === 'i0'
+        ? { ...row, status: 'succeeded' as const, outputs: ['svc-1'] }
+        : { ...row, status: 'succeeded' as const, attempt: 2, outputs: ['page-1'] },
+    )
+    const outputs = [{ resource: 'screen' as const, id: 'page-1', hostId: 'host-1', label: 'Book' }]
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [{ id: 'page-0', label: 'Home', path: '/' }],
+      drafts: [{ id: 'page-1', label: 'Book', reason: 'It could not be published just now. Publish it from Pages.' }],
+    }
+    const retried = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'page-1', label: 'Book', path: '/book' }], drafts: [] }
+    const publish = jest.fn(async () => retried)
+    const outcome = await step({ writer: writer().impl, seen: [], publish })(
+      context(job({ items, outputs, sitePublish: first, inputs: { publish: true, publishConfirmed: true } })),
+    )
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: Array<{ id: string }>; retry?: boolean }]
+    expect(input.outputs.map((page) => page.id)).toEqual(['page-1'])
+    expect(input.retry).toBe(true)
+    expect(outcome.sitePublish).toEqual({
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [...first.published, ...retried.published],
+      drafts: [],
+    })
+    // Every page it built already live: nothing is published again.
+    publish.mockClear()
+    await step({ writer: writer().impl, seen: [], publish })(
+      context(job({ items, outputs, sitePublish: { ...first, published: retried.published }, inputs: { publish: true, publishConfirmed: true } })),
+    )
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('publishes a retry as the first publish when the first put nothing live', async () => {
+    const items = aiBuildInitialLedger(aiBuildUnits(plan())).map((row) =>
+      row.slot === 'i0' ? { ...row, status: 'succeeded' as const, outputs: ['svc-1'] } : { ...row, status: 'succeeded' as const, outputs: ['page-1'] },
+    )
+    const outputs = [{ resource: 'screen' as const, id: 'page-1', hostId: 'host-1', label: 'Book' }]
+    const none = { liveUrl: null, published: [], drafts: [{ id: 'page-1', label: 'Book', reason: 'It could not be published just now. Publish it from Pages.' }] }
+    const live = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'page-1', label: 'Book', path: '/book' }], drafts: [] }
+    const publish = jest.fn(async () => live)
+    const outcome = await step({ writer: writer().impl, seen: [], publish })(
+      context(job({ items, outputs, sitePublish: none, inputs: { publish: true, publishConfirmed: true } })),
+    )
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { retry?: boolean }]
+    expect(input.retry).toBeUndefined()
+    expect(outcome.sitePublish).toEqual(live)
+  })
+
+  it('puts the newest store links draft live: a retried store drafts them again', () => {
+    const draft = (versionId: string) => ({
+      resource: 'layout' as const,
+      id: 'layout-1',
+      hostId: 'host-1',
+      versionId,
+      label: 'Header',
+      proposal: { storeLinks: 'draft', links: {}, screenPaths: {} },
+    })
+    expect(aiBuildStoreLinksToPublish([draft('v-first'), draft('v-retry')])?.versionId).toBe('v-retry')
+    expect(aiBuildStoreLinksToPublish([])).toBeNull()
   })
 
   it('hands a template item its arguments as inputs and its own creation to build', () => {
