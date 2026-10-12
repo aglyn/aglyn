@@ -368,6 +368,9 @@ describe('isHydrationMismatch (AGL-2523)', () => {
   })
 })
 
+const VISITOR_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+
 describe('the installed beacon applies both rules end to end (AGL-2523)', () => {
   let beacon: jest.Mock
   const engine = Error as ErrorConstructor & { stackTraceLimit: number }
@@ -385,6 +388,12 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     jest.useFakeTimers()
     // Well above the number of events this file reports, so the per-page cap
     // cannot silently swallow a later case.
+    // A real visitor's agent, so the browser family below is a classified
+    // one rather than jsdom's `other` (AGL-3732).
+    Object.defineProperty(navigator, 'userAgent', {
+      value: VISITOR_UA,
+      configurable: true,
+    })
     installErrorBeacon({ maxPerPage: 100 })
   })
 
@@ -486,6 +495,22 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     const [event] = reported()
     expect(event['kind']).toBe('hydration')
     expect(event).not.toHaveProperty('translated')
+  })
+
+  it('stamps every event with the browser family, and never the agent or its version (AGL-3732)', () => {
+    throwInPage('family-stamped boom', OWN_STACK)
+    throwInPage(
+      'Minified React error #418; visit https://react.dev/errors/418?args[]=family',
+      OWN_STACK,
+    )
+    const events = reported()
+    expect(events).toHaveLength(2)
+    for (const event of events) expect(event['browser']).toBe('safari')
+    const wire = beacon.mock.calls.map((call) => String(call[1])).join('\n')
+    expect(wire).not.toContain('Mozilla')
+    expect(wire).not.toContain('iPhone')
+    expect(wire).not.toContain('17_5')
+    expect(wire).not.toContain('17.5')
   })
 
   it('labels only hydration reports', () => {
