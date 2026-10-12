@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { DUPLICABLE_HOST_RESOURCE_KINDS, DUPLICATE_NAME_MAX } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { isHostPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
@@ -48,7 +49,8 @@ import { aiJobStepRunnerFor } from './ai-jobs'
  * a site function by the logic plugin's `function` writer, which the `logic`
  * runner calls when its job is a build's unit. A change to a page or layout
  * the site already has is the `edit` runner's, and a change to its header or
- * footer menu the `navigation` runner's (AGL-3728).
+ * footer menu the `navigation` runner's (AGL-3728), and a copy of something
+ * it has the `duplicate` runner's (AGL-3740).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -296,6 +298,47 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     feature: 'versioning',
     runnerKind: 'navigation',
     // Written by code from the plan's words: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // A copy of something the site already has (AGL-3740), made by core's
+    // `duplicateResource` — the console's own Duplicate… — so "another page
+    // like Services" is copied rather than generated again. No model, so no
+    // credits; the copy meets the plan's own counters as a create does,
+    // which is why the Free taste may ask for one.
+    op: 'duplicate',
+    noun: 'copy',
+    where: 'the list the original is on',
+    intents: [
+      'a copy of a page, component, layout, template, form, email design or workflow the site already has, as an unpublished draft to change — rather than making it again',
+    ],
+    argsSchema: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          description: 'What to copy: screen (a page), component, layout, template, form, emailDesign or workflow.',
+          enum: DUPLICABLE_HOST_RESOURCE_KINDS,
+        },
+        source: {
+          type: 'string',
+          description: 'The id of the thing to copy from the site inventory, or its exact name where the inventory does not list it.',
+          maxLength: 64,
+        },
+        name: {
+          type: 'string',
+          description: 'What the copy is called; leave it out for "Copy of" the original’s name.',
+          maxLength: DUPLICATE_NAME_MAX,
+        },
+      },
+      required: ['kind', 'source'],
+      additionalProperties: false,
+    },
+    maxPerPlan: 3,
+    freeAllowed: true,
+    runnerKind: 'duplicate',
+    // Copied by code: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',
   },

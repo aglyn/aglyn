@@ -864,6 +864,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   function: 'logic',
   edit: 'edit',
   navigation: 'navigation',
+  duplicate: 'duplicate',
 }
 
 /**
