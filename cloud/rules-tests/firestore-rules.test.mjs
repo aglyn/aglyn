@@ -2241,7 +2241,7 @@ describe('hosts', () => {
     // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
       'overlays', 'experiments', 'emailTemplates',
-      'coupons', 'discounts', 'reviews',
+      'coupons', 'discounts',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
@@ -2254,6 +2254,11 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
+    // `reviews` LEFT this list in AGL-3736: only `/api/commerce/reviews`
+    // creates one (it alone decides `verified`), no client deletes one, and
+    // an update may touch only the moderation fields. All of it is asserted
+    // in `storefront reviews: verified and status are the server's`.
+    //
     // `siteMembers` LEFT this list in AGL-3308: no client creates one, an
     // update may flip `suspended` and nothing else, and a delete is refused
     // once the member has a credential document. All of it is asserted in
