@@ -441,7 +441,7 @@ async function handler(request: Request): Promise<Response> {
     }
     if (transient) {
       return Response.json(
-        { error: 'Aglyn is busy right now. Wait a few seconds and try again.' },
+        { error: 'Site creation is busy right now. Wait a few seconds and try again.' },
         { status: 503, headers: { 'Retry-After': '5' } },
       )
     }
