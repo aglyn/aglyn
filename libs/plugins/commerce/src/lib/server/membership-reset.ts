@@ -102,7 +102,13 @@ export const membershipResetHandler: PluginApiHandler = async (req, res) => {
         },
         { merge: true },
       )
-      tx.update(memberRef, retiredCredentialFields())
+      tx.update(memberRef, {
+        ...retiredCredentialFields(),
+        // The link was mailed to the member's address, so following it
+        // proves they own it (AGL-3736): what lets a signed-in member's
+        // purchases verify their product reviews.
+        emailVerifiedAtMs: Date.now(),
+      })
       return 'reset'
     })
     if (outcome === 'invalid') return invalid()

@@ -173,6 +173,28 @@ registerPluginJob({
 })
 
 /**
+ * The review-request email (AGL-3736). HOURLY: a request is owed days after
+ * fulfilment, so an hour's lateness is invisible, and the scan is one
+ * collection-group range query over `reviewRequestDueAtMs` — a field only
+ * orders still owed a request carry, so an empty beat costs one read.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'review-request-emails',
+  intervalMinutes: 60,
+  description:
+    'Email each buyer one review request, with a single-use link per product, ' +
+    'days after their order is fulfilled (AGL-3736).',
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    if (!isEmailConfigured()) return
+    const { scanReviewRequests } = await import('./server/review-requests')
+    const { sent } = await scanReviewRequests(gate)
+    if (sent) console.info(`commerce: sent ${sent} review requests`)
+  },
+})
+
+/**
  * The missing-decrement detector (AGL-2358).
  *
  * HOURLY, not on the 15-minute recovery beat: it is a detector for a rare

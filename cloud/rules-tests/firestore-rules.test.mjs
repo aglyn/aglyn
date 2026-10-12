@@ -1630,6 +1630,10 @@ describe('hosts', () => {
       // connection a sealed channel OAuth token; only the sales-channels
       // routes read or write either.
       'salesChannels',
+      // The hashed review links (AGL-3736). Only the review-request sweep
+      // mints one and only /api/commerce/reviews spends one; a client that
+      // could write a row could mint a "verified buyer" review.
+      'reviewTokens',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -9196,6 +9200,144 @@ describe('the inventory ledger is append-only (AGL-2269)', () => {
         },
       ),
     )
+  })
+})
+
+describe('storefront reviews: verified and status are the server\'s; moderation stays client-side (AGL-3736)', () => {
+  const VERIFIED = 'review-verified'
+  const UNVERIFIED = 'review-unverified'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'reviews', VERIFIED), {
+        productId: 'prod-1',
+        rating: 1,
+        body: 'Broke in a week.',
+        authorName: 'Jane D',
+        authorEmail: 'jane@x.z',
+        verified: true,
+        status: 'approved',
+        createdAtMs: 1_760_000_000_000,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'reviews', UNVERIFIED), {
+        productId: 'prod-1',
+        rating: 5,
+        body: 'Love it',
+        authorName: 'Sam',
+        authorEmail: 'sam@x.z',
+        verified: false,
+        status: 'pending',
+        createdAtMs: 1_760_000_000_001,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'reviewTokens', 'hash-1'), {
+        orderId: 'o1',
+        productId: 'prod-1',
+        email: 'jane@x.z',
+        expiresAtMs: 1_765_000_000_000,
+        usedAtMs: null,
+      })
+    })
+  })
+
+  it('no client creates a review — least of all a verified, approved one', async () => {
+    for (const uid of [EDITOR, OWNER]) {
+      await mustDeny(
+        `${uid} minting a verified review`,
+        setDoc(doc(authed(uid), 'hosts', HOST, 'reviews', 'forged'), {
+          productId: 'prod-1',
+          rating: 5,
+          body: 'Best ever',
+          authorName: 'Fan',
+          verified: true,
+          status: 'approved',
+          createdAtMs: 1,
+        }),
+      )
+    }
+  })
+
+  it('no client flips the badge or rewrites what the buyer said', async () => {
+    await mustDeny(
+      'the EDITOR verifying an unverified review',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', UNVERIFIED), { verified: true }),
+    )
+    await mustDeny(
+      'the OWNER raising a rating',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED), { rating: 5 }),
+    )
+    await mustDeny(
+      'the OWNER rewriting the text',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED), { body: 'Great!' }),
+    )
+    await mustDeny(
+      'the OWNER deleting a review',
+      deleteDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED)),
+    )
+  })
+
+  it('a verified review is hidden or rejected only for a content reason, and never re-queued', async () => {
+    await mustDeny(
+      'hiding a verified review with no reason',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), { status: 'hidden' }),
+    )
+    await mustDeny(
+      'rejecting a verified review for being negative',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), {
+        status: 'rejected',
+        moderationReason: 'negative',
+      }),
+    )
+    await mustDeny(
+      'sending a verified review back to pending',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), { status: 'pending' }),
+    )
+    await mustAllow(
+      'hiding a verified review as spam',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), {
+        status: 'hidden',
+        moderationReason: 'spam',
+        moderatedAtMs: 1_760_000_000_500,
+      }),
+    )
+  })
+
+  it('POSITIVE CONTROL: the moderation card approves, rejects and replies', async () => {
+    await mustAllow(
+      'approving a pending unverified review',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', UNVERIFIED), { status: 'approved' }),
+    )
+    await mustAllow(
+      'a seller reply',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED), { reply: 'Sorry — we will replace it.' }),
+    )
+    await mustAllow(
+      'members read the queue',
+      getDoc(doc(authed(VIEWER), 'hosts', HOST, 'reviews', UNVERIFIED)),
+    )
+  })
+
+  it('review links are closed to every client, read and write', async () => {
+    for (const uid of [EDITOR, OWNER]) {
+      await mustDeny(
+        `${uid} reading a review link row`,
+        getDoc(doc(authed(uid), 'hosts', HOST, 'reviewTokens', 'hash-1')),
+      )
+      await mustDeny(
+        `${uid} minting a review link`,
+        setDoc(doc(authed(uid), 'hosts', HOST, 'reviewTokens', 'hash-2'), {
+          orderId: 'o1',
+          productId: 'prod-1',
+          email: 'me@x.z',
+          expiresAtMs: 9_999_999_999_999,
+          usedAtMs: null,
+        }),
+      )
+      await mustDeny(
+        `${uid} un-spending a review link`,
+        updateDoc(doc(authed(uid), 'hosts', HOST, 'reviewTokens', 'hash-1'), { usedAtMs: null }),
+      )
+    }
   })
 })
 
