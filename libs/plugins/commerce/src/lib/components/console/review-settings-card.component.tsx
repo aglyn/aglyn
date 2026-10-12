@@ -19,7 +19,8 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
+import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
   FormControlLabel,
   MenuItem,
@@ -28,7 +29,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, setDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import * as CommerceModel from '../../model'
 
@@ -45,6 +46,7 @@ export interface ReviewSettingsCardProps {
 export function ReviewSettingsCard(props: ReviewSettingsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { data: store } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
@@ -59,11 +61,19 @@ export function ReviewSettingsCard(props: ReviewSettingsCardProps) {
     async (key: 'policy' | 'requestEmail' | 'requestDelayDays', value: unknown) => {
       setSaving(key)
       try {
-        await setDoc(
-          doc(firestore, 'hosts', hostId, 'settings', 'store'),
-          { reviews: { [key]: value } },
-          { merge: true },
-        )
+        // The policy decides what the product page's review form draws, so
+        // the write carries the site's cache drop (AGL-3386).
+        await writeSiteWideChange({
+          firestore,
+          user,
+          hostId,
+          write: (batch) =>
+            batch.set(
+              doc(firestore, 'hosts', hostId, 'settings', 'store'),
+              { reviews: { [key]: value } },
+              { merge: true },
+            ),
+        })
       } catch (error) {
         console.error(error)
         enqueueSnackbar('That setting could not be saved. Try again.', { variant: 'error' })
@@ -71,7 +81,7 @@ export function ReviewSettingsCard(props: ReviewSettingsCardProps) {
         setSaving(null)
       }
     },
-    [enqueueSnackbar, firestore, hostId],
+    [enqueueSnackbar, firestore, hostId, user],
   )
 
   const commitDays = () => {
@@ -89,7 +99,7 @@ export function ReviewSettingsCard(props: ReviewSettingsCardProps) {
   return (
     <CardDisplay
       header={'Reviews'}
-      help={pluginDocsHelp('catalog', { anchor: '#product-reviews' })}
+      help={pluginDocsHelp('catalog', { anchor: '#review-settings' })}
       contentGutterX
       contentGutterY
     >

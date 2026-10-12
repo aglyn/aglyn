@@ -120,6 +120,11 @@ high otherwise.
 Shoppers rate a product from 1 to 5 and write a review in the **Product
 reviews** block on your product page template. Pro plan and above.
 
+### Review settings {#review-settings}
+
+The **Reviews** card in **Settings** decides who can review your products
+and when customers are asked for a review.
+
 **Who can review.** By default only customers who bought the product can
 review it, and their reviews show a **Verified buyer** badge. A customer is
 verified when they are signed in to their account on your store with the
@@ -140,8 +145,10 @@ email respects unsubscribes and your suppression list. Turn it off or change
 the delay on the **Reviews** card, and change its wording under **Emails →
 Review request**.
 
-**Moderation.** The **Review moderation** card, in the products hub's
-**Promotions** section, lists your reviews:
+### Review moderation {#review-moderation}
+
+The **Review moderation** card, in the products hub's **Promotions**
+section, lists your reviews so you can publish, hide and reply to them:
 
 1. Verified reviews publish as soon as they are written, good or bad.
    You can **Hide** one only for a content reason: spam or advertising,

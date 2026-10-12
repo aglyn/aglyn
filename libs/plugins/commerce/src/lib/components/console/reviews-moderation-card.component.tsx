@@ -85,7 +85,7 @@ export function moderationUpdate(
  * moderation queue whose approvals the renderer would never honour.
  */
 
-const reviewsHelp = pluginDocsHelp('catalog', { anchor: '#product-reviews' })
+const reviewsHelp = pluginDocsHelp('catalog', { anchor: '#review-moderation' })
 
 export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props
