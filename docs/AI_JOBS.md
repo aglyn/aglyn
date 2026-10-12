@@ -2602,6 +2602,19 @@ the same way, in a Grid with a row direction and no container.
   was one of these (two h1s on a card and on a template, the bakery footer's link on its
   band, the Free About page's gapped container) were retired with their device-audit
   records.
+- **A link sent home for nothing is repaired in code (AGL-3729).** The layout language
+  sends a call to action that asks a visitor to get in touch (`aiAsksToGetInTouch`:
+  contact, book, quote, request, order, pre-order, enquire…) to the page that places
+  the site's form, and when that page is Home, `link-unrelated-screen` refused it on
+  every answer: a live Free café's Menu page (beta.243, 2026-10-12) was refused whole for
+  "Request weekend pickup", sent to the pre-order form on Home. The page's form page now
+  travels in the tree context (`formScreenIds`), and such a link to it does what it
+  says. Before the check reads the tree, `aiSettleUnrelatedScreenLinks` repairs every
+  link the rule would still refuse: repointed to the form's page when its words ask to
+  get in touch and that page is another, otherwise left out with everything under it.
+  The platform reaches no section of another page by anchor (AGL-2867), so the link
+  names the page. The layout language's page and layout checks and the page's last pass
+  (which stores it) all repair.
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the

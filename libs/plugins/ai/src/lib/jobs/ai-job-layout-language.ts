@@ -39,6 +39,7 @@ import { AI_STEP_TIERS } from '../providers/catalog'
 import type { AiGenerationCheck, AiValidatedTree } from '../runtime/ai-doctrine'
 import {
   aiSettleMechanicalRules,
+  aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
   type AiDoctrineNode,
   type AiDoctrineViolation,
@@ -230,6 +231,8 @@ export function aiLayoutFrameCheck(input: {
       ],
       formIds: input.targets.forms.map((form) => form.id),
       homeScreenIds: input.targets.homeIds,
+      // A footer's "Get in touch" goes to the form, wherever it is placed (AGL-3729).
+      ...(input.targets.formPageId ? { formScreenIds: [input.targets.formPageId] } : {}),
       codeBuilt: true,
     }
     const stored = aiLayoutStoredTree(compiled.tree, 'layout', context)
@@ -262,9 +265,13 @@ export function aiLayoutFrameCheck(input: {
     )
     const { dropped } = copy
     // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
-    const nodes = aiSettleMechanicalRules(
-      { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+    const nodes = aiSettleUnrelatedScreenLinks(
+      aiSettleMechanicalRules(
+        { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+        'layout',
+      ),
       'layout',
+      context,
     ).nodes as unknown as typeof copy.nodes
     const report = validateAiDoctrineTree(
       { rootId: stored.rootId, nodes },
