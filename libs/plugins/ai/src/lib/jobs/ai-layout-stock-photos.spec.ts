@@ -1351,7 +1351,7 @@ describe('Pixabay’s recorded answers to the live starts of 2026-10-10 (AGL-366
         'ceramic nesting bowl set': NESTING_BOWL_SET_PORTFOLIO,
         'handmade ceramics': CERAMICS,
       },
-      60,
+      300,
     )
     const source = aiLayoutStockPhotoSource(
       {
@@ -1361,7 +1361,7 @@ describe('Pixabay’s recorded answers to the live starts of 2026-10-10 (AGL-366
         business: JUNIPER,
         sectionNames: ['Hero', 'Selected work'],
       },
-      { provider: () => provider, ingest: library, budgetMs: 250 },
+      { provider: () => provider, ingest: library, budgetMs: 1500 },
     )
     const photos = await source?.([
       card(0, 'Stoneware for the table, made by hand.', 'hero', 16 / 9),
@@ -1375,7 +1375,8 @@ describe('Pixabay’s recorded answers to the live starts of 2026-10-10 (AGL-366
     const placed = (photos ?? []).map(
       (found) => found?.src?.replace('media:h/', '') ?? null,
     )
-    // Seven slots, seven photos: one copy after another, at 60ms each (420ms), would not have fit in 250ms.
+    // Seven slots, seven photos: one copy after another, at 300ms each (2100ms), would not have fit in 1500ms.
+    // The margin is wide so a loaded CI runner's timer drift cannot fail the parallel path.
     expect(placed.every(Boolean)).toBe(true)
     expect(new Set(placed).size).toBe(placed.length)
     for (const bad of [
