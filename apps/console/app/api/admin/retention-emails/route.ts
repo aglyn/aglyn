@@ -41,6 +41,7 @@ import {
   isRetentionCandidate,
   LIFECYCLE_EMAILS_FIELD,
   planRetentionEmail,
+  retentionNeedsPages,
   summarizePages,
   type RetentionDecision,
   type RetentionPage,
@@ -112,13 +113,10 @@ interface AccountFacts {
   pages: RetentionPage[]
 }
 
+/** The account's own document: what it was sent and what it answered. */
 async function readAccountFacts(uid: string): Promise<AccountFacts> {
   const db = firebaseAdmin.app().firestore()
-  const userRef = db.collection('users').doc(uid)
-  const [profile, orgIndex] = await Promise.all([
-    userRef.get(),
-    userRef.collection('orgs').limit(5).get(),
-  ])
+  const profile = await db.collection('users').doc(uid).get()
   const data = (profile.exists ? profile.data() : null) ?? {}
   const sentRaw = (data as Record<string, unknown>)[LIFECYCLE_EMAILS_FIELD]
   const sent: Record<string, number> = {}
@@ -140,7 +138,17 @@ async function readAccountFacts(uid: string): Promise<AccountFacts> {
     site: null,
     pages: [],
   }
+  return facts
+}
 
+/**
+ * The account's workspaces, first site and pages, onto `facts`: the bulk of
+ * the sweep's reads, so taken only for an account whose decision or email
+ * needs them (see `retentionNeedsPages`).
+ */
+async function readSiteFacts(uid: string, facts: AccountFacts): Promise<AccountFacts> {
+  const db = firebaseAdmin.app().firestore()
+  const orgIndex = await db.collection('users').doc(uid).collection('orgs').limit(5).get()
   let sitesRead = 0
   for (const orgEntry of orgIndex.docs) {
     const org = await db.collection('orgs').doc(orgEntry.id).get()
@@ -351,7 +359,14 @@ async function handler(request: Request): Promise<Response> {
           continue
         }
         candidates += 1
-        const facts = await readAccountFacts(user.uid)
+        let facts = await readAccountFacts(user.uid)
+        const sitesRead = retentionNeedsPages({
+          nowMs,
+          lastSeenMs,
+          emailVerified: user.emailVerified,
+          declinedProductEmail: facts.declinedProductEmail,
+        })
+        if (sitesRead) facts = await readSiteFacts(user.uid, facts)
         const decision = planRetentionEmail({
           nowMs,
           createdAtMs,
@@ -367,6 +382,8 @@ async function handler(request: Request): Promise<Response> {
           continue
         }
         sends += 1
+        // The email's merge names the site even when the decision did not.
+        if (!sitesRead) facts = await readSiteFacts(user.uid, facts)
         const outcome = await sendOne(
           user.uid,
           email,
