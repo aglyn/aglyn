@@ -319,7 +319,7 @@ async function eligibilityHandler(
   if (presented) {
     const check = await inspectReviewToken(firestore, hostId, presented, productId)
     if (check.ok) tokenVerified = true
-    else tokenProblem = check.code
+    else tokenProblem = check.code ?? CommerceModel.REVIEW_ERROR_CODES.tokenInvalid
   }
   const eligibility = CommerceModel.reviewEligibility({
     policy: settings.policy,
@@ -455,8 +455,9 @@ async function submitReview(
   const presented = req.body?.reviewToken
   if (presented) {
     const check = await inspectReviewToken(firestore, hostId, presented, productId)
-    if (!check.ok) {
-      return res.status(403).json({ error: tokenProblemMessage(check.code), code: check.code })
+    if (!check.ok || !check.record || !check.ref) {
+      const code = check.code ?? codes.tokenInvalid
+      return res.status(403).json({ error: tokenProblemMessage(code), code })
     }
     const reviewRef = hostRef.collection('reviews').doc()
     const nowMs = Date.now()

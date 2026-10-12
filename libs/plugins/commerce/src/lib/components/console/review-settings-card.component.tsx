@@ -143,9 +143,11 @@ export function ReviewSettingsCard(props: ReviewSettingsCardProps) {
           disabled={!settings.requestEmail || saving === 'requestDelayDays'}
           size="small"
           type="number"
-          inputProps={{
-            min: CommerceModel.REVIEW_REQUEST_DELAY_MIN_DAYS,
-            max: CommerceModel.REVIEW_REQUEST_DELAY_MAX_DAYS,
+          slotProps={{
+            htmlInput: {
+              min: CommerceModel.REVIEW_REQUEST_DELAY_MIN_DAYS,
+              max: CommerceModel.REVIEW_REQUEST_DELAY_MAX_DAYS,
+            },
           }}
           sx={{ maxWidth: 280 }}
           helperText={`Between ${CommerceModel.REVIEW_REQUEST_DELAY_MIN_DAYS} and ${CommerceModel.REVIEW_REQUEST_DELAY_MAX_DAYS} days. Give the order time to arrive.`}

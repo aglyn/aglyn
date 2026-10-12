@@ -94,8 +94,13 @@ export function stageReviewTokens(
 }
 
 export type ReviewTokenCheck =
-  | { ok: true; record: ReviewTokenRecord; ref: FirebaseFirestore.DocumentReference }
-  | { ok: false; code: CommerceModel.ReviewErrorCode }
+  | {
+      ok: true
+      record: ReviewTokenRecord
+      ref: FirebaseFirestore.DocumentReference
+      code?: undefined
+    }
+  | { ok: false; code: CommerceModel.ReviewErrorCode; record?: undefined; ref?: undefined }
 
 /** The verdict on one stored row, for a product. Pure. */
 export function reviewTokenVerdict(

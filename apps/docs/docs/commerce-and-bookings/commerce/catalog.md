@@ -117,19 +117,44 @@ high otherwise.
 
 ## Product reviews {#product-reviews}
 
-The **Review moderation** card, in the products hub's **Promotions** section,
-holds the reviews shoppers leave on your products until you approve or reject
-them. Pro plan and above.
+Shoppers rate a product from 1 to 5 and write a review in the **Product
+reviews** block on your product page template. Pro plan and above.
 
-1. Add a **Product reviews** block to your product page template, so shoppers
-   can rate a product from 1 to 5 and write a review with their email address.
-2. Each new review waits on the card under **Show: Pending**. A **Verified**
-   label means that email has a paid order for the product.
-3. Select **Approve** to publish a review, or **Reject** to keep it off your
-   site. **Reply** adds your answer under it.
+**Who can review.** By default only customers who bought the product can
+review it, and their reviews show a **Verified buyer** badge. A customer is
+verified when they are signed in to their account on your store with the
+email their order went to, or when they open the link in their
+review-request email. Typing an email address into the form never verifies
+anyone. Everyone else sees "Only customers who bought this can review" and a
+**Sign in** link. To accept reviews from anyone, set **Who can review** to
+**Anyone** on the **Reviews** card in **Settings**: verified buyers still
+publish right away, and everyone else gives a name and an email (never shown)
+and waits for your approval.
 
-Only approved reviews show on your site, with the product's average rating.
-Switch **Show** to **Approved**, **Rejected** or **All** to look back.
+**The review-request email.** A set number of days after an order is
+fulfilled (7 by default, anywhere from 3 to 30), the buyer gets one email
+asking for a review, with a link for each product on the order. Each link
+works once, for 60 days, and only for that order, product and buyer. Items
+that were refunded are left out, and register sales are never asked. The
+email respects unsubscribes and your suppression list. Turn it off or change
+the delay on the **Reviews** card, and change its wording under **Emails →
+Review request**.
+
+**Moderation.** The **Review moderation** card, in the products hub's
+**Promotions** section, lists your reviews:
+
+1. Verified reviews publish as soon as they are written, good or bad.
+   You can **Hide** one only for a content reason: spam or advertising,
+   abusive or hateful language, not being about the product, or sharing
+   private information. The reason is recorded with the review.
+2. Reviews from shoppers who are not verified (only when **Who can review**
+   is **Anyone**) wait under **Show: Pending**. Select **Approve** to publish
+   one, or **Reject** with a reason to keep it off your site.
+3. **Reply** adds your answer under a review.
+
+Only published reviews show on your site, with the product's average rating.
+Switch **Show** to **Published**, **Hidden**, **Rejected** or **All** to look
+back.
 
 ## Slugs
 
