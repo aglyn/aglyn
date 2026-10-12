@@ -1020,9 +1020,8 @@ export const EXPECTED_POSTURE = Object.freeze([
       Object.freeze({
         name: 'Shipping connector bypass',
         why: "ShipStation's order import and shipment notices and ShippingEasy's shipment callback are calls from the shipping apps' own servers, which cannot solve a challenge, so a challenged connector imports nothing and marks nothing shipped",
-        // DECLARED 2026-10-07 (AGL-3613, AGL-3633) ahead of the live rule,
-        // which the orchestrator adds in Vercel before the first live test;
-        // `firewall-drift.yml` reads it missing until then.
+        // Declared 2026-10-07 and live on the console project since
+        // 2026-10-12 (AGL-3613, AGL-3633).
         //
         // Same argument as the Machine traffic bypass: each route enforces
         // its OWN auth before it reads anything. ShipStation's Custom Store
