@@ -53,6 +53,7 @@ import {
   aiSettlePlanDatasets,
   aiSettlePlanFormDatasets,
   aiSettlePlanForms,
+  aiSettlePlanFreeWall,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
@@ -700,10 +701,16 @@ export function aiDoctrinePlanCheck(
     // A plan past the datasets this job may make keeps the most useful
     // (AGL-3616), once a form's dataset is one it can write to and no page
     // lists it.
-    const plan = aiSettlePlanForms(
-      aiSettlePlanLayouts(
-        aiSettlePlanDatasets(
-          aiSettlePlanFormDatasets(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+    // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
+    // last, once every creation the wall counts is settled.
+    const plan = aiSettlePlanFreeWall(
+      aiSettlePlanForms(
+        aiSettlePlanLayouts(
+          aiSettlePlanDatasets(
+            aiSettlePlanFormDatasets(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+            capabilities,
+          ),
+          inventory,
           capabilities,
         ),
         inventory,

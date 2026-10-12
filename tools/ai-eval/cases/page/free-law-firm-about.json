@@ -650,7 +650,7 @@
       "fails": ["plan"]
     },
     {
-      "why": "A plan that asks for eight sections beside the layout its job creates, where the Free wall's worst case pays for six (AGL-3070).",
+      "why": "A plan that asks for nine sections beside the layout its job creates, where the Free wall's worst case pays for six (AGL-3070): three past it, more than the wall's trim settles (AGL-3737).",
       "plan": {
         "reuse": [],
         "create": [
@@ -673,6 +673,7 @@
               { "name": "how we work", "uses": [], "items": 0 },
               { "name": "our values", "uses": [], "items": 0 },
               { "name": "fees", "uses": [], "items": 0 },
+              { "name": "who we serve", "uses": [], "items": 0 },
               { "name": "our office", "uses": [], "items": 0 },
               { "name": "consultation request form", "uses": [], "items": 0 }
             ]
