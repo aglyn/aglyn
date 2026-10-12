@@ -9,6 +9,48 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.245 — 2026-10-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.244...v1.0.0-beta.245)
+
+### Added
+
+- **ai:** re-land the navigation menu op ([AGL-3728](https://linear.app/aglyn/issue/AGL-3728), [AGL-3737](https://linear.app/aglyn/issue/AGL-3737))
+- **ai:** navigation menu op for builds and Assist (AGL-3728) (#1398) ([AGL-3728](https://linear.app/aglyn/issue/AGL-3728))
+- **beacon:** a client error report names its coarse browser family (AGL-3732) (#1399) ([AGL-3732](https://linear.app/aglyn/issue/AGL-3732))
+- **ai:** a store's AI-built products are priced by what they are ([AGL-3733](https://linear.app/aglyn/issue/AGL-3733))
+- **ai:** dataset list cards link each record's page ([AGL-3727](https://linear.app/aglyn/issue/AGL-3727), [AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+
+### Fixed
+
+- **ai:** a paid site start's estimate counts its paid plan and first products ([AGL-3739](https://linear.app/aglyn/issue/AGL-3739))
+- **ai:** a guided blog's retried posts are published ([AGL-3739](https://linear.app/aglyn/issue/AGL-3739))
+- **ai:** a build's Try again publishes the pages it rebuilt ([AGL-3739](https://linear.app/aglyn/issue/AGL-3739), [AGL-3730](https://linear.app/aglyn/issue/AGL-3730))
+- **beacon:** a mismatch on a translated page is dropped, read when marked ([AGL-3738](https://linear.app/aglyn/issue/AGL-3738))
+- **ai:** settle a Free plan's small wall overrun instead of re-asking ([AGL-3737](https://linear.app/aglyn/issue/AGL-3737))
+- **ai:** a heading-only footer column heads the heading-less links after it ([AGL-3735](https://linear.app/aglyn/issue/AGL-3735))
+- **ai:** no hollow footer heading or column; store links under the store heading ([AGL-3735](https://linear.app/aglyn/issue/AGL-3735))
+- **sites:** the busy answer reads no hardcoded brand name ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734))
+- **sites:** a create that claimed its site is finished on retry, never a dead end ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734), [AGL-3689](https://linear.app/aglyn/issue/AGL-3689))
+- **beacon:** a cancelled request is not an unhandled failure ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734))
+
+### Reverted
+
+- **ai:** navigation menu op (AGL-3728) until its live plan eval passes ([AGL-3728](https://linear.app/aglyn/issue/AGL-3728))
+
+### Documentation
+
+- **guides:** build a newsletter sign-up band from a saved form, a live audience and a component (+ US spelling) (#1401)
+- **firewall:** the Shipping connector bypass is live, not just declared (AGL-3633) (#1403) ([AGL-3633](https://linear.app/aglyn/issue/AGL-3633))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **activity:** a replayed create's ALREADY_EXISTS is the entry, not a drop ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734))
+- **ai:** the catalog card spec expects suggested prices ([AGL-3733](https://linear.app/aglyn/issue/AGL-3733))
+
+</details>
+
 ## v1.0.0-beta.244 — 2026-10-12
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.243...v1.0.0-beta.244)
