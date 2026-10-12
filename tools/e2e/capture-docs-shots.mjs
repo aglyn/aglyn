@@ -37,8 +37,8 @@
 //      FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
 //        node tools/e2e/capture-docs-shots.mjs [--only=a,b,…]
 //
-// `--only=` matches shot filenames and the two walk names, `survey-walk`
-// and `member-signup-walk`.
+// `--only=` matches shot filenames and the walk names, `survey-walk`,
+// `member-signup-walk` and `newsletter-walk`.
 //
 // Same conventions as the sibling capture script: 1440×900 viewport,
 // sign-in through the real /signin UI, emulator banner + dev overlay
@@ -701,6 +701,13 @@ async function seedGuideFixtures() {
   await put(orgRef, {
     // The Publish tab needs the selling entitlement to render its form.
     'entitlements.features.marketplaceSelling': true,
+    // Sequences is behind an entitlement no plan carries; with it, the org
+    // strip draws the flagged tab the staff-only guard must see hidden.
+    'entitlements.features.outreach': true,
+    // The two plugins whose tabs ride release flags that are off. Without
+    // them installed neither tab renders, so the guard's preflight finds no
+    // marker to prove hidden and refuses every run.
+    enabledPlugins: FieldValue.arrayUnion('accounting', 'outreach'),
   })
 
   // The reusable component the footer listing is published FROM. Also what
@@ -789,6 +796,213 @@ async function seedGuideFixtures() {
     },
   )
 
+  // ── Newsletter band guide ───────────────────────────────────────────────
+  // A newsletter sign-up built from generic parts instead of the built-in
+  // Newsletter signup block: a saved form that is a SIGN-UP form
+  // (`optInOnSubmit`), a dynamic list of everyone who submits it, and a
+  // reusable component that draws the band and places the form. Styled with
+  // theme tokens only — the gradient's `var(--mui-palette-…)` resolves from
+  // the site theme (palette-sx.ts).
+  const NEWSLETTER_FORM = 'seed-guide-newsletter-form'
+  const NEWSLETTER_BAND = 'seed-guide-newsletter-band'
+  const visuallyHidden = {
+    position: 'absolute', width: '1px', height: '1px', overflow: 'hidden',
+    clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', m: 0, p: 0,
+  }
+  const newsletterForm = (parentId) => ({
+    $id: 'nl-form', componentId: 'form', pluginId: 'forms', parentId, nodes: ['nl-email'],
+    props: {
+      formId: NEWSLETTER_FORM,
+      formName: 'Product updates',
+      submitLabel: 'Subscribe',
+      successMessage: 'Thanks — you’re on the list. No spam, ever.',
+    },
+    sx: {
+      width: '100%', mt: 0.75,
+      flexDirection: { xs: 'column', sm: 'row' }, flexWrap: 'wrap',
+      justifyContent: 'center', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1.25,
+      '& > :not(style) ~ :not(style)': { mt: 0 },
+      '& .MuiAlert-root': { flexBasis: '100%' },
+      '& button[type="submit"]': {
+        alignSelf: 'auto', bgcolor: 'grey.900', color: 'common.white', px: 2.75, py: 1.5,
+        '&:hover': { bgcolor: 'grey.800' },
+      },
+    },
+  })
+  const newsletterEmail = {
+    $id: 'nl-email', componentId: 'formField', pluginId: 'forms', parentId: 'nl-form',
+    props: {
+      fieldName: 'email', label: 'Email address', fieldType: 'email',
+      required: true, placeholder: 'you@company.com',
+    },
+    sx: {
+      width: { xs: '100%', sm: 320 }, flex: { sm: '0 1 auto' },
+      '& .MuiInputLabel-root': visuallyHidden,
+      '& .MuiOutlinedInput-root': { bgcolor: 'common.white', color: 'grey.900', borderRadius: 1 },
+      '& .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
+      '& .MuiOutlinedInput-notchedOutline legend': { maxWidth: 0 },
+      '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'grey.900' },
+      '& .MuiOutlinedInput-input': { py: 1.5, px: 2 },
+      '& .MuiOutlinedInput-input::placeholder': { color: 'grey.500', opacity: 1 },
+    },
+  }
+  // A re-run starts from no sign-up, so the contact shot shows one
+  // submission on the timeline rather than one per run.
+  const staleSignUps = await hostRef
+    .collection('formSubmissions')
+    .where('formName', '==', 'Product updates')
+    .get()
+  for (const submission of staleSignUps.docs) await submission.ref.delete()
+  const staleReaders = await orgRef
+    .collection('contacts')
+    .where('email', '==', 'reader@example.com')
+    .get()
+  for (const contact of staleReaders.docs) await firestore.recursiveDelete(contact.ref)
+  const formRef = hostRef.collection('forms').doc(NEWSLETTER_FORM)
+  await put(formRef, {
+    displayName: 'Product updates',
+    slug: 'product-updates',
+    fields: [{ fieldName: 'email', fieldType: 'email', label: 'Email address', required: true }],
+    optInOnSubmit: true,
+    routing: { lead: false },
+    rootId: 'nl-form',
+    nodes: { 'nl-form': newsletterForm(null), 'nl-email': newsletterEmail },
+    versionId: `${NEWSLETTER_FORM}-v1`,
+    campaignIds: [],
+    inCampaign: false,
+    retired: false,
+    nameLower: nameSearchKey('Product updates'),
+    nameTokens: nameSearchTokens('Product updates'),
+    nameReversed: [...nameSearchKey('Product updates')].reverse().join(''),
+    searchTokens: nameSearchTokens('Product updates'),
+    createdAt: now,
+  })
+  await put(formRef.collection('versions').doc(`${NEWSLETTER_FORM}-v1`), {
+    formId: NEWSLETTER_FORM,
+    hostId: HOST_ID,
+    displayName: 'Initial version',
+    rootId: '_@_',
+    nodes: {
+      '_@_': { $id: '_@_', componentId: 'div', nodes: ['nl-form'] },
+      'nl-form': newsletterForm('_@_'),
+      'nl-email': newsletterEmail,
+    },
+    createdAt: now,
+  })
+  // The audience: everyone who submits the form, refreshed by the
+  // fifteen-minute list sweep. The member stands for the walk's sign-up.
+  const newsletterList = orgRef.collection('lists').doc('seed-guide-product-updates')
+  await put(newsletterList, {
+    name: 'Product updates',
+    nameLower: nameSearchKey('Product updates'),
+    nameTokens: nameSearchTokens('Product updates'),
+    nameReversed: [...nameSearchKey('Product updates')].reverse().join(''),
+    kind: 'dynamic',
+    hostId: HOST_ID,
+    rule: { sources: ['formSubmissions'], formNames: ['Product updates'] },
+    memberCount: 1,
+    evaluationCursor: null,
+    createdAt: now,
+  })
+  await put(newsletterList.collection('members').doc('seed-guide-reader'), {
+    email: 'reader@example.com',
+    searchTokens: nameSearchTokens('reader@example.com'),
+    capturedByHostIds: [HOST_ID],
+    source: 'rule:formSubmissions',
+    via: 'rule',
+    addedAt: now,
+    createdAt: now,
+  })
+  const bandNodes = (rootParent) => ({
+    'nl-band': {
+      $id: 'nl-band', componentId: 'section', parentId: rootParent,
+      nodes: ['nl-heading', 'nl-copy', 'nl-form'],
+      props: { element: 'section', ariaLabel: 'Newsletter sign-up' },
+      sx: {
+        backgroundImage:
+          'linear-gradient(243deg, var(--mui-palette-primary-main) 0%, var(--mui-palette-secondary-main) 100%)',
+        color: 'common.white', textAlign: 'center',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        py: 8, px: 3, gap: 2.25,
+      },
+    },
+    'nl-heading': {
+      $id: 'nl-heading', componentId: 'muiTypography', parentId: 'nl-band',
+      props: { children: '{{prop.heading}}', component: 'h2', variant: 'h4' },
+      sx: { fontWeight: 'bold', color: 'inherit', m: 0 },
+    },
+    'nl-copy': {
+      $id: 'nl-copy', componentId: 'muiTypography', parentId: 'nl-band',
+      props: { children: '{{prop.description}}', variant: 'body1' },
+      sx: { color: 'inherit', opacity: 0.92, maxWidth: 'sm', m: 0 },
+    },
+    'nl-form': newsletterForm('nl-band'),
+    'nl-email': newsletterEmail,
+  })
+  const bandProps = [
+    { name: 'heading', label: 'Heading', type: 'text', defaultValue: 'Get product updates' },
+    {
+      name: 'description', label: 'Description', type: 'text',
+      defaultValue: 'New features, guides, and early-access news — straight to your inbox. No spam.',
+    },
+  ]
+  const bandRef = hostRef.collection('components').doc(NEWSLETTER_BAND)
+  await put(bandRef, {
+    name: 'Newsletter band',
+    displayName: 'Newsletter band',
+    description: 'Gradient band with a heading, a line of copy and the Product updates sign-up form.',
+    kind: 'site',
+    rootId: 'nl-band',
+    nodes: bandNodes(null),
+    props: bandProps,
+    versionId: `${NEWSLETTER_BAND}-v1`,
+    nameLower: nameSearchKey('Newsletter band'),
+    nameTokens: nameSearchTokens('Newsletter band'),
+    nameReversed: [...nameSearchKey('Newsletter band')].reverse().join(''),
+    createdAt: now,
+  })
+  await put(bandRef.collection('versions').doc(`${NEWSLETTER_BAND}-v1`), {
+    componentId: NEWSLETTER_BAND,
+    hostId: HOST_ID,
+    displayName: 'Initial version',
+    rootId: 'nl-band',
+    props: bandProps,
+    nodes: {
+      '_@_': { $id: '_@_', componentId: 'box', parentId: null, nodes: ['nl-band'] },
+      ...bandNodes('_@_'),
+    },
+    createdAt: now,
+  })
+  // A page that places the band once, as any page would.
+  await putScreen(
+    'seed-guide-newsletter-page',
+    { displayName: 'News', slug: 'news' },
+    {
+      '_@_': { $id: '_@_', componentId: 'root', nodes: ['intro', 'band'] },
+      intro: {
+        $id: 'intro',
+        componentId: 'muiTypography',
+        parentId: '_@_',
+        props: { children: 'News from the bakery', variant: 'h3', component: 'h1' },
+        sx: { py: 8, px: 3, textAlign: 'center' },
+      },
+      band: {
+        $id: 'band',
+        componentId: 'reusableInstance',
+        pluginId: 'mui',
+        parentId: '_@_',
+        props: {
+          refId: NEWSLETTER_BAND,
+          name: 'Newsletter band',
+          propValues: {
+            heading: 'Get product updates',
+            description: 'New features, guides, and early-access news — straight to your inbox. No spam.',
+          },
+        },
+      },
+    },
+  )
+
   console.log(`seeded ${written} guide fixture docs`)
 }
 
@@ -810,7 +1024,7 @@ if (!skipSeed) await seedGuideFixtures()
     body: JSON.stringify({
       host: HOST_ID,
       hostId: HOST_ID,
-      paths: ['/', '/survey', '/signup', '/signin', '/account', '/shop', '/products/coffee-club'],
+      paths: ['/', '/news', '/survey', '/signup', '/signin', '/account', '/shop', '/products/coffee-club'],
     }),
   }).catch((error) => ({ status: 0, text: async () => String(error) }))
   if (response.status !== 200) {
@@ -1007,10 +1221,12 @@ for (const path of [
   `/${HOST_BASE}/users`,
   `/${HOST_BASE}/screens/seed-guide-survey-screen/versions/seed-guide-survey-screen-v1/besigner`,
   `/${HOST_BASE}/screens/seed-guide-nav/versions/seed-guide-nav-v1/besigner`,
+  `/${HOST_BASE}/forms/seed-guide-newsletter-form`,
+  `/${HOST_BASE}/components/seed-guide-newsletter-band/versions/seed-guide-newsletter-band-v1/besigner`,
 ]) {
   await fetch(`${CONSOLE_BASE}${path}`).catch(() => undefined)
 }
-for (const path of ['/signup', '/signin', '/survey', '/shop', '/products/coffee-club']) {
+for (const path of ['/signup', '/signin', '/survey', '/news', '/shop', '/products/coffee-club']) {
   await fetch(`${TENANT_BASE}${path}`).catch(() => undefined)
 }
 
@@ -1437,6 +1653,180 @@ await shot({
   path: `/${HOST_BASE}/data`,
   waitFor: 'Add dataset',
   actions: [...pickSurveyDataset, { waitFor: 'gluten-free' }],
+})
+
+// ── Newsletter band guide ─────────────────────────────────────────────────
+
+const newsletterFormPage = `/${HOST_BASE}/forms/seed-guide-newsletter-form`
+const newsletterFormBesigner = `${newsletterFormPage}/versions/seed-guide-newsletter-form-v1/besigner`
+const newsletterAudience = `/${HOST_BASE}/emails/audiences/seed-guide-product-updates`
+const newsletterBandBesigner = `/${HOST_BASE}/components/seed-guide-newsletter-band/versions/seed-guide-newsletter-band-v1/besigner`
+const newsletterPageBesigner = `/${HOST_BASE}/screens/seed-guide-newsletter-page/versions/seed-guide-newsletter-page-v1/besigner`
+
+await shot({
+  out: 'newsletter-create-form-drawer.png',
+  base: CONSOLE_BASE,
+  path: `/${HOST_BASE}/forms`,
+  waitFor: 'Create Form',
+  actions: [
+    { click: 'role=button[name="Create Form"]', waitFor: 'Create new form' },
+    { fill: ['role=textbox[name="Display name"]', 'Product updates'], optional: true },
+  ],
+})
+await shot({
+  out: 'newsletter-form-field-attributes.png',
+  base: CONSOLE_BASE,
+  path: newsletterFormBesigner,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    // The hierarchy, a level at a time — canvas clicks can't reach the
+    // closed shadow root.
+    { click: 'text=Document', optional: true, settleMs: 1000 },
+    { click: 'text=Form', optional: true, settleMs: 1000 },
+    { click: 'text=Form Field', optional: true, settleMs: 1500 },
+    { click: 'role=tab[name="Attributes"]', optional: true, waitFor: 'Placeholder' },
+  ],
+})
+await shot({
+  out: 'newsletter-form-crm-routing.png',
+  base: CONSOLE_BASE,
+  path: newsletterFormPage,
+  waitFor: 'CRM routing',
+  actions: [
+    { scroll: 'text=This is a sign-up form', settleMs: 1200 },
+  ],
+})
+await shot({
+  out: 'newsletter-audience-rule.png',
+  base: CONSOLE_BASE,
+  path: `${newsletterAudience}/edit`,
+  waitFor: 'Edit audience',
+  actions: [{ waitFor: 'Submitted any of: Product updates' }],
+})
+await shot({
+  out: 'newsletter-audience-members.png',
+  base: CONSOLE_BASE,
+  path: newsletterAudience,
+  waitFor: 'reader@example.com',
+})
+await shot({
+  out: 'newsletter-component-properties.png',
+  base: CONSOLE_BASE,
+  path: newsletterBandBesigner,
+  waitFor: 'Properties',
+  settleMs: 4000,
+  actions: [
+    // The besigner's top menus are menuitems, not buttons.
+    { click: '#center-nav-file', settleMs: 1000 },
+    { click: 'role=menuitem[name="Properties…"]', waitFor: 'Component properties' },
+  ],
+})
+await shot({
+  out: 'newsletter-component-styles-jss.png',
+  base: CONSOLE_BASE,
+  path: newsletterBandBesigner,
+  waitFor: 'Properties',
+  settleMs: 4000,
+  actions: [
+    // A component's tree opens collapsed at its Document.
+    { click: 'role=button[name="Expand children"]', settleMs: 1000 },
+    { click: 'text=Section', settleMs: 1500 },
+    { click: 'role=tab[name="Styles"]', settleMs: 1500 },
+    { click: 'text=Classes & custom CSS', settleMs: 1200 },
+    { click: 'role=button[name="JSS (sx)"]', settleMs: 1500 },
+    { scroll: 'role=button[name="Apply JSS"]', optional: true, settleMs: 1000 },
+  ],
+})
+await shot({
+  // In the SAVED FORM's besigner: a placed form draws its styling from the
+  // form itself, so the row layout is authored here, once, for every page.
+  out: 'newsletter-form-styles-jss.png',
+  base: CONSOLE_BASE,
+  path: newsletterFormBesigner,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    { click: 'text=Document', optional: true, settleMs: 1000 },
+    { click: 'text=/^Form$/', settleMs: 1500 },
+    { click: 'role=tab[name="Styles"]', settleMs: 1500 },
+    { click: 'text=Classes & custom CSS', settleMs: 1200 },
+    { click: 'role=button[name="JSS (sx)"]', settleMs: 1500 },
+    { scroll: 'role=button[name="Apply JSS"]', optional: true, settleMs: 1000 },
+  ],
+})
+await shot({
+  out: 'newsletter-instance-attributes.png',
+  base: CONSOLE_BASE,
+  path: newsletterPageBesigner,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    { click: 'text=Document', optional: true, settleMs: 1000 },
+    { click: 'text=Newsletter band', settleMs: 1500 },
+    { click: 'role=tab[name="Attributes"]', optional: true, waitFor: 'Heading' },
+  ],
+})
+
+/** The live band alone, at one viewport width. */
+async function liveBandShot(out, viewport) {
+  if (!selected(out)) return
+  const page = await context.newPage()
+  try {
+    await page.setViewportSize(viewport)
+    await page.goto(`${TENANT_BASE}/news`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+    const band = page.locator('section[aria-label="Newsletter sign-up"]')
+    await band.waitFor({ timeout: TIMEOUT_MS })
+    await stripDevChrome(page)
+    await band.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(1500)
+    const outPath = join(IMG_ROOT, out)
+    await band.screenshot({ path: outPath })
+    const bytes = await optimizePng(outPath)
+    console.log(`SHOT  ${out} (${Math.round(bytes / 1024)} KB)`)
+  } catch (error) {
+    failures += 1
+    console.error(`FAIL  ${out}: ${String(error?.message ?? error).split('\n')[0]}`)
+  } finally {
+    await page.close()
+  }
+}
+await liveBandShot('newsletter-live-band.png', { width: 1440, height: 900 })
+await liveBandShot('newsletter-live-band-mobile.png', { width: 375, height: 812 })
+
+// Sign up for real through the live band, so the contact shot shows what a
+// submission records: the opt-in and the Subscriber stage.
+if (selected('newsletter-walk') || selected('newsletter-contact.png')) {
+  const page = await context.newPage()
+  try {
+    await page.goto(`${TENANT_BASE}/news`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+    const band = page.locator('section[aria-label="Newsletter sign-up"]')
+    await band.waitFor({ timeout: TIMEOUT_MS })
+    // Hydration first, or the submit is a native form post.
+    await page.waitForTimeout(2000)
+    await band.locator('input[type="email"]').fill('reader@example.com')
+    await band.locator('button[type="submit"]').click()
+    await page.waitForSelector('text=Thanks — you’re on the list', { timeout: TIMEOUT_MS })
+    console.log('WALK  newsletter sign-up submitted end-to-end')
+  } catch (error) {
+    failures += 1
+    console.error(`FAIL  newsletter walk: ${String(error?.message ?? error).split('\n')[0]}`)
+  } finally {
+    await page.close()
+  }
+}
+await shot({
+  out: 'newsletter-contact.png',
+  base: CONSOLE_BASE,
+  path: `/${HOST_BASE}/crm/contacts`,
+  waitFor: 'reader@example.com',
+  actions: [
+    { click: 'text=reader@example.com', settleMs: 2000 },
+    { waitFor: 'Subscriber' },
+    // Down to the Relationship card's Marketing email row: the opt-in the
+    // sign-up recorded.
+    { scroll: 'text=Marketing email', settleMs: 1200 },
+  ],
 })
 
 await browser.close()

@@ -397,7 +397,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#form-crm-routing': 'Since the same signup form is often placed by more than one push.',
     '#form-details': 'Something in that card differs from what\'s saved, and saving one card never saves the other.',
     '#form-submissions': 'R.',
-    '#form-versions': 'Scribe* or marketing consent — counts even before you pick it as the consent field.',
+    '#form-versions': 'Ll walkthrough — the form, a live audience of everyone who submits it, and a reusable band that places it on any page — see Build a newsletter sign-up band.',
     '#inbox-card': 'Ad no email field cannot be replied to, and says so instead of offering a Send that would fail.',
     '#one-forms-own-page': 'Goes straight to that site\'s view, with no filter to set. Collaborators invited to particular sites don\'t see the organization\'s Inbox — they keep each site\'s own, which is unchanged.',
     '#replying-to-a-submission': 'Saved to Inbox on a form you bound to a dataset is the signal to go and check the dataset.',
