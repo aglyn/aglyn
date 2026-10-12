@@ -406,7 +406,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#workspace-defaults': 'In your SEO settings, or the workspace\'s default. What you type is never replaced.',
   },
   catalog: {
-    '#categories-and-tags': 'Eir prices left empty, and proposed discounts are created switched off.',
+    '#categories-and-tags': 'Heir suggested prices, and proposed discounts are created switched off.',
     '#product-reviews': ', so that collection\'s grid is in price order — high to low if that is the sort chosen, low to high otherwise.',
   },
   commerce: {

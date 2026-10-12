@@ -932,7 +932,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
       'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
-      catalog: { prefixTokens: 2_449, minimum: 512, caches: true, toolsStable: true },
+      // The catalog is up 132 at AGL-3733 (Zach, 2026-10-12): each product's
+      // suggested price, its field and the rule that prices it by kind.
+      catalog: { prefixTokens: 2_581, minimum: 512, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
       // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },

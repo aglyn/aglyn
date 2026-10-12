@@ -128,8 +128,8 @@ export const AI_UPSELL_COPY: Readonly<Record<AiUpsellKind, AiUpsellCopy>> = {
     title: 'Create products with AI',
     does:
       'Describe what the store sells and AI proposes up to twelve products. You review them ' +
-      'before any is created, and each is created as a draft that is not on your storefront ' +
-      'until you price it and activate it.',
+      'before any is created, and each is created as a draft at a suggested price that is not on ' +
+      'your storefront until you review it and activate it.',
   },
   logic: {
     title: 'Create a function or variable with AI',

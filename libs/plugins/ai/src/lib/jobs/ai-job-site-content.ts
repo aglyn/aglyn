@@ -23,7 +23,7 @@ import {
   writeContentCollection,
   writeContentEntryDraft,
 } from '@aglyn/tenant-data-admin/server/content-entry-drafts'
-import { aiProductsProposalOf } from '../model/ai-products'
+import { aiCatalogPrice, aiProductsProposalOf } from '../model/ai-products'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS, aiSiteWords } from '../model/ai-site-job'
@@ -73,9 +73,12 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *    (`aiPublishSitePosts`), as a person's Publish would.
  *  - ADDING YOUR FIRST PRODUCTS: the `products` step's catalog, asked for
  *    `AI_SITE_PRODUCTS` products, each written through the commerce plugin's
- *    `product` draft writer. The catalog proposes no price, so each takes
- *    the writer's default price (Zach, 2026-10-08: "default a price",
- *    AGL-3676) for the owner to change; the job's row says so. Since the
+ *    `product` draft writer, at the price the catalog suggests for what it
+ *    is (Zach, 2026-10-12: a bar of soap is not priced like a gift set),
+ *    which code keeps in range (`aiCatalogPrice`); a product with no price
+ *    in range takes the writer's default price (his 2026-10-08 "default a
+ *    price", AGL-3676). Every price is the owner's to change, and the job's
+ *    row says so. Since the
  *    2026-10-08 Ember & Wick start, whose store showed no product at all,
  *    each is LISTED at once (`comingSoon`: written `active`). Each gets a
  *    photo in its slot, a stock photo of its own words where the deployment
@@ -462,7 +465,8 @@ export function aiSiteProductsBriefLine(input: AiSiteProductsInput = AI_SITE_PRO
 /**
  * The products unit's runner: the `products` step's catalog for the store's
  * brief, then each proposed product, up to the most a site starts with,
- * written by the plugin that keeps products at its default price, listed. A
+ * written by the plugin that keeps products at its suggested price (else the
+ * store's default), listed. A
  * product past the plan's allowance stops the writing there, and the row
  * says how many were added; none at all is the allowance's review. A photo
  * the product's rules refuse is dropped and the product written without it;
@@ -510,6 +514,10 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         seoTitle: product.seoTitle,
         seoDescription: product.seoDescription,
         comingSoon: true,
+        // The catalog's suggested price for what the product is (Zach,
+        // 2026-10-12), held to range once more here: none, or one out of
+        // range, is left unstated and the writer gives the store's default.
+        ...aiSiteProductPriceContent(product.price),
       }
       // A photo we picked that the product's rules refuse is dropped, never
       // the product: its slot stays empty for the owner's own.
@@ -534,9 +542,9 @@ export function createAiSiteProductsRunner(deps: AiSiteProductsRunnerDeps): AiJo
         now: context.now,
         id: aiSiteProductId(job.$id, index),
         name: product.name,
-        // No price stated: the writer gives it the store's default price
-        // for the owner to change (AGL-3676). Listed at once. Its photo
-        // slot holds a stock or starter photo for the owner to replace.
+        // Its suggested price, else the store's default, for the owner to
+        // change (AGL-3676). Listed at once. Its photo slot holds a stock or
+        // starter photo for the owner to replace.
         content: photoRefused ? content : withPhoto,
       })
       if (written.ok === false) {
@@ -783,11 +791,23 @@ export function aiSiteProductDescriptionWithoutGaps(description: string): string
 
 /** What each product a start wrote says on the job's page (AGL-3676). */
 export const AI_SITE_PRODUCT_NOTE =
-  'On your store at a starting price. Set its real price — and your own photo — in Products.'
+  'On your store at a suggested price. Change its price — and add your own photo — in Products.'
 
 /** The note a store's products row carries once they are written (AGL-3676): the step left before it sells. */
 export const AI_SITE_PRODUCTS_PRICE_NOTE =
-  'Your products are on your store at a starting price. Set their real prices in Products.'
+  'Your products are on your store at suggested prices. Review and change them in Products.'
+
+/**
+ * The price a start writes a product with (Zach, 2026-10-12): the catalog's
+ * suggestion as `aiCatalogPrice` keeps it, stated as the writer reads one
+ * (`priceUsd`); nothing when there is none in range, so the writer gives the
+ * store's default price. Never `priceUsd: null`, which would leave the
+ * product unpriced on purpose.
+ */
+export function aiSiteProductPriceContent(price: unknown): { priceUsd?: number } {
+  const kept = aiCatalogPrice(price)
+  return kept === null ? {} : { priceUsd: kept }
+}
 
 /** What a page of a blog or a store is told about the posts or products built before it. */
 export function aiSiteContentBriefLines(outputs: readonly AiJobOutput[]): string[] {

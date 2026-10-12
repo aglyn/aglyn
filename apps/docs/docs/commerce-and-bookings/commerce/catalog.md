@@ -23,8 +23,8 @@ compare-at price, weight, image, and inventory count.
   `service`.
 - **Status**: `draft` (invisible to visitors), `active`, or `archived`.
   A product created for you rather than added in the editor — a proposed
-  product, for one — starts as a draft with no photo, and its price stays
-  empty unless one was given. It counts toward your plan's product
+  product, for one — starts as a draft with no photo, at the price it was given
+  (an AI proposal's suggested price) or else a default price, for you to change. It counts toward your plan's product
   allowance like any other product.
 - **Pricing**: a variant with a **compare-at price** above its price shows a
   sale badge on storefront blocks.
@@ -78,7 +78,7 @@ decrement it.
 Aglyn AI can write a product's description, search listing and tags from what it says
 and shows, write copy for many products or an import at once, propose a first catalog
 from a brief, and propose categories and discounts. Every proposal is reviewed before it
-is saved. Proposed products are created as drafts with their prices left empty, and
+is saved. Proposed products are created as drafts at their suggested prices, and
 proposed discounts are created switched off. See [Products with AI](../../ai/products-with-ai.md).
 
 ## Categories and tags

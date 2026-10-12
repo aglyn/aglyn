@@ -22,6 +22,8 @@ import {
   unpricedProductDraft,
   defaultPricedProductDraft,
   COMMERCE_DEFAULT_PRICE_USD,
+  COMMERCE_MAX_PRICE_USD,
+  proposedProductPriceUsd,
   validateProduct,
   variantHasPrice,
   type HostProduct,
@@ -171,6 +173,19 @@ describe('a proposed product, created', () => {
     expect(productPriceMissing(draft)).toBe(false)
     expect(defaultPricedProductDraft(PROPOSAL, new Set(), 1, 9.5).variants.map((variant) => (variant as { priceUsd?: number }).priceUsd)).toEqual([9.5, 9.5])
     expect(productPriceMissing(defaultPricedProductDraft(PROPOSAL, new Set(), 1, null))).toBe(true)
+  })
+
+  it('is created at the price an AI proposal suggests when it is a real one, else the default (Zach, 2026-10-12)', () => {
+    expect([9.5, 18, 38, 24.95, 12.345, COMMERCE_MAX_PRICE_USD].map(proposedProductPriceUsd)).toEqual([
+      9.5, 18, 38, 24.95, 12.35, COMMERCE_MAX_PRICE_USD,
+    ])
+    // Never $0, negative, past the ceiling or not a number.
+    expect([undefined, null, 0, 0.001, -4, COMMERCE_MAX_PRICE_USD + 1, Infinity, Number.NaN, '12'].map(proposedProductPriceUsd)).toEqual(
+      Array(9).fill(COMMERCE_DEFAULT_PRICE_USD),
+    )
+    const draft = defaultPricedProductDraft(PROPOSAL, new Set(), 1, proposedProductPriceUsd(32))
+    expect(draft.variants.map((variant) => (variant as { priceUsd?: number }).priceUsd)).toEqual([32, 32])
+    expect(draft).toMatchObject({ status: 'draft', priceFromCents: 3200 })
   })
 
   it('has one default variant when it has no options, and is never sold before it is priced', () => {

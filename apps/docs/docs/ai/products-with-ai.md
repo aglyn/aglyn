@@ -8,7 +8,8 @@ description: "An AI product description generator for your catalog: write copy f
 
 Aglyn AI can write the copy for your products and help you set up a store. Everything it
 does is a **proposal**: you review it, and nothing is saved to your catalog until you
-apply it. It never sets a price, and it never publishes a product.
+apply it. A proposed product comes with a suggested price you can change, and it never
+publishes a product.
 
 ## Write a product's copy
 
@@ -59,13 +60,14 @@ first product** while the catalog is empty), or **Propose products** in **Build 
 catalog with AI** — both open the same brief. **Propose products** takes a brief, such as *"a candle studio: hand-poured soy candles in
 8 oz and 16 oz jars, and wax melts"*, and proposes up to twelve products, usually six or
 more unless your brief says how many: each with a name, type, description, tags, options,
-a search listing and a sentence saying what its photo should show.
+a search listing, a sentence saying what its photo should show, and a suggested price for
+that kind of product, such as about $8–12 for a bar of handmade soap or $30–45 for a gift set.
 
 Review the table, untick any you do not want, and press **Create drafts**. Each product
 is created as a **draft**:
 
-- **It starts at a placeholder price** on every variant, for you to change in the
-  product editor. You may clear a price on purpose: the product still saves, the table
+- **It starts at its suggested price** on every variant (the table shows it), or at a
+  default price where none was suggested, for you to change in the product editor. You may clear a price on purpose: the product still saves, the table
   marks it **Set a price**, and your storefront shows **Price coming soon** with no way to
   buy it until it has one again.
 - **It has no photo**, and the table marks it **Needs a photo** with the suggested shot.
@@ -97,7 +99,8 @@ again or not shown:
   compliance.
 - **No certification, award or endorsement** your own product text does not state. If
   your text says *certified organic*, the copy may say so too.
-- **No prices** you did not give, and no links, emoji or formatting marks.
+- **No prices in the text** you did not give (a proposed product's suggested price is a
+  field of its own, never in its copy), and no links, emoji or formatting marks.
 
 The rules help, but you are still the publisher: read the copy before you apply it.
 
