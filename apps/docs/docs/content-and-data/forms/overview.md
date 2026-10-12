@@ -526,6 +526,22 @@ as *subscribe* or *marketing consent* — counts even before you pick it as the 
 field. **See the contacts this form captured in the CRM** opens the Contacts list
 narrowed to source Form and this form.
 
+##### A sign-up form {#sign-up-form}
+
+**This is a sign-up form: submitting it subscribes the person** is for a form whose only
+purpose is subscribing, like a newsletter sign-up: an email field and a Subscribe
+button, with no box to tick. With it on, every submission records the person's
+**marketing consent** for this site and makes them at least a **Subscriber**. A lead or
+a customer who signs up keeps their stage. The **Marketing consent field** is then not
+needed.
+
+Submitting any other form is never consent. The switch is yours to set, form by form,
+so make the form say plainly what the person is signing up for. A sign-up form sends no
+[confirmation email](../../marketing-and-automation/email-campaigns/overview.md#double-opt-in).
+For a full walkthrough — the form, a live audience of everyone who submits it, and a
+reusable band that places it on any page — see
+[Build a newsletter sign-up band](../../guides/newsletter-sign-up-band.md).
+
 #### Versions {#form-versions}
 
 **Versions** lists the form's designs; **Open** one in the Besigner to edit it, and
