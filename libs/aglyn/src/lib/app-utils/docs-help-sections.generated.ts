@@ -128,7 +128,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   aiProducts: {
     '#propose-a-first-catalog': 'Criptions, search listings and tags with AI as they land. Once the import has created your products, their copy is written as above and waits in the review table on the products page.',
-    '#write-a-products-copy': 'Th AI Aglyn AI can write the copy for your products and help you set up a store.',
+    '#write-a-products-copy': 'Ur products and help you set up a store. Everything it does is a proposal: you review it, and nothing is saved to your catalog until you apply it.',
   },
   aiSeo: {
     '#fix-what-the-seo-check-finds': 'Sting section has the same Write with AI control. It proposes an SEO title and an SEO description from the product\'s name and description.',
@@ -207,8 +207,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#4-save-and-test': 'Ces](actions-builder.md#sequences) for the rest, including what a wait means for the emails sent after it.',
   },
   catalog: {
-    '#categories-and-tags': 'Eir prices left empty, and proposed discounts are created switched off.',
-    '#product-reviews': ', so that collection\'s grid is in price order — high to low if that is the sort chosen, low to high otherwise.',
+    '#categories-and-tags': 'Heir suggested prices, and proposed discounts are created switched off.',
+    '#review-moderation': 'Ff or change the delay on the Reviews card, and change its wording under Emails → Review request.',
+    '#review-settings': '1 to 5 and write a review in the Product reviews block on your product page template.',
   },
   commerce: {
     '#commerce-analytics': 'Hat was refunded, and leaves out test-mode orders. The card lists the five latest orders, and Open store takes you to the products hub.',
@@ -397,7 +398,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#form-crm-routing': 'Since the same signup form is often placed by more than one push.',
     '#form-details': 'Something in that card differs from what\'s saved, and saving one card never saves the other.',
     '#form-submissions': 'R.',
-    '#form-versions': 'Scribe* or marketing consent — counts even before you pick it as the consent field.',
+    '#form-versions': 'Ll walkthrough — the form, a live audience of everyone who submits it, and a reusable band that places it on any page — see Build a newsletter sign-up band.',
     '#inbox-card': 'Ad no email field cannot be replied to, and says so instead of offering a Send that would fail.',
     '#one-forms-own-page': 'Goes straight to that site\'s view, with no filter to set. Collaborators invited to particular sites don\'t see the organization\'s Inbox — they keep each site\'s own, which is unchanged.',
     '#replying-to-a-submission': 'Saved to Inbox on a form you bound to a dataset is the signal to go and check the dataset.',

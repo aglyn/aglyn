@@ -19,6 +19,12 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiLayoutDesignChoices, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiCompileLayoutFrame } from '../layout-language/ai-layout-frame'
 import {
+  aiLayoutFrameHollows,
+  aiLayoutFrameHollowsSaid,
+  aiLayoutFrameIsHollow,
+  aiLayoutRepairFrameHollows,
+} from '../layout-language/ai-layout-frame-hollows'
+import {
   AI_LAYOUT_FRAME_TOOL,
   AI_LAYOUT_LANGUAGE_TEXT,
   aiReadLayoutFrame,
@@ -273,6 +279,10 @@ export function aiLayoutFrameCheck(input: {
       'layout',
       context,
     ).nodes as unknown as typeof copy.nodes
+    // The copy check can take words out of the footer: no heading or column
+    // is left with nothing under it (AGL-3735), and none may remain.
+    aiLayoutRepairFrameHollows(nodes as unknown as Record<string, unknown>)
+    const hollow = aiLayoutFrameHollows(nodes as unknown as Record<string, unknown>)
     const report = validateAiDoctrineTree(
       { rootId: stored.rootId, nodes },
       'layout',
@@ -280,6 +290,16 @@ export function aiLayoutFrameCheck(input: {
     )
     const violations = [
       ...report.violations,
+      ...(aiLayoutFrameIsHollow(hollow)
+        ? [
+            {
+              rule: null,
+              code: 'layout-frame-hollow',
+              message: 'Every footer heading needs something under it, and every footer column more than a heading.',
+              detail: aiLayoutFrameHollowsSaid(hollow).join('; '),
+            },
+          ]
+        : []),
       ...copy.violations,
       ...input.extend({
         rootId: stored.rootId,

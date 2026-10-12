@@ -82,6 +82,49 @@ interface ReviewView {
   createdAtMs: number
 }
 
+/** What `GET /api/commerce/reviews?mode=eligibility` answers (AGL-3736). */
+export interface ReviewFormEligibility {
+  enabled?: boolean
+  policy?: 'verified' | 'anyone'
+  signedIn?: boolean
+  verifiedVia?: 'member' | 'token' | null
+  canReview?: boolean
+  needsEmail?: boolean
+  tokenProblem?: string
+}
+
+/** Where a shopper signs in to their account on the store. */
+export const REVIEW_SIGN_IN_HREF = '/account'
+
+/** The review link from the review-request email, if the page carries one. */
+export function reviewTokenFromLocation(search: string): string {
+  const token = new URLSearchParams(search).get('review') ?? ''
+  return /^[A-Za-z0-9_-]{32}$/.test(token) ? token : ''
+}
+
+/**
+ * Which form the block draws, from the server's answer. Pure, so the three
+ * states are specified in one place:
+ *  - `form`: the visitor may review (verified or, under `anyone`, pending);
+ *  - `sign-in`: the store takes verified reviews only and this visitor is
+ *    not one — "Only customers who bought this can review." and a sign-in
+ *    link (no form: a typed email verifies nothing);
+ *  - `none`: reviews are off on this plan, or the answer has not come yet.
+ */
+export function reviewFormMode(
+  eligibility: ReviewFormEligibility | null,
+): 'form' | 'sign-in' | 'none' {
+  if (!eligibility || eligibility.enabled === false) return 'none'
+  if (eligibility.canReview) return 'form'
+  return 'sign-in'
+}
+
+const TOKEN_PROBLEM_TEXT: Record<string, string> = {
+  review_token_used: 'This review link has already been used.',
+  review_token_expired: 'This review link has expired.',
+  review_token_invalid: 'This review link is not valid for this product.',
+}
+
 async function resolveProductIdFromSlug(hostId: string): Promise<string> {
   const match = window.location.pathname.match(/\/products\/([^/?#]+)/)
   if (!match) return ''
@@ -97,7 +140,11 @@ async function resolveProductIdFromSlug(hostId: string): Promise<string> {
 /**
  * Product reviews block (AGL-324): approved reviews with verified-buyer
  * badges, seller replies, an aggregate summary (emitted as JSON-LD
- * AggregateRating), and a submit form feeding the moderation queue.
+ * AggregateRating), and a submit form. Since AGL-3736 the form asks the server
+ * who the visitor is first: a verified buyer (signed in, or arriving with the
+ * review-request email's link) gets the form and publishes at once; anyone
+ * else sees "Only customers who bought this can review" and a sign-in link,
+ * unless the store accepts reviews from anyone (held for moderation).
  */
 const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
   (props, ref) => {
@@ -270,6 +317,10 @@ const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
     const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>(
       'idle',
     )
+    const [eligibility, setEligibility] = useState<ReviewFormEligibility | null>(null)
+    const [reviewToken, setReviewToken] = useState('')
+    const [submitted, setSubmitted] = useState<{ pending: boolean } | null>(null)
+    const [errorText, setErrorText] = useState('')
 
     useEffect(() => {
       if (!hostId) return
@@ -287,6 +338,17 @@ const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
         const payload = await response.json().catch(() => ({}))
         setReviews(payload?.reviews ?? [])
         setAggregate(payload?.aggregate ?? { count: 0, average: 0 })
+        // May this visitor review, and would it be verified? (AGL-3736)
+        const token = reviewTokenFromLocation(window.location.search)
+        setReviewToken(token)
+        const answer = await fetch(
+          `/api/commerce/reviews?hostId=${encodeURIComponent(hostId)}` +
+            `&productId=${encodeURIComponent(resolved)}&mode=eligibility` +
+            (token ? `&review=${encodeURIComponent(token)}` : ''),
+          { credentials: 'same-origin' },
+        ).catch(() => null)
+        if (!active || !answer?.ok) return
+        setEligibility(await answer.json().catch(() => null))
       })()
       return () => {
         active = false
@@ -300,9 +362,24 @@ const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
         const response = await siteFetch('/api/commerce/reviews', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostId, productId, ...form }),
+          body: JSON.stringify({
+            hostId,
+            productId,
+            rating: form.rating,
+            body: form.body,
+            authorName: form.authorName,
+            ...(eligibility?.needsEmail ? { authorEmail: form.authorEmail } : {}),
+            ...(reviewToken ? { reviewToken } : {}),
+          }),
         })
-        setState(response.ok ? 'done' : 'error')
+        const payload = await response.json().catch(() => ({}))
+        if (response.ok) {
+          setSubmitted({ pending: Boolean(payload?.pending) })
+          setState('done')
+        } else {
+          setErrorText(String(payload?.error ?? ''))
+          setState('error')
+        }
       } catch {
         setState('error')
       }
@@ -361,13 +438,34 @@ const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
             {'No reviews yet — be the first.'}
           </Typography>
         ) : null}
+        {eligibility?.tokenProblem && TOKEN_PROBLEM_TEXT[eligibility.tokenProblem] ? (
+          <Alert severity="info">{TOKEN_PROBLEM_TEXT[eligibility.tokenProblem]}</Alert>
+        ) : null}
         {state === 'done' ? (
           <Alert severity="success">
-            {'Thanks — your review is awaiting moderation.'}
+            {submitted?.pending
+              ? 'Thanks — your review is awaiting moderation.'
+              : 'Thanks — your review is posted.'}
           </Alert>
-        ) : (
+        ) : reviewFormMode(eligibility) === 'sign-in' ? (
+          <Typography variant="body2" color="text.secondary" data-review-sign-in="">
+            {'Only customers who bought this can review. '}
+            <Box component="a" href={REVIEW_SIGN_IN_HREF} sx={{ color: 'primary.main' }}>
+              {'Sign in'}
+            </Box>
+          </Typography>
+        ) : reviewFormMode(eligibility) === 'none' ? null : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 480 }}>
             <Typography variant="subtitle2">{'Write a review'}</Typography>
+            {eligibility?.verifiedVia ? (
+              <Chip
+                label="Your review will show as Verified buyer"
+                size="small"
+                variant="outlined"
+                color="success"
+                sx={{ alignSelf: 'flex-start' }}
+              />
+            ) : null}
             <Rating
               value={form.rating}
               onChange={(_event, value) =>
@@ -394,24 +492,32 @@ const SingleProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
                 size="small"
                 sx={{ flex: 1 }}
               />
-              <TextField
-                placeholder="Email (verifies your purchase)"
-                type="email"
-                value={form.authorEmail}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, authorEmail: event.target.value }))
-                }
-                size="small"
-                sx={{ flex: 1.4 }}
-              />
+              {eligibility?.needsEmail ? (
+                <TextField
+                  placeholder="Email (never shown)"
+                  type="email"
+                  value={form.authorEmail}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, authorEmail: event.target.value }))
+                  }
+                  size="small"
+                  sx={{ flex: 1.4 }}
+                />
+              ) : null}
             </Box>
             {state === 'error' ? (
-              <Alert severity="error">{'Could not submit — check the fields.'}</Alert>
+              <Alert severity="error">
+                {errorText || 'Could not submit — check the fields.'}
+              </Alert>
             ) : null}
             <Button
               variant="outlined"
               size="small"
-              disabled={state === 'busy' || !form.body.trim() || !form.authorEmail.trim()}
+              disabled={
+                state === 'busy' ||
+                !form.body.trim() ||
+                Boolean(eligibility?.needsEmail && !form.authorEmail.trim())
+              }
               onClick={handleSubmit}
               sx={{ alignSelf: 'flex-start' }}
             >
@@ -430,7 +536,8 @@ export const schema: Aglyn.ComponentSchema<ProductReviewsProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Product reviews',
   description:
-    'Approved reviews with verified-buyer badges, and a form to add one.',
+    'Approved reviews with verified-buyer badges, and a form for customers ' +
+    'who bought the product to add one.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiStarOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

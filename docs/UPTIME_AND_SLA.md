@@ -1317,6 +1317,25 @@ Notes that keep these honest:
   folded into `message` on the stackless path only, so every stacked error
   arrived unclassifiable and the policy could express nothing narrower than
   "any entry at all".
+  ⚑ **A mismatch on a page a translator rewrote never arrives (AGL-3738).**
+  React reports a mismatch only after its recovery render has reset `<html>`
+  and replaced every translated node, so a translator's marks are gone by the
+  time the report is built; the six es-US #418s of 2026-10-12 arrived with
+  none. The beacon now watches for the marks from install
+  (`watchPageTranslation`: Chrome's `translated-*` class and `<font>`
+  wrappers, Microsoft's `_msttexthash`, a rewritten `<html lang>`) and drops a
+  hydration report from a page that carried one. An UNMARKED mismatch is still
+  reported, and is the one to read.
+- **Every beacon entry names a coarse browser family (AGL-3732).**
+  `jsonPayload.browser` is exactly one of `safari | chrome | firefox | edge |
+  samsung | webview | other`, classified in the browser by
+  `libs/aglyn/src/lib/app-utils/browser-family.ts` (an Android `; wv)` or an
+  iOS WKWebView/in-app browser is `webview`). The user-agent string and the
+  version never leave the page, and the ingest route drops any value outside
+  the seven. Added to read the en-GB #418 reports on aglyn.com that carried no
+  translator mark: filter `client-errors` on `jsonPayload.kind="hydration"`
+  and group by `jsonPayload.browser`. `client_hydration_errors` has no
+  `browser` label yet; adding one is a metric edit in Cloud Logging, not code.
 - **A stack with no frame of ours never arrives.** `isInjectedThirdPartyFrame`
   drops an error whose every frame is the DOCUMENT rather than a script we
   served — the signature of code a webview or extension evaluated inline. Found

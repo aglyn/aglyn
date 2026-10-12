@@ -741,7 +741,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
                 */}
                 <Typography variant="body2">
                   {'Every submission with an email address updates the person ' +
-                    'in Contacts at stage Lead — a new contact when the ' +
+                    `in Contacts at stage ${effectiveOptInOnSubmit ? 'Subscriber' : 'Lead'} — a new contact when the ` +
                     'address is new, an interaction on their timeline when it ' +
                     'is not. A customer stays a customer.'}
                 </Typography>

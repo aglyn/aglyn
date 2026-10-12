@@ -549,6 +549,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/besigner/music-player',
     title: 'Music player',
   },
+  newsletterSignUpBand: {
+    path: '/guides/newsletter-sign-up-band',
+    title: 'Build a newsletter sign-up band',
+  },
   onboardingDeepLinks: {
     path: '/staff-console/onboarding-deep-links',
     title: 'Onboarding deep links (marketing → console)',
@@ -924,7 +928,7 @@ export const DOCS_HELP_ANCHORS = {
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#routed-sections-agl-2501', '#which-registration-owns-a-path', '#gating-a-section', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
-  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#slugs', '#merchant-center-feed', '#related'],
+  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
@@ -1016,6 +1020,7 @@ export const DOCS_HELP_ANCHORS = {
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
+  newsletterSignUpBand: ['#why-not-the-newsletter-signup-block', '#1-create-the-saved-form', '#2-design-the-form-one-email-field-and-a-button', '#3-style-the-form-on-one-line', '#4-make-it-a-sign-up-form', '#5-create-the-live-audience', '#6-build-the-band-as-a-reusable-component', '#7-place-the-band-on-your-pages', '#8-check-it-on-the-live-site', '#troubleshooting', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   operatorAlerts: ['#channels', '#settings', '#alert-list', '#health', '#render-monitor', '#self-hosting'],
   orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
@@ -1259,7 +1264,8 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   catalog: {
     '#categories-and-tags': 'Categories and tags',
-    '#product-reviews': 'Product reviews',
+    '#review-moderation': 'Review moderation',
+    '#review-settings': 'Review settings',
   },
   commerce: {
     '#commerce-analytics': 'Commerce analytics',

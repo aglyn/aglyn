@@ -45,8 +45,8 @@ import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
-import { aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
+import { aiBuildStoreLinksToPublish, aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
+import { AI_BUILD_MADE_INPUT, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
 import { registerAiJobStep } from './ai-jobs'
@@ -244,6 +244,75 @@ describe('the build step (AGL-3616)', () => {
     expect(publish).toHaveBeenCalledWith(firestore, expect.objectContaining({ outputs: [expect.objectContaining({ id: 'page-1' })] }))
   })
 
+  /*
+   * Try again on a build (the AGL-3730 fix, for a build): a build that had
+   * published once skipped the publish, so a page Try again rebuilt stayed a
+   * draft. Its last pass puts the pages the retry built live, only those, as
+   * a retry, merged into what the first publish put live.
+   */
+  it('publishes the pages Try again built, only those, as a retry, merged into the first publish', async () => {
+    const items = aiBuildInitialLedger(aiBuildUnits(plan())).map((row) =>
+      row.slot === 'i0'
+        ? { ...row, status: 'succeeded' as const, outputs: ['svc-1'] }
+        : { ...row, status: 'succeeded' as const, attempt: 2, outputs: ['page-1'] },
+    )
+    const outputs = [{ resource: 'screen' as const, id: 'page-1', hostId: 'host-1', label: 'Book' }]
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [{ id: 'page-0', label: 'Home', path: '/' }],
+      drafts: [{ id: 'page-1', label: 'Book', reason: 'It could not be published just now. Publish it from Pages.' }],
+    }
+    const retried = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'page-1', label: 'Book', path: '/book' }], drafts: [] }
+    const publish = jest.fn(async () => retried)
+    const outcome = await step({ writer: writer().impl, seen: [], publish })(
+      context(job({ items, outputs, sitePublish: first, inputs: { publish: true, publishConfirmed: true } })),
+    )
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: Array<{ id: string }>; retry?: boolean }]
+    expect(input.outputs.map((page) => page.id)).toEqual(['page-1'])
+    expect(input.retry).toBe(true)
+    expect(outcome.sitePublish).toEqual({
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [...first.published, ...retried.published],
+      drafts: [],
+    })
+    // Every page it built already live: nothing is published again.
+    publish.mockClear()
+    await step({ writer: writer().impl, seen: [], publish })(
+      context(job({ items, outputs, sitePublish: { ...first, published: retried.published }, inputs: { publish: true, publishConfirmed: true } })),
+    )
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('publishes a retry as the first publish when the first put nothing live', async () => {
+    const items = aiBuildInitialLedger(aiBuildUnits(plan())).map((row) =>
+      row.slot === 'i0' ? { ...row, status: 'succeeded' as const, outputs: ['svc-1'] } : { ...row, status: 'succeeded' as const, outputs: ['page-1'] },
+    )
+    const outputs = [{ resource: 'screen' as const, id: 'page-1', hostId: 'host-1', label: 'Book' }]
+    const none = { liveUrl: null, published: [], drafts: [{ id: 'page-1', label: 'Book', reason: 'It could not be published just now. Publish it from Pages.' }] }
+    const live = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'page-1', label: 'Book', path: '/book' }], drafts: [] }
+    const publish = jest.fn(async () => live)
+    const outcome = await step({ writer: writer().impl, seen: [], publish })(
+      context(job({ items, outputs, sitePublish: none, inputs: { publish: true, publishConfirmed: true } })),
+    )
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { retry?: boolean }]
+    expect(input.retry).toBeUndefined()
+    expect(outcome.sitePublish).toEqual(live)
+  })
+
+  it('puts the newest store links draft live: a retried store drafts them again', () => {
+    const draft = (versionId: string) => ({
+      resource: 'layout' as const,
+      id: 'layout-1',
+      hostId: 'host-1',
+      versionId,
+      label: 'Header',
+      proposal: { storeLinks: 'draft', links: {}, screenPaths: {} },
+    })
+    expect(aiBuildStoreLinksToPublish([draft('v-first'), draft('v-retry')])?.versionId).toBe('v-retry')
+    expect(aiBuildStoreLinksToPublish([])).toBeNull()
+  })
+
   it('hands a template item its arguments as inputs and its own creation to build', () => {
     const templatePlan: AiJobPlan = {
       ...plan(),
@@ -298,6 +367,26 @@ describe('the build step (AGL-3616)', () => {
       plan: null,
     })
     expect(derived.brief).toContain('Build the page change “Shorter hero”: The home page hero is too tall.')
+  })
+
+  it('hands a menu item the pages this build made, built before it, to link as new:<title> (AGL-3728)', () => {
+    const navPlan: AiJobPlan = {
+      ...plan(),
+      items: [
+        { slot: 'i0', op: 'navigation', name: 'Menu', why: 'Link the booking page.', dependsOn: [], degrade: 'omit', args: { add: ['Book => new:Book'] }, id: 'nav-1' },
+      ],
+    }
+    const units = aiBuildUnits(navPlan)
+    const menu = units.find((unit) => unit.slot === 'i0') as (typeof units)[number]
+    expect(menu.deps).toEqual(['p0'])
+    const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
+    const ledger = aiBuildInitialLedger(units).map((row) => (row.slot === 'p0' ? { ...row, status: 'succeeded' as const, outputs: [page.screen?.id as string] } : row))
+    const derived = aiBuildUnitJob(job({ plan: navPlan }), menu, { kind: 'navigation', units, ledger, ops: OPS })
+    expect(derived).toMatchObject({ $id: 'nav-1', kind: 'navigation', plan: null, inputs: { add: ['Book => new:Book'] } })
+    expect(derived.inputs[AI_BUILD_MADE_INPUT]).toEqual({ pages: [{ title: 'Book', id: page.screen?.id }], layouts: [] })
+    // A page that was not built is not handed on.
+    const unbuilt = aiBuildUnitJob(job({ plan: navPlan }), menu, { kind: 'navigation', units, ledger: aiBuildInitialLedger(units), ops: OPS })
+    expect(unbuilt.inputs[AI_BUILD_MADE_INPUT]).toBeUndefined()
   })
 
   it('runs an edit item through the edit runner after its admission, and skips it with the admission’s words', async () => {

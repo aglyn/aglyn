@@ -55,6 +55,11 @@ import {
 // subpath, not the `/server` barrel: specs that stub that barrel with a
 // hand-built factory would silently turn this into `undefined`.
 import { isForeignScriptStack } from '@aglyn/aglyn/app-utils/foreign-script'
+// The seven browser families the beacon writes (AGL-3732), same subpath rule.
+import {
+  isBrowserFamily,
+  type BrowserFamily,
+} from '@aglyn/aglyn/app-utils/browser-family'
 
 import {
   readBeaconHeartbeat,
@@ -79,6 +84,12 @@ export interface ClientErrorEvent {
   translated?: string
   /** Hydration only: the visitor's `navigator.language`. */
   language?: string
+  /**
+   * The coarse browser family the beacon classified (AGL-3732). Only the
+   * seven values it writes are kept; anything else — a raw user agent from
+   * some other caller included — is dropped, never logged.
+   */
+  browser?: BrowserFamily
 }
 
 /**
@@ -153,6 +164,7 @@ export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
       url: scrubUrl(event.url) || undefined,
       translated: label(event.translated),
       language: label(event.language),
+      browser: isBrowserFamily(event.browser) ? event.browser : undefined,
     })
   }
   return parsed
@@ -203,6 +215,9 @@ function toReportedEvent(
     kind: clampString(event.kind, 32) || 'error',
     ...(event.translated ? { translated: event.translated } : {}),
     ...(event.language ? { language: event.language } : {}),
+    // Top-level beside `kind`, so a Logs query or a log-based metric label
+    // can filter on `jsonPayload.browser` (AGL-3732).
+    ...(event.browser ? { browser: event.browser } : {}),
     context: {
       httpRequest: event.url ? { url: event.url } : undefined,
       ...(hasStack

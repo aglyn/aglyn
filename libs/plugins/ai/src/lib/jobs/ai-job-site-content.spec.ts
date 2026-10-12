@@ -49,6 +49,7 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_SITE_BLOG_NAME,
   AI_SITE_CONTENT_INPUT,
+  AI_SITE_POSTS,
   AI_SITE_PRODUCT_NOTE,
   AI_SITE_PRODUCTS,
   AI_SITE_PRODUCTS_NOT_WRITTEN_COPY,
@@ -61,10 +62,12 @@ import {
   aiSiteProductDescriptionWithoutGaps,
   aiSiteProductPhotos,
   aiSiteProductPhotoSrc,
+  aiSiteProductPriceContent,
   aiSiteProductsBriefLine,
   createAiSitePostsRunner,
   createAiSiteProductsRunner,
 } from './ai-job-site-content'
+import { AI_SITE_START_POSTS, aiSiteStartContent } from '../model/ai-site-job'
 import type { AiJobStepContext, AiJobStepOutcome } from './ai-job-text-step'
 
 const NOW = new Date('2026-10-07T21:00:00.000Z')
@@ -114,6 +117,13 @@ describe('which part a site gets', () => {
     expect(aiSiteContentPart({ siteKind: 'store' }, true)).toBeNull()
     expect(aiSiteContentPart({ siteKind: 'restaurant' }, false)).toBeNull()
     expect(aiSiteContentPart(null, false)).toBeNull()
+  })
+
+  it('is the part a paid start’s estimate counts, by the same kind', () => {
+    for (const siteKind of ['blog', 'store', 'restaurant', '']) {
+      expect(aiSiteStartContent(siteKind)).toBe(aiSiteContentPart({ siteKind }, false))
+    }
+    expect(AI_SITE_START_POSTS).toBe(AI_SITE_POSTS)
   })
 })
 
@@ -263,6 +273,44 @@ describe('the first products, from the catalog', () => {
     )
     expect(outcome.outputs.every((output) => !output.proposal)).toBe(true)
     expect(outcome.usage).toEqual(SPEND.usage)
+  })
+
+  it('writes each product at the price the catalog suggests for what it is, and leaves a missing or absurd one to the writer’s default (Zach, 2026-10-12)', async () => {
+    // A replay of a catalog answer for a bath-and-body store: soap, lotion,
+    // a gift set, a candle and a mug priced by kind, then the prices code
+    // must never write — none, $0, negative, absurd, not a number.
+    const suggested: unknown[] = [9.5, 18, 38, 24.95, 32, undefined, 0, -5, 250_000, Number.NaN, '12.50']
+    const products = suggested.map((price, index) => ({ ...proposed(1)[0], name: `Item ${index + 1}`, price }))
+    const output: AiJobOutput = { ...catalogOutput(1), proposal: { kind: 'catalog', products, notes: [] } }
+    const writes: Array<Record<string, unknown>> = []
+    const priced: PluginResourceDraftWriter = {
+      ...writer,
+      write: async (request) => {
+        writes.push(request.content as Record<string, unknown>)
+        return { ok: true, replayed: false, id: request.id, name: request.name, versionId: null, facts: {} }
+      },
+    }
+    const run = createAiSiteProductsRunner({ catalog: async () => spent([output]), writerFor: () => ({ pluginId: 'commerce', writer: priced }) })
+    // Six at most per start: the first six of the replay.
+    await run(context(unitJob()))
+    expect(writes.map((content) => content['priceUsd'])).toEqual([9.5, 18, 38, 24.95, 32, undefined])
+    expect(writes[5]).not.toHaveProperty('priceUsd')
+    // Every price code keeps is in range and whole cents; everything else is unstated, never `null`.
+    expect(suggested.map((price) => aiSiteProductPriceContent(price))).toEqual([
+      { priceUsd: 9.5 },
+      { priceUsd: 18 },
+      { priceUsd: 38 },
+      { priceUsd: 24.95 },
+      { priceUsd: 32 },
+      {},
+      {},
+      {},
+      {},
+      {},
+      { priceUsd: 12.5 },
+    ])
+    expect(aiSiteProductPriceContent(12.345)).toEqual({ priceUsd: 12.35 })
+    expect(aiSiteProductPriceContent(null)).toEqual({})
   })
 
   it('stops at the plan’s allowance and says so where the last one added is; none at all is the allowance’s review', async () => {

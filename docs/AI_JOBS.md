@@ -225,7 +225,11 @@ quoted before), shown as "About 106 credits (up to 650)". The table is
 `AI_MEASURED_UNIT_CREDITS` — done jobs in production since 2026-10-01, read
 2026-10-09: page 30/40 for about five sections (scaled about 6/8 a section by
 `aiMeasuredPageCredits`), form 29/31, layout 23/24, theme 4/8, plan 21/70; the
-module says how to re-measure. Kinds with no measurement of their own
+module says how to re-measure. A paid site start (`aiSiteCreditRange`) reads
+`AI_MEASURED_PAID_SITE_CREDITS` instead, measured on paid starts only (read
+2026-10-12): its plan runs on the paid routing at 81/86 rather than a Free
+start's 20/42, and a store's first products (64/66) or a blog's first posts
+are counted, by the kind picked. Kinds with no measurement of their own
 (components, email designs, items) use a form's figures per pass as a declared
 stand-in. The meter still charges actual use and each pass still reserves 50:
 only the quote and the Free admission moved.
@@ -772,6 +776,14 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   rule (`plan-over-free-wall`), and its re-ask gives the count to plan within and how to
   get there: a list's repeated items in one section, and no section the brief does not
   ask for. It only lowers what a plan may ask for, and no prompt line or figure changes.
+  A plan at most `AI_FREE_WALL_SETTLE_MAX_OVER` (2) sections past the wall is trimmed to
+  fit in code instead (`aiSettlePlanFreeWall`, AGL-3737), before the rules read it: the
+  live candle-shop start of 2026-10-12 planned 7 + 2 against a wall of 8 on all three
+  answers. One section goes at a time, the last of its page, from the page furthest past
+  its share (the home at / past its fewest, any other page past two), never a page's
+  opening, a section that places something, one that collects answers or says how to
+  reach the owner, or a storefront's listing parts. A plan further over, past its page
+  cap, or with a list split into sections is still re-asked.
 - **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
   inline sentence's old words, "draw a repeated item in its own section", as a section an
   item, and planned "the four areas we practice" as four sections of one item: none was

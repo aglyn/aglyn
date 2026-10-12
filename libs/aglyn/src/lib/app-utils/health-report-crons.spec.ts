@@ -34,6 +34,8 @@ import {
   healthStatus,
   previousCronFire,
   writeCronBeat,
+  CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS,
+  resetCronBeatThrottleForTests,
   type CronBeat,
 } from './health-report'
 
@@ -455,6 +457,22 @@ describe('writeCronBeat', () => {
     const { store, writes } = fakeStore(CRON_BEAT_SUMMARY_DOC)
     expect(await writeCronBeat(store, 'audit-archive', NOW)).toBe(true)
     expect(writes.map((write) => write.doc)).toEqual(['audit-archive'])
+  })
+
+  it('marks an every-minute job at most once per interval per instance', async () => {
+    resetCronBeatThrottleForTests()
+    const { store, writes } = fakeStore()
+    expect(await writeCronBeat(store, 'ai-jobs-beat', NOW)).toBe(true)
+    expect(await writeCronBeat(store, 'ai-jobs-beat', NOW + 60_000)).toBe(true)
+    expect(writes).toHaveLength(2)
+    expect(
+      await writeCronBeat(store, 'ai-jobs-beat', NOW + CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS),
+    ).toBe(true)
+    expect(writes).toHaveLength(4)
+    // A job on a slower schedule is marked every run.
+    await writeCronBeat(store, 'audit-archive', NOW)
+    await writeCronBeat(store, 'audit-archive', NOW)
+    expect(writes).toHaveLength(8)
   })
 
   it('never throws, so the monitor cannot become the outage', async () => {

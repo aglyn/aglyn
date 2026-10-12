@@ -44,6 +44,7 @@ import {
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
   pageTranslationSignal,
+  watchPageTranslation,
   raiseStackTraceLimit,
   recoveredErrorKind,
 } from './error-beacon'
@@ -368,6 +369,9 @@ describe('isHydrationMismatch (AGL-2523)', () => {
   })
 })
 
+const VISITOR_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+
 describe('the installed beacon applies both rules end to end (AGL-2523)', () => {
   let beacon: jest.Mock
   const engine = Error as ErrorConstructor & { stackTraceLimit: number }
@@ -385,6 +389,12 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     jest.useFakeTimers()
     // Well above the number of events this file reports, so the per-page cap
     // cannot silently swallow a later case.
+    // A real visitor's agent, so the browser family below is a classified
+    // one rather than jsdom's `other` (AGL-3732).
+    Object.defineProperty(navigator, 'userAgent', {
+      value: VISITOR_UA,
+      configurable: true,
+    })
     installErrorBeacon({ maxPerPage: 100 })
   })
 
@@ -462,22 +472,6 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(events[0]['kind']).toBe('hydration')
   })
 
-  it("names the translator a hydration report's page carries", () => {
-    const root = document.documentElement
-    root.classList.add('translated-ltr')
-    try {
-      throwInPage(
-        'Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]=',
-        OWN_STACK,
-      )
-    } finally {
-      root.classList.remove('translated-ltr')
-    }
-    const [event] = reported()
-    expect(event).toMatchObject({ kind: 'hydration', translated: 'chrome' })
-    expect(event['language']).toBe(navigator.language)
-  })
-
   it('leaves an untranslated hydration report unlabeled — the one to read', () => {
     throwInPage(
       'Minified React error #423; visit https://react.dev/errors/423',
@@ -486,6 +480,54 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     const [event] = reported()
     expect(event['kind']).toBe('hydration')
     expect(event).not.toHaveProperty('translated')
+    expect(event['language']).toBe(navigator.language)
+  })
+
+  it('stamps every event with the browser family, and never the agent or its version (AGL-3732)', () => {
+    throwInPage('family-stamped boom', OWN_STACK)
+    throwInPage(
+      'Minified React error #418; visit https://react.dev/errors/418?args[]=family',
+      OWN_STACK,
+    )
+    const events = reported()
+    expect(events).toHaveLength(2)
+    for (const event of events) expect(event['browser']).toBe('safari')
+    const wire = beacon.mock.calls.map((call) => String(call[1])).join('\n')
+    expect(wire).not.toContain('Mozilla')
+    expect(wire).not.toContain('iPhone')
+    expect(wire).not.toContain('17_5')
+    expect(wire).not.toContain('17.5')
+  })
+
+  // ⚠️ The two cases below leave the pageview TRANSLATED — the beacon
+  // remembers a translator's mark for the rest of the page (AGL-3738) — so
+  // they stay last among the hydration cases of this shared install.
+
+  it('DROPS a mismatch on a page a translator rewrote, though React erased the mark first (AGL-3738)', async () => {
+    const root = document.documentElement
+    // The translator runs before hydration: Chrome's class on <html> and a
+    // <font> wrapper around the text it replaced.
+    root.classList.add('translated-ltr')
+    const font = document.createElement('font')
+    font.setAttribute('style', 'vertical-align: inherit;')
+    font.textContent = 'Crea tu sitio web.'
+    document.body.appendChild(font)
+    // The observer delivers on a microtask, as it does between the
+    // translator's task and React's.
+    await Promise.resolve()
+    // React's recovery: the client render resets <html> and replaces the
+    // translated nodes BEFORE it reports the mismatch.
+    root.classList.remove('translated-ltr')
+    font.remove()
+    throwInPage(
+      'Minified React error #418; visit https://react.dev/errors/418?args[]=text&args[]=',
+      OWN_STACK,
+    )
+    expect(beacon).not.toHaveBeenCalled()
+    // Only the hydration family is the translator's: anything else on the
+    // same translated page is still reported.
+    throwInPage('an error of ours on a translated page', OWN_STACK)
+    expect(reported()).toHaveLength(1)
   })
 
   it('labels only hydration reports', () => {
@@ -577,6 +619,31 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     const events = reported()
     expect(events).toHaveLength(1)
     expect(events[0]['kind']).toBe('unhandledrejection')
+  })
+
+  it('DROPS a cancelled request: an AbortError rejection (AGL-3734)', () => {
+    // The 2026-10-10 /edit-access shape: name only, no message, no stack.
+    rejectInPage(new DOMException('', 'AbortError'))
+    rejectInPage({ name: 'AbortError' })
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('still REPORTS a TimeoutError rejection: a missed deadline (AGL-3734)', () => {
+    rejectInPage(new DOMException('signal timed out', 'TimeoutError'))
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ kind: 'unhandledrejection' })
+  })
+
+  it('still REPORTS an uncaught AbortError thrown, not rejected (AGL-3734)', () => {
+    const error = new Error('aborted by hand')
+    error.name = 'AbortError'
+    error.stack = `AbortError: aborted by hand\n${OWN_FRAME}`
+    window.dispatchEvent(
+      new ErrorEvent('error', { error, message: error.message, filename: PAGE }),
+    )
+    jest.runOnlyPendingTimers()
+    expect(reported()).toHaveLength(1)
   })
 
   it('DROPS a rejection an automation driver raised (AGL-3423)', () => {
@@ -799,5 +866,68 @@ describe('pageTranslationSignal', () => {
     ).toBeUndefined()
     expect(pageTranslationSignal(page('<p>x</p>', 'EN'), 'en')).toBeUndefined()
     expect(pageTranslationSignal(page('<p>x</p>', 'tr'), null)).toBeUndefined()
+  })
+})
+
+describe('watchPageTranslation (AGL-3738)', () => {
+  function page(lang = 'en'): Document {
+    const doc = document.implementation.createHTMLDocument('')
+    doc.documentElement.setAttribute('lang', lang)
+    doc.body.innerHTML = '<h1>Build your website.</h1>'
+    return doc
+  }
+
+  /** React's recovery render: <html> as served, translated nodes replaced. */
+  function recover(doc: Document, lang = 'en'): void {
+    doc.documentElement.removeAttribute('class')
+    doc.documentElement.setAttribute('lang', lang)
+    doc.body.innerHTML = '<h1>Build your website.</h1>'
+  }
+
+  it("remembers Chrome's mark after React erased it", async () => {
+    const doc = page()
+    const read = watchPageTranslation(doc, 'en')
+    doc.documentElement.classList.add('translated-ltr')
+    doc.querySelector('h1')!.innerHTML =
+      '<font style="vertical-align: inherit;">Crea tu sitio web.</font>'
+    await Promise.resolve()
+    recover(doc)
+    expect(pageTranslationSignal(doc, 'en')).toBeUndefined()
+    expect(read()).toBe('chrome')
+  })
+
+  it("remembers Microsoft Translator's hash attributes", async () => {
+    const doc = page()
+    const read = watchPageTranslation(doc, 'en')
+    doc.querySelector('h1')!.setAttribute('_msttexthash', '123')
+    await Promise.resolve()
+    recover(doc)
+    expect(read()).toBe('microsoft')
+  })
+
+  it('sees a rewrite made in the same task as the report', () => {
+    const doc = page()
+    const read = watchPageTranslation(doc, 'en')
+    doc.documentElement.classList.add('translated-rtl')
+    // No microtask: the record is still pending when the report reads it.
+    expect(read()).toBe('chrome')
+  })
+
+  it('names a translator that ran before the beacon was installed', () => {
+    const doc = page()
+    doc.documentElement.classList.add('translated-ltr')
+    const read = watchPageTranslation(doc, 'en')
+    recover(doc)
+    expect(read()).toBe('chrome')
+  })
+
+  it('says nothing about a page nobody translated, however React re-rendered it', async () => {
+    const doc = page()
+    const read = watchPageTranslation(doc, 'en')
+    doc.body.innerHTML = '<h1>Build your website.</h1><p>Client-only copy</p>'
+    doc.documentElement.classList.add('mui-ready')
+    await Promise.resolve()
+    recover(doc)
+    expect(read()).toBeUndefined()
   })
 })

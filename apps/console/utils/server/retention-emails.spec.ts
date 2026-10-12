@@ -24,6 +24,7 @@ import {
   DAY_MS,
   HOUR_MS,
   isRetentionCandidate,
+  retentionNeedsPages,
   planRetentionEmail,
   summarizePages,
   type RetentionFacts,
@@ -188,5 +189,21 @@ describe('summarizePages', () => {
     expect(
       summarizePages([{ createdAtMs: created, updatedAtMs: NOW, publishedAtMs: null, createdBy: 'u', deleted: true }]).ownPages,
     ).toBe(0)
+  })
+})
+
+describe('retentionNeedsPages', () => {
+  const NOW_MS = Date.UTC(2026, 9, 12, 12)
+  const base = { nowMs: NOW_MS, lastSeenMs: NOW_MS - 3 * DAY_MS, emailVerified: true, declinedProductEmail: false }
+
+  it('reads pages for a confirmed account that takes product email and is away', () => {
+    expect(retentionNeedsPages(base)).toBe(true)
+    expect(retentionNeedsPages({ ...base, lastSeenMs: null })).toBe(true)
+  })
+
+  it('skips them when the decision is made before any page is looked at', () => {
+    expect(retentionNeedsPages({ ...base, emailVerified: false })).toBe(false)
+    expect(retentionNeedsPages({ ...base, declinedProductEmail: true })).toBe(false)
+    expect(retentionNeedsPages({ ...base, lastSeenMs: NOW_MS - 10 * 60_000 })).toBe(false)
   })
 })

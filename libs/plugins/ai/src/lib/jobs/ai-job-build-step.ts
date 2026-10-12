@@ -21,6 +21,7 @@ import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   AI_BUILD_LIMITS,
+  AI_BUILD_MADE_INPUT,
   AI_BUILD_PUBLISH_INPUT,
   aiArticle,
   aiBuildCreditRange,
@@ -34,6 +35,7 @@ import {
   aiBuildPlanShapeRefusal,
   aiBuildSmaller,
   aiBuildUnits,
+  type AiBuildMade,
   type AiBuildOps,
   type AiBuildUnit,
 } from '../model/ai-build-job'
@@ -120,7 +122,7 @@ import {
   type AiJobStepOutcome,
   type AiJobStepRunner,
 } from './ai-job-text-step'
-import { aiJobPublishesBuild, aiPublishGuidedSite } from './ai-site-publish'
+import { aiJobPublishesBuild, aiMergeSitePublish, aiPublishGuidedSite } from './ai-site-publish'
 import {
   AI_PLANNED_JOB_KINDS,
   aiJobStepRunMinimumMs,
@@ -285,6 +287,19 @@ export function aiBuildUnitJob(
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // An item is told the pages and layouts this build made before it, which
+  // its arguments may link as `new:<name>` (a menu item, AGL-3728).
+  if (item) {
+    const rows = new Map(context.ledger.map((row) => [row.slot, row]))
+    const made: AiBuildMade = {
+      pages: context.units.flatMap((one) => {
+        const row = rows.get(one.slot)
+        return one.screen?.id && row && aiBuildItemDelivered(row) ? [{ title: one.screen.title, id: one.screen.id }] : []
+      }),
+      layouts: [...built.entries()].filter(([, entry]) => entry.kind === 'layout').map(([name, entry]) => ({ name, id: entry.id })),
+    }
+    if (made.pages.length || made.layouts.length) inputs[AI_BUILD_MADE_INPUT] = made
+  }
   // A dataset this build made for its form, which the form may bind (AGL-3616).
   const madeFor = unit.creation?.kind === 'form' && isAiPlanNewRef(unit.creation.writesTo) ? unitPlan.create[0]?.writesTo : null
   if (madeFor) inputs[AI_FORM_DATASET_MADE_INPUT] = madeFor
@@ -471,7 +486,10 @@ export async function aiBuildStoreLinksOutputs(
 
 /** The store's links a build drafted into the site's layout (AGL-3676), as its publish puts them live; `null` where it drafted none. */
 export function aiBuildStoreLinksToPublish(outputs: readonly AiJobOutput[]): AiSitePublishStoreLinks | null {
-  const draft = outputs.find((output) => output.resource === 'layout' && output.proposal?.['storeLinks'] === 'draft' && output.versionId)
+  // The newest: a retried store drafts its links again after the first attempt's (AGL-3739).
+  const draft = [...outputs]
+    .reverse()
+    .find((output) => output.resource === 'layout' && output.proposal?.['storeLinks'] === 'draft' && output.versionId)
   if (!draft?.versionId) return null
   return {
     layoutId: draft.id,
@@ -531,13 +549,21 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
     const othersOpen = (slot: string) =>
       ordered.some((one) => one.slot !== slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }))
 
-    /** The build's last pass puts its pages live, where it was asked and confirmed. */
+    /**
+     * The build's last pass puts its pages live, where it was asked and
+     * confirmed. Once it has, Try again's last pass puts only the pages the
+     * retry built live (AGL-3739, AGL-3730's fix for a site start),
+     * merged into the record of the first.
+     */
     const finish = async (
       outcome: AiJobStepOutcome,
       extraPages: readonly AiJobOutput[] = [],
       extraOutputs: readonly AiJobOutput[] = [],
     ): Promise<AiJobStepOutcome> => {
-      if (!aiJobPublishesBuild(job) || job.sitePublish || !job.hostId) return outcome
+      if (!aiJobPublishesBuild(job) || !job.hostId) return outcome
+      const previous = job.sitePublish ?? null
+      const retry = Boolean(previous?.published.length)
+      const already = new Set((previous?.published ?? []).map((page) => page.id))
       // A record template renders once per record only once its binding is
       // saved, so it is never published at its own address (AGL-3616).
       // A store's own pages (AGL-3676) go live with the pages the build planned.
@@ -550,31 +576,39 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
           )
           .flatMap((one) => rows.get(one.slot)?.outputs ?? []),
       )
-      const pages = [
+      const built = [
         ...(job.outputs ?? []).filter((output) => output.resource === 'screen' && pageIds.has(output.id)),
         ...extraPages,
       ]
+      const pages = built.filter((page) => !already.has(page.id))
       if (!pages.length) return outcome
       // A canceled build never puts anything live (AGL-3616): its pages stay drafts.
       if (await aiJobCancelAsked(firestore, job, context.signal)) return outcome
       // The store pages a layout this build made links and that were not written come out of it.
       const storePages = aiBuildStorePagesOf(plan)
-      const live = new Set(pages.map((page) => page.proposal?.['storePage']).filter(Boolean))
+      const live = new Set(built.map((page) => page.proposal?.['storePage']).filter(Boolean))
       const unwrittenHrefs = storePages
         ? aiStorePagesToWrite(storePages.pages).filter((page) => !live.has(page.key)).map((page) => page.href)
         : []
-      const storeLinks = aiBuildStoreLinksToPublish([...(job.outputs ?? []), ...extraOutputs])
+      // A retry puts the store's links live only with store pages it built:
+      // the first publish's links draft is live already, and a person may have edited it since.
+      const storeLinks =
+        !retry || pages.some((page) => page.proposal?.['storePage'])
+          ? aiBuildStoreLinksToPublish([...(job.outputs ?? []), ...extraOutputs])
+          : null
       const sitePublish = await publish(firestore, {
         job,
         outputs: pages,
         now: context.now,
         ...(unwrittenHrefs.length ? { unwrittenHrefs } : {}),
         ...(storeLinks ? { storeLinks } : {}),
+        ...(retry ? { retry: true } : {}),
       }).catch((error: unknown) => {
         console.error('ai build publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
-      return sitePublish ? { ...outcome, sitePublish } : outcome
+      if (!sitePublish) return outcome
+      return { ...outcome, sitePublish: previous ? aiMergeSitePublish(previous, sitePublish) : sitePublish }
     }
 
     if (!unit) return finish({ ...aiUnspentOutcome(model), ...init })
@@ -829,6 +863,8 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   workflow: 'workflow',
   function: 'logic',
   edit: 'edit',
+  navigation: 'navigation',
+  duplicate: 'duplicate',
 }
 
 /**

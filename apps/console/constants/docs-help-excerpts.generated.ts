@@ -164,6 +164,7 @@ export const DOCS_HELP_EXCERPTS = {
   multilingual: 'Offer your site in multiple languages with locale variants, hreflang, and a language switcher.',
   multiSelect: 'Select several elements at once and move the whole selection together.',
   musicPlayer: 'The Music player element — play your own tracks from the media library, one or a playlist, the rights confirmation every audio upload needs, and how copyright takedowns work.',
+  newsletterSignUpBand: 'Build a "Get product updates" band from a saved form, a live audience and a reusable component, styled only with theme tokens, instead of the built-in Newsletter signup block.',
   onboardingDeepLinks: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
   operatorAlerts: 'Every event an install operator must hear about: which alerts exist, where they go (email and an optional webhook), how staff switch them or batch them daily, and how health checks alert on their own.',
   orderNotifications: 'The emails your customers get about their orders, the private order status page they link to, and how to resend a receipt.',
@@ -406,8 +407,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#workspace-defaults': 'In your SEO settings, or the workspace\'s default. What you type is never replaced.',
   },
   catalog: {
-    '#categories-and-tags': 'Eir prices left empty, and proposed discounts are created switched off.',
-    '#product-reviews': ', so that collection\'s grid is in price order — high to low if that is the sort chosen, low to high otherwise.',
+    '#categories-and-tags': 'Heir suggested prices, and proposed discounts are created switched off.',
+    '#review-moderation': 'Ff or change the delay on the Reviews card, and change its wording under Emails → Review request.',
+    '#review-settings': '1 to 5 and write a review in the Product reviews block on your product page template.',
   },
   commerce: {
     '#commerce-analytics': 'Hat was refunded, and leaves out test-mode orders. The card lists the five latest orders, and Open store takes you to the products hub.',
@@ -580,7 +582,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#form-crm-routing': 'Since the same signup form is often placed by more than one push.',
     '#form-details': 'Something in that card differs from what\'s saved, and saving one card never saves the other.',
     '#form-submissions': 'R.',
-    '#form-versions': 'Scribe* or marketing consent — counts even before you pick it as the consent field.',
+    '#form-versions': 'Ll walkthrough — the form, a live audience of everyone who submits it, and a reusable band that places it on any page — see Build a newsletter sign-up band.',
     '#inbox-card': 'Ad no email field cannot be replied to, and says so instead of offering a Send that would fail.',
     '#one-forms-own-page': 'Goes straight to that site\'s view, with no filter to set. Collaborators invited to particular sites don\'t see the organization\'s Inbox — they keep each site\'s own, which is unchanged.',
     '#replying-to-a-submission': 'Saved to Inbox on a form you bound to a dataset is the signal to go and check the dataset.',

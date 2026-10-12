@@ -22,7 +22,13 @@ import { AI_PALETTE, AI_SURFACES } from '../runtime/ai-palette.generated'
 import { aiLayoutListingContext, aiLayoutListingsWithDatasets, aiLayoutPageCheck, aiLayoutPagePrompt } from '../jobs/ai-job-page-language'
 import { aiLayoutFrameCheck } from '../jobs/ai-job-layout-language'
 import { aiSiteListings } from '../jobs/ai-job-site-content'
-import { AI_LAYOUT_POST_CARD_TOKENS, AI_LAYOUT_STORE_EMPTY, aiCompileLayoutPage, aiLayoutRecordCardFields } from './ai-layout-compiler'
+import {
+  AI_LAYOUT_POST_CARD_TOKENS,
+  AI_LAYOUT_RECORD_LINK_LABEL,
+  AI_LAYOUT_STORE_EMPTY,
+  aiCompileLayoutPage,
+  aiLayoutRecordCardFields,
+} from './ai-layout-compiler'
 import {
   AI_LAYOUT_CART_ELEMENT,
   AI_LAYOUT_LISTING_ELEMENTS,
@@ -30,6 +36,8 @@ import {
   aiLayoutListingAt,
   aiLayoutListingPlacements,
   aiLayoutListingsOf,
+  aiLayoutRecordBaseOf,
+  aiLayoutRecordHref,
   aiLayoutRecordsPlacements,
   type AiLayoutListing,
 } from './ai-layout-listings'
@@ -763,6 +771,96 @@ describe('a section one of the site’s datasets fills (AGL-3616)', () => {
       const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [PIECES] })
       expect(read.imageField).toBe('image')
       expect(aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...PIECES, imageField: '{{x}}' }] })[0]).not.toHaveProperty('imageField')
+    })
+  })
+
+  /*
+   * AGL-3727: a list of records whose dataset has a page per record (AGL-3475)
+   * linked none of them — "Listing cards do not link record pages" — so a
+   * visitor reading the menu could never open a dish.
+   */
+  describe('a dataset whose records have pages of their own (AGL-3727)', () => {
+    const LINKED: AiLayoutListing = { ...MENU, recordBase: 'menu', addressField: 'slug' }
+    const linkedCheck = (listing: AiLayoutListing) => {
+      const sectionIds = ['sec-0', 'sec-1']
+      const listed = { ...targets('home', [listing]), pages: [...targets('home', [listing]).pages, { id: 'menu', label: 'Menu', slug: '/menu' }] }
+      return aiLayoutPageCheck({
+        screen: MENU_SCREEN as never,
+        sectionIds,
+        targets: listed,
+        context: aiLayoutListingContext(
+          { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds: ['ds-menu'], codeBuilt: true, scrollTargetIds: sectionIds },
+          listed,
+        ),
+        reusableComponents: false,
+      })(answer)
+    }
+
+    it('reads the link off the base and the address field, and only both whole', () => {
+      expect(aiLayoutRecordHref(LINKED)).toBe('/menu/{{item.slug}}')
+      expect(aiLayoutRecordHref({ ...LINKED, recordBase: '/services/residential/' })).toBe('/services/residential/{{item.slug}}')
+      expect(aiLayoutRecordHref(MENU)).toBeNull()
+      expect(aiLayoutRecordHref({ ...LINKED, addressField: undefined })).toBeNull()
+      expect(aiLayoutRecordHref({ ...LINKED, recordBase: '../admin' })).toBeNull()
+      expect(aiLayoutRecordHref({ ...LINKED, addressField: '{{x}}' })).toBeNull()
+      expect(aiLayoutRecordHref({ ...PRODUCTS, recordBase: 'shop', addressField: 'slug' })).toBeNull()
+    })
+
+    it('finds the base on the plan’s record template, by the dataset’s id or the name it was planned under', () => {
+      const screens = [
+        { id: 'menu', title: 'Menu', slug: '/menu', sections: [{ name: 'The menu', items: 12, uses: ['new:Menu'] }] },
+        { id: 'dish', title: 'Dish', slug: '/dish', sections: [], record: { dataset: 'new:menu', base: 'menu' } },
+      ]
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Menu' }, screens)).toBe('menu')
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Dishes' }, screens)).toBeNull()
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Dishes' }, [{ ...screens[1], record: { dataset: 'ds-menu', base: 'dishes' } }])).toBe('dishes')
+      expect(aiLayoutRecordBaseOf({ id: 'ds-menu', name: 'Menu' }, [{ ...screens[1], record: { dataset: 'ds-menu', base: 'Not A Path!' } }])).toBeNull()
+    })
+
+    it('links every card to its record’s page, in code, whatever the design wrote', () => {
+      const result = linkedCheck(LINKED)
+      expect(result.violations).toEqual([])
+      const nodes = nodesOf(result.value?.nodes)
+      const link = nodes.find((node) => node.componentId === 'muiScreenLink' && node.props?.['href'] === '/menu/{{item.slug}}')
+      expect(link?.props).toMatchObject({ children: AI_LAYOUT_RECORD_LINK_LABEL, href: '/menu/{{item.slug}}' })
+      // The address is the card's link, never its words.
+      expect(nodes.filter((node) => node.props?.['children'] === '{{item.slug}}')).toEqual([])
+    })
+
+    it('links a card’s photo to the page too, unless the photo opens in a lightbox', () => {
+      const pictured: AiLayoutListing = { ...LINKED, imageField: 'image' }
+      const picture = nodesOf(linkedCheck(pictured).value?.nodes).find((node) => node.componentId === 'image' && node.props?.['src'] === '{{item.image}}')
+      expect(picture?.props?.['href']).toBe('/menu/{{item.slug}}')
+    })
+
+    it('draws no link where the dataset has no record page', () => {
+      const nodes = nodesOf(linkedCheck(MENU).value?.nodes)
+      expect(nodes.some((node) => node.props?.['children'] === AI_LAYOUT_RECORD_LINK_LABEL)).toBe(false)
+    })
+
+    it('admits the link only on a page that lists the dataset', () => {
+      const placed = { ...LINKED, placements: [{ screenId: 'home', section: 1, role: 'featured' as const }] }
+      expect(aiLayoutListingContext({}, targets('home', [placed])).bindingTokens).toEqual(['/menu/{{item.slug}}'])
+      expect(aiLayoutListingContext({}, targets('about', [placed])).bindingTokens).toBeUndefined()
+    })
+
+    it('round-trips the base and address through a unit’s inputs, and reads a build’s address off the inventory', () => {
+      const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [LINKED] })
+      expect(read).toMatchObject({ recordBase: 'menu', addressField: 'slug' })
+      // A build knows the base before the dataset's address field exists.
+      const [base] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [{ ...LINKED, addressField: undefined }] })
+      expect(base.recordBase).toBe('menu')
+      expect(base).not.toHaveProperty('addressField')
+      const inventory = {
+        datasets: [{ id: 'ds-menu', name: 'Menu', fields: ['Dish', 'Page address'], fieldIds: ['dish', 'slug'], addressField: 'slug' }],
+      }
+      const [filled] = aiLayoutListingsWithDatasets([{ ...base, fields: [] }], inventory)
+      expect(filled).toMatchObject({ addressField: 'slug', fields: [{ id: 'dish', name: 'Dish', type: 'text' }] })
+      expect(aiLayoutRecordHref(filled)).toBe('/menu/{{item.slug}}')
+      // No record page, no link: the address stays off the card all the same.
+      const [unlinked] = aiLayoutListingsWithDatasets([{ ...MENU, fields: [] }], inventory)
+      expect(unlinked).not.toHaveProperty('addressField')
+      expect(unlinked.fields).toEqual([{ id: 'dish', name: 'Dish', type: 'text' }])
     })
   })
 

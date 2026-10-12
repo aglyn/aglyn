@@ -1605,6 +1605,70 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     expect(publishPosts).not.toHaveBeenCalled()
   })
 
+  /*
+   * Try again on a guided blog whose posts part failed: the retry wrote the
+   * posts, but a site already live skipped the posts' publish (only the
+   * first publish put them live), so they stayed drafts.
+   */
+  it('publishes the posts Try again wrote on a site already live, with no page to publish', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const posts = [entry('job-1-posts-0', 'One'), entry('job-1-posts-1', 'Two')]
+    const pages = ['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))
+    const ledger = (posts: Record<string, unknown>) =>
+      aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) => (row.slot === 'posts' ? { ...row, ...posts } : row))
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: pages.map((page) => ({ id: page.id, label: page.id, path: `/${page.id}` })),
+      drafts: [],
+    }
+    const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
+    const publishPosts = jest.fn(async () => ({ published: 2, kept: 0, paths: ['/blog', '/blog/one', '/blog/two'] }))
+    const dropCache = jest.fn(async () => ({ complete: true }))
+    const step = stepWith({}, { publish, publishPosts, dropCache: dropCache as never })
+    const retried = ledger({ status: 'succeeded', attempt: 2, outputs: posts.map((post) => post.id) })
+    const outcome = await step(
+      context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items: retried as never, sitePublish: first })),
+    )
+    expect(publish).not.toHaveBeenCalled()
+    expect(publishPosts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ outputs: posts }))
+    expect(dropCache).toHaveBeenCalledWith(expect.objectContaining({ paths: { 'host-1': ['/blog', '/blog/one', '/blog/two'] } }))
+    expect(outcome.sitePublish).toBeUndefined()
+    // Posts the first attempt wrote went live with the first publish: not again.
+    publishPosts.mockClear()
+    const firstTime = ledger({ status: 'succeeded', outputs: posts.map((post) => post.id) })
+    await step(
+      context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items: firstTime as never, sitePublish: first })),
+    )
+    expect(publishPosts).not.toHaveBeenCalled()
+  })
+
+  it('publishes the retried posts beside a retried page, as a retry', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const posts = [entry('job-1-posts-0', 'One')]
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const items = aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) =>
+      row.slot === 'posts' ? { ...row, status: 'succeeded' as const, attempt: 2, outputs: posts.map((post) => post.id) } : row,
+    )
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: pages.map((page) => ({ id: page.id, label: page.id, path: `/${page.id}` })),
+      drafts: [],
+    }
+    const retried = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'screen-3', label: 'Blog', path: '/journal' }], drafts: [] }
+    const publish = jest.fn(async () => retried)
+    const publishPosts = jest.fn(async () => ({ published: 1, kept: 0, paths: ['/blog'] }))
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts, dropCache: jest.fn(async () => ({ complete: true })) as never },
+    )
+    const outcome = await step(
+      context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items, sitePublish: first })),
+    )
+    expect(publish).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ retry: true, blogUnwritten: false }))
+    expect(publishPosts).toHaveBeenCalledTimes(1)
+    expect(outcome.sitePublish?.published.map((page) => page.id)).toEqual(['screen-0', 'screen-1', 'screen-2', 'screen-3'])
+  })
+
   it('tells the publish the blog went unwritten when its posts part failed, so its links come out (AGL-3660)', async () => {
     const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
     const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))

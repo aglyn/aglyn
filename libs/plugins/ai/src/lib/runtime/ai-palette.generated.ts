@@ -4267,7 +4267,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     category: 'Commerce',
     displayName: 'Product reviews',
     summary:
-      'Approved reviews with verified-buyer badges, and a form to add one.',
+      'Approved reviews with verified-buyer badges, and a form for customers who bought the product to add one.',
     acceptsChildren: false,
     propsSchema: {
       type: 'object',

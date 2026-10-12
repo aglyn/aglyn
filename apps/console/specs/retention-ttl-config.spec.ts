@@ -278,6 +278,12 @@ const POLICIES: Array<{
     writers: ['libs/plugins/stock-photos/src/lib/server/search-cache.ts'],
     stamp: 'expiresAt: new Date(at + STOCK_PHOTO_SEARCH_CACHE_MS)',
   },
+  {
+    // The review-request email's single-use links (AGL-3736).
+    collectionGroup: 'reviewTokens',
+    writers: ['libs/plugins/commerce/src/lib/server/review-tokens.ts'],
+    stamp: 'expiresAt: firebaseAdmin.firestore.Timestamp.fromMillis(expiresAtMs)',
+  },
 ]
 
 describe('Firestore TTL policies are declared, documented and written', () => {

@@ -626,8 +626,8 @@ function optionAxesOf(
 /**
  * Whether a variant has a price a sale can charge (AGL-2916).
  *
- * A product proposed by AI is created with every price left empty for the
- * merchant to set, so a stored variant can lack one. `Number(undefined)` is
+ * A product may be stored with a price left empty on purpose (an owner who
+ * clears it, or a writer asked for none), so a stored variant can lack one. `Number(undefined)` is
  * no price, and neither is `null`, which `Number` reads as zero: a sale door
  * that priced either would charge nothing, or fail at the processor.
  */
@@ -812,6 +812,20 @@ export function defaultPricedProductDraft(
   if (priceUsd === null) return draft
   const variants = draft.variants.map((variant) => ({ ...variant, priceUsd })) as ProductVariant[]
   return { ...draft, ...productSearchFields({ name: draft.name, variants }), variants }
+}
+
+/**
+ * The price a proposed product is created at (Zach, 2026-10-12): a price an
+ * AI proposal suggests for what the product is, when it is a real one — a
+ * finite amount above $0, at most `COMMERCE_MAX_PRICE_USD`, rounded to whole
+ * cents — else the default price (`COMMERCE_DEFAULT_PRICE_USD`). Never $0,
+ * negative or past the ceiling, whatever a proposal carries; the owner
+ * changes it like any price.
+ */
+export function proposedProductPriceUsd(suggested: unknown): number {
+  if (typeof suggested !== 'number' || !Number.isFinite(suggested)) return COMMERCE_DEFAULT_PRICE_USD
+  const cents = Math.round(suggested * 100)
+  return cents > 0 && cents <= COMMERCE_MAX_PRICE_USD * 100 ? cents / 100 : COMMERCE_DEFAULT_PRICE_USD
 }
 
 /** Variant whose option selections match exactly; undefined if none. */

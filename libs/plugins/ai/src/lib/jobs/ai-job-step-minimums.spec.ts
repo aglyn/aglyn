@@ -83,6 +83,8 @@ import { AI_JOB_TEMPLATE_STEP_BUDGET } from './ai-job-template-step'
 import { AI_JOB_TEXT_STEP_BUDGET } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_BUDGET, AI_THEME_BRAND_BUDGET_MS } from './ai-job-theme-budget'
 import { AI_EDIT_READS_MS, AI_JOB_EDIT_STEP_BUDGET } from './ai-job-edit-step'
+import { AI_JOB_NAVIGATION_STEP_MINIMUM_MS } from './ai-job-navigation-step'
+import { AI_JOB_DUPLICATE_STEP_MINIMUM_MS } from './ai-job-duplicate-step'
 import { AI_JOB_WORKFLOW_STEP_BUDGET, AI_WORKFLOW_RECORDS_READ_MS } from './ai-job-workflow-step'
 import {
   AI_JOB_PLAN_STEP,
@@ -240,14 +242,17 @@ describe('every step the console runs registers the least time it needs (AGL-303
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs > AI_JOB_STEP_MAX_MINIMUM_MS)).toEqual([])
     // Every kind with a step module beside the machine is among them.
-    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products', 'crm', 'build', 'edit'] as const) {
+    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products', 'crm', 'build', 'edit', 'navigation', 'duplicate'] as const) {
       expect([kind, steps.some((entry) => entry.kind === kind)]).toEqual([kind, true])
     }
   })
 
   it('leaves every step for the beat but the ones whose worst case at their ceiling fits an inline door, proven by the helper', () => {
     const inline = registeredSteps().filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS)
-    expect(inline.map(({ kind, step }) => `${kind}/${step}`)).toEqual(['crm/generate', 'text/draft'])
+    // A menu change asks no model (AGL-3728), nor a copy (AGL-3740): their reads and one write fit any door.
+    expect(inline.map(({ kind, step }) => `${kind}/${step}`).sort()).toEqual(['crm/generate', 'duplicate/generate', 'navigation/generate', 'text/draft'])
+    expect(aiJobStepMinimumMs('navigation', 'generate')).toBe(AI_JOB_NAVIGATION_STEP_MINIMUM_MS)
+    expect(aiJobStepMinimumMs('duplicate', 'generate')).toBe(AI_JOB_DUPLICATE_STEP_MINIMUM_MS)
     // The text step's one request at the routing ceiling on its own tier is what fits.
     const tier = AI_STEP_TIERS['job.text']
     expect(AI_JOB_TEXT_STEP_BUDGET.maxTokens(modelOn(tier))).toBe(AI_ROUTING_TABLE['job.text'].maxTokens)
