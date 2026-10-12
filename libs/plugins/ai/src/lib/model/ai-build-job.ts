@@ -106,18 +106,6 @@ export const AI_BUILD_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = ['layout'
  */
 export const AI_BUILD_STRUCTURAL_OPS: readonly string[] = ['page', ...AI_BUILD_CREATE_KINDS]
 
-/**
- * What a build hands an item it made before it (AGL-3728): its pages, by the
- * title the plan gave each and the id it was written under, and its layouts,
- * by name. An item's `new:<title>` destinations are read against it.
- */
-export const AI_BUILD_MADE_INPUT = 'buildMade'
-
-export interface AiBuildMade {
-  pages: Array<{ title: string; id: string }>
-  layouts: Array<{ name: string; id: string }>
-}
-
 /** The job input a build's Assist proposal sets when the brief asked to publish. */
 export const AI_BUILD_PUBLISH_INPUT = 'publish'
 
@@ -154,28 +142,6 @@ export function aiBuildRefName(ref: string): string {
   return ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
 }
 
-/**
- * The `new:<name>` references an item's arguments make (AGL-3728): an
- * argument that is one, or the destination after `=>` in an entry such as a
- * menu item's `About => new:About`. Read from the arguments, never from the
- * model's `dependsOn`, so what an item links is always built before it.
- */
-export function aiBuildItemArgRefs(args: Readonly<Record<string, unknown>> | null | undefined): string[] {
-  const refs: string[] = []
-  const take = (value: unknown) => {
-    if (typeof value !== 'string') return
-    for (const part of [value, value.split('=>').slice(-1)[0] ?? '']) {
-      const ref = part.trim()
-      if (isAiPlanNewRef(ref) && !refs.includes(ref)) refs.push(ref)
-    }
-  }
-  for (const value of Object.values(args ?? {})) {
-    if (Array.isArray(value)) value.forEach(take)
-    else take(value)
-  }
-  return refs
-}
-
 /** Every reference a page makes: its layout, template, starting page and what its sections place. */
 export function aiBuildScreenRefs(screen: AiBuildPlanScreen): string[] {
   return [
@@ -194,18 +160,11 @@ export function aiBuildScreenRefs(screen: AiBuildPlanScreen): string[] {
  */
 export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
   const slots = namedSlots(plan)
-  // A page, by the title the plan gave it: what an item's arguments may link
-  // as `new:<title>` (a menu item, AGL-3728), built before the item.
-  const pageSlots = new Map<string, string>()
-  plan.screens.forEach((screen, index) => {
-    const title = screen.title.trim().toLowerCase()
-    if (title && !pageSlots.has(title)) pageSlots.set(title, `p${index}`)
-  })
-  const depsOf = (refs: readonly (string | null)[], self: string, pages = false): string[] => {
+  const depsOf = (refs: readonly (string | null)[], self: string): string[] => {
     const deps: string[] = []
     for (const ref of refs) {
       if (!isAiPlanNewRef(ref)) continue
-      const slot = slots.get(aiBuildRefName(ref)) ?? (pages ? pageSlots.get(aiBuildRefName(ref)) : undefined)
+      const slot = slots.get(aiBuildRefName(ref))
       if (slot && slot !== self && !deps.includes(slot)) deps.push(slot)
     }
     return deps
@@ -224,14 +183,7 @@ export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
     })
   })
   for (const item of plan.items ?? []) {
-    units.push({
-      slot: item.slot,
-      op: item.op,
-      label: item.name,
-      item,
-      // What it depends on, and what its arguments link as `new:` (AGL-3728).
-      deps: depsOf([...item.dependsOn, ...aiBuildItemArgRefs(item.args)], item.slot, true),
-    })
+    units.push({ slot: item.slot, op: item.op, label: item.name, item, deps: depsOf(item.dependsOn, item.slot) })
   }
   plan.screens.forEach((screen, index) => {
     const slot = `p${index}`

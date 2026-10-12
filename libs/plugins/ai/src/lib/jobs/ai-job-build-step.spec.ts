@@ -46,7 +46,7 @@ import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 import { aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
-import { AI_BUILD_MADE_INPUT, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
+import { aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
 import { registerAiJobStep } from './ai-jobs'
@@ -298,26 +298,6 @@ describe('the build step (AGL-3616)', () => {
       plan: null,
     })
     expect(derived.brief).toContain('Build the page change “Shorter hero”: The home page hero is too tall.')
-  })
-
-  it('hands a menu item the pages this build made, built before it, to link as new:<title> (AGL-3728)', () => {
-    const navPlan: AiJobPlan = {
-      ...plan(),
-      items: [
-        { slot: 'i0', op: 'navigation', name: 'Menu', why: 'Link the booking page.', dependsOn: [], degrade: 'omit', args: { add: ['Book => new:Book'] }, id: 'nav-1' },
-      ],
-    }
-    const units = aiBuildUnits(navPlan)
-    const menu = units.find((unit) => unit.slot === 'i0') as (typeof units)[number]
-    expect(menu.deps).toEqual(['p0'])
-    const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
-    const ledger = aiBuildInitialLedger(units).map((row) => (row.slot === 'p0' ? { ...row, status: 'succeeded' as const, outputs: [page.screen?.id as string] } : row))
-    const derived = aiBuildUnitJob(job({ plan: navPlan }), menu, { kind: 'navigation', units, ledger, ops: OPS })
-    expect(derived).toMatchObject({ $id: 'nav-1', kind: 'navigation', plan: null, inputs: { add: ['Book => new:Book'] } })
-    expect(derived.inputs[AI_BUILD_MADE_INPUT]).toEqual({ pages: [{ title: 'Book', id: page.screen?.id }], layouts: [] })
-    // A page that was not built is not handed on.
-    const unbuilt = aiBuildUnitJob(job({ plan: navPlan }), menu, { kind: 'navigation', units, ledger: aiBuildInitialLedger(units), ops: OPS })
-    expect(unbuilt.inputs[AI_BUILD_MADE_INPUT]).toBeUndefined()
   })
 
   it('runs an edit item through the edit runner after its admission, and skips it with the admission’s words', async () => {

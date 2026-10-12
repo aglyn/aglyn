@@ -37,7 +37,6 @@ import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { registerAiLogicJob } from './jobs/ai-job-logic-step'
 import { registerAiEditJob } from './jobs/ai-job-edit-step'
-import { registerAiNavigationJob } from './jobs/ai-job-navigation-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -132,9 +131,6 @@ function registerAiJobKinds(): void {
   // A change to a page or a layout the site has, from a description, saved
   // where no visitor sees it — the Assist edit rung run as a job (AGL-3616).
   registerAiEditJob()
-  // A change to a site's header or footer menu, made by code from a build's
-  // item and saved beside the live layout (AGL-3728).
-  registerAiNavigationJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()
