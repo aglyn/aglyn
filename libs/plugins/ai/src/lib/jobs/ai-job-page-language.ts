@@ -49,6 +49,7 @@ import {
 import type { AiUsage } from '../providers/contract'
 import {
   aiSettleMechanicalRules,
+  aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
   type AiDoctrineNode,
   type AiDoctrineTreeContext,
@@ -269,12 +270,15 @@ export function aiLayoutListingsWithDatasets(
  * binds (AGL-3676): each post's card links its post and shows its cover by
  * the tokens the page fills per post, which a page's store admits whole only
  * where a listing places them. A dataset's card shows its record's photo
- * the same way (AGL-3616), by `{{item.<photo field>}}`.
+ * the same way (AGL-3616), by `{{item.<photo field>}}`. And the page that
+ * places the site's form, which a call to action asking a visitor to get in
+ * touch links even when it is home (AGL-3729).
  */
 export function aiLayoutListingContext(
   context: AiDoctrineTreeContext,
   targets: AiLayoutTargets,
 ): AiDoctrineTreeContext {
+  if (targets.formPageId) context = { ...context, formScreenIds: [targets.formPageId] }
   const here = (targets.listings ?? []).filter((listing) =>
     listing.placements.some((placement) => placement.screenId === targets.pageId),
   )
@@ -569,10 +573,15 @@ export function aiLayoutPageCheck(
       last,
     )
     const { dropped } = copy
-    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
-    const nodes = aiSettleMechanicalRules(
-      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660),
+    // and a link sent home for nothing is sent to the form or left out (AGL-3729).
+    const nodes = aiSettleUnrelatedScreenLinks(
+      aiSettleMechanicalRules(
+        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+        'page',
+      ),
       'page',
+      { ...context, ownScreenIds: input.targets.pageId ? [input.targets.pageId] : [] },
     ).nodes as unknown as typeof copy.nodes
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },

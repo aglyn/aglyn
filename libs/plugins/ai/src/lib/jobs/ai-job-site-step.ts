@@ -80,7 +80,7 @@ import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_LISTINGS_INPUT, aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
-import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
+import { aiJobPublishesSite, aiMergeSitePublish, aiPublishGuidedSite } from './ai-site-publish'
 import {
   AI_SITE_CONTENT_INPUT,
   AI_SITE_POST_BUDGET,
@@ -1144,9 +1144,18 @@ export function createAiJobSiteStep(
     const rows = new Map(ledger.map((row) => [row.slot, row]))
     const next = aiBuildNextUnit(ledgerUnits, ledger)
 
-    /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
+    /**
+     * A guided start's last pass puts what it built on the site (AGL-3596):
+     * only its pages that were built. Once it has, Try again's last pass puts
+     * only the pages the retry built live (AGL-3730), never the home address
+     * or the announce again, merged into the record of the first.
+     */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
-      if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      if (!aiJobPublishesSite(job) || !job.hostId || !pages.length) return outcome
+      const previous = job.sitePublish ?? null
+      const live = new Set((previous?.published ?? []).map((page) => page.id))
+      const fresh = pages.filter((page) => !live.has(page.id))
+      if (!fresh.length) return outcome
       // A canceled start never puts the site live (AGL-3616): its pages stay drafts.
       if (await aiJobCancelAsked(context.firestore, job, context.signal)) return outcome
       // A blog the header links by path before its posts exist (AGL-3660):
@@ -1154,18 +1163,21 @@ export function createAiJobSiteStep(
       const postsRow = rows.get('posts')
       const sitePublish = await publish(context.firestore, {
         job,
-        outputs: pages,
+        outputs: fresh,
         now: context.now,
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
         // The store's pages the header and footer link and the start did not write (AGL-3676).
         ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
+        ...(previous?.published.length ? { retry: true } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
-      if (sitePublish?.published.length) await finishPosts()
-      return sitePublish ? { ...outcome, sitePublish } : outcome
+      // The blog's posts went live with the first publish that put a page live.
+      if (sitePublish?.published.length && !previous?.published.length) await finishPosts()
+      if (!sitePublish) return outcome
+      return { ...outcome, sitePublish: previous ? aiMergeSitePublish(previous, sitePublish) : sitePublish }
     }
     /** The blog's posts go live with its pages (AGL-3676), as a person's Publish would put them. */
     const finishPosts = async () => {

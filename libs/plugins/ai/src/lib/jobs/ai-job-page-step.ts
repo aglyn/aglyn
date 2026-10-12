@@ -34,7 +34,12 @@ import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
-import { aiSettleMechanicalRules, validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import {
+  aiSettleMechanicalRules,
+  aiSettleUnrelatedScreenLinks,
+  validateAiDoctrineTree,
+  type AiDoctrineTree,
+} from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -667,10 +672,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // and stored (AGL-3660): this pass asks no model, so a page refused
       // here for one would be refused the same way on every Try again. A
       // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
-      const settled = aiSettleMechanicalRules(
-        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
-        'page',
-      )
+      // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729).
+      const settle = <T extends AiDoctrineTree>(tree: T): T =>
+        aiSettleUnrelatedScreenLinks(aiSettleMechanicalRules(tree, 'page'), 'page', {
+          ...context,
+          ownScreenIds: [screen.id, draftId],
+        })
+      const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
       if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
         // Never written once the job is canceled (AGL-3616).
         throwIfAiJobCanceled(signal)
@@ -681,7 +689,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           now,
           update: (nodes) => {
             const tree = { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as AiDoctrineTree['nodes'] }
-            const next = aiSettleMechanicalRules(tree, 'page')
+            const next = settle(tree)
             return next === tree ? null : (next.nodes as unknown as typeof nodes)
           },
         })

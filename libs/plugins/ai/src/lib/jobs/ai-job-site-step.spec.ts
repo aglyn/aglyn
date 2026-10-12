@@ -1321,10 +1321,56 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
       'screen-3',
     ])
     expect(outcome.sitePublish).toEqual(SITE_PUBLISH)
-    // A job that already published does not publish again.
+    // A job that already published every page it built does not publish again.
     publish.mockClear()
-    await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: SITE_PUBLISH }))
+    const everyPage = {
+      ...SITE_PUBLISH,
+      published: ['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => ({ id, label: id, path: `/${id}` })),
+    }
+    await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: everyPage }))
     expect(publish).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Try again on a guided start (AGL-3730): org 1-cho3N4FW's retried
+   * Portfolio page (beta.243) stayed a draft with no header entry, since a job
+   * that had published once skipped the publish. The retry's last pass puts
+   * the pages it built live, and only those, merged into the first record.
+   */
+  it('publishes the pages Try again built, only those, as a retry, merged into what the start published', async () => {
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [
+        { id: 'screen-0', label: 'Home', path: '/' },
+        { id: 'screen-1', label: 'About', path: '/about' },
+        { id: 'screen-2', label: 'Services', path: '/services' },
+      ],
+      drafts: [{ id: 'screen-9', label: 'Gallery', reason: 'It was deleted before it could be published.' }],
+    }
+    const retried = { liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'screen-3', label: 'Portfolio', path: '/portfolio' }], drafts: [] }
+    const publish = jest.fn(async () => retried)
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) }, { publish })
+    const outcome = await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: first }))
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[]; retry?: boolean }]
+    expect(input.outputs.map((entry) => entry.id)).toEqual(['screen-3'])
+    expect(input.retry).toBe(true)
+    expect(outcome.sitePublish).toEqual({
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [...first.published, { id: 'screen-3', label: 'Portfolio', path: '/portfolio' }],
+      drafts: first.drafts,
+    })
+  })
+
+  it('publishes a retry as the first publish when the first put nothing live', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) }, { publish })
+    const none = { liveUrl: null, published: [], drafts: [{ id: 'screen-0', label: 'Home', reason: 'It could not be published just now. Publish it from Pages.' }] }
+    const outcome = await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: none }))
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { outputs: AiJobOutput[]; retry?: boolean }]
+    expect(input.outputs).toHaveLength(4)
+    expect(input.retry).toBeUndefined()
+    expect(outcome.sitePublish).toEqual({ ...SITE_PUBLISH, drafts: none.drafts })
   })
 
   it('never puts a canceled start live: its pages stay drafts (AGL-3616)', async () => {
