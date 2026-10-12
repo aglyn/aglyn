@@ -234,6 +234,20 @@ export function aiLayoutWithNavigation(
 }
 
 /**
+ * A retry's publish merged into the start's first (AGL-3730): the pages it
+ * put live join the published list, a page it published leaves the drafts,
+ * and a page it left a draft is reported with its newest reason.
+ */
+export function aiMergeSitePublish(previous: AiJobSitePublish, retried: AiJobSitePublish): AiJobSitePublish {
+  const now = new Set([...retried.published, ...retried.drafts].map((page) => page.id))
+  return {
+    liveUrl: retried.liveUrl ?? previous.liveUrl,
+    published: [...previous.published.filter((page) => !now.has(page.id)), ...retried.published],
+    drafts: [...previous.drafts.filter((page) => !now.has(page.id)), ...retried.drafts],
+  }
+}
+
+/**
  * Publishes the pages a guided site start built. Never throws for a page; a
  * Firestore failure of the publish write itself reports every page as a
  * draft, for the same reason, and is logged.
@@ -250,6 +264,14 @@ export async function aiPublishGuidedSite(
     unwrittenHrefs?: readonly string[]
     /** A store's links a build drafted into the site's own layout (AGL-3676), which go live with its pages. */
     storeLinks?: AiSitePublishStoreLinks | null
+    /**
+     * The start published once already, and Try again rebuilt what failed
+     * (AGL-3730): only `outputs` go live, beside what is. The home address is
+     * never taken from the starter here, the starter is never retired, and
+     * `site_published` is not sent again; a retried page at `/` that the
+     * starter still holds stays a draft and says so.
+     */
+    retry?: boolean
   },
   deps: AiSitePublishDeps = {},
 ): Promise<AiJobSitePublish> {
@@ -273,7 +295,9 @@ export async function aiPublishGuidedSite(
   if (!host.exists || !pages.length) return result
 
   const before = { ...((host.get('screens') ?? {}) as Record<string, string>) }
-  const placeholder = (host.get('defaultHomeScreenId') as string | undefined) || null
+  const starter = (host.get('defaultHomeScreenId') as string | undefined) || null
+  // A retry never takes `/` from the starter (AGL-3730): it holds it like any page.
+  const placeholder = input.retry ? null : starter
   const routing = { ...before }
   const entries: Record<string, string> = {}
   const accepted: Array<{ id: string; label: string; path: string; slug: string }> = []
@@ -402,8 +426,9 @@ export async function aiPublishGuidedSite(
     ...(layoutWrites.length ? {} : { paths: { [hostId]: paths } }),
   })
   if (dropped.complete) await outboxRef.delete().catch(() => undefined)
-  // A site that came alive with nobody's browser on the publish (AGL-1589).
-  await sendSitePublished({ hostId, firstPublish: isFirstPublishedRoute(before, placeholder) })
+  // A site that came alive with nobody's browser on the publish (AGL-1589),
+  // announced once: a retry's pages join a site already announced (AGL-3730).
+  if (!input.retry) await sendSitePublished({ hostId, firstPublish: isFirstPublishedRoute(before, placeholder) })
   return result
 }
 
