@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { consumeRateLimit, firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { AggregateField } from 'firebase-admin/firestore'
 import {
   MEMBER_SUSPENDED_ERROR,
@@ -459,7 +460,7 @@ async function submitReview(
       const code = check.code ?? codes.tokenInvalid
       return res.status(403).json({ error: tokenProblemMessage(code), code })
     }
-    const reviewRef = hostRef.collection('reviews').doc()
+    const reviewRef = hostRef.collection('reviews').doc(createResourceUid())
     const nowMs = Date.now()
     const problem = await firestore.runTransaction(async (transaction) => {
       const spent = await redeemReviewTokenIn(transaction, check.ref, productId, reviewRef.id, nowMs)
@@ -509,7 +510,7 @@ async function submitReview(
         code: codes.alreadyReviewed,
       })
     }
-    await hostRef.collection('reviews').add({
+    await hostRef.collection('reviews').doc(createResourceUid()).set({
       productId,
       rating,
       body,
@@ -539,7 +540,7 @@ async function submitReview(
   if (!authorName || !EMAIL_PATTERN.test(authorEmail)) {
     return res.status(400).json({ error: 'Your name and email are required' })
   }
-  await hostRef.collection('reviews').add({
+  await hostRef.collection('reviews').doc(createResourceUid()).set({
     productId,
     rating,
     body,
