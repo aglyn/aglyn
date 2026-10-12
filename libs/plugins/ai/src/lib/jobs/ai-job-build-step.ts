@@ -21,6 +21,7 @@ import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   AI_BUILD_LIMITS,
+  AI_BUILD_MADE_INPUT,
   AI_BUILD_PUBLISH_INPUT,
   aiArticle,
   aiBuildCreditRange,
@@ -34,6 +35,7 @@ import {
   aiBuildPlanShapeRefusal,
   aiBuildSmaller,
   aiBuildUnits,
+  type AiBuildMade,
   type AiBuildOps,
   type AiBuildUnit,
 } from '../model/ai-build-job'
@@ -285,6 +287,19 @@ export function aiBuildUnitJob(
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // An item is told the pages and layouts this build made before it, which
+  // its arguments may link as `new:<name>` (a menu item, AGL-3728).
+  if (item) {
+    const rows = new Map(context.ledger.map((row) => [row.slot, row]))
+    const made: AiBuildMade = {
+      pages: context.units.flatMap((one) => {
+        const row = rows.get(one.slot)
+        return one.screen?.id && row && aiBuildItemDelivered(row) ? [{ title: one.screen.title, id: one.screen.id }] : []
+      }),
+      layouts: [...built.entries()].filter(([, entry]) => entry.kind === 'layout').map(([name, entry]) => ({ name, id: entry.id })),
+    }
+    if (made.pages.length || made.layouts.length) inputs[AI_BUILD_MADE_INPUT] = made
+  }
   // A dataset this build made for its form, which the form may bind (AGL-3616).
   const madeFor = unit.creation?.kind === 'form' && isAiPlanNewRef(unit.creation.writesTo) ? unitPlan.create[0]?.writesTo : null
   if (madeFor) inputs[AI_FORM_DATASET_MADE_INPUT] = madeFor
@@ -829,6 +844,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   workflow: 'workflow',
   function: 'logic',
   edit: 'edit',
+  navigation: 'navigation',
 }
 
 /**

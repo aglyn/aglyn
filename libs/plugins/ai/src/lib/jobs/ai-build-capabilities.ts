@@ -47,7 +47,8 @@ import { aiJobStepRunnerFor } from './ai-jobs'
  * and workflows plugins, through the writers their runners already call, and
  * a site function by the logic plugin's `function` writer, which the `logic`
  * runner calls when its job is a build's unit. A change to a page or layout
- * the site already has is the `edit` runner's.
+ * the site already has is the `edit` runner's, and a change to its header or
+ * footer menu the `navigation` runner's (AGL-3728).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -228,6 +229,74 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     freeAllowed: false,
     runnerKind: 'edit',
     estimateCredits: passes(1),
+    degrade: 'omit',
+  },
+  {
+    // The site's header and footer menus (AGL-3728): the Besigner's own Page
+    // Links and Dropdown Menus in the site's layout, changed by code from the
+    // words the planner wrote, saved as a version beside the live one. No
+    // model, so no credits. Not on the Free taste, as `edit`: a layout is
+    // always served, so without version history there is nowhere to land.
+    op: 'navigation',
+    noun: 'menu change',
+    where: 'the layout’s versions',
+    intents: [
+      'changing the site’s header or footer menu — add, remove, rename, reorder or relink its items, or put items under a dropdown — saved as a layout version visitors do not see until it is published',
+    ],
+    argsSchema: {
+      type: 'object',
+      properties: {
+        menu: {
+          type: 'string',
+          description: 'Which menu: header (the default), footer, or both.',
+          enum: ['header', 'footer', 'both'],
+        },
+        layout: {
+          type: 'string',
+          description: 'The layout id from the site inventory, or new:<name> of a layout this plan makes; leave it out for the layout the site’s pages use.',
+          maxLength: 64,
+        },
+        add: {
+          type: 'array',
+          description:
+            'Items to add, each "Label => destination", or "Parent > Label => destination" to put it under the dropdown Parent. A destination is a page id from the site inventory, new:<page title> of a page this plan makes, a path such as /contact, or an https:// address.',
+          items: { type: 'string', maxLength: 160 },
+          maxItems: 12,
+        },
+        remove: {
+          type: 'array',
+          description: 'Labels of items to take out, as "Label" or "Parent > Label".',
+          items: { type: 'string', maxLength: 100 },
+          maxItems: 12,
+        },
+        rename: {
+          type: 'array',
+          description: 'Items to rename, each "Old label => New label".',
+          items: { type: 'string', maxLength: 100 },
+          maxItems: 12,
+        },
+        relink: {
+          type: 'array',
+          description: 'Items to point somewhere else, each "Label => destination", destinations as in add.',
+          items: { type: 'string', maxLength: 160 },
+          maxItems: 12,
+        },
+        order: {
+          type: 'array',
+          description: 'Top-level labels in the order wanted; items not named keep their order after them.',
+          items: { type: 'string', maxLength: 60 },
+          maxItems: 12,
+        },
+      },
+      additionalProperties: false,
+    },
+    maxPerPlan: 1,
+    freeAllowed: false,
+    // Offered only where the change has somewhere to land: a plan with version history.
+    feature: 'versioning',
+    runnerKind: 'navigation',
+    // Written by code from the plan's words: no model pass.
+    estimateCredits: () => 0,
     degrade: 'omit',
   },
 ]

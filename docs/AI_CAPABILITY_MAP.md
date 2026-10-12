@@ -59,6 +59,7 @@ checks the member's role and the allowance when the item runs.
 | `workflow` (2) | ai | workflow runner, workflows writer | | | no |
 | `function` (2) | ai | logic runner, logic `function` writer | | `functionsPerHost` | yes |
 | `edit` (3) | ai | edit runner (a version, unpublished) | | | no |
+| `navigation` (1), AGL-3728 | ai | navigation runner, no model (a layout version, unpublished) | `versioning` | | no |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
 | `variable` | logic | `variable` writer | | `variablesPerHost` | yes |
@@ -163,7 +164,7 @@ gap.
 | Besigner elements | animations, lightbox and galleries, music player, video, markdown, interactions, repeat over a dataset | partial: pages place what the layout language compiles; repeat over a dataset (this PR); no animations, interactions, lightbox or video placement op |
 | Reusable components | components with properties | yes (build `component`; a site start draws repeats inline) |
 | Theme builder | colors, fonts, light and dark | yes: the site look; theme proposals |
-| Menus and navigation | dropdown, mega menu, drawer | partial: a guided start writes header links at publish; no dropdown, mega or drawer menus |
+| Menus and navigation | dropdown, mega menu, drawer | yes (AGL-3728): a build's `navigation` op adds, removes, renames, relinks and reorders header and footer items and puts items under a dropdown; a guided start writes header links at publish; no mega menu panels or new drawers |
 | Bindings and logic | variables, functions | yes (`variable`, `function`) |
 | Templates and blog | page templates, blog collections, entries | partial: entry, product and author templates; a blog start's first 3 posts; no collection create, authors or scheduled posts outside a site start |
 | Site backup and packages | export, import, merge | no, by design: a person's decision |
@@ -197,7 +198,9 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    that repeats over the dataset, a drafted record page (Starter and up), and
    static copy where datasets are not allowed. See below.
 2. **Navigation and menus.** Navigation is written only at publish, as flat
-   header links. There is no op for dropdown, mega or drawer menus.
+   header links. **CLOSED (AGL-3728):** a build's `navigation` op changes the
+   header and footer menus, dropdowns included. See "Navigation and menus"
+   below.
 3. **Blog collections and posts.** Collections can't be created outside a
    site start, and there are no authors or scheduled posts.
 4. **Forms that write to a dataset. CLOSED (Zach, 2026-10-10).** A form's
@@ -271,6 +274,51 @@ is a decision about the account, not something to build.
   record template's first Image shows the record's photo.
 - **Not yet.** Listing cards do not link record pages until the member saves
   the binding.
+
+## Navigation and menus (AGL-3728)
+
+- **The menus are the Besigner's own elements.** There is no separate menu
+  document: a site's header menu is the Page Links (`muiScreenLink`) in its
+  layout's App Bar, once in the bar's row and again in the phone menu's
+  Drawer, with Dropdown Menus (`muiNavMenu`, `muiMegaMenu`) holding more; its
+  footer menu is the longest list of Page Links in the element that renders
+  `footer`. `model/ai-layout-menus.ts` reads them the way a store's links
+  are added (`aiLayoutWithStoreLinks`): lists that render `nav` where there
+  are any, so the brand and an account link beside it are never items.
+- **The op.** `navigation` (`jobs/ai-build-capabilities.ts`, at most one a
+  plan) takes `menu` (header, footer or both), an optional `layout`, and
+  lists of words: `add` and `relink` as `Label => destination` (or
+  `Parent > Label => destination` for a dropdown), `remove`, `rename` as
+  `Old => New`, and `order`. A destination is an inventory page id, a page
+  the plan makes (`new:<title>`), a path on the site or an https address;
+  anything else is left out with a sentence. The planner sees these
+  arguments in the op catalog, so the plan prompt changed with it.
+- **Applied by code** (`jobs/ai-job-navigation-step.ts`), never by a model:
+  every list of the menu takes the same change, so the bar and the phone
+  menu agree. A new link copies its neighbours' look (in the phone menu, the
+  interaction that closes it). A link under a parent goes into that Dropdown
+  Menu in the bar, made where there is none, and flat after its parent in the
+  phone menu and the footer.
+- **Where it lands.** A new version beside the layout's live one, named by
+  the job's id, as the `edit` op's change to a layout does: visitors see
+  nothing until a person publishes it. Without version history there is
+  nowhere to land: the op is offered only where the plan includes `versioning`
+  (Pro and up), and the door refuses it as a plan limit otherwise.
+- **Gates.** The editor's own rule for a layout's versions: a member with the
+  admin, editor or author role on the site, while no lockdown freezes the
+  site, its org or the platform. Asked at the door, again before the write,
+  and the role again inside the write's transaction. The job's `ai.generate`
+  gate and the AI plugin's site switch apply as to every job.
+- **Order.** A build builds it after the pages its arguments link
+  (`aiBuildItemArgRefs`), whatever the plan's `dependsOn` says, and hands it
+  the pages it made (`buildMade`). A page that failed is not linked.
+- **Cost and audit.** No model, so 0 credits in the estimate and none spent.
+  The layout version is the job's output, recorded as an `ai.job.output`
+  activity row like every other op's.
+- **Not yet.** A site start still writes its navigation at publish
+  (`aiLayoutWithNavigation`) rather than through this op; mega menu panels'
+  columns and new drawers are not made, and a menu change never publishes on
+  its own, even in a build that publishes its pages.
 
 ## Forms that write to a dataset
 
