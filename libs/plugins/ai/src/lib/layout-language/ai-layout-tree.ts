@@ -125,3 +125,23 @@ export class AiLayoutTreeBuilder {
     return { rootId, nodes: this.nodes }
   }
 }
+
+/** Spans out of twelve for relative widths: each at least three, summing to twelve. */
+export function aiLayoutSpans(weights: readonly number[]): number[] {
+  const total = weights.reduce((sum, weight) => sum + weight, 0)
+  const spans = weights.map((weight) =>
+    Math.max(3, Math.round((weight / total) * 12)),
+  )
+  let over = spans.reduce((sum, span) => sum + span, 0) - 12
+  while (over !== 0) {
+    // Take from (or give to) the widest column that can spare it.
+    const order = spans
+      .map((span, position) => ({ span, position }))
+      .sort((a, b) => (over > 0 ? b.span - a.span : a.span - b.span))
+    const pick = order.find((entry) => (over > 0 ? entry.span > 3 : true))
+    if (!pick) break
+    spans[pick.position] += over > 0 ? -1 : 1
+    over += over > 0 ? -1 : 1
+  }
+  return spans
+}

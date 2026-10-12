@@ -53,6 +53,8 @@
  * Pure: nodes in, nodes out.
  */
 
+import { aiLayoutRepairFrameHollows } from '../layout-language/ai-layout-frame-hollows'
+
 /** A menu of a site's layout. */
 export type AiMenuName = 'header' | 'footer'
 
@@ -360,6 +362,9 @@ export function aiLayoutWithMenuChanges(
       }
     }
   }
+  // A link taken out leaves no dropdown with no link in it, and no footer
+  // heading or column with nothing under it (AGL-3735).
+  if (changed && changes.remove.length) aiLayoutRepairFrameHollows(map as unknown as Record<string, unknown>)
   const entries = [...outcomes.values()]
   return {
     nodes: changed ? (map as Record<string, unknown>) : null,

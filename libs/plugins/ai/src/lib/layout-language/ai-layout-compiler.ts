@@ -65,6 +65,7 @@ import {
   type AiLayoutTargets,
 } from './ai-layout-links'
 import {
+  aiLayoutSpans,
   AI_LAYOUT_FRAMES,
   AiLayoutTreeBuilder,
   type AiLayoutRawTree,
@@ -795,29 +796,14 @@ function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
 
 // ── A row of columns ──────────────────────────────────────────────────────
 
-/** Spans out of twelve for relative widths: each at least three, summing to twelve. */
-export function aiLayoutSpans(weights: readonly number[]): number[] {
-  const total = weights.reduce((sum, weight) => sum + weight, 0)
-  const spans = weights.map((weight) =>
-    Math.max(3, Math.round((weight / total) * 12)),
-  )
-  let over = spans.reduce((sum, span) => sum + span, 0) - 12
-  while (over !== 0) {
-    // Take from (or give to) the widest column that can spare it.
-    const order = spans
-      .map((span, position) => ({ span, position }))
-      .sort((a, b) => (over > 0 ? b.span - a.span : a.span - b.span))
-    const pick = order.find((entry) => (over > 0 ? entry.span > 3 : true))
-    if (!pick) break
-    spans[pick.position] += over > 0 ? -1 : 1
-    over += over > 0 ? -1 : 1
-  }
-  return spans
-}
+// Spans out of twelve live with the tree, so a frame's repair reads them without the compiler (AGL-3735).
+export { aiLayoutSpans }
 
 export function compileRow(
   scope: SectionScope,
   columns: Array<{ column: AiLayoutBlock[]; weight: number }>,
+  /** How the columns sit against each other: centered on a page, top-aligned in a footer (AGL-3735). */
+  alignItems: 'center' | 'flex-start' = 'center',
 ): string {
   const tree = scope.page.tree
   const spans = aiLayoutSpans(columns.map((entry) => entry.weight))
@@ -835,7 +821,7 @@ export function compileRow(
   return tree.add(
     'muiGrid',
     { container: true, spacing: columns.length >= 3 ? '4' : '6' },
-    { alignItems: 'center' },
+    { alignItems },
     items,
     'row',
   )

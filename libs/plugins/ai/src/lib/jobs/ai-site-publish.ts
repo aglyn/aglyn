@@ -29,6 +29,13 @@ import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cac
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { sendGa4SitePublished } from '@aglyn/tenant-data-admin/server/ga4-measurement-protocol'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
+import {
+  aiLayoutFrameHollows,
+  aiLayoutFrameHollowsSaid,
+  aiLayoutFrameIsHollow,
+  aiLayoutRepairFrameHollows,
+  aiLayoutWithoutFrameHollows,
+} from '../layout-language/ai-layout-frame-hollows'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
@@ -191,6 +198,9 @@ export function aiLayoutWithNavigation(
       for (const node of Object.values(map)) {
         if (node.nodes?.some((child) => gone.has(child))) node.nodes = node.nodes.filter((child) => !gone.has(child))
       }
+      // A footer heading whose links all went goes with them, and its column
+      // when that leaves it only the heading (AGL-3735).
+      aiLayoutRepairFrameHollows(map as unknown as Record<string, unknown>)
       changed = true
     }
   }
@@ -518,6 +528,12 @@ async function aiLayoutVersionWrite(
   if (links && !fromDraft) {
     const added = aiLayoutWithStoreLinks((next ?? nodes) as never, links.links, links.screenPaths)
     next = (added.nodes as NodesMap | null) ?? next
+  }
+  // What a publish puts live has no hollow heading, column or menu (AGL-3735).
+  next = (aiLayoutWithoutFrameHollows((next ?? nodes) as unknown as Record<string, unknown>) as NodesMap | null) ?? next
+  const hollow = aiLayoutFrameHollows((next ?? nodes) as unknown as Record<string, unknown>)
+  if (aiLayoutFrameIsHollow(hollow)) {
+    console.error('ai site publish: a layout is still hollow after its repair', { layoutId, hollow: aiLayoutFrameHollowsSaid(hollow) })
   }
   if (!next) return fromDraft && draftRef ? { layoutRef, versionRef: draftRef, version: null } : null
   const packed = encodeStoredNodes(next)
