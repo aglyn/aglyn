@@ -128,7 +128,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   aiProducts: {
     '#propose-a-first-catalog': 'Criptions, search listings and tags with AI as they land. Once the import has created your products, their copy is written as above and waits in the review table on the products page.',
-    '#write-a-products-copy': 'Th AI Aglyn AI can write the copy for your products and help you set up a store.',
+    '#write-a-products-copy': 'Ur products and help you set up a store. Everything it does is a proposal: you review it, and nothing is saved to your catalog until you apply it.',
   },
   aiSeo: {
     '#fix-what-the-seo-check-finds': 'Sting section has the same Write with AI control. It proposes an SEO title and an SEO description from the product\'s name and description.',
@@ -207,7 +207,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#4-save-and-test': 'Ces](actions-builder.md#sequences) for the rest, including what a wait means for the emails sent after it.',
   },
   catalog: {
-    '#categories-and-tags': 'Eir prices left empty, and proposed discounts are created switched off.',
+    '#categories-and-tags': 'Heir suggested prices, and proposed discounts are created switched off.',
     '#product-reviews': ', so that collection\'s grid is in price order — high to low if that is the sort chosen, low to high otherwise.',
   },
   commerce: {

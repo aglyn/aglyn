@@ -626,8 +626,8 @@ function optionAxesOf(
 /**
  * Whether a variant has a price a sale can charge (AGL-2916).
  *
- * A product proposed by AI is created with every price left empty for the
- * merchant to set, so a stored variant can lack one. `Number(undefined)` is
+ * A product may be stored with a price left empty on purpose (an owner who
+ * clears it, or a writer asked for none), so a stored variant can lack one. `Number(undefined)` is
  * no price, and neither is `null`, which `Number` reads as zero: a sale door
  * that priced either would charge nothing, or fail at the processor.
  */
