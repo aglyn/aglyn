@@ -27,6 +27,7 @@ import {
   type SectionScope,
 } from './ai-layout-compiler'
 import { aiLayoutFitText } from './ai-layout-copy'
+import { aiLayoutRepairFrameHollows } from './ai-layout-frame-hollows'
 import { AI_LAYOUT_CART_ELEMENT } from './ai-layout-listings'
 import {
   AI_LAYOUT_MAX_ITEMS,
@@ -491,6 +492,11 @@ export function aiCompileLayoutFrame(
     'slot',
   )
   const footer = compileFooter(page, frame.footer, plan, name)
+  // No heading with nothing under it, no column of only a heading, columns
+  // top-aligned (AGL-3735): a list under a heading can compile to nothing.
+  if (aiLayoutRepairFrameHollows(tree.nodes as unknown as Record<string, unknown>)) {
+    page.settled.push({ at: 'footer', what: 'a heading with nothing under it taken out, and its column with it' })
+  }
   const column = tree.add(
     'muiStack',
     null,
@@ -501,6 +507,41 @@ export function aiCompileLayoutFrame(
   tree.prune(column, new Set([slot]))
   const rootId = tree.add('div', null, null, [column], 'layout')
   return { tree: { rootId, nodes: tree.nodes }, settled: page.settled }
+}
+
+/** What a store's own column of account and policy links is headed where the footer design gave no store heading (AGL-3735). */
+export const AI_LAYOUT_STORE_FOOTER_HEADING = 'Customer care'
+
+/** A footer heading a store's account and policies belong under (AGL-3735). */
+const STORE_HEADING = /\b(?:shop|store|shopping|help|customer|care|support|service|orders?|account|policies|policy|legal|info|information|shipping|returns)\b/i
+
+/**
+ * The footer heading a store's account and policy links go under
+ * (AGL-3735): a heading of the design's that names the store or its help
+ * ("Our shop", "Help", "Customer care"), the first with nothing under it
+ * before one with words or links of its own. Never the heading over the
+ * site's pages, whose list is the site's navigation. `end` is where the
+ * links go: the end of what that heading heads.
+ */
+export function aiLayoutFooterStoreHeading(
+  columns: readonly AiLayoutBlock[][],
+  navItems: readonly { to: string }[],
+): { column: AiLayoutBlock[]; end: number; heading: string } | null {
+  const navTo = new Set(navItems.map((item) => item.to))
+  const candidates: Array<{ column: AiLayoutBlock[]; end: number; heading: string; empty: boolean }> = []
+  for (const column of columns) {
+    column.forEach((block, at) => {
+      if (block.kind !== 'heading' || !STORE_HEADING.test(block.text ?? '')) return
+      let end = at + 1
+      while (end < column.length && column[end].kind !== 'heading') end += 1
+      const under = column.slice(at + 1, end)
+      const site = under.some((one) => one.kind === 'list' && (one.items ?? []).some((item) => navTo.has(item.to ?? '')))
+      if (site) return
+      candidates.push({ column: column as AiLayoutBlock[], end, heading: String(block.text), empty: under.length === 0 })
+    })
+  }
+  const pick = candidates.find((one) => one.empty) ?? candidates[0]
+  return pick ? { column: pick.column, end: pick.end, heading: pick.heading } : null
 }
 
 /** A link followed from the phone menu closes it. */
@@ -586,18 +627,29 @@ function compileFooter(
     ])
     weights.push(1)
   }
-  // A store's account and policies (AGL-3676), as one more list beside the site's pages.
+  // A store's account and policies (AGL-3676): under the store heading the
+  // design already wrote ("Our shop", "Help"…), never as a column with no
+  // heading beside a heading with nothing under it (AGL-3735); where the
+  // design wrote none, a column of their own, headed.
   const storeLinks = plan.storeLinks?.footer ?? []
   if (storeLinks.length) {
-    columns.push([{ kind: 'list', items: storeLinks.map((link) => ({ title: link.label, text: '', to: `page:store:${link.href}` })) }])
-    weights.push(1)
+    const list: AiLayoutBlock = { kind: 'list', items: storeLinks.map((link) => ({ title: link.label, text: '', to: `page:store:${link.href}` })) }
+    const home = aiLayoutFooterStoreHeading(columns, navItems)
+    if (home) {
+      home.column.splice(home.end, 0, list)
+      page.settled.push({ at: 'footer', what: `the store's account and policy links under "${home.heading}"` })
+    } else {
+      columns.push([{ kind: 'heading', text: AI_LAYOUT_STORE_FOOTER_HEADING }, list])
+      weights.push(1)
+    }
   }
   const filled = columns
     .map((column, position) => ({ column, weight: weights[position] ?? 1 }))
     .filter((entry) => entry.column.length)
+  // A footer's columns are top-aligned: each starts at its heading (AGL-3735).
   const top =
     filled.length > 1
-      ? compileRow(scope, filled)
+      ? compileRow(scope, filled, 'flex-start')
       : filled.length === 1
         ? compileFlow(scope, filled[0].column, 'full')
         : null
