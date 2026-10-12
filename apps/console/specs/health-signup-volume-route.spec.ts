@@ -54,6 +54,13 @@ const mockRefusalGet = jest.fn()
 /** AGL-2583 signup-page serve markers — the drought denominator. */
 const mockServedGet = jest.fn()
 const mockAttemptGet = jest.fn()
+/** AGL-3725 orgs in the landing window. */
+const mockLandingGet = jest.fn()
+const landingQueries: {
+  collection: string
+  bounds: { field: string; op: string; ms: number }[]
+  limit: number
+}[] = []
 const queries: {
   collection: string
   field: string
@@ -94,6 +101,22 @@ jest.mock('firebase-admin/firestore', () => ({
   getFirestore: () => ({
     collection: (collection: string) => ({
       where: (field: string, op: string, cutoff: { ms: number } | number) => ({
+        // AGL-3725: the landing read is the only one with a SECOND range edge.
+        where: (field2: string, op2: string, cutoff2: { ms: number }) => ({
+          limit: (max: number) => ({
+            get: () => {
+              landingQueries.push({
+                collection,
+                bounds: [
+                  { field, op, ms: (cutoff as { ms: number }).ms },
+                  { field: field2, op: op2, ms: cutoff2.ms },
+                ],
+                limit: max,
+              })
+              return mockLandingGet()
+            },
+          }),
+        }),
         // AGL-1536: the org-creation aggregation.
         count: () => ({
           get: () => {
@@ -182,6 +205,18 @@ async function freshRoute(): Promise<RouteModule> {
 
 const countOf = (count: number) => async () => ({ data: () => ({ count }) })
 
+/** Orgs as the landing read sees them: each with this many sites (AGL-3725). */
+const orgsWithSites =
+  (...siteCounts: number[]) =>
+  async () => ({
+    docs: siteCounts.map((n) => ({
+      get: (field: string) =>
+        field === 'hosts'
+          ? Object.fromEntries(Array.from({ length: n }, (_, i) => [`h${i}`, true]))
+          : undefined,
+    })),
+  })
+
 beforeEach(() => {
   mockCountGet.mockReset()
   mockRefusalGet.mockReset()
@@ -194,6 +229,11 @@ beforeEach(() => {
   // and cannot turn an unrelated test red for its own reasons.
   mockServedGet.mockImplementation(servesOf())
   mockAttemptGet.mockImplementation(attemptsOf())
+  // Every org has a site by default, so the AGL-3725 landing check stays
+  // green and cannot turn an unrelated test red.
+  mockLandingGet.mockReset()
+  mockLandingGet.mockImplementation(orgsWithSites(1, 1))
+  landingQueries.length = 0
   queries.length = 0
   refusalQueries.length = 0
   servedQueries.length = 0
@@ -678,6 +718,7 @@ describe('AGL-2583 · the old /api/health/signups path still answers', () => {
     expect(body.service).toBe('console-signup-volume')
     expect(Object.keys(body.checks).sort()).toEqual([
       'signupDrought',
+      'signupLanding',
       'signupRefusals',
       'signupVolume',
     ])
@@ -759,5 +800,76 @@ describe('AGL-2583 · one blind signups-lock decision is a 503', () => {
     const response = await (await freshRoute()).GET()
     expect(response.status).toBe(200)
     expect((await response.json()).checks.signupRefusals.lockUnreadable).toBe(0)
+  })
+})
+
+describe('AGL-3725 · signupLanding: a workspace that never reached a site', () => {
+  /*
+   * AGL-3724 made every workspace it was asked for and sent the person to a
+   * 404 before the site list. Volume, refusals, drought and the canary all
+   * stayed green for nine hours, because each of them asks about workspaces.
+   */
+  it('goes red when two orgs past the grace period have no site', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockLandingGet.mockImplementation(orgsWithSites(0, 1, 0, 2))
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(503)
+    expect(body.checks.signupLanding).toMatchObject({
+      ok: false,
+      code: 'signups-stranded',
+      strandedOrgs: 2,
+      orgsInWindow: 4,
+      windowHours: 12,
+      graceMinutes: 30,
+      maxStranded: 2,
+    })
+  })
+
+  it('stays green for one person who signed up and left', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockLandingGet.mockImplementation(orgsWithSites(0, 1, 1))
+    const { GET } = await freshRoute()
+    const body = await (await GET()).json()
+    expect(body.checks.signupLanding).toMatchObject({ ok: true, strandedOrgs: 1 })
+    expect(body.checks.signupLanding.code).toBeUndefined()
+  })
+
+  it('reads orgs between twelve hours and thirty minutes old, bounded', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    const before = Date.now()
+    const { GET } = await freshRoute()
+    await GET()
+    const after = Date.now()
+    expect(landingQueries).toHaveLength(1)
+    const [query] = landingQueries
+    expect(query.collection).toBe('orgs')
+    expect(query.limit).toBeGreaterThan(0)
+    const [older, newer] = query.bounds
+    expect(older).toMatchObject({ field: 'createdAt', op: '>' })
+    expect(newer).toMatchObject({ field: 'createdAt', op: '<=' })
+    expect(older.ms).toBeGreaterThanOrEqual(before - 12 * 3_600_000)
+    expect(older.ms).toBeLessThanOrEqual(after - 12 * 3_600_000)
+    expect(newer.ms).toBeGreaterThanOrEqual(before - 30 * 60_000)
+    expect(newer.ms).toBeLessThanOrEqual(after - 30 * 60_000)
+  })
+
+  it('is degraded, never calm, when the orgs cannot be read', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockLandingGet.mockRejectedValue(
+      new Error('7 PERMISSION_DENIED: projects/aglyn-main/databases/(default)'),
+    )
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(503)
+    expect(body.checks.signupLanding).toMatchObject({
+      ok: false,
+      code: 'orgs-unavailable',
+      strandedOrgs: null,
+    })
+    // The provider's message never reaches the public body.
+    expect(JSON.stringify(body)).not.toContain('aglyn-main')
   })
 })

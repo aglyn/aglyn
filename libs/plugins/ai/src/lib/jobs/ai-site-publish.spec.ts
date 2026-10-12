@@ -35,6 +35,7 @@ import {
   AI_SITE_PUBLISH_DELETED,
   aiJobPublishesSite,
   aiLayoutWithNavigation,
+  aiMergeSitePublish,
   aiPublishGuidedSite,
   aiSiteUnwrittenBlogHrefs,
   aiSitePublishTakenCopy,
@@ -216,6 +217,86 @@ describe('a guided start’s pages go live', () => {
     await publish()
     expect(docs.get('hosts/host-1/screens/scr-starter')).not.toHaveProperty('deletedAt')
     expect(docs.get('hosts/host-1/screens/scr-starter')).not.toHaveProperty('publishedAt')
+  })
+})
+
+/*
+ * Try again on a guided start (AGL-3730): org 1-cho3N4FW's retried Portfolio
+ * page (beta.243) stayed a draft with no header entry. A retry publishes only
+ * the pages it built, beside what the first publish put live: no home
+ * address taken, no starter retired, no second site_published.
+ */
+describe('a retry puts the pages Try again built live beside the first publish (AGL-3730)', () => {
+  const PORTFOLIO: AiJobOutput = {
+    resource: 'screen',
+    id: 'drft-portfolio',
+    hostId: 'host-1',
+    label: 'Portfolio',
+    proposal: { navigation: { label: 'Portfolio', slug: 'portfolio' } },
+  }
+  const retry = (outputs: AiJobOutput[]) =>
+    aiPublishGuidedSite(firestore, { job: JOB, outputs, now: NOW, retry: true }, { sendSitePublished: sendSitePublished as never, dropCache })
+
+  it('publishes the retried page, adds its header entry, and sends no second site_published', async () => {
+    seedSite()
+    await publish()
+    sendSitePublished.mockClear()
+    docs.set('hosts/host-1/screens/drft-portfolio', { displayName: 'Portfolio', slug: 'portfolio', versionId: 'v-port' })
+    docs.set('hosts/host-1/screens/drft-portfolio/versions/v-port', { layoutId: 'lay-site', aiJobId: 'job-1' })
+    const result = await retry([PORTFOLIO])
+    expect(result.published).toEqual([{ id: 'drft-portfolio', label: 'Portfolio', path: '/portfolio' }])
+    expect(result.drafts).toEqual([])
+    expect(docs.get('hosts/host-1/screens/drft-portfolio')).toMatchObject({ publishedAt: NOW })
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['screens']).toEqual({
+      'drft-home': '/',
+      'drft-book': 'book-now',
+      'drft-portfolio': 'portfolio',
+    })
+    expect(sendSitePublished).not.toHaveBeenCalled()
+    const layout = docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>
+    const version = docs.get(`hosts/host-1/layouts/lay-site/versions/${layout['versionId']}`) as Record<string, unknown>
+    const nodes = decodeStoredNodes<Record<string, { props?: Record<string, unknown>; nodes?: string[] }>>(version['nodes'] as never) ?? {}
+    const labels = (nodes['dl_toolbar'].nodes ?? []).map((id) => nodes[id].props?.['children']).filter(Boolean)
+    expect(labels).toEqual(['Hillside', 'Book Now', 'Portfolio'])
+  })
+
+  it('never takes `/` from the starter nor retires it: a retried home it holds stays a draft', async () => {
+    seedSite()
+    const result = await retry([OUTPUTS[1]])
+    expect(result.published).toEqual([])
+    expect(result.drafts).toEqual([{ id: 'drft-home', label: 'Home', reason: aiSitePublishTakenCopy('/') }])
+    const host = docs.get('hosts/host-1') as Record<string, unknown>
+    expect(host['screens']).toEqual({ 'scr-starter': '/' })
+    expect(host['defaultHomeScreenId']).toBe('scr-starter')
+    expect(docs.get('hosts/host-1/screens/scr-starter')).not.toHaveProperty('deletedAt')
+    expect(sendSitePublished).not.toHaveBeenCalled()
+  })
+
+  it('merges the retry into the first record: published joined, drafts that went live dropped, newest reasons kept', () => {
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [{ id: 'drft-home', label: 'Home', path: '/' }],
+      drafts: [
+        { id: 'drft-book', label: 'Book Now', reason: 'It could not be published just now. Publish it from Pages.' },
+        { id: 'drft-old', label: 'Old', reason: AI_SITE_PUBLISH_DELETED },
+      ],
+    }
+    const retried = {
+      liveUrl: null,
+      published: [{ id: 'drft-book', label: 'Book Now', path: '/book-now' }],
+      drafts: [{ id: 'drft-portfolio', label: 'Portfolio', reason: aiSitePublishTakenCopy('portfolio') }],
+    }
+    expect(aiMergeSitePublish(first, retried)).toEqual({
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: [
+        { id: 'drft-home', label: 'Home', path: '/' },
+        { id: 'drft-book', label: 'Book Now', path: '/book-now' },
+      ],
+      drafts: [
+        { id: 'drft-old', label: 'Old', reason: AI_SITE_PUBLISH_DELETED },
+        { id: 'drft-portfolio', label: 'Portfolio', reason: aiSitePublishTakenCopy('portfolio') },
+      ],
+    })
   })
 })
 

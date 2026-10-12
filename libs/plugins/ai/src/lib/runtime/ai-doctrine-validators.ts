@@ -241,6 +241,14 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    */
   homeScreenIds?: readonly string[]
   /**
+   * The site's pages that place its form, by id (AGL-3729): where a link whose
+   * words ask a visitor to get in touch (`aiAsksToGetInTouch`) does what it
+   * says, even when that page is home. A guided start's café put its
+   * pre-order form on Home, and its Menu page's "Request weekend pickup"
+   * links there. Absent: none is known, and a link home is held to its words.
+   */
+  formScreenIds?: readonly string[]
+  /**
    * The node as the model wrote it, by the id the checked tree gives it
    * (AGL-3078), for a tree that was stored before it is checked: a page
    * section is checked as part of the page, whose props the palette validator
@@ -2009,6 +2017,115 @@ export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputK
 /** A link's words that say it goes home. */
 const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 
+/** Words that ask a visitor to get in touch, which the site's form answers. */
+const GET_IN_TOUCH_WORDS =
+  /\b(?:contact|book|booking|call|quote|estimate|appointment|schedule|reserve|reservation|get in touch|request|visit|enquire|inquire|enquiry|inquiry|message|talk|consult|consultation|order|pre-?order|sign up|join|apply|start)\b/i
+
+/**
+ * Whether a link's words ask a visitor to get in touch — contact, book, quote,
+ * request, order, pre-order, enquire — which the site's form answers
+ * (AGL-3729). The layout language sends such a link to the form.
+ */
+export function aiAsksToGetInTouch(label: string): boolean {
+  return GET_IN_TOUCH_WORDS.test(label)
+}
+
+/**
+ * The links rule 10 refuses as sent home for nothing (`detectUnrelatedScreenLinks`),
+ * in document order. A link whose words ask a visitor to get in touch, sent to
+ * a home page that places the site's form, does what it says (AGL-3729).
+ */
+function unrelatedScreenLinks(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'>,
+): Array<{ id: string; label: string }> {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const home = new Set(context.homeScreenIds ?? [])
+  const forms = new Set(context.formScreenIds ?? [])
+  const sent: Array<{ id: string; label: string }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    const screenId = node.props?.['screenId']
+    const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    if (!linksHome || !label || HOME_WORDS.test(label)) continue
+    // Home holds the site's form, and the words ask for what it does (AGL-3729).
+    if (typeof screenId === 'string' && forms.has(screenId) && aiAsksToGetInTouch(label)) continue
+    // The header and the navigation link home by name and by the site's own brand.
+    const inNavigation = hasAncestor(
+      tree,
+      visit,
+      (ancestor) => ancestor.componentId === 'muiAppBar' || ['header', 'nav'].includes(elementOf(ancestor)),
+    )
+    if (!inNavigation) sent.push({ id: visit.id, label })
+  }
+  return sent
+}
+
+/**
+ * RULE 10'S LINK SENT HOME, REPAIRED IN CODE (AGL-3729).
+ *
+ * The rule's own advice is "link the page that does, or leave the link out",
+ * and both halves are something code can do once it knows where the site's
+ * form is. A Free guided start's café (beta.243, 2026-10-12) put its contact
+ * and pre-order form on Home; its Menu page's "Request weekend pickup" was
+ * sent to Home, and the page was refused on every answer, since the
+ * destination was the compiler's, not the model's. So, before the check reads
+ * the tree, each link `detectUnrelatedScreenLinks` would refuse is:
+ *
+ * - repointed to the page that places the site's form, when its words ask a
+ *   visitor to get in touch and the site has such a page that is not the page
+ *   being checked (`formScreenIds`, `ownScreenIds`). The platform reaches a
+ *   section of another page by no anchor (AGL-2867), so the link names the
+ *   page; a link to a section of its own page is the Scroll to element
+ *   interaction, which this never writes;
+ * - otherwise left out: the node and everything under it are taken off the
+ *   page, and out of its parent's children.
+ *
+ * The root is never taken out. A tree with nothing to repair comes back as
+ * the same object; a node that is changed is copied, never edited in place.
+ */
+export function aiSettleUnrelatedScreenLinks<T extends AiDoctrineTree>(
+  tree: T,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'> & {
+    /** The page being checked, by every id it goes by: a link never goes to itself. */
+    ownScreenIds?: readonly string[]
+  } = {},
+): T {
+  const sent = unrelatedScreenLinks(tree, outputKind, context)
+  if (!sent.length) return tree
+  const own = new Set(context.ownScreenIds ?? [])
+  const formScreen = (context.formScreenIds ?? []).find((id) => !own.has(id)) ?? null
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const parents = new Map<string, string>()
+  for (const visit of walkTree(tree)) {
+    const parent = visit.ancestors[visit.ancestors.length - 1]
+    if (parent !== undefined) parents.set(visit.id, parent)
+  }
+  for (const { id, label } of sent) {
+    if (!nodes[id]) continue
+    if (formScreen && aiAsksToGetInTouch(label)) {
+      const props: Record<string, unknown> = { ...(nodes[id].props ?? {}), screenId: formScreen }
+      delete props['href']
+      nodes[id] = { ...nodes[id], props }
+      continue
+    }
+    const parent = parents.get(id)
+    if (parent === undefined || !nodes[parent]) continue
+    nodes[parent] = { ...nodes[parent], nodes: (nodes[parent].nodes ?? []).filter((child) => child !== id) }
+    const stack = [id]
+    while (stack.length) {
+      const next = stack.pop() as string
+      stack.push(...(nodes[next]?.nodes ?? []))
+      delete nodes[next]
+    }
+  }
+  return { ...tree, nodes } as T
+}
+
 /**
  * Rule 10, for a link sent where the site has nothing for it (AGL-3056). A
  * link whose purpose the site has no screen for is left out; it never goes to
@@ -2023,26 +2140,9 @@ const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 export function detectUnrelatedScreenLinks(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds'> = {},
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'> = {},
 ): AiDoctrineViolation[] {
-  if (outputKind === 'email' || outputKind === 'form') return []
-  const home = new Set(context.homeScreenIds ?? [])
-  const sent: Array<{ id: string; label: string }> = []
-  for (const visit of walkTree(tree)) {
-    const { node } = visit
-    if (!LINK_COMPONENTS.has(node.componentId)) continue
-    const screenId = node.props?.['screenId']
-    const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
-    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
-    if (!linksHome || !label || HOME_WORDS.test(label)) continue
-    // The header and the navigation link home by name and by the site's own brand.
-    const inNavigation = hasAncestor(
-      tree,
-      visit,
-      (ancestor) => ancestor.componentId === 'muiAppBar' || ['header', 'nav'].includes(elementOf(ancestor)),
-    )
-    if (!inNavigation) sent.push({ id: visit.id, label })
-  }
+  const sent = unrelatedScreenLinks(tree, outputKind, context)
   if (!sent.length) return []
   return [
     {

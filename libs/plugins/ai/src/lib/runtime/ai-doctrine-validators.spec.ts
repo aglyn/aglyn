@@ -43,6 +43,7 @@ import {
   AI_DOCTRINE_RULES,
   AI_FREE_PAGE_WORST_CASE_CREDITS,
   AI_TYPED_LIST_MIN_ITEMS,
+  aiAsksToGetInTouch,
   aiBracketedFacts,
   aiDanglingWord,
   aiDoctrineViolationText,
@@ -88,6 +89,7 @@ import {
   detectTypedData,
   detectUnfilledInstances,
   detectUnrelatedScreenLinks,
+  aiSettleUnrelatedScreenLinks,
   detectUnresponsiveGrids,
   detectUntemplatedSimilarPages,
   estimateAiOutputLoad,
@@ -1084,6 +1086,71 @@ describe('rule 10 — a link goes to a screen that does what its words say, or i
     expect(detectUnrelatedScreenLinks(passing, 'layout', home)).toEqual([])
     expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'layout')).toEqual([])
     expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'email', home)).toEqual([])
+  })
+})
+
+/*
+ * A Free guided start's café (beta.243, 2026-10-12, job 4ctq-dfbUP): Home
+ * placed the contact and pre-order form, and the Menu page's "Request weekend
+ * pickup" was sent to Home, so the whole page was refused for one link the
+ * compiler chose. A link that asks to get in touch may go to the page placing
+ * the form, home or not, and a link that cannot is repaired in code (AGL-3729).
+ */
+describe('rule 10 — a link sent home is repaired, not refused (AGL-3729)', () => {
+  const home = { homeScreenIds: ['scr-home'] }
+  const pickup = (props: Record<string, unknown> = { screenId: 'scr-home' }): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Request weekend pickup', variant: 'contained', ...props },
+  })
+  const menu = (...children: Nested[]) => tree(page(section(text('h1', 'Our menu', 'h1'), ...children)))
+
+  it('reads a call to action that asks to get in touch', () => {
+    for (const words of ['Request weekend pickup', 'Pre-order for Saturday', 'Book a table', 'Get a quote', 'Enquire now', 'Contact us']) {
+      expect(aiAsksToGetInTouch(words)).toBe(true)
+    }
+    for (const words of ['See the menu', 'Our story', 'Browse the gallery']) expect(aiAsksToGetInTouch(words)).toBe(false)
+  })
+
+  it('refuses "Request weekend pickup" sent home when Home is not known to hold the form, and admits it when it is', () => {
+    expect(codes(detectUnrelatedScreenLinks(menu(pickup()), 'page', home))).toEqual(['link-unrelated-screen'])
+    expect(detectUnrelatedScreenLinks(menu(pickup()), 'page', { ...home, formScreenIds: ['scr-home'] })).toEqual([])
+    // Words that do not ask for what the form does are still held to them.
+    const story = { componentId: 'muiButton', props: { children: 'Our story', screenId: 'scr-home' } }
+    expect(codes(detectUnrelatedScreenLinks(menu(story), 'page', { ...home, formScreenIds: ['scr-home'] }))).toEqual([
+      'link-unrelated-screen',
+    ])
+  })
+
+  it('repoints the link to the page that places the form, dropping any href, and the page then passes', () => {
+    const before = menu(pickup({ href: '/' }))
+    const context = { ...home, formScreenIds: ['scr-contact'], ownScreenIds: ['scr-menu'] }
+    const after = aiSettleUnrelatedScreenLinks(before, 'page', context)
+    expect(after.nodes['n3'].props).toEqual({ children: 'Request weekend pickup', variant: 'contained', screenId: 'scr-contact' })
+    expect(before.nodes['n3'].props?.['href']).toBe('/')
+    expect(detectUnrelatedScreenLinks(after, 'page', context)).toEqual([])
+  })
+
+  it('leaves the link out when the site has no page for it, and never links the page to itself', () => {
+    const story = { componentId: 'muiButton', props: { children: 'Our story', screenId: 'scr-home' } }
+    const before = menu(story, text('body1', 'Fresh every morning.'))
+    const after = aiSettleUnrelatedScreenLinks(before, 'page', { ...home, formScreenIds: ['scr-home'] })
+    expect(after.nodes['n3']).toBeUndefined()
+    expect(after.nodes['n1'].nodes).toEqual(['n2', 'n4'])
+    expect(detectUnrelatedScreenLinks(after, 'page', home)).toEqual([])
+    // The form is on this page: no page to link, so the link is left out.
+    const own = aiSettleUnrelatedScreenLinks(menu(pickup({ screenId: 'scr-home', href: '/' })), 'page', {
+      homeScreenIds: ['scr-home'],
+      formScreenIds: ['scr-menu'],
+      ownScreenIds: ['scr-menu'],
+    })
+    expect(own.nodes['n3']).toBeUndefined()
+  })
+
+  it('returns the same tree when nothing is sent home for nothing', () => {
+    const fine = menu(pickup({ screenId: 'scr-about' }))
+    expect(aiSettleUnrelatedScreenLinks(fine, 'page', home)).toBe(fine)
+    const admitted = menu(pickup())
+    expect(aiSettleUnrelatedScreenLinks(admitted, 'page', { ...home, formScreenIds: ['scr-home'] })).toBe(admitted)
   })
 })
 

@@ -214,3 +214,77 @@ describe('a section the plan named with a note, or planned as customer words', (
     expect(result.violations.map((violation) => violation.code)).not.toContain('layout-section-no-items')
   })
 })
+
+/*
+ * A Free guided start's café (beta.243, 2026-10-12, job 4ctq-dfbUP): Home
+ * placed the "Contact & pre-order" section with the site's form, and the
+ * Menu page's "Request weekend pickup" — sent to that form, so to Home — was
+ * refused on every answer for rule 10. It goes to the page that places the
+ * form, and the page is built (AGL-3729).
+ */
+describe('a call to action on another page goes to the form Home places (AGL-3729)', () => {
+  const screen = {
+    title: 'Menu',
+    slug: '/menu',
+    template: null,
+    sections: [
+      { name: 'Menu hero', uses: [], items: 0 },
+      { name: 'Weekend pre-orders', uses: [], items: 0 },
+    ],
+  }
+  const ids = ['sec-0', 'sec-1']
+  const targets = {
+    pageId: 'p-menu',
+    pages: [{ id: 'p-home', label: 'Home', slug: '/' }],
+    homeIds: ['p-home'],
+    forms: [],
+    formPageId: 'p-home',
+    components: [],
+    facts: 'A café and bakery that takes weekend pre-orders.',
+  }
+  const menu = (to: string) => ({
+    sections: [
+      { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Our menu'), block('lede', 'Baked fresh every morning.')] },
+      {
+        band: 'soft',
+        align: 'start',
+        cols: [],
+        blocks: [block('heading', 'Weekend pre-orders'), block('text', 'Order by Thursday for Saturday pickup.'), { ...block('button', 'Request weekend pickup'), to }],
+      },
+    ],
+  })
+  const check = () =>
+    aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds: ids,
+      targets: targets as never,
+      context: { screenIds: ['p-home'], formIds: [], componentIds: [], codeBuilt: true, homeScreenIds: ['p-home'], reusableComponents: false },
+      reusableComponents: false,
+    })
+  const buttons = (nodes: unknown) =>
+    Object.values(nodes as Record<string, { componentId: string; props?: Record<string, unknown> }>).filter(
+      (node) => node.componentId === 'muiButton',
+    )
+
+  for (const to of ['form', 'page:Home', '']) {
+    it(`builds the Menu page with "Request weekend pickup" linking Home's form (to: "${to}")`, () => {
+      const result = check()(menu(to))
+      expect(result.violations).toEqual([])
+      expect(buttons(result.value?.nodes).map((node) => [node.props?.['children'], node.props?.['screenId']])).toEqual([
+        ['Request weekend pickup', 'p-home'],
+      ])
+    })
+  }
+
+  it('still refuses nothing when the site has no form page: the link is left out', () => {
+    const result = aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds: ids,
+      targets: { ...targets, formPageId: null } as never,
+      context: { screenIds: ['p-home'], formIds: [], componentIds: [], codeBuilt: true, homeScreenIds: ['p-home'], reusableComponents: false },
+      reusableComponents: false,
+    })(menu('form'))
+    expect(result.violations).toEqual([])
+    expect(buttons(result.value?.nodes)).toEqual([])
+  })
+})

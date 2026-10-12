@@ -2732,7 +2732,8 @@ Four things changed.
 
 `/api/health/signups` → **`/api/health/signup-volume`**, with three checks in
 one body: `signupVolume` (the wave), `signupRefusals` (refusals, including the
-fail-closed ones) and `signupDrought` (below).
+fail-closed ones) and `signupDrought` (below). A fourth, `signupLanding`, was
+added by AGL-3725 and is described after the drought.
 
 **The old path still answers**, served by a thin alias — not a redirect, since
 this repo's own probe refuses to follow a `3xx` and would report one as an
@@ -2791,6 +2792,33 @@ Forced failure, to prove the alert path: set `SIGNUP_DROUGHT_MIN_TRAFFIC=0` in
 the console's Vercel env. Every hour with no creations then reports a drought,
 including a healthy quiet one → expect the email → unset. It breaks signup for
 nobody.
+
+
+### The landing: a workspace and no site (AGL-3725)
+
+Every question above is about workspaces. On 2026-10-10/11 (AGL-3724), Google
+sign-ups that finished on `auth.aglyn.com` got their workspace and were then
+sent to `auth.aglyn.com/<slug>/hosts`, which that host refuses with a 404 by
+design (AGL-3090). Each workspace was created, so volume, refusals and drought
+all read healthy, and so did the signup canary, which graded "a workspace
+exists". Three people were lost over nine hours. The activation sweep found it.
+
+`signupLanding` measures the outcome instead. It reads orgs created between
+twelve hours and thirty minutes ago and reds when **two or more have no
+site** (`code: signups-stranded`). It does not know or care about the cause:
+a dead landing, a broken create-site dialog and a `hosts/create` that 500s
+all end with an org and no host.
+
+The numbers come from a backtest on production, 2026-09-11 → 2026-10-11.
+That month had 44 orgs, and 38 made a site with a median under a minute and a
+slowest of 8.2 minutes, so thirty minutes never counts someone still typing.
+Six never made one: the three AGL-3724 orgs, and three on 9/26, 10/6 and 10/8.
+The rule fires for exactly one stretch, 10/11 04:00Z–12:00Z. It would have
+paged at about 04:20Z, two hours before the third person. One stranded org
+alone never fires, because people do sign up and leave.
+
+The body carries counts only (`strandedOrgs`, `orgsInWindow`) and the rule
+(`windowHours`, `graceMinutes`, `maxStranded`), never an org id or slug.
 
 ### The blocking function's decisions are DATA now
 

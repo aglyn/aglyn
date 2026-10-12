@@ -818,6 +818,21 @@ async function walk(page, db, auth, identity, created) {
         `screen: ${seen}${/\/signin/.test(url) ? ' (signed out)' : ''} — at ${where.origin}${where.pathname}`,
     )
   }
+  /**
+   * THE LANDING IS GRADED TOO (AGL-3725).
+   *
+   * A workspace is not the end of a sign-up: the person has to reach the site
+   * list to make a site. The console navigates there the moment the workspace
+   * exists, so a short settle lets that navigation answer. This FAILS only on
+   * a 404 the page actually received, never on a navigation that has not
+   * happened yet, so a slow redirect cannot red it.
+   */
+  await new Promise((r) => setTimeout(r, 10_000))
+  if ((page.documentNotFound ?? []).length > 0) {
+    throw new Error(
+      `workspace made, then the landing answered 404 at ${page.documentNotFound.join(', ')}`,
+    )
+  }
   const outcome = 'workspace'
   if (orgs.size > 1) {
     throw new Error(`one signup produced ${orgs.size} workspaces`)
@@ -1112,8 +1127,25 @@ async function main() {
           page.walkTrace.push(`console.${message.type()}: ${message.text().slice(0, 160)}`)
         }
       })
+      /**
+       * Every page the walk was SENT to that answered 404 (AGL-3725). A
+       * document navigation that 404s is a fact, not a timing question, so
+       * this needs no wait on the address bar. AGL-3724 made every workspace
+       * and then landed the person on one of these, and a canary that graded
+       * only the workspace passed straight through it.
+       */
+      page.documentNotFound = []
       page.on('response', (response) => {
         const u = new URL(response.url())
+        const request = response.request()
+        if (
+          response.status() === 404 &&
+          request.isNavigationRequest() &&
+          request.frame() === page.mainFrame()
+        ) {
+          page.documentNotFound.push(`${u.host}${u.pathname}`)
+          page.walkTrace.push(`404 ${u.host}${u.pathname}`)
+        }
         if (u.pathname === '/api/orgs/create' || u.pathname.startsWith('/api/edit-hint/')) {
           page.walkTrace.push(`${response.request().method()} ${u.host}${u.pathname} → ${response.status()}`)
         }
