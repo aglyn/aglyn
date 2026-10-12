@@ -45,6 +45,7 @@
  * module graph (AGL-52); every importer is already a client module.
  */
 
+import { browserFamily, type BrowserFamily } from './browser-family'
 import { isCrossPoolDesync } from './cross-pool-desync'
 import { isForeignScriptUrl, stackFrameUrls } from './foreign-script'
 import { isStaleBuildError, recoverStaleBuildRejection } from './stale-build-error'
@@ -76,6 +77,12 @@ export interface ErrorBeaconEvent {
   translated?: string
   /** On a `hydration` event only: `navigator.language`, clamped. */
   language?: string
+  /**
+   * On every event: the coarse browser family — one of seven, see
+   * {@link browserFamily} (AGL-3732). Never the user agent, never a version.
+   * Stamped by the queue, so a caller never sets it.
+   */
+  browser?: BrowserFamily
 }
 
 export interface ErrorBeaconOptions {
@@ -516,6 +523,14 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   // translator has had a chance to rewrite it (`pageTranslationSignal`).
   const servedLang = document.documentElement?.getAttribute('lang') ?? null
   if (sampled) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
+  // Classified once, here, and only the family is kept: the user-agent
+  // string itself never reaches the queue (AGL-3732).
+  let browser: BrowserFamily = 'other'
+  try {
+    browser = browserFamily(navigator.userAgent)
+  } catch {
+    // An unreadable navigator is just `other`.
+  }
 
   const seen = new Set<string>()
   let queued: ErrorBeaconEvent[] = []
@@ -552,7 +567,7 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
     if (seen.has(key)) return
     seen.add(key)
     sent += 1
-    queued.push(event)
+    queued.push({ ...event, browser })
     if (!timer) timer = setTimeout(flush, FLUSH_DELAY_MS)
   }
   // Null on an unsampled pageview, so it reports nothing by either door
