@@ -24,7 +24,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
-import { aiLayoutListingAt, aiLayoutListingsOf, type AiLayoutListing } from '../layout-language/ai-layout-listings'
+import { aiLayoutListingAt, aiLayoutListingsOf, aiLayoutRecordHref, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
   AI_LAYOUT_PAGE_TOOL,
@@ -256,12 +256,23 @@ export function aiLayoutListingsWithDatasets(
     if (!row) return []
     // The photo field is the card's picture, never its words (AGL-3616).
     const imageField = listing.imageField ?? row.imageField
+    // The address is the card's link to its record's page, never its words (AGL-3727).
+    const addressField = listing.addressField ?? row.addressField
     const fields = (
       listing.fields?.length
         ? listing.fields
         : row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name, type: 'text' }))
-    ).filter((field) => field.id !== imageField)
-    return fields.length ? [{ ...listing, fields, ...(imageField ? { imageField } : {}) }] : []
+    ).filter((field) => field.id !== imageField && field.id !== addressField)
+    return fields.length
+      ? [
+          {
+            ...listing,
+            fields,
+            ...(imageField ? { imageField } : {}),
+            ...(listing.recordBase && addressField ? { addressField } : {}),
+          },
+        ]
+      : []
   })
 }
 
@@ -285,6 +296,11 @@ export function aiLayoutListingContext(
   const tokens = [
     ...(here.some((listing) => listing.kind === 'posts') ? AI_LAYOUT_POST_ADDRESS_TOKENS : []),
     ...here.flatMap((listing) => (listing.kind === 'records' && listing.imageField ? [`{{item.${listing.imageField}}}`] : [])),
+    // Each card's link to its record's own page (AGL-3727), admitted whole.
+    ...here.flatMap((listing) => {
+      const href = aiLayoutRecordHref(listing)
+      return href ? [href] : []
+    }),
   ]
   if (!tokens.length) return context
   return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...tokens])] }

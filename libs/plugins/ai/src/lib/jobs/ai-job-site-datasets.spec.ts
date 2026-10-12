@@ -41,6 +41,7 @@ import {
   AI_SITE_DATASET_INPUT,
   AI_SITE_DATASET_NOT_WRITTEN_COPY,
   AI_SITE_DATASETS_MAX,
+  aiDatasetListingsOf,
   aiDatasetSparseFields,
   aiSiteDatasetBriefLines,
   aiSiteDatasetInputOf,
@@ -437,11 +438,35 @@ describe('what the pages built after a dataset are told', () => {
           { id: 'dish', name: 'Dish', type: 'text' },
           { id: 'description', name: 'Description', type: 'text' },
         ],
+        // Each card links its record's own page: the plan made the Dish page its record template (AGL-3727).
+        recordBase: 'menu',
+        addressField: 'slug',
         placements: [
           { screenId: 'pHome', section: 1, role: 'featured' },
           { screenId: 'pMenu', section: 1, role: 'index' },
         ],
       },
+    ])
+  })
+
+  it('links no record page where the plan makes none, or the dataset has no address (AGL-3727)', () => {
+    const withoutTemplate = SCREENS.filter((one) => !one.record)
+    const [listing] = aiSiteDatasetListings({ outputs: [written], datasets: [MENU], screens: withoutTemplate, delivered: new Map([['menu', 'drftMenu01']]) })
+    expect(listing).not.toHaveProperty('recordBase')
+    expect(listing).not.toHaveProperty('addressField')
+    const noAddress = { ...written, proposal: { ...written.proposal, addressField: null } }
+    const [bare] = aiSiteDatasetListings({ outputs: [noAddress], datasets: [MENU], screens: SCREENS, delivered: new Map([['menu', 'drftMenu01']]) })
+    expect(bare).toMatchObject({ recordBase: 'menu' })
+    expect(bare).not.toHaveProperty('addressField')
+  })
+
+  it('finds a build’s record page by the dataset’s id as well as by the name the plan gave it (AGL-3727)', () => {
+    const screens = [
+      { id: 'pTeam', title: 'Team', slug: '/team', sections: [{ name: 'Our people', uses: ['ds-team'], items: 6 }] },
+      { id: 'pPerson', title: 'Person', slug: '/person', sections: [{ name: 'Bio', uses: [], items: 0 }], record: { dataset: 'ds-team', base: '/team/' } },
+    ]
+    expect(aiDatasetListingsOf([{ id: 'ds-team', name: 'Team' }], screens)).toEqual([
+      expect.objectContaining({ datasetId: 'ds-team', recordBase: 'team', placements: [{ screenId: 'pTeam', section: 0, role: 'index' }] }),
     ])
   })
 

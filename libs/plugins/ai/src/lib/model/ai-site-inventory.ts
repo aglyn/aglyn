@@ -132,6 +132,11 @@ export interface AiInventoryDataset {
    * (AGL-3616): what a record template's Image binds as its `src`.
    */
   imageField?: string
+  /**
+   * The id of the record's page-address field, where it has one (AGL-3727):
+   * what a listing's card links each record's own page by.
+   */
+  addressField?: string
 }
 
 export interface AiInventoryCollection {

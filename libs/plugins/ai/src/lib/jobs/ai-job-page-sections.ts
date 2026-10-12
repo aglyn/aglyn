@@ -235,7 +235,7 @@ export function aiPageSectionWithRecordImage(
  * every record template is set up.
  */
 export function aiPageRecordNote(template: AiPageRecordTemplate): string {
-  return `This page is drafted as the record template of "${template.name}". To serve a page per record at /${template.base}/…, open Page Properties → Record pages and save its dataset, address and fields.`
+  return `This page is drafted as the record template of "${template.name}". To serve a page per record at /${template.base}/…, open Page Properties → Record pages and save its dataset, address and fields: the cards that list its records link those pages.`
 }
 
 export interface AiPageSectionPromptInput {

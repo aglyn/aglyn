@@ -119,6 +119,19 @@ export interface AiLayoutListing {
    */
   imageField?: string
   /**
+   * Where each record's own page lives (AGL-3727): the base path of the
+   * dataset's record template (AGL-3475), without slashes at either end —
+   * `services` for `/services/roofing`. Set by code where the plan makes or
+   * the site keeps a record template for the dataset, never by the model.
+   */
+  recordBase?: string
+  /**
+   * The record's page-address field (AGL-3727), which the record's page is
+   * served at under {@link recordBase}. Never among `fields`: it is the card's
+   * link, not its words.
+   */
+  addressField?: string
+  /**
    * Where a visitor goes from a store with nothing listed yet (AGL-3676): the
    * site's contact page, by its path. The empty state names it as its one
    * action, so a shop that opens empty still answers a visitor.
@@ -179,6 +192,22 @@ const SITE_PATH = /^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/
 const DATASET_ID = /^[A-Za-z0-9_-]{1,128}$/
 const FIELD_ID = /^[A-Za-z][A-Za-z0-9_]{0,63}$/
 
+/** A record template's base: one to four URL-safe segments, as the data plugin keeps it. */
+const RECORD_BASE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*){0,3}$/
+
+/**
+ * The link each card of a records listing opens (AGL-3727): the record's own
+ * page, `/{base}/{{item.<address field>}}`, which the page fills per record
+ * as it repeats the card. `null` where the dataset has no record page, or the
+ * listing names no address to reach it by.
+ */
+export function aiLayoutRecordHref(listing: Pick<AiLayoutListing, 'kind' | 'recordBase' | 'addressField'>): string | null {
+  if (listing.kind !== 'records') return null
+  const base = text(listing.recordBase).replace(/^\/+|\/+$/g, '')
+  const field = text(listing.addressField)
+  return RECORD_BASE.test(base) && FIELD_ID.test(field) ? `/${base}/{{item.${field}}}` : null
+}
+
 /** A records listing's fields as its input carries them; nothing that does not read is kept. */
 function listingFieldsOf(raw: unknown): AiLayoutListingField[] {
   if (!Array.isArray(raw)) return []
@@ -204,6 +233,8 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
     const datasetId = kind === 'records' ? text(record['datasetId']) : ''
     const fields = kind === 'records' ? listingFieldsOf(record['fields']) : []
     const imageField = kind === 'records' ? text(record['imageField']) : ''
+    const recordBase = kind === 'records' ? text(record['recordBase']).replace(/^\/+|\/+$/g, '') : ''
+    const addressField = kind === 'records' ? text(record['addressField']) : ''
     // Its fields may be left for the page to read off the site's inventory.
     if (kind === 'records' && !DATASET_ID.test(datasetId)) continue
     if (
@@ -242,6 +273,10 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
       ...(kind === 'posts' ? { collectionSlug } : {}),
       ...(kind === 'records' ? { datasetId, fields } : {}),
       ...(kind === 'records' && FIELD_ID.test(imageField) ? { imageField } : {}),
+      // A record page's base, and the address field where the unit knew it; a
+      // build's page reads the field off the site's inventory (AGL-3727).
+      ...(kind === 'records' && RECORD_BASE.test(recordBase) ? { recordBase } : {}),
+      ...(kind === 'records' && RECORD_BASE.test(recordBase) && FIELD_ID.test(addressField) ? { addressField } : {}),
       ...(kind === 'products' && record['cart'] === false ? { cart: false } : {}),
       ...(kind === 'products' && actionLabel && SITE_PATH.test(actionHref) ? { emptyAction: { label: actionLabel, href: actionHref } } : {}),
       placements,
@@ -272,6 +307,8 @@ export interface AiLayoutListingScreen {
   title: string
   slug: string
   sections: ReadonlyArray<{ name: string; items: number; uses?: readonly string[] }>
+  /** The dataset this page is the record template of, and its base (AGL-3475); absent for a page that is one page. */
+  record?: { dataset: string; base: string } | null
 }
 
 const PRODUCT_PAGE = /\b(shop|store|products?|catalog(?:ue)?|collections?|range|browse)\b/i
@@ -431,6 +468,26 @@ export function aiLayoutListingPlacements(
     place(screen, afterHero(screen, (name) => POST_SECTION.test(name)), 'featured')
   }
   return placements
+}
+
+/**
+ * Where a dataset's records have pages of their own (AGL-3727): the base of
+ * the page the plan makes its record template (AGL-3475), named by its id or
+ * as `new:<its name>`; `null` where no page is. Read off the plan, never
+ * asked of the model, so every card that lists the dataset links its record.
+ */
+export function aiLayoutRecordBaseOf(
+  dataset: { id: string; name: string },
+  screens: readonly AiLayoutListingScreen[],
+): string | null {
+  const named = `new:${dataset.name}`.trim().toLowerCase()
+  for (const screen of screens) {
+    const ref = text(screen.record?.dataset)
+    if (!ref || (ref !== dataset.id && ref.toLowerCase() !== named)) continue
+    const base = text(screen.record?.base).replace(/^\/+|\/+$/g, '')
+    if (RECORD_BASE.test(base)) return base
+  }
+  return null
 }
 
 /**

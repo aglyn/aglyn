@@ -31,6 +31,7 @@ import {
 } from '../runtime/ai-dataset-generation'
 import {
   aiLayoutListingId,
+  aiLayoutRecordBaseOf,
   aiLayoutRecordsPlacements,
   type AiLayoutListing,
   type AiLayoutListingField,
@@ -689,12 +690,22 @@ export async function aiSitePlanDatasetCapability(
  * site's inventory when the page is designed (`aiLayoutListingsWithDatasets`).
  */
 export function aiDatasetListingsOf(
-  datasets: ReadonlyArray<{ id: string; name: string; records?: string[]; fields?: AiLayoutListingField[]; imageField?: string | null }>,
+  datasets: ReadonlyArray<{
+    id: string
+    name: string
+    records?: string[]
+    fields?: AiLayoutListingField[]
+    imageField?: string | null
+    /** The record's page-address field, where the writer added one (AGL-3727). */
+    addressField?: string | null
+  }>,
   screens: readonly AiLayoutListingScreen[],
 ): AiLayoutListing[] {
   return datasets.flatMap((dataset) => {
     const placements = aiLayoutRecordsPlacements(dataset, screens)
     if (!placements.length) return []
+    // Each card links its record's own page where the plan makes one (AGL-3727).
+    const recordBase = aiLayoutRecordBaseOf(dataset, screens)
     return [
       {
         id: aiLayoutListingId('records', dataset.id),
@@ -705,6 +716,8 @@ export function aiDatasetListingsOf(
         ...(dataset.fields?.length ? { fields: dataset.fields } : {}),
         // Its card leads with the record's photo (AGL-3616).
         ...(dataset.imageField ? { imageField: dataset.imageField } : {}),
+        // The address is read off the site's inventory where the build does not know it yet.
+        ...(recordBase ? { recordBase, ...(dataset.addressField ? { addressField: dataset.addressField } : {}) } : {}),
         placements,
       },
     ]
@@ -747,6 +760,7 @@ export function aiSiteDatasetListings(input: {
             (index === 0 || !proposal.sparseFields?.includes(field.id)),
         ),
         imageField: proposal.imageField ?? null,
+        addressField: proposal.addressField,
       },
     ]
   })
