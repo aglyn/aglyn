@@ -3019,11 +3019,44 @@ export interface CronBeatStore {
   }
 }
 
+/**
+ * How often one instance re-marks an every-minute job.
+ *
+ * A job that runs every minute and is graded against a thirty-minute grace
+ * does not need sixty marks an hour: each mark is two writes, and the two
+ * every-minute beats alone were 5,760 writes a day. One mark per instance per
+ * five minutes leaves a silent job silent for at most five minutes plus the
+ * grace before it reads `job-silent` — still inside the budget the grace
+ * describes, and an instance that stops running stops marking either way.
+ */
+export const CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS = 5 * 60_000
+
+/** The jobs whose marks {@link CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS} spaces out. */
+const EVERY_MINUTE_CRON_JOBS = new Set(
+  SCHEDULED_JOBS.filter((job) => job.cron === '* * * * *').map((job) => job.id),
+)
+
+/** When this instance last marked each every-minute job. */
+const lastEveryMinuteBeat = new Map<string, number>()
+
+/** Test seam. */
+export function resetCronBeatThrottleForTests(): void {
+  lastEveryMinuteBeat.clear()
+}
+
 export async function writeCronBeat(
   store: CronBeatStore,
   jobId: string,
   now: number = Date.now(),
 ): Promise<boolean> {
+  const throttled = EVERY_MINUTE_CRON_JOBS.has(jobId)
+  if (throttled) {
+    const last = lastEveryMinuteBeat.get(jobId)
+    // `>= 0` so a clock that steps backwards marks rather than going quiet.
+    if (last !== undefined && now - last >= 0 && now - last < CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS) {
+      return true
+    }
+  }
   try {
     const beats = store.collection(CRON_BEAT_COLLECTION)
     await beats
@@ -3036,6 +3069,7 @@ export async function writeCronBeat(
     } catch {
       // The reader confirms a stale summary entry against the mark above.
     }
+    if (throttled) lastEveryMinuteBeat.set(jobId, now)
     return true
   } catch {
     return false

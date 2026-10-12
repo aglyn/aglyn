@@ -31,7 +31,11 @@
  * inside a transaction on the check's document.
  *
  * Cheap on the hot path: each instance remembers the last state it wrote, so
- * a poll that finds nothing changed costs no Firestore round trip at all.
+ * a poll that finds nothing changed costs no Firestore round trip at all. An
+ * instance's FIRST poll of a check reads the document outside a transaction
+ * and writes nothing when the stored status already agrees: serverless
+ * instances come and go all day, and rewriting `detail` on every cold start
+ * was a write per check per instance that nothing reads.
  * The Admin SDK is loaded on the first write rather than at import, so every
  * health route can import this without initializing anything. Never throws.
  */
@@ -90,13 +94,17 @@ export async function recordHealthState(
   try {
     const db = await firestore()
     const ref = db.collection(OPERATOR_HEALTH_COLLECTION).doc(id)
+    const stored = await ref.get()
+    if (stored.exists && stored.get('status') === status) {
+      lastWritten.set(id, status)
+      return null
+    }
     const edge = await db.runTransaction(async (transaction: any) => {
       const snapshot = await transaction.get(ref)
       const prior = (snapshot.exists ? snapshot.data() : null) as
         | Partial<OperatorHealthStateDoc>
         | null
       if (prior?.status === status) {
-        transaction.update(ref, { detail: summary, updatedAtMs: now })
         return { transition: null, priorSinceMs: prior.sinceMs ?? now }
       }
       const next: OperatorHealthStateDoc = {
