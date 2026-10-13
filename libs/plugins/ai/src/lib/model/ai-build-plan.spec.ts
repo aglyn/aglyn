@@ -31,6 +31,7 @@ import {
   aiPlanLayoutRegionWords,
   aiPlanCreateFor,
   aiPlanEmbedsFor,
+  aiPlanPhotoWords,
   aiPlanRecordBase,
   aiPlanUndeclaredRefs,
   isAiPlanNewRef,
@@ -526,5 +527,37 @@ describe("a layout's regions written as one list", () => {
   it("leaves a component's fields as they were written", () => {
     const parsed = parseAiBuildPlan(plan())
     expect(parsed.ok && parsed.plan.create[0].fields).toEqual(['title:text', 'image:image'])
+  })
+})
+
+describe("a site plan's photo words, in English (AGL-3760)", () => {
+  it('asks a site plan for them beside its language, and no other kind', () => {
+    const site = aiBuildPlanToolFor('Una panadería en San Antonio.', { language: true })
+    expect(site.inputSchema['required']).toEqual(expect.arrayContaining(['language', 'photoWords']))
+    expect(site.inputSchema['properties']).toHaveProperty('photoWords')
+    expect(aiBuildPlanToolFor('A bakery.').inputSchema['properties']).not.toHaveProperty('photoWords')
+  })
+
+  it('keeps plain English words, lowercase, at most four', () => {
+    expect(aiPlanPhotoWords('Bakery bread pastries')).toBe('bakery bread pastries')
+    expect(aiPlanPhotoWords('bakery, bread & pastries, cakes, coffee')).toBe('bakery bread pastries cakes')
+    expect(aiPlanPhotoWords("baker's dough")).toBe("baker's dough")
+  })
+
+  it('drops words that are not plain English, and anything not a string', () => {
+    expect(aiPlanPhotoWords('panadería pan dulce')).toBeNull()
+    expect(aiPlanPhotoWords('')).toBeNull()
+    expect(aiPlanPhotoWords(null)).toBeNull()
+    expect(aiPlanPhotoWords(42)).toBeNull()
+  })
+
+  it('reads them onto the plan, and drops words that are not English as a repair, never a refusal', () => {
+    const kept = parseAiBuildPlan({ ...plan(), language: 'es', photoWords: 'bakery bread pastries' })
+    expect(kept.ok && kept.plan.photoWords).toBe('bakery bread pastries')
+    const dropped = parseAiBuildPlan({ ...plan(), language: 'es', photoWords: 'panadería' })
+    expect(dropped.ok && dropped.plan.photoWords).toBeUndefined()
+    expect(dropped.ok && dropped.repairs.some((repair) => repair.includes('photoWords'))).toBe(true)
+    const none = parseAiBuildPlan({ ...plan(), language: 'en', photoWords: null })
+    expect(none.ok && 'photoWords' in none.plan).toBe(false)
   })
 })

@@ -421,6 +421,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
           extend: aiLayoutChecks(inventory, plan, job.brief),
           design: aiLayoutDesignOf(job, '/'),
           storeLinks: aiStoreFrameLinksOf(job.inputs),
+          // The frame's own words in the site's language (AGL-3760).
+          ...(job.plan?.language ? { language: job.plan.language } : {}),
         }),
         ...(signal ? { signal } : {}),
       })

@@ -422,6 +422,8 @@ export interface AiLayoutPageCheckInput {
   only?: readonly number[]
   /** The site the page is drawn for (`aiLayoutDesignOf`); absent, the compiler's first design. */
   design?: AiLayoutDesign | null
+  /** The site's language, which the compiler's own words are written in (AGL-3760); absent, English. */
+  language?: string
 }
 
 /**
@@ -550,6 +552,7 @@ export function aiLayoutPageCheck(
         reusableComponents: input.reusableComponents,
         sectionIds: input.sectionIds,
         ...(input.design ? { design: input.design } : {}),
+        ...(input.language ? { language: input.language } : {}),
       },
     )
     const stored = aiLayoutStoredTree(
@@ -712,6 +715,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           kept,
           design: aiLayoutDesignOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
+          ...(input.plan.language ? { language: input.plan.language } : {}),
         }),
       ),
       ...(input.signal ? { signal: input.signal } : {}),

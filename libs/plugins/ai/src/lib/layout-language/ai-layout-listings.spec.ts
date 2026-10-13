@@ -660,6 +660,28 @@ describe('a section one of the site’s datasets fills (AGL-3616)', () => {
     expect(nodes.some((node) => node.props?.['children'] === 'See all')).toBe(true)
   })
 
+  it("writes the way to the whole list in the site's language (AGL-3760)", () => {
+    // The beta.246 Panadería Sol de Oaxaca home showed "See all" under "Lo que horneamos".
+    const sectionIds = ['sec-0', 'sec-1']
+    const spanish = (language?: string) =>
+      nodesOf(
+        aiLayoutPageCheck({
+          screen: MENU_SCREEN as never,
+          sectionIds,
+          targets: { ...targets('home', [MENU]), pages: [...targets('home', [MENU]).pages, { id: 'menu', label: 'Menú', slug: '/menu' }] },
+          context: { screenIds: ['menu'], formIds: [], componentIds: [], datasetIds: ['ds-menu'], codeBuilt: true, scrollTargetIds: sectionIds },
+          reusableComponents: false,
+          ...(language ? { language } : {}),
+        })(answer).value?.nodes,
+      ).map((node) => node.props?.['children'])
+    expect(spanish('es')).toContain('Ver todo')
+    expect(spanish('es')).not.toContain('See all')
+    expect(spanish('es-MX')).toContain('Ver todo')
+    // A language the table does not list keeps the English, as does a site with none.
+    expect(spanish('ja')).toContain('See all')
+    expect(spanish()).toContain('See all')
+  })
+
   it('admits a repeat only over a dataset the site has, as a Form’s dataset binding is', () => {
     const nodes = nodesOf(check([]).value?.nodes)
     expect(nodes.some((node) => 'repeatDataset' in (node.props ?? {}))).toBe(false)

@@ -331,13 +331,14 @@ describe('the stock photo searches (AGL-3660)', () => {
         'calm class',
       ),
     ).toEqual([
-      // A hero of a craft names the craft itself (AGL-3660, Saltmarsh).
+      // A hero of a craft names the craft itself (AGL-3660, Saltmarsh), in its first tag (AGL-3760).
       {
         query: 'yoga studio',
         orientation: 'horizontal',
         minWidth: 1600,
         broad: true,
         category: ['yoga'],
+        first: true,
       },
       {
         query: 'yoga',
@@ -345,6 +346,7 @@ describe('the stock photo searches (AGL-3660)', () => {
         minWidth: 1600,
         broad: true,
         category: ['yoga'],
+        first: true,
       },
     ])
     expect(

@@ -249,6 +249,11 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    */
   homeScreenIds?: readonly string[]
   /**
+   * The home pages' own titles (AGL-3760): a link home under one of them says
+   * where it goes in the site's language, as "Inicio" does on a Spanish site.
+   */
+  homeLabels?: readonly string[]
+  /**
    * The site's pages that place its form, by id (AGL-3729): where a link whose
    * words ask a visitor to get in touch (`aiAsksToGetInTouch`) does what it
    * says, even when that page is home. A guided start's café put its
@@ -2027,6 +2032,9 @@ export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputK
 /** A link's words that say it goes home. */
 const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 
+/** A label's words, lowercase, for comparing one label with another. */
+const labelWords = (label: string) => label.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ')
+
 /** Words that ask a visitor to get in touch, which the site's form answers. */
 const GET_IN_TOUCH_WORDS =
   /\b(?:contact|book|booking|call|quote|estimate|appointment|schedule|reserve|reservation|get in touch|request|visit|enquire|inquire|enquiry|inquiry|message|talk|consult|consultation|order|pre-?order|sign up|join|apply|start)\b/i
@@ -2048,11 +2056,12 @@ export function aiAsksToGetInTouch(label: string): boolean {
 function unrelatedScreenLinks(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'>,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'>,
 ): Array<{ id: string; label: string }> {
   if (outputKind === 'email' || outputKind === 'form') return []
   const home = new Set(context.homeScreenIds ?? [])
   const forms = new Set(context.formScreenIds ?? [])
+  const homeLabels = new Set((context.homeLabels ?? []).map(labelWords).filter(Boolean))
   const sent: Array<{ id: string; label: string }> = []
   for (const visit of walkTree(tree)) {
     const { node } = visit
@@ -2060,7 +2069,7 @@ function unrelatedScreenLinks(
     const screenId = node.props?.['screenId']
     const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
     const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
-    if (!linksHome || !label || HOME_WORDS.test(label)) continue
+    if (!linksHome || !label || HOME_WORDS.test(label) || homeLabels.has(labelWords(label))) continue
     // Home holds the site's form, and the words ask for what it does (AGL-3729).
     if (typeof screenId === 'string' && forms.has(screenId) && aiAsksToGetInTouch(label)) continue
     // The header and the navigation link home by name and by the site's own brand.
@@ -2100,7 +2109,7 @@ function unrelatedScreenLinks(
 export function aiSettleUnrelatedScreenLinks<T extends AiDoctrineTree>(
   tree: T,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'> & {
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'> & {
     /** The page being checked, by every id it goes by: a link never goes to itself. */
     ownScreenIds?: readonly string[]
   } = {},
@@ -2150,7 +2159,7 @@ export function aiSettleUnrelatedScreenLinks<T extends AiDoctrineTree>(
 export function detectUnrelatedScreenLinks(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'> = {},
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'> = {},
 ): AiDoctrineViolation[] {
   const sent = unrelatedScreenLinks(tree, outputKind, context)
   if (!sent.length) return []

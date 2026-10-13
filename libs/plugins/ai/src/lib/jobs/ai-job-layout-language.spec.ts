@@ -23,6 +23,7 @@
 import type { AiBuildPlanScreen } from '../model/ai-build-plan'
 import type { AiJob } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory } from '../model/ai-site-inventory'
+import { detectUnrelatedScreenLinks } from '../runtime/ai-doctrine-validators'
 import { aiLayoutFrameCheck, aiLayoutFrameTargets, aiLayoutHomeId, aiLayoutNavPages } from './ai-job-layout-language'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 
@@ -117,5 +118,66 @@ describe('a frame links every page the site builds, whatever its answer says (AG
     expect(links.filter(([label]) => label === 'Contact')).toHaveLength(3)
     expect(linked(result.value?.nodes, 'rlv3yk2I46')).toBe(true)
     expect(linked(result.value?.nodes, 'Fw0B612Zew')).toBe(true)
+  })
+})
+
+describe("a frame names the home page in the site's language (AGL-3760)", () => {
+  // The beta.246 Panadería Sol de Oaxaca start (job ODSFzsGM91): a Spanish
+  // plan whose home page is "Inicio", linked in the header as "Home".
+  const SPANISH = [
+    { id: 'z1ZrELnVk3', title: 'Inicio', slug: '/', nav: true, record: null },
+    { id: 'uvp7wVAjtz', title: 'Menú', slug: '/menu', nav: true, record: null },
+    { id: 'r6qqdj-eS4', title: 'Visítanos', slug: '/visitanos', nav: true, record: null },
+  ] as unknown as AiBuildPlanScreen[]
+  const spanish = {
+    $id: 'job-frame-es',
+    brief: 'Una panadería familiar de San Antonio.',
+    inputs: { businessName: 'Panadería Sol de Oaxaca', [AI_LAYOUT_SITE_PAGES_INPUT]: aiLayoutSitePagesOfPlan(SPANISH, { guided: true }) },
+    plan: { language: 'es' },
+  } as unknown as AiJob
+
+  it("keeps the home page's own title on a site in another language", () => {
+    const pages = aiLayoutNavPages(spanish, emptyAiSiteInventory('host-1'))
+    expect(pages.map((page) => page.label)).toEqual(['Inicio', 'Menú', 'Visítanos'])
+  })
+
+  it('still says Home on an English site, and on one whose plan named no language', () => {
+    expect(aiLayoutNavPages({ ...job, plan: { language: 'en-US' } } as unknown as AiJob, null)[0]?.label).toBe('Home')
+    expect(aiLayoutNavPages(job, null)[0]?.label).toBe('Home')
+  })
+
+  it('links Inicio from the header, the phone menu and the footer, never "Home"', () => {
+    const inventory = emptyAiSiteInventory('host-1')
+    const pages = aiLayoutNavPages(spanish, inventory)
+    const check = aiLayoutFrameCheck({
+      siteName: 'Panadería Sol de Oaxaca',
+      homeId: aiLayoutHomeId(pages, inventory),
+      pages,
+      targets: aiLayoutFrameTargets(spanish, inventory),
+      extend: () => [],
+      language: 'es',
+    })
+    const item = (title: string, to: string) => ({ title, text: '', to })
+    const result = check({
+      header: { band: 'plain', align: 'start', cols: [], blocks: [{ kind: 'button', col: -1, text: 'Visítanos', to: 'page:r6qqdj-eS4', icon: '', style: 'primary', items: [] }] },
+      footer: {
+        band: 'soft',
+        align: 'start',
+        cols: [2, 1],
+        blocks: [
+          { kind: 'text', col: 0, text: 'Pan dulce recién horneado cada mañana.', to: '', icon: '', style: 'none', items: [] },
+          { kind: 'list', col: 1, text: '', to: '', icon: '', style: 'none', items: [item('Menú', 'page:uvp7wVAjtz')] },
+        ],
+      },
+    })
+    expect(result.violations).toEqual([])
+    const nodes = Object.values(result.value?.nodes ?? {}) as Array<{ componentId: string; props?: Record<string, unknown> }>
+    const links = nodes.filter((node) => node.componentId === 'muiScreenLink').map((node) => [node.props?.['children'], node.props?.['screenId']])
+    expect(links.filter(([label]) => label === 'Home')).toEqual([])
+    expect(links.filter(([label, id]) => label === 'Inicio' && id === 'z1ZrELnVk3')).toHaveLength(3)
+    // Rule 10 reads a link home under the home page's own title as one that says home.
+    const tree = { rootId: result.value?.rootId ?? '', nodes: result.value?.nodes ?? {} } as never
+    expect(detectUnrelatedScreenLinks(tree, 'layout', { homeScreenIds: ['z1ZrELnVk3'], homeLabels: ['Inicio'] })).toEqual([])
+    expect(detectUnrelatedScreenLinks(tree, 'layout', { homeScreenIds: ['z1ZrELnVk3'] })).toHaveLength(1)
   })
 })

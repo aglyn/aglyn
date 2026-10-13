@@ -26,7 +26,7 @@ import {
 } from '../model/ai-build-plan'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, aiHomeScreenNames, type AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiTool } from '../providers/contract'
 import {
   AI_REASK_OFFENDING_MAX_CHARS,
@@ -508,6 +508,7 @@ export function aiPageCheckContext(
     ...tree,
     ...(tree.screenIds || options.linkablePages?.length ? { screenIds } : {}),
     homeScreenIds: aiHomeScreenIds(inventory),
+    homeLabels: aiHomeScreenNames(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
     ...(options.sections?.length ? { pageSections: options.sections } : {}),
     ...(options.embeds?.length ? { plannedEmbeds: options.embeds } : {}),
