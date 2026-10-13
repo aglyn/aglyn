@@ -110,7 +110,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-a-layout-with-aglyn-ai': 'Copy until you assign it, so nothing on the live site changes.',
   },
   aiLogic: {
-    '#change': 'Ariable} Create with AI at the top of the Variables card writes one site variable — a name, a type and a value in that type\'s stored form, such as a dictionary of plan prices {"starter":19,"pro":49}.',
+    '#change': 'Top of the Variables card writes one site variable — a name, a type and a value, such as a dictionary of plan prices with a starter entry of 19 and a pro entry of 49.',
     '#function': '. Nothing is saved for you. What Aglyn AI writes opens in the function or variable editor, unsaved, exactly as if you had typed it.',
     '#variable': 'Tten, saying why. Where your description needs a number your site does not hold, it becomes a parameter rather than a guess.',
   },
@@ -192,7 +192,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   bindings: {
     '#functions-card': 'N explain, change or fix it — each opens unsaved in the editor.',
     '#insert-a-variable': 'K. A published page resolves only the id form, so a name token that was never converted — because no variable had that name — shows exactly as typed.',
-    '#no-code-functions': 'E.',
+    '#no-code-functions': 'The next value in the list, and × removes one. On a page, a bare {{name}} shows a dictionary as name: value pairs and a list comma-separated.',
     '#site-details': 'Taset/webhook, and computed variables pick their workflow. Renaming an entity never breaks anything that references it — the display name is just a label.',
     '#typed-variables': 'The site you are editing, exactly as the published page does.',
     '#where-used--safety': 'Riable for every figure on the page, and a true/false for every row a filter can turn off.',
