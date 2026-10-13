@@ -490,8 +490,12 @@ export function readThemeColor(
 
 /**
  * Sets one color for one scheme, or clears it with `undefined` so the slot
- * inherits again. A palette color writes `main` and keeps whatever else its
- * record carries, and clearing it drops the record; a group member that
+ * inherits again. A palette color writes a record of `main` alone: its
+ * `light`, `dark` and `contrastText` were derived from (or authored for) the
+ * old `main`, and the editor offers no control for them, so a kept shade
+ * would go on painting the old color (an outlined button reads `dark`) with
+ * no way for the owner to see or change it. Dropped, the theme derives them
+ * from the new `main`. Clearing it drops the record; a group member that
  * leaves its group empty drops the group.
  */
 export function writeThemeColor(
@@ -510,7 +514,7 @@ export function writeThemeColor(
     const [group, key] = token.split('.')
     if (!key) {
       const paletteKey = group as PaletteColorKey
-      if (hex) next[paletteKey] = { ...next[paletteKey], main: hex }
+      if (hex) next[paletteKey] = { main: hex }
       else delete next[paletteKey]
       return next
     }

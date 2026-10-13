@@ -205,12 +205,36 @@ describe('THEME_EDITOR_CONTROLS (AGL-2938)', () => {
 })
 
 describe('the editor writes (AGL-2938)', () => {
-  it('sets a palette color on main and keeps the rest of its record', () => {
+  it('sets a palette color on main and drops the shades derived from the old main', () => {
+    const theme: HostTheme = {
+      colorSchemes: {
+        light: {
+          primary: { main: '#4f46e5', light: '#818cf8', dark: '#3730a3', contrastText: '#fff' },
+          secondary: { main: '#0f766e', dark: '#115e59' },
+          background: { default: '#fafafa' },
+        },
+        dark: { primary: { main: '#a5b4fc', dark: '#6366f1' } },
+      },
+    }
+    const next = writeThemeColor(theme, 'light', 'primary', '#b3261e')
+    // Only main survives, so the theme derives light, dark and contrastText
+    // from the new color instead of painting the old indigo.
+    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#b3261e' })
+    expect(readThemeColor(next, 'light', 'primary')).toBe('#b3261e')
+    // Every other group, and the other scheme, is untouched.
+    expect(next.colorSchemes?.light?.secondary).toEqual({ main: '#0f766e', dark: '#115e59' })
+    expect(next.colorSchemes?.light?.background).toEqual({ default: '#fafafa' })
+    expect(next.colorSchemes?.dark).toEqual(theme.colorSchemes?.dark)
+    // The input is never mutated.
+    expect(theme.colorSchemes?.light?.primary?.dark).toBe('#3730a3')
+  })
+
+  it('sets a palette color on main and clears it back to inherit', () => {
     const theme: HostTheme = {
       colorSchemes: { light: { primary: { main: '#111111', contrastText: '#fff' } } },
     }
     const next = writeThemeColor(theme, 'light', 'primary', '#222222')
-    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#222222', contrastText: '#fff' })
+    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#222222' })
     expect(readThemeColor(next, 'light', 'primary')).toBe('#222222')
     // Cleared, the palette record goes with it and the slot inherits.
     const cleared = writeThemeColor(next, 'light', 'primary', undefined)
