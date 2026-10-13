@@ -89,7 +89,10 @@ import {
   heldUpdateApplied,
   stripeCallWithKey,
 } from '../../../../utils/server/immediate-charge'
-import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
+import {
+  invoiceClosedBeforeFirstPayment,
+  platformInvoiceRevenue,
+} from '../../../../utils/server/platform-revenue'
 import {
   defaultPaymentMethodChange,
   describeStripePaymentMethod,
@@ -1721,23 +1724,40 @@ async function handler(request: Request): Promise<Response> {
               reason: type === 'invoice.voided' ? 'voided' : 'uncollectible',
               metadata: invoiceMetadata,
             })
-            // Revenue the books expected that is not coming (AGL-3377).
-            await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
-              dedupeKey: `${String(object?.id ?? '')}:${type}`,
-              context: {
-                invoiceId: String(object?.id ?? ''),
+            // A sign-up whose first charge never went through (AGL-3766):
+            // Stripe expires the `incomplete` subscription and voids its
+            // opening invoice. Nothing was ever counted as revenue for it and
+            // the workspace never left Free, so there is nothing to alert on —
+            // but it is a decision, named so it never reads as inert.
+            if (invoiceClosedBeforeFirstPayment(object)) {
+              ledger.skip('invoice-closed-before-first-payment')
+            } else {
+              // Revenue the books expected that is not coming (AGL-3377).
+              // The alert IS this branch's effect: without it in the ledger the
+              // delivery reads as inert and the operator gets a second email
+              // saying no handler acted, beside the one this just sent.
+              const closedAlert = await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
+                dedupeKey: `${String(object?.id ?? '')}:${type}`,
+                context: {
+                  invoiceId: String(object?.id ?? ''),
+                  orgId,
+                  // Off the org document already read for the slug above
+                  // (AGL-3432); blank when it has no name.
+                  orgName: String(invoiceOrg.get('name') ?? '').trim(),
+                  status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
+                  amount: formatOperatorAlertAmount(
+                    Number(object?.amount_due ?? 0),
+                    String(object?.currency ?? 'usd'),
+                  ),
+                },
                 orgId,
-                // Off the org document already read for the slug above
-                // (AGL-3432); blank when it has no name.
-                orgName: String(invoiceOrg.get('name') ?? '').trim(),
-                status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
-                amount: formatOperatorAlertAmount(
-                  Number(object?.amount_due ?? 0),
-                  String(object?.currency ?? 'usd'),
-                ),
-              },
-              orgId,
-            })
+              })
+              if (closedAlert.outcome === 'undelivered') {
+                ledger.skip('invoice-closed-alert-undelivered')
+              } else {
+                ledger.effect('operator-told-invoice-closed')
+              }
+            }
           }
         }
       }
