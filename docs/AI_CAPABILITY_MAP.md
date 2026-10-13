@@ -165,7 +165,7 @@ gap.
 | Besigner elements | animations, lightbox and galleries, music player, video, markdown, interactions, repeat over a dataset | partial: pages place what the layout language compiles; repeat over a dataset (this PR); no animations, interactions, lightbox or video placement op |
 | Reusable components | components with properties | yes (build `component`; a site start draws repeats inline) |
 | Theme builder | colors, fonts, light and dark | yes: the site look; theme proposals |
-| Menus and navigation | dropdown, mega menu, drawer | yes (AGL-3728): a build's `navigation` op adds, removes, renames, relinks and reorders header and footer items and puts items under a dropdown; a guided start writes header links at publish; no mega menu panels or new drawers |
+| Menus and navigation | dropdown, mega menu, drawer | yes (AGL-3728): a build's `navigation` op adds, removes, renames, relinks and reorders header and footer items and puts items under a dropdown; a guided start adds its header links at publish through the same code (AGL-3747); no mega menu panels or new drawers |
 | Bindings and logic | variables, functions | yes (`variable`, `function`) |
 | Templates and blog | page templates, blog collections, entries | partial: entry, product and author templates; a blog start's first 3 posts; no collection create, authors or scheduled posts outside a site start |
 | Site backup and packages | export, import, merge | no, by design: a person's decision |
@@ -289,9 +289,15 @@ is a decision about the account, not something to build.
   the link token is admitted only on a page that lists the dataset. The link
   answers once the member saves the binding (rule 13), as the record page's
   row says.
-- **Not yet.** A dataset with a record page saved earlier and no record
-  template in the plan is not linked: the inventory does not read the data
-  plugin's bindings.
+- **Record pages saved earlier (AGL-3747).** The data plugin's `dataset`
+  index, narrowed to a site, says where the site already serves a dataset's
+  records pages of their own (`facts.recordPage`: the saved binding's base
+  and address field). The inventory carries them as the dataset's
+  `recordBase` and `addressField` (never in the prompt's line), and a
+  listing whose plan makes no record template takes them, so its cards link
+  the pages the site already has. A build lists the site's own datasets its
+  plan reuses where a section places them, as it lists the ones it made: the
+  page's section line then says the platform lists the records.
 
 ## Navigation and menus (AGL-3728)
 
@@ -333,10 +339,20 @@ is a decision about the account, not something to build.
 - **Cost and audit.** No model, so 0 credits in the estimate and none spent.
   The layout version is the job's output, recorded as an `ai.job.output`
   activity row like every other op's.
-- **Not yet.** A site start still writes its navigation at publish
-  (`aiLayoutWithNavigation`) rather than through this op; mega menu panels'
-  columns and new drawers are not made, and a menu change never publishes on
-  its own, even in a build that publishes its pages.
+- **The site start shares it (AGL-3747).** A guided start still adds its
+  pages' header entries when it publishes (`aiLayoutWithNavigation`), since
+  only then does it know which pages went live, but it adds them through this
+  op's `aiLayoutWithMenuChanges`: into the bar's menu and the phone menu,
+  after their items (after the brand in a starter's Toolbar), like their
+  neighbours, and never a second item of a name already there. Its link
+  repair is unchanged: links to a retired starter home move to the new home,
+  and links to pages it did not write come out. A blog whose posts part
+  failed is published with its links out; once Try again puts its posts live
+  (AGL-3739), the same code puts its header entry back, after the home
+  page's item (`aiRestoreGuidedBlogEntry`), as a new live layout version.
+- **Not yet.** Mega menu panels' columns and new drawers are not made, and a
+  menu change never publishes on its own, even in a build that publishes its
+  pages.
 
 ## Duplicating (AGL-3740)
 

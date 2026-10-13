@@ -80,7 +80,7 @@ import { aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_LAYOUT_LISTINGS_INPUT, aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
-import { aiJobPublishesSite, aiMergeSitePublish, aiPublishGuidedSite } from './ai-site-publish'
+import { aiJobPublishesSite, aiMergeSitePublish, aiPublishGuidedSite, aiRestoreGuidedBlogEntry } from './ai-site-publish'
 import {
   AI_SITE_CONTENT_INPUT,
   AI_SITE_POST_BUDGET,
@@ -996,6 +996,8 @@ export interface AiJobSiteStepDeps {
   /** The posts' publish once the pages are live, and the cache drop after it. */
   publishPosts?: typeof aiPublishSitePosts
   dropCache?: typeof dropPluginSiteCache
+  /** The blog's header entry put back once Try again's posts are live (AGL-3747); specs hand in a fake. */
+  restoreBlogEntry?: typeof aiRestoreGuidedBlogEntry
 }
 
 /** A page the scaffold reported built that holds none of its plan's sections. */
@@ -1114,6 +1116,7 @@ export function createAiJobSiteStep(
   const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
   const publishPosts = deps.publishPosts ?? aiPublishSitePosts
   const dropCache = deps.dropCache ?? dropPluginSiteCache
+  const restoreBlogEntry = deps.restoreBlogEntry ?? aiRestoreGuidedBlogEntry
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -1162,7 +1165,7 @@ export function createAiJobSiteStep(
       // A canceled start never puts the site live (AGL-3616): its pages stay drafts.
       if (await aiJobCancelAsked(context.firestore, job, context.signal)) return outcome
       if (!fresh.length) {
-        await finishPosts()
+        if (await finishPosts()) await finishBlogEntry(previous?.published ?? [])
         return outcome
       }
       // A blog the header links by path before its posts exist (AGL-3660):
@@ -1182,8 +1185,12 @@ export function createAiJobSiteStep(
         return null
       })
       // The blog's posts go live with the first publish that puts a page
-      // live, and on a site already live, when Try again wrote them.
-      if (wasLive ? postsRetried : sitePublish?.published.length) await finishPosts()
+      // live, and on a site already live, when Try again wrote them; then
+      // the header links the blog again, which the first publish took out.
+      if (wasLive ? postsRetried : sitePublish?.published.length) {
+        const posted = await finishPosts()
+        if (posted && wasLive) await finishBlogEntry([...(previous?.published ?? []), ...(sitePublish?.published ?? [])])
+      }
       if (!sitePublish) return outcome
       return { ...outcome, sitePublish: previous ? aiMergeSitePublish(previous, sitePublish) : sitePublish }
     }
@@ -1196,19 +1203,42 @@ export function createAiJobSiteStep(
       const row = rows.get('posts')
       return Boolean(row && row.attempt > 1 && aiBuildItemDelivered(row) && row.outputs?.length)
     }
-    /** The blog's posts go live with its pages (AGL-3676), as a person's Publish would put them. */
-    const finishPosts = async () => {
+    /**
+     * The blog's posts go live with its pages (AGL-3676), as a person's
+     * Publish would put them. Whether any did.
+     */
+    const finishPosts = async (): Promise<boolean> => {
       const row = rows.get('posts')
-      if (!row || !aiBuildItemDelivered(row) || !job.hostId) return
+      if (!row || !aiBuildItemDelivered(row) || !job.hostId) return false
       const ids = new Set(row.outputs)
       const posts = (job.outputs ?? []).filter((output) => output.resource === 'entry' && ids.has(output.id))
       const published = await publishPosts(context.firestore, { job, outputs: posts, now: context.now })
-      if (!published?.paths.length) return
+      if (!published?.paths.length) return false
       await dropCache({
         hostIds: [job.hostId],
         reason: 'guided AI site start published its posts',
         paths: { [job.hostId]: published.paths },
       }).catch((error: unknown) => console.warn('ai site posts: cache not dropped', { jobId: job.$id, error }))
+      return true
+    }
+    /**
+     * A blog whose posts Try again put live on a site already live (AGL-3747):
+     * the first publish took every link to it out (AGL-3660), so its header
+     * entry goes back, after the home page's, where no link opens it yet. The
+     * site is live either way; a layout it cannot change is logged.
+     */
+    const finishBlogEntry = async (published: ReadonlyArray<{ id: string; path: string }>) => {
+      const blog = aiSiteBlogNavPage(aiSitePlanWithoutBlogStandIns(plan.screens).screens)
+      await restoreBlogEntry(context.firestore, {
+        job,
+        pageIds: published.map((page) => page.id),
+        homeId: published.find((page) => page.path === '/')?.id ?? null,
+        blog: { label: blog.label, href: blog.href },
+        now: context.now,
+      }).catch((error: unknown) => {
+        console.error('ai site blog entry not restored', { orgId: job.orgId, jobId: job.$id, error })
+        return false
+      })
     }
     /**
      * The pages built so far, as the job reported them. A dataset's record

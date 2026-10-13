@@ -244,7 +244,8 @@ export function aiLayoutPageTargets(input: {
  * (AGL-3616): a records listing is kept only where the site has the dataset —
  * the tree check admits a repeat over no other, and a card left repeating
  * over nothing would show its `{{item.*}}` — and one that names no fields
- * takes the inventory's, in the dataset's order.
+ * takes the inventory's, in the dataset's order. Its cards link the record
+ * pages the plan makes, else those the site already serves (AGL-3747).
  */
 export function aiLayoutListingsWithDatasets(
   listings: readonly AiLayoutListing[],
@@ -258,6 +259,9 @@ export function aiLayoutListingsWithDatasets(
     const imageField = listing.imageField ?? row.imageField
     // The address is the card's link to its record's page, never its words (AGL-3727).
     const addressField = listing.addressField ?? row.addressField
+    // A record page the site already serves for the dataset (AGL-3747), where
+    // the plan makes none of its own.
+    const recordBase = listing.recordBase ?? row.recordBase
     const fields = (
       listing.fields?.length
         ? listing.fields
@@ -269,7 +273,7 @@ export function aiLayoutListingsWithDatasets(
             ...listing,
             fields,
             ...(imageField ? { imageField } : {}),
-            ...(listing.recordBase && addressField ? { addressField } : {}),
+            ...(recordBase && addressField ? { recordBase, addressField } : {}),
           },
         ]
       : []
