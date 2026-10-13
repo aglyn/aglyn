@@ -93,6 +93,9 @@ describe('where the feed files a job output', () => {
     for (const resource of ['form', 'emailScreen', 'campaign', 'product', 'experiment'] as const) {
       expect(aiOutputTargetType(resource)).toBe('content')
     }
+    // A build's settings (AGL-3748) and media library changes (AGL-3752) describe the site.
+    expect(aiOutputTargetType('settings')).toBe('content')
+    expect(aiOutputTargetType('media')).toBe('content')
   })
 })
 

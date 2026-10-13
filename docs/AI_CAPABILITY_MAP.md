@@ -64,6 +64,7 @@ checks the member's role and the allowance when the item runs.
 | `navigation` (1), AGL-3728 | ai | navigation runner, no model (a layout version, unpublished) | `versioning` | | no |
 | `duplicate` (3), AGL-3740 | ai | duplicate runner, no model, core's `duplicateResource` (an unpublished copy) | the kind's own, checked by the copy | the kind's create counter | yes |
 | `settings` (1), AGL-3748 | ai | settings runner, no model, the console settings cards' fields saved LIVE on confirm | | | yes |
+| `media` (4), AGL-3752 | ai | media runner, no model, the media library Details drawer's folder, tags, alt text and file name saved LIVE on confirm | | | yes |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
 | `store-shipping` (10), `store-pickup` (5), `store-delivery` (5), `store-tax` (6), AGL-3749 | commerce | `store-settings` writer, no model, live (`libs/plugins/commerce/src/lib/server/store-setup-ai-capability.ts`) | `commerce` | | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
@@ -188,7 +189,7 @@ gap.
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
 | Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
-| Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
+| Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; a build's `media` op (AGL-3752) files the site's own files in folders (made where missing), adds and removes tags, renames one, and writes alt text from the request or from the caption the library holds, live; no uploads, edits, crops, sharing or the organization library |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); values added to every picklist and Choice field (`crm-picklist-values`, AGL-3756); no records or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
 | Bookings | services, availability, payment, reminders | partial: a booking service draft |
@@ -241,7 +242,10 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    error pages, site search or multilingual variants.
 10. **Integrations.** No webhooks, Zapier or GA4/conversions setup.
 11. **Media library.** No tags, folders or metadata, and no video, music or
-    lightbox placement ops.
+    lightbox placement ops. **Organization CLOSED (AGL-3752):** a build's
+    `media` op files, tags, renames and writes alt text for files already in
+    the site's own library, as the Details drawer saves them. See "Media
+    library" below. Placement ops (video, music, lightbox) stay open.
 12. **Duplicating.** `duplicate_resource` exists and nothing calls it.
     **CLOSED (AGL-3740):** a build's `duplicate` op copies a page, component,
     layout, template, form, email design or workflow the site has, so "make
@@ -572,6 +576,59 @@ is a decision about the account, not something to build.
   brief: nothing in the site plan says which language the brief is in, and
   adding that changes the plan prompt (see the PR). Clearing a setting is
   not offered.
+
+## Media library (AGL-3752)
+
+- **The library is core's, so the op is the AI plugin's**, as `settings` is
+  (`jobs/ai-job-media-step.ts`): no plugin owns the media library, and core
+  registers no capability. No model, so 0 credits; every plan has a library,
+  so the Free taste may ask.
+- **What the console supports, and nothing else.** Checked against
+  `apps/console/components/media/media-library.component.tsx` (the Details
+  drawer's save, the grid's bulk tag and New folder) and `/api/media/folders`
+  (`create-folder`, `update-details`): folders, tags, alt text, a file name
+  and a description. The op writes four of them:
+
+  | argument | field | rule (the console's) |
+  | -- | -- | -- |
+  | `folder` (a path, `Studio / Kilns`) | `folderId`, legacy `folder`; a new `mediaFolders` doc | `newMediaFolderDoc`, `normalizeFolderName` (60), sibling names unique without case, `MEDIA_FOLDER_MAX_DEPTH` (5); a missing folder is made, an existing one used |
+  | `addTags`, `removeTags` | `tags` | `normalizeMediaTags` (lower case, 20 of 40 characters); a tag a full file cannot take is named |
+  | `rename` (one file) | `fileName` | 200 characters; the file's address never changes |
+  | `alt` (one image), `altFromDetails` | `alt` | `MEDIA_ALT_MAX_LENGTH` (300); images only |
+
+  Each write re-derives the library's filter and search keys
+  (`mediaFilterKeys`) as the drawer does. Filing writes the folder as the
+  drawer's save does; the stored object takes the folder's path the next time
+  that folder is renamed or moved (`relocateAsset`), and every address stays.
+- **Files** are named by media id or exact file name from the site's own
+  library (never the organization's, which every site shares); a deleted file
+  is not found, and two of one name are refused, as for `settings`.
+  `missingAlt` selects up to 20 images the library's "Alt text is missing"
+  filter (`hasAlt == false`) finds. Up to 20 files an item.
+- **Alt text is specific to the image.** `alt` is for exactly one image the
+  request says what it shows. `altFromDetails` fills a MISSING alt from what
+  the library already holds: the file's description, else the caption,
+  headline or title read from inside it (`embeddedMetadata`, only while it
+  describes the file's bytes). An image with none is named ("say what it
+  shows"); nothing calls a vision model. Alt that is only a word like "image"
+  or repeats the file name is refused (`inheritedMediaAlt`'s rule). The
+  library's alt is what a placement takes when placed; placements already on a
+  page keep their own, and the output says so.
+- **Never.** Uploading, copying, replacing or deleting a file, editing its
+  bytes or the details inside them, crops, sharing (`visibleTo`), privacy,
+  custom metadata, the description, and renaming, moving or deleting a folder
+  are not arguments. A file is organized in place: no second copy.
+- **Live on confirm.** A file's details have no draft. One transaction reads
+  the site, its folders and the named files, re-checks the role, makes only
+  the missing folders and writes only what differs, so a pass asked again
+  writes nothing. No cache drop: nothing a published page renders changes.
+  The job row reads "Live now, in the site's Media library." and links to it.
+- **Gates.** The site library's rules (`canWriteHostContent`,
+  `hostWritesFrozen`): admin, editor or author, no lockdown, at the door,
+  before the write and inside it.
+- **Not yet.** The planner sees no list of the library (the site inventory
+  carries none), so a file is named by the person; a description, a folder's
+  rename or move, and the organization library are not offered.
 
 ## Forms that write to a dataset
 

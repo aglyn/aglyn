@@ -260,6 +260,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   entry: 'content',
   // A site's settings a build saved (AGL-3748) describe the site, filed with its content.
   settings: 'content',
+  // Files a build organized in the site's media library (AGL-3752), filed with its content.
+  media: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {
