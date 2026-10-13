@@ -27,7 +27,7 @@
  * Each `formField` node becomes a Form Control (same id, same `sx`) holding a
  * Form Label and the answer element (Input, Select › Select Options, Radio
  * Group › Choice Labels › Radios, Choice Labels › Checkboxes, Rating), built
- * by `formFieldToElements` in `libs/aglyn/src/lib/app-utils/
+ * by `formFieldToElements` in `libs/plugins/forms/src/lib/model/
  * form-field-elements.ts` — the same function the seeds and presets follow,
  * imported straight from its TypeScript source (Node strips the types).
  *
@@ -67,7 +67,7 @@ import {
   migrateFormFieldNodes,
   muiClassSelectorsIn,
   rekeyFormFieldOverrides,
-} from '../../libs/aglyn/src/lib/app-utils/form-field-elements.ts'
+} from '../../libs/plugins/forms/src/lib/model/form-field-elements.ts'
 
 /** Every per-host collection whose documents carry a `nodes` tree. */
 const KINDS = [

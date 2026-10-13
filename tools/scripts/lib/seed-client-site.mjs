@@ -407,7 +407,7 @@ function homeNodes(hostId) {
 /**
  * One labelled text field as MUI's separate form elements — Form Control ›
  * Form Label + Input — the tree `starterTextField` and the formField backfill
- * build (libs/aglyn/src/lib/app-utils/form-field-elements.ts).
+ * build (libs/plugins/forms/src/lib/model/form-field-elements.ts).
  */
 function textField(id, { name, label, type = 'text', multiline = false, required = false }) {
   const req = required ? { required: true } : {}

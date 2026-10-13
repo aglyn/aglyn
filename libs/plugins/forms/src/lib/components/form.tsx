@@ -60,6 +60,11 @@ import {
   useState,
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  formFieldToElements,
+  LEGACY_FORM_FIELD_COMPONENT_ID,
+  type StoredFormNode,
+} from '../model/form-field-elements'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 /*
@@ -1217,14 +1222,14 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
 export function fieldPresetData(
   props: FormFieldProps,
 ): Aglyn.NodePresetData {
-  const built = Aglyn.formFieldToElements({
+  const built = formFieldToElements({
     $id: 'field',
-    componentId: Aglyn.LEGACY_FORM_FIELD_COMPONENT_ID,
+    componentId: LEGACY_FORM_FIELD_COMPONENT_ID,
     props: props as Record<string, unknown>,
   })
   if (!built) throw new Error('formFieldToElements refused a Form Field')
   const nest = (id: string): Aglyn.NodePresetData => {
-    const node = built.nodes[id] as Aglyn.StoredFormNode
+    const node = built.nodes[id] as StoredFormNode
     const children = (node.nodes ?? []).map(String)
     return {
       $id: null,

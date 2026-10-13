@@ -137,8 +137,8 @@ export const starterText = (
 
 /**
  * One labelled text field, as MUI's separate form elements: a Form Control
- * holding a Form Label and an Input — exactly the tree `formFieldToElements`
- * rebuilds an all-in-one Form Field into, so a starter's fields and a migrated
+ * holding a Form Label and an Input — exactly the tree the forms plugin's
+ * `formFieldToElements` rebuilds an all-in-one Form Field into, so a starter's fields and a migrated
  * site's look and submit alike. Ids are `id`, `id-label` and `id-input`.
  */
 export const starterTextField = (

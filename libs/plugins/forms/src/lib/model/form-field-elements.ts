@@ -38,21 +38,23 @@
  *   named the field's id and a prop of the all-in-one element; the slice is
  *   re-keyed onto the piece that now owns that prop.
  *
- * Pure and dependency-free (type imports only) on purpose: the backfill is a
- * plain Node script that imports this file directly, and a value import here
- * would drag the whole foundation barrel into it.
+ * It lives with the forms plugin, which owns the all-in-one element, rather
+ * than in core: a form's vocabulary is the plugin's domain (docs/PACKAGES.md
+ * rule 3).
+ *
+ * Pure and dependency-free (no imports at all) on purpose: the backfill is a
+ * plain Node script that imports this file directly from its TypeScript
+ * source, and an import here would drag a package graph into it.
  */
-
-import type { NodeId } from '../foundation/definitions/components.types'
 
 /** A node as it is stored: a flat map entry with its children by id. */
 export interface StoredFormNode {
-  $id?: NodeId | string
+  $id?: string
   componentId?: string
   pluginId?: string
-  parentId?: NodeId | string | null
+  parentId?: string | null
   props?: Record<string, unknown>
-  nodes?: (NodeId | string)[]
+  nodes?: string[]
   sx?: unknown
   [key: string]: unknown
 }
@@ -65,8 +67,9 @@ export const FORM_FIELD_ELEMENTS_PLUGIN_ID = 'mui'
 
 /**
  * MUI's form elements, by persisted component id — restated rather than
- * imported (see the module note). `form-field-elements.spec.ts` holds this
- * table equal to `FORM_INPUT_ELEMENT_IDS` in `forms.ts`.
+ * imported (see the module note; a plugin never imports another plugin).
+ * `form-field-elements.spec.ts` holds this table equal to core's
+ * `FORM_INPUT_ELEMENT_IDS` in `forms.ts`.
  */
 export const FORM_FIELD_ELEMENT_IDS = {
   formControl: 'muiFormControl',

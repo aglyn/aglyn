@@ -22,7 +22,14 @@
  * the name it submits under, and whatever a placement overrode on it.
  */
 
-import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
+import {
+  type AglynNodeSchema,
+  FORM_INPUT_ELEMENT_IDS,
+  formFieldDeclsFromNodes,
+  MARKETING_CONSENT_FORM_FIELD,
+  type NodeId,
+} from '@aglyn/aglyn'
+import { buildDefaultHomeScreen } from '@aglyn/aglyn/app-utils/default-site'
 import {
   FORM_FIELD_ELEMENT_IDS,
   formFieldLayoutIn,
@@ -32,11 +39,6 @@ import {
   rekeyFormFieldOverrides,
   type StoredFormNode,
 } from './form-field-elements'
-import {
-  FORM_INPUT_ELEMENT_IDS,
-  formFieldDeclsFromNodes,
-  MARKETING_CONSENT_FORM_FIELD,
-} from './forms'
 
 const field = (
   $id: string,
@@ -379,5 +381,30 @@ describe('muiClassSelectorsIn', () => {
     ).toEqual(['MuiInputBase-input', 'MuiInputLabel-root', 'MuiOutlinedInput-notchedOutline'])
     expect(muiClassSelectorsIn({ color: 'red' })).toEqual([])
     expect(muiClassSelectorsIn(undefined)).toEqual([])
+  })
+})
+
+describe('the default site’s contact form', () => {
+  it('is exactly the tree the backfill rebuilds its old Form Fields into', () => {
+    const nodes = buildDefaultHomeScreen('Acme').nodes as Record<string, StoredFormNode>
+    expect(Object.values(nodes).some((node) => node.componentId === 'formField')).toBe(false)
+    expect(nodes['dh_form']?.nodes).toEqual(['dh_fName', 'dh_fEmail', 'dh_fMessage'])
+    const legacy: Record<string, Record<string, unknown>> = {
+      dh_fName: { fieldName: 'name', label: 'Name', required: true },
+      dh_fEmail: { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
+      dh_fMessage: { fieldName: 'message', label: 'Message', fieldType: 'textarea', required: true },
+    }
+    for (const [id, props] of Object.entries(legacy)) {
+      const built = formFieldToElements({ $id: id, componentId: 'formField', parentId: 'dh_form', props })
+      for (const [builtId, node] of Object.entries(built?.nodes ?? {})) {
+        expect(nodes[builtId]).toMatchObject({
+          componentId: node.componentId,
+          pluginId: 'mui',
+          parentId: node.parentId,
+          props: node.props,
+          nodes: node.nodes ?? [],
+        })
+      }
+    }
   })
 })
