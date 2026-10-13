@@ -129,6 +129,7 @@ const AI_OUTPUT_NOUNS: Readonly<Record<string, string>> = {
   seo: 'search fixes',
   crm: 'CRM answer',
   insight: 'insight',
+  settings: 'site settings',
 }
 
 /**
@@ -258,6 +259,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   orgAutomation: 'content',
   // A blog post a guided start wrote (AGL-3676) is the site's content.
   entry: 'content',
+  // A site's settings a build saved (AGL-3748) describe the site, filed with its content.
+  settings: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

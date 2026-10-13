@@ -67,6 +67,10 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
+  if (output.resource === 'settings') {
+    // Settings a build saved (AGL-3748) open where most of them are edited.
+    return buildRoute(Route.HOST_SETUP_SEO, { orgSlug, host })
+  }
   if (output.resource === 'draft' && output.draftResource) {
     // A draft another plugin wrote — a dataset a site start or a build made
     // (AGL-3616) — opens where its owner lists it, or nowhere it is not loaded.

@@ -61,6 +61,7 @@ checks the member's role and the allowance when the item runs.
 | `edit` (3) | ai | edit runner (a version, unpublished) | | | no |
 | `navigation` (1), AGL-3728 | ai | navigation runner, no model (a layout version, unpublished) | `versioning` | | no |
 | `duplicate` (3), AGL-3740 | ai | duplicate runner, no model, core's `duplicateResource` (an unpublished copy) | the kind's own, checked by the copy | the kind's create counter | yes |
+| `settings` (1), AGL-3748 | ai | settings runner, no model, the console settings cards' fields saved LIVE on confirm | | | yes |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
 | `variable` | logic | `variable` writer | | `variablesPerHost` | yes |
@@ -171,9 +172,9 @@ gap.
 | Site backup and packages | export, import, merge | no, by design: a person's decision |
 | Custom domains | connect and verify a domain | no, by design (out of scope) |
 | Redirects | rules, loop checks, hit counts | no |
-| SEO | per-page listing, sitemap, structured data, audit | yes: listings, audit fixes, the site listing |
+| SEO | per-page listing, sitemap, structured data, audit | yes: listings, audit fixes, the site listing; a build's `settings` op (AGL-3748) sets the site's search title, description, separator, title pattern, favicon, social image and publisher details live |
 | Site protection | password a page, error pages, maintenance mode | no |
-| Multilingual | locale variants, hreflang, Weglot | no |
+| Multilingual | locale variants, hreflang, Weglot | partial (AGL-3748): a build's `settings` op sets a site's one language or a multilingual site's default among its languages; no locale variants, no adding a language |
 | Site search | search box, search page | no |
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
@@ -213,8 +214,11 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
    order emails.
-9. **Site settings.** No maintenance mode, password or error pages, site
-   search or multilingual.
+9. **Site settings.** **PARTLY CLOSED (AGL-3748):** a build's `settings` op
+   changes the site's name, search defaults, favicon, logo and social image,
+   language, time zone, contact details and cookie banner mode, live on
+   confirm. See "Site settings" below. Still no maintenance mode, password or
+   error pages, site search or multilingual variants.
 10. **Integrations.** No webhooks, Zapier or GA4/conversions setup.
 11. **Media library.** No tags, folders or metadata, and no video, music or
     lightbox placement ops.
@@ -374,6 +378,59 @@ is a decision about the account, not something to build.
 - **Not yet.** A later item or page in the same plan cannot cite the copy as
   `new:<name>`; a page that should start from another is still the page
   runner's `duplicateOf`.
+
+## Site settings (AGL-3748)
+
+- **Only the console's own fields.** The console saves a site's settings from
+  the browser, straight onto the host document, with no server save function
+  to call; the rules (`canWriteHostContent`, `hostWritesFrozen`) are the gate.
+  So the op writes exactly the keys the settings cards write, each held to the
+  card's own rule (`jobs/ai-job-settings-step.ts`, `AI_SETTINGS_LIMITS`):
+
+  | argument | field | the card that writes it | rule |
+  | -- | -- | -- | -- |
+  | `name` | `displayName` | Admin → General | 30 characters; members' site switcher resynced after |
+  | `seoTitle`, `seoDescription`, `separator` | `seo.title`, `seo.description`, `seo.separator` | Setup → SEO | 60, 155, 3 |
+  | `titlePattern` | `seo.titlePattern` | Setup → SEO | 120; only `{{page.name}}`, `{{site.separator}}`, `{{site.name}}` |
+  | `businessName`, `businessDescription`, `telephone` | `seo.entity.name`, `.description`, `.telephone` | Setup → SEO, publisher | description 300 |
+  | `supportEmail`, `address` | `business.supportEmail`, `business.address` | Setup → Details, Business details | an email address; one line |
+  | `language` | `locales`, `defaultLocale` | Setup → Details, Languages | the card's code pattern; see below |
+  | `timeZone` | `timeZone` | Admin → General | one of `supportedTimeZones()` |
+  | `consentMode` | `consent.mode` | Setup → Tracking, consent banner | `geo` or `strict` |
+  | `favicon`, `logo`, `socialImage` | `seo.favicon`, `logoUrl`, `seo.image` (+ size and alt) | the media pickers | an image already in the site's or its org's library |
+
+- **Never.** The address (subdomain, domains), plugins, members and roles,
+  billing, lockdown, deletion, search engine indexing
+  (`seo.discourageSearchEngines`), analytics and ad ids, verification tokens,
+  and turning the consent banner off are not arguments, so the planner cannot
+  ask for them. There is no tagline field on a site; "tagline" maps to the
+  publisher's one-sentence description (`seo.entity.description`).
+- **Language.** As the Languages card saves it: a site with no language or one
+  now publishes in the one asked for (`locales: [code]`, `defaultLocale:
+  code`), which is what `<html lang>` reads (`resolvePageLocale`); a
+  multilingual site's default moves only to a language it already lists,
+  and adding one is refused in words. It does not translate the pages, and
+  the output says so.
+- **Images** are named by media id or exact file name, from the site's own
+  library or the org's where `visibleToHost` allows; never private, deleted or
+  not an image; two of one name are refused. Written through `mediaNodeSrc`,
+  as the pickers write them, and the social image copies its size and alt as
+  the Social image card does.
+- **Live on confirm** (Zach, 2026-10-12). A setting has no draft. The write is
+  one transaction that re-reads the host, re-checks the role, and writes only
+  the values that differ, with a site-wide `publishOutbox` entry; then the
+  site's cached pages are dropped (`dropPluginSiteCache`) and the entry is
+  cleared once the drop certainly landed. A pass asked again writes nothing.
+  A value that cannot be used is named in the output's note, and the rest are
+  still written.
+- **Gates and cost.** A member with the admin, editor or author role, while no
+  lockdown freezes the site, at the door, before the write and inside it. No
+  model, so 0 credits, and the Free taste may ask for it (every plan may
+  change its own settings).
+- **Not yet.** The guided start does not set the site's language from the
+  brief: nothing in the site plan says which language the brief is in, and
+  adding that changes the plan prompt (see the PR). Clearing a setting is
+  not offered.
 
 ## Forms that write to a dataset
 

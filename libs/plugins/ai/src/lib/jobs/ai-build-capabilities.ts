@@ -35,6 +35,7 @@ import { AI_EDIT_TARGET_KINDS } from '../model/ai-edit-job'
 import { AI_CAMPAIGN_RESOURCE } from './ai-job-campaign-step'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
+import { AI_SETTINGS_ARGS_SCHEMA } from './ai-job-settings-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -49,8 +50,9 @@ import { aiJobStepRunnerFor } from './ai-jobs'
  * a site function by the logic plugin's `function` writer, which the `logic`
  * runner calls when its job is a build's unit. A change to a page or layout
  * the site already has is the `edit` runner's, and a change to its header or
- * footer menu the `navigation` runner's (AGL-3728), and a copy of something
- * it has the `duplicate` runner's (AGL-3740).
+ * footer menu the `navigation` runner's (AGL-3728), a copy of something
+ * it has the `duplicate` runner's (AGL-3740), and a change to its settings
+ * the `settings` runner's (AGL-3748).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -339,6 +341,29 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     freeAllowed: true,
     runnerKind: 'duplicate',
     // Copied by code: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // The site's settings (AGL-3748): the fields the console's settings
+    // cards write — name, search defaults, favicon, logo and social image
+    // from the media library, language, time zone, contact details and the
+    // cookie banner's mode — held to the same limits and saved live when the
+    // plan is confirmed, as a settings save is. No model, so no credits; every
+    // plan may change its own settings, so the Free taste may too. Domains,
+    // members, billing, plugins, indexing and anything with a credential are
+    // not arguments, so they cannot be asked for.
+    op: 'settings',
+    noun: 'settings change',
+    where: 'the site’s Settings, saved live',
+    intents: [
+      'changing the site’s settings — its name, search title and description, title pattern, favicon, logo or social image (from images already in the media library), language, time zone, business name, description (tagline), phone, contact email or address, or the cookie banner’s mode — saved to the live site when the plan is confirmed',
+    ],
+    argsSchema: AI_SETTINGS_ARGS_SCHEMA,
+    maxPerPlan: 1,
+    freeAllowed: true,
+    runnerKind: 'settings',
+    // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',
   },

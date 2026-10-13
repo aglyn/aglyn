@@ -44,7 +44,12 @@ One message can ask for any mix of:
 - **an A/B test** of a page or of an email's subject line;
 - **a funnel** that counts visits from one step to the next;
 - **a change to a page or layout** the site already has, saved as a new version visitors do
-  not see until you publish it.
+  not see until you publish it;
+- **a change to the site's settings**: its name, search title and description, title
+  pattern, favicon, logo or social image (from images already in your media library), its
+  language, time zone, business name, description, phone, contact email or address, or the
+  cookie banner's mode. For example, *rename my site to Juniper Clay Studio* or *make the
+  site Spanish*.
 
 One build holds up to 16 things and 8 pages. On the Free plan it holds 2 pages, and some
 parts, such as templates, campaigns, automations, products and edits to existing pages,
@@ -103,6 +108,12 @@ page that places them.
   campaigns are unsent and aimed at nobody.
 - **Names are your own.** A new variable or function never takes a name the site already
   uses.
+- **Settings are saved live.** A change to the site's settings has no draft: like a save in
+  Settings, it reaches your live site as soon as that part is built. Making the site
+  Spanish sets its language; it does not translate the pages. A value that cannot be used,
+  such as an email address that is not one, is named on the card and the rest are saved.
+  Assist never changes your site's address, domain, members, billing, plugins or tracking
+  ids, and never hides the site from search engines.
 
 When it is done the card says how many parts were built, such as *5 of 6 built; 1 failed*.
 **Try again what failed** builds only the parts that failed, and shows what that is likely
