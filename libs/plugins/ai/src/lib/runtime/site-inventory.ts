@@ -181,6 +181,26 @@ export function aiStarterHomeUntouched(
   return Boolean(publishedVersionId) && versionIds.length === 1 && versionIds[0] === publishedVersionId
 }
 
+/** A record template's base, as the data plugin keeps it: one to four URL-safe segments. */
+const RECORD_BASE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*){0,3}$/
+
+/**
+ * The record page a site already serves for a dataset (AGL-3747), from the
+ * `recordPage` fact the data plugin's index answers for a site: its base and
+ * the address field its pages are reached by. `null` where there is none, or
+ * where its address field is no longer one of the dataset's fields.
+ */
+export function aiInventoryRecordPage(
+  fact: unknown,
+  fields: ReadonlyArray<{ id: string }>,
+): { recordBase: string; addressField: string } | null {
+  if (!fact || typeof fact !== 'object') return null
+  const base = text((fact as Data)['base']).replace(/^\/+|\/+$/g, '')
+  const slugField = text((fact as Data)['slugField'])
+  if (!RECORD_BASE.test(base) || !slugField || !fields.some((field) => field.id === slugField)) return null
+  return { recordBase: base, addressField: slugField }
+}
+
 /**
  * The org's datasets shared with the site, through the `dataset` index the
  * data plugin publishes (AGL-3080) rather than its collection: their names
@@ -208,14 +228,18 @@ async function readIndexedDatasets(
         .filter((field) => field.name)
       // A record's photo (AGL-3616), the data plugin's `image` field type.
       const image = fields.find((field) => field.image && field.id)
-      const address = fields.find((field) => field.address && field.id)
+      // The record page the site already serves for it (AGL-3747), whose
+      // address field is the one its pages are reached by.
+      const page = aiInventoryRecordPage(record.facts['recordPage'], fields)
+      const address = page?.addressField ?? fields.find((field) => field.address && field.id)?.id
       return {
         id: record.id,
         name: record.name,
         fields: fields.map((field) => field.name),
         fieldIds: fields.map((field) => field.id || field.name),
         ...(image ? { imageField: image.id } : {}),
-        ...(address ? { addressField: address.id } : {}),
+        ...(address ? { addressField: address } : {}),
+        ...(page ? { recordBase: page.recordBase } : {}),
       }
     }),
     truncated,
