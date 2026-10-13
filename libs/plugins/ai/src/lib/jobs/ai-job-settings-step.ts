@@ -22,7 +22,7 @@ import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
-import { normalizeLocaleTag } from '@aglyn/aglyn/app-utils/seo-locale'
+import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import { isSeoTitleVariable } from '@aglyn/aglyn/app-utils/seo-title-variables'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { PluginAiCapabilityArgsSchema } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
@@ -129,9 +129,6 @@ export const AI_SETTINGS_LIMITS = {
   supportEmail: 254,
   address: 200,
 } as const
-
-/** The Languages card's own pattern for one language code. */
-export const AI_SETTINGS_LOCALE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
 
 /** The consent banner card's two modes; turning the banner off is not offered. */
 export const AI_SETTINGS_CONSENT_MODES = ['geo', 'strict'] as const
@@ -272,12 +269,6 @@ export function aiSettingsTitlePatternOk(pattern: string): boolean {
   return [...pattern.matchAll(PATTERN_VARIABLE)].every((match) => isSeoTitleVariable(match[1]))
 }
 
-/** A language code, as the Languages card stores it, or `null`. */
-export function aiSettingsLocale(value: string): string | null {
-  const tag = normalizeLocaleTag(value)
-  return tag && AI_SETTINGS_LOCALE_PATTERN.test(tag) ? tag : null
-}
-
 /** The item's arguments read: what may be written, and a sentence for each that may not. */
 export function aiSettingsRequestOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiSettingsRead {
   const request: AiSettingsRequest = {}
@@ -315,7 +306,7 @@ export function aiSettingsRequestOf(inputs: Readonly<Record<string, unknown>> | 
   }
   const language = text(inputs?.['language'])
   if (language) {
-    const locale = aiSettingsLocale(language)
+    const locale = siteLanguageCode(language)
     if (locale) request.language = locale
     else problems.push(`“${language}” is not a language code such as es or pt-BR.`)
   }
