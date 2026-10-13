@@ -25,6 +25,7 @@ import {
   ICON_VARIANT_HOST_GROUP,
   ICON_VARIANT_ORGANIZATION,
 } from '@aglyn/shared-data-enums'
+import { mdiPin, mdiPinOutline } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
   CardDisplay,
@@ -32,13 +33,18 @@ import {
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListFilterToolbar from '@aglyn/shared-ui-jsx/components/list-filter-toolbar.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
+  IconButton,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
@@ -53,7 +59,9 @@ import PlatformMarketingConsentPrompt from '../../../components/marketing-consen
 import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import { useOrgPlans } from '../../../hooks/use-org-plans'
 import { useOrgScope } from '../../../hooks/use-org-scope'
+import { usePinnedOrgs } from '../../../hooks/use-pinned-orgs'
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
@@ -69,12 +77,38 @@ import {
 } from '../../../utils/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
 import { currentConsoleLandingHref } from '../../../utils/console-landing'
+import {
+  arrangeWorkspaces,
+  needsWorkspacePlans,
+  WORKSPACE_FILTER_FIELDS,
+  WORKSPACE_FILTER_HEADERS,
+  WORKSPACE_FILTER_OPTIONS,
+  type WorkspaceRow,
+} from '../../../utils/workspace-list'
 
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */
 const PROVISION_HOLD_KEY = 'home:provision-sign-up-workspace'
 /** Longer than a slow create: the hold's own timer is only the backstop. */
 const PROVISION_HOLD_MAX_MS = 60_000
+/** What the picker pages while its list is still settling. */
+const NO_WORKSPACES: WorkspaceRow[] = []
+
+/**
+ * Reads each workspace's plan for the Plan filter (AGL-3762) and hands the
+ * answers up. A component rather than a hook call in the page so it is
+ * MOUNTED only while that filter is in force: the reads are one per
+ * workspace, and a reader who never filters by plan pays none of them.
+ */
+function WorkspacePlansReader(props: {
+  orgIds: string[]
+  onPlans: (plans: Record<string, string>) => void
+}) {
+  const { orgIds, onPlans } = props
+  const plans = useOrgPlans(orgIds)
+  useEffect(() => onPlans(plans), [plans, onPlans])
+  return null
+}
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -94,18 +128,82 @@ function OrgJump() {
     error: orgsError,
     retry: retryOrgs,
   } = useOrgScope()
-  // The picker pages on the console's own footer (AGL-2501); the membership
-  // window still grows underneath when the reader walks to its end.
+  /*
+   * THE WHOLE MEMBERSHIP SET, BEFORE ANY ORDER (AGL-3762).
+   *
+   * The picker sorts by name, pins, searches and filters in memory, which is
+   * only honest over every row: sorting a 50-row window would put "Zed" last
+   * on one page and then move it when the window grew. The set is the
+   * reader's own memberships — one small row per organization they belong to
+   * — so the window is grown until the listen says it is complete, and
+   * nothing is arranged before then. One growth per arrival of rows, so it
+   * cannot outrun the listen.
+   */
+  useEffect(() => {
+    if (hasMoreOrgs) loadMoreOrgs()
+  }, [hasMoreOrgs, loadMoreOrgs, orgs.length])
+  const orgsComplete = !hasMoreOrgs
+  const [orgClauses, setOrgClauses] = useState<ListFilterClause[]>([])
+  const [orgSearch, setOrgSearch] = useState<string[]>([])
+  const { pinned: pinnedOrgIds, toggle: togglePinnedOrg } = usePinnedOrgs()
+  /*
+   * The plan is the ORG document's, not the membership row's, so the Plan
+   * filter reads each workspace's plan — only while that filter is in force —
+   * and lists nothing until every plan has answered: a workspace whose plan
+   * is still in flight is never mistaken for one that does not match.
+   */
+  const planFilter = needsWorkspacePlans(orgClauses)
+  const orgIds = useMemo(() => orgs.map((org) => org.$id), [orgs])
+  const [orgPlans, setOrgPlans] = useState<Record<string, string>>({})
+  const plansPending = planFilter && orgIds.some((orgId) => !orgPlans[orgId])
+  const orgListSettling = !orgsComplete || plansPending
+  const arrangedOrgs = useMemo(
+    () =>
+      orgListSettling
+        ? NO_WORKSPACES
+        : arrangeWorkspaces(orgs, {
+            pinned: pinnedOrgIds,
+            plans: orgPlans,
+            clauses: orgClauses,
+            search: orgSearch,
+          }),
+    [orgListSettling, orgs, pinnedOrgIds, orgPlans, orgClauses, orgSearch],
+  )
+  // The picker pages on the console's own footer (AGL-2501), over the
+  // arranged list, so a page holds the same five workspaces every render.
   const {
     visible: visibleOrgs,
     page: orgPage,
     setPage: setOrgPage,
     pageSize: orgPageSize,
     hasMore: hasMoreOrgPages,
-  } = useWorkspacePage(orgs, {
+  } = useWorkspacePage(arrangedOrgs, {
     hasMoreRows: hasMoreOrgs,
     loadMoreRows: loadMoreOrgs,
   })
+  // A list that shrank under the page (an unpin under a Pinned filter took
+  // the last card away) steps back to its new last page.
+  useEffect(() => {
+    if (orgListSettling || orgPage === 0) return
+    if (orgPage * orgPageSize < arrangedOrgs.length) return
+    setOrgPage(Math.max(0, Math.ceil(arrangedOrgs.length / orgPageSize) - 1))
+  }, [arrangedOrgs.length, orgListSettling, orgPage, orgPageSize, setOrgPage])
+  // A new search or filter is a new list, read from its first page.
+  const onOrgClauses = useCallback(
+    (next: ListFilterClause[]) => {
+      setOrgClauses(next)
+      setOrgPage(0)
+    },
+    [setOrgPage],
+  )
+  const onOrgSearch = useCallback(
+    (next: string[]) => {
+      setOrgSearch(next)
+      setOrgPage(0)
+    },
+    [setOrgPage],
+  )
+  const orgFiltering = orgClauses.length > 0 || orgSearch.length > 0
   /**
    * `useOrgScope` has said all along that an errored membership listen "says
    * nothing about what orgs exist" (AGL-1260), and this page read `orgs`
@@ -377,12 +475,13 @@ function OrgJump() {
       // and why am I picking one" is asked.
       help={{
         topic: 'consoleTour',
-        anchor: '#the-app-bar',
+        anchor: '#choose-a-workspace',
         title: 'Workspaces',
         excerpt:
           'A workspace is your organization: its sites, team, billing and ' +
-          'plan live together. Open one to see its sites; the switcher in ' +
-          'the app bar moves between them later.',
+          'plan live together. Open one to see its sites, and pin the ones ' +
+          'you use most to keep them first. The switcher in the app bar ' +
+          'moves between them later.',
       }}
       // The primary action belongs in the header, like every other list page
       // (sites, screens, layouts) — at the foot of the list it sat below the
@@ -400,6 +499,9 @@ function OrgJump() {
         ) : null
       }
     >
+      {planFilter && orgsComplete ? (
+        <WorkspacePlansReader orgIds={orgIds} onPlans={setOrgPlans} />
+      ) : null}
       {loading || provisioning || orgs.length === 1 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
@@ -526,6 +628,36 @@ function OrgJump() {
                     : 'You belong to several organizations — pick one to manage.'}
                 </Typography>
               </Box>
+              <Stack spacing={1}>
+                <ListFilterToolbar
+                  fields={WORKSPACE_FILTER_FIELDS}
+                  headers={WORKSPACE_FILTER_HEADERS}
+                  options={WORKSPACE_FILTER_OPTIONS}
+                  clauses={orgClauses}
+                  onChange={onOrgClauses}
+                  search={{
+                    words: orgSearch,
+                    onChange: onOrgSearch,
+                    placeholder: 'Search by name or slug',
+                  }}
+                />
+                <ListFilterChips
+                  fields={WORKSPACE_FILTER_FIELDS}
+                  headers={WORKSPACE_FILTER_HEADERS}
+                  options={WORKSPACE_FILTER_OPTIONS}
+                  clauses={orgClauses}
+                  onChange={onOrgClauses}
+                />
+              </Stack>
+              {orgListSettling ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress aria-label="Loading workspaces" />
+                </Box>
+              ) : !arrangedOrgs.length && orgFiltering ? (
+                <Typography color="text.secondary">
+                  {'No workspaces match this search and these filters.'}
+                </Typography>
+              ) : null}
               <GridItems
                 // A gallery of workspace tiles, each the same shape. Rows are the point.
                 masonry={false}
@@ -543,6 +675,22 @@ function OrgJump() {
                             fontSize="large"
                             path={ICON_VARIANT_ORGANIZATION.path}
                           />
+                        ),
+                        // The card's own action sits in its header: a pinned
+                        // workspace leads the list, on every device.
+                        action: (
+                          <Tooltip title={org.pinned ? 'Unpin' : 'Pin to top'}>
+                            <IconButton
+                              aria-label={`${org.pinned ? 'Unpin' : 'Pin'} ${org.orgName ?? org.slug ?? org.$id}`}
+                              aria-pressed={org.pinned}
+                              color={org.pinned ? 'primary' : 'default'}
+                              onClick={() => togglePinnedOrg(org.$id)}
+                            >
+                              <MdiIcon
+                                path={org.pinned ? mdiPin.path : mdiPinOutline.path}
+                              />
+                            </IconButton>
+                          </Tooltip>
                         ),
                       }}
                       header={org.orgName ?? org.slug ?? org.$id}
@@ -601,16 +749,18 @@ function OrgJump() {
                   The footer states the position instead: "1–5 of more than 5"
                   while another page is known to exist, the real total once it
                   is not. */}
-              <ListPagination
-                page={orgPage}
-                pageSize={orgPageSize}
-                rowCount={visibleOrgs.length}
-                hasMore={hasMoreOrgPages}
-                onPageChange={setOrgPage}
-                labelDisplayedRows={({ from, to, count }) =>
-                  `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
-                }
-              />
+              {orgListSettling || !arrangedOrgs.length ? null : (
+                <ListPagination
+                  page={orgPage}
+                  pageSize={orgPageSize}
+                  rowCount={visibleOrgs.length}
+                  hasMore={hasMoreOrgPages}
+                  onPageChange={setOrgPage}
+                  labelDisplayedRows={({ from, to, count }) =>
+                    `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
+                  }
+                />
+              )}
             </Stack>
           )}
           <CreateOrgDialog

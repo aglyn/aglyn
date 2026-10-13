@@ -37,6 +37,13 @@ let mockLanding: (url: string) => string = (url) => url
 /** The `onCreated` the home page hands its create-site dialog. */
 let capturedOnCreated: (() => void) | undefined
 
+// The reader's workspace pins (AGL-3762) are a read of their own account
+// document; none of these assertions is about them.
+jest.mock('../hooks/use-pinned-orgs', () => ({
+  __esModule: true,
+  usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+  default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+}))
 jest.mock('next/navigation', () => {
   const router = {
     push: (...args: unknown[]) => mockPush(...args),
