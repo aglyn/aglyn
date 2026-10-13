@@ -24,6 +24,7 @@ import {
   SCREEN_ROOT_PATH,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/app-utils/screen-route'
+import { resolvePageLocale } from '@aglyn/aglyn/app-utils/seo-locale'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
@@ -36,9 +37,11 @@ import {
   aiLayoutRepairFrameHollows,
   aiLayoutWithoutFrameHollows,
 } from '../layout-language/ai-layout-frame-hollows'
+import { aiPlanLanguage } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
+import { aiLayoutWithMenuChanges, aiNoMenuChanges } from '../model/ai-layout-menus'
 import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
 
 /**
@@ -98,6 +101,35 @@ export interface AiSitePublishDeps {
  */
 export function aiJobPublishesBuild(job: Pick<AiJob, 'kind' | 'inputs'>): boolean {
   return job.kind === 'build' && job.inputs?.['publish'] === true && job.inputs?.['publishConfirmed'] === true
+}
+
+/**
+ * The host fields a guided start writes for its plan's language (AGL-3750),
+ * as the Languages card saves one language: `locales` of that one and
+ * `defaultLocale` the same. `null` — nothing written — where the plan said no
+ * valid language, where it is the language the site already publishes in
+ * (English for a new site), and on a site with more than one language, whose
+ * languages are the owner's decision. Nothing is translated: the pages were
+ * written in the brief's language, and this says so to the reader.
+ */
+export function aiSiteLanguageUpdates(
+  host: { locales?: unknown; defaultLocale?: unknown },
+  language: string | null | undefined,
+): { locales: string[]; defaultLocale: string } | null {
+  const code = aiPlanLanguage(language)
+  if (!code) return null
+  const locales = Array.isArray(host.locales)
+    ? host.locales.filter((one): one is string => typeof one === 'string' && one.trim() !== '')
+    : []
+  if (locales.length > 1) return null
+  const current = resolvePageLocale({
+    host: {
+      ...(typeof host.defaultLocale === 'string' ? { defaultLocale: host.defaultLocale } : {}),
+      locales,
+    },
+  })
+  if (current === code) return null
+  return { locales: [code], defaultLocale: code }
 }
 
 /** Whether a finished job of this shape publishes what it built. */
@@ -163,10 +195,12 @@ export function aiSiteUnwrittenBlogHrefs(blogUnwritten: boolean | undefined): st
 
 /**
  * The layout's nodes with its links to the retired starter home pointed at
- * the new home, and a link for each proposed entry the header does not
- * already carry, placed in the header's toolbar after its existing links.
- * `null` when nothing changes, or when the layout has no toolbar to hold an
- * entry and no link to repoint.
+ * the new home, its links to pages the start did not write taken out, and a
+ * link for each proposed entry the header does not already carry, added by
+ * the navigation op's `aiLayoutWithMenuChanges` (AGL-3747): to the header's
+ * menu and its phone menu, after their items, or after the brand in a
+ * starter's Toolbar. `null` when nothing changes, or when the layout has no
+ * header to hold an entry and no link to repoint or take out.
  */
 export function aiLayoutWithNavigation(
   nodes: NodesMap,
@@ -213,34 +247,110 @@ export function aiLayoutWithNavigation(
       }
     }
   }
+  // The entries go into the header through the navigation op's own code
+  // (AGL-3747): the bar's menu and the phone menu's, after the items already
+  // there, each looking like its neighbours. A page some link already opens,
+  // or an item of the same name, is not added again.
   const linked = new Set(links.map((link) => link.props?.['screenId']).filter(Boolean))
-  const toolbar = Object.values(map).find((node) => node.componentId === 'muiToolbar')
   const missing = input.entries.filter((entry) => !linked.has(entry.screenId))
-  if (toolbar && missing.length) {
-    const children = toolbar.nodes ?? []
-    // After the last link already in the toolbar (the brand), before the
-    // search, the mode switch and the call to action.
-    const lastLink = children.reduce(
-      (at, id, index) => (map[id]?.componentId === 'muiScreenLink' ? index : at),
-      -1,
+  if (missing.length) {
+    const added = aiLayoutWithMenuChanges(
+      map,
+      ['header'],
+      { ...aiNoMenuChanges(), add: missing.map((entry) => ({ parent: null, label: entry.label, to: { screenId: entry.screenId } })) },
+      { newId: () => `ai_nav_${createResourceUid()}` },
     )
-    const added = missing.map((entry) => {
-      const id = `ai_nav_${createResourceUid()}`
-      map[id] = {
-        $id: id,
-        componentId: 'muiScreenLink',
-        pluginId: 'mui',
-        parentId: toolbar.$id,
-        props: { children: entry.label, screenId: entry.screenId, renderAs: 'link', color: 'inherit' },
-        sx: { textDecoration: 'none', whiteSpace: 'nowrap' },
-        nodes: [],
-      }
-      return id
-    })
-    toolbar.nodes = [...children.slice(0, lastLink + 1), ...added, ...children.slice(lastLink + 1)]
-    changed = true
+    if (added.nodes) return added.nodes as unknown as NodesMap
   }
   return changed ? (map as unknown as NodesMap) : null
+}
+
+/** The blog a start writes, as its header entry links it (`aiSiteBlogNavPage`). */
+export interface AiSiteBlogEntry {
+  label: string
+  href: string
+}
+
+/**
+ * The layout's nodes with the blog's header entry put back (AGL-3747): a
+ * start whose posts part failed published with every link to the blog taken
+ * out (AGL-3660), and Try again's posts went live with none to reach them.
+ * Added by the navigation op's `aiLayoutWithMenuChanges`, as the start's
+ * other entries are — the bar's menu and the phone menu — second after the
+ * home page's item, as the start first linked it (AGL-3676), else last.
+ * `null` where some link already opens the blog, or the layout has no header
+ * menu to hold it.
+ */
+export function aiLayoutWithBlogEntry(
+  nodes: NodesMap,
+  input: { blog: AiSiteBlogEntry; homeId?: string | null },
+): NodesMap | null {
+  const blogHrefs = new Set([input.blog.href, ...AI_SITE_BLOG_SLUGS.map((slug) => `/${slug}`)])
+  const linked = Object.values(nodes as unknown as Record<string, MutableNode>).some(
+    (node) => node?.componentId === 'muiScreenLink' && blogHrefs.has(String(node.props?.['href'] ?? '')),
+  )
+  if (linked) return null
+  const home = [...(input.homeId ? [{ screenId: input.homeId }] : []), { href: '/' }]
+  const added = aiLayoutWithMenuChanges(
+    nodes as unknown as Record<string, unknown>,
+    ['header'],
+    { ...aiNoMenuChanges(), add: [{ parent: null, label: input.blog.label, to: { href: input.blog.href }, after: home }] },
+    { newId: () => `ai_nav_${createResourceUid()}` },
+  )
+  return (added.nodes as unknown as NodesMap | null) ?? null
+}
+
+/**
+ * Puts the blog's header entry back on a live start whose posts Try again
+ * wrote (AGL-3747), as a new live version of the layout its published pages
+ * render inside, in one batch with the publish outbox entry that drops the
+ * live site's cached pages, the drop itself attempted at once. Returns
+ * whether the entry went live; never throws for a layout it cannot change.
+ */
+export async function aiRestoreGuidedBlogEntry(
+  firestore: Firestore,
+  input: {
+    job: Pick<AiJob, '$id' | 'hostId'>
+    /** The start's published pages: the layout they share is the one changed. */
+    pageIds: readonly string[]
+    /** The published home page, which the blog's entry follows. */
+    homeId?: string | null
+    blog: AiSiteBlogEntry
+    now: Date
+  },
+  deps: Pick<AiSitePublishDeps, 'dropCache'> = {},
+): Promise<boolean> {
+  const dropCache = deps.dropCache ?? dropPluginSiteCache
+  const hostId = input.job.hostId ?? ''
+  if (!hostId || !input.pageIds.length) return false
+  const layoutId = await aiPagesLayoutId(firestore, hostId, input.pageIds)
+  if (!layoutId) return false
+  const write = await aiLayoutVersionWrite(firestore, {
+    hostId,
+    layoutId,
+    transform: (nodes) => aiLayoutWithBlogEntry(nodes, { blog: input.blog, homeId: input.homeId ?? null }),
+    storeLinks: null,
+    jobId: input.job.$id,
+    now: input.now,
+    displayName: 'Navigation for the blog',
+  })
+  if (!write?.version) return false
+  const batch = firestore.batch()
+  batch.create(write.versionRef, write.version)
+  batch.set(write.layoutRef, { versionId: write.versionRef.id, updatedAt: input.now }, { merge: true })
+  // A layout change reaches every page, so the announce asks for the whole site.
+  const outboxRef = firestore.collection('publishOutbox').doc(createResourceUid())
+  batch.set(outboxRef, {
+    hostId,
+    paths: [SCREEN_ROOT_PATH],
+    createdAt: FieldValue.serverTimestamp(),
+    attempts: 0,
+    entireHost: true,
+  })
+  await batch.commit()
+  const dropped = await dropCache({ hostIds: [hostId], reason: 'guided AI site start linked its blog' })
+  if (dropped.complete) await outboxRef.delete().catch(() => undefined)
+  return true
 }
 
 /**
@@ -282,6 +392,11 @@ export async function aiPublishGuidedSite(
      * starter still holds stays a draft and says so.
      */
     retry?: boolean
+    /**
+     * The language the plan says the brief and copy are in (AGL-3750): the
+     * site publishes in it, where `aiSiteLanguageUpdates` says so.
+     */
+    language?: string | null
   },
   deps: AiSitePublishDeps = {},
 ): Promise<AiJobSitePublish> {
@@ -401,6 +516,14 @@ export async function aiPublishGuidedSite(
   } else if (placeholder && entries[placeholder]) {
     hostUpdates['defaultHomeScreenId'] = FieldValue.delete()
   }
+  // The site's language, from its plan (AGL-3750): every page's `<html lang>`
+  // reads it, so the announce below asks for the whole site.
+  const language = aiSiteLanguageUpdates(
+    { locales: host.get('locales'), defaultLocale: host.get('defaultLocale') },
+    input.language,
+  )
+  if (language) Object.assign(hostUpdates, language)
+  const entireHost = layoutWrites.length > 0 || language !== null
   batch.update(hostRef, hostUpdates)
   for (const page of accepted) {
     batch.set(hostRef.collection('screens').doc(page.id), { slug: page.slug, publishedAt: now }, { merge: true })
@@ -417,7 +540,7 @@ export async function aiPublishGuidedSite(
     paths: paths.length ? paths : [SCREEN_ROOT_PATH],
     createdAt: FieldValue.serverTimestamp(),
     attempts: 0,
-    ...(layoutWrites.length ? { entireHost: true } : {}),
+    ...(entireHost ? { entireHost: true } : {}),
   })
   try {
     await batch.commit()
@@ -433,7 +556,7 @@ export async function aiPublishGuidedSite(
   const dropped = await dropCache({
     hostIds: [hostId],
     reason: 'guided AI site start published',
-    ...(layoutWrites.length ? {} : { paths: { [hostId]: paths } }),
+    ...(entireHost ? {} : { paths: { [hostId]: paths } }),
   })
   if (dropped.complete) await outboxRef.delete().catch(() => undefined)
   // A site that came alive with nobody's browser on the publish (AGL-1589),
@@ -469,9 +592,23 @@ async function aiNavigationLayoutWrite(
   },
 ): Promise<LayoutWrite | null> {
   if (!input.entries.length && !input.retiredHomeId && !input.droppedHrefs.length && !input.storeLinks) return null
-  const hostRef = firestore.collection('hosts').doc(input.hostId)
+  const layoutId = await aiPagesLayoutId(firestore, input.hostId, input.pageIds)
+  if (!layoutId) return null
+  return aiLayoutVersionWrite(firestore, {
+    hostId: input.hostId,
+    layoutId,
+    transform: (nodes) => aiLayoutWithNavigation(nodes, input),
+    storeLinks: input.storeLinks ?? null,
+    jobId: input.jobId,
+    now: input.now,
+  })
+}
+
+/** The one layout the pages render inside, by their current versions; `null` where they do not share one. */
+async function aiPagesLayoutId(firestore: Firestore, hostId: string, pageIds: readonly string[]): Promise<string | null> {
+  const hostRef = firestore.collection('hosts').doc(hostId)
   const layoutIds = new Set<string>()
-  for (const id of input.pageIds) {
+  for (const id of pageIds) {
     const screen = await hostRef.collection('screens').doc(id).get()
     const versionId = screen.get('versionId')
     const version =
@@ -481,16 +618,7 @@ async function aiNavigationLayoutWrite(
     const layoutId = version?.get('layoutId') ?? screen.get('layoutId')
     if (typeof layoutId === 'string' && layoutId) layoutIds.add(layoutId)
   }
-  if (layoutIds.size !== 1) return null
-  const [layoutId] = [...layoutIds]
-  return aiLayoutVersionWrite(firestore, {
-    hostId: input.hostId,
-    layoutId,
-    transform: (nodes) => aiLayoutWithNavigation(nodes, input),
-    storeLinks: input.storeLinks ?? null,
-    jobId: input.jobId,
-    now: input.now,
-  })
+  return layoutIds.size === 1 ? [...layoutIds][0] : null
 }
 
 /**
@@ -509,6 +637,8 @@ async function aiLayoutVersionWrite(
     storeLinks: AiSitePublishStoreLinks | null
     jobId: string
     now: Date
+    /** The new version's name in the layout's versions. */
+    displayName?: string
   },
 ): Promise<LayoutWrite | null> {
   const { layoutId } = input
@@ -545,7 +675,7 @@ async function aiLayoutVersionWrite(
     version: {
       layoutId,
       hostId: input.hostId,
-      displayName: 'Navigation for the new pages',
+      displayName: input.displayName ?? 'Navigation for the new pages',
       nodes: Buffer.from(packed),
       createdAt: input.now,
       updatedAt: input.now,

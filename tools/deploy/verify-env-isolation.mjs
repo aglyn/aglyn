@@ -391,10 +391,11 @@ const MODE_PREFIX = { live: 'pk_live_', test: 'pk_test_' }
 const stripeModeOf = (record) => {
   if (record?.key !== STRIPE_MODE_PROBE) return undefined
   const value = record?.value
-  // Stored `sensitive` or `encrypted`: the API returns no plaintext and this
+  // Stored `sensitive` or `encrypted` (only `plain` records come back with a
+  // value, measured 2026-10-12): the API returns no plaintext and this
   // script will not ask for one. That is UNKNOWN, and unknown is reported —
   // never rounded down to "fine". aglyn-tenant's development and preview
-  // records are in this state as of 2026-08-23.
+  // records are in this state (encrypted and sensitive) as of 2026-10-12.
   if (typeof value !== 'string' || !value) return 'unknown'
   for (const [mode, prefix] of Object.entries(MODE_PREFIX)) {
     if (value.startsWith(prefix)) return mode
@@ -712,7 +713,7 @@ async function main() {
           `  ${m.key}\n` +
             `    scope        ${m.scope}\n` +
             `    environments ${m.environments.join(', ')}\n` +
-            `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored sensitive, not readable'}\n` +
+            `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored encrypted or sensitive, not readable (store it plain)'}\n` +
             `    reaches      ${m.projects.join(', ') || '(linked to no project — inert)'}\n` +
             `  ${owner}\n\n`,
         )

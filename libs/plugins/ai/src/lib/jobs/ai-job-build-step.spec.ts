@@ -45,7 +45,13 @@ import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { aiBuildStoreLinksToPublish, aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
+import {
+  aiBuildItemOutputNote,
+  aiBuildStoreLinksToPublish,
+  aiBuildUnitJob,
+  createAiBuildJobAdmission,
+  createAiJobBuildStep,
+} from './ai-job-build-step'
 import { AI_BUILD_MADE_INPUT, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
@@ -196,6 +202,21 @@ describe('the build step (AGL-3616)', () => {
       estCostUsd: 0,
       item: { slot: 'i0', status: 'succeeded', outputs: ['svc-1'] },
       outputs: [{ resource: 'draft', id: 'svc-1', draftResource: 'bookingService', note: 'A draft, in Bookings → Services.' }],
+    })
+  })
+
+  it('reports an item whose resource has no draft state as live, not as a draft (AGL-3745)', async () => {
+    const live: PluginAiCapability = { ...SERVICE, live: true, where: 'Redirects' }
+    const outcome = await createAiJobBuildStep({
+      runnerFor: (() => null) as never,
+      writerFor: (resource) => (resource === 'bookingService' ? writer().impl : null),
+      opsFor: async () => new Map([...OPS, [live.op, live]]),
+      pluginAdmission: async () => null,
+      readNodes: readNodes as never,
+    })(context(job()))
+    expect(outcome).toMatchObject({
+      item: { slot: 'i0', status: 'succeeded' },
+      outputs: [{ resource: 'draft', id: 'svc-1', note: 'Live now, in Redirects.' }],
     })
   })
 
@@ -578,6 +599,28 @@ describe('a build’s datasets (AGL-3616)', () => {
     expect(template.plan?.screens[0].record).toEqual({ dataset: 'ds-menu', base: 'menu' })
   })
 
+  /*
+   * AGL-3747: a build that lists one of the site's own datasets placed no
+   * listing for it, so its cards could never link the record pages the site
+   * already serves for it.
+   */
+  it('lists a dataset the site already has where a page places it, its fields and record pages left to the inventory (AGL-3747)', () => {
+    const reusePlan = (): AiJobPlan => ({
+      ...plan(),
+      labels: { ...(plan().labels ?? {}), 'ds-team': 'Team' },
+      reuse: [...plan().reuse, { kind: 'dataset', id: 'ds-team', purpose: 'The people.' }],
+      screens: [{ ...plan().screens[0], title: 'About', slug: '/about', sections: [{ name: 'Our people', uses: ['ds-team'], items: 6 }], id: 'page-about' }],
+    })
+    const units = aiBuildUnits(reusePlan())
+    const page = units.find((unit) => unit.slot === 'p0') as (typeof units)[number]
+    const derived = aiBuildUnitJob(job({ plan: reusePlan() }), page, { kind: 'page', units, ledger: aiBuildInitialLedger(units), ops: OPS })
+    const [listing, ...rest] = aiLayoutListingsOf(derived.inputs)
+    expect(rest).toEqual([])
+    expect(listing).toMatchObject({ kind: 'records', datasetId: 'ds-team', name: 'Team', fields: [], placements: [{ screenId: 'page-about', section: 0, role: 'index' }] })
+    // The plan makes no record template for it: the base is the site's own, read when the page is designed.
+    expect(listing).not.toHaveProperty('recordBase')
+  })
+
   it('lists nothing for a dataset item that was not made', () => {
     const units = aiBuildUnits(menuPlan())
     const ledger = aiBuildInitialLedger(units).map((row) => (row.slot === 'i0' ? { ...row, status: 'failed' as const } : row))
@@ -651,5 +694,14 @@ describe('a build’s form that writes to a dataset (AGL-3616)', () => {
       note: 'Its submissions arrive in the Inbox only: the dataset “Attendees” could not be created.',
     })
     expect(seen[0].plan?.create[0]?.writesTo).toBeNull()
+  })
+})
+
+describe('aiBuildItemOutputNote (AGL-3746)', () => {
+  it('calls a writer’s item a draft unless its capability saves it live', () => {
+    expect(aiBuildItemOutputNote({ where: 'Bookings → Services' })).toBe('A draft, in Bookings → Services.')
+    expect(aiBuildItemOutputNote({ where: 'CRM → Deals → Pipelines', live: true })).toBe(
+      'Live now, in CRM → Deals → Pipelines.',
+    )
   })
 })

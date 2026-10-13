@@ -43,8 +43,25 @@ One message can ask for any mix of:
 - **an announcement bar** or **a popup**;
 - **an A/B test** of a page or of an email's subject line;
 - **a funnel** that counts visits from one step to the next;
+- **CRM setup**: a [deal pipeline](./crm-by-ai.md#set-up-the-crm) with its stages, and
+  [custom fields](./crm-by-ai.md#set-up-the-crm) on contacts, companies, deals or leads.
+  These are saved straight to your CRM, as they are when you set them up yourself;
 - **a change to a page or layout** the site already has, saved as a new version visitors do
-  not see until you publish it.
+  not see until you publish it;
+- **redirects**: send an old address to a page you have, change where a redirect goes, or
+  stop one, such as *redirect /old-menu to /menu*. See
+  [Redirects](../building-sites/redirects/overview.md#ask-aglyn-ai);
+- **a change to the site's settings**: its name, search title and description, title
+  pattern, favicon, logo or social image (from images already in your media library), its
+  language, time zone, business name, description, phone, contact email or address, or the
+  cookie banner's mode. For example, *rename my site to Juniper Clay Studio* or *make the
+  site Spanish*.
+- **store setup**: shipping zones and rates, local pickup, local delivery and sales tax,
+  such as *free shipping over $50, otherwise $5 flat in the US*. See
+  [Shipping](../commerce-and-bookings/commerce/shipping.md#ask-aglyn-ai),
+  [Pickup & local delivery](../commerce-and-bookings/commerce/pickup-and-local-delivery.md#ask-aglyn-ai)
+  and [Tax settings](../commerce-and-bookings/commerce/overview.md#tax-settings). Store
+  setup needs the admin or editor role on the site.
 
 One build holds up to 16 things and 8 pages. On the Free plan it holds 2 pages, and some
 parts, such as templates, campaigns, automations, products and edits to existing pages,
@@ -100,9 +117,20 @@ page that places them.
 - **Everything is a draft.** Pages are unpublished drafts unless you ticked the publish box.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
-  campaigns are unsent and aimed at nobody.
+  campaigns are unsent and aimed at nobody. The exceptions are a **redirect**, **CRM
+  setup**, **store setup** and **site settings**: a redirect rule, a CRM pipeline or custom
+  field, the shipping, pickup, delivery and tax settings, and the site's settings have no
+  draft, so they work as soon as the build saves them, as they do when you save them
+  yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
+  prices and rates you state.
 - **Names are your own.** A new variable or function never takes a name the site already
   uses.
+- **Settings are saved live.** A change to the site's settings has no draft: like a save in
+  Settings, it reaches your live site as soon as that part is built. Making the site
+  Spanish sets its language; it does not translate the pages. A value that cannot be used,
+  such as an email address that is not one, is named on the card and the rest are saved.
+  Assist never changes your site's address, domain, members, billing, plugins or tracking
+  ids, and never hides the site from search engines.
 
 When it is done the card says how many parts were built, such as *5 of 6 built; 1 failed*.
 **Try again what failed** builds only the parts that failed, and shows what that is likely
@@ -149,8 +177,8 @@ your products, set shipping and tax, and fill in your policies.
 ## What it costs {#what-it-costs}
 
 A build spends [AI credits](./ai-credits.md) for each part it makes, and the card shows the
-estimate before you confirm. Products, booking services, overlays, A/B tests, funnels and
-variables cost almost nothing. If the build fails because of something on our side, the
+estimate before you confirm. Products, booking services, overlays, A/B tests, funnels,
+variables and CRM setup cost almost nothing, and redirects and store setup cost nothing. If the build fails because of something on our side, the
 credits are given back, and the card says so. See
 [Credits given back](./ai-credits.md#credits-given-back).
 

@@ -862,6 +862,28 @@ describe('a section one of the site’s datasets fills (AGL-3616)', () => {
       expect(unlinked).not.toHaveProperty('addressField')
       expect(unlinked.fields).toEqual([{ id: 'dish', name: 'Dish', type: 'text' }])
     })
+
+    /*
+     * AGL-3747: a dataset whose record page the site saved before the plan
+     * was made linked none of its cards — the base came only off the plan's
+     * own record template.
+     */
+    it('links the record pages the site already serves, where the plan makes none of its own (AGL-3747)', () => {
+      const inventory = {
+        datasets: [
+          { id: 'ds-menu', name: 'Menu', fields: ['Dish', 'Page address'], fieldIds: ['dish', 'slug'], addressField: 'slug', recordBase: 'dishes' },
+        ],
+      }
+      const [served] = aiLayoutListingsWithDatasets([{ ...MENU, fields: [] }], inventory)
+      expect(served).toMatchObject({ recordBase: 'dishes', addressField: 'slug', fields: [{ id: 'dish', name: 'Dish', type: 'text' }] })
+      expect(aiLayoutRecordHref(served)).toBe('/dishes/{{item.slug}}')
+      // The plan's own record template wins over the one the site had.
+      const [planned] = aiLayoutListingsWithDatasets([{ ...MENU, fields: [], recordBase: 'menu' }], inventory)
+      expect(aiLayoutRecordHref(planned)).toBe('/menu/{{item.slug}}')
+      // And the cards link it, in code, through the same compile.
+      const nodes = nodesOf(linkedCheck(served).value?.nodes)
+      expect(nodes.some((node) => node.componentId === 'muiScreenLink' && node.props?.['href'] === '/dishes/{{item.slug}}')).toBe(true)
+    })
   })
 
   it('draws questions and answers as a ruled list, and a card from the fields its names say', () => {

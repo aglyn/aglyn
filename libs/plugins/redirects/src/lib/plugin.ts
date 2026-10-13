@@ -20,6 +20,7 @@ import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/pl
 import { mdiSignDirection } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerRedirectsRecordRoutes } from './model/redirects-record-routes'
 import { REDIRECTS_SEARCH_SOURCES } from './model/redirects-search-sources'
 import { REDIRECTS_TRANSFER_KEY } from './transfer/redirects-transfer-fields'
 
@@ -58,6 +59,9 @@ export function registerRedirectsConsole(): void {
       },
     ],
   })
+  // Where a rule opens, for a surface that names one — the AI plugin's job
+  // drawer opening a rule a build changed (AGL-3745).
+  registerRedirectsRecordRoutes()
   // The client half of the `redirects` transfer resource: how the import
   // wizard and the export dialog name it. The server half is registered from
   // `declarations.console-server.ts`.

@@ -9,6 +9,46 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.246 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.245...v1.0.0-beta.246)
+
+### Added
+
+- **ai:** the guided site start sets the site language from the brief ([AGL-3750](https://linear.app/aglyn/issue/AGL-3750))
+- **commerce,ai:** builds and Assist set up store shipping, pickup, delivery and tax ([AGL-3749](https://linear.app/aglyn/issue/AGL-3749))
+- **ai:** site settings op for builds and Assist ([AGL-3748](https://linear.app/aglyn/issue/AGL-3748))
+- **crm,ai:** builds and Assist set up CRM pipelines, stages and custom fields ([AGL-3746](https://linear.app/aglyn/issue/AGL-3746), [AGL-3743](https://linear.app/aglyn/issue/AGL-3743))
+- **redirects,ai:** builds and Assist create, change and remove redirects ([AGL-3745](https://linear.app/aglyn/issue/AGL-3745))
+- **events-calendar,ai:** builds and Assist draft events and place the Event List ([AGL-3743](https://linear.app/aglyn/issue/AGL-3743))
+
+### Fixed
+
+- **ai:** a plan's header, navigation or footer section comes off the page ([AGL-3750](https://linear.app/aglyn/issue/AGL-3750))
+- **commerce:** the store-setup role refusal names no brand ([AGL-3749](https://linear.app/aglyn/issue/AGL-3749))
+- **commerce,ai:** only an admin or editor may change store setup through AI ([AGL-3749](https://linear.app/aglyn/issue/AGL-3749))
+- **ai:** the settings step's cache-drop reason names no brand ([AGL-3748](https://linear.app/aglyn/issue/AGL-3748))
+- **ai:** a guided blog's header link comes back when Try again posts it ([AGL-3747](https://linear.app/aglyn/issue/AGL-3747), [AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-3739](https://linear.app/aglyn/issue/AGL-3739))
+- **ai:** list cards link record pages the site already serves ([AGL-3747](https://linear.app/aglyn/issue/AGL-3747), [AGL-3727](https://linear.app/aglyn/issue/AGL-3727))
+- **erase:** reap a deleted site's late beacon counters daily ([AGL-3744](https://linear.app/aglyn/issue/AGL-3744))
+
+### Changed
+
+- **ai:** a site start's header entries go in through the navigation op ([AGL-3747](https://linear.app/aglyn/issue/AGL-3747), [AGL-3728](https://linear.app/aglyn/issue/AGL-3728))
+
+### Documentation
+
+- **crm,ai:** document CRM setup by Assist builds and in the capability map ([AGL-3746](https://linear.app/aglyn/issue/AGL-3746))
+- **env-isolation:** the Stripe publishable key must be stored plain to be readable (AGL-2401) (#1415) ([AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **redirects:** the screen-create sweep names the AI redirect writer as not a door ([AGL-3745](https://linear.app/aglyn/issue/AGL-3745))
+- **erase:** the staff erasure spec mocks the host remnant reap ([AGL-3744](https://linear.app/aglyn/issue/AGL-3744))
+
+</details>
+
 ## v1.0.0-beta.245 — 2026-10-12
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.244...v1.0.0-beta.245)

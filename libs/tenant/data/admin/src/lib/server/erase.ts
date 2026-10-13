@@ -465,6 +465,63 @@ export async function eraseSubtree(
   )
 }
 
+/**
+ * The collections the page-view beacon writes under `hosts/{hostId}`
+ * (`apps/tenant/app/api/analytics/collect/route.ts`), with `set(…, merge)`.
+ */
+export const HOST_BEACON_COLLECTIONS: readonly string[] = [
+  'analytics',
+  'screenAnalytics',
+]
+
+export interface ReapHostBeaconRemnantsResult {
+  /** Phantom `hosts/{id}` trees removed. */
+  reaped: string[]
+  /** Phantoms holding anything else — left for a person to look at. */
+  left: Array<{ hostId: string; collections: string[] }>
+}
+
+/**
+ * Remove what a deleted site's late beacons wrote after `eraseHost` (AGL-3744).
+ *
+ * The beacon trusts a positive host-exists read for an hour per instance, so
+ * a tab left open on a site that is then deleted still lands its dwell or
+ * page view, and the merge-write recreates `hosts/{id}/analytics/{day}` or
+ * `screenAnalytics/{screenId}:{day}` under a host with no document. Nothing
+ * reads those again, and nothing else would ever delete them: a 2026-10-12
+ * audit found one standing three days after its site was erased.
+ *
+ * A host document is written before any beacon can count for it, so a
+ * missing document whose only children are the beacon's own counters is a
+ * deleted site and nothing else. A phantom holding any other collection is
+ * not this leak and is reported, never deleted.
+ *
+ * `listDocuments` lists every host id once, which is a run's whole cost.
+ */
+export async function reapHostBeaconRemnants(
+  options: { dryRun?: boolean } = {},
+): Promise<ReapHostBeaconRemnantsResult> {
+  const firestore = firebaseAdmin.app().firestore()
+  const result: ReapHostBeaconRemnantsResult = { reaped: [], left: [] }
+  const refs = await firestore.collection('hosts').listDocuments()
+  for (let index = 0; index < refs.length; index += 300) {
+    const snapshots = await firestore.getAll(...refs.slice(index, index + 300))
+    for (const snapshot of snapshots) {
+      if (snapshot.exists) continue
+      const collections = (await snapshot.ref.listCollections()).map(
+        (collection) => collection.id,
+      )
+      if (!collections.every((id) => HOST_BEACON_COLLECTIONS.includes(id))) {
+        result.left.push({ hostId: snapshot.id, collections })
+        continue
+      }
+      if (!options.dryRun) await firestore.recursiveDelete(snapshot.ref)
+      result.reaped.push(snapshot.id)
+    }
+  }
+  return result
+}
+
 /** Best-effort Stripe customer deletion — PII lives at the processor too. */
 async function deleteStripeCustomer(customerId?: string): Promise<void> {
   const key = process.env.STRIPE_SECRET_KEY

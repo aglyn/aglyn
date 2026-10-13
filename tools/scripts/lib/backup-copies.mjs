@@ -83,6 +83,12 @@ export const MAX_EXPORT_AGE_DAYS = 8
  * costs anything. Two days is one nightly run plus a day of slack, and it
  * doubles as the tolerance for a write that landed while the sync was in
  * flight.
+ *
+ * It is also the age a source object must reach before its absence from the
+ * mirror counts as missing (`compareMirrorListings`). The transfer runs once a
+ * day at 09:00 UTC and this check runs at 08:07 UTC, so every healthy run sees
+ * up to a day of uploads the next sync has not reached yet; a raw count
+ * comparison read that backlog as an incomplete mirror on every busy day.
  */
 export const MAX_MIRROR_LAG_DAYS = 2
 
@@ -166,7 +172,7 @@ export const PRODUCTION_DATA_STORES = [
     bucket: 'run-sources-{projectId}-us-central1',
     holds: 'Cloud Run source archives — currently the log-drain receiver',
     copiedBy: 'nothing-to-copy',
-    why: "Created by the first `gcloud run deploy --source` of the log-drain receiver (AGL-2483), which is why it appeared in production without anyone classifying it. Service source, reproducible from git (cloud/log-drain). Losing it costs a redeploy, not data — the same standing as the Cloud Functions source bucket above.",
+    why: 'Created by the first `gcloud run deploy --source` of the log-drain receiver (AGL-2483), which is why it appeared in production without anyone classifying it. Service source, reproducible from git (cloud/log-drain). Losing it costs a redeploy, not data — the same standing as the Cloud Functions source bucket above.',
   },
 ]
 
@@ -238,7 +244,15 @@ export const ACKNOWLEDGED = [
  *   mirrorObjects: number,
  *   mirrorNewest: string | null,
  *   mirrorTruncated: boolean,
+ *   missingObjects?: number,
+ *   missingRecent?: number,
  * }} MirroredStore
+ *
+ * `missingObjects` is the number of source objects older than
+ * MAX_MIRROR_LAG_DAYS whose name is absent under the mirror prefix, and
+ * `missingRecent` the absent ones younger than that (the next sync's work, not
+ * a finding). When a caller measured counts only, `missingObjects` is absent
+ * and the verdict falls back to the count deficit.
  */
 
 /**
@@ -252,6 +266,43 @@ export const ACKNOWLEDGED = [
  */
 
 const DAY_MS = 86_400_000
+
+/**
+ * Compare a source listing with its mirror by NAME, not by count.
+ *
+ * Counts cannot answer completeness on a bucket with churn: an object deleted
+ * from the source since the last sync is still in the mirror (the sync
+ * propagates the delete next run) and offsets an object that is genuinely
+ * missing, while an upload made since the last sync reads as missing although
+ * the next run copies it. Only a name present in the source, absent from the
+ * mirror and older than the lag budget is a missing object.
+ *
+ * Returns counts only; the names never leave this function, so no customer
+ * media path reaches a CI log.
+ *
+ * @param {{
+ *   source: { name: string, timeCreated?: string }[],
+ *   mirror: { name: string }[],
+ *   prefix: string,
+ *   now: number,
+ * }} input
+ * @returns {{ missingObjects: number, missingRecent: number }}
+ */
+export function compareMirrorListings({ source, mirror, prefix, now }) {
+  const mirrored = new Set(mirror.map((item) => item.name))
+  const settledBefore = now - MAX_MIRROR_LAG_DAYS * DAY_MS
+  let missingObjects = 0
+  let missingRecent = 0
+  for (const item of source) {
+    if (mirrored.has(`${prefix}${item.name}`)) continue
+    const created = Date.parse(item.timeCreated ?? '')
+    // An unreadable creation time is treated as old: the safe direction is to
+    // report it, never to excuse it.
+    if (Number.isFinite(created) && created > settledBefore) missingRecent += 1
+    else missingObjects += 1
+  }
+  return { missingObjects, missingRecent }
+}
 
 /** Substitute the production project's identifiers into a declared name. */
 export function resolveStoreName(bucket, { projectId, projectNumber }) {
@@ -495,13 +546,21 @@ export function assessBackupCopies({
         continue
       }
 
-      if (store.mirrorObjects < store.sourceObjects) {
+      const missing =
+        typeof store.missingObjects === 'number'
+          ? store.missingObjects
+          : Math.max(0, store.sourceObjects - store.mirrorObjects)
+      if (missing > 0) {
         findings.push({
           code: 'storage-mirror-incomplete',
           title: `The mirror of gs://${store.name} is missing objects`,
           detail: [
             `Source holds ${store.sourceObjects} object(s); the mirror prefix`,
             `${store.prefix} in gs://${storageMirror.bucket} holds ${store.mirrorObjects}.`,
+            typeof store.missingObjects === 'number'
+              ? `${missing} source object(s) older than ${MAX_MIRROR_LAG_DAYS} days are absent from the mirror by name` +
+                ` (${store.missingRecent ?? 0} younger one(s) are awaiting the next sync and are not counted).`
+              : `${missing} object(s) short by count.`,
             'A partial mirror restores a partial workspace. The mirror may legitimately',
             'hold MORE than the source — an object the source lifecycle expired is still',
             'in the copy, which is the point — so only the deficit is a finding.',

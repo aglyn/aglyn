@@ -917,7 +917,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   shipping: {
     '#carrier-accounts': 'Tment or suite, city, state or region, postal code, the two-letter country code and a phone number, saved beside the location\'s name.',
     '#shipping-labels': 'Account and not kept by Aglyn. Labels bought on your own account are billed to you by the carrier, so Aglyn charges nothing for them.',
-    '#where-parcels-ship-from': 'Te. The destination coverage rules explain what your zones make checkout ask and refuse.',
+    '#where-parcels-ship-from': 'Redits.',
     '#zones-and-rates': 'Ced from the zones and rates you save there, at the storefront\'s cart, on a product\'s Buy button, and on a draft order\'s payment link.',
   },
   siteBackupAndPackages: {

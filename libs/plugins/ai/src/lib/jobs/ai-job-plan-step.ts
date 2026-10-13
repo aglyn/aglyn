@@ -190,6 +190,7 @@ export function aiJobPlanPrompt(
   capabilities: AiPlanCapabilities | null = null,
   inventory: AiSiteInventory | null = null,
   ops: AiBuildOps | null = null,
+  now: Date | null = null,
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
@@ -205,7 +206,7 @@ export function aiJobPlanPrompt(
   }
   lines.push(...aiPlanTemplateTokenLines(job))
   lines.push(...aiPlanSiteLines(job, inventory, capabilities))
-  lines.push(...aiPlanBuildLines(job, capabilities, ops))
+  lines.push(...aiPlanBuildLines(job, capabilities, ops, now))
   return lines.join('\n')
 }
 
@@ -219,6 +220,7 @@ export function aiPlanBuildLines(
   job: Pick<AiJob, 'kind'>,
   capabilities: AiPlanCapabilities | null,
   ops: AiBuildOps | null,
+  now: Date | null = null,
 ): string[] {
   if (job.kind !== 'build') return []
   const pages = aiBuildPageLimit(capabilities?.freeTaste === true)
@@ -229,7 +231,14 @@ export function aiPlanBuildLines(
     // doctrine's "repeated items place a component" is not asked of a build.
     ...(capabilities?.repeatsCompiled ? [AI_PLAN_COMPILED_REPEATS_SENTENCE] : []),
     ...(ops ? aiBuildOpLines(ops, AI_BUILD_STRUCTURAL_OPS) : []),
+    // An item with a date (an event, AGL-3743) is dated after the build.
+    ...(now ? [aiPlanTodaySentence(now)] : []),
   ]
+}
+
+/** The build's date, so a dated item falls after it (AGL-3743). */
+export function aiPlanTodaySentence(now: Date): string {
+  return `Today is ${now.toISOString().slice(0, 10)} (UTC). Anything an item dates, such as an event, falls after today.`
 }
 
 /**
@@ -925,7 +934,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // provider's fast tier (AGL-3594), unless the creator picked a model.
     const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = aiJobPlanPrompt(job, capabilities, inventory, ops)
+    const prompt = aiJobPlanPrompt(job, capabilities, inventory, ops, now)
 
     /**
      * The confirm door's answer for this plan, asked before the plan is kept
@@ -977,10 +986,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     const resolved = model ?? aiModelForStep('job.plan')
     // A brief that asks for a video is offered the plan's list of players
     // (AGL-3433), and a job that may bind a dataset a record template on
-    // each screen (AGL-3475).
+    // each screen (AGL-3475). A site's plan says the language its brief is
+    // written in, which its guided start sets the site's language from (AGL-3750).
     const tool = aiBuildPlanToolFor(job.brief, {
       records: Boolean(inventory?.datasets.length) || capabilities?.create.dataset.allowed === true,
       items: job.kind === 'build',
+      language: site,
     })
     const key = aiJobPlanKey({
       job,

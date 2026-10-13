@@ -1331,6 +1331,20 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     expect(publish).not.toHaveBeenCalled()
   })
 
+  it('hands the publish the language its plan says the brief is in, and none where it says none (AGL-3750)', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish },
+    )
+    const job = lastPass({ autoConfirm: true })
+    await step(context({ ...job, plan: { ...(job.plan as AiJobPlan), language: 'es' } }))
+    expect(publish.mock.calls[0]).toEqual([expect.anything(), expect.objectContaining({ language: 'es' })])
+    publish.mockClear()
+    await step(context(lastPass({ autoConfirm: true })))
+    expect(publish.mock.calls[0]).toEqual([expect.anything(), expect.not.objectContaining({ language: expect.anything() })])
+  })
+
   /*
    * Try again on a guided start (AGL-3730): org 1-cho3N4FW's retried
    * Portfolio page (beta.243) stayed a draft with no header entry, since a job
@@ -1624,7 +1638,7 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     const publish = jest.fn(async () => ({ liveUrl: null, published: [], drafts: [] }))
     const publishPosts = jest.fn(async () => ({ published: 2, kept: 0, paths: ['/blog', '/blog/one', '/blog/two'] }))
     const dropCache = jest.fn(async () => ({ complete: true }))
-    const step = stepWith({}, { publish, publishPosts, dropCache: dropCache as never })
+    const step = stepWith({}, { publish, publishPosts, dropCache: dropCache as never, restoreBlogEntry: jest.fn(async () => true) })
     const retried = ledger({ status: 'succeeded', attempt: 2, outputs: posts.map((post) => post.id) })
     const outcome = await step(
       context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items: retried as never, sitePublish: first })),
@@ -1659,7 +1673,7 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     const publishPosts = jest.fn(async () => ({ published: 1, kept: 0, paths: ['/blog'] }))
     const step = stepWith(
       { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
-      { publish, publishPosts, dropCache: jest.fn(async () => ({ complete: true })) as never },
+      { publish, publishPosts, dropCache: jest.fn(async () => ({ complete: true })) as never, restoreBlogEntry: jest.fn(async () => true) },
     )
     const outcome = await step(
       context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items, sitePublish: first })),
@@ -1667,6 +1681,74 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     expect(publish).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ retry: true, blogUnwritten: false }))
     expect(publishPosts).toHaveBeenCalledTimes(1)
     expect(outcome.sitePublish?.published.map((page) => page.id)).toEqual(['screen-0', 'screen-1', 'screen-2', 'screen-3'])
+  })
+
+  /*
+   * AGL-3747: the first publish of a start whose posts part failed took every
+   * link to the blog out (AGL-3660); Try again then put the posts live
+   * (AGL-3739) with no header link left to reach them.
+   */
+  it('puts the blog’s header entry back once Try again’s posts are live, and only then (AGL-3747)', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const posts = [entry('job-1-posts-0', 'One')]
+    const pages = ['screen-0', 'screen-1', 'screen-2', 'screen-3'].map((id) => output('screen', id))
+    const ledger = (row: Record<string, unknown>) =>
+      aiSiteInitialLedger(units, [LOOK, ...pages]).map((one) => (one.slot === 'posts' ? { ...one, ...row } : one))
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: pages.map((page, index) => ({ id: page.id, label: page.id, path: index === 0 ? '/' : `/${page.id}` })),
+      drafts: [],
+    }
+    const restoreBlogEntry = jest.fn(async () => true)
+    const publishPosts = jest.fn(async () => ({ published: 1, kept: 0, paths: ['/blog', '/blog/one'] }))
+    const deps = { publish: jest.fn(), publishPosts, dropCache: jest.fn(async () => ({ complete: true })) as never, restoreBlogEntry }
+    const run = (items: unknown) =>
+      stepWith({}, deps)(
+        context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items: items as never, sitePublish: first })),
+      )
+    await run(ledger({ status: 'succeeded', attempt: 2, outputs: posts.map((post) => post.id) }))
+    expect(restoreBlogEntry).toHaveBeenCalledTimes(1)
+    expect(restoreBlogEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        pageIds: pages.map((page) => page.id),
+        homeId: 'screen-0',
+        blog: { label: 'Blog', href: '/blog' },
+      }),
+    )
+    // Posts the first attempt wrote went live with links the first publish kept.
+    restoreBlogEntry.mockClear()
+    await run(ledger({ status: 'succeeded', outputs: posts.map((post) => post.id) }))
+    expect(restoreBlogEntry).not.toHaveBeenCalled()
+    // No post went live, no link to a blog with nothing in it.
+    publishPosts.mockResolvedValueOnce({ published: 0, kept: 0, paths: [] })
+    await run(ledger({ status: 'succeeded', attempt: 2, outputs: posts.map((post) => post.id) }))
+    expect(restoreBlogEntry).not.toHaveBeenCalled()
+  })
+
+  it('puts the blog’s entry back beside a retried page, in the layout every published page shares (AGL-3747)', async () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { content: 'posts' })
+    const posts = [entry('job-1-posts-0', 'One')]
+    const pages = ['screen-0', 'screen-1', 'screen-2'].map((id) => output('screen', id))
+    const items = aiSiteInitialLedger(units, [LOOK, ...pages]).map((row) =>
+      row.slot === 'posts' ? { ...row, status: 'succeeded' as const, attempt: 2, outputs: posts.map((post) => post.id) } : row,
+    )
+    const first = {
+      liveUrl: 'https://hillside.aglyn.app/',
+      published: pages.map((page) => ({ id: page.id, label: page.id, path: `/${page.id}` })),
+      drafts: [],
+    }
+    const publish = jest.fn(async () => ({ liveUrl: 'https://hillside.aglyn.app/', published: [{ id: 'screen-3', label: 'Home', path: '/' }], drafts: [] }))
+    const restoreBlogEntry = jest.fn(async () => true)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish, publishPosts: jest.fn(async () => ({ published: 1, kept: 0, paths: ['/blog'] })), dropCache: jest.fn(async () => ({ complete: true })) as never, restoreBlogEntry },
+    )
+    await step(context(siteJob({ inputs: { ...blogInputs, autoConfirm: true }, outputs: [LOOK, ...posts, ...pages], items, sitePublish: first })))
+    expect(restoreBlogEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ pageIds: ['screen-0', 'screen-1', 'screen-2', 'screen-3'], homeId: 'screen-3' }),
+    )
   })
 
   it('tells the publish the blog went unwritten when its posts part failed, so its links come out (AGL-3660)', async () => {

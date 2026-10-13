@@ -83,6 +83,8 @@ export type AiJobKind =
   | 'navigation'
   /** A copy of something a site already has, made by core's duplicate (AGL-3740). */
   | 'duplicate'
+  /** A change to a site's settings, made by code and saved live (AGL-3748). */
+  | 'settings'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -108,6 +110,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'build',
   'navigation',
   'duplicate',
+  'settings',
 ]
 
 /**
@@ -255,6 +258,8 @@ export type AiJobOutputResource =
   | 'orgAutomation'
   /** A post a guided start wrote into the site's blog (AGL-3676): a content collection entry. */
   | 'entry'
+  /** A site's settings a build changed (AGL-3748): saved live, on the host document. */
+  | 'settings'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can

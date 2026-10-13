@@ -38,9 +38,9 @@ beforeEach(() => {
 })
 
 describe('the addresses the CRM publishes', () => {
-  it('owns the four record kinds, and tasks', () => {
+  it('owns the four record kinds, the setup an AI build saves, and tasks', () => {
     expect(listPluginRecordRouteKinds()).toEqual(
-      ['contact', 'lead', 'company', 'deal', 'task'].map((kind) => ({
+      ['contact', 'lead', 'company', 'deal', 'crm-pipeline', 'crm-field', 'task'].map((kind) => ({
         kind,
         pluginId: 'crm',
       })),
@@ -55,6 +55,9 @@ describe('the addresses the CRM publishes', () => {
     expect(pluginRecordHref('company', site, 'co1')).toBe(siteHub.company('co1'))
     expect(pluginRecordHref('deal', site, 'd1')).toBe(siteHub.deal('d1'))
     expect(pluginRecordListHref('lead', site)).toBe(siteHub.section('leads'))
+    // A pipeline or field an AI build saved (AGL-3746) opens its section.
+    expect(pluginRecordHref('crm-pipeline', site, 'p1')).toBe(siteHub.section('deals'))
+    expect(pluginRecordHref('crm-field', site, 'f1')).toBe(siteHub.section('fields'))
     expect(pluginRecordByEmailHref('contact', site, 'ada@example.com')).toBe(
       siteHub.contactByEmail('ada@example.com'),
     )
@@ -89,6 +92,6 @@ describe('the addresses the CRM publishes', () => {
 
   it('registers again without refusing itself', () => {
     expect(() => registerCrmRecordRoutes()).not.toThrow()
-    expect(listPluginRecordRouteKinds()).toHaveLength(5)
+    expect(listPluginRecordRouteKinds()).toHaveLength(7)
   })
 })

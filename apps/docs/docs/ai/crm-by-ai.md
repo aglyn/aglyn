@@ -15,6 +15,9 @@ what happens next: nothing is saved, sent or imported until you do it yourself.
 - **In an import**, a suggested match between the columns of your file and the fields they
   fill.
 
+It can also [set up the CRM](#set-up-the-crm) from the Assist chat: your deal pipelines and
+their stages, and your custom fields. You confirm the plan before anything is saved.
+
 ## Summarize a record {#summarize-a-record}
 
 On a contact's, company's, deal's or lead's page, **Summarize this contact** (or company, deal
@@ -109,6 +112,35 @@ is left out.
 AI is **never** given a password, a sign-in token, an account identifier or a record's
 internal id. A related record — the company someone works for, the person they report to, a
 campaign — is named by its name.
+
+## Set up the CRM from the chat {#set-up-the-crm}
+
+Ask Assist to [build](./assist-builds.md) your CRM setup, for example *"set up a sales
+pipeline for my agency: Discovery, Proposal, Negotiation, Won/Lost"* or *"add a Budget field to
+opportunities"*. The plan card lists each pipeline and field; once you confirm, they are saved
+to your CRM exactly as if you had set them up yourself in
+[Deals](../content-and-data/crm/deals.md) and [Custom fields](../content-and-data/crm/custom-fields.md).
+Unlike pages and emails, they are not drafts: a pipeline and a field are in use as soon as they
+are saved.
+
+- **Pipelines.** A new pipeline gets the stages you list, in order, with its Won and Lost
+  stages named as you ask (otherwise *Closed Won* and *Closed Lost*). A stage's win
+  probability is the one you give, such as *"Proposal at 60%"*, or else is spread from low to
+  high across the stages. Your first pipeline becomes the default; a later one does only when
+  you say so. Ask to rename a pipeline, add a stage or put stages in a new order and the
+  pipeline you have is changed instead of a second one made.
+- **Custom fields** go on contacts, companies (accounts), deals (opportunities) or leads, with
+  the CRM's field types: text, number, date, choice, checkbox and link. There is no currency
+  type, so an amount such as a budget is a number field.
+- **Nothing twice, nothing removed.** Pipelines, stages and fields are matched by name,
+  ignoring capitals, so asking again changes nothing that is already there. AI never removes a
+  stage or a field, and a stage it was not told about stays where it is, after the ones you
+  listed. A name a retired field still uses is refused: restore that field in **CRM → Fields**
+  instead.
+
+CRM setup needs the CRM on your plan (Starter and up) and, like setting it up yourself, the
+**Manage data** permission as an owner, admin or editor. A custom field belongs to the whole
+organization, so adding one needs access to every site. It uses no AI credits.
 
 ## Who can use it {#who-can-use-it}
 

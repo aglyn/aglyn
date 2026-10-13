@@ -39,6 +39,7 @@ import { registerAiLogicJob } from './jobs/ai-job-logic-step'
 import { registerAiEditJob } from './jobs/ai-job-edit-step'
 import { registerAiNavigationJob } from './jobs/ai-job-navigation-step'
 import { registerAiDuplicateJob } from './jobs/ai-job-duplicate-step'
+import { registerAiSettingsJob } from './jobs/ai-job-settings-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -139,6 +140,9 @@ function registerAiJobKinds(): void {
   // A copy of something a site already has, through core's duplicate — the
   // console's own Duplicate… — as a build's item (AGL-3740).
   registerAiDuplicateJob()
+  // A change to a site's settings — its name, search defaults, icons,
+  // language, time zone and contact details — saved live (AGL-3748).
+  registerAiSettingsJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()

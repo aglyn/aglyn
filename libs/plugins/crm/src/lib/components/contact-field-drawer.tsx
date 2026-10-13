@@ -36,6 +36,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ContactFieldDefinitionDoc } from '../hooks/use-contact-field-definitions'
+import { CRM_FIELD_LABEL_MAX_LENGTH, crmFieldOptions } from '../model/crm-setup-content'
 
 /** What the drawer hands back — the definition's editable half. */
 export interface ContactFieldDraft {
@@ -109,23 +110,12 @@ export function fieldDrawerMappingNote(object: CrmFieldObject): string {
   )
 }
 
-/** How many choices a select may declare, and how long each may be. */
-const OPTIONS_MAX = 50
-const OPTION_MAX_LENGTH = 120
-const LABEL_MAX_LENGTH = 80
+/** How long a label may be: the one bound an AI build's field is held to too (AGL-3746). */
+const LABEL_MAX_LENGTH = CRM_FIELD_LABEL_MAX_LENGTH
 
-/** One choice per line, trimmed, blanks dropped, duplicates collapsed. */
+/** One choice per line, trimmed, blanks dropped, duplicates collapsed, under the shared bounds. */
 function parseOptions(text: string): string[] {
-  const seen = new Set<string>()
-  const options: string[] = []
-  for (const line of text.split('\n')) {
-    const option = line.trim().slice(0, OPTION_MAX_LENGTH)
-    if (!option || seen.has(option)) continue
-    seen.add(option)
-    options.push(option)
-    if (options.length >= OPTIONS_MAX) break
-  }
-  return options
+  return crmFieldOptions(text.split('\n'))
 }
 
 /**

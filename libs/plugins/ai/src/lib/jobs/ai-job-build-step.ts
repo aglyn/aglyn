@@ -17,6 +17,7 @@
 
 import { aiJobCancelAsked } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import type { PluginAiCapability } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -198,6 +199,15 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
   return runnerKind ? (runnerKind as AiJobKind) : null
 }
 
+/**
+ * What the job drawer says under an item another plugin's writer made: a
+ * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
+ * field, AGL-3746), that it was saved.
+ */
+export function aiBuildItemOutputNote(capability: Pick<PluginAiCapability, 'where' | 'live'>): string {
+  return capability.live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
+}
+
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {
   return unit.creation?.id ?? unit.screen?.id ?? unit.item?.id ?? `${job.$id}-${unit.slot}`
@@ -311,10 +321,16 @@ export function aiBuildUnitJob(
     if (pages.length) inputs[AI_LAYOUT_SITE_PAGES_INPUT] = pages
     const formPage = aiLayoutFormPageOfPlan(plan)
     if (formPage) inputs[AI_LAYOUT_FORM_PAGE_INPUT] = formPage
-    // The datasets this build made, repeated in the sections that name them (AGL-3616).
+    // The datasets this build made, repeated in the sections that name them (AGL-3616),
+    // and the site's own the plan reuses (AGL-3747): the page reads their fields,
+    // and the record pages the site already serves for them, off its inventory.
     const datasets = [...built.entries()]
       .filter(([, entry]) => entry.kind === 'dataset')
       .map(([name, entry]) => ({ id: entry.id, name: context.units.find((one) => one.item?.name.toLowerCase() === name)?.label ?? entry.label }))
+    for (const entry of plan.reuse) {
+      if (entry.kind !== 'dataset' || datasets.some((one) => one.id === entry.id)) continue
+      datasets.push({ id: entry.id, name: plan.labels?.[entry.id] ?? entry.id })
+    }
     const listings = aiDatasetListingsOf(datasets, plan.screens)
     if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
@@ -748,7 +764,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         hostId: job.hostId,
         label: written.name,
         draftResource: capability.draftResource,
-        note: `A draft, in ${capability.where}.`,
+        // A resource with no draft state is live once written (AGL-3745, AGL-3746).
+        note: aiBuildItemOutputNote(capability),
       }
       return settle(
         {
@@ -865,6 +882,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   edit: 'edit',
   navigation: 'navigation',
   duplicate: 'duplicate',
+  settings: 'settings',
 }
 
 /**
