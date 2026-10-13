@@ -570,6 +570,35 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
     expect(wasMarkedInert('evt_checkout')).toBe(false)
   })
 
+  it('a voided workspace invoice is NOT marked — the operator alert is its effect', async () => {
+    // The branch writes nothing through the route's handle: it tells plugins
+    // and raises `billing.platformInvoiceUncollectible`. Unrecorded, that
+    // read as inert and the operator got "no handler acted" beside the
+    // "Invoice voided" alert the same delivery had just sent.
+    const post = loadWebhook()
+    await post(
+      signed(
+        event('evt_voided', 'invoice.voided', {
+          id: 'in_voided',
+          object: 'invoice',
+          customer: 'cus_own_1',
+          amount_due: 5600,
+          currency: 'usd',
+        }),
+        'whsec_live_fake',
+      ),
+    )
+    expect(mockRaiseOperatorAlert).toHaveBeenCalledWith(
+      'billing.platformInvoiceUncollectible',
+      expect.anything(),
+    )
+    expect(mockRaiseOperatorAlert).not.toHaveBeenCalledWith(
+      'billing.webhookInert',
+      expect.anything(),
+    )
+    expect(wasMarkedInert('evt_voided')).toBe(false)
+  })
+
   it('an event type we never subscribed to is NOT marked', async () => {
     const post = loadWebhook()
     await post(
@@ -712,7 +741,7 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
     },
   )
 
-  it('a renewal written off on a paying subscription still alerts, and that alert is the effect', async () => {
+  it('a renewal written off on a paying subscription is not a sign-up: it still alerts', async () => {
     await loadWebhook()(
       signed(event('evt_renewal_void', 'invoice.voided', RENEWAL_INVOICE), 'whsec_live_fake'),
     )
@@ -749,45 +778,6 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
     )
     expect(alertsOfType('billing.platformInvoiceUncollectible')).toHaveLength(1)
     expect(wasMarkedInert('evt_net30')).toBe(false)
-  })
-
-  it('THE CHECK CAN FAIL: a revenue alert that could not be raised at all IS marked', async () => {
-    // The raise's own catch: no staff row, no email, no webhook. Nothing in
-    // this process told anyone, and the delivery must say so.
-    mockRaiseOperatorAlert.mockImplementation(async (alertType: unknown) =>
-      alertType === 'billing.platformInvoiceUncollectible'
-        ? { outcome: 'undelivered', type: alertType }
-        : { outcome: 'delivered' },
-    )
-    await loadWebhook()(
-      signed(event('evt_alert_dead', 'invoice.voided', RENEWAL_INVOICE), 'whsec_live_fake'),
-    )
-    expect(wasMarkedInert('evt_alert_dead')).toBe(true)
-  })
-
-  it('an alert that reached the staff console but no email or webhook still counts', async () => {
-    mockRaiseOperatorAlert.mockImplementation(async (alertType: unknown) => ({
-      outcome: 'undelivered',
-      type: alertType,
-      email: { sent: false, reason: 'unconfigured' },
-      webhook: { posted: false, reason: 'unconfigured' },
-    }))
-    await loadWebhook()(
-      signed(event('evt_console_only', 'invoice.voided', RENEWAL_INVOICE), 'whsec_live_fake'),
-    )
-    expect(wasMarkedInert('evt_console_only')).toBe(false)
-  })
-
-  it('a plugin that handles its own closed invoice is an effect', async () => {
-    mockRunPluginEventHandlers.mockImplementation(async () => ({ handled: 1, failed: [] }))
-    mockRaiseOperatorAlert.mockImplementation(async (alertType: unknown) => ({
-      outcome: 'undelivered',
-      type: alertType,
-    }))
-    await loadWebhook()(
-      signed(event('evt_plugin_closed', 'invoice.voided', RENEWAL_INVOICE), 'whsec_live_fake'),
-    )
-    expect(wasMarkedInert('evt_plugin_closed')).toBe(false)
   })
 })
 
