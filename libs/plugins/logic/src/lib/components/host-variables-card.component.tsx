@@ -60,7 +60,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getCountFromServer } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -70,7 +70,6 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import WhereUsedDialog from './where-used-dialog.component'
-import { StructuredValueEditor } from './structured-value-editor.component'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { HOST_LOGIC_ZONE, type LogicProposal } from './logic-zones'
 import {
@@ -78,6 +77,12 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '@aglyn/aglyn/app-utils/where-used'
+
+// The entry/item editor is its own chunk, loaded when a dictionary or list
+// variable is opened (AGL-3757).
+const StructuredValueEditor = lazy(
+  () => import('./structured-value-editor.component'),
+)
 
 /**
  * How many variables the card reads.
@@ -162,12 +167,14 @@ function VariableValueField(props: {
       // Rows, never typed JSON (AGL-3757). Keyed by the draft and type so
       // opening another variable, or switching type, reads its value afresh.
       return (
-        <StructuredValueEditor
-          key={`${draft.id ?? 'new'}:${draft.type}`}
-          shape={draft.type}
-          value={draft.value}
-          onChange={onChange}
-        />
+        <Suspense fallback={null}>
+          <StructuredValueEditor
+            key={`${draft.id ?? 'new'}:${draft.type}`}
+            shape={draft.type}
+            value={draft.value}
+            onChange={onChange}
+          />
+        </Suspense>
       )
     default:
       return (

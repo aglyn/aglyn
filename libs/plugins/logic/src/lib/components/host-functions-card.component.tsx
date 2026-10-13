@@ -84,7 +84,7 @@ import {
 } from '../model/parameter-options'
 import WhereUsedDialog from './where-used-dialog.component'
 import { FormulaBuilderButton } from './formula-builder.component'
-import { formulaNames } from '../model/formula'
+import { formulaNames } from '../model/formula-names'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   HOST_LOGIC_ZONE,

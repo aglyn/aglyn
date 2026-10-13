@@ -59,7 +59,7 @@ describe('the dictionary editor writes JSON nobody typed (AGL-3757)', () => {
 })
 
 describe('the formula builder fills the box (AGL-3757)', () => {
-  it('builds money formatting from picked values', () => {
+  it('builds money formatting from picked values', async () => {
     const onUse = jest.fn()
     const onOpen = jest.fn()
     render(
@@ -72,7 +72,7 @@ describe('the formula builder fills the box (AGL-3757)', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Build formula' }))
     expect(onOpen).toHaveBeenCalled()
-    const dialog = screen.getByRole('dialog')
+    const dialog = await screen.findByRole('dialog')
     choose(/Work out/, 'Format as money', dialog)
     choose(/Which/, 'price', dialog)
     expect(within(dialog).getByText("The box will read: '$' + format(price, 2)")).toBeTruthy()
@@ -80,11 +80,11 @@ describe('the formula builder fills the box (AGL-3757)', () => {
     expect(onUse).toHaveBeenCalledWith("'$' + format(price, 2)")
   })
 
-  it('layers on what the box held', () => {
+  it('layers on what the box held', async () => {
     const onUse = jest.fn()
     render(<FormulaBuilderButton current="P1 + P2" names={[]} onUse={onUse} />)
     fireEvent.click(screen.getByRole('button', { name: 'Build formula' }))
-    const dialog = screen.getByRole('dialog')
+    const dialog = await screen.findByRole('dialog')
     choose(/Work out/, 'Round up', dialog)
     fireEvent.click(within(dialog).getByRole('button', { name: 'Use formula' }))
     expect(onUse).toHaveBeenCalledWith('ceil(P1 + P2)')

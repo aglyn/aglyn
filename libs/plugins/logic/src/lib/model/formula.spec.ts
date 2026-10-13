@@ -20,8 +20,8 @@ import {
   buildFormula,
   FORMULA_OPERATION_ORDER,
   formulaDraftFor,
-  formulaNames,
 } from './formula'
+import { formulaNames } from './formula-names'
 
 const name = (value: string) => ({ source: 'name' as const, name: value })
 const number = (value: string) => ({ source: 'number' as const, value })

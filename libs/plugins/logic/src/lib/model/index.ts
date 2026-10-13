@@ -22,5 +22,3 @@
  */
 export * from './parameter-options'
 export * from './reference-audit'
-export * from './structured-value'
-export * from './formula'
