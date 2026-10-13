@@ -161,6 +161,19 @@ export function DatasetImageFieldInput(props: CustomFieldInputProps) {
 }
 DatasetImageFieldInput.displayName = 'DatasetImageFieldInput'
 
+/** The Page field where no site is open: it names what is held and where to choose. */
+function PageFieldWithoutSite(props: { label?: string; chosen: boolean }) {
+  return (
+    <Stack spacing={0.5}>
+      <TextField size="small" label={props.label} value={props.chosen ? 'A page is chosen' : 'No page chosen'} disabled />
+      <Typography variant="caption" color="text.secondary">
+        {'Pages belong to a site. Open this dataset from that site’s Data page to choose one.'}
+      </Typography>
+    </Stack>
+  )
+}
+PageFieldWithoutSite.displayName = 'PageFieldWithoutSite'
+
 /**
  * A record's page: one of the site's pages, picked by name. Stored as the
  * page's link reference, so a Button or Link bound to it follows the page to
@@ -194,16 +207,7 @@ export function DatasetPageFieldInput(props: CustomFieldInputProps) {
   )
   const known = !selected || pages.some((page) => page.id === selected)
 
-  if (!hostId) {
-    return (
-      <Stack spacing={0.5}>
-        <TextField size="small" label={label} value={selected ? 'A page is chosen' : 'No page chosen'} disabled />
-        <Typography variant="caption" color="text.secondary">
-          {'Pages belong to a site. Open this dataset from that site’s Data page to choose one.'}
-        </Typography>
-      </Stack>
-    )
-  }
+  if (!hostId) return <PageFieldWithoutSite label={label} chosen={Boolean(selected)} />
 
   return (
     <TextField

@@ -387,6 +387,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'media-ref',
     why: 'The cart line image, given siteRelativeMediaSrc by 9a517e5ec so a white-label storefront stops naming aglyn.app. Resolution only — the scheme is still open here, unlike the events and marketing sinks.',
   },
+  'libs/plugins/data/src/lib/components/dataset-field-inputs.component.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "The preview thumbnail beside a dataset record's Image field (AGL-3763), in the console's record editor on the site and organization Data pages. The src is the record's stored value through resolveMediaSrc with the site's id: a media-library pick, or an https link the workspace member typed under \"Use a link instead\". The reader is that member, signed in to the console, so the IP at risk is theirs, never a site visitor's.",
+  },
   'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx': {
     markers: 1,
     guard: 'off-tenant',
