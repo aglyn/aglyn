@@ -792,8 +792,16 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   is one the rule reads as a region and it places nothing, or only a layout. One that
   places a form or a component, and a page whose every section is a region, are
   re-asked as before; a home left under its fewest sections is the thin-home check's.
-  `plan-empty-gallery` is not settled: how many pieces a section shows, and whether it
-  shows the work at all, has no one answer.
+- **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
+  `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
+  `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
+  name `aiSiteSectionShowsWork` reads, never a framing one like "Portfolio Hero")
+  planned with fewer than `AI_SITE_GALLERY_MIN_ITEMS` (3) to exactly 3, before the rules
+  read the plan. The job opts in through the `galleryMinItems` capability, which only
+  `aiSitePlanCapabilities` sets for a `site` job. A section's items move no section cap,
+  Free wall or credit figure, which count sections and pages, and a site start keeps no
+  components, so rule 1 asks none for the raised count. One item of a list split into
+  sections is left for rule 1's re-ask to join; the gallery check stays as the backstop.
 - **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
   inline sentence's old words, "draw a repeated item in its own section", as a section an
   item, and planned "the four areas we practice" as four sections of one item: none was

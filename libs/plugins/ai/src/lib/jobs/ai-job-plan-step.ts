@@ -62,6 +62,7 @@ import {
   AI_SITE_GALLERY_SENTENCE,
   aiSiteEmptyGalleryViolations,
   AI_SITE_DATASETS_MAX,
+  AI_SITE_GALLERY_MIN_ITEMS,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
@@ -465,7 +466,10 @@ export function aiSiteStoreShopCheck(): (plan: AiBuildPlan) => AiDoctrineViolati
 /**
  * A site plan's section that shows the work without its pieces (AGL-3660),
  * asked about on the FIRST answer only, like a thin home: the re-ask names
- * the section, and an answer that keeps it thin is kept.
+ * the section, and an answer that keeps it thin is kept. A site start's plan
+ * is given its fewest pieces in code first (`aiSettlePlanGalleries`,
+ * AGL-3754), so this is the backstop for a section that settle leaves: one
+ * item of a list split into sections.
  */
 export function aiSiteEmptyGalleryCheck(): (plan: AiBuildPlan) => AiDoctrineViolation[] {
   let answers = 0
@@ -1149,8 +1153,15 @@ export function aiSitePlanCapabilities(
       reason: 'a site start draws its repeated items in their sections',
     },
   }
-  // At most a start's few datasets, settled in code where a plan names more (AGL-3616).
-  const site = { ...capabilities, reusableComponents: false, create, datasetsMax: AI_SITE_DATASETS_MAX }
+  // At most a start's few datasets, settled in code where a plan names more
+  // (AGL-3616); a section that shows the work with its fewest pieces (AGL-3754).
+  const site = {
+    ...capabilities,
+    reusableComponents: false,
+    create,
+    datasetsMax: AI_SITE_DATASETS_MAX,
+    galleryMinItems: AI_SITE_GALLERY_MIN_ITEMS,
+  }
   if (!capabilities.freeTaste) return site
   const asked = Number((job.inputs ?? {})['pages'])
   const pages =

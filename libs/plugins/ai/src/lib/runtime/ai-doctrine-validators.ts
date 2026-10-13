@@ -64,7 +64,12 @@ import {
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiFreeSiteSectionsWithin, aiSiteHomeMinSections, aiSitePlanIsHome } from '../model/ai-site-job'
+import {
+  aiFreeSiteSectionsWithin,
+  aiSiteHomeMinSections,
+  aiSitePlanIsHome,
+  aiSiteSectionShowsWork,
+} from '../model/ai-site-job'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import {
@@ -4112,6 +4117,44 @@ export function aiSettlePlanLayoutRegionSections(
     if (kept.length === screen.sections.length || !kept.length) return screen
     changed = true
     return { ...screen, sections: kept }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
+/**
+ * A section that shows the work — a gallery, a portfolio, selected works, by
+ * the name `aiSiteSectionShowsWork` reads — planned with fewer pieces than
+ * the job's `galleryMinItems` is raised to it before the rules read the plan
+ * (AGL-3754). The site start's `plan-empty-gallery` refusal names one answer,
+ * "plan it with three to six items", and the fewest is the one that keeps
+ * the plan's own count closest: a section's items move no section cap, Free
+ * wall or credit figure, which count sections and pages.
+ *
+ * A section the rule reads as one item of a list split into sections is
+ * left for rule 1's re-ask to join, as the Free wall's trim leaves it: raised
+ * here, it would hide the split. A job that sets no `galleryMinItems` (every
+ * job but a site start) is returned unchanged.
+ */
+export function aiSettlePlanGalleries(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  const least = capabilities?.galleryMinItems ?? 0
+  const thin = (section: AiBuildPlanSection) => aiSiteSectionShowsWork(section.name) && section.items < least
+  if (!plan.screens.some((screen) => screen.sections.some(thin))) return plan
+  const split = new Set(detectPlanSplitLists(plan, inventory, capabilities).flatMap((violation) => violation.paths ?? []))
+  let changed = false
+  const screens = plan.screens.map((screen, screenIndex) => {
+    if (!screen.sections.some(thin)) return screen
+    return {
+      ...screen,
+      sections: screen.sections.map((section, sectionIndex) => {
+        if (!thin(section) || split.has(`screens[${screenIndex}].sections[${sectionIndex}]`)) return section
+        changed = true
+        return { ...section, items: least }
+      }),
+    }
   })
   return changed ? { ...plan, screens } : plan
 }
