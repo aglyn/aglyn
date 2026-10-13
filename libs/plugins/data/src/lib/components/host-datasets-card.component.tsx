@@ -80,6 +80,7 @@ import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-l
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 import { DatasetRecordDialog } from './dataset-record-dialog.component'
+import { DatasetRecordSiteContext } from './dataset-field-inputs.component'
 import {
   datasetRecordFilter,
   planRecordQuery,
@@ -188,6 +189,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const createdFromHostId = props.orgId ? undefined : hostId || undefined
   const createdFrom = useMemo(
     () => (createdFromHostId ? { hostId: createdFromHostId } : {}),
+    [createdFromHostId],
+  )
+  /**
+   * The site the record editor's Page field lists pages from (AGL-3763): the
+   * site whose Data page this is, and none on the organization Data page,
+   * where a dataset is no one site's.
+   */
+  const recordSite = useMemo(
+    () => ({ hostId: createdFromHostId }),
     [createdFromHostId],
   )
   /**
@@ -1471,6 +1481,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
+          <DatasetRecordSiteContext.Provider value={recordSite}>
           {fields.map((fieldId, index) => {
             const field = model.fields[fieldId]
             if (!field) return null
@@ -1617,6 +1628,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             }
             return <TextField key={fieldId} {...common} />
           })}
+          </DatasetRecordSiteContext.Provider>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>

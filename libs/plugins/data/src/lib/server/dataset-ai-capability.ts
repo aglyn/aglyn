@@ -83,7 +83,9 @@ export function datasetDraftContentFromArgs(args: PluginAiCapabilityArgs): Reado
     const record: Record<string, unknown> = {}
     fields.forEach((field, index) => {
       const value = values[index] ?? ''
-      if (!value) return
+      // A page is picked by the owner from the site's pages (AGL-3763); the
+      // planner has no page ids to give, so it never seeds one.
+      if (!value || field.type === 'page') return
       record[field.name] = field.type === 'list' ? value.split(LIST_SEPARATOR).filter(Boolean) : value
     })
     return record
@@ -110,7 +112,7 @@ export const datasetAiCapability: PluginAiCapability = {
       name: { type: 'string', description: 'What the dataset is called, e.g. "Menu" or "Team".', maxLength: DATASET_DRAFT_NAME_MAX },
       fields: {
         type: 'array',
-        description: `Each field as Name:type, type one of ${TYPES.join('|')}; a date or time is text, written the way a visitor reads it. The first text field names each record.`,
+        description: `Each field as Name:type, type one of ${TYPES.join('|')}; a date or time is text, written the way a visitor reads it; a page field links each record to one of the site's pages, which the owner picks, so leave its values empty. The first text field names each record.`,
         items: { type: 'string', maxLength: DATASET_DRAFT_FIELD_NAME_MAX + 10 },
         maxItems: DATASET_DRAFT_FIELDS_MAX,
       },

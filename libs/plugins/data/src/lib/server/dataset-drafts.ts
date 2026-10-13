@@ -46,6 +46,7 @@ import {
   type DatasetModel,
 } from '../model/dataset-models'
 import { DATASET_IMAGE_FIELD_TYPE, isDatasetImageValue } from '../model/dataset-image-field'
+import { DATASET_PAGE_FIELD_TYPE, isDatasetPageValue } from '../model/dataset-page-field'
 import {
   RECORD_PAGE_ADDRESS_FIELD_TYPE,
   RECORD_PAGE_ADDRESS_MAX,
@@ -82,6 +83,9 @@ import {
  *    "Image" custom type, each value an address the site's Image element
  *    shows (`isDatasetImageValue`), so a portfolio's pieces or a team keep
  *    the photo the page that lists them binds.
+ *  - A PAGE is a `page` field (AGL-3763): text storage riding the "Page"
+ *    custom type, each value one of the site's pages as `screen:{id}`
+ *    (`isDatasetPageValue`), which a Button or Link binds.
  *
  * Nothing is published. The writer touches the one new dataset and its
  * records; a page shows them only where a person (or a job's draft page)
@@ -110,7 +114,8 @@ export const DATASET_DRAFT_LIST_MAX = 12
  * each one is stored as. A date or a time is written as text the way a
  * visitor reads it ("Saturday 8 November, 7 pm"): a stored timestamp renders
  * as a number in a repeat's `{{item.<field>}}`. An image is text holding a
- * photo's address, under the "Image" custom type (AGL-3616).
+ * photo's address, under the "Image" custom type (AGL-3616), and a page is
+ * text holding a page's reference, under the "Page" custom type (AGL-3763).
  */
 export const DATASET_DRAFT_FIELD_TYPES = {
   text: 'text',
@@ -119,6 +124,7 @@ export const DATASET_DRAFT_FIELD_TYPES = {
   boolean: 'bool',
   list: 'sorted',
   image: 'text',
+  page: 'text',
 } as const satisfies Record<string, DatasetFieldType>
 
 export type DatasetDraftFieldType = keyof typeof DATASET_DRAFT_FIELD_TYPES
@@ -260,6 +266,7 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
         name: fieldName,
         type: DATASET_DRAFT_FIELD_TYPES[rawType as DatasetDraftFieldType],
         ...(rawType === 'image' ? { customType: DATASET_IMAGE_FIELD_TYPE } : {}),
+        ...(rawType === 'page' ? { customType: DATASET_PAGE_FIELD_TYPE } : {}),
         ...(isRecord(raw) && raw['required'] === true ? { required: true } : {}),
       }
       model.order.push(id)
@@ -321,6 +328,10 @@ export function readDatasetDraftContent(content: Readonly<Record<string, unknown
         const field = model.fields[id]
         if (field?.customType === DATASET_IMAGE_FIELD_TYPE && !errors[id] && !isDatasetImageValue(value)) {
           errors[id] = `${field.name} is not a photo from the media library or an https link`
+        }
+        // …and a page is one of the site's pages, by reference (AGL-3763).
+        if (field?.customType === DATASET_PAGE_FIELD_TYPE && !errors[id] && !isDatasetPageValue(value)) {
+          errors[id] = `${field.name} is not one of the site’s pages`
         }
       }
       for (const error of Object.values(errors)) problems.push(`Record ${index + 1}: ${error}`)

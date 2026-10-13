@@ -100,6 +100,23 @@ describe('the dataset operation', () => {
     expect(checkDatasetDraftContent(content)).toMatchObject({ ok: true, facts: { records: 2, addressField: 'slug' } })
   })
 
+  it('makes a page field but never seeds one, since the owner picks the page (AGL-3763)', () => {
+    const content = datasetDraftContentFromArgs({
+      name: 'Services',
+      fields: ['Name', 'Details page:page'],
+      records: ['Drywall repair | /services/drywall', 'Painting | screen:painting'],
+    })
+    expect(content).toEqual({
+      name: 'Services',
+      fields: [
+        { name: 'Name', type: 'text' },
+        { name: 'Details page', type: 'page' },
+      ],
+      records: [{ Name: 'Drywall repair' }, { Name: 'Painting' }],
+    })
+    expect(checkDatasetDraftContent(content)).toMatchObject({ ok: true, facts: { records: 2 } })
+  })
+
   it('registers as the data plugin’s', () => {
     registerDatasetAiCapability()
     expect(pluginAiCapability('dataset')?.pluginId).toBe('data')
