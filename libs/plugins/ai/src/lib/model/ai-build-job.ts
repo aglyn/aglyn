@@ -370,6 +370,25 @@ export function aiBuildPlanShapeRefusal(
   return null
 }
 
+/**
+ * What the person must still say before this plan can be built, as the
+ * questions its operations ask (`missingInput`), or `null` when nothing is
+ * missing: an item the planner kept with nothing it may build from — a
+ * tracking change naming no id, AGL-3751 — is asked about, never built
+ * empty or from a value the planner made up. Not a plan rule: a re-ask
+ * cannot supply what only the person knows, so the plan is not kept and
+ * the build answers with the question.
+ */
+export function aiBuildPlanMissingInput(plan: AiBuildPlan, ops: AiBuildOps | null | undefined): string | null {
+  if (!ops) return null
+  const questions: string[] = []
+  for (const item of plan.items ?? []) {
+    const question = ops.get(item.op)?.missingInput?.({ name: item.name, why: item.why, args: item.args })
+    if (question && !questions.includes(question)) questions.push(question)
+  }
+  return questions.length ? questions.join(' ') : null
+}
+
 /** "a booking service", "an email design". */
 export function aiArticle(noun: string): string {
   return `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`

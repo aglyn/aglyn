@@ -41,6 +41,7 @@ import { registerAiNavigationJob } from './jobs/ai-job-navigation-step'
 import { registerAiDuplicateJob } from './jobs/ai-job-duplicate-step'
 import { registerAiSettingsJob } from './jobs/ai-job-settings-step'
 import { registerAiMediaJob } from './jobs/ai-job-media-step'
+import { registerAiTrackingJob } from './jobs/ai-job-tracking-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { registerAiTextGenerator } from './server/plugin-text-generation'
@@ -147,6 +148,9 @@ function registerAiJobKinds(): void {
   // Folders, tags, alt text and names of files already in a site's media
   // library, as its Details drawer saves them, live (AGL-3752).
   registerAiMediaJob()
+  // The site's analytics and advertising tags, as Setup → Tracking sets
+  // them, saved live (AGL-3751).
+  registerAiTrackingJob()
   // Product copy, and a store's products, categories and discounts from a
   // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
   registerAiProductsJob()

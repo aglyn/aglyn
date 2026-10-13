@@ -37,6 +37,7 @@ import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plug
 import { aiJobStepRunnerFor } from './ai-jobs'
 import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
 import { AI_MEDIA_ARGS_SCHEMA, AI_MEDIA_LIMITS, AI_MEDIA_WHERE } from './ai-job-media-step'
+import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingMissingInput } from './ai-job-tracking-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -53,8 +54,9 @@ import { AI_MEDIA_ARGS_SCHEMA, AI_MEDIA_LIMITS, AI_MEDIA_WHERE } from './ai-job-
  * the site already has is the `edit` runner's, and a change to its header or
  * footer menu the `navigation` runner's (AGL-3728), a copy of something
  * it has the `duplicate` runner's (AGL-3740), a change to its settings
- * the `settings` runner's (AGL-3748), and organizing its media library the
- * `media` runner's (AGL-3752).
+ * the `settings` runner's (AGL-3748), organizing its media library the
+ * `media` runner's (AGL-3752), and a change to its analytics and
+ * advertising tags the `tracking` runner's (AGL-3751).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -390,6 +392,33 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     runnerKind: 'media',
     // A library file's details have no draft state: saved, they are what the library shows.
     live: true,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // The site's analytics and advertising tags (AGL-3751): the ids the
+    // console's Setup → Tracking card sets — Google Analytics, Tag Manager,
+    // and the Meta, Google Ads, LinkedIn, TikTok and Pinterest tags — each
+    // held to the card's own pattern, set or removed, saved live on confirm.
+    // Only public ids the person states: never a credential (Ad conversions'
+    // tokens, Zapier, webhook secrets), and never the consent banner, which
+    // still decides where every tag loads. No model, so no credits; the card
+    // is on every plan, so the Free taste may ask too.
+    op: 'tracking',
+    noun: 'tracking change',
+    where: AI_TRACKING_WHERE,
+    intents: [
+      'connecting or removing the site’s Google Analytics, Google Tag Manager, Meta pixel, Google Ads, LinkedIn Insight, TikTok pixel or Pinterest tag by the ID the person gives (never one it makes up; ask for the ID when the request has none) — saved to the live site when the plan is confirmed, loading only where a visitor’s cookie consent allows',
+    ],
+    argsSchema: AI_TRACKING_ARGS_SCHEMA,
+    maxPerPlan: 1,
+    freeAllowed: true,
+    runnerKind: 'tracking',
+    // A tag has no draft state: saved, it is on every live page.
+    live: true,
+    // An item with no usable id asks for it instead of being built (AGL-3751).
+    missingInput: aiTrackingMissingInput,
     // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',

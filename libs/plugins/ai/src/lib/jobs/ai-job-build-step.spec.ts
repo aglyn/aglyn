@@ -705,3 +705,49 @@ describe('aiBuildItemOutputNote (AGL-3746)', () => {
     )
   })
 })
+
+describe('a build whose plan leaves out what only the person can give asks for it (AGL-3751)', () => {
+  // The live eval's "add my Meta pixel": the planner kept a tracking change
+  // with no id. Kept, it would build nothing; it must ask instead.
+  const trackingPlan = (args: Record<string, unknown>, name = 'Meta pixel'): AiJobPlan => ({
+    reuse: [],
+    create: [],
+    screens: [],
+    items: [{ slot: 'i0', op: 'tracking', name, why: 'The person wants their Meta pixel on the site.', dependsOn: [], degrade: 'omit', args: args as never }],
+    status: 'proposed',
+    labels: {},
+    proposedAt: NOW as never,
+    confirmedAt: null,
+    confirmedBy: null,
+  })
+  const ask = (plan: AiJobPlan) =>
+    createAiBuildJobAdmission({ opsFor: async () => OPS, now: () => NOW, ownerOf: async () => 'org-1' })({
+      firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: {},
+      org: { plan: 'business', billingStatus: 'active' },
+      plan,
+    })
+
+  beforeAll(() => registerAiJobStep('page', pageRunner([])))
+
+  it('refuses the plan with the question, naming the tag, before anything is kept or built', async () => {
+    await expect(ask(trackingPlan({}))).resolves.toEqual({
+      status: 400,
+      error: 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.',
+    })
+  })
+
+  it('says why an id given was not one, and asks again', async () => {
+    const refused = await ask(trackingPlan({ googleAnalytics: 'my analytics' }, 'Analytics'))
+    expect(refused?.error).toBe(
+      '“my analytics” is not an ID for Google Analytics, which looks like G-XXXXXXXXXX. What’s your Google Analytics measurement ID? It looks like G-XXXXXXXXXX.',
+    )
+  })
+
+  it('admits a tracking change that sets or removes something', async () => {
+    await expect(ask(trackingPlan({ metaPixel: '123456789012345' }))).resolves.toBeNull()
+    await expect(ask(trackingPlan({ remove: ['metaPixel'] }))).resolves.toBeNull()
+  })
+})
