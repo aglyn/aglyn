@@ -96,7 +96,7 @@ export const AI_SITE_EVENT_LABEL = 'An event'
  * to plan none for a business that holds none.
  */
 const EVENT_LED =
-  /\b(venues?|clubs?|class(?:es)?|meetups?|meet-ups?|church(?:es)?|parish|congregation|ministr(?:y|ies)|theat(?:re|er)s?|playhouse|concerts?|live music|gigs?|workshops?|festivals?|comedy|open mic|dance|choir|community (?:center|centre)|events?|tastings?|book club|trivia|seminars?|retreats?|lessons|courses?|performances?|shows)\b/i
+  /\b(venues?|clubs?|class(?:es)?|meetups?|meet-ups?|church(?:es)?|parish|congregation|ministr(?:y|ies)|theat(?:re|er)s?|playhouse|concerts?|live music|gigs?|workshops?|festivals?|comedy|open mic|dance|choir|(?:neighborhood|civic|recreation) (?:center|centre)|associations?|local groups?|events?|tastings?|book club|trivia|seminars?|retreats?|lessons|courses?|performances?|shows)\b/i
 
 /** Whether a site start's brief and answers read as an event-led business. */
 export function aiSiteEventLed(job: Pick<AiJob, 'brief' | 'inputs'>): boolean {

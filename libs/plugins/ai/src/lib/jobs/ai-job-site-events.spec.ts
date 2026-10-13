@@ -129,7 +129,7 @@ const firestoreWith = (host: Record<string, unknown> | null) =>
 
 describe('which starts plan events', () => {
   it('reads a venue, a club, a church, a theater or a studio’s classes as event-led, and an accountant not', () => {
-    for (const about of ['jazz club', 'a music venue', 'a church in Tulsa', 'community theatre', 'a theater company', 'a pottery studio with weekly classes', 'a monthly founders meetup']) {
+    for (const about of ['jazz club', 'a music venue', 'a church in Tulsa', 'a neighborhood theatre', 'a theater company', 'a pottery studio with weekly classes', 'a monthly founders meetup', 'a civic center']) {
       expect(aiSiteEventLed({ brief: 'A website.', inputs: { businessType: about } })).toBe(true)
     }
     expect(aiSiteEventLed({ brief: 'A website for my accounting firm.', inputs: { businessType: 'accountant' } })).toBe(false)
