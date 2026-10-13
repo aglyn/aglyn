@@ -25,7 +25,7 @@ A dataset field has two names, and the distinction matters everywhere:
   example a short, code-friendly key that differs from the label. Once the field
   is created the id is **fixed** and never changes. Records store values keyed by
   reference id — it's the key you use in `{{item.reference_id}}` bindings and
-  what a form field's **Maps to schema field** picker stores.
+  what the **Maps to schema field** picker on a form's input stores.
 
 The schema dialog shows both — each field row reads `Display name · fieldId`.
 The Reference ID input sits directly under Display name in the field editor; it
@@ -168,7 +168,7 @@ design a single template. Up to 100 records render per repeatable.
 | --- | --- |
 | **Console** — **Add record** / record editor | Typed inputs per field; validated and quota-checked. |
 | **Console** — **Import records** | Bulk CSV/JSON with validation, upsert, and quota math. |
-| **Forms** — the Form element's **Write to dataset** | Appends on each submission. The dataset is bound by id (a dropdown; legacy forms still match by name) and each form field can map to a schema field by id via **Maps to schema field**, with name-matching as the fallback — so renames never lose data. Best-effort (quota-full submissions keep only the inbox copy). See the [survey guide](build-and-publish-a-survey.md). |
+| **Forms** — the Form element's **Write to dataset** | Appends on each submission. The dataset is bound by id (a dropdown; legacy forms still match by name) and each element a visitor answers with (an Input, Select, Radio Group, Checkbox or Rating) can map to a schema field by id via **Maps to schema field**, with name-matching on its **Field name** as the fallback — so renames never lose data. Best-effort (quota-full submissions keep only the inbox copy). See the [survey guide](build-and-publish-a-survey.md). |
 | **Automations** — the **Write to a dataset** step | Appends a record from a workflow/action run. |
 | **Automations** — the **Update a dataset record** step | Updates a matching record (by email) or appends when none matches. |
 

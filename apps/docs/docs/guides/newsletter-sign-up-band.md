@@ -1,7 +1,7 @@
 ---
 sidebar_position: 10
 title: Build a newsletter sign-up band
-description: Build a "Get product updates" band from a saved form, a live audience and a reusable component, styled only with theme tokens, instead of the built-in Newsletter signup block.
+description: Build a "Get product updates" band from a saved form, a live audience and a reusable component, and style every piece with the Besigner's own fields — no code.
 ---
 
 # Build a newsletter sign-up band
@@ -9,15 +9,16 @@ description: Build a "Get product updates" band from a saved form, a live audien
 This walkthrough builds a full-width "Get product updates" band from parts you
 already have. Each part does one job:
 
-- A **saved form** collects the address. Its design is an email field and a
-  Subscribe button, and it is set up as a **sign-up form**, so submitting it
-  records the person's opt-in.
+- A **saved form** collects the address. It holds two elements, an **Input** and
+  a **Button**, and it is set up as a **sign-up form**, so submitting it records
+  the person's opt-in.
 - A **live audience** picks up everyone who submits that form.
 - A **reusable component** draws the band and places the form in it. Every
   page that shows the band uses this one component.
 
-By the end you have a band you can drop on any page, styled entirely with your
-theme's colors and spacing, and filling an audience you can send campaigns to.
+Everything is done by clicking. Every color, gap and corner comes from your
+theme through the Besigner's **Styles** panel, so the band follows your theme,
+and you never type code.
 
 ![The finished newsletter band on a published page: a gradient from the theme's secondary to its primary color, a bold "Get product updates" heading, one line of copy, a white email field and a dark Subscribe button](/img/guides/newsletter-live-band.png)
 
@@ -36,17 +37,17 @@ flowchart LR
 
 The **Newsletter signup** element in the Commerce group is one fixed piece: a
 heading, a small outlined field and a primary button. It works, but it cannot
-look like your design. Building the band from these parts gets you:
+look like your design. Building the band from separate elements gets you:
 
-- **Your design.** Every part is an ordinary element you can style, at every
-  breakpoint.
+- **Your design.** The field and the button are separate elements, each with
+  the whole Styles panel, at every screen size.
 - **One place to change it.** Change the component once and every page that
   uses it updates. The same goes for the form.
-- **Theme tokens only.** Colors, spacing and type come from your theme, so the
-  band follows a theme change or a different site's theme with nothing to
-  re-pick.
+- **Theme colors and spacing.** Every color picker offers your theme's colors,
+  and every spacing field offers its spacing steps, so the band follows a theme
+  change, or another site's theme, with nothing to re-pick.
 - **An audience by rule.** The audience fills itself from the form's
-  submissions, so you never paste a list id into an element.
+  submissions.
 
 :::note What the block does that this does not
 The block sends a **confirmation email** when the site
@@ -67,118 +68,82 @@ You land on the form's own page. Remember the display name. The audience in
 step 5 finds people by it, so renaming the form later means updating the
 audience too.
 
-## 2. Design the form: one email field and a button
+## 2. Add an Input and a Button
 
-Choose **Edit in besigner** on the form's page. The form's own design opens with
-an empty **Form** at its root.
+Choose **Edit in besigner** on the form's page. The form's own design opens
+with an empty **Form** at its root. Select the Form, choose **Add Element**,
+and from the **Forms** group insert an **Input**. Then, from the **Input**
+group, insert a **Button** after it.
 
-1. Choose **Add Element**. In the **Forms** group, insert a **Form Field** inside
-   the Form.
-2. Set the field's **Attributes**:
+Select the **Input** and set its **Attributes**:
 
 | Attribute | Value | Why |
 | --- | --- | --- |
 | **Field name** | `email` | The key the address is stored under. |
-| **Type** | **Email** | The browser checks it is an address before sending. |
-| **Label** | `Email address` | Keep it set, even though step 3 hides it from view. It is the field's name for screen readers. |
+| **Type** | **Email** | The browser checks it is an address, and phones show the email keyboard. |
 | **Placeholder** | `you@company.com` | The gray hint inside the empty field. |
 | **Required?** | On | No empty sign-ups. |
+| **Size** | **Small** | 40px tall, to sit beside the button. |
+| **Accessible label** | `Email address` | The field's name for screen readers, since the band shows no label above it. |
 
-3. Select the **Form** itself and set **Submit label** to `Subscribe` and
-   **Success message** to `Thanks — you're on the list. No spam, ever.` The
-   message replaces the form after a successful sign-up.
+![The form's besigner with the Input selected: Field name email, Type Email, Placeholder you@company.com and Required? on in the Attributes panel](/img/guides/newsletter-input-attributes.png)
 
-![The form's besigner with the Form Field selected: Field name email, Label Email address, Placeholder you@company.com and Type Email in the Attributes panel](/img/guides/newsletter-form-field-attributes.png)
+Select the **Button** and set its **Text** to `Subscribe` and its **Type** to
+**Submit**. A Submit button inside a form is the form's button: the Form's own
+built-in button steps aside, and this one sends the address.
 
-## 3. Style the form on one line
+![The Button selected, with Text Subscribe and Type Submit in the Attributes panel](/img/guides/newsletter-button-attributes.png)
 
-A form stacks its fields and button by default. The band puts them side by side
-on wider screens and stacks them on phones. Style this **here, on the saved
-form**: a page that places the form draws its styling from the form itself, so
-it is set once for every page.
+Finally select the **Form** itself and set **Success message** to `Thanks —
+you're on the list. No spam, ever.` It replaces the form after a successful
+sign-up.
 
-You set these in **Styles → Classes & custom CSS → JSS (sx)**. That tab holds an
-element's whole style object, and it accepts what the other style fields cannot
-express: nested selectors and per-breakpoint values. See
-[Custom CSS (sx)](../building-sites/besigner/responsive-styling.md#custom-css-sx).
+## 3. Style the form with the Styles panel
 
-**The Form.** Select it, open **JSS (sx)**, paste the following, and choose
-**Apply JSS**:
+Each element is styled on its own, in the **Styles** tab. Pick colors from the
+**theme colors** each color picker offers and spacing from the theme's
+**spacing steps**. See
+[Responsive styling](../building-sites/besigner/responsive-styling.md).
 
-```json
-{
-  "width": "100%",
-  "mt": 0.75,
-  "flexDirection": { "xs": "column", "sm": "row" },
-  "flexWrap": "wrap",
-  "justifyContent": "center",
-  "alignItems": { "xs": "stretch", "sm": "center" },
-  "gap": 1.25,
-  "& > :not(style) ~ :not(style)": { "mt": 0 },
-  "& .MuiAlert-root": { "flexBasis": "100%" },
-  "& button[type=\"submit\"]": {
-    "alignSelf": "auto",
-    "bgcolor": "grey.900",
-    "color": "common.white",
-    "px": 2.75,
-    "py": 1.5,
-    "&:hover": { "bgcolor": "grey.800" }
-  }
-}
-```
+**The Form: stacked on phones, one line from tablet up.** Select the Form and
+open **Flexbox & Grid**:
 
-![The Form selected in the saved form's besigner with the JSS (sx) tab open, showing the row layout and the Subscribe button's colors](/img/guides/newsletter-form-styles-jss.png)
+1. With the toolbar's breakpoint picker on **Fluid Responsive** (every screen
+   size), set **Flex direction** to *column*, **Justify content** to *center*
+   and **Gap** to **Small**. Leave **Align items** unset, so the field and button
+   stretch to full width on a phone.
+2. Switch the breakpoint picker to **SM – Tablet**. The panel now reads
+   *Styling breakpoint: SM*. Set **Flex direction** to *row* and **Align items**
+   to *center*. From tablet width up, the field and button share one line.
+3. Back on **Fluid Responsive**, in **Sizing**, set **Width** to `100` %.
 
-What each part does:
+![The Form selected at the SM breakpoint, with Flexbox & Grid showing Flex direction row, Justify content center and Align items center](/img/guides/newsletter-form-layout.png)
 
-- `flexDirection` stacks the field and button on phones (`xs`) and puts them in
-  a row from tablet width (`sm`) up.
-- `gap` spaces them. The `& > :not(style) ~ :not(style)` line removes the
-  vertical margin the form adds between stacked children, which would otherwise
-  push the button down in a row.
-- `& .MuiAlert-root` gives an error or notice message its own full-width line.
-- `& button[type="submit"]` styles the Subscribe button: dark fill, white text,
-  a slightly larger click target, and a hover shade.
+See [Style per breakpoint](../building-sites/besigner/responsive-styling.md#style-per-breakpoint).
 
-**The Form Field.** Select it and apply:
+**The Input: a white field with no outline.** Select the Input:
 
-```json
-{
-  "width": { "xs": "100%", "sm": 320 },
-  "flex": { "sm": "0 1 auto" },
-  "& .MuiInputLabel-root": {
-    "position": "absolute", "width": "1px", "height": "1px",
-    "overflow": "hidden", "clip": "rect(0 0 0 0)", "whiteSpace": "nowrap",
-    "m": 0, "p": 0
-  },
-  "& .MuiOutlinedInput-root": { "bgcolor": "common.white", "color": "grey.900", "borderRadius": 1 },
-  "& .MuiOutlinedInput-notchedOutline": { "borderColor": "transparent" },
-  "& .MuiOutlinedInput-notchedOutline legend": { "maxWidth": 0 },
-  "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": { "borderColor": "grey.900" },
-  "& .MuiOutlinedInput-input": { "py": 1.5, "px": 2 },
-  "& .MuiOutlinedInput-input::placeholder": { "color": "grey.500", "opacity": 1 }
-}
-```
+- **Colors**: **Background Color** = `common.white`, **Text Color** =
+  `grey.900`.
+- **Borders & Shadows**: **Border Color** = `common.white`, so the outline
+  disappears into the field, and **Corner Radius** = **Slightly rounded**.
+- **Sizing**: at **SM – Tablet**, **Width** = `320` px. On phones it stays full
+  width.
 
-- The field is full width on phones and 320px from tablet width up.
-- The label is **visually hidden, not removed**. It still names the field for
-  assistive technology, which a placeholder cannot do.
-- The field is white with dark text on any background, has no outline until it
-  has focus, and its placeholder is a readable gray.
+![The Input selected, with Colors showing a dark gray Text Color and a white Background Color](/img/guides/newsletter-input-styles.png)
 
-:::tip Why these values are tokens
-Every value above is a theme token, not a hard-coded value:
+The outline you see is the Input's own border, so Border Color and Corner
+Radius change it directly. A focus ring still appears while someone types.
 
-- **Spacing.** A bare number such as `1.5` or `2.75` is a step on your theme's
-  spacing scale. `py: 1.5` is 12px on the default 8px scale.
-- **Colors.** A dotted path such as `grey.900` or `common.white` is a color from
-  your theme's palette.
-- **Corners.** `borderRadius: 1` is one step of the theme's corner radius.
+**The Button: dark, with a lighter shade on hover.** Select the Button:
 
-Change the theme and the band follows. The one fixed number is the field's
-320px width, a layout measurement rather than a style. See
-[Spacing steps](../building-sites/besigner/responsive-styling.md#spacing-steps).
-:::
+- **Colors**: **Background Color** = `grey.900`, **Text Color** =
+  `common.white`.
+- In the spacing ring, **Padding**: Top and Bottom **Extra small**, Left and
+  Right **Medium**.
+- Switch the state chips from **Default** to **Hover**, and set **Background
+  Color** = `grey.800`. Switch back to **Default**. See
+  [Style hover, focus and other states](../building-sites/besigner/responsive-styling.md#interaction-states).
 
 When the form looks right, publish it from the top-right save button →
 **Save & publish**, or from the form page's **Versions** card. See
@@ -252,74 +217,53 @@ checks before it sends. See
 2. Give it two text **properties** so each page can change the words. Choose
    **File → Properties…** → **Add property**:
 
-| Name | Type | Label | Default |
-| --- | --- | --- | --- |
-| `heading` | Text | Heading | `Get product updates` |
-| `description` | Text | Description | `New features, guides, and early-access news — straight to your inbox. No spam.` |
+   | Name | Type | Label | Default |
+   | --- | --- | --- | --- |
+   | `heading` | Text | Heading | `Get product updates` |
+   | `description` | Text | Description | `New features, guides, and early-access news — straight to your inbox. No spam.` |
 
    Choose **Save properties**.
 
-![The Component properties dialog with the heading and description text properties and their defaults](/img/guides/newsletter-component-properties.png)
+   ![The Component properties dialog with the heading and description text properties and their defaults](/img/guides/newsletter-component-properties.png)
 
 3. Build the band from the **Choose element** picker:
    - a **Section**: the band itself. Set its **Accessible label** to
      `Newsletter sign-up` so screen readers can find it.
-   - inside it, two **Typography** elements. Set the first one's text to
-     `{{prop.heading}}`, its **Variant** to **Heading 4** and its **Component**
-     to `h2`. Set the second one's text to `{{prop.description}}` and its
-     **Variant** to **Body 1**. Type the tokens, or insert them with the
-     field's `{}` button from its **Properties** group. See
-     [Insert a variable](../building-sites/bindings/overview.md#insert-a-variable).
+   - inside it, two **Typography** elements:
+     - The first one's text is the **heading** property. Use the text field's
+       `{}` button and pick **heading** from its **Properties** group. Set
+       **Variant** to **Heading 4** and **Component** to `h2`.
+     - The second one's text is the **description** property, picked the same
+       way, with **Variant** set to **Body 1**.
+
+     See [Insert a variable](../building-sites/bindings/overview.md#insert-a-variable).
    - a **Form**, from the **Forms** group. Pick `Product updates` under
-     **Form**. The band now draws that form's field, button and styles.
-4. Style the **Section** in **Styles → Classes & custom CSS → JSS (sx)**:
+     **Form**. The band now draws that form's field and button, styled as you
+     styled them.
+4. Style the **Section**:
+   - **Colors**:
+     - **Background Fill** = *Linear gradient*. Set the **Angle** to `243`, and
+       bind its two color stops to the theme's **Secondary** and **Primary**
+       colors. See
+       [Gradient backgrounds](../building-sites/besigner/responsive-styling.md#gradient-backgrounds).
+     - **Text Color** = `common.white`. The heading and copy inside inherit it.
+   - **Flexbox & Grid**: **Flex direction** *column*, **Align items** *center*,
+     **Gap** **Small**.
+   - **Typography**: **Text Alignment** *center*.
+   - In the spacing ring, **Padding**: Top and Bottom **Huge**, Left and Right
+     **Medium**.
 
-```json
-{
-  "backgroundImage": "linear-gradient(243deg, var(--mui-palette-primary-main) 0%, var(--mui-palette-secondary-main) 100%)",
-  "color": "common.white",
-  "textAlign": "center",
-  "display": "flex",
-  "flexDirection": "column",
-  "alignItems": "center",
-  "py": 8,
-  "px": 3,
-  "gap": 2.25
-}
-```
+   ![The Newsletter band component in the besigner with the Section selected: Text Color common.white and Background Fill set to Linear gradient](/img/guides/newsletter-section-fill.png)
 
-![The Newsletter band component in the besigner with the Section selected and its JSS (sx) tab showing the theme-token gradient](/img/guides/newsletter-component-styles-jss.png)
+   Because the gradient's stops are theme colors, each site that places the
+   band shows it in that site's own colors.
 
-How the Section's styles work:
-
-- **The gradient uses theme tokens.**
-  `var(--mui-palette-primary-main)` and `var(--mui-palette-secondary-main)`
-  are your theme's primary and secondary colors. They are filled in from the
-  site's theme when the page renders, so each site's band uses that site's
-  colors. Don't add a hex fallback: the theme always supplies the color.
-- **Text color.** `color: common.white` makes everything inside white, the
-  two Typography elements included.
-- **Spacing.** `py: 8` and `px: 3` are spacing steps (64px and 24px on the
-  default scale). `gap: 2.25` spaces the heading, copy and form.
-
-Give the two Typography elements a little polish of their own:
-
-- **The heading:** `fontWeight: bold`, `color: inherit` and `m: 0`.
-- **The description:** `color: inherit`, `opacity: 0.92`, `maxWidth: sm` (the
-  theme's tablet width, so the line wraps comfortably) and `m: 0`.
-
-5. Publish the component: the top-right save button → **Save & publish**. Every
+5. Give the two Typography elements a little polish:
+   - **The heading:** **Typography** → **Font Weight** = **Bold**.
+   - **The description:** **Opacity** `0.92` and **Max Width** `600` px, so the
+     line wraps comfortably on wide screens.
+6. Publish the component: the top-right save button → **Save & publish**. Every
    page using it refreshes at once.
-
-Prefer clicking to typing JSON? Most of these values have fields too:
-
-- Spacing is in the box-model diagram.
-- Colors are under **Colors**.
-- Gradients are under **Background Fill**. See
-  [Gradient backgrounds](../building-sites/besigner/responsive-styling.md#gradient-backgrounds).
-
-The JSS tab is just the quickest way to set many at once, and the only way to
-reach the form's inner field and button.
 
 ## 7. Place the band on your pages
 
@@ -363,14 +307,15 @@ updates** audience. It is ready for your next
 | --- | --- |
 | The audience stays empty | Wait for the fifteen-minute refresh. Then check that **Submitted form** matches the form's **Display name** exactly. A rename breaks the match. |
 | The contact has no opt-in | The sign-up switch was off, or not saved, when they submitted. Turn it on and **Save**. It applies to new submissions, not past ones. |
-| The field and button stack on a wide screen | The row layout lives on the **saved form**. Check that step 3's JSS is on the saved form's Form element, and that you published the form afterwards. |
-| The band shows the wrong colors | It follows your theme's **primary** and **secondary** colors. Change them in the theme, not in the band. |
-| A visible "Email address" label sits on the field | The Form Field's label styles are missing. Re-apply step 3's JSS to the Form Field. Don't clear the **Label** itself. |
+| The field and button stack on a wide screen | **Flex direction** *row* is set at the wrong breakpoint. Select the saved form's **Form**, switch the breakpoint picker to **SM – Tablet**, and check Flexbox & Grid. Then publish the form. |
+| Two buttons show | The Button's **Type** is not **Submit**. Only a Submit button replaces the form's built-in one. |
+| The band shows the wrong colors | Its gradient stops are bound to your theme's **Primary** and **Secondary** colors. Change them in the theme, not in the band. |
+| A gray outline shows around the field | Set the Input's **Border Color** to the same color as its **Background Color**. |
 
 ## Related
 
-- [Forms](../content-and-data/forms/overview.md): saved forms, [placing one on a page](../content-and-data/forms/overview.md#place-a-saved-form) and [CRM routing](../content-and-data/forms/overview.md#form-crm-routing)
+- [Forms](../content-and-data/forms/overview.md): [the field elements](../content-and-data/forms/overview.md#field-types), [placing a saved form on a page](../content-and-data/forms/overview.md#place-a-saved-form) and [CRM routing](../content-and-data/forms/overview.md#form-crm-routing)
 - [Reusable components](../building-sites/besigner/reusable-components.md): [properties](../building-sites/besigner/reusable-components.md#properties) and [publishing](../building-sites/besigner/reusable-components.md#save-then-publish)
-- [Responsive styling](../building-sites/besigner/responsive-styling.md): [per-breakpoint styles](../building-sites/besigner/responsive-styling.md#style-per-breakpoint), [spacing steps](../building-sites/besigner/responsive-styling.md#spacing-steps) and [custom CSS (sx)](../building-sites/besigner/responsive-styling.md#custom-css-sx)
+- [Responsive styling](../building-sites/besigner/responsive-styling.md): [per-breakpoint styles](../building-sites/besigner/responsive-styling.md#style-per-breakpoint), [states](../building-sites/besigner/responsive-styling.md#interaction-states), [spacing steps](../building-sites/besigner/responsive-styling.md#spacing-steps) and [gradient backgrounds](../building-sites/besigner/responsive-styling.md#gradient-backgrounds)
 - [Email campaigns](../marketing-and-automation/email-campaigns/overview.md): [email lists](../marketing-and-automation/email-campaigns/overview.md#email-lists) and [asking subscribers to confirm](../marketing-and-automation/email-campaigns/overview.md#double-opt-in)
 - [Build & publish a survey](build-and-publish-a-survey.md), a sibling walkthrough with a form that writes to a dataset

@@ -40,7 +40,8 @@ Open **CRM → Fields**, pick the tab for the record the field describes — **C
   value is read by its type, so the type is fixed once the field exists.
 - **Choices** — for a Choice field, one per line. A stored value has to be one of them.
 - **Required on the … form** — the record's page will not save the field empty. It does
-  not make a website form field required; that is set on the form itself.
+  not make a website form field required; that is the **Required?** switch on the field's
+  input in the Besigner.
 
 Each tab is the console's list table: it pages, sorts by **Field**, **Key** or **Type**,
 filters by **Type** and **Required** from its **Filters** panel, and searches a field's
@@ -110,9 +111,12 @@ know a person each see their own values, never each other's.
 ## Save a form field into a custom field {#save-a-form-field}
 
 On a form's own page (**Forms →** the form), **Saves to contact fields** lists every
-field the published design declares, with a choice beside each. Pick a custom field and
-every submission's answer to that form field is stored under it on the contact the
-submission creates or updates.
+field the published design declares, with a choice beside each. A field is listed by the
+**Field name** of the element a visitor answers with — an Input, Select, Radio Group,
+Checkbox or Rating (see [Field types](../forms/overview.md#field-types)) — and several
+Checkboxes sharing one Field name are one field. Pick a custom field and every
+submission's answer to that form field is stored under it on the contact the submission
+creates or updates.
 
 Answers arrive as text and are converted by the field's type:
 
@@ -128,8 +132,8 @@ An answer left blank writes **nothing** — a submission never clears a value yo
 hand. A mapping onto a [retired](#retire-restore-delete) field writes nothing either.
 
 Mappings are kept by **field name** across publishes: redrawing the form and publishing a
-new version does not lose them. A field renamed on the canvas is a new field and starts
-unmapped; a field removed takes its mapping with it.
+new version does not lose them. An element whose **Field name** you change on the canvas
+is a new field and starts unmapped; a field removed takes its mapping with it.
 
 The sender's **name** and **email** are recognized from the field name — see
 [who a submission is from](../forms/overview.md#who-a-submission-is-from) — and never
