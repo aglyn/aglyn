@@ -58,11 +58,27 @@ Beyond server events (form submissions, page views, sign-ins, leads, bookings), 
 can fire on **visitor behavior in the page**:
 
 - **Scroll depth** — the visitor scrolls past a percentage.
-- **Scroll to / element visible** — a CSS-selected element enters the viewport.
-- **Element click** — a CSS-selected element is clicked.
+- **Scroll to / element visible** — an element you pick enters the viewport.
+- **Element click** — an element you pick is clicked.
 - **Exit intent** — the pointer leaves toward the top of the window.
 - **Time on page** — a dwell-time threshold passes.
 - **Page visit** — the page loads.
+
+### Pointing at an element {#pick-element}
+
+A trigger or step that works on one element — element visible, element click, show or
+hide, a class, an attribute, scroll to, play a video, sticky nav — has a **Pick element**
+button. It opens your site's page in a window. Choose the **Page**, move over the page
+until the element you want is outlined, and click it. The chip beside the button then
+names what you picked, and **×** on the chip clears it. When the trigger is limited to
+one page, the picker opens that page first.
+
+The picker opens the published site, so publish a new element before you pick it. An
+element in your header or footer is the same element on every page, so you can pick it
+on any of them.
+
+For an advanced case, such as every element carrying a class your theme adds, **Use a
+custom selector** takes a CSS selector instead. It replaces the picked element.
 
 Page triggers can be limited to certain paths (`/pricing`, `/blog/*`), and a
 **Frequency** setting controls re-fires: every matching pageview, **once per session**,

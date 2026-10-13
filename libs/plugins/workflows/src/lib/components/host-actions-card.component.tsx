@@ -94,6 +94,7 @@ import {
   type AutomationStepKind,
   defaultStep,
 } from './automation-step-fields.component'
+import { ElementSelectorField } from './element-selector-field.component'
 import {
   conditionRowsFromTrigger,
   conditionsFromRows,
@@ -1052,21 +1053,22 @@ export function HostActionsCard(props: {
               {(ELEMENT_SCOPED_SITE_EVENTS as readonly string[]).includes(
                 draft?.trigger.event ?? '',
               ) ? (
-                <TextField
-                  label="CSS selector"
-                  placeholder="#pricing-table"
+                <ElementSelectorField
+                  label="Element"
+                  hostId={hostId}
+                  // Open the page the trigger is limited to, when it names one.
+                  initialPath={
+                    draft?.trigger.pathPattern && !draft.trigger.pathPattern.includes('*')
+                      ? draft.trigger.pathPattern
+                      : undefined
+                  }
                   value={draft?.trigger.selector ?? ''}
-                  onChange={(event) =>
+                  onChange={(selector) =>
                     patch((previous) => ({
                       ...previous,
-                      trigger: {
-                        ...previous.trigger,
-                        selector: event.target.value,
-                      },
+                      trigger: { ...previous.trigger, selector },
                     }))
                   }
-                  size="small"
-                  sx={{ flex: 1 }}
                 />
               ) : null}
               {['scrollDepth', 'timeOnPage'].includes(
@@ -1199,6 +1201,7 @@ export function HostActionsCard(props: {
                 event: draft?.trigger.event,
                 afterWait: stepRunsAfterWait(draft?.steps, index),
               }}
+              siteHostId={hostId}
             />
           ))}
           <Button

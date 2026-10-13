@@ -26,7 +26,7 @@
  * and asserts the step that is saved.
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import HostActionsCard from './host-actions-card.component'
@@ -70,6 +70,11 @@ jest.mock('firebase/firestore', () => ({
   where: () => undefined,
   limit: () => undefined,
   doc: () => ({}),
+  // The site the element picker opens (AGL-3758).
+  getDoc: jest.fn(async () => ({
+    exists: () => true,
+    data: () => ({ subdomain: 'acme', screens: { s1: '/pricing' } }),
+  })),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
@@ -107,6 +112,12 @@ function type(label: string, value: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value } })
 }
 
+/** A typed selector, behind the picker's "Use a custom selector" (AGL-3758). */
+function customSelector(value: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Use a custom selector' }))
+  type('Custom selector', value)
+}
+
 function startAction() {
   render(<HostActionsCard hostId="host-1" org={ORG} />)
   fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
@@ -128,7 +139,7 @@ describe('HostActionsCard in-page steps', () => {
   it('builds "Toggle a CSS class" rather than turning it into a dataset write', async () => {
     startAction()
     pick('Do', 'Toggle a CSS class')
-    type('CSS selector', '.menu')
+    customSelector('.menu')
     type('Class name', 'is-open')
     expect(await savedStep()).toEqual({
       type: 'toggleClass',
@@ -140,7 +151,7 @@ describe('HostActionsCard in-page steps', () => {
   it('builds "Set an ARIA or data attribute"', async () => {
     startAction()
     pick('Do', 'Set an ARIA or data attribute')
-    type('CSS selector', TARGET)
+    customSelector(TARGET)
     type('Attribute', 'aria-expanded')
     type('Value', 'true')
     expect(await savedStep()).toEqual({
@@ -154,7 +165,7 @@ describe('HostActionsCard in-page steps', () => {
   it('builds "Remove an ARIA or data attribute"', async () => {
     startAction()
     pick('Do', 'Remove an ARIA or data attribute')
-    type('CSS selector', TARGET)
+    customSelector(TARGET)
     type('Attribute', 'aria-expanded')
     expect(screen.queryByLabelText('Value')).toBeNull()
     expect(await savedStep()).toEqual({
@@ -167,7 +178,7 @@ describe('HostActionsCard in-page steps', () => {
   it('builds "Scroll to element" with how and where it stops (AGL-2867)', async () => {
     startAction()
     pick('Do', 'Scroll to element')
-    type('CSS selector', TARGET)
+    customSelector(TARGET)
     pick('Scroll', 'Instantly')
     type('Offset (px)', '80')
     expect(await savedStep()).toEqual({
@@ -181,7 +192,35 @@ describe('HostActionsCard in-page steps', () => {
   it('builds "Play a video" (AGL-2867)', async () => {
     startAction()
     pick('Do', 'Play a video')
-    type('CSS selector', TARGET)
+    customSelector(TARGET)
+    expect(await savedStep()).toEqual({ type: 'playVideo', selector: TARGET })
+  })
+
+  it('picks the element on the live page instead of typing it (AGL-3758)', async () => {
+    startAction()
+    pick('Do', 'Play a video')
+    fireEvent.click(screen.getByRole('button', { name: 'Pick element' }))
+    const frame = (await screen.findByTitle('Site page to pick from')) as HTMLIFrameElement
+    // A local console opens the local tenant, in pick mode.
+    expect(frame.src).toBe('http://localhost:4500/?tenantHost=acme&aglyn-pick=1')
+    const send = (origin: string, data: unknown) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', { data, origin, source: frame.contentWindow }),
+        )
+      })
+    const picked = {
+      type: 'aglyn-pick-element',
+      event: 'picked',
+      selector: TARGET,
+      label: '“Our film”',
+    }
+    // Another origin is not the page that was opened.
+    send('https://elsewhere.example', picked)
+    expect(screen.getByTitle('Site page to pick from')).toBeTruthy()
+    send('http://localhost:4500', picked)
+    await waitFor(() => expect(screen.queryByTitle('Site page to pick from')).toBeNull())
+    expect(screen.getByText('“Our film”')).toBeTruthy()
     expect(await savedStep()).toEqual({ type: 'playVideo', selector: TARGET })
   })
 
