@@ -886,7 +886,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // field, a choice and a checkbox are put together. Most requests that
       // carry the document doctrine are up 1, from rule 17's larger form
       // budget, which the same fields now need.
-      form: { prefixTokens: 3_337, minimum: 512, caches: true, toolsStable: true },
+      form: { prefixTokens: 3_365, minimum: 512, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_588, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
