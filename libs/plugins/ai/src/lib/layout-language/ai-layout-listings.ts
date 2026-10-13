@@ -63,6 +63,11 @@ import { aiStorefrontSays } from './ai-layout-storefront'
  *    repeat), its card binding the record's fields as `{{item.<field>}}`, in
  *    the sections whose plan names the dataset in its `uses`. A site may list
  *    several, one listing a dataset.
+ *  - `events` — the site's dated events (AGL-3755), which a guided start of
+ *    an event-led business drafts through the events-calendar plugin, listed
+ *    by its Event List (`eventList`) in the section whose plan names them in
+ *    its `uses`: each published event with its date, place and cover, and
+ *    its search-engine Event markup.
  *
  * The elements are named by their persisted ids, as the form binding names
  * `form`: a plugin never imports another's internals, and
@@ -72,7 +77,7 @@ import { aiStorefrontSays } from './ai-layout-storefront'
  * Model only: shapes and the inputs reader; the compiler draws them.
  */
 
-export type AiLayoutListingKind = 'products' | 'posts' | 'tracks' | 'reviews' | 'signup' | 'records'
+export type AiLayoutListingKind = 'products' | 'posts' | 'tracks' | 'reviews' | 'signup' | 'records' | 'events'
 
 /** How a section shows a listing: a few of its records on a page about something else, or all of them on its own page. */
 export type AiLayoutListingRole = 'featured' | 'index'
@@ -162,16 +167,17 @@ export const AI_LAYOUT_LISTING_ELEMENTS: Readonly<Record<AiLayoutListingKind, st
   signup: 'newsletter-signup',
   // The platform's own Box, repeating its card over the dataset.
   records: 'muiBox',
+  events: 'eventList',
 }
 
 /** The header's cart button: the commerce plugin's Cart in its `button` variant. */
 export const AI_LAYOUT_CART_ELEMENT = 'cart'
 
 /** The most records a featured band shows; a page of its own shows them all. */
-export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0, reviews: 3, signup: 0, records: 3 } as const
+export const AI_LAYOUT_FEATURED_RECORDS = { products: 4, posts: 3, tracks: 0, reviews: 3, signup: 0, records: 3, events: 3 } as const
 
 const PLACEMENT_ROLES: readonly AiLayoutListingRole[] = ['featured', 'index']
-const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks', 'reviews', 'signup', 'records']
+const KINDS: readonly AiLayoutListingKind[] = ['products', 'posts', 'tracks', 'reviews', 'signup', 'records', 'events']
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
 
@@ -183,6 +189,7 @@ const LISTING_NAMES: Readonly<Record<AiLayoutListingKind, string>> = {
   reviews: 'the store',
   signup: 'the newsletter',
   records: 'the list',
+  events: 'the events',
 }
 
 /** A path on the site, as a listing's links are kept. */
@@ -266,7 +273,7 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
       // A tracks listing names no records: no job sources a recording (AGL-3716);
       // nor do a store's reviews and its sign-up, which shoppers fill (AGL-3676).
       records:
-        kind !== 'products' && kind !== 'posts' && kind !== 'records'
+        kind !== 'products' && kind !== 'posts' && kind !== 'records' && kind !== 'events'
           ? []
           : (Array.isArray(record['records']) ? record['records'] : []).map(text).filter(Boolean).slice(0, 12),
       ...(SITE_PATH.test(href) ? { href } : {}),
@@ -507,6 +514,29 @@ export function aiLayoutRecordsPlacements(
     screen.sections.forEach((section, index) => {
       const lists = (section.uses ?? []).some((ref) => ref === dataset.id || ref.trim().toLowerCase() === named)
       if (lists) placements.push({ screenId: screen.id as string, section: index, role: isHome(screen.slug) ? 'featured' : 'index' })
+    })
+  }
+  return placements
+}
+
+/**
+ * The sections that list the site's events (AGL-3755): every section whose
+ * plan names one of them in its `uses` (`new:<its name>`), once however many
+ * it names. The home page features the next few; any other page lists them
+ * all. Chosen from the plan, never asked of the model.
+ */
+export function aiLayoutEventsPlacements(
+  names: readonly string[],
+  screens: readonly AiLayoutListingScreen[],
+): AiLayoutListingPlacement[] {
+  const named = new Set(names.map((name) => `new:${name}`.trim().toLowerCase()))
+  const placements: AiLayoutListingPlacement[] = []
+  for (const screen of screens) {
+    if (typeof screen.id !== 'string' || !screen.id) continue
+    screen.sections.forEach((section, index) => {
+      if ((section.uses ?? []).some((ref) => named.has(ref.trim().toLowerCase()))) {
+        placements.push({ screenId: screen.id as string, section: index, role: isHome(screen.slug) ? 'featured' : 'index' })
+      }
     })
   }
   return placements

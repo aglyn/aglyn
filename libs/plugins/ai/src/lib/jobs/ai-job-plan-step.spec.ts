@@ -319,6 +319,36 @@ describe('the plan step', () => {
     expect(tool?.inputSchema['properties']).toHaveProperty('language')
   })
 
+  it('offers an event-led start the event items it may plan, and every other start none (AGL-3755)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
+    const event = {
+      op: 'event',
+      noun: 'event',
+      where: 'Events',
+      intents: ['dated events'],
+      argsSchema: { type: 'object' as const, properties: { title: { type: 'string' as const, description: 'Its name.' } }, required: ['title'], additionalProperties: false as const },
+      maxPerPlan: 6,
+      freeAllowed: true,
+      draftResource: 'event',
+      estimateCredits: () => 0,
+      degrade: 'omit' as const,
+    }
+    const readSiteEvents = jest.fn(async () => ({ ops: new Map([['event', event]]), timeZone: 'America/Chicago' }))
+    const club = job({ kind: 'site', brief: 'A website for a jazz club.' })
+    await planStep({ readSiteEvents })({ job: club, stepIndex: 0, now: NOW, firestore })
+    expect(readSiteEvents).toHaveBeenCalledWith(expect.objectContaining({ job: club, now: NOW }))
+    const [request] = mockRunAiRequest.mock.calls[0]
+    expect(request.tools[0].inputSchema.required).toContain('items')
+    expect(request.messages[0].content).toContain('plan its first 3 upcoming events in items, each with op event')
+    expect(request.messages[0].content).toContain("The business's time zone is America/Chicago")
+    // A start the gate gives no events is told nothing of them, and offered no items.
+    await planStep({ readSiteEvents: async () => null })({ job: club, stepIndex: 0, now: NOW, firestore })
+    const [plain] = mockRunAiRequest.mock.calls[mockRunAiRequest.mock.calls.length - 1]
+    expect(plain.tools[0].inputSchema.required).not.toContain('items')
+    expect(plain.messages[0].content).not.toContain('op event')
+  })
+
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {
     mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
     const modelFor = jest.fn(() => 'picked-model')

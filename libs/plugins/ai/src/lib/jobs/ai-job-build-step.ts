@@ -18,7 +18,6 @@
 import { aiJobCancelAsked } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { PluginAiCapability } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
-import type { PluginDraftRecord } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -33,6 +32,7 @@ import {
   aiBuildItemOpen,
   aiBuildNextUnit,
   aiBuildOrder,
+  aiBuildItemOutputNote,
   aiBuildPlacedItemLines,
   aiBuildPlanShapeRefusal,
   aiBuildSmaller,
@@ -200,22 +200,8 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
   return runnerKind ? (runnerKind as AiJobKind) : null
 }
 
-/**
- * What the job drawer says under an item another plugin's writer made: a
- * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
- * field, AGL-3746), that it was saved. A writer that went live only when the
- * member may (an event the publishing role publishes, AGL-3755) reports
- * `live: false` for one it kept as a draft, with its `notice` saying why.
- */
-export function aiBuildItemOutputNote(
-  capability: Pick<PluginAiCapability, 'where' | 'live'>,
-  written?: Pick<PluginDraftRecord, 'live' | 'notice'>,
-): string {
-  const live = written?.live ?? capability.live
-  const said = live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
-  const notice = written?.notice?.trim()
-  return notice ? `${said} ${notice}` : said
-}
+/** What the job drawer says under an item another plugin's writer made (`model/ai-build-job.ts`). */
+export { aiBuildItemOutputNote }
 
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {

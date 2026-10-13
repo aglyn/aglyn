@@ -2486,7 +2486,8 @@ function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBl
   if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
   const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
   if (!index) return null
-  const text = listing.kind === 'tracks' ? 'All music' : listing.kind === 'records' ? 'See all' : 'Shop all'
+  const text =
+    listing.kind === 'tracks' ? 'All music' : listing.kind === 'events' ? 'All events' : listing.kind === 'records' ? 'See all' : 'Shop all'
   return { kind: 'button', text, to: `page:${index.screenId}`, style: 'secondary' }
 }
 
@@ -2770,6 +2771,14 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
     id = tree.add(element, null, null, null, 'player')
     page.settled.push({ at: scope.at, what: 'an empty music player placed for the owner’s own tracks' })
     // The player is what the section shows: its tracks are the owner's to add.
+    noted(scope, [id, id])
+    return id
+  }
+  if (listing.kind === 'events') {
+    // The site's published events (AGL-3755), each with its date, place and
+    // cover: the section's heading is the model's, so the list adds none.
+    id = tree.add(element, featured ? { maxItems: String(shown) } : null, null, null, 'events')
+    page.settled.push({ at: scope.at, what: 'the site’s events listed by the Event List' })
     noted(scope, [id, id])
     return id
   }

@@ -5445,7 +5445,13 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'video',
       'videoEmbed',
     ],
-    codeOnly: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup'],
+    codeOnly: [
+      'icon',
+      'product-grid',
+      'product-reviews',
+      'newsletter-signup',
+      'eventList',
+    ],
   },
   email: {
     root: 'div',

@@ -20,6 +20,7 @@ import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   isAiPlanNewRef,
+  type AiBuildItem,
   type AiBuildPlanCreate,
   type AiBuildPlanCreateKind,
   type AiBuildPlanScreen,
@@ -112,6 +113,16 @@ import {
   aiSiteRecordTemplateOf,
   runAiSiteDatasetUnit,
 } from './ai-job-site-datasets'
+import {
+  AI_SITE_EVENT_INPUT,
+  AI_SITE_EVENT_LABEL,
+  AI_SITE_EVENT_MINIMUM_MS,
+  AI_SITE_EVENTS_MAX,
+  aiSiteEventListings,
+  aiSiteEventRefusal,
+  aiSitePlanEvents,
+  runAiSiteEventUnit,
+} from './ai-job-site-events'
 import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
 import {
   AI_SITE_STORE_PAGES_INPUT,
@@ -212,6 +223,7 @@ export type AiSiteUnitKind =
   | 'form'
   | 'component'
   | 'dataset'
+  | 'event'
   | 'posts'
   | 'products'
   | 'page'
@@ -230,6 +242,8 @@ export interface AiSiteUnit {
   screen?: AiBuildPlanScreen
   /** The creation a theme, layout or form unit builds. */
   creation?: AiBuildPlanCreate
+  /** The event an event unit drafts (AGL-3755). */
+  item?: AiBuildItem
   /** What the unit is, for the derived job's brief. */
   label: string
 }
@@ -253,6 +267,9 @@ const UNIT_KINDS: Record<
   // The scaffold's own runner designs it (`ai-job-site-datasets.ts`), and the
   // data plugin's writer keeps it: a draft of another plugin's (AGL-3616).
   dataset: { jobKind: 'text', resource: 'draft' },
+  // An event-led start's first events (AGL-3755): the events-calendar
+  // plugin's writer keeps each, run by the scaffold's own pass.
+  event: { jobKind: 'text', resource: 'draft' },
   // The scaffold's own runner writes them, by code (`ai-job-site-store-pages.ts`).
   store: { jobKind: 'text', resource: 'screen' },
 }
@@ -307,7 +324,12 @@ export const AI_SITE_UNIT_EMPTY_COPY =
  * is not.
  */
 export const AI_SITE_MAX_PASSES =
-  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 2
+  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) +
+  CREATION_UNITS.length +
+  AI_SITE_DATASETS_MAX +
+  AI_SITE_EVENTS_MAX +
+  AI_SITE_POSTS +
+  2
 
 /**
  * The units a plan implies, in build order: the palette first, because a
@@ -319,7 +341,7 @@ export const AI_SITE_MAX_PASSES =
  * than part of it.
  */
 export function aiSiteJobUnits(
-  plan: Pick<AiJobPlan, 'create' | 'screens'>,
+  plan: Pick<AiJobPlan, 'create' | 'screens'> & Partial<Pick<AiJobPlan, 'items'>>,
   options: { welcomeEmail?: boolean; content?: 'posts' | 'products' | null } = {},
 ): AiSiteUnit[] {
   // The site's look is designed first, on every scaffold (AGL-3660): the
@@ -353,6 +375,10 @@ export function aiSiteJobUnits(
   } else if (options.content === 'products') {
     units.push({ kind: 'products', ...UNIT_KINDS.products, slot: 'products', label: AI_SITE_PRODUCTS_LABEL })
   }
+  // An event-led start's first events (AGL-3755), before the pages that list them.
+  aiSitePlanEvents(plan).forEach((item, index) => {
+    units.push({ kind: 'event', ...UNIT_KINDS.event, slot: `v${index}`, item, label: item.name || AI_SITE_EVENT_LABEL })
+  })
   plan.screens.forEach((screen, index) => {
     units.push({
       kind: 'page',
@@ -569,7 +595,10 @@ export function aiSiteEmailBriefLines(
  */
 export function aiSiteUnitJobId(job: Pick<AiJob, '$id' | 'steps'>, unit: AiSiteUnit): string {
   const recorded =
-    unit.creation?.id ?? unit.screen?.id ?? (unit.kind === 'email' ? aiRecordedJobDraftId(job, 'email') : null)
+    unit.creation?.id ??
+    unit.screen?.id ??
+    unit.item?.id ??
+    (unit.kind === 'email' ? aiRecordedJobDraftId(job, 'email') : null)
   return recorded || `${job.$id}-${unit.slot}`
 }
 
@@ -736,6 +765,8 @@ export function aiSiteUnitJob(
     const delivered = new Map([...built.entries()].filter(([, entry]) => entry.kind === 'dataset').map(([name, entry]) => [name, entry.id]))
     listings.push(
       ...aiSiteDatasetListings({ outputs: job.outputs ?? [], datasets: aiSitePlanDatasets(plan), screens: merged.screens, delivered }),
+      // The events this start drafted, in the section that names them (AGL-3755).
+      ...aiSiteEventListings({ outputs: job.outputs ?? [], items: aiSitePlanEvents(plan), screens: merged.screens }),
     )
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
     // A paid store's header links its account beside the cart, and its footer
@@ -775,6 +806,8 @@ export function aiSiteUnitJob(
     unitInputs[AI_SITE_CONTENT_INPUT] = posts
   }
   if (unit.kind === 'products') unitInputs['target'] = 'catalog'
+  // The event an event unit drafts (AGL-3755).
+  if (unit.kind === 'event' && unit.item) unitInputs[AI_SITE_EVENT_INPUT] = unit.item
   // Where the plan lists a dataset, which its design reads, and the form
   // that writes to it (AGL-3616).
   if (unit.kind === 'dataset' && unit.creation) {
@@ -993,6 +1026,9 @@ export interface AiJobSiteStepDeps {
   /** A dataset's pass and whether one may be made here (AGL-3616); specs hand in fakes. */
   dataset?: AiJobStepRunner
   datasetRefusal?: typeof aiSiteDatasetRefusal
+  /** An event's pass and whether one may be drafted here (AGL-3755); specs hand in fakes. */
+  event?: AiJobStepRunner
+  eventRefusal?: typeof aiSiteEventRefusal
   /** The posts' publish once the pages are live, and the cache drop after it. */
   publishPosts?: typeof aiPublishSitePosts
   dropCache?: typeof dropPluginSiteCache
@@ -1050,7 +1086,12 @@ export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
   return units.map((unit) => ({
     slot: unit.slot,
     op:
-      unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' || unit.kind === 'dataset' || unit.kind === 'store'
+      unit.kind === 'theme' ||
+      unit.kind === 'posts' ||
+      unit.kind === 'products' ||
+      unit.kind === 'dataset' ||
+      unit.kind === 'event' ||
+      unit.kind === 'store'
         ? unit.kind
         : unit.jobKind,
     label: unit.label,
@@ -1100,6 +1141,7 @@ function aiSiteOwedUnits(
       unit.kind === 'theme' ||
       unit.kind === 'posts' ||
       unit.kind === 'dataset' ||
+      unit.kind === 'event' ||
       (unit.kind !== 'store' && runnerFor(unit.jobKind)),
   )
 }
@@ -1113,6 +1155,7 @@ export function createAiJobSiteStep(
   const look = deps.look ?? aiRunSiteLook
   const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
   const datasetRefusal = deps.datasetRefusal ?? aiSiteDatasetRefusal
+  const eventRefusal = deps.eventRefusal ?? aiSiteEventRefusal
   const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
   const publishPosts = deps.publishPosts ?? aiPublishSitePosts
   const dropCache = deps.dropCache ?? dropPluginSiteCache
@@ -1283,7 +1326,9 @@ export function createAiJobSiteStep(
             ? (deps.products ?? (catalog ? createAiSiteProductsRunner({ catalog }) : undefined))
             : unit.kind === 'dataset'
               ? (deps.dataset ?? runAiSiteDatasetUnit)
-              : unit.kind === 'store'
+              : unit.kind === 'event'
+                ? (deps.event ?? runAiSiteEventUnit)
+                : unit.kind === 'store'
                 ? (deps.storePages ?? runAiSiteStorePagesUnit)
                 : runnerFor(unit.jobKind)
     if (!runner) return { ...aiUnspentOutcome(model), ...init }
@@ -1331,6 +1376,15 @@ export function createAiJobSiteStep(
     if (unit.kind === 'dataset' && rows.get(unit.slot)?.status !== 'running') {
       const refusal = await datasetRefusal({ ...context, job }).catch((error: unknown) => {
         console.error('ai site dataset admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // An event asks the same (AGL-3755): the events plugin runs here, and its
+    // writer admits this member now.
+    if (unit.kind === 'event' && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await eventRefusal({ ...context, job }).catch((error: unknown) => {
+        console.error('ai site event admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
         return AI_SITE_UNIT_EMPTY_COPY
       })
       if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
@@ -1471,6 +1525,7 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
       (unit.kind === 'theme' ||
         unit.kind === 'posts' ||
         unit.kind === 'dataset' ||
+        unit.kind === 'event' ||
         unit.kind === 'store' ||
         aiJobStepRunnerFor(unit.jobKind)) &&
       (!owed.size || owed.has(unit.slot)),
@@ -1483,6 +1538,7 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
   if (unit.kind === 'posts') return AI_SITE_POST_BUDGET.minimumMs
   if (unit.kind === 'dataset') return AI_SITE_DATASET_BUDGET.minimumMs
+  if (unit.kind === 'event') return AI_SITE_EVENT_MINIMUM_MS
   // The store's pages ask no model: five draft writes (AGL-3676).
   if (unit.kind === 'store') return AI_SITE_STORE_PAGES_MINIMUM_MS
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))

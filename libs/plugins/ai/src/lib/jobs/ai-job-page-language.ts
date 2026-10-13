@@ -332,6 +332,11 @@ export function aiLayoutPagePrompt(input: {
       // A music site's player (AGL-3716): placed empty, for the owner's own uploads.
       return `${index + 1}. "${section.name}"${places}; the platform places a music player here for the artist's own tracks, which they add themselves: write only its heading and a line inviting visitors to listen, and no cards, list, images or links for songs`
     }
+    if (listed?.listing.kind === 'events') {
+      // The site's own dated events (AGL-3755), listed by the platform with their dates.
+      const names = listed.listing.records.length ? ` (${listed.listing.records.map((name) => `"${name}"`).join(', ')})` : ''
+      return `${index + 1}. "${section.name}"${places}; the platform lists the site's upcoming events here${names} with their dates, places and photos: write only its heading and a line inviting visitors to come, and no cards, dates, list or links for events`
+    }
     if (listed?.listing.kind === 'reviews') {
       // A store's own reviews (AGL-3676): shoppers write them; none is ever written here.
       return `${index + 1}. "${section.name}"${places}; the platform shows the store's real customer reviews here with their star ratings, once shoppers leave them: write only its heading, and no quotes, names, ratings or cards`

@@ -186,7 +186,7 @@ gap.
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
-| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op makes dated events (title, start and end in the business's time zone, location, organizer, description), published for the publishing role, each with a stock cover photo (AGL-3755), and a page section that uses them places the Event List |
+| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op makes dated events (title, start and end in the business's time zone, location, organizer, description), published for the publishing role, each with a stock cover photo, and an event-led guided start drafts its first three (AGL-3755); a page section that uses them places the Event List |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); no records, picklist values or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
@@ -512,6 +512,20 @@ is a decision about the account, not something to build.
   editor's own `coverImage` field and writes no cover description (the list
   shows the cover beside the title that names it). A process with no picker
   writes the event without a cover.
+- **Guided site starts (AGL-3755).** A start whose brief reads as event-led
+  (a venue, club, studio with classes, meetup, church, theater) and whose
+  site admits the `event` op (the build's own gate: the `eventCalendar`
+  add-on, the plugin on and released) and whose member the writer admits is
+  offered `items` of op `event` only, at most three
+  (`jobs/ai-job-site-events.ts`). Its turn is told today's date, the site's
+  or workspace's time zone where one is set, never to date against a day the
+  brief gives, and to name the events in the uses of a section the plan
+  already has, so the section caps stay its budget; a plan that does
+  otherwise is re-asked once. The scaffold drafts each through the writer
+  (published per the role, with its cover, the site's zone over the plan's)
+  as an `event` unit before the pages, and the section that names them lists
+  them by the Event List (`events` listing, `eventList` code-only on the page
+  surface). A start that cannot have events is told nothing about them.
 
 ## Site settings (AGL-3748)
 

@@ -142,6 +142,20 @@ Upcoming lists the next events by start time; past lists the most recent first. 
 list is served through the public events API and cached briefly at the CDN, so a newly
 published event can take about a minute to appear.
 
+## Ask Aglyn AI {#ask-aglyn-ai}
+
+[Aglyn AI](../../ai/assist-builds.md) can add events for you, such as *add our autumn
+sourdough workshops*, and a [site started with AI](../../ai/start-with-ai.md#events-from-the-start)
+for a business that holds events adds its first three. Each event gets a title, a start and
+end in your business's time zone, a place, an organizer and a description, and a
+[stock photo](../../ai/stock-photos.md) as its cover, copied into your media library. A page
+section that shows them gets the **Event List**.
+
+Events Aglyn AI adds are **published**, the same as **Set published**, when you have the
+admin or editor role on the site, so they show on your site straight away. With the author
+role they are saved as drafts, and the job says so. Edit, unpublish or delete them on the
+**Events** page like any other event. Adding events needs the Event Calendar add-on.
+
 ## Search engines
 
 Every rendered event emits **schema.org `Event` JSON-LD** — name, start and end,
