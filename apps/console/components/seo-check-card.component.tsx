@@ -46,10 +46,9 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query } from 'firebase/firestore'
-import { useCallback, useRef, useState } from 'react'
+import { collection, doc, documentId, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import {
   type SeoKeywordPage,
@@ -120,24 +119,41 @@ export function SeoFindingChips({ findings }: { findings: readonly SeoFinding[] 
 /**
  * The site's routed pages, by name and path, for the keyword page picker:
  * the host's routing map says each page's path, and the screens their names.
+ *
+ * The screen names are read once, and only when `wanted` (a keyword row
+ * exists): Setup → SEO opens without paying for the site's screen list.
  */
-function useSeoKeywordPages(hostId: string): SeoKeywordPage[] {
+function useSeoKeywordPages(hostId: string, wanted: boolean): SeoKeywordPage[] {
   const firestore = useFirestore()
   const { data: host } = useFirestoreDoc<any>(() => doc(firestore, 'hosts', hostId), [firestore, hostId])
-  const { data: screens } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
+  const [names, setNames] = useState<Map<string, string> | null>(null)
+  useEffect(() => {
+    if (!wanted || names) return
+    let live = true
+    getDocs(query(collection(firestore, 'hosts', hostId, 'screens'), orderBy(documentId()), limit(200)))
+      .then((snapshot) => {
+        if (!live) return
+        setNames(
+          new Map(
+            snapshot.docs.map((screen) => [
+              screen.id,
+              String(screen.get('displayName') ?? screen.get('name') ?? ''),
+            ]),
+          ),
+        )
+      })
+      // Without names the picker still lists every page by its path.
+      .catch(() => live && setNames(new Map()))
+    return () => {
+      live = false
+    }
+  }, [wanted, names, firestore, hostId])
   const routes: Record<string, unknown> = host?.screens ?? {}
-  const names = new Map<string, string>(
-    (screens ?? []).map((screen: any) => [screen.$id, String(screen.displayName ?? screen.name ?? '')]),
-  )
   return Object.entries(routes)
-    .filter(([, path]) => typeof path === 'string')
+    .filter(([, route]) => typeof route === 'string')
     .map(([screenId, route]) => {
       const path = screenRoutePathToUrl(route as string)
-      return { path, name: names.get(screenId) || path }
+      return { path, name: names?.get(screenId) || path }
     })
     .sort((a, b) => a.path.localeCompare(b.path))
 }
@@ -175,7 +191,7 @@ export function SeoCheckCard(props: SeoCheckCardProps) {
     seoKeywordRowsFromLines(check?.keywords ?? ''),
   )
   const keywords = seoKeywordLinesFromRows(keywordRows)
-  const keywordPages = useSeoKeywordPages(hostId)
+  const keywordPages = useSeoKeywordPages(hostId, keywordRows.length > 0)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [page, setPage] = useState(0)

@@ -18,7 +18,7 @@
 import { readSeoKeywordLines, seoNormalizePath } from '@aglyn/aglyn/app-utils/seo-audit'
 import { SEO_MAX_KEYWORDS } from '@aglyn/aglyn/app-utils/seo-keywords'
 import { mdiClose, mdiPlus } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx/components/mdi-icon'
 import {
   Autocomplete,
   Box,
@@ -186,7 +186,7 @@ export function SeoTargetKeywords(props: SeoTargetKeywordsProps) {
         <Box>
           <Button
             size="small"
-            disabled={disabled || rows.length >= pages.length}
+            disabled={disabled || (rows.length > 0 && rows.length >= pages.length)}
             startIcon={<MdiIcon path={mdiPlus.path} fontSize="small" />}
             onClick={() => onChange([...rows, { path: '', keywords: [] }])}
           >

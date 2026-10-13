@@ -44,17 +44,21 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('firebase/firestore', () => ({
   collection: () => null,
   doc: () => null,
+  documentId: () => null,
   limit: () => null,
+  orderBy: () => null,
   query: () => null,
+  getDocs: async () => ({
+    docs: [
+      { id: 'home', get: (field: string) => (field === 'displayName' ? 'Home' : undefined) },
+      { id: 'lamps', get: (field: string) => (field === 'displayName' ? 'Lamps' : undefined) },
+    ],
+  }),
 }))
 // The page picker's list: the host's routing map, and the screens' names.
 jest.mock('../hooks/use-firestore-doc', () => ({
   __esModule: true,
   default: () => ({ data: { screens: { home: '/', lamps: 'lamps' } } }),
-}))
-jest.mock('../hooks/use-firestore-collection', () => ({
-  __esModule: true,
-  default: () => ({ data: [{ $id: 'home', displayName: 'Home' }, { $id: 'lamps', displayName: 'Lamps' }] }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ header, children }: { header?: ReactNode; children: ReactNode }) => (
