@@ -250,7 +250,7 @@ export const PLUGIN_DOCS = {
   contactFields: {
     path: '/content-and-data/crm/custom-fields',
     title: 'Custom fields',
-    excerpt: 'Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
+    excerpt: 'Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox, link or currency — show them on every record and its list, and save form answers straight into a contact\'s.',
   },
   contactRecord: {
     path: '/content-and-data/crm/contact-record',
@@ -570,7 +570,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#alerts-on-this-device'],
   contactActivities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
-  contactFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
+  contactFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#currency-fields', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#contact-properties', '#the-standard-fields', '#do-not-call', '#deleting-and-erasing', '#what-each-site-keeps-to-itself', '#when-sites-join-or-leave-a-group', '#merging-two-records', '#likely-duplicates', '#owner', '#last-engaged', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#files', '#related'],
   contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#known-by', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
   couriers: ['#who-pays', '#connect-doordash-drive', '#webhook', '#send-a-courier', '#cancel', '#what-your-buyer-sees'],

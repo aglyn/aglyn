@@ -342,9 +342,9 @@ is a decision about the account, not something to build.
   unasked probability is spread by position (25/50/75 for three stages).
 - **`crm-field`** (at most 12 a plan) takes `object` (contact, company,
   deal, lead — `CRM_FIELD_OBJECTS`), `label`, `type` (text, number, date,
-  select, checkbox, url — `CONTACT_FIELD_TYPES`; no currency type exists, so
-  money is a number), `options` for select, and `required`. Org-wide, last
-  on its object's tab.
+  select, checkbox, url, currency — `CONTACT_FIELD_TYPES`; "Budget" is
+  currency, AGL-3756), `options` for select, `currency` (ISO 4217, USD when
+  unsaid) for currency, and `required`. Org-wide, last on its object's tab.
 - **Idempotent.** The job's attempt key is a new pipeline's or field's id.
   An active pipeline is matched by name, a stage within it by name, a field
   by label or key within its object, all without case; a match is brought to

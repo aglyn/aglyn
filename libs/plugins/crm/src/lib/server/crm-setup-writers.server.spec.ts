@@ -222,6 +222,6 @@ describe('the crm-field writer', () => {
   })
 
   it('refuses a type the CRM does not have', async () => {
-    await expect(writer.write(request('j', { ...budget, type: 'currency' }))).resolves.toMatchObject({ ok: false, status: 400 })
+    await expect(writer.write(request('j', { ...budget, type: 'money' }))).resolves.toMatchObject({ ok: false, status: 400 })
   })
 })

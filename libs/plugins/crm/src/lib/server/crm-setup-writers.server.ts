@@ -201,7 +201,13 @@ function fieldRecord(field: CrmFieldDefinitionDoc): PluginDraftRecord {
     id: field.$id,
     name: String(field.label ?? ''),
     versionId: null,
-    facts: { object: field.object ?? 'contact', key: field.key, type: field.type, ...(field.options ? { options: field.options } : {}) },
+    facts: {
+      object: field.object ?? 'contact',
+      key: field.key,
+      type: field.type,
+      ...(field.options ? { options: field.options } : {}),
+      ...(field.currency ? { currency: field.currency } : {}),
+    },
   }
 }
 

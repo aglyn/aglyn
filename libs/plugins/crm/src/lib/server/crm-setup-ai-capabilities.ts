@@ -78,7 +78,7 @@ export function crmPipelineSetupContentFromArgs(args: PluginAiCapabilityArgs): R
 
 /** The field writer's content for an item: its arguments, as they are. Pure. */
 export function crmFieldSetupContentFromArgs(args: PluginAiCapabilityArgs): Readonly<Record<string, unknown>> {
-  return pick(args, ['object', 'label', 'type', 'options', 'required'])
+  return pick(args, ['object', 'label', 'type', 'options', 'currency', 'required'])
 }
 
 export const crmPipelineAiCapability: PluginAiCapability = {
@@ -143,7 +143,7 @@ export const crmFieldAiCapability: PluginAiCapability = {
   noun: 'CRM custom field',
   where: 'CRM → Fields',
   intents: [
-    'CRM custom fields on contacts, companies (accounts), deals (opportunities) or leads — "add a Budget field to opportunities", "a Choice field for Industry on companies"; types text, number, date, choice, checkbox and link only',
+    'CRM custom fields on contacts, companies (accounts), deals (opportunities) or leads — "add a Budget field to opportunities", "a Choice field for Industry on companies"; types text, number, date, choice, checkbox, link and currency (an amount of money: budget, deal size, revenue)',
   ],
   argsSchema: {
     type: 'object',
@@ -162,7 +162,7 @@ export const crmFieldAiCapability: PluginAiCapability = {
       type: {
         type: 'string',
         description:
-          'What it holds: text; number (also an amount of money or a percentage — there is no currency type); date; select (a Choice from listed options); checkbox (yes or no); url (a link).',
+          'What it holds: text; number (a count or a percentage); currency (an amount of money — a budget, a price, revenue — with "currency"); date; select (a Choice from listed options); checkbox (yes or no); url (a link).',
         enum: CONTACT_FIELD_TYPES,
       },
       options: {
@@ -170,6 +170,12 @@ export const crmFieldAiCapability: PluginAiCapability = {
         description: 'For select only: the choices, in order. A select field that exists gains the ones it lacks.',
         items: { type: 'string', maxLength: CRM_FIELD_OPTION_MAX_LENGTH },
         maxItems: CRM_FIELD_OPTIONS_MAX,
+      },
+      currency: {
+        type: 'string',
+        description:
+          'For currency only: the ISO 4217 code its amounts are in, e.g. "EUR", when the request names one. Leave out for US dollars.',
+        maxLength: 3,
       },
       required: {
         type: 'boolean',

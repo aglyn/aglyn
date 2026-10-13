@@ -265,8 +265,8 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#the-recent-activity-feed': 'The whole organization when the organization has chosen an org-wide default.',
   },
   contactFields: {
-    '#define-a-field': 'O Plan availability Custom fields are part of the CRM, included from Starter.',
-    '#save-a-form-field': 'Xports and the API carry the values under their keys. A value belongs to the site that recorded it.',
+    '#define-a-field': 'N.',
+    '#save-a-form-field': 'S of that currency\'s smallest unit. To track a second currency, add a second field.',
   },
   contactRecord: {
     '#contact-properties': 'Checkbox to complete it, and a New task shortcut — see Tasks & follow-ups.',

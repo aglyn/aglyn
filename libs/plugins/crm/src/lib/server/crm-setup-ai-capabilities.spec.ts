@@ -84,7 +84,7 @@ describe('the CRM setup build operations (AGL-3746)', () => {
   })
 
   it('holds the planner to the schema: no invented type or object', () => {
-    expect(pluginAiCapabilityArgsProblems(crmFieldAiCapability.argsSchema, { object: 'opportunity', label: 'Budget', type: 'currency' })).toEqual([
+    expect(pluginAiCapabilityArgsProblems(crmFieldAiCapability.argsSchema, { object: 'opportunity', label: 'Budget', type: 'money' })).toEqual([
       `"object" must be one of ${CRM_FIELD_OBJECTS.join(', ')}`,
       `"type" must be one of ${CONTACT_FIELD_TYPES.join(', ')}`,
     ])

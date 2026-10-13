@@ -1,7 +1,7 @@
 ---
 sidebar_position: 12
 title: Custom fields
-description: Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact's.
+description: Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox, link or currency — show them on every record and its list, and save form answers straight into a contact's.
 ---
 
 # Custom fields
@@ -10,7 +10,7 @@ A contact carries a fixed set of properties — name, email, tags, notes, and th
 own owner, lifecycle stage and company; a company its domain, address and industry; a
 deal its amount, stage and close date; a lead the person and their company as text.
 **Custom fields** add the properties your business describes each of them by: an annual
-revenue, a tier, a renewal date, a VIP checkbox, a link to a profile.
+revenue, a budget in euros, a tier, a renewal date, a VIP checkbox, a link to a profile.
 
 A field is defined once for the whole organization, for **one kind of record** — see
 [fields per record](#fields-per-record). It then appears on every record of that kind,
@@ -36,9 +36,13 @@ Open **CRM → Fields**, pick the tab for the record the field describes — **C
   lowercase letters, digits and underscores, up to 40 characters. Values are stored under
   the key, so it **cannot change** once the field exists — a rename is a new field and a
   retirement of the old one.
-- **Type** — **Text**, **Number**, **Date**, **Choice**, **Checkbox** or **Link**. Every
-  value is read by its type, so the type is fixed once the field exists.
+- **Type** — **Text**, **Number**, **Date**, **Choice**, **Checkbox**, **Link** or
+  **Currency**. Every value is read by its type, so the type is fixed once the field
+  exists.
 - **Choices** — for a Choice field, one per line. A stored value has to be one of them.
+- **Currency** — for a Currency field, the currency every amount in it is in: USD, EUR,
+  GBP and the other currencies a deal's amount offers. It starts at USD and is fixed once
+  the field exists — see [currency fields](#currency-fields).
 - **Required on the … form** — the record's page will not save the field empty. It does
   not make a website form field required; that is set on the form itself.
 
@@ -88,12 +92,13 @@ need nothing done to them.
 
 - **A contact's page** carries its fields in the **Properties** card, under **More
   fields** after the built-in properties, with one control per field — a text box, a
-  number box, a date picker, a choice list, a checkbox or a link box. The card's one
+  number box, a date picker, a choice list, a checkbox, a link box or an amount box with
+  the currency beside it. The card's one
   **Save**, in its header, writes the profile and only the fields you changed; clearing a
   control clears the value. With no field defined, there is no **More fields** at all.
 - **The contacts list** offers one optional column per field. The columns show the value
-  as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link. They do
-  not sort; each is a field in the table's **Filters** panel — see
+  as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link, an
+  amount as money ("€1,250.00"). They do not sort; each is a field in the table's **Filters** panel — see
   [Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
 - **A lead's page** carries its fields in the **Details** card, under **More fields**
   after the profile and saved with it by the same **Save** in the card's header. The **New
@@ -106,6 +111,34 @@ need nothing done to them.
 
 A value belongs to the site that recorded it. Two sites in one organization that both
 know a person each see their own values, never each other's.
+
+## Currency fields {#currency-fields}
+
+A **Currency** field holds an amount of money — a budget, a contract value, a price
+quoted — in the one currency the field was made with. Every value in the field is in
+that currency, so its column on a list reads as one currency throughout.
+
+- **Typing an amount.** The box takes the amount as you would write it — `1250.50`,
+  `$1,250.50`, `1,250` — with the currency shown beside it. Symbols, codes and thousands
+  separators are ignored; more decimals than the currency has are rounded (`19.995` USD
+  is `$20.00`). A negative amount is allowed, for a discount or a credit.
+- **How it reads.** Everywhere a value shows — a record's page, a list column — it is
+  formatted as money in your browser's locale.
+- **How it is stored.** As a whole number of the currency's smallest unit — cents for
+  USD, yen for JPY — the way a deal's amount is. That is the number the
+  [REST API](#over-the-api) reads and writes under the field's key: send `125050` for
+  $1,250.50, or send the amount as text (`"1250.50"`) and it is read as dollars.
+- **Filtering contacts.** A contact currency field's filter asks **equals** an amount,
+  typed as you would type it, or **is not empty**.
+- **Import and export.** A file carries the amount as a plain number in the field's
+  currency — `1250.5` — and an import reads it back the same way. The **Fields** export
+  lists each currency field's currency.
+
+A field's currency cannot be changed once it exists, because its values are counts of
+that currency's smallest unit. To track a second currency, add a second field.
+
+There is no organization-wide currency setting, so a new Currency field always starts at
+USD; pick another before you create it.
 
 ## Save a form field into a custom field {#save-a-form-field}
 
@@ -123,6 +156,7 @@ Answers arrive as text and are converted by the field's type:
 | **Date** | The date, as an ISO 8601 stamp, whichever way the visitor typed it. |
 | **Choice** | The answer, only when it is one of the field's choices exactly. |
 | **Checkbox** | `true` or `false`, from what a ticked or unticked box sends. |
+| **Currency** | The amount, read in the field's currency — "1,250.50" or "$1,250.50". An answer that is not one amount is dropped. |
 
 An answer left blank writes **nothing** — a submission never clears a value you set by
 hand. A mapping onto a [retired](#retire-restore-delete) field writes nothing either.
@@ -263,7 +297,9 @@ resource is judged against the definitions of **its own** record: a company body
 validated against the company fields, whatever a contact field of the same key holds.
 
 - **POST** and **PATCH** accept `custom`. Values are converted by type exactly as a form
-  answer is.
+  answer is. A [currency field](#currency-fields)'s value is a whole number of its
+  currency's smallest unit (`125050` is $1,250.50), and text is read as an amount
+  (`"1250.50"`); a response carries the stored number.
 - A **PATCH** merges the keys it sends and keeps the rest; send `null` under a key to
   clear it.
 - A key that is not a field of that record, a field that is retired, or a value the type
@@ -284,8 +320,8 @@ why the key of a retired field still counts as taken when you create one on that
 ## Export your fields {#export-fields}
 
 **Export…** at the top of the Fields section writes every custom field you
-defined as a file — its name, key, the record it describes, its type, its
-choices, whether it is required, its position and whether it is retired —
+defined as a file — its name, key, the record it describes, its type, a
+currency field's currency, its choices, whether it is required, its position and whether it is retired —
 through the [export dialog](./export.md): a record of your setup, to document
 it or to rebuild it elsewhere. Fields are defined here, so the file is never
 imported. Their values travel with each record's own [export](./export.md).

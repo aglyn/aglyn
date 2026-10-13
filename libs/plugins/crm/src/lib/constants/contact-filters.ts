@@ -24,6 +24,7 @@ import {
   crmFacetKey,
   crmFacetKeyValue,
 } from '@aglyn/aglyn/app-utils/crm'
+import { contactFieldCurrency, parseCurrencyInput } from '@aglyn/aglyn/app-utils/contact-custom-fields'
 import { EMAIL_STATE_STATUSES } from '@aglyn/aglyn/app-utils/email-state'
 import type {
   ListFilterField,
@@ -257,6 +258,9 @@ export function contactCustomFilterFields(
       const path = `custom.${definition.key}`
       switch (definition.type) {
         case 'number':
+        // An amount is typed in major units and asked as the minor units it
+        // is stored in — `ContactQueryReader.currencies` (AGL-3756).
+        case 'currency':
           return {
             column,
             kind: 'number',
@@ -446,6 +450,23 @@ export interface ContactQueryReader {
    * level, where there is no scope clause.
    */
   foldsScope: boolean
+  /**
+   * The currency of each custom currency column, by column (AGL-3756): an
+   * amount typed into its `=` is major units, asked as the minor units the
+   * facet key holds. {@link contactCustomCurrencies} builds it.
+   */
+  currencies?: Readonly<Record<string, string>>
+}
+
+/** Each active currency field's column and code, for {@link ContactQueryReader.currencies}. */
+export function contactCustomCurrencies(
+  definitions: readonly Pick<ContactFieldDefinition, 'key' | 'type' | 'currency' | 'retiredAt'>[],
+): Record<string, string> {
+  return Object.fromEntries(
+    definitions
+      .filter((definition) => definition.type === 'currency' && !definition.retiredAt)
+      .map((definition) => [crmContactCustomColumn(definition.key), contactFieldCurrency(definition)]),
+  )
 }
 
 /** Why a reader whose access is some sites cannot filter by a holder's field. */
@@ -502,8 +523,15 @@ export function contactQueryClause(
     }
   }
   const keys: string[] = []
+  const currency = reader.currencies?.[clause.field]
   for (const value of crmClauseValues(clause)) {
-    const key = crmFacetKeyValue(clause.op === '=' ? Number(value) : value)
+    const asked =
+      clause.op !== '='
+        ? value
+        : currency
+          ? (parseCurrencyInput(value, currency) ?? Number.NaN)
+          : Number(value)
+    const key = crmFacetKeyValue(asked)
     if (key === null) return { refused: 'no value yet' }
     keys.push(crmFacetKey(group, facet, key))
   }

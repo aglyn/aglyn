@@ -44,6 +44,7 @@ import {
   CONTACT_PREFIX_SEARCH,
   contactClauseImpliesScope,
   contactSoloClause,
+  contactCustomCurrencies,
   contactCustomFilterFields,
   contactCustomFilterHeaders,
   contactQueryClause,
@@ -338,12 +339,14 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    */
   const foldsScope = useCrmFoldsScope(orgId, visibleToTokens)
   const groupId = consentGroup?.groupId ?? null
+  // A currency field's `=` is typed in major units (AGL-3756).
+  const currencies = useMemo(() => contactCustomCurrencies(customFields.active), [customFields.active])
   const asked = useMemo(
     () =>
       crmAskClauses(views.state.filters, (clause) =>
-        contactQueryClause(clause, { groupId, foldsScope }),
+        contactQueryClause(clause, { groupId, foldsScope, currencies }),
       ),
-    [views.state.filters, groupId, foldsScope],
+    [views.state.filters, groupId, foldsScope, currencies],
   )
   const impliesScope = useMemo(() => contactClauseImpliesScope(groupId), [groupId])
   // The quick search is the grid's box, answered by the same query.

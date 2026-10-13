@@ -56,6 +56,8 @@ import {
   normalizeCrmPicklist,
   ORG_SCOPE_TOKEN,
   readCrmCustomInput,
+  contactFieldCurrency,
+  currencyMinorToMajor,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
 import {
@@ -729,13 +731,20 @@ export function customKeyOf(fieldId: string): string | null {
 
 /**
  * A stored custom value as the file reads it: a date (stored as epoch
- * milliseconds) as its day, `YYYY-MM-DD`; anything else as stored.
+ * milliseconds) as its day, `YYYY-MM-DD`; an amount (stored as minor units)
+ * as major units in the field's currency, `1250.5` (AGL-3756); anything
+ * else as stored.
  */
 export function customTransferValue(
-  definition: Pick<ContactFieldDefinition, 'type'> | undefined,
+  definition: Pick<ContactFieldDefinition, 'type' | 'currency'> | undefined,
   value: unknown,
 ): unknown {
   if (value === null || value === undefined) return null
+  if (definition?.type === 'currency') {
+    return typeof value === 'number' && Number.isFinite(value)
+      ? currencyMinorToMajor(value, contactFieldCurrency(definition))
+      : null
+  }
   if (definition?.type === 'date') {
     const ms = storedMs(value)
     return ms === null ? null : new Date(ms).toISOString().slice(0, 10)
@@ -767,7 +776,12 @@ export function customWriteValues(
   const raw: Record<string, unknown> = {}
   for (const [fieldId, value] of Object.entries(values)) {
     const key = customKeyOf(fieldId)
-    if (key) raw[key] = value === undefined || value === '' ? null : value
+    if (!key) continue
+    const blank = value === undefined || value === ''
+    // A file's amount is major units, which the reader takes as text; a
+    // number it is handed would be read as the minor units it stores.
+    const currency = definitions.find((one) => one.key === key)?.type === 'currency'
+    raw[key] = blank ? null : currency && typeof value === 'number' ? String(value) : value
   }
   if (!Object.keys(raw).length) return { values: {} }
   const judged = readCrmCustomInput(raw, definitions as ContactFieldDefinition[], object)

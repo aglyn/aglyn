@@ -130,8 +130,9 @@ are saved.
   you say so. Ask to rename a pipeline, add a stage or put stages in a new order and the
   pipeline you have is changed instead of a second one made.
 - **Custom fields** go on contacts, companies (accounts), deals (opportunities) or leads, with
-  the CRM's field types: text, number, date, choice, checkbox and link. There is no currency
-  type, so an amount such as a budget is a number field.
+  the CRM's field types: text, number, date, choice, checkbox, link and currency. An amount
+  such as a budget is a [currency field](../content-and-data/crm/custom-fields.md#currency-fields),
+  in the currency you name (*"a Budget field in euros"*) or US dollars when you name none.
 - **Nothing twice, nothing removed.** Pipelines, stages and fields are matched by name,
   ignoring capitals, so asking again changes nothing that is already there. AI never removes a
   stage or a field, and a stage it was not told about stays where it is, after the ones you

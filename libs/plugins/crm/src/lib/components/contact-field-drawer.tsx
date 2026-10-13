@@ -19,6 +19,7 @@
 import {
   CONTACT_FIELD_TYPE_LABELS,
   CONTACT_FIELD_TYPES,
+  contactFieldCurrency,
   type ContactFieldType,
   type CrmFieldObject,
   isContactFieldType,
@@ -37,6 +38,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ContactFieldDefinitionDoc } from '../hooks/use-contact-field-definitions'
 import { CRM_FIELD_LABEL_MAX_LENGTH, crmFieldOptions } from '../model/crm-setup-content'
+import { DEAL_CURRENCIES } from '../model/deal-board-model'
 
 /** What the drawer hands back — the definition's editable half. */
 export interface ContactFieldDraft {
@@ -45,6 +47,8 @@ export interface ContactFieldDraft {
   type: ContactFieldType
   /** The choices, for `select`; empty for every other type. */
   options: string[]
+  /** For `currency` (AGL-3756): the lowercase ISO 4217 code; `null` for every other type. */
+  currency: string | null
   required: boolean
 }
 
@@ -149,6 +153,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
   const [keyTouched, setKeyTouched] = useState(false)
   const [type, setType] = useState<ContactFieldType>('text')
   const [optionsText, setOptionsText] = useState('')
+  const [currency, setCurrency] = useState(contactFieldCurrency(null))
   const [required, setRequired] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -162,6 +167,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
     setKeyTouched(Boolean(definition))
     setType(definition?.type ?? 'text')
     setOptionsText((definition?.options ?? []).join('\n'))
+    setCurrency(contactFieldCurrency(definition))
     setRequired(definition?.required === true)
     setBusy(false)
     setError(null)
@@ -201,6 +207,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
         key: derivedKey,
         type,
         options: type === 'select' ? options : [],
+        currency: type === 'currency' ? currency : null,
         required,
       })
     } catch (caught) {
@@ -209,7 +216,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
     } finally {
       setBusy(false)
     }
-  }, [canSubmit, derivedKey, onSubmit, label, type, options, required])
+  }, [canSubmit, derivedKey, onSubmit, label, type, options, currency, required])
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -277,6 +284,28 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
             minRows={3}
             fullWidth
           />
+        ) : null}
+        {type === 'currency' ? (
+          <TextField
+            select
+            size="small"
+            label="Currency"
+            value={currency}
+            onChange={(event) => setCurrency(event.target.value)}
+            disabled={editing}
+            helperText={
+              editing
+                ? 'Amounts are stored in this currency, so it is fixed once the field exists.'
+                : 'Every amount in this field is in this currency.'
+            }
+            fullWidth
+          >
+            {[...new Set<string>([...DEAL_CURRENCIES, currency])].map((code) => (
+              <MenuItem key={code} value={code}>
+                {code.toUpperCase()}
+              </MenuItem>
+            ))}
+          </TextField>
         ) : null}
         <FormControlLabel
           control={
