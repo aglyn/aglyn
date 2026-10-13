@@ -872,8 +872,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // a timestamp: a live build printed all three on every article. All
       // four grew 6 at AGL-3588, the App Bar's shrink and hide switches, and
       // 4 at AGL-3717, the Image's and the Image List's lightbox switch.
-      layout: { prefixTokens: 4_431, minimum: 512, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_043, minimum: 512, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_430, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_042, minimum: 512, caches: true, toolsStable: true },
       component: { prefixTokens: 5_042, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
@@ -963,7 +963,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
       'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
       'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
-      'copy.section': { prefixTokens: 694, minimum: 512, caches: true, toolsStable: true },
+      'copy.section': { prefixTokens: 736, minimum: 512, caches: true, toolsStable: true },
     })
   })
 

@@ -957,6 +957,155 @@ function parseDeclaredOptions(options: unknown): string[] {
     .filter(Boolean)
 }
 
+/**
+ * MUI's form elements that carry an answer (`libs/plugins/mui`
+ * form-controls.tsx), restated by id because the foundation layer may not
+ * import a plugin. A form built from these pieces — a Form Control holding a
+ * Form Label and an Input, a Select of Select Options, a Radio Group of
+ * Radios, a Checkbox in a Choice Label, a Rating — declares its fields from
+ * them exactly as it does from the all-in-one `formField`.
+ *
+ * Persisted ids; never rename.
+ */
+export const FORM_INPUT_ELEMENT_IDS = {
+  input: 'muiInput',
+  select: 'muiSelect',
+  selectOption: 'muiSelectOption',
+  radioGroup: 'muiRadioGroup',
+  radio: 'muiRadio',
+  checkbox: 'muiCheckbox',
+  rating: 'muiRating',
+  formControl: 'muiFormControl',
+  formLabel: 'muiFormLabel',
+  choiceLabel: 'muiFormControlLabel',
+} as const
+
+const ANSWER_ELEMENT_IDS = new Set<string>([
+  FORM_INPUT_ELEMENT_IDS.input,
+  FORM_INPUT_ELEMENT_IDS.select,
+  FORM_INPUT_ELEMENT_IDS.radioGroup,
+  FORM_INPUT_ELEMENT_IDS.checkbox,
+  FORM_INPUT_ELEMENT_IDS.rating,
+])
+
+/** Whether a node carries an answer the form submits. */
+export function isFormInputNode(
+  node: AglynNodeSchema | undefined | null,
+  formFieldComponentId = FORM_FIELD_COMPONENT_ID,
+): boolean {
+  const componentId = String(node?.componentId ?? '')
+  return componentId === formFieldComponentId || ANSWER_ELEMENT_IDS.has(componentId)
+}
+
+/**
+ * The key an input submits under: a `formField`'s `fieldName`, or the `name`
+ * of one of MUI's form elements — the HTML attribute it renders.
+ */
+export function formInputName(node: AglynNodeSchema | undefined | null): string {
+  const props = (node?.props ?? {}) as Record<string, unknown>
+  return String(props['fieldName'] ?? props['name'] ?? '').trim()
+}
+
+/** The declared type of an input node, in `FormFieldType` terms. */
+export function formInputType(node: AglynNodeSchema | undefined | null): FormFieldType {
+  const props = (node?.props ?? {}) as Record<string, unknown>
+  switch (node?.componentId) {
+    case FORM_INPUT_ELEMENT_IDS.input:
+      if (props['multiline'] === true) return 'textarea'
+      return props['type'] === 'email' ? 'email' : 'text'
+    case FORM_INPUT_ELEMENT_IDS.select:
+      return 'select'
+    case FORM_INPUT_ELEMENT_IDS.radioGroup:
+      return 'radio'
+    case FORM_INPUT_ELEMENT_IDS.checkbox:
+      return 'checkbox'
+    case FORM_INPUT_ELEMENT_IDS.rating:
+      return 'rating'
+    default: {
+      const raw = String(props['fieldType'] ?? 'text') as FormFieldType
+      return FORM_FIELD_TYPES.has(raw) ? raw : 'text'
+    }
+  }
+}
+
+/** The plain text a text-bearing node shows (`children` as a string). */
+function nodeText(node: AglynNodeSchema | undefined | null): string {
+  const children = (node?.props as Record<string, unknown> | undefined)?.['children']
+  return typeof children === 'string' ? children.trim() : ''
+}
+
+/**
+ * The words that name one of MUI's input elements: the Choice Label around a
+ * checkbox, else the Form Label in the Form Control around it, else its
+ * accessible label or placeholder.
+ */
+function answerElementLabel(
+  nodes: Record<NodeId, AglynNodeSchema | undefined>,
+  id: NodeId,
+): string {
+  const node = nodes[id]
+  const props = (node?.props ?? {}) as Record<string, unknown>
+  let parentId = node?.parentId as NodeId | undefined
+  for (let depth = 0; parentId && depth < 8; depth += 1) {
+    const parent = nodes[parentId]
+    if (!parent) break
+    if (parent.componentId === FORM_INPUT_ELEMENT_IDS.choiceLabel) {
+      const words = String((parent.props as Record<string, unknown>)?.['label'] ?? '').trim()
+      if (words) return words
+    }
+    if (parent.componentId === FORM_INPUT_ELEMENT_IDS.formControl) {
+      for (const childId of childIdsOf(parent)) {
+        const child = nodes[childId]
+        if (child?.componentId === FORM_INPUT_ELEMENT_IDS.formLabel && nodeText(child)) {
+          return nodeText(child)
+        }
+      }
+      break
+    }
+    parentId = parent.parentId as NodeId | undefined
+  }
+  return String(props['ariaLabel'] ?? props['placeholder'] ?? '').trim()
+}
+
+/** The choices one of MUI's choice elements offers, in order. */
+function answerElementOptions(
+  nodes: Record<NodeId, AglynNodeSchema | undefined>,
+  id: NodeId,
+): string[] {
+  const node = nodes[id]
+  const props = (node?.props ?? {}) as Record<string, unknown>
+  if (node?.componentId === FORM_INPUT_ELEMENT_IDS.checkbox) {
+    return [String(props['value'] ?? '').trim() || 'on']
+  }
+  const wanted =
+    node?.componentId === FORM_INPUT_ELEMENT_IDS.select
+      ? FORM_INPUT_ELEMENT_IDS.selectOption
+      : node?.componentId === FORM_INPUT_ELEMENT_IDS.radioGroup
+        ? FORM_INPUT_ELEMENT_IDS.radio
+        : null
+  if (!wanted) return []
+  const options: string[] = []
+  const stack = [...childIdsOf(node)].reverse()
+  const seen = new Set<NodeId>([id])
+  while (stack.length) {
+    const childId = stack.pop() as NodeId
+    if (seen.has(childId)) continue
+    seen.add(childId)
+    const child = nodes[childId]
+    if (!child) continue
+    if (child.componentId === wanted) {
+      const value = String((child.props as Record<string, unknown>)?.['value'] ?? '').trim()
+      const option = value || nodeText(child)
+      if (option) options.push(option)
+    }
+    const children = childIdsOf(child)
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index] as NodeId)
+    }
+  }
+  return options
+}
+
 /** Child ids of a node in the stored map form, in the author's order. */
 function childIdsOf(node: AglynNodeSchema | undefined): NodeId[] {
   return Array.isArray(node?.nodes) ? (node.nodes as NodeId[]) : []
@@ -989,7 +1138,7 @@ export function collectFormFieldNodeIds(
     const id = stack.pop() as NodeId
     if (seen.has(id) || !nodes[id]) continue
     seen.add(id)
-    if (nodes[id]?.componentId === formFieldComponentId) found.push(id)
+    if (isFormInputNode(nodes[id], formFieldComponentId)) found.push(id)
     // Pushed reversed so the first child is popped first — the walk is
     // pre-order, and a nested field must not overtake its own siblings.
     const children = childIdsOf(nodes[id])
@@ -1024,24 +1173,40 @@ export function formFieldDeclsFromNodes(
   formFieldComponentId = FORM_FIELD_COMPONENT_ID,
 ): FormFieldDecl[] {
   const declarations: FormFieldDecl[] = []
-  const claimed = new Set<string>()
+  const byName = new Map<string, FormFieldDecl>()
   for (const id of collectFormFieldNodeIds(nodes, formNodeId, formFieldComponentId)) {
-    const props = (nodes?.[id]?.props ?? {}) as Record<string, unknown>
-    const fieldName = String(props['fieldName'] ?? '').trim()
-    if (!fieldName || claimed.has(fieldName)) continue
-    claimed.add(fieldName)
-    const rawType = String(props['fieldType'] ?? 'text') as FormFieldType
-    const options = parseDeclaredOptions(props['options'])
-    const label = String(props['label'] ?? '').trim()
+    const node = nodes?.[id]
+    const props = (node?.props ?? {}) as Record<string, unknown>
+    const fieldName = formInputName(node)
+    if (!fieldName) continue
+    const isFormField = node?.componentId === formFieldComponentId
+    const options = isFormField
+      ? parseDeclaredOptions(props['options'])
+      : answerElementOptions(nodes as Record<NodeId, AglynNodeSchema | undefined>, id)
+    const claimed = byName.get(fieldName)
+    if (claimed) {
+      // Several Checkboxes sharing a name are one question with several
+      // boxes: each adds its value as an option. Anything else keeps the
+      // first, as the submission does.
+      if (claimed.fieldType === 'checkbox' && formInputType(node) === 'checkbox') {
+        claimed.options = [...(claimed.options ?? []), ...options]
+      }
+      continue
+    }
+    const label = isFormField
+      ? String(props['label'] ?? '').trim()
+      : answerElementLabel(nodes as Record<NodeId, AglynNodeSchema | undefined>, id)
     const datasetFieldId = String(props['datasetFieldId'] ?? '').trim()
-    declarations.push({
+    const declaration: FormFieldDecl = {
       fieldName,
-      fieldType: FORM_FIELD_TYPES.has(rawType) ? rawType : 'text',
+      fieldType: formInputType(node),
       ...(label ? { label } : {}),
       ...(props['required'] === true ? { required: true } : {}),
       ...(options.length ? { options } : {}),
       ...(datasetFieldId ? { datasetFieldId } : {}),
-    })
+    }
+    byName.set(fieldName, declaration)
+    declarations.push(declaration)
   }
   return declarations
 }

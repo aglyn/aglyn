@@ -33,6 +33,7 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import Alert from '@mui/material/Alert'
+import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
 import FormControl from '@mui/material/FormControl'
@@ -46,6 +47,7 @@ import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
 import Rating from '@mui/material/Rating'
 import Stack from '@mui/material/Stack'
+import { useForkRef } from '@mui/material/utils'
 import TextField from '@mui/material/TextField'
 import {
   createContext,
@@ -152,6 +154,49 @@ export const FIELD_MAP_INPUT_PREFIX = '__map__'
  * recorded for the one site the visitor is on.
  */
 export const CONSENT_GROUP_INPUT = '__consentGroup'
+
+/**
+ * The class on a form's built-in submit button. It hides while the form holds
+ * a Button the author placed with Type: Submit (see the Form's `:has` rule).
+ */
+const BUILT_IN_SUBMIT_CLASS = 'aglyn-form-submit-built-in'
+
+/**
+ * The consent-group sentence (AGL-3320), as the all-in-one Form Field draws it
+ * under the opt-in, and as the Form draws it for a form built from MUI's own
+ * form elements, which know nothing of consent. The Form's copy hides while a
+ * Form Field's is on the page, so a form never shows it twice.
+ */
+const FIELD_CONSENT_NOTE_CLASS = 'aglyn-form-consent-note-field'
+const FORM_CONSENT_NOTE_CLASS = 'aglyn-form-consent-note'
+
+/**
+ * Whether the form's opt-in is one of MUI's form elements (an input named as
+ * the declared opt-in field) rather than an all-in-one Form Field, which
+ * draws its own sentence. Read off the rendered form after mount: the
+ * elements know nothing of consent, and until it is read the form shows no
+ * sentence and posts no key — the safe way to be early.
+ */
+function useOptInDrawnByElements(
+  formRef: { current: HTMLFormElement | null },
+  fieldName: string | null | undefined,
+): boolean {
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    const form = formRef.current
+    if (!form || !fieldName) {
+      setDrawn(false)
+      return
+    }
+    const hasInput = Array.from(form.elements).some(
+      (element) => (element as HTMLInputElement).name === fieldName,
+    )
+    setDrawn(
+      hasInput && !form.querySelector(`.${FIELD_CONSENT_NOTE_CLASS}`),
+    )
+  }, [formRef, fieldName])
+  return drawn
+}
 
 /** The site's consent-group sentence, as `/api/consent/disclosure` answers it. */
 export interface FormConsentDisclosure {
@@ -295,6 +340,8 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   } = props
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const handleRef = useForkRef(ref, formRef)
   // Resolves the redirect screen like ScreenLink does (rename-safe) and
   // flags editing surfaces, where outcomes must never fire (AGL-557).
   const { href: redirectScreenHref, suppressNavigation } = Aglyn.useScreenLink(
@@ -388,6 +435,10 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       current = false
     }
   }, [hostId, formId, siteFetch])
+  const optInDrawnByElements = useOptInDrawnByElements(
+    formRef,
+    disclosure?.fieldName,
+  )
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -591,12 +642,27 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
 
   return (
     <Stack
-      ref={ref}
+      ref={handleRef}
       component="form"
       spacing={2}
+      // Gap, not margins, between children: a form turned into a row with
+      // the Styles panel's Flex direction lines its input and button up
+      // instead of pushing every item after the first down a step.
+      useFlexGap
       onSubmit={handleSubmit}
       onInput={handleFirstInput}
       {...rest}
+      sx={[
+        {
+          // A Button placed in the form with Type: Submit is the form's
+          // button — styled like any element — so the built-in one steps
+          // aside. CSS rather than a registration, so the server's first
+          // paint is already right.
+          [`&:has(button[type="submit"]:not(.${BUILT_IN_SUBMIT_CLASS})) .${BUILT_IN_SUBMIT_CLASS}`]:
+            { display: 'none' },
+        },
+        ...(Array.isArray(rest['sx']) ? rest['sx'] : [rest['sx']]),
+      ]}
     >
       {/* Hides the reveal target until submit (AGL-557); rendered by the
           form so SSR ships it hidden — no flash, no target-side props.
@@ -607,6 +673,21 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       <FormConsentDisclosureContext.Provider value={disclosure}>
         {children}
       </FormConsentDisclosureContext.Provider>
+      {/*
+        The sentence for a form built from MUI's form elements: shown when the
+        form declares its opt-in field, beside the button that sends it.
+      */}
+      {disclosure && optInDrawnByElements ? (
+        <Box className={FORM_CONSENT_NOTE_CLASS}>
+          <FormHelperText>{disclosure.text}</FormHelperText>
+          <input
+            type="hidden"
+            name={CONSENT_GROUP_INPUT}
+            value={disclosure.key}
+            readOnly
+          />
+        </Box>
+      ) : null}
       {/* Honeypot: humans never see or fill this. */}
       <input
         type="text"
@@ -664,6 +745,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       <Button
         type="submit"
         variant="contained"
+        className={BUILT_IN_SUBMIT_CLASS}
         disabled={status === 'sending'}
         sx={{ alignSelf: 'flex-start' }}
       >
@@ -786,7 +868,9 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
   const consentNote =
     disclosure && describesOptIn ? (
       <>
-        <FormHelperText>{disclosure.text}</FormHelperText>
+        <FormHelperText className={FIELD_CONSENT_NOTE_CLASS}>
+          {disclosure.text}
+        </FormHelperText>
         <input
           type="hidden"
           name={CONSENT_GROUP_INPUT}
