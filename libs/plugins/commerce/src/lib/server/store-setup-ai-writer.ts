@@ -71,7 +71,7 @@ type Firestore = FirebaseFirestore.Firestore
 type Stored = Record<string, unknown>
 
 /** The refusal for a member without the publishing role (admin or editor). */
-export const STORE_SETUP_ROLE_REFUSAL = 'Changing store settings with Aglyn AI needs an admin or editor role'
+export const STORE_SETUP_ROLE_REFUSAL = 'Changing store settings through AI needs an admin or editor role'
 /** The refusal for a plan without commerce. */
 export const STORE_SETUP_PLAN_REFUSAL = 'Selling online is not included in your plan — see Billing'
 /** What a member is told while a lockdown refuses writes to the site. */
