@@ -41,6 +41,22 @@ export const EXPECTED_FROM_DOMAIN =
   operatorIdentity().supportEmail?.split('@').pop() || 'aglyn.com'
 
 /**
+ * Whether a sender domain is the expected one or a subdomain of it.
+ *
+ * Platform mail sends from its own stream, `notify.aglyn.com` (AGL-3664), so
+ * reputation is not shared with person or marketing mail. A subdomain is
+ * verified with the mail provider in its own right and aligns under the
+ * apex's DMARC policy, so it is the operator's domain, not a stranger's. An
+ * exact match read that split as a blocker and kept this check red while
+ * mail was delivering.
+ */
+export function sendsFromDomain(fromDomain: string, expected: string): boolean {
+  const from = fromDomain.trim().toLowerCase()
+  const apex = expected.trim().toLowerCase()
+  return from === apex || from.endsWith(`.${apex}`)
+}
+
+/**
  * Can this deployment send mail (AGL-709), as one report: what
  * `/api/admin/email-health` answers staff, and what the operator alerts tick
  * checks on its own schedule (AGL-3377).
@@ -78,7 +94,7 @@ export async function evaluateEmailHealth(options: { probe: boolean }) {
         `<noreply@${EXPECTED_FROM_DOMAIN}>".`,
     )
   }
-  if (config.fromDomain && config.fromDomain !== EXPECTED_FROM_DOMAIN) {
+  if (config.fromDomain && !sendsFromDomain(config.fromDomain, EXPECTED_FROM_DOMAIN)) {
     blockers.push(
       `USAGE_EMAIL_FROM sends from ${config.fromDomain}, but the verified ` +
         `sending domain is ${EXPECTED_FROM_DOMAIN}.`,

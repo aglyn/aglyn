@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.248 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.247...v1.0.0-beta.248)
+
+### Fixed
+
+- **billing:** a voided invoice no longer also raises "delivery changed nothing"
+- **billing:** a voided never-paid sign-up invoice is a named skip, not an inert delivery
+- **email:** a sending subdomain of the operator domain is not a health blocker
+
 ## v1.0.0-beta.247 — 2026-10-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.246...v1.0.0-beta.247)
