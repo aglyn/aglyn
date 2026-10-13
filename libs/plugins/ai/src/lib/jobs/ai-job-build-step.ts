@@ -882,6 +882,7 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   edit: 'edit',
   navigation: 'navigation',
   duplicate: 'duplicate',
+  settings: 'settings',
 }
 
 /**

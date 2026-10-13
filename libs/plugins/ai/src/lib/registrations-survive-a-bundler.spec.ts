@@ -283,7 +283,7 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
 
   it('registers what a build can make on the core’s capability contract, by calling, from a bundle (AGL-3616)', () => {
     const bundled = isolated(() => registered(load(serverBundle)))
-    expect(bundled.capabilities).toEqual(['campaign', 'component', 'duplicate', 'edit', 'email', 'form', 'function', 'layout', 'navigation', 'page', 'template', 'workflow'])
+    expect(bundled.capabilities).toEqual(['campaign', 'component', 'duplicate', 'edit', 'email', 'form', 'function', 'layout', 'navigation', 'page', 'settings', 'template', 'workflow'])
     expect(bundled.steps['build']).toEqual([
       { step: 'plan', runner: true, minimumMs: expect.any(Number) },
       { step: 'generate', runner: true, minimumMs: expect.any(Number) },
@@ -337,11 +337,12 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
       list.filter(({ runner }) => runner).map(({ step, minimumMs }) => ({ kind, step, minimumMs })),
     )
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
-    // A menu change asks no model (AGL-3728), nor a copy (AGL-3740), so both fit an inline door too.
+    // A menu change asks no model (AGL-3728), nor a copy (AGL-3740), nor a settings change (AGL-3748), so all fit an inline door too.
     expect(steps.filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS).map(({ kind, step }) => `${kind}/${step}`).sort()).toEqual([
       'crm/generate',
       'duplicate/generate',
       'navigation/generate',
+      'settings/generate',
       'text/draft',
     ])
     expect(bundled.creationPass).toBe(bundled.layout)

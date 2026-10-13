@@ -51,6 +51,11 @@ One message can ask for any mix of:
 - **redirects**: send an old address to a page you have, change where a redirect goes, or
   stop one, such as *redirect /old-menu to /menu*. See
   [Redirects](../building-sites/redirects/overview.md#ask-aglyn-ai);
+- **a change to the site's settings**: its name, search title and description, title
+  pattern, favicon, logo or social image (from images already in your media library), its
+  language, time zone, business name, description, phone, contact email or address, or the
+  cookie banner's mode. For example, *rename my site to Juniper Clay Studio* or *make the
+  site Spanish*.
 - **store setup**: shipping zones and rates, local pickup, local delivery and sales tax,
   such as *free shipping over $50, otherwise $5 flat in the US*. See
   [Shipping](../commerce-and-bookings/commerce/shipping.md#ask-aglyn-ai),
@@ -113,12 +118,19 @@ page that places them.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
   campaigns are unsent and aimed at nobody. The exceptions are a **redirect**, **CRM
-  setup** and **store setup**: a redirect rule, a CRM pipeline or custom field, and the
-  shipping, pickup, delivery and tax settings have no draft, so they work as soon as the build saves them, as they do when you save them
+  setup**, **store setup** and **site settings**: a redirect rule, a CRM pipeline or custom
+  field, the shipping, pickup, delivery and tax settings, and the site's settings have no
+  draft, so they work as soon as the build saves them, as they do when you save them
   yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
   prices and rates you state.
 - **Names are your own.** A new variable or function never takes a name the site already
   uses.
+- **Settings are saved live.** A change to the site's settings has no draft: like a save in
+  Settings, it reaches your live site as soon as that part is built. Making the site
+  Spanish sets its language; it does not translate the pages. A value that cannot be used,
+  such as an email address that is not one, is named on the card and the rest are saved.
+  Assist never changes your site's address, domain, members, billing, plugins or tracking
+  ids, and never hides the site from search engines.
 
 When it is done the card says how many parts were built, such as *5 of 6 built; 1 failed*.
 **Try again what failed** builds only the parts that failed, and shows what that is likely

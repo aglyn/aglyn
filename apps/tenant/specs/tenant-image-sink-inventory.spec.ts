@@ -327,6 +327,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the `seo` generation job step (AGL-2910), loaded only through its lazy registration in jobs/ai-jobs.ts, which runs it for a job on the console's AI job doors and from the job beat (jobs/ai-jobs-beat.ts). Both markers are the `image` key of the input it hands `generateSeoFields` in runtime/seo-fields.ts: for a page's listing, the share image's current description and the page text beside the same picture; for a product's listing, `null`. Neither is a URL, and the step writes nothing: what it returns is a proposal, applied only when a member saves it in the console.",
   },
+  'libs/plugins/ai/src/lib/jobs/ai-job-settings-step.ts': {
+    markers: 1,
+    guard: 'projection',
+    why: "Not a sink, and never on a tenant render: the build's `settings` step (AGL-3748), run for a job on the console's AI job doors and from the job beat. The marker is the `'seo.image'` field path it writes onto the host document. The value is `mediaNodeSrc` of a public, non-deleted image in this site's own media library or its org's library where `visibleToHost` admits the site, the same writer the Social image card's picker uses, so it is a `media:` reference or that asset's own stored URL, never a string from the model. The tenant renders it through resolveSocialImage → absoluteMediaSrc like any other stored seo.image.",
+  },
   'libs/plugins/ai/src/lib/jobs/ai-job-component-step.ts': {
     markers: 1,
     guard: 'off-tenant',
