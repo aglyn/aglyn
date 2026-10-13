@@ -43,6 +43,9 @@ One message can ask for any mix of:
 - **an announcement bar** or **a popup**;
 - **an A/B test** of a page or of an email's subject line;
 - **a funnel** that counts visits from one step to the next;
+- **CRM setup**: a [deal pipeline](./crm-by-ai.md#set-up-the-crm) with its stages, and
+  [custom fields](./crm-by-ai.md#set-up-the-crm) on contacts, companies, deals or leads.
+  These are saved straight to your CRM, as they are when you set them up yourself;
 - **a change to a page or layout** the site already has, saved as a new version visitors do
   not see until you publish it;
 - **redirects**: send an old address to a page you have, change where a redirect goes, or
@@ -109,9 +112,9 @@ page that places them.
 - **Everything is a draft.** Pages are unpublished drafts unless you ticked the publish box.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
-  campaigns are unsent and aimed at nobody. The exceptions are a **redirect** and **store
-  setup**: a redirect rule and the shipping, pickup, delivery and tax settings have no
-  draft, so they work as soon as the build saves them, as they do when you save them
+  campaigns are unsent and aimed at nobody. The exceptions are a **redirect**, **CRM
+  setup** and **store setup**: a redirect rule, a CRM pipeline or custom field, and the
+  shipping, pickup, delivery and tax settings have no draft, so they work as soon as the build saves them, as they do when you save them
   yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
   prices and rates you state.
 - **Names are your own.** A new variable or function never takes a name the site already
@@ -162,8 +165,8 @@ your products, set shipping and tax, and fill in your policies.
 ## What it costs {#what-it-costs}
 
 A build spends [AI credits](./ai-credits.md) for each part it makes, and the card shows the
-estimate before you confirm. Products, booking services, overlays, A/B tests, funnels and
-variables cost almost nothing, and redirects and store setup cost nothing. If the build fails because of something on our side, the
+estimate before you confirm. Products, booking services, overlays, A/B tests, funnels,
+variables and CRM setup cost almost nothing, and redirects and store setup cost nothing. If the build fails because of something on our side, the
 credits are given back, and the card says so. See
 [Credits given back](./ai-credits.md#credits-given-back).
 
