@@ -33,8 +33,9 @@ name: Env isolation
 # clipboard. So the checker classifies `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`,
 # which is public by construction (Next inlines it into every browser bundle)
 # and must match the secret key's mode, down to one of `live` / `test` /
-# `unknown` at the API boundary. `unknown` — a key stored `sensitive`, so
-# unreadable — is a finding, never a pass.
+# `unknown` at the API boundary. `unknown` — a key stored `encrypted` or
+# `sensitive`, so unreadable (only `plain` comes back) — is a finding, never a
+# pass.
 #
 # ## The shared scope is the whole point
 #
@@ -48,7 +49,7 @@ name: Env isolation
 #
 # As of 2026-08-24 it reports 25 sharing findings and 3 mode findings —
 # aglyn-console's development and preview read `pk_live_`, and aglyn-tenant's
-# development and preview copies are stored `sensitive`, so UNKNOWN. Turning it
+# development and preview copies are stored `encrypted`/`sensitive`, so UNKNOWN. Turning it
 # green is remediation work
 # in the Vercel dashboard (AGL-2403 / AGL-2401 / AGL-2402) — the runbook is
 # `docs/SECRET_ROTATION.md`. Do NOT add `continue-on-error`, and do NOT move a
