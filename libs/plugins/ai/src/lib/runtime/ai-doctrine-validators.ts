@@ -16,6 +16,7 @@
  */
 
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
+import { isFormInputNode } from '@aglyn/aglyn/app-utils/forms'
 import {
   formatBytes,
   measureNodeMap,
@@ -750,7 +751,9 @@ export function detectLayoutRegions(
 /**
  * Rule 3. A form on a page is a Form bound by id to a form built on the
  * Forms page — fields, validation, consent and routing kept in one place.
- * Loose fields, an unbound Form, and fields drawn inside a bound Form (which
+ * Loose fields — a Form Field, or any of MUI's answer elements (an Input,
+ * Select, Radio Group, Checkbox or Rating) — an unbound Form, and fields
+ * drawn inside a bound Form (which
  * the page never renders: the placed form's own design replaces them) are
  * refused. A form's own design is the one place fields are drawn.
  *
@@ -771,7 +774,7 @@ export function detectInlineForms(
   const shadowed: string[] = []
   for (const visit of walkTree(tree)) {
     if (
-      visit.node.componentId === 'formField' &&
+      isFormInputNode(visit.node as never) &&
       !hasAncestor(tree, visit, (node) => node.componentId === 'form')
     ) {
       loose.push(visit.id)
@@ -3516,7 +3519,10 @@ export function validateAiDoctrineTree(
   const storedOf = (id: string): unknown => written[validated.sourceIds[id] ?? id]
   const violations = [
     ...publish,
-    ...detectRepeatedSubtrees(tree, otherPages, context),
+    // A form's fields share a shape because a field IS one shape — a Form
+    // Control over a Form Label and an answer — and a form places no
+    // instances, so rule 1 has nothing to ask of one.
+    ...(outputKind === 'form' ? [] : detectRepeatedSubtrees(tree, otherPages, context)),
     ...detectLayoutRegions(tree, outputKind),
     ...detectInlineForms(tree, outputKind),
     ...detectLiteralStyles(tree, outputKind),

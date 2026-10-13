@@ -30,17 +30,47 @@ import {
 /**
  * A form bound to a dataset (AGL-3616): the props the Form element's own
  * binding writes, which the data plugin's record target reads at each
- * submission — the form node's `datasetId` and each field's `datasetFieldId`.
+ * submission — the form node's `datasetId` and each answer element's
+ * `datasetFieldId`.
  */
 
-const RSVP: NodesMap = {
-  form: { $id: 'form', componentId: 'form', nodes: ['name', 'guests', 'diet', 'rating', 'consent'], props: { datasetName: 'Old', formId: 'frm1' } },
-  name: { $id: 'name', componentId: 'formField', parentId: 'form', nodes: [], props: { fieldName: 'attendee', label: 'Your name' } },
-  guests: { $id: 'guests', componentId: 'formField', parentId: 'form', nodes: [], props: { fieldName: 'guests', label: 'Guests', fieldType: 'select', options: '1\n2\n3' } },
-  diet: { $id: 'diet', componentId: 'formField', parentId: 'form', nodes: [], props: { fieldName: 'dietaryNeeds', label: 'Dietary needs', fieldType: 'checkbox', options: 'Vegetarian\nVegan' } },
-  rating: { $id: 'rating', componentId: 'formField', parentId: 'form', nodes: [], props: { fieldName: 'excitement', label: 'Excitement', fieldType: 'rating', datasetFieldId: 'drawn' } },
-  consent: { $id: 'consent', componentId: 'formField', parentId: 'form', nodes: [], props: { fieldName: 'marketingConsent', label: 'Keep me posted', fieldType: 'checkbox' } },
-} as unknown as NodesMap
+/** One node of a design, under its parent. */
+const node = (
+  $id: string,
+  componentId: string,
+  parentId: string,
+  props: Record<string, unknown>,
+  nodes: string[] = [],
+) => ({ $id, componentId, parentId, props, nodes })
+
+/**
+ * An RSVP built from MUI's separate form elements, as the form job draws one:
+ * each field a Form Control over a Form Label and its answer element.
+ */
+const RSVP: NodesMap = Object.fromEntries(
+  [
+    { $id: 'form', componentId: 'form', nodes: ['nameField', 'guestsField', 'dietField', 'ratingField', 'consent'], props: { datasetName: 'Old', formId: 'frm1' } },
+    node('nameField', 'muiFormControl', 'form', {}, ['nameLabel', 'name']),
+    node('nameLabel', 'muiFormLabel', 'nameField', { children: 'Your name' }),
+    node('name', 'muiInput', 'nameField', { name: 'attendee' }),
+    node('guestsField', 'muiFormControl', 'form', {}, ['guestsLabel', 'guests']),
+    node('guestsLabel', 'muiFormLabel', 'guestsField', { children: 'Guests' }),
+    node('guests', 'muiSelect', 'guestsField', { name: 'guests' }, ['guests1', 'guests2']),
+    node('guests1', 'muiSelectOption', 'guests', { children: '1' }),
+    node('guests2', 'muiSelectOption', 'guests', { children: '2' }),
+    node('dietField', 'muiFormControl', 'form', {}, ['dietLabel', 'vegetarian', 'vegan']),
+    node('dietLabel', 'muiFormLabel', 'dietField', { children: 'Dietary needs' }),
+    node('vegetarian', 'muiFormControlLabel', 'dietField', { label: 'Vegetarian' }, ['vegetarianBox']),
+    node('vegetarianBox', 'muiCheckbox', 'vegetarian', { name: 'dietaryNeeds', value: 'Vegetarian' }),
+    node('vegan', 'muiFormControlLabel', 'dietField', { label: 'Vegan' }, ['veganBox']),
+    node('veganBox', 'muiCheckbox', 'vegan', { name: 'dietaryNeeds', value: 'Vegan' }),
+    node('ratingField', 'muiFormControl', 'form', {}, ['ratingLabel', 'rating']),
+    node('ratingLabel', 'muiFormLabel', 'ratingField', { children: 'Excitement' }),
+    node('rating', 'muiRating', 'ratingField', { name: 'excitement', datasetFieldId: 'drawn' }),
+    node('consent', 'muiFormControlLabel', 'form', { label: 'Keep me posted' }, ['consentBox']),
+    node('consentBox', 'muiCheckbox', 'consent', { name: 'marketingConsent', value: 'Yes' }),
+  ].map((one) => [one.$id, one]),
+) as unknown as NodesMap
 
 const ATTENDEES: AiFormDataset = {
   id: 'dsAttendees',
@@ -83,22 +113,40 @@ describe('binding a form to a dataset', () => {
     )
     expect(map).toEqual({ attendee: 'your_name', excitement: 'excitement' })
     expect(formFieldDeclsFromNodes(nodes as never, 'form').find((field) => field.fieldName === 'excitement')?.datasetFieldId).toBe('excitement')
+    // The binding is written on the answer element itself, never its frame or label.
+    expect((nodes['name']?.props as Record<string, unknown>)['datasetFieldId']).toBe('your_name')
+    expect((nodes['nameField']?.props as Record<string, unknown>)['datasetFieldId']).toBeUndefined()
     // The consent field is never a record's.
-    expect((nodes['consent']?.props as Record<string, unknown>)['datasetFieldId']).toBeUndefined()
+    expect((nodes['consentBox']?.props as Record<string, unknown>)['datasetFieldId']).toBeUndefined()
+  })
+
+  it('binds Checkboxes sharing a name together, as the one answer they are', () => {
+    const nodes = copy(RSVP)
+    const binding = aiBindFormToDataset(nodes, 'form', {
+      ...ATTENDEES,
+      fields: [{ id: 'dietary_needs', name: 'Dietary needs', type: 'text' }],
+    })
+    expect(binding).toEqual({ bound: ['dietaryNeeds'], unbound: ['Your name', 'Guests', 'Excitement'] })
+    expect((nodes['vegetarianBox']?.props as Record<string, unknown>)['datasetFieldId']).toBe('dietary_needs')
+    expect((nodes['veganBox']?.props as Record<string, unknown>)['datasetFieldId']).toBe('dietary_needs')
+    // A binding the model drew is dropped, not kept where nothing matched.
+    expect((nodes['rating']?.props as Record<string, unknown>)['datasetFieldId']).toBeUndefined()
   })
 
   it('takes each dataset field once', () => {
     const nodes = copy(RSVP)
+    /** The guests question as a text Input under the label "Your name", submitted as `name`. */
+    const textGuests = (design: NodesMap, name: string) => {
+      design['guests'] = { ...design['guests'], componentId: 'muiInput', nodes: [], props: { name } } as never
+      ;(design['guestsLabel']?.props as Record<string, unknown>)['children'] = 'Your name'
+    }
     // A second field labelled "Your name" finds that field taken, and its name before its label.
-    ;(nodes['guests']?.props as Record<string, unknown>)['fieldName'] = 'guestName'
-    ;(nodes['guests']?.props as Record<string, unknown>)['label'] = 'Your name'
-    ;(nodes['guests']?.props as Record<string, unknown>)['fieldType'] = 'text'
-    ;(nodes['name']?.props as Record<string, unknown>)['fieldName'] = 'fullName'
+    textGuests(nodes, 'guestName')
+    ;(nodes['name']?.props as Record<string, unknown>)['name'] = 'fullName'
     const binding = aiBindFormToDataset(nodes, 'form', ATTENDEES)
     expect(binding.bound).toEqual(['fullName', 'guestName', 'excitement'])
     const again = copy(RSVP)
-    ;(again['guests']?.props as Record<string, unknown>)['label'] = 'Your name'
-    ;(again['guests']?.props as Record<string, unknown>)['fieldType'] = 'text'
+    textGuests(again, 'guests')
     expect(aiBindFormToDataset(again, 'form', ATTENDEES).unbound).toContain('Your name')
   })
 

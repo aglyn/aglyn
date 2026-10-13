@@ -43,10 +43,18 @@
           "rootId": "order-form",
           "nodes": {
             "order-form": { "componentId": "form", "props": { "formName": "Custom cake order", "afterSubmit": "message" }, "nodes": ["f-name", "f-email", "f-date", "f-details"] },
-            "f-name": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text" } },
-            "f-email": { "componentId": "formField", "props": { "fieldName": "email", "label": "Email", "fieldType": "email" } },
-            "f-date": { "componentId": "formField", "props": { "fieldName": "pickupDate", "label": "Pickup date", "placeholder": "Friday, June 6", "fieldType": "text" } },
-            "f-details": { "componentId": "formField", "props": { "fieldName": "details", "label": "What should the cake be?", "placeholder": "Flavor, size, and any writing on top", "fieldType": "textarea" } }
+            "f-name": { "componentId": "muiFormControl", "props": { "fullWidth": true }, "nodes": ["f-name-label", "f-name-input"] },
+            "f-name-label": { "componentId": "muiFormLabel", "props": { "children": "Your name" } },
+            "f-name-input": { "componentId": "muiInput", "props": { "name": "name", "fullWidth": true } },
+            "f-email": { "componentId": "muiFormControl", "props": { "fullWidth": true }, "nodes": ["f-email-label", "f-email-input"] },
+            "f-email-label": { "componentId": "muiFormLabel", "props": { "children": "Email" } },
+            "f-email-input": { "componentId": "muiInput", "props": { "name": "email", "type": "email", "fullWidth": true } },
+            "f-date": { "componentId": "muiFormControl", "props": { "fullWidth": true }, "nodes": ["f-date-label", "f-date-input"] },
+            "f-date-label": { "componentId": "muiFormLabel", "props": { "children": "Pickup date" } },
+            "f-date-input": { "componentId": "muiInput", "props": { "name": "pickupDate", "placeholder": "Friday, June 6", "fullWidth": true } },
+            "f-details": { "componentId": "muiFormControl", "props": { "fullWidth": true }, "nodes": ["f-details-label", "f-details-input"] },
+            "f-details-label": { "componentId": "muiFormLabel", "props": { "children": "What should the cake be?" } },
+            "f-details-input": { "componentId": "muiInput", "props": { "name": "details", "multiline": true, "placeholder": "Flavor, size, and any writing on top", "fullWidth": true } }
           }
         }
       },
@@ -62,8 +70,12 @@
           "rootId": "order-form",
           "nodes": {
             "order-form": { "componentId": "form", "props": { "formName": "Custom cake order" }, "nodes": ["f-name", "f-details"] },
-            "f-name": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text" } },
-            "f-details": { "componentId": "formField", "props": { "fieldName": "details", "label": "Your text here", "fieldType": "textarea" } }
+            "f-name": { "componentId": "muiFormControl", "props": { "fullWidth": true }, "nodes": ["f-name-label", "f-name-input"] },
+            "f-name-label": { "componentId": "muiFormLabel", "props": { "children": "Your name" } },
+            "f-name-input": { "componentId": "muiInput", "props": { "name": "name", "fullWidth": true } },
+            "f-details": { "componentId": "muiFormControl", "props": { "fullWidth": true }, "nodes": ["f-details-label", "f-details-input"] },
+            "f-details-label": { "componentId": "muiFormLabel", "props": { "children": "Your text here" } },
+            "f-details-input": { "componentId": "muiInput", "props": { "name": "details", "multiline": true, "fullWidth": true } }
           }
         }
       },

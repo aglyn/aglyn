@@ -778,7 +778,10 @@ async function main(): Promise<void> {
     .map(registered)
     .filter((id) => !NEVER_IDS.has(id))
     .sort()
-  const formAllow = ['form', 'formField'].map(registered)
+  // A generated form is built from MUI's separate form elements — each piece
+  // of a field its own element — and an optional Submit button; never the
+  // all-in-one Form Field.
+  const formAllow = ['form', ...FORM_ELEMENT_IDS, 'muiButton'].map(registered).sort()
   const surfaces = {
     screen: { root: 'div', allow: pageAllow, codeOnly: CODE_ONLY_IDS.screen.map(registered) },
     email: { root: 'div', allow: emailAllow },

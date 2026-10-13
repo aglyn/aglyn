@@ -1035,9 +1035,10 @@ function nodeText(node: AglynNodeSchema | undefined | null): string {
 }
 
 /**
- * The words that name one of MUI's input elements: the Choice Label around a
- * checkbox, else the Form Label in the Form Control around it, else its
- * accessible label or placeholder.
+ * The words that name one of MUI's input elements: the Form Label in the
+ * Form Control around it, else the Choice Label around a checkbox, else its
+ * accessible label or placeholder. A question of several Checkboxes in one
+ * Form Control is named by its Form Label, not by its first box.
  */
 function answerElementLabel(
   nodes: Record<NodeId, AglynNodeSchema | undefined>,
@@ -1046,12 +1047,14 @@ function answerElementLabel(
   const node = nodes[id]
   const props = (node?.props ?? {}) as Record<string, unknown>
   let parentId = node?.parentId as NodeId | undefined
+  // A Choice Label names its one box; a Form Label above it names the
+  // question, which is what several boxes sharing a name are.
+  let choiceWords = ''
   for (let depth = 0; parentId && depth < 8; depth += 1) {
     const parent = nodes[parentId]
     if (!parent) break
-    if (parent.componentId === FORM_INPUT_ELEMENT_IDS.choiceLabel) {
-      const words = String((parent.props as Record<string, unknown>)?.['label'] ?? '').trim()
-      if (words) return words
+    if (parent.componentId === FORM_INPUT_ELEMENT_IDS.choiceLabel && !choiceWords) {
+      choiceWords = String((parent.props as Record<string, unknown>)?.['label'] ?? '').trim()
     }
     if (parent.componentId === FORM_INPUT_ELEMENT_IDS.formControl) {
       for (const childId of childIdsOf(parent)) {
@@ -1064,7 +1067,7 @@ function answerElementLabel(
     }
     parentId = parent.parentId as NodeId | undefined
   }
-  return String(props['ariaLabel'] ?? props['placeholder'] ?? '').trim()
+  return choiceWords || String(props['ariaLabel'] ?? props['placeholder'] ?? '').trim()
 }
 
 /** The choices one of MUI's choice elements offers, in order. */

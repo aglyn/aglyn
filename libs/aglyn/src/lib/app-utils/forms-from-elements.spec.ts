@@ -128,6 +128,26 @@ describe('a form built from MUI’s form elements', () => {
     expect(violations.map((violation) => violation.nodeId)).toContain('nameless')
   })
 
+  it('names a question of several Checkboxes in a Form Control by its Form Label, not its first box', () => {
+    const question: Nodes = {
+      form: n('form', 'form', null, {}, ['fc']),
+      fc: n('fc', 'muiFormControl', 'form', {}, ['lb', 'clA', 'clB']),
+      lb: n('lb', 'muiFormLabel', 'fc', { children: 'What could we do better?' }),
+      clA: n('clA', 'muiFormControlLabel', 'fc', { label: 'Wait times' }, ['cbA']),
+      cbA: n('cbA', 'muiCheckbox', 'clA', { name: 'improvements', value: 'Wait times' }),
+      clB: n('clB', 'muiFormControlLabel', 'fc', { label: 'Booking' }, ['cbB']),
+      cbB: n('cbB', 'muiCheckbox', 'clB', { name: 'improvements', value: 'Booking' }),
+    }
+    expect(formFieldDeclsFromNodes(question, 'form')).toEqual([
+      {
+        fieldName: 'improvements',
+        fieldType: 'checkbox',
+        label: 'What could we do better?',
+        options: ['Wait times', 'Booking'],
+      },
+    ])
+  })
+
   it('reads a multi-line Input as a message box', () => {
     const message: Nodes = {
       form: n('form', 'form', null, {}, ['msg']),

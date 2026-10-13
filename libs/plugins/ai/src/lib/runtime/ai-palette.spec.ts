@@ -110,10 +110,24 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
     )
   })
 
-  it('offers the form palette as the form components', () => {
+  it('offers the form palette as the Form, MUI’s separate form elements and a Button — never the all-in-one Form Field', () => {
     expect(AI_SURFACES.form).toEqual({
       root: 'form',
-      allow: ['form', 'formField'],
+      allow: [
+        'form',
+        'muiButton',
+        'muiCheckbox',
+        'muiFormControl',
+        'muiFormControlLabel',
+        'muiFormHelperText',
+        'muiFormLabel',
+        'muiInput',
+        'muiRadio',
+        'muiRadioGroup',
+        'muiRating',
+        'muiSelect',
+        'muiSelectOption',
+      ],
     })
   })
 

@@ -188,7 +188,7 @@ describe('the doctrine block', () => {
 
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '3b4497f02c7fb75e84c0b617d3b59253512b19675ac5f5838bcff7a41ea32817',
+      'abc89b1c89654cfb5ac445903cff10ebd09dd824a295bacc8030100e3e21ae44',
     )
   })
 
