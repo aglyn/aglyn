@@ -85,6 +85,8 @@ export type AiJobKind =
   | 'duplicate'
   /** A change to a site's settings, made by code and saved live (AGL-3748). */
   | 'settings'
+  /** Folders, tags, alt text and names in a site's media library, made by code and saved live (AGL-3752). */
+  | 'media'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -111,6 +113,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'navigation',
   'duplicate',
   'settings',
+  'media',
 ]
 
 /**
@@ -260,6 +263,8 @@ export type AiJobOutputResource =
   | 'entry'
   /** A site's settings a build changed (AGL-3748): saved live, on the host document. */
   | 'settings'
+  /** Files in a site's media library a build organized (AGL-3752): saved live, on their documents. */
+  | 'media'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can

@@ -67,6 +67,10 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
+  if (output.resource === 'media') {
+    // Files a build organized (AGL-3752) open in the site's media library.
+    return buildRoute(Route.HOST_MEDIA, { orgSlug, host })
+  }
   if (output.resource === 'settings') {
     // Settings a build saved (AGL-3748) open where most of them are edited.
     return buildRoute(Route.HOST_SETUP_SEO, { orgSlug, host })

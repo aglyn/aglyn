@@ -218,52 +218,64 @@ export type AiOutputTargetType =
   | 'theme'
 
 /**
+ * The resource kinds the feed files as the site's content. Named as a type,
+ * so the list costs no bytes in this eagerly loaded module and the map below
+ * stays total over everything else.
+ *
+ * - `text` is copy; `form`, `emailScreen`, `campaign`, `product`,
+ *   `experiment` are content until a target of their own exists.
+ * - An SEO proposal (AGL-2910) is about the site's content.
+ * - An insight answer (AGL-2915) is about the site's figures; the feed row
+ *   names it and never what it says.
+ * - A CRM proposal (AGL-2917), a logic proposal and an org automation's
+ *   (AGL-3603) write nothing: the editor's Save is the write.
+ * - Another plugin's draft a build asked its writer for (AGL-3616).
+ * - A blog post a guided start wrote (AGL-3676).
+ * - A site's settings a build saved (AGL-3748) describe the site.
+ * - A change a build made to the site's media library (AGL-3752).
+ */
+type AiContentOutputResource =
+  | 'form'
+  | 'emailScreen'
+  | 'campaign'
+  | 'product'
+  | 'experiment'
+  | 'seo'
+  | 'text'
+  | 'insight'
+  | 'crm'
+  | 'draft'
+  | 'logic'
+  | 'orgAutomation'
+  | 'entry'
+  | 'settings'
+  | 'media'
+
+/**
  * Where the feed files each resource kind a job can write (AGL-2904).
  *
  * A job names its output by the resource it wrote, and the activity logs
- * know a narrower set of targets. The map is total, so a resource kind
- * added to the job document must say where the feed shows it before the
- * machine can log it. `reusableComponent` is the feed's `component`; a
- * `text` output is copy, which the feed files as `content`; a `theme`
- * proposal is filed under the site's theme, which the host feed links to the
- * Theme section (AGL-2938); the kinds whose runners have not shipped are
- * content of the site too, and are filed there until a target of their own
- * exists.
+ * know a narrower set of targets. The map and `AiContentOutputResource`
+ * together are total, so a resource kind added to the job document must say
+ * where the feed shows it before the machine can log it.
+ * `reusableComponent` is the feed's `component`; a `theme` proposal is filed
+ * under the site's theme, which the host feed links to the Theme section
+ * (AGL-2938).
  */
-const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = {
+const AI_OUTPUT_TARGET_TYPES: Record<
+  Exclude<AiJobOutputResource, AiContentOutputResource>,
+  AiOutputTargetType
+> = {
   screen: 'screen',
   reusableComponent: 'component',
   layout: 'layout',
   template: 'template',
-  form: 'content',
-  emailScreen: 'content',
-  campaign: 'content',
-  product: 'content',
-  experiment: 'content',
   workflow: 'workflow',
-  // An SEO proposal (AGL-2910) is about the site's content, and is filed there.
-  seo: 'content',
-  text: 'content',
   theme: 'theme',
-  // An insight answer (AGL-2915) is about the site's figures; the feed row
-  // names it and never what it says.
-  insight: 'content',
-  // A CRM proposal (AGL-2917) writes nothing; the feed files it with content.
-  crm: 'content',
-  // Another plugin's draft a build asked its writer for (AGL-3616).
-  draft: 'content',
-  // A logic proposal (AGL-3603) writes nothing either.
-  logic: 'content',
-  // So does an org automation's (AGL-3603): the editor's Save is the write.
-  orgAutomation: 'content',
-  // A blog post a guided start wrote (AGL-3676) is the site's content.
-  entry: 'content',
-  // A site's settings a build saved (AGL-3748) describe the site, filed with its content.
-  settings: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {
-  return AI_OUTPUT_TARGET_TYPES[resource]
+  return (AI_OUTPUT_TARGET_TYPES as Partial<Record<AiJobOutputResource, AiOutputTargetType>>)[resource] ?? 'content'
 }
 
 /** Whether a stored action is one of the AI codes above. */
