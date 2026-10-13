@@ -47,6 +47,24 @@ narrows the address it collects to that destination, so a shopper cannot pick
 another zone's cheaper rate. The [destination coverage](./overview.md#destination-coverage)
 rules explain what your zones make checkout ask and refuse.
 
+## Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask [Aglyn Assist](../../ai/assist-builds.md) to set up shipping in plain words,
+such as *free shipping over $50, otherwise $5 flat in the US*, *add $15 express to
+Canada* or *stop shipping to the UK*. The plan card lists each change, and **Confirm
+plan** saves it.
+
+- Aglyn AI saves exactly what this card saves: a zone with its countries, and a flat,
+  free-over-subtotal, subtotal-tier or weight-tier rate in it. A zone or rate you already
+  have is changed in place, found by its name.
+- It uses only the prices you give. A rate you do not price is not added; Aglyn AI asks
+  instead.
+- If the change leaves some destinations with no rate, the build says so, as the
+  **Coverage** line does.
+- Carrier rates need a carrier account, so you set those up yourself.
+- Changes work as soon as they are saved, like a save on this card. They cost no AI
+  credits.
+
 ## Where parcels ship from
 
 Each **inventory location** (the **Inventory locations** card in the store's

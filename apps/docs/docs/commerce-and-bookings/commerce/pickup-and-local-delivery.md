@@ -114,6 +114,22 @@ and accounting, exactly like shipped ones.
 The buyer's [order status page](./order-notifications.md) shows where to pick
 up, the pickup hours, or the delivery time, and each step as it happens.
 
+## Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask [Aglyn Assist](../../ai/assist-builds.md) to set up pickup or delivery, such as
+*offer local pickup at our Austin shop, weekdays 9 to 5* or *deliver to 78701 and 78702
+for $5, free over $75, weekday mornings*. The plan card lists each change, and **Confirm
+plan** saves it.
+
+- Pickup is turned on for one of your [inventory locations](./overview.md#inventory-locations),
+  found by its name, city or street. Aglyn AI never adds a location: add it first, then
+  ask. Without a location, it turns on the store-wide **Offer free local pickup** choice.
+- Local delivery uses postal-code zones. Aglyn AI turns delivery on only when checkout can
+  offer it: a country, at least one zone and at least one delivery window. Distance zones
+  need your store placed on the map, so you set those up yourself.
+- It uses only the fees and times you give.
+- Changes work as soon as they are saved, and cost no AI credits.
+
 ## Related
 
 - [Shipping](./shipping.md)

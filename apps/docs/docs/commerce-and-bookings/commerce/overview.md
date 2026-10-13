@@ -531,6 +531,19 @@ What the store has collected is reported on the
 [Storefront sales tax](#storefront-sales-tax) card. A store that uses Avalara
 or TaxJar sets that up separately: see [Tax services](./tax-services.md).
 
+**Ask Aglyn AI.** You can ask [Aglyn Assist](../../ai/assist-builds.md) to set up tax, such
+as *charge 8.25% Texas sales tax, we sell from Austin*, *calculate tax automatically* or
+*we don't collect sales tax*. It saves what this card saves, and works as soon as you
+confirm the plan:
+
+- It enters only a rate you state. If you ask to *set up tax* without saying how, Aglyn AI
+  asks you instead of choosing a rate or an option for you.
+- Manual rates need the origin country, so Aglyn AI asks for it rather than leave
+  checkout unable to tax.
+- Lodging and service tax rates are left as they are. Avalara and TaxJar need your account
+  details, so you connect them yourself.
+- It costs no AI credits.
+
 ### Lodging tax on reservations
 
 A stay is not goods. The sales-tax settings above configure a **goods** rate
