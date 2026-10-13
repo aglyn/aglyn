@@ -33,6 +33,7 @@ import {
   AI_LAYOUT_CART_ELEMENT,
   AI_LAYOUT_LISTING_ELEMENTS,
   AI_LAYOUT_LISTINGS_INPUT,
+  aiLayoutEventsPlacements,
   aiLayoutListingAt,
   aiLayoutListingPlacements,
   aiLayoutListingsOf,
@@ -155,7 +156,7 @@ describe('where a site lists its records (AGL-3676)', () => {
 
   it('reads the listings a unit carries, dropping one it cannot place', () => {
     const read = aiLayoutListingsOf({
-      [AI_LAYOUT_LISTINGS_INPUT]: [PRODUCTS, { ...POSTS, collectionSlug: '../x' }, { kind: 'events' }],
+      [AI_LAYOUT_LISTINGS_INPUT]: [PRODUCTS, { ...POSTS, collectionSlug: '../x' }, { kind: 'calendar' }],
     })
     expect(read.map((listing) => listing.kind)).toEqual(['products'])
     expect(aiLayoutListingAt(read, 'shop', 1)?.role).toBe('index')
@@ -922,5 +923,69 @@ describe('a section one of the site’s datasets fills (AGL-3616)', () => {
       kicker: null,
       body: 'answer',
     })
+  })
+})
+
+/*
+ * A site's dated events (AGL-3755): an event-led start drafts its first few
+ * through the events-calendar plugin, and the section whose plan names them
+ * lists them by that plugin's Event List, never as cards the model wrote.
+ */
+describe('a section the site’s events fill (AGL-3755)', () => {
+  const events: AiLayoutListing = {
+    id: 'listing:events',
+    kind: 'events',
+    name: 'the events',
+    records: ['Friday jazz night', 'Open mic Tuesday'],
+    placements: [{ screenId: 'home', section: 1, role: 'featured' }],
+  }
+
+  it('names the Event List by the id the events-calendar plugin persists, placed by code and never offered to a model', () => {
+    const source = readFileSync(join(__dirname, '../../../../events-calendar/src/lib/components/event-list.tsx'), 'utf8')
+    expect(source).toContain(`export const ID: Aglyn.ComponentId = '${AI_LAYOUT_LISTING_ELEMENTS.events}'`)
+    expect(AI_PALETTE['eventList']?.pluginId).toBe('events-calendar')
+    expect(AI_SURFACES.screen.codeOnly).toEqual(expect.arrayContaining(['eventList']))
+    expect(AI_SURFACES.screen.allow).not.toContain('eventList')
+  })
+
+  it('round-trips the events it names, and places them where the plan names them', () => {
+    const [read] = aiLayoutListingsOf({ [AI_LAYOUT_LISTINGS_INPUT]: [events] })
+    expect(read).toEqual(events)
+    expect(
+      aiLayoutEventsPlacements(
+        ['Friday jazz night'],
+        [
+          { id: 'home', title: 'Home', slug: '/', sections: [{ name: 'Hero', items: 0 }, { name: 'Coming up', items: 0, uses: ['new:Friday jazz night'] }] },
+          { id: 'events', title: 'Events', slug: '/events', sections: [{ name: 'Hero', items: 0 }, { name: 'Calendar', items: 0, uses: ['NEW:friday jazz night'] }] },
+          { id: 'about', title: 'About', slug: '/about', sections: [{ name: 'Story', items: 0, uses: [] }] },
+        ],
+      ),
+    ).toEqual([
+      { screenId: 'home', section: 1, role: 'featured' },
+      { screenId: 'events', section: 1, role: 'index' },
+    ])
+  })
+
+  it('stores the list through the validator every generated page passes, in place of the cards the design wrote', () => {
+    const result = homeCheck([events])(HOME_ANSWER)
+    expect(result.violations).toEqual([])
+    const nodes = nodesOf(result.value?.nodes)
+    const list = nodes.find((node) => node.componentId === 'eventList')
+    expect(list?.props).toEqual({ maxItems: '3' })
+    // The design's cards are gone: the platform lists the events.
+    expect(JSON.stringify(result.value?.nodes)).not.toContain('Signature Soy Candle')
+  })
+
+  it('tells the model the platform lists the events, so it writes no dates or cards', () => {
+    const prompt = aiLayoutPagePrompt({
+      job: { $id: 'job-1', brief: 'A jazz club', inputs: {} },
+      plan: { reuse: [], create: [], screens: [HOME_SCREEN] } as never,
+      screen: HOME_SCREEN as never,
+      targets: targets('home', [events]),
+      reusableComponents: false,
+    })
+    expect(prompt).toContain(
+      '2. "Featured candles"; the platform lists the site\'s upcoming events here ("Friday jazz night", "Open mic Tuesday") with their dates, places and photos',
+    )
   })
 })

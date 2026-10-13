@@ -32,7 +32,9 @@ import {
   aiBuildItemOpen,
   aiBuildNextUnit,
   aiBuildOrder,
+  aiBuildItemOutputNote,
   aiBuildPlacedItemLines,
+  aiBuildPlanMissingInput,
   aiBuildPlanShapeRefusal,
   aiBuildSmaller,
   aiBuildUnits,
@@ -58,7 +60,7 @@ import {
   type AiCreditsPrompt,
   type AiCreditsSmaller,
 } from '../model/ai-credit-estimate'
-import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
+import { aiFreeCreditsNoneLeftText, aiSiteWords } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiModelForStep } from '../providers/routing'
 import {
@@ -89,6 +91,7 @@ import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiDatasetListingsOf } from './ai-job-site-datasets'
+import { AI_SITE_EVENT_OP, aiEventsListings } from './ai-job-site-events'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import {
@@ -199,14 +202,8 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
   return runnerKind ? (runnerKind as AiJobKind) : null
 }
 
-/**
- * What the job drawer says under an item another plugin's writer made: a
- * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
- * field, AGL-3746), that it was saved.
- */
-export function aiBuildItemOutputNote(capability: Pick<PluginAiCapability, 'where' | 'live'>): string {
-  return capability.live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
-}
+/** What the job drawer says under an item another plugin's writer made (`model/ai-build-job.ts`). */
+export { aiBuildItemOutputNote }
 
 /** The id a unit's job, and so its draft, is named by. */
 export function aiBuildUnitJobId(job: Pick<AiJob, '$id'>, unit: AiBuildUnit): string {
@@ -279,7 +276,10 @@ export function aiBuildUnitJob(
       },
     ]
     brief.push(`Build the page “${screen.title}”, at ${screen.slug}.`)
-    brief.push(...aiBuildPlacedItemLines(unit, { units: context.units, ledger: context.ledger, ops: context.ops }))
+    // A build's events are listed by the platform (AGL-3755), never written by the page.
+    brief.push(
+      ...aiBuildPlacedItemLines(unit, { units: context.units, ledger: context.ledger, ops: context.ops, placedByCode: [AI_SITE_EVENT_OP] }),
+    )
   }
   const item = unit.item
   if (item) {
@@ -332,6 +332,21 @@ export function aiBuildUnitJob(
       datasets.push({ id: entry.id, name: plan.labels?.[entry.id] ?? entry.id })
     }
     const listings = aiDatasetListingsOf(datasets, plan.screens)
+    // The events this build wrote, in the sections that name them (AGL-3755).
+    const eventUnits = context.units.filter((one) => one.item?.op === AI_SITE_EVENT_OP)
+    const ledgerRows = new Map(context.ledger.map((row) => [row.slot, row]))
+    listings.push(
+      ...aiEventsListings({
+        written: eventUnits
+          .filter((one) => {
+            const row = ledgerRows.get(one.slot)
+            return Boolean(row && aiBuildItemDelivered(row) && row.outputs.length)
+          })
+          .map((one) => one.item?.name ?? one.label),
+        planned: eventUnits.map((one) => one.item?.name ?? one.label),
+        screens: plan.screens,
+      }),
+    )
     if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   // A build that makes the site a store links its account and policies from
@@ -750,6 +765,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         uid: job.createdBy,
         org,
         now: context.now,
+        // Drafts of one build share what must not repeat (a cover photo) and read its business (AGL-3755).
+        act: { id: aiOriginJobId(job), business: aiSiteWords(job.inputs).about || job.brief || '' },
         id,
         name: item.name,
         content,
@@ -765,7 +782,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         label: written.name,
         draftResource: capability.draftResource,
         // A resource with no draft state is live once written (AGL-3745, AGL-3746).
-        note: aiBuildItemOutputNote(capability),
+        note: aiBuildItemOutputNote(capability, written),
       }
       return settle(
         {
@@ -883,6 +900,8 @@ const AI_BUILD_ITEM_RUNNER_KINDS: Readonly<Record<string, AiJobKind>> = {
   navigation: 'navigation',
   duplicate: 'duplicate',
   settings: 'settings',
+  media: 'media',
+  tracking: 'tracking',
 }
 
 /**
@@ -950,6 +969,9 @@ export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJo
     const ops = await opsFor({ orgId: context.orgId, hostId: context.hostId, org, host, freeTaste })
     const shape = aiBuildPlanShapeRefusal(plan, { freeTaste, ops })
     if (shape) return { status: 400, error: shape }
+    // Something only the person can give (AGL-3751): asked, never built without.
+    const missing = aiBuildPlanMissingInput(plan, ops)
+    if (missing) return { status: 400, error: missing }
     if (freeTaste) {
       const refusal = await aiBuildFreeCreditsRefusal({
         firestore: context.firestore,

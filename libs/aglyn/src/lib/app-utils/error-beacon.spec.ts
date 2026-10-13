@@ -43,6 +43,7 @@ import {
   isBenignBrowserNotice,
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
+  isWebDocument,
   pageTranslationSignal,
   watchPageTranslation,
   raiseStackTraceLimit,
@@ -284,6 +285,35 @@ describe('isBenignBrowserNotice (AGL-3423)', () => {
       ),
     ).toBe(false)
     expect(isBenignBrowserNotice('ResizeObserver is not defined')).toBe(false)
+  })
+})
+
+describe('isWebDocument (AGL-3759)', () => {
+  it('is TRUE for a page served over http or https', () => {
+    expect(isWebDocument({ protocol: 'https:' })).toBe(true)
+    expect(isWebDocument({ protocol: 'http:' })).toBe(true)
+    expect(isWebDocument(window.location)).toBe(true)
+  })
+
+  it('is FALSE for a copy of the page in a document with no web URL', () => {
+    // A translator's or a framing site's copy: where Next.js's router throws
+    // "Failed to construct 'URL': Invalid URL".
+    expect(isWebDocument(new URL('about:blank'))).toBe(false)
+    expect(isWebDocument(new URL('about:srcdoc'))).toBe(false)
+    expect(isWebDocument(new URL('file:///Users/someone/pricing.html'))).toBe(false)
+    expect(isWebDocument(new URL('chrome-extension://abcdef/page.html'))).toBe(false)
+  })
+
+  it('is FALSE when there is no location to read', () => {
+    expect(isWebDocument(undefined)).toBe(false)
+    expect(isWebDocument(null)).toBe(false)
+    expect(isWebDocument({})).toBe(false)
+    const unreadable = {
+      get protocol(): string {
+        throw new Error('cross-origin')
+      },
+    }
+    expect(isWebDocument(unreadable)).toBe(false)
   })
 })
 

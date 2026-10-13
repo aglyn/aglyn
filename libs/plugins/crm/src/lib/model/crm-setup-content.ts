@@ -18,9 +18,11 @@
 // Modules by their own paths, never the `@aglyn/aglyn` barrel: the console
 // server's boot reaches this file through the CRM's setup writers.
 import {
+  CONTACT_FIELD_DEFAULT_CURRENCY,
   CONTACT_FIELD_TYPES,
   CONTACT_FIELDS_MAX_PER_ORG,
   fieldDefinitionsForObject,
+  isCustomFieldCurrency,
   isContactFieldType,
 } from '@aglyn/aglyn/app-utils/contact-custom-fields'
 import {
@@ -68,7 +70,8 @@ import {
  *    `newStageId`'s slugs.
  *  - A FIELD is the Fields section's create: a key derived from the label by
  *    `normalizeContactFieldKey`, one of `CONTACT_FIELD_TYPES`, the choices
- *    the drawer allows, landing last on its object's tab, org-wide.
+ *    the drawer allows, a currency field's ISO 4217 code (USD when unsaid,
+ *    as the drawer's default), landing last on its object's tab, org-wide.
  *
  * IDEMPOTENT BY NAME. Asked twice, nothing is made twice: an active pipeline
  * is matched by name and a stage within it by name, a field by label or key
@@ -361,6 +364,8 @@ export interface CrmFieldSetup {
   type: ContactFieldType
   /** The choices, for `select`; empty otherwise. */
   options: string[]
+  /** For `currency` (AGL-3756): the lowercase ISO 4217 code; `null` otherwise. */
+  currency: string | null
   required: boolean
 }
 
@@ -382,6 +387,11 @@ export function readCrmFieldSetup(
   const listed = Array.isArray(content['options']) ? content['options'].filter((one): one is string => typeof one === 'string') : []
   const options = type === 'select' ? crmFieldOptions(listed) : []
   if (type === 'select' && !options.length) problems.push('A Choice field needs its choices.')
+  // A currency field's code, as the drawer offers it: named, or the default.
+  const asked = text(content['currency']).toLowerCase()
+  if (type === 'currency' && asked && !isCustomFieldCurrency(asked)) {
+    problems.push('A currency field’s currency is an ISO 4217 code, such as USD or EUR.')
+  }
   if (problems.length) return { ok: false, problems }
   return {
     ok: true,
@@ -391,6 +401,7 @@ export function readCrmFieldSetup(
       key: key as string,
       type: type as ContactFieldType,
       options,
+      currency: type === 'currency' ? asked || CONTACT_FIELD_DEFAULT_CURRENCY : null,
       required: content['required'] === true,
     },
   }
@@ -400,7 +411,15 @@ export function readCrmFieldSetup(
 export function checkCrmFieldSetup(content: Readonly<Record<string, unknown>>): PluginDraftCheck {
   const read = readCrmFieldSetup(content)
   if (read.ok === false) return { ok: false, problems: read.problems }
-  return { ok: true, facts: { object: read.value.object, key: read.value.key, type: read.value.type } }
+  return {
+    ok: true,
+    facts: {
+      object: read.value.object,
+      key: read.value.key,
+      type: read.value.type,
+      ...(read.value.currency ? { currency: read.value.currency } : {}),
+    },
+  }
 }
 
 /** A stored definition, as the writer reads one: its document id beside it. */
@@ -465,6 +484,7 @@ export function planCrmFieldSetup(
       label: setup.label,
       type: setup.type,
       ...(setup.type === 'select' ? { options: setup.options } : {}),
+      ...(setup.type === 'currency' && setup.currency ? { currency: setup.currency } : {}),
       required: setup.required,
       order,
       retiredAt: null,

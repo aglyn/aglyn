@@ -25,6 +25,7 @@ import {
   aiBuildNextUnit,
   aiBuildOrder,
   aiBuildPlacedItemLines,
+  aiBuildPlanMissingInput,
   aiBuildPlanShapeRefusal,
   aiBuildRetryLedger,
   aiBuildSettlement,
@@ -246,6 +247,33 @@ describe('the shape a build holds', () => {
     const many = Array.from({ length: AI_BUILD_LIMITS.pages + 1 }, (_, index) => screen(`P${index}`, `/p${index}`))
     expect(aiBuildPlanShapeRefusal({ ...plan, screens: many, items: [] })).toContain('at most 8')
     expect(aiBuildPlanShapeRefusal({ reuse: [], create: [], screens: [] })).toContain('builds nothing')
+  })
+})
+
+describe('what a plan leaves out that only the person can give (AGL-3751)', () => {
+  const asks = capability('tracking', {
+    // Asks unless the item names an id: what a tracking change does.
+    missingInput: (one) => (one.args['id'] ? null : `What is the ${one.name} id?`),
+  })
+  const ops: AiBuildOps = new Map([...OPS, ['tracking', asks]])
+  const plan = (args: Record<string, string>[]) => ({
+    ...canonical(),
+    items: [...(canonical().items ?? []), ...args.map((one, index) => item(index + 1, { op: 'tracking', name: `Tag ${index}`, args: one }))],
+  })
+
+  it('asks each question an item’s operation asks, once each, and nothing when every item can be built', () => {
+    expect(aiBuildPlanMissingInput(plan([{ id: 'x' }]), ops)).toBeNull()
+    expect(aiBuildPlanMissingInput(plan([{}, { id: 'x' }]), ops)).toBe('What is the Tag 0 id?')
+    expect(aiBuildPlanMissingInput(plan([{}, {}]), ops)).toBe('What is the Tag 0 id? What is the Tag 1 id?')
+  })
+
+  it('asks nothing of an operation with no such check, or with no operations to read', () => {
+    expect(aiBuildPlanMissingInput(canonical(), OPS)).toBeNull()
+    expect(aiBuildPlanMissingInput(plan([{}]), null)).toBeNull()
+  })
+
+  it('is not a shape problem the plan is re-asked about', () => {
+    expect(aiBuildPlanShapeRefusal(plan([{}]), { ops })).toBeNull()
   })
 })
 

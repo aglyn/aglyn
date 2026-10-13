@@ -6,28 +6,36 @@ description: "Answer a few questions when you create a site and Aglyn AI plans, 
 
 # Start a new site with AI
 
-A site you have just created opens on its **Setup** page with **Start your site** over
-it. **Start with AI** asks a few questions, then plans the site, writes every page,
-gives it a look of its own and publishes it at its address. This page walks through
-each question and what happens after you choose **Plan my site**.
+**Create site** opens **Start your site** straight away, before the site exists.
+**Start with AI** asks a few questions, then creates the site, plans it, writes every
+page, gives it a look of its own and publishes it at its address. This page walks
+through each question and what happens after you choose **Plan my site**.
 
 To scaffold pages for a site that already exists, or for several sites at once, see
 [Generate a website from a prompt](./generate-a-site.md).
 
 ## How do you want to start? {#how-do-you-want-to-start}
 
-The first step offers two cards:
+The first step asks for the site's **Site name** and **Subdomain**, its free address
+on Aglyn. The subdomain follows the name until you change it, and is checked as you
+type: if it is taken, the field says so and offers available ones to pick. Then it
+offers two cards:
 
 - **Start from the starter site** gives the site a ready-made home page with a header,
   footer and contact form, live at its address, for you to edit.
 - **Start with AI** (marked **Recommended**) asks the questions below and builds the site
   for you. On the Free plan the card says how many pages a Free start makes.
 
-**Skip**, the close control and the Escape key all leave the window. Before anything is
-being planned, leaving gives the site the starter home page and nothing else, and the site
-does not ask again. If you have typed or picked something, the window first asks
-**Leave without your answers?**, because what you typed is not saved. Once the site is
-being planned, closing only closes the window; the job carries on.
+No site exists until you choose. **Start from the starter site** and **Skip** (in the
+bar at the top) create the site with the starter home page and open it. **Plan my site**
+creates the site and starts planning it. The close control and the Escape key create
+nothing: the window closes and no site is made. If you have typed or picked something,
+the window first asks **Leave without your answers?**, because what you typed is not
+saved. Once the site is being planned, closing only closes the window; the job carries on.
+
+If your role cannot create sites, or your plan has no site left, **Create site** says so
+before asking anything. If the site is created but its planning cannot start, the window
+says why; leaving then gives that site the starter home page, so it is never left empty.
 
 ## Your business {#your-business}
 
@@ -98,6 +106,8 @@ builds, in this order:
 4. **Your first posts or products**, on paid plans, when the site is a blog or a store.
    See [A store from the start](#a-store-from-the-start) and
    [A blog from the start](#a-blog-from-the-start).
+   **Your first events**, when your business holds them and your workspace has the Event
+   Calendar add-on. See [Events from the start](#events-from-the-start).
 5. **Your pages**, each with its sections, its address and its own search title and
    description. A home page opens with a hero and has several bands below it, such as
    services, about, social proof and a closing call to action. Photos come from your media
@@ -222,6 +232,22 @@ On a paid plan, a site with the **Blog & writing** style also gets a **Blog** co
 with three posts, signed with the business name and published with the site. Each post
 has a cover photo, and the blog's index page shows the covers on its cards. See
 [Build a blog](../building-sites/site-templates/build-a-blog.md).
+
+## Events from the start {#events-from-the-start}
+
+When your business holds dated events, such as a venue, a club, a studio with classes, a
+meetup, a church or a theater, and your workspace has the
+[Event Calendar add-on](../content-and-data/events/overview.md), the start adds your first
+three upcoming events to the **Events** page, each with a cover photo. They are dated after
+the day you start, in your site's time zone, and a day or time you gave in your description
+is kept as you gave it. The page about your events, or else your home page, lists them with
+the **Event List**, in one of its planned sections.
+
+The events are published, so they show on your site straight away, when you have the
+admin or editor role on the site. With the author role they are saved as drafts, and the
+job says so; someone with the editor role publishes them on the **Events** page. Without
+the add-on the start adds no events. Change or delete them on the **Events** page like any
+event.
 
 ## On the Free plan {#on-the-free-plan}
 

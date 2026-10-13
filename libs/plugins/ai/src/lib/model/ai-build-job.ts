@@ -19,6 +19,7 @@ import {
   pluginAiCapabilityArgsProblems,
   type PluginAiCapability,
 } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import type { PluginDraftRecord } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
   AI_PLAN_NEW_REF_PREFIX,
   isAiPlanNewRef,
@@ -370,6 +371,25 @@ export function aiBuildPlanShapeRefusal(
   return null
 }
 
+/**
+ * What the person must still say before this plan can be built, as the
+ * questions its operations ask (`missingInput`), or `null` when nothing is
+ * missing: an item the planner kept with nothing it may build from — a
+ * tracking change naming no id, AGL-3751 — is asked about, never built
+ * empty or from a value the planner made up. Not a plan rule: a re-ask
+ * cannot supply what only the person knows, so the plan is not kept and
+ * the build answers with the question.
+ */
+export function aiBuildPlanMissingInput(plan: AiBuildPlan, ops: AiBuildOps | null | undefined): string | null {
+  if (!ops) return null
+  const questions: string[] = []
+  for (const item of plan.items ?? []) {
+    const question = ops.get(item.op)?.missingInput?.({ name: item.name, why: item.why, args: item.args })
+    if (question && !questions.includes(question)) questions.push(question)
+  }
+  return questions.length ? questions.join(' ') : null
+}
+
 /** "a booking service", "an email design". */
 export function aiArticle(noun: string): string {
   return `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`
@@ -662,7 +682,13 @@ export function aiBuildCreationNoun(kind: AiBuildPlanCreateKind): string {
  */
 export function aiBuildPlacedItemLines(
   unit: AiBuildUnit,
-  context: { units: readonly AiBuildUnit[]; ledger: readonly AiJobItemLedger[]; ops?: AiBuildOps },
+  context: {
+    units: readonly AiBuildUnit[]
+    ledger: readonly AiJobItemLedger[]
+    ops?: AiBuildOps
+    /** Operations whose items the platform places itself (a listing), so the page is told nothing of them. */
+    placedByCode?: readonly string[]
+  },
 ): string[] {
   if (!unit.screen) return []
   const rows = new Map(context.ledger.map((row) => [row.slot, row]))
@@ -674,6 +700,7 @@ export function aiBuildPlacedItemLines(
     for (const { dep, capability } of aiBuildSectionItems(section, context.units, context.ops)) {
       const row = rows.get(dep.slot)
       if (!row || !aiBuildItemDelivered(row)) continue
+      if (context.placedByCode?.includes(dep.op)) continue
       const blocks = capability?.pageBlocks ?? []
       if (!blocks.length) continue
       const key = aiBuildBlocksKey(blocks)
@@ -809,4 +836,21 @@ export function aiLedgerUnits(ledger: readonly AiJobItemLedger[]): AiBuildUnit[]
     label: row.label,
     deps: row.op === 'page' ? creations : [],
   }))
+}
+
+/**
+ * What the job drawer says under an item another plugin's writer made: a
+ * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
+ * field, AGL-3746), that it was saved. A writer that went live only when the
+ * member may (an event the publishing role publishes, AGL-3755) reports
+ * `live: false` for one it kept as a draft, with its `notice` saying why.
+ */
+export function aiBuildItemOutputNote(
+  capability: Pick<PluginAiCapability, 'where' | 'live'>,
+  written?: Pick<PluginDraftRecord, 'live' | 'notice'>,
+): string {
+  const live = written?.live ?? capability.live
+  const said = live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
+  const notice = written?.notice?.trim()
+  return notice ? `${said} ${notice}` : said
 }

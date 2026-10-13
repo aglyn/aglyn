@@ -34,6 +34,8 @@ export const AI_LAYOUT_LABELS_EN = {
   allPosts: 'All posts',
   /** The same, for the site's music. */
   allMusic: 'All music',
+  /** The same, for the site's events. */
+  allEvents: 'All events',
   /** The button a storefront's hero, or a featured band of products, opens the shop with. */
   shopAll: 'Shop all',
   /** A post card's link to the post. */
@@ -72,6 +74,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     seeAll: 'Ver todo',
     allPosts: 'Todas las entradas',
     allMusic: 'Toda la música',
+    allEvents: 'Todos los eventos',
     shopAll: 'Ver la tienda',
     readPost: 'Leer la entrada',
     viewDetails: 'Ver detalles',
@@ -91,6 +94,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     seeAll: 'Tout voir',
     allPosts: 'Tous les articles',
     allMusic: 'Toute la musique',
+    allEvents: 'Tous les événements',
     shopAll: 'Voir la boutique',
     readPost: 'Lire l’article',
     viewDetails: 'Voir les détails',
@@ -110,6 +114,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     seeAll: 'Ver tudo',
     allPosts: 'Todos os posts',
     allMusic: 'Todas as músicas',
+    allEvents: 'Todos os eventos',
     shopAll: 'Ver a loja',
     readPost: 'Ler o post',
     viewDetails: 'Ver detalhes',
@@ -129,6 +134,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     seeAll: 'Alle ansehen',
     allPosts: 'Alle Beiträge',
     allMusic: 'Alle Musik',
+    allEvents: 'Alle Veranstaltungen',
     shopAll: 'Zum Shop',
     readPost: 'Beitrag lesen',
     viewDetails: 'Details ansehen',
@@ -148,6 +154,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     seeAll: 'Vedi tutto',
     allPosts: 'Tutti gli articoli',
     allMusic: 'Tutta la musica',
+    allEvents: 'Tutti gli eventi',
     shopAll: 'Vai al negozio',
     readPost: 'Leggi l’articolo',
     viewDetails: 'Vedi dettagli',

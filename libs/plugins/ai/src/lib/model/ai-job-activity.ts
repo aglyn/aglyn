@@ -283,6 +283,8 @@ const KIND_NOUNS: Partial<Record<AiJobKind, string>> = {
   navigation: 'menu',
   duplicate: 'copy',
   settings: 'settings',
+  media: 'media library change',
+  tracking: 'tracking',
 }
 
 /** The noun for what a job of this kind makes, or `AI job` for a kind with none. */

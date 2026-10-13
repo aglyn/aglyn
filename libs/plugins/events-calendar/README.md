@@ -35,7 +35,7 @@ This package is a first-party Aglyn plugin. It is loaded through Aglyn's plugin 
 - `events/list`: published events for the Event List component, sorted by start, with a `mode=past` option. Drafts never leave the server.
 - `events/dispatch`: receives a site event whose client-side trigger fired on the page, so that the action's server steps run.
 
-`registerEventsCalendarConsoleServerDeclarations()` (the `consoleServerDeclarations` surface) registers the server half of the events import and export, and the `event` draft writer with the `event` build operation an Aglyn AI build uses to draft dated events and place the Event List on a page. A drafted event is listed on the site only once a person publishes it.
+`registerEventsCalendarConsoleServerDeclarations()` (the `consoleServerDeclarations` surface) registers the server half of the events import and export, and the `event` draft writer with the `event` build operation an Aglyn AI build or guided site start uses to make dated events and place the Event List on a page. An event is published for a member with the publishing role (admin or editor) and kept as a draft, with a notice, for an author; a new event with no cover gets one from the stock photo picker (`core.stock-photo-picker`) when a plugin registers one.
 
 Routes are served by the host app's API dispatcher under `/api/`, for example `/api/events/list`. There is no `consoleApi` registrar.
 

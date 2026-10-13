@@ -29,7 +29,6 @@ import {
   crmContactFacetKeys,
   crmPicklistDefinition,
   crmPicklistKey,
-  crmPicklistValueByLabel,
   effectiveCrmPicklist,
   newResourceScopeFields,
   normalizeCrmPicklist,
@@ -48,7 +47,10 @@ import {
   setPicklistValueGroup,
 } from '../model/picklist-values'
 import { orgHostIds, readCrmRouteScope } from './org-caller'
+import { picklistGroupOf, regroupEverywhere } from './picklist-regroup'
 import { authorizeCrmWriter } from './task-routes'
+
+export { picklistGroupOf, regroupEverywhere } from './picklist-regroup'
 
 /** What the suite gate names when a plan without the CRM asks. */
 const suiteAct = (definition: CrmPicklistDefinition) =>
@@ -164,53 +166,6 @@ async function replaceInArrayEverywhere(
         [target.keyField]: [...keys],
         updatedAt: FieldValue.serverTimestamp(),
       })
-      changed += 1
-    }
-    if (changed) await batch.commit()
-    written += changed
-    if (page.size < BATCH_SIZE) return written
-    after = page.docs[page.docs.length - 1] ?? null
-  }
-}
-
-/** The group a label is filed under in `picklist` — `null` for none, or a label it does not hold. */
-export function picklistGroupOf(picklist: CrmPicklist, label: string | null): string | null {
-  return (label === null ? null : crmPicklistValueByLabel(picklist, label)?.group) ?? null
-}
-
-/**
- * Rewrite a target's GROUP field (AGL-3577) — a lead's
- * `leadSourceDirection` — on every record holding `label` in any spelling
- * (by its `keyField`) whose group is not `group` already. Answers how many
- * were written. The field is derived, like the list keys a restamp writes,
- * so `updatedAt` is left alone.
- *
- * Paged by document id rather than re-run: a record already holding the
- * group stays in the query's answer.
- */
-export async function regroupEverywhere(
-  firestore: FirebaseFirestore.Firestore,
-  records: FirebaseFirestore.CollectionReference,
-  target: CrmPicklistTarget,
-  label: string,
-  group: string | null,
-): Promise<number> {
-  const key = crmPicklistKey(label)
-  if (!key || !target.keyField || !target.groupField) return 0
-  const query = records
-    .where(target.keyField, '==', key)
-    .orderBy(FieldPath.documentId())
-    .limit(BATCH_SIZE)
-  let written = 0
-  let after: FirebaseFirestore.QueryDocumentSnapshot | null = null
-  for (;;) {
-    const page: FirebaseFirestore.QuerySnapshot = await (after ? query.startAfter(after) : query).get()
-    if (page.empty) return written
-    const batch = firestore.batch()
-    let changed = 0
-    for (const snapshot of page.docs) {
-      if (snapshot.get(target.groupField) === group) continue
-      batch.update(snapshot.ref, { [target.groupField]: group })
       changed += 1
     }
     if (changed) await batch.commit()

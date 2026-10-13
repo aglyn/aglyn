@@ -112,6 +112,7 @@ import {
 } from './ai-job-site-content'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
+import { AI_SITE_EVENT_INPUT, AI_SITE_EVENTS_MAX } from './ai-job-site-events'
 import { AI_SITE_STORE_PAGES_INPUT, type AiSiteStorePagesInput } from './ai-job-site-store-pages'
 import { AI_SITE_STORE_PAGES_LABEL, AI_SITE_STORE_PAGES_NOTE, aiStoreFrameLinksOf } from '../model/ai-site-store-pages'
 import { AI_STOCK_PHOTO_AVOID_INPUT } from './ai-layout-stock-photos'
@@ -1782,8 +1783,10 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
 
   it('gives a post’s pass the time a post needs, and bounds the passes with every post in them', () => {
     expect(aiSiteJobRunMinimumMs(siteJob({ inputs: blogInputs }))).toBe(AI_SITE_POST_BUDGET.minimumMs)
-    // …and a site's datasets, one pass each (AGL-3616), and a store's own pages, one pass (AGL-3676).
-    expect(AI_SITE_MAX_PASSES).toBe(AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_POSTS + 2)
+    // …and a site's datasets, one pass each (AGL-3616), its first events, one each (AGL-3755), and a store's own pages, one pass (AGL-3676).
+    expect(AI_SITE_MAX_PASSES).toBe(
+      AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + 3 + AI_SITE_DATASETS_MAX + AI_SITE_EVENTS_MAX + AI_SITE_POSTS + 2,
+    )
   })
 })
 
@@ -2168,5 +2171,97 @@ describe('a dataset’s pass, timed (AGL-3616)', () => {
   it('gives a dataset’s pass the time one dataset needs', () => {
     const menu = { kind: 'dataset' as const, name: 'Menu', why: 'dishes', duplicateOf: null, fields: ['Dish'], id: 'drftMenu01' }
     expect(aiSiteJobRunMinimumMs(siteJob({ plan: confirmedPlan({ create: [menu] }) }))).toBe(AI_SITE_DATASET_BUDGET.minimumMs)
+  })
+})
+
+/*
+ * An event-led start's first events (AGL-3755): drafted through the
+ * events-calendar plugin's writer before the pages, and listed by its Event
+ * List in the section whose plan names them.
+ */
+describe('an event-led start’s first events (AGL-3755)', () => {
+  const EVENT = (index: number, name: string) => ({
+    slot: `i${index}`,
+    op: 'event',
+    name,
+    why: 'the club’s next nights',
+    dependsOn: [],
+    degrade: 'omit' as const,
+    args: { title: name, startsAt: `2026-10-2${index}T19:00`, timezone: 'America/Chicago', description: 'An evening of jazz.' },
+    id: `drftEvent${index}`,
+    credits: 0,
+  })
+  const EVENTS = [EVENT(0, 'Friday jazz night'), EVENT(1, 'Open mic Tuesday')]
+  const plan = confirmedPlan({
+    items: EVENTS,
+    screens: [
+      planScreen({ title: 'Home', slug: '/', id: 'drftPage00', sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'Coming up', uses: ['new:Friday jazz night', 'new:Open mic Tuesday'], items: 0 }] }),
+      planScreen({ title: 'Events', slug: 'events', id: 'drftPage01', nav: true, sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'Calendar', uses: ['new:Friday jazz night'], items: 0 }] }),
+      planScreen({ title: 'Contact', slug: 'contact', id: 'drftPage02', nav: false }),
+      planScreen({ title: 'About', slug: 'about', id: 'drftPage03', nav: false }),
+    ],
+  })
+  const WRITTEN: AiJobOutput = { resource: 'draft', draftResource: 'event', id: 'drftEvent0', hostId: 'host-1', label: 'Friday jazz night', note: 'Live now, in Events.' }
+  const pageRunner = () => fakeRunner([], () => ({ outputs: [output('screen', 'screen-x')] }))
+
+  it('drafts each event after the look and before the pages, under the id its plan item recorded', () => {
+    const units = aiSiteJobUnits(plan)
+    expect(units.map((unit) => unit.slot)).toEqual(['t', 'v0', 'v1', 'p0', 'p1', 'p2', 'p3'])
+    expect(units[1]).toMatchObject({ kind: 'event', jobKind: 'text', resource: 'draft', label: 'Friday jazz night', item: EVENTS[0] })
+    expect(aiSiteLedgerUnits(units)[1]).toMatchObject({ slot: 'v0', op: 'event', deps: [] })
+    const derived = aiSiteUnitJob(siteJob({ plan }), units[1] as AiSiteUnit, new Map())
+    expect(derived.$id).toBe('drftEvent0')
+    expect(derived.inputs[AI_SITE_EVENT_INPUT]).toEqual(EVENTS[0])
+  })
+
+  it('drafts no more than a start’s first few, and nothing that is not an event', () => {
+    const many = confirmedPlan({ items: [...[0, 1, 2, 3, 4].map((index) => EVENT(index, `Night ${index}`)), { ...EVENT(5, 'A service'), op: 'booking-service' }] })
+    expect(aiSiteJobUnits(many).filter((unit) => unit.kind === 'event')).toHaveLength(AI_SITE_EVENTS_MAX)
+  })
+
+  it('asks before an event’s first pass and runs the event’s own pass, skipping it unspent where refused', async () => {
+    const seen: AiJob[] = []
+    const event = fakeRunner(seen, () => ({ outputs: [WRITTEN] }))
+    const eventRefusal = jest.fn(async () => null)
+    const outcome = await stepWith({ page: pageRunner() }, { event, eventRefusal })(context(siteJob({ plan })))
+    expect(eventRefusal).toHaveBeenCalled()
+    expect(seen.map((one) => one.$id)).toEqual(['drftEvent0'])
+    expect(outcome.item).toMatchObject({ slot: 'v0', status: 'succeeded', outputs: ['drftEvent0'] })
+
+    const refused = jest.fn()
+    const skipped = await stepWith(
+      { page: pageRunner() },
+      { event: refused, eventRefusal: async () => 'The Event Calendar is a paid add-on: enable it from Billing → Add-ons' },
+    )(context(siteJob({ plan })))
+    expect(refused).not.toHaveBeenCalled()
+    expect(skipped.item).toEqual({ slot: 'v0', status: 'skipped', note: 'Not built: The Event Calendar is a paid add-on: enable it from Billing → Add-ons' })
+    expect(skipped.usage).toEqual(AI_JOB_ZERO_USAGE)
+  })
+
+  it('lists the events it wrote by the Event List in each section that names them, featured on the home', () => {
+    const units = aiSiteJobUnits(plan)
+    const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
+    const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK, WRITTEN] }), home, new Map())
+    expect(aiLayoutListingsOf(job.inputs).filter((listing) => listing.kind === 'events')).toEqual([
+      {
+        id: 'listing:events',
+        kind: 'events',
+        name: 'the events',
+        records: ['Friday jazz night'],
+        placements: [
+          { screenId: 'drftPage00', section: 1, role: 'featured' },
+          { screenId: 'drftPage01', section: 1, role: 'index' },
+        ],
+      },
+    ])
+    // The page binds no event by reference: the listing places them.
+    expect(job.plan?.screens[0].sections[1].uses).toEqual([])
+  })
+
+  it('lists none where no event was written', () => {
+    const units = aiSiteJobUnits(plan)
+    const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
+    const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK] }), home, new Map())
+    expect(aiLayoutListingsOf(job.inputs).some((listing) => listing.kind === 'events')).toBe(false)
   })
 })

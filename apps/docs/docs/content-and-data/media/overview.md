@@ -135,6 +135,29 @@ to the assets [shared with that site](#who-an-asset-is-shared-with).
   you deleted disappear and everything else stays exactly where it was — so a long
   clear-out is one pass, not one pass per file.
 
+### Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask [Aglyn Assist](../../ai/assist-builds.md) to organize files already in this
+site's library, such as *put kiln.jpg and wheel.jpg in a Studio folder*, *tag kiln.jpg
+portfolio*, *rename IMG_4021.jpg to Kiln at night.jpg* or *write the missing alt text from
+the captions*. The plan card lists the change, and **Confirm plan** saves it.
+
+- Name each file as the library shows it, by its file name. Two files with one name are
+  not guessed between.
+- A folder that is not there yet is made, as **New folder** makes it, up to five levels
+  deep. Files are filed the way the details drawer files them, and every file keeps its
+  link.
+- Tags are added and removed as the details drawer saves them: lower case, at most 20 a
+  file.
+- Alt text is written for one image you describe, or from the description or caption the
+  library already has for an image with none. An image with nothing to go on is named on
+  the card, so you can say what it shows. Pages that already place an image keep their own
+  alt text; images placed from then on take the new one.
+- It changes this site's library only, never the organization library, and it never
+  uploads, copies, replaces, deletes or shares a file.
+- It needs the admin, editor or author role on the site, works as soon as it is saved, and
+  costs no AI credits.
+
 ### Filter and search {#filter-and-search}
 
 The library filters like every list in the console: **Filters** in its toolbar

@@ -30,8 +30,9 @@ import {
 } from '../model/event-write'
 
 /**
- * WHAT AN AI BUILD CAN MAKE IN EVENTS (AGL-3743): a dated event, as a draft,
- * and the Event List block that shows the site's events on a page.
+ * WHAT AN AI BUILD CAN MAKE IN EVENTS (AGL-3743): a dated event, published
+ * when the member may publish (AGL-3755), and the Event List block that
+ * shows the site's events on a page.
  *
  * The capability the AI plugin's build planner offers for "add our fall
  * workshops" or "an events page". Its item is written by this plugin's
@@ -39,7 +40,9 @@ import {
  * add-on, the member's role, a start after the write, and the shape
  * `eventWrite` stores. One item is one event; a page section that uses any
  * of them places the Event List block, which lists the site's published
- * events, so the drafts appear there once a person publishes them.
+ * events, so the events show there at once. A member who may write but not
+ * publish gets drafts, and the job row says so (`live` with the writer's
+ * `live: false`).
  *
  * The arguments are flat, as the contract requires, and are the event's own
  * fields: an event has no recurrence, tickets, RSVP or meeting link, so none
@@ -75,9 +78,9 @@ export function eventDraftContentFromArgs(args: PluginAiCapabilityArgs): Readonl
 export const eventAiCapability: PluginAiCapability = {
   op: EVENT_AI_OP,
   noun: 'event',
-  where: 'Events, as a draft to publish',
+  where: 'Events',
   intents: [
-    'dated events on the site’s events calendar — classes, workshops, tastings, shows, open houses, meetups — each with its time, place and description, drafted for the owner to publish; use this rather than a dataset for anything held on a date',
+    'dated events on the site’s events calendar — classes, workshops, tastings, shows, open houses, meetups — each with its time, place and description, published to the site’s Event List; use this rather than a dataset for anything held on a date',
     'an events page or section that lists the site’s upcoming events',
   ],
   argsSchema: {
@@ -131,6 +134,8 @@ export const eventAiCapability: PluginAiCapability = {
   freeAllowed: true,
   feature: 'eventCalendar',
   draftResource: EVENT_DRAFT_RESOURCE,
+  // Published as the Events page publishes, for the publishing role (AGL-3755).
+  live: true,
   // Written without a model: the planner already filled the arguments.
   estimateCredits: () => 0,
   degrade: 'omit',

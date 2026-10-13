@@ -39,6 +39,7 @@ import {
   CRM_FIELD_SETUP_RESOURCE,
   CRM_PIPELINE_SETUP_RESOURCE,
 } from './model/crm-setup-content'
+import { checkCrmPicklistValuesSetup, CRM_PICKLIST_VALUES_SETUP_RESOURCE } from './model/crm-picklist-setup-content'
 import { registerCrmSetupAiCapabilities } from './server/crm-setup-ai-capabilities'
 import { crmTransferPlanGate, registerCrmTransferResources } from './transfer/register'
 import {
@@ -87,6 +88,12 @@ export const lazyCrmPipelineSetupWriter = lazySetupWriter(
 export const lazyCrmFieldSetupWriter = lazySetupWriter(
   checkCrmFieldSetup,
   (module) => module.crmFieldSetupWriter,
+)
+
+/** The `crm-picklist-values` writer as boot registers it (AGL-3756). */
+export const lazyCrmPicklistValuesSetupWriter = lazySetupWriter(
+  checkCrmPicklistValuesSetup,
+  (module) => module.crmPicklistValuesSetupWriter,
 )
 
 /** The email templates package's server half (AGL-3535), loaded when an import or export first asks. */
@@ -203,6 +210,9 @@ export function registerCrmConsoleServerDeclarations(): void {
   // the build plans for them. The console runs AI jobs (AGL-3026).
   registerPluginResourceDraftWriter(CRM_PIPELINE_SETUP_RESOURCE, lazyCrmPipelineSetupWriter, { pluginId: BUNDLE_ID })
   registerPluginResourceDraftWriter(CRM_FIELD_SETUP_RESOURCE, lazyCrmFieldSetupWriter, { pluginId: BUNDLE_ID })
+  registerPluginResourceDraftWriter(CRM_PICKLIST_VALUES_SETUP_RESOURCE, lazyCrmPicklistValuesSetupWriter, {
+    pluginId: BUNDLE_ID,
+  })
   registerCrmSetupAiCapabilities()
   // What the CRM imports and exports (AGL-3527): each resource's module
   // loads with the first transfer that asks for it.

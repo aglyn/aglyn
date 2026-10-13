@@ -188,7 +188,7 @@ describe('reading a field ask', () => {
   it('derives the key and keeps choices only for a Choice field', () => {
     expect(readCrmFieldSetup({ object: 'deal', label: 'Budget', type: 'number', options: ['x'] })).toEqual({
       ok: true,
-      value: { object: 'deal', label: 'Budget', key: 'budget', type: 'number', options: [], required: false },
+      value: { object: 'deal', label: 'Budget', key: 'budget', type: 'number', options: [], currency: null, required: false },
     })
     expect(checkCrmFieldSetup({ object: 'company', label: 'Industry tier', type: 'select', options: ['A', 'A', ' B '] })).toEqual({
       ok: true,
@@ -198,7 +198,7 @@ describe('reading a field ask', () => {
 
   it('refuses an object, a type or a label the CRM does not have', () => {
     expect(checkCrmFieldSetup({ object: 'opportunity', label: 'Budget', type: 'number' }).ok).toBe(false)
-    expect(checkCrmFieldSetup({ object: 'deal', label: 'Budget', type: 'currency' }).ok).toBe(false)
+    expect(checkCrmFieldSetup({ object: 'deal', label: 'Budget', type: 'money' }).ok).toBe(false)
     expect(checkCrmFieldSetup({ object: 'deal', label: '123', type: 'text' }).ok).toBe(false)
     expect(checkCrmFieldSetup({ object: 'deal', label: 'Tier', type: 'select' }).ok).toBe(false)
   })

@@ -73,6 +73,9 @@ describe('the event capability', () => {
       maxPerPlan: EVENT_AI_MAX_PER_PLAN,
       degrade: 'omit',
       pageBlocks: ['eventList'],
+      // Published as the Events page publishes (AGL-3755).
+      live: true,
+      where: 'Events',
     })
     expect(eventAiCapability.quota).toBeUndefined()
     expect(eventAiCapability.estimateCredits(ARGS)).toBe(0)

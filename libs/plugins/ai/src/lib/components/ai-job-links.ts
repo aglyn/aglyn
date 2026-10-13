@@ -67,9 +67,17 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
+  if (output.resource === 'media') {
+    // Files a build organized (AGL-3752) open in the site's media library.
+    return buildRoute(Route.HOST_MEDIA, { orgSlug, host })
+  }
   if (output.resource === 'settings') {
     // Settings a build saved (AGL-3748) open where most of them are edited.
     return buildRoute(Route.HOST_SETUP_SEO, { orgSlug, host })
+  }
+  if (output.resource === 'tracking') {
+    // Tags a build saved (AGL-3751) open on the card that edits them.
+    return buildRoute(Route.HOST_SETUP_TRACKING, { orgSlug, host })
   }
   if (output.resource === 'draft' && output.draftResource) {
     // A draft another plugin wrote — a dataset a site start or a build made

@@ -142,6 +142,8 @@ export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
     switch (definition.type) {
       case 'number':
         return 'Stored as a number; an answer that is not one number is dropped.'
+      case 'currency':
+        return `Stored as an amount in ${String(definition.currency || 'usd').toUpperCase()}; an answer that is not one amount is dropped.`
       case 'date':
         return 'Stored as a date, whichever way the visitor types it.'
       case 'checkbox':
