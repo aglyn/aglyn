@@ -45,6 +45,9 @@ One message can ask for any mix of:
 - **a funnel** that counts visits from one step to the next;
 - **a change to a page or layout** the site already has, saved as a new version visitors do
   not see until you publish it.
+- **redirects**: send an old address to a page you have, change where a redirect goes, or
+  stop one, such as *redirect /old-menu to /menu*. See
+  [Redirects](../building-sites/redirects/overview.md#ask-aglyn-ai).
 
 One build holds up to 16 things and 8 pages. On the Free plan it holds 2 pages, and some
 parts, such as templates, campaigns, automations, products and edits to existing pages,
@@ -100,7 +103,9 @@ page that places them.
 - **Everything is a draft.** Pages are unpublished drafts unless you ticked the publish box.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
-  campaigns are unsent and aimed at nobody.
+  campaigns are unsent and aimed at nobody. The one exception is a **redirect**: a rule has
+  no draft, so it works as soon as the build makes it, as it does when you save one
+  yourself. The plan card lists each redirect before you confirm.
 - **Names are your own.** A new variable or function never takes a name the site already
   uses.
 
@@ -150,7 +155,7 @@ your products, set shipping and tax, and fill in your policies.
 
 A build spends [AI credits](./ai-credits.md) for each part it makes, and the card shows the
 estimate before you confirm. Products, booking services, overlays, A/B tests, funnels and
-variables cost almost nothing. If the build fails because of something on our side, the
+variables cost almost nothing, and redirects cost nothing. If the build fails because of something on our side, the
 credits are given back, and the card says so. See
 [Credits given back](./ai-credits.md#credits-given-back).
 
