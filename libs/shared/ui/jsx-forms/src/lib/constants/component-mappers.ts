@@ -81,6 +81,9 @@ export const simpleComponentMapper = {
   [FieldComponentType.SWITCH]: FIELD_MAP_SWITCH,
   [FieldComponentType.TEXT_FIELD]: FIELD_MAP_TEXT_FIELD,
   [FieldComponentType.TEXTAREA]: FIELD_MAP_TEXTAREA,
+  // Settings forms' opening hours. A `dynamic()` stub: nothing loads until a
+  // schema draws one.
+  [FieldComponentType.WEEKLY_HOURS]: FIELD_MAP_WEEKLY_HOURS,
 }
 
 export const dateTimeComponentMapper = {
