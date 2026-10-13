@@ -54,6 +54,7 @@ import {
   aiSettlePlanFormDatasets,
   aiSettlePlanForms,
   aiSettlePlanFreeWall,
+  aiSettlePlanLayoutRegionSections,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
@@ -701,13 +702,20 @@ export function aiDoctrinePlanCheck(
     // A plan past the datasets this job may make keeps the most useful
     // (AGL-3616), once a form's dataset is one it can write to and no page
     // lists it.
+    // A page section that is a layout region (header, navigation, footer) is
+    // taken off the page (AGL-3750), first after the refs, so the wall
+    // counts what the page keeps.
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
     // last, once every creation the wall counts is settled.
     const plan = aiSettlePlanFreeWall(
       aiSettlePlanForms(
         aiSettlePlanLayouts(
           aiSettlePlanDatasets(
-            aiSettlePlanFormDatasets(aiSettlePlanRefs(parsed.plan, inventory), inventory, capabilities),
+            aiSettlePlanFormDatasets(
+              aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(parsed.plan, inventory), inventory),
+              inventory,
+              capabilities,
+            ),
             capabilities,
           ),
           inventory,

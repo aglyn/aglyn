@@ -24,6 +24,7 @@ import {
   SCREEN_ROOT_PATH,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/app-utils/screen-route'
+import { resolvePageLocale } from '@aglyn/aglyn/app-utils/seo-locale'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
@@ -36,6 +37,7 @@ import {
   aiLayoutRepairFrameHollows,
   aiLayoutWithoutFrameHollows,
 } from '../layout-language/ai-layout-frame-hollows'
+import { aiPlanLanguage } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
@@ -99,6 +101,35 @@ export interface AiSitePublishDeps {
  */
 export function aiJobPublishesBuild(job: Pick<AiJob, 'kind' | 'inputs'>): boolean {
   return job.kind === 'build' && job.inputs?.['publish'] === true && job.inputs?.['publishConfirmed'] === true
+}
+
+/**
+ * The host fields a guided start writes for its plan's language (AGL-3750),
+ * as the Languages card saves one language: `locales` of that one and
+ * `defaultLocale` the same. `null` — nothing written — where the plan said no
+ * valid language, where it is the language the site already publishes in
+ * (English for a new site), and on a site with more than one language, whose
+ * languages are the owner's decision. Nothing is translated: the pages were
+ * written in the brief's language, and this says so to the reader.
+ */
+export function aiSiteLanguageUpdates(
+  host: { locales?: unknown; defaultLocale?: unknown },
+  language: string | null | undefined,
+): { locales: string[]; defaultLocale: string } | null {
+  const code = aiPlanLanguage(language)
+  if (!code) return null
+  const locales = Array.isArray(host.locales)
+    ? host.locales.filter((one): one is string => typeof one === 'string' && one.trim() !== '')
+    : []
+  if (locales.length > 1) return null
+  const current = resolvePageLocale({
+    host: {
+      ...(typeof host.defaultLocale === 'string' ? { defaultLocale: host.defaultLocale } : {}),
+      locales,
+    },
+  })
+  if (current === code) return null
+  return { locales: [code], defaultLocale: code }
 }
 
 /** Whether a finished job of this shape publishes what it built. */
@@ -361,6 +392,11 @@ export async function aiPublishGuidedSite(
      * starter still holds stays a draft and says so.
      */
     retry?: boolean
+    /**
+     * The language the plan says the brief and copy are in (AGL-3750): the
+     * site publishes in it, where `aiSiteLanguageUpdates` says so.
+     */
+    language?: string | null
   },
   deps: AiSitePublishDeps = {},
 ): Promise<AiJobSitePublish> {
@@ -480,6 +516,14 @@ export async function aiPublishGuidedSite(
   } else if (placeholder && entries[placeholder]) {
     hostUpdates['defaultHomeScreenId'] = FieldValue.delete()
   }
+  // The site's language, from its plan (AGL-3750): every page's `<html lang>`
+  // reads it, so the announce below asks for the whole site.
+  const language = aiSiteLanguageUpdates(
+    { locales: host.get('locales'), defaultLocale: host.get('defaultLocale') },
+    input.language,
+  )
+  if (language) Object.assign(hostUpdates, language)
+  const entireHost = layoutWrites.length > 0 || language !== null
   batch.update(hostRef, hostUpdates)
   for (const page of accepted) {
     batch.set(hostRef.collection('screens').doc(page.id), { slug: page.slug, publishedAt: now }, { merge: true })
@@ -496,7 +540,7 @@ export async function aiPublishGuidedSite(
     paths: paths.length ? paths : [SCREEN_ROOT_PATH],
     createdAt: FieldValue.serverTimestamp(),
     attempts: 0,
-    ...(layoutWrites.length ? { entireHost: true } : {}),
+    ...(entireHost ? { entireHost: true } : {}),
   })
   try {
     await batch.commit()
@@ -512,7 +556,7 @@ export async function aiPublishGuidedSite(
   const dropped = await dropCache({
     hostIds: [hostId],
     reason: 'guided AI site start published',
-    ...(layoutWrites.length ? {} : { paths: { [hostId]: paths } }),
+    ...(entireHost ? {} : { paths: { [hostId]: paths } }),
   })
   if (dropped.complete) await outboxRef.delete().catch(() => undefined)
   // A site that came alive with nobody's browser on the publish (AGL-1589),

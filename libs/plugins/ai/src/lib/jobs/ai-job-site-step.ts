@@ -1179,6 +1179,8 @@ export function createAiJobSiteStep(
         // The store's pages the header and footer link and the start did not write (AGL-3676).
         ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
         ...(wasLive ? { retry: true } : {}),
+        // The site publishes in the language its brief was written in (AGL-3750).
+        ...(plan.language ? { language: plan.language } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
