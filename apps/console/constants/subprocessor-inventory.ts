@@ -418,7 +418,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     reason:
       'Cloud Logging `entries:write`, the sink for client-side error reports and beacons from customer sites.',
     dataReceived:
-      "The error message and stack, the URL it happened on, the host and build identifiers, and the reporting browser's user-agent.",
+      'Technical diagnostic information about errors in the Services, such as error details, the page and code where an error occurred, the application version, and general characteristics of the browser and device.',
   },
   'recaptchaenterprise.googleapis.com': {
     disposition: 'subprocessor',
