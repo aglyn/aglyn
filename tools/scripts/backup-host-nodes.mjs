@@ -40,7 +40,17 @@ initializeApp({
 })
 const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
-const KINDS = ['screens', 'layouts', 'components', 'templates']
+// `forms` and `emailTemplates` are besigner documents too — a form's design
+// and a per-site email design — so a snapshot taken before a node backfill
+// (`backfill-formfield-elements.mjs` rewrites form designs) covers them.
+const KINDS = [
+  'screens',
+  'layouts',
+  'components',
+  'templates',
+  'forms',
+  'emailTemplates',
+]
 
 async function* nodeDocs(hostRef) {
   for (const kind of KINDS) {

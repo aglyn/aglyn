@@ -33,7 +33,8 @@
  *
  * The three moves this covers are the three that have happened: `booking` and
  * `eventList` left `mui` before `requiredSitePlugins` existed, and `form` /
- * `formField` left it after.
+ * `formField` left it after. MUI's separate form elements never moved, but the
+ * forms plugin's presets place them, so they are listed back to `mui`.
  */
 
 import { readFileSync } from 'node:fs'
@@ -134,18 +135,32 @@ describe('the pluginId backfill names the bundles that exist', () => {
       'eventList',
       'form',
       'formField',
+      // MUI's separate form elements: never moved, but the forms plugin's
+      // presets and the formField backfill place them.
+      'muiCheckbox',
+      'muiFormControl',
+      'muiFormControlLabel',
+      'muiFormHelperText',
+      'muiFormLabel',
+      'muiInput',
+      'muiRadio',
+      'muiRadioGroup',
+      'muiRating',
+      'muiSelect',
+      'muiSelectOption',
     ])
   })
 
-  it('never claims an id the mui bundle still registers', () => {
+  it('never points an id the mui bundle still registers anywhere but mui', () => {
     // The failure this catches is the reverse of a missing row: a row left
     // behind after an element moved BACK, or written for one that never left,
     // would restamp live nodes away from the bundle that draws them.
-    for (const componentId of Object.keys(table)) {
-      expect({
+    for (const [componentId, bundleId] of Object.entries(table)) {
+      const stillInMui = MUI_BUNDLE.some((entry) => entry.schema.$id === componentId)
+      expect({ componentId, restampsAwayFromMui: stillInMui && bundleId !== MUI_ID }).toEqual({
         componentId,
-        stillInMui: MUI_BUNDLE.some((entry) => entry.schema.$id === componentId),
-      }).toEqual({ componentId, stillInMui: false })
+        restampsAwayFromMui: false,
+      })
     }
   })
 
