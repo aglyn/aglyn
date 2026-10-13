@@ -100,7 +100,7 @@ export function StructuredValueEditor(props: StructuredValueEditorProps) {
                 duplicates.has(row.key.trim()) ? 'Used twice — the last one wins' : undefined
               }
               size="small"
-              sx={{ flex: 1 }}
+              sx={{ flex: 3, minWidth: 0 }}
             />
           ) : (
             <Typography
@@ -115,7 +115,7 @@ export function StructuredValueEditor(props: StructuredValueEditorProps) {
             <Typography
               variant="body2"
               color="text.secondary"
-              sx={{ flex: 2 }}
+              sx={{ flex: 5, minWidth: 0 }}
               noWrap
               title={row.value}
             >
@@ -142,7 +142,7 @@ export function StructuredValueEditor(props: StructuredValueEditorProps) {
                   })
                 }}
                 size="small"
-                sx={{ width: 130 }}
+                sx={{ flex: 2, minWidth: 108 }}
               >
                 {Object.entries(KIND_LABELS).map(([kind, label]) => (
                   <MenuItem key={kind} value={kind}>
@@ -154,7 +154,7 @@ export function StructuredValueEditor(props: StructuredValueEditorProps) {
                 <Stack
                   direction="row"
                   spacing={1}
-                  sx={{ alignItems: 'center', flex: 2 }}
+                  sx={{ alignItems: 'center', flex: 3, minWidth: 0 }}
                 >
                   <Switch
                     checked={row.value === 'true'}
@@ -187,7 +187,7 @@ export function StructuredValueEditor(props: StructuredValueEditorProps) {
                       : undefined
                   }
                   size="small"
-                  sx={{ flex: 2 }}
+                  sx={{ flex: 3, minWidth: 0 }}
                 />
               )}
             </>
