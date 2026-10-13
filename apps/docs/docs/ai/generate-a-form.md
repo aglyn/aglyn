@@ -33,13 +33,15 @@ or **Cancel job**. **Open AI jobs** follows the job in the Assist panel instead.
 
 - **Fields** of the types a form supports: text, email, multiline, dropdown, radio choice,
   checkboxes and star rating. Each has a label, and is marked **Required** only when the form
-  cannot do its job without the answer.
+  cannot do its job without the answer. They are built from the Besigner's separate
+  [form elements](../content-and-data/forms/overview.md#field-types), so you edit and style
+  them like any field you add yourself.
 - **Marketing consent.** When the form asks for an email address, it gets the
-  **Marketing consent** field, the same one the Besigner's element picker adds: a
-  **Marketing emails** checkbox with the single option *Email me news and offers*, left
-  unticked and named as the form's **Marketing consent field**. A visitor who ticks it is
-  recorded as consenting; submitting the form is never consent on its own. You can reword the
-  label and the option on the form.
+  **Marketing consent** field, the same one the Besigner's element picker adds: a single
+  **Checkbox** beside the words *Email me news and offers*, left unticked and named as the
+  form's **Marketing consent field**. A visitor who ticks it is recorded as consenting;
+  submitting the form is never consent on its own. You can reword the text beside the box
+  on the form.
 - **Routing.** Every submission lands in the Inbox. When your brief describes each submission
   as a sales lead, the form also files a lead in **CRM → Leads**, which you can switch off on
   the form's page. When your brief asks to add people to an email list, the job tells you how:
