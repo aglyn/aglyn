@@ -96,6 +96,25 @@ export function normalizeLocaleTag(
     .join('-')
 }
 
+/**
+ * The pattern the console's Languages card holds one site language to: a
+ * two-letter language and at most one subtag, a region (`pt-BR`) or a script
+ * (`zh-Hant`). Narrower than `normalizeLocaleTag`, which also reads
+ * three-letter languages, numeric regions and script-plus-region tags.
+ */
+export const SITE_LANGUAGE_CODE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
+
+/**
+ * A site language code as the Languages card would store it, or `null`:
+ * `normalizeLocaleTag`'s canonical casing (`_` read as `-`, surrounding space
+ * dropped), held to `SITE_LANGUAGE_CODE_PATTERN`. Anything that is not a
+ * string, or not a code the card would accept, is `null`.
+ */
+export function siteLanguageCode(value: unknown): string | null {
+  const tag = normalizeLocaleTag(typeof value === 'string' ? value : undefined)
+  return tag && SITE_LANGUAGE_CODE_PATTERN.test(tag) ? tag : null
+}
+
 /** The screen and host fields the language of a page is decided from. */
 export interface PageLocaleSources {
   /** The screen being rendered — its `locale` is the most specific answer. */
