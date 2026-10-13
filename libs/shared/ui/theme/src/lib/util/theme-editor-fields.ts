@@ -520,6 +520,15 @@ export function writeThemeColor(
       const paletteKey = group as PaletteColorKey
       if (hex) next[paletteKey] = { main: hex }
       else delete next[paletteKey]
+      // An accent's tint is a wash of its old `main` for the same reason, so
+      // it goes too and the theme washes one from the new color.
+      const tint = next.tint as Record<string, string> | undefined
+      if (tint && paletteKey in tint) {
+        const rest = { ...tint }
+        delete rest[paletteKey]
+        if (Object.keys(rest).length) next.tint = rest as HostThemeSchemeColors['tint']
+        else delete next.tint
+      }
       return next
     }
     const groupKey = group as 'background' | 'text' | 'tint'

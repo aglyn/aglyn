@@ -9,6 +9,30 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.249 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.248...v1.0.0-beta.249)
+
+### Added
+
+- **logic:** a function parameter's choices as rows, not "value: Label" text ([AGL-3768](https://linear.app/aglyn/issue/AGL-3768))
+
+### Fixed
+
+- **theme:** a recolored accent's tint follows its new main (AGL-3764) (#1455) ([AGL-3764](https://linear.app/aglyn/issue/AGL-3764))
+- **ai:** a site's photo words are read subject first, so its hero is of its business ([AGL-3769](https://linear.app/aglyn/issue/AGL-3769), [AGL-3760](https://linear.app/aglyn/issue/AGL-3760))
+
+### Documentation
+
+- **legal:** describe Cloud Logging error reports by category, not by field ([AGL-3732](https://linear.app/aglyn/issue/AGL-3732))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **env-isolation:** exempt live Stripe in console/tenant dev+preview by owner decision ([AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+
+</details>
+
 ## v1.0.0-beta.248 — 2026-10-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.247...v1.0.0-beta.248)

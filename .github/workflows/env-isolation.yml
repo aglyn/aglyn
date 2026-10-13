@@ -47,15 +47,26 @@ name: Env isolation
 #
 # ## ⚠️ THIS JOB IS RED TODAY, AND THAT IS THE DELIVERABLE
 #
-# As of 2026-08-24 it reports 25 sharing findings and 3 mode findings —
-# aglyn-console's development and preview read `pk_live_`, and aglyn-tenant's
-# development and preview copies are stored `encrypted`/`sensitive`, so UNKNOWN. Turning it
-# green is remediation work
-# in the Vercel dashboard (AGL-2403 / AGL-2401 / AGL-2402) — the runbook is
+# As of 2026-10-13 it reports 18 sharing findings (CRON_SECRET,
+# FIREBASE_PRIVATE_KEY, TOKEN_SIGNING_SECRET, VERCEL_TOKEN, …) and no mode
+# findings — the Stripe ones are exempted by decision, see below. Turning it
+# green is remediation work in the Vercel dashboard (AGL-2403 / AGL-2401 / AGL-2402) — the runbook is
 # `docs/SECRET_ROTATION.md`. Do NOT add `continue-on-error`, and do NOT move a
 # finding into the checker's ACCEPTED table to quiet it: an ACCEPTED entry
 # needs a name and a reason and is still printed on every run. A guard that
 # cannot be red is not a guard.
+#
+# ## Live Stripe outside production is a decision, not a finding
+#
+# Owner decision 2026-10-13: aglyn-console and aglyn-tenant development and
+# preview run against the LIVE Stripe account on purpose. The checker's
+# LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE exempts exactly that — the Stripe
+# key family (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+# NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY), only in development/preview, only where
+# the record reaches console and/or tenant — from BOTH the sharing and the mode
+# verdicts. Those records are still printed every run in a NOTE section. Every
+# other credential, an inert or otherwise-linked Stripe record, and any other
+# non-production environment still fails exactly as before.
 #
 # ## Configuration
 #
