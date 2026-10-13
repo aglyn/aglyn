@@ -30,6 +30,7 @@ import {
   isImpersonationSession,
   meterPlatformEmail,
   raiseOperatorAlert,
+  reapHostBeaconRemnants,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
@@ -398,7 +399,23 @@ async function handler(request: Request): Promise<Response> {
       return null
     })
 
-    return Response.json({ erased, skipped, scanned: due.size, people }, { status: 200 })
+    /*
+     * A deleted site's late page-view beacons recreate its counters under a
+     * host with no document (AGL-3744); daily is the cadence they land at.
+     * Its own catch, for the same reason as the person queue's.
+     */
+    const hostRemnants = await reapHostBeaconRemnants().catch((error) => {
+      console.error('run-erasures: host remnant reap failed', error)
+      return null
+    })
+    if (hostRemnants?.left.length) {
+      console.warn('run-erasures: phantom hosts not reaped', hostRemnants.left)
+    }
+
+    return Response.json(
+      { erased, skipped, scanned: due.size, people, hostRemnants },
+      { status: 200 },
+    )
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

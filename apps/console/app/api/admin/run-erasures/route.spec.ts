@@ -33,6 +33,7 @@
  */
 
 const mockEraseOrg = jest.fn()
+const mockReapHostBeaconRemnants = jest.fn()
 // Typed with its parameter: `jest.fn(async () => …)` infers a zero-arity
 // signature, so passing the payload through is a compile error even though it
 // runs fine. `nx test` never surfaced that — only `tsc` does.
@@ -56,6 +57,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   ERASURE_HOLD_MS: 7 * 24 * 60 * 60 * 1000,
   eraseOrg: (orgId: string) => mockEraseOrg(orgId),
+  reapHostBeaconRemnants: () => mockReapHostBeaconRemnants(),
   findUserByUidAcrossPools: async () => null,
   meterPlatformEmail: async () => undefined,
   firebaseAdmin: {
@@ -110,6 +112,7 @@ describe('the erasure runner batch (AGL-1455)', () => {
     process.env.CRON_SECRET = 'test-secret'
     mockDue = []
     mockOperatorAlerts.length = 0
+    mockReapHostBeaconRemnants.mockResolvedValue({ reaped: [], left: [] })
   })
 
   it('THE DEFECT: a throw on one org still erases the rest of the batch', async () => {
@@ -160,5 +163,27 @@ describe('the erasure runner batch (AGL-1455)', () => {
     expect(payload.scanned).toBe(2)
     // A hold is the schedule working, not a failure: nobody is alerted.
     expect(mockOperatorAlerts).toEqual([])
+  })
+
+  it('reaps a deleted site\'s beacon remnants on the same run (AGL-3744)', async () => {
+    mockReapHostBeaconRemnants.mockResolvedValue({ reaped: ['host-gone'], left: [] })
+
+    const { status, payload } = await run()
+
+    expect(status).toBe(200)
+    expect(mockReapHostBeaconRemnants).toHaveBeenCalledTimes(1)
+    expect(payload.hostRemnants).toEqual({ reaped: ['host-gone'], left: [] })
+  })
+
+  it('a failed reap does not fail the erasures already done', async () => {
+    mockDue = ['org-a']
+    mockEraseOrg.mockResolvedValue({ ok: true })
+    mockReapHostBeaconRemnants.mockRejectedValue(new Error('listDocuments failed'))
+
+    const { status, payload } = await run()
+
+    expect(status).toBe(200)
+    expect(payload.erased).toEqual(['org-a'])
+    expect(payload.hostRemnants).toBeNull()
   })
 })
