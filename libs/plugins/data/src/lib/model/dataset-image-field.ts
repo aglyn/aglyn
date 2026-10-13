@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import type { CustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
@@ -29,6 +30,11 @@ import { BUNDLE_ID } from '../constants/bundle-common'
  * the form a picker writes into a product), a `media:` reference, another
  * path on the site, or an https address. Nothing else is a picture a page can
  * draw, so nothing else is stored.
+ *
+ * A `media:` reference is read by `parseMediaRef`, the grammar that minted
+ * it, so a photo from the organization library (`media:org:{orgId}/{id}`,
+ * whose scope holds a colon) and a content-pinned one (`…@{hash}`) are the
+ * same photo as a site's own (AGL-3763).
  */
 
 /** The custom field type a record's photo rides. Persisted on field definitions — never rename. */
@@ -37,13 +43,11 @@ export const DATASET_IMAGE_FIELD_TYPE = 'image'
 /** The longest photo address kept. */
 export const DATASET_IMAGE_VALUE_MAX = 2_000
 
-const MEDIA_REF = /^media:[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+(?:@[A-Za-z0-9]+)?$/
-
 /** Whether a value is a photo address a record may hold. */
 export function isDatasetImageValue(value: unknown): value is string {
   if (typeof value !== 'string' || !value || value.length > DATASET_IMAGE_VALUE_MAX) return false
   if (/[\s"'<>\\]/.test(value)) return false
-  if (value.startsWith('media:')) return MEDIA_REF.test(value)
+  if (value.startsWith('media:')) return parseMediaRef(value) !== null
   if (value.startsWith('/')) return !value.startsWith('//')
   return /^https:\/\/[^/]+/.test(value)
 }

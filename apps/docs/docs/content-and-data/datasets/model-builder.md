@@ -18,7 +18,7 @@ import in the console, or write through the REST API, are validated against it.
 ## Define the model
 
 1. In **Data**, create a dataset and open the **schema dialog**.
-2. Add **typed fields** — text, number, date, reference, page address, and more.
+2. Add **typed fields** — text, number, date, reference, image, page, page address, and more.
 3. Save. The model is stored on the dataset. Every write validates records against
    it — the console, the REST API, a bound form and an automation step — and stores
    each value as its field's type. A record with a value that doesn't fit is not
@@ -63,11 +63,33 @@ for how the pages are built.
 ### Image fields {#image-fields}
 
 An **Image** field holds a record's photo: a portfolio piece, a dish, a team member.
-Pick **Image** in the field's type list. Its value is a photo from your media library
-or an `https://` link to one. To show it, bind an Image's source to the field, such as
-`{{item.image}}`, inside a repeat or on a record template. When Aglyn AI builds a
-dataset for a list people look at, such as pieces, a menu or classes, it adds this
-field and gives each record a stock photo you can replace.
+Pick **Image** in the field's type list. In the record editor, press **Choose from
+media** and pick a photo from your media library — this site's files or your
+organization's. The editor shows a preview, with **Change photo** and **Remove** beside
+it. A chosen photo is kept by identity, so moving it to another folder or replacing the
+file never breaks the record. For a photo hosted on another website, press **Use a link
+instead**.
+
+To show the photo, select an Image inside a repeat or on a record template, press the
+`{}` button beside its **Image source**, and pick the field from the record's group.
+When Aglyn AI builds a dataset for a list people look at, such as pieces, a menu or
+classes, it adds this field and gives each record a stock photo you can replace.
+
+### Page fields {#page-fields}
+
+A **Page** field links a record to one of your site's pages: each service to the page
+about it, each location to its own page. Pick **Page** in the field's type list. In the
+record editor the field is a list of the site's pages by name; pick one, or **No page**.
+
+To link to it, select a Button or Link inside a repeat, press the `{}` button in its
+**External URL**, and pick the field from the record's group. The link goes to the page
+itself, not to an address typed for it, so it follows the page wherever it goes: rename
+the page or move it under another one and every record that names it still links to it.
+
+A page belongs to one site, so the list shows the pages of the site whose **Data** page
+you opened the dataset from. On the organization **Data** page, open the dataset from a
+site's **Data** page to choose its pages. When Aglyn AI builds a dataset with a Page
+field, it leaves the field empty for you to pick.
 
 ## Edit records
 
