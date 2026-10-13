@@ -602,7 +602,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   marketplaces: ['#connect-a-marketplace', '#listings', '#orders', '#activity'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
-  ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
+  ordersAndReturns: ['#fulfillment', '#invoices', '#returns', '#buyer-requests', '#run-a-return', '#order-webhooks', '#when-an-endpoint-is-down', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   pickupAndDelivery: ['#set-up-pickup', '#set-up-local-delivery', '#queue', '#ask-aglyn-ai', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
