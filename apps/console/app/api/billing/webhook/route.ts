@@ -1722,6 +1722,15 @@ async function handler(request: Request): Promise<Response> {
               metadata: invoiceMetadata,
             })
             // Revenue the books expected that is not coming (AGL-3377).
+            //
+            // Telling the operator IS this delivery's consequence on this
+            // route, so it is the effect the ledger records (AGL-1954). The
+            // plugin raise above writes through handles this route cannot
+            // see and the alert through its own, so without this line every
+            // voided workspace invoice — the one a staff lock's cancel leaves
+            // behind, for one — read as inert and turned the billing check
+            // degraded.
+            ledger.effect('operator-told-invoice-closed')
             await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
               dedupeKey: `${String(object?.id ?? '')}:${type}`,
               context: {

@@ -523,6 +523,32 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
     expect(wasMarkedInert('evt_mkt_refund')).toBe(false)
   })
 
+  it("a workspace's voided invoice tells the operator and is NOT marked", async () => {
+    // What a staff lock's subscription cancel leaves behind: Stripe voids the
+    // open first invoice, and the only consequence on this route is the
+    // operator alert.
+    const post = loadWebhook()
+    const response = await post(
+      signed(
+        event('evt_voided', 'invoice.voided', {
+          id: 'in_voided',
+          object: 'invoice',
+          customer: 'cus_own_1',
+          currency: 'usd',
+          amount_due: 5600,
+          metadata: {},
+        }),
+        'whsec_live_fake',
+      ),
+    )
+    expect(response.status).toBe(200)
+    expect(mockRaiseOperatorAlert).toHaveBeenCalledWith(
+      'billing.platformInvoiceUncollectible',
+      expect.objectContaining({ dedupeKey: 'in_voided:invoice.voided' }),
+    )
+    expect(wasMarkedInert('evt_voided')).toBe(false)
+  })
+
   it('a WON dispute nobody claimed moved no money and is NOT marked', async () => {
     const post = loadWebhook()
     await post(
