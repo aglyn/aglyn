@@ -24,6 +24,8 @@ import {
   DEFAULT_SITE_THEME,
   defaultSiteSeo,
 } from './default-site'
+import { formFieldToElements, type StoredFormNode } from './form-field-elements'
+import { formFieldDeclsFromNodes } from './forms'
 import { nodeIdFromInteractionSelector } from './node-interactions'
 import { validateThemeForPublish } from './site-theme'
 
@@ -79,11 +81,37 @@ describe('AGL-3497 · the default home page', () => {
   })
 
   it('names the forms bundle on the contact form, so it draws with the page', () => {
-    const forms = nodesOf(home.nodes).filter(([, node]) =>
-      ['form', 'formField'].includes(node.componentId),
-    )
-    expect(forms.length).toBe(4)
+    const forms = nodesOf(home.nodes).filter(([, node]) => node.componentId === 'form')
+    expect(forms.length).toBe(1)
     for (const [, node] of forms) expect((node as { pluginId?: string }).pluginId).toBe('forms')
+  })
+
+  it('builds the contact fields from MUI’s separate form elements, exactly as the backfill rebuilds a Form Field', () => {
+    const nodes = home.nodes as Record<string, StoredFormNode>
+    expect(nodesOf(home.nodes).some(([, node]) => node.componentId === 'formField')).toBe(false)
+    expect(nodes['dh_form']?.nodes).toEqual(['dh_fName', 'dh_fEmail', 'dh_fMessage'])
+    const legacy: Record<string, Record<string, unknown>> = {
+      dh_fName: { fieldName: 'name', label: 'Name', required: true },
+      dh_fEmail: { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
+      dh_fMessage: { fieldName: 'message', label: 'Message', fieldType: 'textarea', required: true },
+    }
+    for (const [id, props] of Object.entries(legacy)) {
+      const built = formFieldToElements({ $id: id, componentId: 'formField', parentId: 'dh_form', props })
+      for (const [builtId, node] of Object.entries(built?.nodes ?? {})) {
+        expect(nodes[builtId]).toMatchObject({
+          componentId: node.componentId,
+          pluginId: 'mui',
+          parentId: node.parentId,
+          props: node.props,
+          nodes: node.nodes ?? [],
+        })
+      }
+    }
+    expect(formFieldDeclsFromNodes(nodes as never, 'dh_form').map((decl) => decl.fieldName)).toEqual([
+      'name',
+      'email',
+      'message',
+    ])
   })
 })
 

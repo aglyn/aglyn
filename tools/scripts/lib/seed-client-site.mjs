@@ -404,6 +404,34 @@ function homeNodes(hostId) {
   ])
 }
 
+/**
+ * One labelled text field as MUI's separate form elements — Form Control ›
+ * Form Label + Input — the tree `starterTextField` and the formField backfill
+ * build (libs/aglyn/src/lib/app-utils/form-field-elements.ts).
+ */
+function textField(id, { name, label, type = 'text', multiline = false, required = false }) {
+  const req = required ? { required: true } : {}
+  return {
+    id,
+    componentId: 'muiFormControl',
+    props: { fullWidth: true, ...req },
+    children: [
+      { id: `${id}-label`, componentId: 'muiFormLabel', props: { children: label } },
+      {
+        id: `${id}-input`,
+        componentId: 'muiInput',
+        props: {
+          name,
+          type,
+          ...(multiline ? { multiline: true, minRows: 3 } : {}),
+          ...req,
+          fullWidth: true,
+        },
+      },
+    ],
+  }
+}
+
 function contactNodes() {
   return buildNodes([
     section('cc_contact', [
@@ -419,21 +447,9 @@ function contactNodes() {
             successMessage: 'Thanks — we will call you within one business day.',
           },
           children: [
-            {
-              id: 'cc_name',
-              componentId: 'formField',
-              props: { fieldName: 'name', label: 'Your name', fieldType: 'text', required: true },
-            },
-            {
-              id: 'cc_email',
-              componentId: 'formField',
-              props: { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
-            },
-            {
-              id: 'cc_details',
-              componentId: 'formField',
-              props: { fieldName: 'details', label: F.markers.formLabel, fieldType: 'textarea' },
-            },
+            textField('cc_name', { name: 'name', label: 'Your name', required: true }),
+            textField('cc_email', { name: 'email', label: 'Email', type: 'email', required: true }),
+            textField('cc_details', { name: 'details', label: F.markers.formLabel, multiline: true }),
           ],
         },
         text('cc_bookTitle', 'h2', 'Or book a site visit'),

@@ -1206,6 +1206,51 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
   ],
 }
 
+/**
+ * A field as a preset: the all-in-one Form Field's props rebuilt as MUI's
+ * separate form elements by `formFieldToElements` — the same function the
+ * backfill migrates saved fields with, so a field added today and a field
+ * migrated from a Form Field are the same tree. Ids are left `null` (fresh
+ * ones are minted at insertion) and every node names `mui`, the bundle that
+ * registers it.
+ */
+export function fieldPresetData(
+  props: FormFieldProps,
+): Aglyn.NodePresetData {
+  const built = Aglyn.formFieldToElements({
+    $id: 'field',
+    componentId: Aglyn.LEGACY_FORM_FIELD_COMPONENT_ID,
+    props: props as Record<string, unknown>,
+  })
+  if (!built) throw new Error('formFieldToElements refused a Form Field')
+  const nest = (id: string): Aglyn.NodePresetData => {
+    const node = built.nodes[id] as Aglyn.StoredFormNode
+    const children = (node.nodes ?? []).map(String)
+    return {
+      $id: null,
+      componentId: node.componentId,
+      pluginId: node.pluginId,
+      props: node.props ?? {},
+      ...(children.length ? { nodes: children.map(nest) } : {}),
+    } as unknown as Aglyn.NodePresetData
+  }
+  return nest(built.rootId)
+}
+
+/** The name/email/message fields every contact form starts with. */
+const contactFields = (): Aglyn.NodePresetData[] => [
+  fieldPresetData({ fieldName: 'name', label: 'Name', required: true }),
+  fieldPresetData({ fieldName: 'email', label: 'Email', fieldType: 'email', required: true }),
+  fieldPresetData({ fieldName: 'message', label: 'Message', fieldType: 'textarea', required: true }),
+]
+
+/*
+ * The all-in-one Form Field has no preset: every piece of a field is its own
+ * element in the mui plugin now (Form Control, Form Label, Input, …, with
+ * Text/Email/Message/Dropdown/Radio/Checkbox/Rating field presets there), so
+ * the Add Element picker no longer offers it. Its component and schema stay
+ * registered so a document nobody has migrated keeps drawing and editing.
+ */
 export const formPresets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(FORM_ID, 'contact'),
@@ -1220,58 +1265,16 @@ export const formPresets: Aglyn.PresetSchema[] = [
       componentId: FORM_ID,
       pluginId: BUNDLE_ID,
       props: { formName: 'Contact' },
-      nodes: [
-        {
-          $id: null,
-          componentId: FORM_FIELD_ID,
-          pluginId: BUNDLE_ID,
-          props: { fieldName: 'name', label: 'Name', required: true },
-        },
-        {
-          $id: null,
-          componentId: FORM_FIELD_ID,
-          pluginId: BUNDLE_ID,
-          props: {
-            fieldName: 'email',
-            label: 'Email',
-            fieldType: 'email',
-            required: true,
-          },
-        },
-        {
-          $id: null,
-          componentId: FORM_FIELD_ID,
-          pluginId: BUNDLE_ID,
-          props: {
-            fieldName: 'message',
-            label: 'Message',
-            fieldType: 'textarea',
-            required: true,
-          },
-        },
-      ],
-    },
-  },
-  {
-    $id: generatePresetId(FORM_FIELD_ID),
-    type: Aglyn.NodeType.PRESET,
-    displayName: 'Form Field',
-    pluginId: BUNDLE_ID,
-    description: 'Single input inside a form',
-    category: Aglyn.ComponentCategory.FORMS,
-    icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
-    data: {
-      $id: null,
-      componentId: FORM_FIELD_ID,
-      pluginId: BUNDLE_ID,
-      props: { fieldName: 'field', label: 'Field' },
+      nodes: contactFields(),
     },
   },
   /*
-   * The marketing consent field as one preset rather than a recipe. Its props
-   * are the platform's `MARKETING_CONSENT_FORM_FIELD`, which every place that adds
-   * this field reads, so each adds the same unticked one-option checkbox. It
-   * records consent once the form names it as its Marketing consent field.
+   * The marketing consent field as one preset rather than a recipe. It is the
+   * platform's `MARKETING_CONSENT_FORM_FIELD` rebuilt as elements — a lone,
+   * unticked, not-required Checkbox named `marketingConsent` in a Choice
+   * Label whose words say what the person agrees to and are also what the box
+   * posts — so every place that adds this field adds the same one. It records
+   * consent once the form names it as its Marketing consent field.
    */
   {
     $id: generatePresetId(FORM_FIELD_ID, 'marketing-consent'),
@@ -1281,12 +1284,7 @@ export const formPresets: Aglyn.PresetSchema[] = [
     description: 'An unticked checkbox asking permission to send marketing emails',
     category: Aglyn.ComponentCategory.FORMS,
     icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
-    data: {
-      $id: null,
-      componentId: FORM_FIELD_ID,
-      pluginId: BUNDLE_ID,
-      props: { ...Aglyn.MARKETING_CONSENT_FORM_FIELD },
-    },
+    data: fieldPresetData({ ...Aglyn.MARKETING_CONSENT_FORM_FIELD }),
   },
 ]
 
@@ -1337,25 +1335,12 @@ export const formBlockPresets: Aglyn.PresetSchema[] = [
             submitLabel: 'Send message',
             successMessage: 'Thanks — we will get back to you soon.',
           },
-          nodes: [
-            contactField('name', 'Name'),
-            contactField('email', 'Email', { fieldType: 'email' }),
-            contactField('message', 'Message', { fieldType: 'textarea' }),
-          ],
+          nodes: contactFields(),
         },
       ],
     },
   },
 ]
-
-function contactField(fieldName: string, label: string, extra?: object) {
-  return {
-    $id: null,
-    componentId: FORM_FIELD_ID,
-    pluginId: BUNDLE_ID,
-    props: { fieldName, label, required: true, ...extra },
-  }
-}
 
 export { Form, FormField }
 export default Form
