@@ -194,6 +194,9 @@ describe('the Variables card', () => {
     })
     const dialog = await screen.findByRole('dialog')
     expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value).toBe('plan_prices')
+    // A dictionary opens as rows, not JSON (AGL-3757).
+    expect((within(dialog).getByLabelText('Entry name') as HTMLInputElement).value).toBe('pro')
+    expect(within(dialog).getByDisplayValue('49')).toBeTruthy()
   })
 })
 

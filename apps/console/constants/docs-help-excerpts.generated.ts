@@ -373,7 +373,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   bindings: {
     '#functions-card': 'N explain, change or fix it — each opens unsaved in the editor.',
     '#insert-a-variable': 'K. A published page resolves only the id form, so a name token that was never converted — because no variable had that name — shows exactly as typed.',
-    '#no-code-functions': 'E.',
+    '#no-code-functions': 'The next value in the list, and × removes one. On a page, a bare {{name}} shows a dictionary as name: value pairs and a list comma-separated.',
     '#site-details': 'Taset/webhook, and computed variables pick their workflow. Renaming an entity never breaks anything that references it — the display name is just a label.',
     '#typed-variables': 'The site you are editing, exactly as the published page does.',
     '#where-used--safety': 'Riable for every figure on the page, and a true/false for every row a filter can turn off.',

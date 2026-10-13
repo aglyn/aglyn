@@ -36,8 +36,8 @@ function limit applies as it does to **Add function**.
 ## Write a variable {#variable}
 
 **Create with AI** at the top of the **Variables** card writes one site variable — a name, a
-type and a value in that type's stored form, such as a dictionary of plan prices
-`{"starter":19,"pro":49}`. It opens in the variable editor, unsaved.
+type and a value, such as a dictionary of plan prices with a **starter** entry of 19 and a
+**pro** entry of 49. It opens in the variable editor, unsaved, with each entry in its own row.
 
 ## Change, fix or explain a function {#change}
 

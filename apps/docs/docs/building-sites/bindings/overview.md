@@ -136,6 +136,13 @@ does. In a field, the token shows as a pill named after the detail, such as
 Create **typed site variables** and reference them as `{{name}}` in any prop. Types keep
 values consistent across the site.
 
+A **Dictionary** variable holds named entries — one plan's name, annual price and number of
+sites, say. Its editor is a table: press **Add entry**, give the entry an **Entry name**, pick
+its **Type** (**Text**, **Number** or **True/false**) and fill in the **Value**. A
+**Collection list** works the same way without names: **Add item** adds the next value in
+the list, and **×** removes one. On a page, a bare `{{name}}` shows a dictionary as
+`name: value` pairs and a list comma-separated.
+
 ## No-code functions
 
 Build **functions** in the in-editor function builder with a safe evaluator — no arbitrary
@@ -143,23 +150,45 @@ code execution. Compose variables and other functions, and call them inline with
 `{{fn:name(args)}}`.
 
 A function is parameters in, numbered **if / then / otherwise** steps, and one value out.
-Inside a step, an expression can use:
+Each box in a step has an **ƒx** button beside it. Press it, choose what to **Work out**, and
+pick the values it works on — a parameter, one of the function's own variables, a site
+variable, a number or some text — then press **Use formula**:
 
-- `+` `-` `*` `/` and parentheses, on numbers; `+` also joins text.
+| Work out | What it does |
+| --- | --- |
+| **Use a value** | One value as it is |
+| **Add**, **Subtract**, **Multiply**, **Divide** | Arithmetic on two or more values (**Add another** for more) |
+| **Smallest of**, **Largest of** | The lowest or highest of the values |
+| **Round**, **Round down**, **Round up** | Rounds to the **Decimal places** you pick, or to a whole number |
+| **Without its minus sign** | The value as a positive number |
+| **Format as money** | The amount with a currency **Sign** and thousands separators — 1396 reads **$1,396.00** |
+| **Format with thousands separators** | 1234567 reads **1,234,567** |
+| **Join text** | Puts texts together with a space, a comma, a dash or nothing **Between each** |
+
+The dialog shows what the box will read before you use it. When the box already holds a
+formula, **What is there now** offers it as a value, so you can build on it — add two
+prices, then **Format as money** with the sum.
+
+What a formula can read:
+
 - **Any site variable, by its name.** A function that prices a plan can read
   `extra_site_price` directly, so changing the variable changes every page and every
   calculator that uses it. A function can read a variable and never set one, and a
   parameter or local variable with the same name wins.
-- **A dictionary variable's members, as `name.member`.** Keep one dictionary per plan —
-  `{"name": "Pro", "annual": 39, "sites": 3}` — and read `plan_pro.annual`. A text variable
-  inside the function can hold a copy of one (`chosen = plan_pro`), so the function can pick
-  a plan and then read `chosen.sites`.
-- These built-ins: `min(a, b, …)`, `max(a, b, …)`, `round(value, places)`,
-  `floor(value)`, `ceil(value)`, `abs(value)`, and `format(value, places)`, which writes a
-  number with thousands separators — `'$' + format(1396)` is `$1,396`.
+- **A dictionary variable's entries.** Keep one dictionary per plan and the **ƒx** picker
+  lists each entry under the variable — **plan_pro → annual**. A text variable inside the
+  function can hold a copy of one (set it to **plan_pro**), so the function can pick a plan
+  and then read that plan's entries.
 
 There are no loops and no way to add a built-in, which is what keeps the evaluator safe
 to run on a page.
+
+:::tip Advanced: type it raw
+A box also takes a formula written out, the same way the **ƒx** dialog writes it: `+` `-`
+`*` `/` and parentheses, names as `plan_pro.annual`, and the built-ins `min`, `max`,
+`round`, `floor`, `ceil`, `abs` and `format`. Nothing needs it — every formula above is
+built by picking.
+:::
 
 **Create with AI** on the Functions and Variables cards writes one from a description, and
 a saved function's editor can explain, change or fix it — each opens unsaved in the editor.

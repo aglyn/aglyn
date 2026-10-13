@@ -70,6 +70,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import WhereUsedDialog from './where-used-dialog.component'
+import { StructuredValueEditor } from './structured-value-editor.component'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { HOST_LOGIC_ZONE, type LogicProposal } from './logic-zones'
 import {
@@ -158,17 +159,14 @@ function VariableValueField(props: {
       )
     case 'dictionary':
     case 'collection':
+      // Rows, never typed JSON (AGL-3757). Keyed by the draft and type so
+      // opening another variable, or switching type, reads its value afresh.
       return (
-        <TextField
-          label="Value (JSON)"
-          placeholder={
-            draft.type === 'dictionary' ? '{"key": "value"}' : '["a", "b"]'
-          }
+        <StructuredValueEditor
+          key={`${draft.id ?? 'new'}:${draft.type}`}
+          shape={draft.type}
           value={draft.value}
-          onChange={(event) => onChange(event.target.value)}
-          size="small"
-          multiline
-          minRows={3}
+          onChange={onChange}
         />
       )
     default:
