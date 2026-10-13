@@ -154,6 +154,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Email unverified' }, { status: 403 }),
   isImpersonationSession: () => false,
   meterPlatformEmail: async () => undefined,
+  reapHostBeaconRemnants: async () => ({ reaped: [], left: [] }),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: mockVerifyIdToken }),
