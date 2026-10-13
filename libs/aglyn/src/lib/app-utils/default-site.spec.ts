@@ -24,6 +24,7 @@ import {
   DEFAULT_SITE_THEME,
   defaultSiteSeo,
 } from './default-site'
+import { formFieldDeclsFromNodes } from './forms'
 import { nodeIdFromInteractionSelector } from './node-interactions'
 import { validateThemeForPublish } from './site-theme'
 
@@ -79,11 +80,26 @@ describe('AGL-3497 · the default home page', () => {
   })
 
   it('names the forms bundle on the contact form, so it draws with the page', () => {
-    const forms = nodesOf(home.nodes).filter(([, node]) =>
-      ['form', 'formField'].includes(node.componentId),
-    )
-    expect(forms.length).toBe(4)
+    const forms = nodesOf(home.nodes).filter(([, node]) => node.componentId === 'form')
+    expect(forms.length).toBe(1)
     for (const [, node] of forms) expect((node as { pluginId?: string }).pluginId).toBe('forms')
+  })
+
+  it('builds the contact fields from MUI’s separate form elements, under the field ids and names it always had', () => {
+    // The forms plugin's form-field-elements.spec.ts holds these to the exact
+    // tree its backfill rebuilds an all-in-one Form Field into.
+    const nodes = home.nodes as Record<string, { componentId: string; nodes?: string[] }>
+    expect(nodesOf(home.nodes).some(([, node]) => node.componentId === 'formField')).toBe(false)
+    expect(nodes['dh_form']?.nodes).toEqual(['dh_fName', 'dh_fEmail', 'dh_fMessage'])
+    for (const id of ['dh_fName', 'dh_fEmail', 'dh_fMessage']) {
+      expect(nodes[id]?.componentId).toBe('muiFormControl')
+      expect(nodes[id]?.nodes).toEqual([`${id}-label`, `${id}-input`])
+    }
+    expect(formFieldDeclsFromNodes(nodes as never, 'dh_form')).toEqual([
+      { fieldName: 'name', fieldType: 'text', label: 'Name', required: true },
+      { fieldName: 'email', fieldType: 'email', label: 'Email', required: true },
+      { fieldName: 'message', fieldType: 'textarea', label: 'Message', required: true },
+    ])
   })
 })
 

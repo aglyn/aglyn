@@ -60,7 +60,8 @@ import { parseDeployArgs } from './lib/deploy-args.mjs'
 /**
  * Which bundle registers each component id that has ever changed packages.
  *
- * Only MOVED ids belong here. A node whose component never left its bundle is
+ * Only MOVED ids belong here, and ids another bundle's presets place. A node
+ * whose component never left its bundle and is only ever placed by it is
  * already correct, and sweeping every id would turn a targeted correction into
  * a rewrite of every document on the platform.
  *
@@ -77,6 +78,22 @@ const OWNING_BUNDLE = {
   formField: 'forms',
   booking: 'bookings',
   eventList: 'events-calendar',
+  // MUI's separate form elements. They never moved, but another bundle's
+  // presets PLACE them (the forms plugin's Contact Form, Contact Section and
+  // Marketing consent build their fields from them) and the formField
+  // backfill writes them, which are the two ways a node gets stamped with the
+  // bundle that placed it instead of the one that registers it.
+  muiFormControl: 'mui',
+  muiFormLabel: 'mui',
+  muiInput: 'mui',
+  muiFormHelperText: 'mui',
+  muiSelect: 'mui',
+  muiSelectOption: 'mui',
+  muiCheckbox: 'mui',
+  muiRadioGroup: 'mui',
+  muiRadio: 'mui',
+  muiFormControlLabel: 'mui',
+  muiRating: 'mui',
 }
 
 /**
@@ -248,6 +265,13 @@ function selfTest() {
       f1: { $id: 'f1', componentId: 'form', pluginId: 'forms' },
     }),
     null,
+  )
+  check(
+    'a form element placed by a forms preset goes back to mui',
+    restampNodes({
+      i1: { $id: 'i1', componentId: 'muiInput', pluginId: 'forms' },
+    })?.nodes.i1.pluginId,
+    'mui',
   )
   check(
     'a node with NO pluginId is left with none',

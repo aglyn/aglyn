@@ -269,7 +269,7 @@ describe('the consent field', () => {
 
   it('is a Choice Label holding one Checkbox, in the words of the editor’s Marketing consent preset', () => {
     const preset = presetNamed('Marketing consent')
-    expect(preset).toMatch(/props: \{ \.\.\.Aglyn\.MARKETING_CONSENT_FORM_FIELD \}/)
+    expect(preset).toMatch(/fieldPresetData\(\{ \.\.\.Aglyn\.MARKETING_CONSENT_FORM_FIELD \}\)/)
     const draft = signup()
     expect(draft.nodes[AI_FORM_CONSENT_NODE_ID]).toMatchObject({
       componentId: 'muiFormControlLabel',

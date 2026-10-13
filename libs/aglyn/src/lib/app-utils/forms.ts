@@ -1035,10 +1035,9 @@ function nodeText(node: AglynNodeSchema | undefined | null): string {
 }
 
 /**
- * The words that name one of MUI's input elements: the Form Label in the
- * Form Control around it, else the Choice Label around a checkbox, else its
- * accessible label or placeholder. A question of several Checkboxes in one
- * Form Control is named by its Form Label, not by its first box.
+ * The words that name one of MUI's input elements: the Form Label in the Form
+ * Control around it (the question, for a group of boxes), else the Choice
+ * Label around a lone checkbox, else its accessible label or placeholder.
  */
 function answerElementLabel(
   nodes: Record<NodeId, AglynNodeSchema | undefined>,
@@ -1046,10 +1045,10 @@ function answerElementLabel(
 ): string {
   const node = nodes[id]
   const props = (node?.props ?? {}) as Record<string, unknown>
-  let parentId = node?.parentId as NodeId | undefined
-  // A Choice Label names its one box; a Form Label above it names the
-  // question, which is what several boxes sharing a name are.
+  // A Choice Label names its own box; a Form Label in the Form Control
+  // around a GROUP of boxes names the question, and wins.
   let choiceWords = ''
+  let parentId = node?.parentId as NodeId | undefined
   for (let depth = 0; parentId && depth < 8; depth += 1) {
     const parent = nodes[parentId]
     if (!parent) break
@@ -1067,7 +1066,50 @@ function answerElementLabel(
     }
     parentId = parent.parentId as NodeId | undefined
   }
-  return choiceWords || String(props['ariaLabel'] ?? props['placeholder'] ?? '').trim()
+  if (choiceWords) return choiceWords
+  return String(props['ariaLabel'] ?? props['placeholder'] ?? '').trim()
+}
+
+/**
+ * Whether one of MUI's input elements must be answered: its own `required`,
+ * a Radio Group any of whose Radios is required (the browser enforces it per
+ * radio), or the Form Control around it marked required — the only place a
+ * group of Checkboxes can say "at least one".
+ */
+function answerElementRequired(
+  nodes: Record<NodeId, AglynNodeSchema | undefined>,
+  id: NodeId,
+): boolean {
+  const node = nodes[id]
+  if ((node?.props as Record<string, unknown> | undefined)?.['required'] === true) return true
+  if (node?.componentId === FORM_INPUT_ELEMENT_IDS.radioGroup) {
+    const stack = [...childIdsOf(node)]
+    const seen = new Set<NodeId>([id])
+    while (stack.length) {
+      const childId = stack.pop() as NodeId
+      if (seen.has(childId)) continue
+      seen.add(childId)
+      const child = nodes[childId]
+      if (!child) continue
+      if (
+        child.componentId === FORM_INPUT_ELEMENT_IDS.radio &&
+        (child.props as Record<string, unknown> | undefined)?.['required'] === true
+      ) {
+        return true
+      }
+      stack.push(...childIdsOf(child))
+    }
+  }
+  let parentId = node?.parentId as NodeId | undefined
+  for (let depth = 0; parentId && depth < 8; depth += 1) {
+    const parent = nodes[parentId]
+    if (!parent) break
+    if (parent.componentId === FORM_INPUT_ELEMENT_IDS.formControl) {
+      return (parent.props as Record<string, unknown> | undefined)?.['required'] === true
+    }
+    parentId = parent.parentId as NodeId | undefined
+  }
+  return false
 }
 
 /** The choices one of MUI's choice elements offers, in order. */
@@ -1204,7 +1246,11 @@ export function formFieldDeclsFromNodes(
       fieldName,
       fieldType: formInputType(node),
       ...(label ? { label } : {}),
-      ...(props['required'] === true ? { required: true } : {}),
+      ...((isFormField
+        ? props['required'] === true
+        : answerElementRequired(nodes as Record<NodeId, AglynNodeSchema | undefined>, id))
+        ? { required: true }
+        : {}),
       ...(options.length ? { options } : {}),
       ...(datasetFieldId ? { datasetFieldId } : {}),
     }
