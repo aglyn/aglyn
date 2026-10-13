@@ -30,6 +30,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import HostActionsCard from './host-actions-card.component'
+import { pickerPages } from './element-picker-dialog.component'
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
   actions: [],
@@ -73,7 +74,7 @@ jest.mock('firebase/firestore', () => ({
   // The site the element picker opens (AGL-3758).
   getDoc: jest.fn(async () => ({
     exists: () => true,
-    data: () => ({ subdomain: 'acme', screens: { s1: '/pricing' } }),
+    data: () => ({ subdomain: 'acme', screens: { s0: '/', s1: 'pricing' } }),
   })),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
@@ -231,5 +232,23 @@ describe('HostActionsCard in-page steps', () => {
     expect(screen.getByText('Must start with aria- or data-')).toBeTruthy()
     type('Attribute', 'data-state')
     expect(screen.queryByText('Must start with aria- or data-')).toBeNull()
+  })
+})
+
+describe('the pages the element picker offers (AGL-3758)', () => {
+  it('lists the published pages home first, as the routing map stores them', () => {
+    expect(pickerPages({ a: 'pricing', b: '/', c: 'about' })).toEqual([
+      { path: '/', label: 'Home' },
+      { path: '/about', label: '/about' },
+      { path: '/pricing', label: '/pricing' },
+    ])
+  })
+
+  it('offers no home a site never published, and home when nothing is', () => {
+    expect(pickerPages({ a: 'home', b: 'scoped' }).map((page) => page.path)).toEqual([
+      '/home',
+      '/scoped',
+    ])
+    expect(pickerPages(undefined)).toEqual([{ path: '/', label: 'Home' }])
   })
 })

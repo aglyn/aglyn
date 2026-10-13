@@ -51,15 +51,21 @@ export interface ElementPickerDialogProps {
   onClose: () => void
 }
 
-/** The site's published pages as the picker lists them, home first. */
+/**
+ * The site's published pages as the picker lists them, home first. The
+ * routing map stores the root as `/` and every other page as bare segments
+ * (`about`); a site with nothing published still offers its home, which is
+ * what the dialog then says has not answered.
+ */
 export function pickerPages(
   screens: Record<string, string> | undefined,
 ): { path: string; label: string }[] {
-  const paths = new Set<string>(['/'])
+  const paths = new Set<string>()
   for (const slug of Object.values(screens ?? {})) {
     if (typeof slug !== 'string' || !slug) continue
     paths.add(slug.startsWith('/') ? slug : `/${slug}`)
   }
+  if (!paths.size) paths.add('/')
   return [...paths]
     .sort((a, b) => (a === '/' ? -1 : b === '/' ? 1 : a.localeCompare(b)))
     .map((path) => ({ path, label: path === '/' ? 'Home' : path }))
@@ -104,7 +110,7 @@ export default function ElementPickerDialog(props: ElementPickerDialogProps) {
     path ??
     (initialPath && pages.some((page) => page.path === initialPath)
       ? initialPath
-      : '/')
+      : pages[0].path)
   const pageUrl = host ? siteLiveUrlForSlug(host, current) : undefined
   const src = pageUrl ? elementPickUrl(pageUrl) : undefined
 
