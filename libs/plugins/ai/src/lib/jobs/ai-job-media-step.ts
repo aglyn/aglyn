@@ -166,7 +166,7 @@ export const AI_MEDIA_ARGS_SCHEMA: PluginAiCapabilityArgsSchema = {
     alt: {
       type: 'string',
       description:
-        'Alt text for exactly one image: what it shows, in one plain sentence, only from what the request says about it. Never its file name.',
+        'Alt text for exactly one image, saying what it shows in one plain sentence, only from what the request says about it. Never its file name.',
       maxLength: AI_MEDIA_LIMITS.alt,
     },
     altFromDetails: {
