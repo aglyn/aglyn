@@ -1435,6 +1435,25 @@ nothing itself.
   and it is why a page places the scaffold's own form by id rather than planning
   one of its own. SEO travels with each page: the page step writes its search
   listing on its own last pass.
+- **The site's language** (AGL-3750). A site plan's tool carries one more
+  field, `language`: the code of the language the brief is written in, which
+  the site's copy is written in too, or null (`withPlanLanguage`,
+  `model/ai-build-plan.ts`). Only a `site` job's plan is offered it, one
+  schema for every brief, so the request still caches across briefs
+  (`site-plan` in `runtime/ai-prompt-cache.spec.ts`, 54 tokens over the plain
+  plan); every other kind's tool is the same bytes as before. The reader keeps
+  a code the Languages card would accept (`aiPlanLanguage`: `es`, `pt-BR`,
+  `zh-Hant`, in BCP 47 casing) and drops anything else as a repair, never a
+  refusal. A guided start's publish then writes `locales: [code]` and
+  `defaultLocale: code`, as the Languages card saves one language
+  (`aiSiteLanguageUpdates`, `jobs/ai-site-publish.ts`), in the publish's own
+  batch, with the announce asking for the whole site because every page's
+  `<html lang>` reads it. Nothing is written where the code is the language
+  the site already publishes in (English for a new site, so an English brief
+  changes nothing), and nothing on a site with more than one language, whose
+  languages are its owner's. Nothing is translated: the pages were written in
+  the brief's language, and the host now says so. Before this, a Spanish site
+  served `<html lang="en">`, which invited a browser translator (AGL-3738).
 - **A blog's first posts and a store's first products** (AGL-3676,
   `ai-job-site-content.ts`). A site whose kind is Blog & writing gets the row
   "Writing your first posts": a content collection "Blog" (the platform's own

@@ -30,9 +30,11 @@
 
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { FieldValue } from 'firebase-admin/firestore'
+import { AI_BUILD_PLAN_TOOL, aiBuildPlanToolFor, aiPlanLanguage, parseAiBuildPlan } from '../model/ai-build-plan'
 import type { AiJobOutput } from '../model/ai-jobs.types'
 import {
   AI_SITE_PUBLISH_DELETED,
+  aiSiteLanguageUpdates,
   aiJobPublishesSite,
   aiLayoutWithBlogEntry,
   aiLayoutWithNavigation,
@@ -498,5 +500,80 @@ describe('the blog’s header entry, put back once Try again’s posts are live 
     docs.set('hosts/host-1/screens/drft-book/versions/v-book', { layoutId: 'lay-other', aiJobId: 'job-1' })
     expect(await aiRestoreGuidedBlogEntry(firestore, { job: JOB, pageIds: ['drft-home', 'drft-book'], blog: BLOG, now: NOW }, { dropCache })).toBe(false)
     expect((docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>)['versionId']).toBe('v-lay')
+  })
+})
+
+describe('the site publishes in the language its brief was written in (AGL-3750)', () => {
+  /** A site plan's answer, as the model sends it, read the way the plan step reads it. */
+  const planned = (language: unknown) => {
+    const parsed = parseAiBuildPlan({ reuse: [], create: [], screens: [], language })
+    if (parsed.ok === false) throw new Error(parsed.error)
+    return parsed
+  }
+  const publishIn = (language: string | undefined) =>
+    aiPublishGuidedSite(
+      firestore,
+      { job: JOB, outputs: OUTPUTS, now: NOW, ...(language ? { language } : {}) },
+      { sendSitePublished: sendSitePublished as never, dropCache },
+    )
+
+  it('offers the language field to a site plan only, the same bytes for every brief', () => {
+    const site = aiBuildPlanToolFor('Un sitio web para una panadería en Madrid.', { language: true })
+    const other = aiBuildPlanToolFor('A website for a bakery in Tulsa.', { language: true })
+    expect(site.inputSchema['required']).toContain('language')
+    expect(JSON.stringify(site)).toBe(JSON.stringify(other))
+    const page = aiBuildPlanToolFor('Un sitio web para una panadería en Madrid.')
+    expect(page).toBe(AI_BUILD_PLAN_TOOL)
+    expect(page.inputSchema['properties']).not.toHaveProperty('language')
+  })
+
+  it('a Spanish brief: the plan says es, and the new site publishes in es', async () => {
+    const { plan } = planned('es')
+    expect(plan.language).toBe('es')
+    seedSite()
+    await publishIn(plan.language)
+    expect(docs.get('hosts/host-1')).toMatchObject({ locales: ['es'], defaultLocale: 'es' })
+    // `<html lang>` is on every page, so the whole site's cache goes.
+    expect(dropCache).toHaveBeenCalledWith(expect.not.objectContaining({ paths: expect.anything() }))
+  })
+
+  it('an English brief leaves a new site as it is', async () => {
+    const { plan } = planned('en')
+    expect(plan.language).toBe('en')
+    seedSite()
+    await publishIn(plan.language)
+    expect(docs.get('hosts/host-1')).not.toHaveProperty('locales')
+    expect(docs.get('hosts/host-1')).not.toHaveProperty('defaultLocale')
+  })
+
+  it('a plan that says null, or no code at all, keeps the plan and the site’s language', async () => {
+    expect(planned(null).plan).not.toHaveProperty('language')
+    const invalid = planned('Spanish')
+    expect(invalid.plan).not.toHaveProperty('language')
+    expect(invalid.repairs).toEqual(['language "Spanish" is not a language code; ignored'])
+    expect(planned('es-419').plan).not.toHaveProperty('language')
+    seedSite()
+    await publishIn('Spanish')
+    expect(docs.get('hosts/host-1')).not.toHaveProperty('locales')
+    expect(docs.get('hosts/host-1')).not.toHaveProperty('defaultLocale')
+  })
+
+  it('reads a code the way the Languages card stores it', () => {
+    expect(aiPlanLanguage('pt_br')).toBe('pt-BR')
+    expect(aiPlanLanguage('ZH-hant')).toBe('zh-Hant')
+    expect(aiPlanLanguage(' fr ')).toBe('fr')
+    expect(aiPlanLanguage('spa')).toBeNull()
+    expect(aiPlanLanguage(3)).toBeNull()
+  })
+
+  it('replaces a site’s one language, and never touches a multilingual site', async () => {
+    expect(aiSiteLanguageUpdates({ locales: ['en'], defaultLocale: 'en' }, 'es')).toEqual({ locales: ['es'], defaultLocale: 'es' })
+    expect(aiSiteLanguageUpdates({ locales: ['es'] }, 'es')).toBeNull()
+    expect(aiSiteLanguageUpdates({ locales: ['en', 'fr'], defaultLocale: 'en' }, 'es')).toBeNull()
+    expect(aiSiteLanguageUpdates({ locales: ['en', 'es'], defaultLocale: 'en' }, 'es')).toBeNull()
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), locales: ['en', 'fr'], defaultLocale: 'en' })
+    await publishIn('es')
+    expect(docs.get('hosts/host-1')).toMatchObject({ locales: ['en', 'fr'], defaultLocale: 'en' })
   })
 })

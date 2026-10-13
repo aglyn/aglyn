@@ -78,7 +78,7 @@ import {
 } from '../jobs/ai-job-workflow-step'
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
-import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_TOOL, aiBuildPlanToolFor } from '../model/ai-build-plan'
 import { resolveBusinessProfile } from '@aglyn/aglyn/app-utils/business-profile'
 import {
   AI_SITE_CONTEXT_MAX_CHARS,
@@ -375,6 +375,14 @@ const REQUESTS: Record<string, Composed> = {
     step: 'job.plan',
     blocks: (site) => aiDoctrineSystemBlocks(site, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
     tools: () => [AI_BUILD_PLAN_TOOL, aiInventoryLookupTool()],
+  },
+  // A site's plan (AGL-3750): the same request with the site's language on
+  // its tool, one schema for every brief.
+  'site-plan': {
+    door: 'jobs/ai-job-plan-step.ts',
+    step: 'job.plan',
+    blocks: (site) => aiDoctrineSystemBlocks(site, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
+    tools: () => [aiBuildPlanToolFor('', { language: true }), aiInventoryLookupTool()],
   },
   layout: {
     door: 'jobs/ai-job-layout-step.ts',
@@ -848,6 +856,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // carries. A brief that asks for a video is offered the plan's list of
       // players on a tool of its own; this plain one is the same bytes.
       plan: { prefixTokens: 2_984, minimum: 512, caches: true, toolsStable: true },
+      // A site's plan says the language its brief is in (AGL-3750): the plain
+      // plan's prefix and one nullable field, up 54.
+      'site-plan': { prefixTokens: 3_038, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary

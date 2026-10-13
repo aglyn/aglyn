@@ -1331,6 +1331,20 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     expect(publish).not.toHaveBeenCalled()
   })
 
+  it('hands the publish the language its plan says the brief is in, and none where it says none (AGL-3750)', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'screen-3')] })) },
+      { publish },
+    )
+    const job = lastPass({ autoConfirm: true })
+    await step(context({ ...job, plan: { ...(job.plan as AiJobPlan), language: 'es' } }))
+    expect(publish.mock.calls[0]).toEqual([expect.anything(), expect.objectContaining({ language: 'es' })])
+    publish.mockClear()
+    await step(context(lastPass({ autoConfirm: true })))
+    expect(publish.mock.calls[0]).toEqual([expect.anything(), expect.not.objectContaining({ language: expect.anything() })])
+  })
+
   /*
    * Try again on a guided start (AGL-3730): org 1-cho3N4FW's retried
    * Portfolio page (beta.243) stayed a draft with no header entry, since a job

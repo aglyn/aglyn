@@ -308,6 +308,17 @@ describe('the plan step', () => {
     expect(mockRunAiRequest.mock.calls[1][0].tools?.[0]).toBe(AI_BUILD_PLAN_TOOL)
   })
 
+  it('asks a site plan for the language its brief is written in, and no other kind (AGL-3750)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
+    await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest.mock.calls[0][0].tools?.[0]).toBe(AI_BUILD_PLAN_TOOL)
+    await planStep()({ job: job({ kind: 'site', brief: 'Un sitio web para una panadería en Madrid.' }), stepIndex: 0, now: NOW, firestore })
+    const tool = mockRunAiRequest.mock.calls[1][0].tools?.[0]
+    expect(tool?.inputSchema['required']).toContain('language')
+    expect(tool?.inputSchema['properties']).toHaveProperty('language')
+  })
+
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {
     mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
     const modelFor = jest.fn(() => 'picked-model')
