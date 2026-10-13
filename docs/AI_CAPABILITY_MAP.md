@@ -64,6 +64,7 @@ checks the member's role and the allowance when the item runs.
 | `navigation` (1), AGL-3728 | ai | navigation runner, no model (a layout version, unpublished) | `versioning` | | no |
 | `duplicate` (3), AGL-3740 | ai | duplicate runner, no model, core's `duplicateResource` (an unpublished copy) | the kind's own, checked by the copy | the kind's create counter | yes |
 | `settings` (1), AGL-3748 | ai | settings runner, no model, the console settings cards' fields saved LIVE on confirm | | | yes |
+| `tracking` (1), AGL-3751 | ai | tracking runner, no model (`jobs/ai-job-tracking-step.ts`), the Setup → Tracking card's ids set or removed LIVE on confirm | | | yes |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
 | `store-shipping` (10), `store-pickup` (5), `store-delivery` (5), `store-tax` (6), AGL-3749 | commerce | `store-settings` writer, no model, live (`libs/plugins/commerce/src/lib/server/store-setup-ai-capability.ts`) | `commerce` | | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
@@ -193,8 +194,8 @@ gap.
 | Bookings | services, availability, payment, reminders | partial: a booking service draft |
 | Marketing overlays | bars and popups | yes (`overlay`) |
 | Email campaigns | campaigns, designed emails | yes, drafted and unsent (`campaign`, `email`) |
-| Analytics, funnels, A/B tests | insights, funnels, experiments, GA4, conversions | partial: insights, `funnel`, `experiment`; no GA4 or conversions setup |
-| Workflows | workflows, actions, webhooks, Zapier | partial: `workflow` (can name a `webhookPost` step); no webhook or Zapier setup |
+| Analytics, funnels, A/B tests | insights, funnels, experiments, GA4, conversions | partial: insights, `funnel`, `experiment`; a build's `tracking` op (AGL-3751) connects or removes Google Analytics, Tag Manager and the Meta, Google Ads, LinkedIn, TikTok and Pinterest tags; no Conversions API (it needs an access token) |
+| Workflows | workflows, actions, webhooks, Zapier | partial: `workflow` (can name a `webhookPost` step); no order webhook or Zapier setup, by design (AGL-3751: a signing secret shown once, a Zapier account) |
 | Teams and roles, billing | members, roles, plans, add-ons | no, by design |
 
 ## Gaps, ranked
@@ -238,6 +239,12 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    confirm. See "Site settings" below. Still no maintenance mode, password or
    error pages, site search or multilingual variants.
 10. **Integrations.** No webhooks, Zapier or GA4/conversions setup.
+    **CLOSED for tracking tags (AGL-3751):** a build's `tracking` op sets
+    or removes what the console's Setup → Tracking card sets (Google
+    Analytics, Tag Manager, Meta, Google Ads, LinkedIn, TikTok, Pinterest),
+    live on confirm. Server-side conversions, order webhooks, Zapier and
+    marketing-platform connections stay a person's: each needs a secret or an
+    account the person holds. See "Integrations" below.
 11. **Media library.** No tags, folders or metadata, and no video, music or
     lightbox placement ops.
 12. **Duplicating.** `duplicate_resource` exists and nothing calls it.
@@ -522,7 +529,7 @@ is a decision about the account, not something to build.
   billing, lockdown, deletion, search engine indexing
   (`seo.discourageSearchEngines`), analytics and ad ids, verification tokens,
   and turning the consent banner off are not arguments, so the planner cannot
-  ask for them. There is no tagline field on a site; "tagline" maps to the
+  ask for them (tracking ids are the `tracking` op's, AGL-3751). There is no tagline field on a site; "tagline" maps to the
   publisher's one-sentence description (`seo.entity.description`).
 - **Language.** As the Languages card saves it: a site with no language or one
   now publishes in the one asked for (`locales: [code]`, `defaultLocale:
@@ -674,3 +681,50 @@ catering inquiry into Inquiries.
   settings the site has; a new zone or rate takes an id derived from the
   item, and a change the settings already hold writes nothing (`replayed`).
 - **Cost.** No model, so 0 credits.
+
+## Integrations (AGL-3751)
+
+What the console can connect, and what Aglyn AI may do with each. Only what
+a console card already sets, and only values that are not secrets.
+
+| integration | console surface | Aglyn AI |
+| -- | -- | -- |
+| Google Analytics 4, Google Tag Manager | Setup → Tracking (`analytics.gaMeasurementId`, `analytics.gtmContainerId`) | **yes**, the `tracking` op |
+| Meta pixel, Google Ads tag, LinkedIn Insight, TikTok pixel, Pinterest tag | Setup → Tracking (`analytics.adTags.*`) | **yes**, the `tracking` op |
+| Meta, TikTok, Pinterest Conversions API | the Ad conversions card (`ad-conversions` plugin) | no: connecting needs the vendor's access token, which the person pastes |
+| Order webhooks | Products → Settings → Order webhooks (commerce) | no: the endpoint's signing secret is shown once, to the person who adds it, and the endpoint sends buyers' order data to an outside address |
+| Zapier | the Zapier card (`zapier` plugin) | no: a Zap is made in Zapier with the person's API key; the card only lists and disconnects |
+| Klaviyo, Mailchimp, Omnisend, Attentive | the Marketing platforms card | no: OAuth or an API key |
+| A workflow's `webhookPost` step | Workflows | already the `workflow` op |
+
+- **The op.** `tracking` (`jobs/ai-job-tracking-step.ts`, at most one a
+  plan) takes `googleAnalytics`, `googleTagManager`, `metaPixel`,
+  `googleAds`, `linkedinInsight`, `tiktokPixel`, `pinterestTag` (each an id
+  exactly as the person gave it) and `remove` (a list of those names). The
+  argument descriptions and the intent tell the planner never to make an id
+  up and to ask for it when the request has none. The planner sees the op in
+  the op catalog and Assist's build intents, so the plan prompt changed.
+- **The card's own rules.** Each id is held to the pattern the card's field
+  and the tenant's loader share (`GA_MEASUREMENT_ID_PATTERN`,
+  `GTM_CONTAINER_ID_PATTERN`, `META_PIXEL_ID_PATTERN` and the rest in
+  `libs/aglyn/src/lib/app-utils/visitor-consent.ts`), written to the field
+  the card writes; a removal deletes the field, as the card's cleared box does
+  (`CLEARABLE_TRACKING_PATHS`). An id of the wrong shape is named in the
+  output and the rest are still written; an id both set and removed is left
+  alone.
+- **Consent is untouched.** No `consent.*` key is an argument, so the op
+  cannot turn the banner off, change its mode or its advertising question,
+  and search indexing is not reachable either. The tenant gates every tag on
+  the stored ids and the visitor's consent, whoever saved them. The output
+  says the tags load only where consent allows, warns where the site's banner
+  is off for its own consent tool, and repeats the card's double-counting
+  warning when a Tag Manager container sits beside a direct Analytics or Ads
+  tag.
+- **Live on confirm, idempotent.** As `settings` (AGL-3748): one transaction
+  re-reads the host, re-checks the role, writes only what differs with a
+  site-wide `publishOutbox` entry, then drops the site's cached pages. The
+  output reads "Live now, in Setup → Tracking." and links to that card.
+- **Gates and cost.** The Firestore rules' for the host document: an admin,
+  editor or author, while no lockdown freezes the site, at the door, before
+  the write and inside it. The card is on every plan, so Free may ask. No
+  model, so 0 credits.

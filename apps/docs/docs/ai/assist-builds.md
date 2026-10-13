@@ -56,6 +56,10 @@ One message can ask for any mix of:
   language, time zone, business name, description, phone, contact email or address, or the
   cookie banner's mode. For example, *rename my site to Juniper Clay Studio* or *make the
   site Spanish*.
+- **tracking tags**: connect or remove Google Analytics, Google Tag Manager, or the Meta,
+  Google Ads, LinkedIn, TikTok or Pinterest tag by the ID you give, such as *connect Google
+  Analytics G-4R7KX2PQ9Z*. See
+  [The Tracking card](../marketing-and-automation/analytics/overview.md#ask-aglyn-ai);
 - **store setup**: shipping zones and rates, local pickup, local delivery and sales tax,
   such as *free shipping over $50, otherwise $5 flat in the US*. See
   [Shipping](../commerce-and-bookings/commerce/shipping.md#ask-aglyn-ai),
@@ -118,10 +122,10 @@ page that places them.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
   campaigns are unsent and aimed at nobody. The exceptions are a **redirect**, **CRM
-  setup**, **store setup** and **site settings**: a redirect rule, a CRM pipeline or custom
-  field, the shipping, pickup, delivery and tax settings, and the site's settings have no
-  draft, so they work as soon as the build saves them, as they do when you save them
-  yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
+  setup**, **store setup**, **site settings** and **tracking tags**: a redirect rule, a CRM
+  pipeline or custom field, the shipping, pickup, delivery and tax settings, the site's
+  settings and its tracking tags have no draft, so they work as soon as the build saves
+  them, as they do when you save them yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
   prices and rates you state.
 - **Names are your own.** A new variable or function never takes a name the site already
   uses.
@@ -129,8 +133,9 @@ page that places them.
   Settings, it reaches your live site as soon as that part is built. Making the site
   Spanish sets its language; it does not translate the pages. A value that cannot be used,
   such as an email address that is not one, is named on the card and the rest are saved.
-  Assist never changes your site's address, domain, members, billing, plugins or tracking
-  ids, and never hides the site from search engines.
+  Assist never changes your site's address, domain, members, billing, plugins or cookie
+  banner, and never hides the site from search engines. Tracking IDs change only as a
+  tracking change, by the ID you give.
 
 When it is done the card says how many parts were built, such as *5 of 6 built; 1 failed*.
 **Try again what failed** builds only the parts that failed, and shows what that is likely
