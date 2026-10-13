@@ -6,28 +6,36 @@ description: "Answer a few questions when you create a site and Aglyn AI plans, 
 
 # Start a new site with AI
 
-A site you have just created opens on its **Setup** page with **Start your site** over
-it. **Start with AI** asks a few questions, then plans the site, writes every page,
-gives it a look of its own and publishes it at its address. This page walks through
-each question and what happens after you choose **Plan my site**.
+**Create site** opens **Start your site** straight away, before the site exists.
+**Start with AI** asks a few questions, then creates the site, plans it, writes every
+page, gives it a look of its own and publishes it at its address. This page walks
+through each question and what happens after you choose **Plan my site**.
 
 To scaffold pages for a site that already exists, or for several sites at once, see
 [Generate a website from a prompt](./generate-a-site.md).
 
 ## How do you want to start? {#how-do-you-want-to-start}
 
-The first step offers two cards:
+The first step asks for the site's **Site name** and **Subdomain**, its free address
+on Aglyn. The subdomain follows the name until you change it, and is checked as you
+type: if it is taken, the field says so and offers available ones to pick. Then it
+offers two cards:
 
 - **Start from the starter site** gives the site a ready-made home page with a header,
   footer and contact form, live at its address, for you to edit.
 - **Start with AI** (marked **Recommended**) asks the questions below and builds the site
   for you. On the Free plan the card says how many pages a Free start makes.
 
-**Skip**, the close control and the Escape key all leave the window. Before anything is
-being planned, leaving gives the site the starter home page and nothing else, and the site
-does not ask again. If you have typed or picked something, the window first asks
-**Leave without your answers?**, because what you typed is not saved. Once the site is
-being planned, closing only closes the window; the job carries on.
+No site exists until you choose. **Start from the starter site** and **Skip** (in the
+bar at the top) create the site with the starter home page and open it. **Plan my site**
+creates the site and starts planning it. The close control and the Escape key create
+nothing: the window closes and no site is made. If you have typed or picked something,
+the window first asks **Leave without your answers?**, because what you typed is not
+saved. Once the site is being planned, closing only closes the window; the job carries on.
+
+If your role cannot create sites, or your plan has no site left, **Create site** says so
+before asking anything. If the site is created but its planning cannot start, the window
+says why; leaving then gives that site the starter home page, so it is never left empty.
 
 ## Your business {#your-business}
 

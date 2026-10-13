@@ -714,7 +714,9 @@ async function runOnce(context, index) {
   const runStart = Date.now()
   let pump = null
   try {
-    // 2. Sites → Create site.
+    // 2. Sites → Create site, which opens straight on the start (AGL-3761):
+    // the site's name and address are asked on its first step, and nothing
+    // is created until Plan my site.
     await page.goto(`${consoleUrl}/${run.orgSlug}/hosts`, {
       waitUntil: 'domcontentloaded',
       timeout: 120_000,
@@ -723,38 +725,27 @@ async function runOnce(context, index) {
       .getByRole('button', { name: 'Create site' })
       .first()
       .click({ timeout: 120_000 })
-    const dialog = page.getByRole('dialog', { name: 'Create a new site' })
+    const dialog = page.getByRole('dialog', { name: 'Start your site' })
     await dialog.getByLabel('Site name').fill(siteName)
     await dialog.getByLabel('Subdomain').fill(run.subdomain)
+    const startWithAi = dialog.getByRole('button', { name: /Start with AI/ })
+    await startWithAi.waitFor({ timeout: 120_000 })
     await shot(page, '01-create-site')
-    await dialog.getByRole('button', { name: 'Create site' }).click()
-    await page.waitForURL((url) => url.searchParams.get('start') === 'site', {
-      timeout: 120_000,
-    })
-
-    const hostSnapshot = await firestore
-      .collection('hosts')
-      .where('subdomain', '==', run.subdomain)
-      .limit(1)
-      .get()
-    record(run, { hostId: hostSnapshot.docs[0]?.id ?? null })
-    if (!run.hostId)
-      throw new Error(`no host document for subdomain ${run.subdomain}`)
-    const born = await readHost(firestore, run.hostId)
-    const bornScreens = born.screens.filter(
-      (screen) => screen.data.deletedAt == null,
-    )
+    const findHost = async () =>
+      (
+        await firestore
+          .collection('hosts')
+          .where('subdomain', '==', run.subdomain)
+          .limit(1)
+          .get()
+      ).docs[0]?.id ?? null
     check(
-      'site empty at creation',
-      bornScreens.length === 0 &&
-        born.layouts.length === 0 &&
-        Object.keys(born.data?.screens ?? {}).length === 0,
-      `${bornScreens.length} page(s), ${born.layouts.length} layout(s), ${born.forms.length} form(s), routes ${JSON.stringify(born.data?.screens ?? {})}`,
+      'no site before the start is answered',
+      (await findHost()) === null,
+      `a host for ${run.subdomain} existed before Plan my site`,
     )
 
     // 3. Start with AI, and the answers.
-    const startWithAi = page.getByRole('button', { name: /Start with AI/ })
-    await startWithAi.waitFor({ timeout: 120_000 })
     await shot(page, '02-start-choice')
     await startWithAi.click()
     await page
@@ -789,7 +780,28 @@ async function runOnce(context, index) {
     await page.waitForTimeout(600)
     await shot(page, '03-answers', { fullPage: true })
 
-    // 4. The beat runs from here on, as the scheduler would.
+    // 4. Plan my site creates the site, empty, and starts its job. The beat
+    // is not running yet, so the site is read as it was born.
+    await page.getByRole('button', { name: 'Plan my site' }).click()
+    await page.waitForURL((url) => /\/ai-jobs\/[^/]+$/.test(url.pathname), {
+      timeout: 180_000,
+    })
+    record(run, { hostId: await findHost() })
+    if (!run.hostId)
+      throw new Error(`no host document for subdomain ${run.subdomain}`)
+    const born = await readHost(firestore, run.hostId)
+    const bornScreens = born.screens.filter(
+      (screen) => screen.data.deletedAt == null,
+    )
+    check(
+      'site empty at creation',
+      bornScreens.length === 0 &&
+        born.layouts.length === 0 &&
+        Object.keys(born.data?.screens ?? {}).length === 0,
+      `${bornScreens.length} page(s), ${born.layouts.length} layout(s), ${born.forms.length} form(s), routes ${JSON.stringify(born.data?.screens ?? {})}`,
+    )
+
+    // The beat runs from here on, as the scheduler would.
     pump = startAiJobsBeatPump({
       origin: consoleUrl,
       secret: LOCAL_CRON_SECRET,
@@ -797,11 +809,6 @@ async function runOnce(context, index) {
       due: () => countDueAiJobs(firestore),
       log: (line) =>
         context.beatLog.write(`${new Date().toISOString()} ${line}\n`),
-    })
-
-    await page.getByRole('button', { name: 'Plan my site' }).click()
-    await page.waitForURL((url) => /\/ai-jobs\/[^/]+$/.test(url.pathname), {
-      timeout: 180_000,
     })
     record(run, {
       jobId: decodeURIComponent(new URL(page.url()).pathname.split('/').pop()),
