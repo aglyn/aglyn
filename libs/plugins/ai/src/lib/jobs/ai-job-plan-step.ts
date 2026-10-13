@@ -21,6 +21,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import {
   AI_BUILD_PLAN_TOOL,
   aiBuildPlanToolFor,
+  aiPlanSlugKey,
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
@@ -94,6 +95,13 @@ import {
   type AiBuildOps,
 } from '../model/ai-build-job'
 import { aiBuildOpLines, aiBuildOps } from './ai-build-capabilities'
+import { aiBuildUnlistedEventsCheck, aiSettleBuildEventPage } from '../model/ai-build-event-page'
+import {
+  aiSiteEventItemsCheck,
+  aiSiteEventPlanLines,
+  readAiSiteEventPlanning,
+  type AiSiteEventPlanning,
+} from './ai-job-site-events'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
 import { readAiPlanCapabilities } from './ai-job-drafts'
@@ -597,6 +605,29 @@ function planViolations(
   }
 }
 
+/** The layout a site's pages render in (AGL-3755): its home page's, else its only layout, else none. */
+function aiSiteLayoutOf(inventory: AiSiteInventory | null): string | null {
+  const home = inventory?.screens.find((screen) => !screen.template && aiPlanSlugKey(screen.slug) === '/')
+  if (home?.layoutId) return home.layoutId
+  return inventory?.layouts.length === 1 ? (inventory.layouts[0]?.id ?? null) : null
+}
+
+/**
+ * A site plan's violations with its events' (AGL-3755): its items are only
+ * the events it may plan. Every other kind's are as they are.
+ */
+function aiSiteWithEventItemsCheck(
+  violations: (plan: AiBuildPlan) => AiDoctrineViolation[],
+  siteEvents: AiSiteEventPlanning | null | undefined,
+  ops: AiBuildOps | null = null,
+): (plan: AiBuildPlan) => AiDoctrineViolation[] {
+  // A build's events left on no page are re-asked once (AGL-3755).
+  const unlisted = ops ? aiBuildUnlistedEventsCheck(ops) : null
+  const events = siteEvents === undefined ? null : aiSiteEventItemsCheck(siteEvents)
+  if (!unlisted && !events) return violations
+  return (plan) => [...violations(plan), ...(events ? events(plan) : []), ...(unlisted ? unlisted(plan) : [])]
+}
+
 /**
  * The inventory names of every id the plan references, so the proposal reads
  * "the Services layout" rather than an id — kept on the plan because the
@@ -820,6 +851,11 @@ export interface AiJobPlanStepDeps {
    * kept so its card can say whether it fits; `null` turns it off.
    */
   readFreeCredits?: typeof readFreeAiCreditsLeft | null
+  /**
+   * What an event-led site start may plan of events (AGL-3755); specs hand in
+   * their own, and `null` turns it off.
+   */
+  readSiteEvents?: typeof readAiSiteEventPlanning | null
 }
 
 /** What a job's site context is read with (AGL-3661). */
@@ -899,6 +935,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const readOps = deps.readOps ?? readAiBuildOps
   const readContext = deps.readSiteContext === undefined ? readAiJobSiteContext : deps.readSiteContext
   const readFreeCredits = deps.readFreeCredits === undefined ? readFreeAiCreditsLeft : deps.readFreeCredits
+  const readSiteEvents = deps.readSiteEvents === undefined ? readAiSiteEventPlanning : deps.readSiteEvents
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
     const [inventory, workspace, siteContext] = await Promise.all([
@@ -919,6 +956,13 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // A build's operations, as this site has them (AGL-3616).
     const ops = job.kind === 'build' ? await readOps({ job, org, firestore, freeTaste }) : null
     const site = job.kind === 'site'
+    // An event-led start's first events (AGL-3755), only where the build's
+    // gate admits the events plugin's operation here and its writer this member.
+    const siteEvents =
+      site && readSiteEvents
+        ? await readSiteEvents({ job, org, firestore, now, readOps: () => readOps({ job, org, firestore, freeTaste }) })
+        : null
+    const itemOps = ops ?? siteEvents?.ops ?? null
     // A kept plan waits for its confirmation; a Free build's card is told what
     // is left, so it says before Confirm whether the build fits (AGL-3722).
     // Net of what THIS plan just spent: the machine meters the step after it
@@ -938,7 +982,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // provider's fast tier (AGL-3594), unless the creator picked a model.
     const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = aiJobPlanPrompt(job, capabilities, inventory, ops, now)
+    const prompt = [aiJobPlanPrompt(job, capabilities, inventory, ops, now), ...(siteEvents ? aiSiteEventPlanLines(siteEvents, now) : [])].join('\n')
 
     /**
      * The confirm door's answer for this plan, asked before the plan is kept
@@ -994,7 +1038,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // written in, which its guided start sets the site's language from (AGL-3750).
     const tool = aiBuildPlanToolFor(job.brief, {
       records: Boolean(inventory?.datasets.length) || capabilities?.create.dataset.allowed === true,
-      items: job.kind === 'build',
+      items: job.kind === 'build' || Boolean(siteEvents),
       language: site,
     })
     const key = aiJobPlanKey({
@@ -1012,7 +1056,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       : null
     if (reused) {
       // The reused plan's draft ids name the other job's drafts; this job's are its own.
-      const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
+      const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
         ...reused.plan,
         status: 'proposed',
         labels: aiPlanLabels(reused.plan, inventory),
@@ -1049,15 +1093,32 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
-      extend: planViolations(
-        scope,
-        job.brief,
-        freeTaste,
+      // A build's events are listed on a page (AGL-3755): on the one it makes
+      // about them, else on an Events page of its own where there is room.
+      ...(ops
+        ? {
+            settle: (answered: AiBuildPlan) =>
+              aiSettleBuildEventPage(answered, {
+                ops,
+                siteSlugs: (inventory?.screens ?? []).map((screen) => screen.slug),
+                pageLimit: aiBuildPageLimit(freeTaste),
+                siteLayout: aiSiteLayoutOf(inventory),
+              }),
+          }
+        : {}),
+      extend: aiSiteWithEventItemsCheck(
+        planViolations(
+          scope,
+          job.brief,
+          freeTaste,
+          ops,
+          site ? aiSitePlanHomeRule(inventory, capabilities) : null,
+          site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
+          site,
+          site && aiSiteKindOfInputs(job.inputs)?.id === 'store',
+        ),
+        site ? siteEvents : undefined,
         ops,
-        site ? aiSitePlanHomeRule(inventory, capabilities) : null,
-        site && aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
-        site,
-        site && aiSiteKindOfInputs(job.inputs)?.id === 'store',
       ),
     })
     const spent: AiJobStepOutcome = {
@@ -1097,7 +1158,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // A store's plan is a storefront's (AGL-3676): settled before it is kept and priced.
     const answered = site && aiSiteKindOfInputs(job.inputs)?.id === 'store' ? aiSiteStorefrontPlan(result.value, { paid: !freeTaste }) : result.value
     // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
-    const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(ops, aiPlanWithDraftIds(job.kind, {
+    const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
       ...answered,
       status: 'proposed',
       labels: aiPlanLabels(answered, inventory),

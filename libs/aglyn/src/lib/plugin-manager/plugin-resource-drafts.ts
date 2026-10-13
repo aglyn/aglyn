@@ -76,6 +76,21 @@ export interface PluginDraftContext {
   /** The org document the caller already read, for the owner's entitlement and allowance reads. */
   org: Readonly<Record<string, unknown>> | null
   now: Date
+  /**
+   * The act the draft is one part of, where there is one: an AI build's job
+   * (AGL-3755). Drafts of one act share what must not repeat across them (a
+   * cover photo), and a writer that fetches something for the draft reads
+   * what the act says the business is.
+   */
+  act?: PluginDraftAct
+}
+
+/** The act a draft is one part of ({@link PluginDraftContext.act}). */
+export interface PluginDraftAct {
+  /** Stable across the act's retries. */
+  id: string
+  /** What the act says the business is, in its own words: "a sourdough bakery in Austin". */
+  business?: string
 }
 
 /** Why a draft cannot be made. */
@@ -93,6 +108,15 @@ export interface PluginDraftRecord {
   versionId: string | null
   /** What the owner reports about the draft beyond its identity, in the shape its writer documents. */
   facts: Readonly<Record<string, unknown>>
+  /**
+   * For a resource its writer makes live when the member may (an event the
+   * publishing role publishes, AGL-3755): whether this one went live. `false`
+   * means it was kept as a draft, and `notice` says why. Absent: the
+   * capability's own `live` stands.
+   */
+  live?: boolean
+  /** Customer-safe: a sentence a caller shows beside the record, such as why it stayed a draft. */
+  notice?: string
 }
 
 export interface PluginDraftRequest extends PluginDraftContext {

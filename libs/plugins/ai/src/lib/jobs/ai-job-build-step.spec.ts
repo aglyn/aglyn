@@ -220,6 +220,38 @@ describe('the build step (AGL-3616)', () => {
     })
   })
 
+  it('reports an item a live writer kept as a draft as a draft, saying why (AGL-3755)', async () => {
+    const live: PluginAiCapability = { ...SERVICE, live: true, where: 'Events' }
+    const kept = writer({
+      write: async (request) => ({
+        ok: true,
+        replayed: false,
+        id: request.id,
+        name: request.name,
+        versionId: null,
+        facts: { status: 'draft' },
+        live: false,
+        notice: 'Kept as a draft: publishing takes the editor role.',
+      }),
+    })
+    const outcome = await createAiJobBuildStep({
+      runnerFor: (() => null) as never,
+      writerFor: (resource) => (resource === 'bookingService' ? kept.impl : null),
+      opsFor: async () => new Map([...OPS, [live.op, live]]),
+      pluginAdmission: async () => null,
+      readNodes: readNodes as never,
+    })(context(job()))
+    expect(outcome).toMatchObject({
+      outputs: [{ note: 'A draft, in Events. Kept as a draft: publishing takes the editor role.' }],
+    })
+  })
+
+  it('names the output note from the capability alone when the writer says nothing (AGL-3755)', () => {
+    expect(aiBuildItemOutputNote({ where: 'Events', live: true })).toBe('Live now, in Events.')
+    expect(aiBuildItemOutputNote({ where: 'Events', live: true }, { live: true })).toBe('Live now, in Events.')
+    expect(aiBuildItemOutputNote({ where: 'Notes' })).toBe('A draft, in Notes.')
+  })
+
   it('tells the page to place the Booking block for the service it built', async () => {
     const { impl } = writer()
     const seen: AiJob[] = []
@@ -597,6 +629,33 @@ describe('a build’s datasets (AGL-3616)', () => {
       ops,
     })
     expect(template.plan?.screens[0].record).toEqual({ dataset: 'ds-menu', base: 'menu' })
+  })
+
+  it('lists the events it wrote by the Event List where a page names them, and asks the page to place no block for them (AGL-3755)', () => {
+    const EVENT: PluginAiCapability = { ...DATASET, op: 'event', noun: 'event', where: 'Events', draftResource: 'event', live: true, pageBlocks: ['eventList'] }
+    const eventsPlan = (): AiJobPlan => ({
+      ...plan(),
+      screens: [
+        { ...plan().screens[0], title: 'Events', slug: '/events', sections: [{ name: 'Upcoming events', uses: ['new:Jazz Oct 16', 'new:Jazz Oct 23'], items: 0 }], id: 'page-events' },
+      ],
+      items: [
+        { slot: 'i0', op: 'event', name: 'Jazz Oct 16', why: '', dependsOn: [], degrade: 'omit', args: {}, id: 'ev-16' },
+        { slot: 'i1', op: 'event', name: 'Jazz Oct 23', why: '', dependsOn: [], degrade: 'omit', args: {}, id: 'ev-23' },
+      ],
+    })
+    const units = aiBuildUnits(eventsPlan())
+    // The second event failed: the list still shows the first.
+    const ledger = aiBuildInitialLedger(units).map((row) =>
+      row.slot === 'i0' ? { ...row, status: 'succeeded' as const, outputs: ['ev-16'] } : row.slot === 'i1' ? { ...row, status: 'failed' as const } : row,
+    )
+    const ops: AiBuildOps = new Map([...OPS, ['event', EVENT]])
+    const page = units.find((unit) => unit.screen) as (typeof units)[number]
+    const derived = aiBuildUnitJob(job({ plan: eventsPlan() }), page, { kind: 'page', units, ledger, ops })
+    expect(aiLayoutListingsOf(derived.inputs)).toEqual([
+      { id: 'listing:events', kind: 'events', name: 'the events', records: ['Jazz Oct 16'], placements: [{ screenId: 'page-events', section: 0, role: 'index' }] },
+    ])
+    expect(derived.brief).not.toContain('eventList')
+    expect(derived.plan?.screens[0].sections[0].uses).toEqual([])
   })
 
   /*

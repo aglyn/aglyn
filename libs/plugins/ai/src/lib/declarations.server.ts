@@ -33,6 +33,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import { registerStockPhotoPicker } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import { AI_PLUGIN_ID, AI_USAGE_METER_ID } from './constants'
 import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED, AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
 import { registerAiDeclarations } from './declarations'
@@ -165,6 +166,18 @@ export function registerAiServerDeclarations(): void {
   registerOperatorAlerts([AI_PROVIDER_UNAVAILABLE, AI_JOB_FAILED, AI_BUILD_PARTLY_FAILED], {
     pluginId: AI_PLUGIN_ID,
   })
+  // The stock photo picker another plugin's draft writer asks for (AGL-3755):
+  // an event's cover, chosen as a page's pictures are. The choosing loads on
+  // the first pick; registering again replaces it.
+  registerStockPhotoPicker(
+    {
+      pick: async (request) => {
+        const { aiStockPhotoPick } = await import('./jobs/ai-stock-photo-picker')
+        return aiStockPhotoPick(request)
+      },
+    },
+    { pluginId: AI_PLUGIN_ID },
+  )
   if (
     !listUsageAlertContributors().some(
       (contributor) =>

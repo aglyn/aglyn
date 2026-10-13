@@ -22,8 +22,9 @@
  *
  *  - THE REFUSAL is the Events page's gate: the add-on, and a write role.
  *  - THE CHECK reads wall times in a zone and holds the rest to `eventWrite`.
- *  - THE WRITE makes a draft that starts after it, and asked again finds it.
- *  - A DRAFT is listed nowhere until a person publishes it.
+ *  - THE WRITE makes an event that starts after it, and asked again finds it.
+ *  - PUBLISHED for the publishing role, as the Events page publishes; a
+ *    member who may write but not publish gets a draft and a notice (AGL-3755).
  */
 
 jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({ __esModule: true, firebaseAdmin: {} }))
@@ -34,6 +35,7 @@ import {
   createEventDraftWriter,
   EVENT_DRAFT_PLAN_REFUSAL,
   EVENT_DRAFT_ROLE_REFUSAL,
+  EVENT_DRAFT_UNPUBLISHED_NOTICE,
   eventDraftPastRefusal,
 } from './event-drafts.server'
 
@@ -124,11 +126,11 @@ const request = (patch: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   store.clear()
   commits = []
-  store.set('hosts/host-1', { memberRoles: { 'uid-1': 'editor', 'uid-2': 'viewer' } })
+  store.set('hosts/host-1', { memberRoles: { 'uid-1': 'editor', 'uid-2': 'viewer', 'uid-3': 'author' } })
 })
 
 describe('the event writer', () => {
-  it('writes the event the editor saves, born a draft, at the instant its wall time names', async () => {
+  it('writes and publishes the event the editor saves, at the instant its wall time names (AGL-3755)', async () => {
     const written = await writer.write(request())
     expect(written).toEqual({
       ok: true,
@@ -136,7 +138,8 @@ describe('the event writer', () => {
       id: 'job-1-i0',
       name: 'Autumn sourdough workshop',
       versionId: null,
-      facts: { status: 'draft', startsAtMs: STARTS, endsAtMs: STARTS + 3 * 60 * 60 * 1000 },
+      facts: { status: 'published', startsAtMs: STARTS, endsAtMs: STARTS + 3 * 60 * 60 * 1000 },
+      live: true,
     })
     expect(store.get('hosts/host-1/events/job-1-i0')).toEqual({
       title: 'Autumn sourdough workshop',
@@ -145,7 +148,7 @@ describe('the event writer', () => {
       location: CONTENT.location,
       organizer: CONTENT.organizer,
       description: CONTENT.description,
-      status: 'draft',
+      status: 'published',
       createdAt: NOW,
       updatedAt: NOW,
       createdBy: 'uid-1',
@@ -174,7 +177,8 @@ describe('the event writer', () => {
       replayed: true,
       id: 'job-1-i0',
       name: 'Autumn sourdough workshop',
-      facts: { status: 'draft' },
+      facts: { status: 'published' },
+      live: true,
     })
     expect(commits).toEqual([])
     expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ id: 'job-1-i0', versionId: null })
@@ -188,10 +192,97 @@ describe('the event writer', () => {
     expect(await writer.write(request())).toMatchObject({ ok: false, status: 409 })
   })
 
-  it('reports a published draft as published when read back', async () => {
+  it('keeps an author’s event as a draft, saying why, since an author may write but not publish (AGL-3755)', async () => {
+    const written = await writer.write(request({ uid: 'uid-3' }))
+    expect(written).toMatchObject({
+      ok: true,
+      facts: { status: 'draft' },
+      live: false,
+      notice: EVENT_DRAFT_UNPUBLISHED_NOTICE,
+    })
+    expect(store.get('hosts/host-1/events/job-1-i0')).toMatchObject({ status: 'draft', createdBy: 'uid-3' })
+  })
+
+  it('publishes for an admin too, and nothing beyond the status the Events page sets', async () => {
+    store.set('hosts/host-1', { memberRoles: { 'uid-1': 'admin' } })
     await writer.write(request())
+    const stored = store.get('hosts/host-1/events/job-1-i0') as Record<string, unknown>
+    expect(stored['status']).toBe('published')
+    expect(Object.keys(stored).sort()).toEqual(
+      ['createdAt', 'createdBy', 'description', 'endsAtMs', 'location', 'organizer', 'startsAtMs', 'status', 'title', 'updatedAt'],
+    )
+  })
+
+  it('reports an author’s draft as published once a person publishes it', async () => {
+    await writer.write(request({ uid: 'uid-3' }))
     store.set('hosts/host-1/events/job-1-i0', { ...store.get('hosts/host-1/events/job-1-i0'), status: 'published' })
-    expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ facts: { status: 'published' } })
+    expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ facts: { status: 'published' }, live: true })
+  })
+
+  describe('its cover (AGL-3755)', () => {
+    const PICK = { src: 'media:hosts/host-1/m-1', url: '/api/media/cdn/hosts/host-1/m-1', width: 1600, height: 1067, origin: 'library' as const }
+    const picking = (answer: unknown = PICK) => {
+      const pick = jest.fn(async () => answer as never)
+      return { pick, writer: createEventDraftWriter({ firestore: () => firestore, stockPhotos: () => ({ pick }) }) }
+    }
+
+    it('asks the picker for a photo of the title, scoped to the act, and stores its address in the cover field', async () => {
+      const { pick, writer: covered } = picking()
+      const written = await covered.write({ ...request(), act: { id: 'job-1', business: 'a sourdough bakery in Austin' } })
+      expect(pick).toHaveBeenCalledWith({
+        hostId: 'host-1',
+        uid: 'uid-1',
+        subject: 'Autumn sourdough workshop',
+        business: 'a sourdough bakery in Austin',
+        orientation: 'horizontal',
+        scope: 'job-1',
+        seed: 'job-1-i0',
+      })
+      expect(written).toMatchObject({ ok: true, facts: { coverImage: PICK.url } })
+      const stored = store.get('hosts/host-1/events/job-1-i0') as Record<string, unknown>
+      expect(stored['coverImage']).toBe(PICK.url)
+      // No description is invented: the list shows the cover beside the title that names it.
+      expect(stored['coverImageAlt']).toBeUndefined()
+    })
+
+    it('takes a starter photo’s path as it takes a library photo’s', async () => {
+      const { writer: covered } = picking({ ...PICK, src: '/_static/starter/desk.jpg', url: '/_static/starter/desk.jpg', origin: 'starter' })
+      await covered.write(request())
+      expect(store.get('hosts/host-1/events/job-1-i0')).toMatchObject({ coverImage: '/_static/starter/desk.jpg' })
+    })
+
+    it('keeps the cover the content names, and asks for none', async () => {
+      const { pick, writer: covered } = picking()
+      await covered.write(request({ content: { ...CONTENT, coverImage: 'https://example.com/loaf.jpg' } }))
+      expect(pick).not.toHaveBeenCalled()
+      expect(store.get('hosts/host-1/events/job-1-i0')).toMatchObject({ coverImage: 'https://example.com/loaf.jpg' })
+    })
+
+    it('fetches nothing for a replay, a refused member or a workspace without the add-on', async () => {
+      const { pick, writer: covered } = picking()
+      await covered.write(request())
+      pick.mockClear()
+      await covered.write(request())
+      await covered.write(request({ id: 'job-1-i1', uid: 'uid-2' }))
+      await covered.write(request({ id: 'job-1-i2', org: WITHOUT_ADDON }))
+      expect(pick).not.toHaveBeenCalled()
+    })
+
+    it('writes the event without a cover when the picker has none, fails, or answers an address the field refuses', async () => {
+      for (const [index, answer] of [null, { ...PICK, url: 'javascript:alert(1)' }].entries()) {
+        const { writer: covered } = picking(answer)
+        await covered.write(request({ id: `job-1-n${index}` }))
+        expect(store.get(`hosts/host-1/events/job-1-n${index}`)).not.toHaveProperty('coverImage')
+      }
+      const failing = createEventDraftWriter({
+        firestore: () => firestore,
+        stockPhotos: () => ({ pick: async () => { throw new Error('library down') } }),
+      })
+      expect(await failing.write(request({ id: 'job-1-f' }))).toMatchObject({ ok: true })
+      expect(store.get('hosts/host-1/events/job-1-f')).not.toHaveProperty('coverImage')
+      const none = createEventDraftWriter({ firestore: () => firestore, stockPhotos: () => null })
+      expect(await none.write(request({ id: 'job-1-x' }))).toMatchObject({ ok: true })
+    })
   })
 
   it('refuses content the check refuses, with its first problem', async () => {

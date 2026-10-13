@@ -40,6 +40,9 @@ One message can ask for any mix of:
   variables**, such as a phone number kept in one place;
 - **products** to sell, with a description, tags and options;
 - **a booking service** visitors can book online, with its length, hours and price;
+- **events** on the site's calendar, each with its date and time, place, description and a
+  cover photo, published so the Event List on your pages shows them. They need the Event
+  Calendar add-on. See [Events Calendar](../content-and-data/events/overview.md#ask-aglyn-ai);
 - **an announcement bar** or **a popup**;
 - **an A/B test** of a page or of an email's subject line;
 - **a funnel** that counts visits from one step to the next;

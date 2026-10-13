@@ -98,6 +98,8 @@ builds, in this order:
 4. **Your first posts or products**, on paid plans, when the site is a blog or a store.
    See [A store from the start](#a-store-from-the-start) and
    [A blog from the start](#a-blog-from-the-start).
+   **Your first events**, when your business holds them and your workspace has the Event
+   Calendar add-on. See [Events from the start](#events-from-the-start).
 5. **Your pages**, each with its sections, its address and its own search title and
    description. A home page opens with a hero and has several bands below it, such as
    services, about, social proof and a closing call to action. Photos come from your media
@@ -222,6 +224,22 @@ On a paid plan, a site with the **Blog & writing** style also gets a **Blog** co
 with three posts, signed with the business name and published with the site. Each post
 has a cover photo, and the blog's index page shows the covers on its cards. See
 [Build a blog](../building-sites/site-templates/build-a-blog.md).
+
+## Events from the start {#events-from-the-start}
+
+When your business holds dated events, such as a venue, a club, a studio with classes, a
+meetup, a church or a theater, and your workspace has the
+[Event Calendar add-on](../content-and-data/events/overview.md), the start adds your first
+three upcoming events to the **Events** page, each with a cover photo. They are dated after
+the day you start, in your site's time zone, and a day or time you gave in your description
+is kept as you gave it. The page about your events, or else your home page, lists them with
+the **Event List**, in one of its planned sections.
+
+The events are published, so they show on your site straight away, when you have the
+admin or editor role on the site. With the author role they are saved as drafts, and the
+job says so; someone with the editor role publishes them on the **Events** page. Without
+the add-on the start adds no events. Change or delete them on the **Events** page like any
+event.
 
 ## On the Free plan {#on-the-free-plan}
 

@@ -680,6 +680,7 @@ export function aiDoctrinePlanCheck(
   inventory: AiSiteInventory | null,
   framing: AiCopyFraming = null,
   capabilities: AiPlanCapabilities | null = null,
+  settle: ((plan: AiBuildPlan) => AiBuildPlan) | null = null,
 ): AiGenerationCheck<AiBuildPlan> {
   return (answer) => {
     const publish = detectPublishIntent(answer)
@@ -709,14 +710,16 @@ export function aiDoctrinePlanCheck(
     // counts what the page keeps. A site start's section that shows the work
     // with fewer pieces than its fewest is given that many (AGL-3754).
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
-    // last, once every creation the wall counts is settled.
+    // last, once every creation the wall counts is settled. The door's own
+    // settling (a build's events page, AGL-3755) runs first, so every rule
+    // after it holds what it added.
     const plan = aiSettlePlanFreeWall(
       aiSettlePlanForms(
         aiSettlePlanLayouts(
           aiSettlePlanDatasets(
             aiSettlePlanFormDatasets(
               aiSettlePlanGalleries(
-                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(parsed.plan, inventory), inventory),
+                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
                 inventory,
                 capabilities,
               ),
@@ -925,6 +928,11 @@ export interface AiPlanGenerationInput extends AiGenerationInputBase {
   capabilities?: AiPlanCapabilities | null
   /** Checks the door adds to the doctrine's own, run on a plan that parsed. */
   extend?: (plan: AiBuildPlan, answer: Record<string, unknown>) => AiDoctrineViolation[]
+  /**
+   * What the door settles in a plan that parsed, before the doctrine's own
+   * settling and every rule (a build's events page, AGL-3755); pure.
+   */
+  settle?: (plan: AiBuildPlan) => AiBuildPlan
 }
 
 export interface AiCustomGenerationInput<T> extends Omit<AiGenerationInputBase, 'inventory'> {
@@ -1028,7 +1036,7 @@ function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   if (kind === 'plan') {
     const plan = input as AiPlanGenerationInput
     return withExtension(
-      aiDoctrinePlanCheck(plan.inventory, plan.framing ?? null, plan.capabilities ?? null),
+      aiDoctrinePlanCheck(plan.inventory, plan.framing ?? null, plan.capabilities ?? null, plan.settle ?? null),
       plan.extend,
     ) as AiGenerationCheck<unknown>
   }

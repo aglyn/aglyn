@@ -19,6 +19,7 @@ import {
   pluginAiCapabilityArgsProblems,
   type PluginAiCapability,
 } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import type { PluginDraftRecord } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
   AI_PLAN_NEW_REF_PREFIX,
   isAiPlanNewRef,
@@ -681,7 +682,13 @@ export function aiBuildCreationNoun(kind: AiBuildPlanCreateKind): string {
  */
 export function aiBuildPlacedItemLines(
   unit: AiBuildUnit,
-  context: { units: readonly AiBuildUnit[]; ledger: readonly AiJobItemLedger[]; ops?: AiBuildOps },
+  context: {
+    units: readonly AiBuildUnit[]
+    ledger: readonly AiJobItemLedger[]
+    ops?: AiBuildOps
+    /** Operations whose items the platform places itself (a listing), so the page is told nothing of them. */
+    placedByCode?: readonly string[]
+  },
 ): string[] {
   if (!unit.screen) return []
   const rows = new Map(context.ledger.map((row) => [row.slot, row]))
@@ -693,6 +700,7 @@ export function aiBuildPlacedItemLines(
     for (const { dep, capability } of aiBuildSectionItems(section, context.units, context.ops)) {
       const row = rows.get(dep.slot)
       if (!row || !aiBuildItemDelivered(row)) continue
+      if (context.placedByCode?.includes(dep.op)) continue
       const blocks = capability?.pageBlocks ?? []
       if (!blocks.length) continue
       const key = aiBuildBlocksKey(blocks)
@@ -828,4 +836,21 @@ export function aiLedgerUnits(ledger: readonly AiJobItemLedger[]): AiBuildUnit[]
     label: row.label,
     deps: row.op === 'page' ? creations : [],
   }))
+}
+
+/**
+ * What the job drawer says under an item another plugin's writer made: a
+ * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
+ * field, AGL-3746), that it was saved. A writer that went live only when the
+ * member may (an event the publishing role publishes, AGL-3755) reports
+ * `live: false` for one it kept as a draft, with its `notice` saying why.
+ */
+export function aiBuildItemOutputNote(
+  capability: Pick<PluginAiCapability, 'where' | 'live'>,
+  written?: Pick<PluginDraftRecord, 'live' | 'notice'>,
+): string {
+  const live = written?.live ?? capability.live
+  const said = live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
+  const notice = written?.notice?.trim()
+  return notice ? `${said} ${notice}` : said
 }
