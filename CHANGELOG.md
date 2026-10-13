@@ -16,6 +16,8 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **billing:** a voided invoice no longer also raises "delivery changed nothing"
+- **billing:** a voided never-paid sign-up invoice is a named skip, not an inert delivery
+- **email:** a sending subdomain of the operator domain is not a health blocker
 
 ## v1.0.0-beta.247 — 2026-10-13
 
