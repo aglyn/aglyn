@@ -291,13 +291,20 @@ async function handler(request: Request): Promise<Response> {
     // for "a blank site" is what writes the starter
     // (`POST /api/hosts/starter`). Anyone who will not be offered the start
     // gets the starter now, as before.
-    const guidedStart = await guidedStartOffered({
-      orgId: orgMembership.orgId,
-      org,
-      host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
-      member: orgMembership.member,
-      staff: decoded['staff'] === true,
-    })
+    //
+    // A person who chose the starter in "Create site"'s start (AGL-3761) asked
+    // for it before the site existed, so it is born with it, in the same
+    // transaction, and is not offered the start again.
+    const starterChosen = body?.start === 'starter'
+    const guidedStart =
+      !starterChosen &&
+      (await guidedStartOffered({
+        orgId: orgMembership.orgId,
+        org,
+        host: { enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS] },
+        member: orgMembership.member,
+        staff: decoded['staff'] === true,
+      }))
     const claim = await claimHostForOrg({
       firestore,
       orgId: orgMembership.orgId,

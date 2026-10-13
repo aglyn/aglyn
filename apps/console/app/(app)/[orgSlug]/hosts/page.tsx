@@ -54,11 +54,13 @@ import ListQueryNotices, {
 import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { Alert, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { collection, type Firestore } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { Suspense, useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import CreateHostDialog from '../../../../components/create-host-dialog.component'
+import CreateHostDialog, {
+  CreateSiteFromUrl,
+} from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
 import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -428,6 +430,7 @@ function HostsContent() {
     ? 'loading'
     : readOutcome({ ready: hostsReady, error: hostsError })
   const [creating, setCreating] = useState(false)
+  const openCreate = useCallback(() => setCreating(true), [])
   const { permissions } = useOrgPermissions()
   /**
    * `6 of 10 sites · Business plan` (AGL-2166). The console mockup puts
@@ -578,6 +581,11 @@ function HostsContent() {
         </>
         )}
       </Container>
+      {/* A first site from the empty console lands here, in the workspace
+          made for it, with "Create site" open (AGL-3761). */}
+      <Suspense fallback={null}>
+        <CreateSiteFromUrl onOpen={openCreate} />
+      </Suspense>
       <CreateHostDialog open={creating} onClose={() => setCreating(false)} />
     </DashboardLayout>
   )

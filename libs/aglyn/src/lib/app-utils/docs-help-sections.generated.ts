@@ -145,7 +145,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#details': 'Nt, a blog and so on. One is picked for you from your first answer; choose another to change it.',
     '#how-do-you-want-to-start': 'Hrough each question and what happens after you choose Plan my site.',
     '#the-sites-search-listing': 'Se the site\'s search indexing setting. Until the site is built, its address shows a short coming soon page with the site\'s name, which search engines are asked not to index.',
-    '#your-business': 'Ite does not ask again. If you have typed or picked something, the window first asks Leave without your answers?, because what you typed is not saved.',
+    '#your-business': 'Ites, or your plan has no site left, Create site says so before asking anything.',
   },
   aiTemplate: {
     '#generate-a-page-template-with-aglyn-ai': 'Ate is linked back to the template afterwards. Editing a page will never change the template, and updating a template will never change pages you already made.',

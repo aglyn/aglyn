@@ -45,7 +45,10 @@ import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-eve
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import CreateHostDialog from '../../../components/create-host-dialog.component'
+import {
+  SITE_CREATE_PARAM,
+  SITE_CREATE_VALUE,
+} from '../../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../../components/create-org-dialog.component'
 import EmptyState from '../../../components/empty-state.component'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -69,6 +72,7 @@ import {
 } from '../../../utils/sign-up-landing-hold'
 import hardNavigate from '../../../utils/hard-navigate'
 import { currentConsoleLandingHref } from '../../../utils/console-landing'
+import { createFirstSiteWorkspace } from '../../../utils/first-site-workspace'
 
 
 /** The landing hold the workspace provisioning takes (AGL-3690). */
@@ -82,7 +86,8 @@ const PROVISION_HOLD_MAX_MS = 60_000
  * precedence guess. Lives in the `(app)` group so it wears the console chrome,
  * and frames its content in DashboardLayout (AGL-631). A single-org member
  * skips straight to their sites; a first-time member with no org creates their
- * first site (which auto-provisions the workspace).
+ * first site, which sets up the workspace first and then asks, in it, how the
+ * site should start (AGL-3761).
  */
 function OrgJump() {
   const {
@@ -122,17 +127,18 @@ function OrgJump() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [creatingOrg, setCreatingOrg] = useState(false)
-  const [creatingSite, setCreatingSite] = useState(false)
   /**
-   * A site was just created from this page (AGL-3742). The create made the
-   * account's one workspace, and the dialog is already navigating to the
-   * site's start. The single-org redirect below must not race it to the
-   * sites list.
+   * "Create site" with no workspace: the workspace being made for it
+   * (AGL-3761), then the sites page with the start open.
+   */
+  const [startingSite, setStartingSite] = useState(false)
+  const [startSiteError, setStartSiteError] = useState<string | null>(null)
+  /**
+   * The workspace for a first site was just created from this page
+   * (AGL-3742, AGL-3761), and the page is already leaving for its start. The
+   * single-org redirect below must not race it to the sites list.
    */
   const siteCreatedRef = useRef(false)
-  const markSiteCreated = useCallback(() => {
-    siteCreatedRef.current = true
-  }, [])
   /**
    * A workspace this page tried to create for a sign-up, and could not
    * (AGL-1523).
@@ -220,6 +226,38 @@ function OrgJump() {
     // fresh function every render would re-fire a navigation on every render.
     [intent],
   )
+
+  /**
+   * "Create site" for an account with no workspace (AGL-3761).
+   *
+   * How a site starts is asked inside a workspace — its plan decides what is
+   * offered — so the workspace is made first and the site is not: the person
+   * lands in the new workspace's sites with "Create site" open, and the site
+   * is created there only once they choose how it starts. A visit carrying a
+   * plan lands on billing with it instead (AGL-1117), where the workspace is
+   * what the plan is bought for.
+   *
+   * Hard, like the sign-up provisioning above: the whole chrome resolves
+   * against a workspace that did not exist when this page rendered. And on
+   * the auth host, to the console host, which serves the path (AGL-3742).
+   */
+  const startFirstSite = useCallback(async () => {
+    if (startingSite || !user) return
+    setStartingSite(true)
+    setStartSiteError(null)
+    siteCreatedRef.current = true
+    const outcome = await createFirstSiteWorkspace(user, user)
+    if ('slug' in outcome) {
+      const target = intent
+        ? enterOrg(outcome.slug)
+        : `${buildRoute(Route.HOST_LIST, { orgSlug: outcome.slug })}?${SITE_CREATE_PARAM}=${SITE_CREATE_VALUE}`
+      hardNavigate(currentConsoleLandingHref(target))
+      return
+    }
+    siteCreatedRef.current = false
+    setStartSiteError(outcome.error)
+    setStartingSite(false)
+  }, [enterOrg, intent, startingSite, user])
 
   /**
    * THE WORKSPACE THE SIGN-UP ASKED FOR, CREATED ON THE FIRST VERIFIED
@@ -449,19 +487,15 @@ function OrgJump() {
                   </Typography>
                 </Box>
                 <OrgInvitesBanner />
+                {startSiteError ? <Alert severity="error">{startSiteError}</Alert> : null}
                 <Button
                   variant="text"
                   sx={{ alignSelf: 'flex-start' }}
-                  onClick={() => setCreatingSite(true)}
+                  disabled={startingSite}
+                  onClick={() => void startFirstSite()}
                 >
-                  {'Create my own site instead'}
+                  {startingSite ? 'Setting up your workspace…' : 'Create my own site instead'}
                 </Button>
-                <CreateHostDialog
-                  open={creatingSite}
-                  onClose={() => setCreatingSite(false)}
-                  destination={intent ? enterOrg : undefined}
-                  onCreated={markSiteCreated}
-                />
               </Stack>
             ) : (
               <>
@@ -480,9 +514,10 @@ function OrgJump() {
                       <Button
                         variant="contained"
                         color="primary"
-                        onClick={() => setCreatingSite(true)}
+                        disabled={startingSite}
+                        onClick={() => void startFirstSite()}
                       >
-                        {'Create site'}
+                        {startingSite ? 'Setting up your workspace…' : 'Create site'}
                       </Button>
                       <Button
                         variant="text"
@@ -493,18 +528,16 @@ function OrgJump() {
                     </Stack>
                   }
                 />
-                {/* The first site provisions the workspace, so this is the
-                    whole of the zero-org buyer's path: someone arriving from
-                    a plan CTA with no workspace at all has no picker and no
-                    create-workspace dialog to carry the intent for them. The
-                    prop is passed only when there IS an intent, so an
-                    ordinary first site still lands on its Setup page. */}
-                <CreateHostDialog
-                  open={creatingSite}
-                  onClose={() => setCreatingSite(false)}
-                  destination={intent ? enterOrg : undefined}
-                  onCreated={markSiteCreated}
-                />
+                {/* The first site's workspace is the whole of the zero-org
+                    buyer's path: someone arriving from a plan CTA with no
+                    workspace at all has no picker and no create-workspace
+                    dialog to carry the intent for them, so `startFirstSite`
+                    lands a visit with a plan on billing. */}
+                {startSiteError ? (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {startSiteError}
+                  </Alert>
+                ) : null}
               </>
             )
           ) : (

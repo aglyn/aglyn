@@ -18,8 +18,9 @@ those jobs run in order, not a different way of building.
 
 ## Starting a new site from a few questions
 
-A site you have just created opens on its **Setup** page, and **Start your site**
-opens over it with one question first: **how do you want to start?**
+**Create site** opens **Start your site** straight away, before the site exists. Its
+first step asks the site's name and address, and one question: **how do you want to
+start?**
 
 - **Start from the starter site** gives the site a ready-made home page with a
   header, footer and contact form, live at its address, for you to edit.
@@ -34,14 +35,14 @@ Where submissions go is the form's routing: **the Inbox**, or the Inbox and a
 lead in CRM for every message that carries an email address. You can change that
 on the form itself afterwards.
 
-**Skip** is in the bar at the top on both steps, and so are the close control and
-the Escape key. Before a site is being planned, all three do what the starter
-card does: the site gets the starter home page, and nothing else is created — no
-job, no half-built site behind you — and the site does not ask again. Once the
-site is being planned they only close the window; the job carries on.
+Nothing is created until you choose. The starter card and **Skip** (in the bar at
+the top on both steps) create the site with the starter home page. **Plan my site**
+creates the site and starts planning it. The close control and the Escape key create
+nothing: the window closes and no site is made. Once the site is being planned,
+closing only closes the window; the job carries on.
 
-Until one of those happens, a site that started this way has no page yet, and its
-address shows a short **coming soon** page with the site's name, which search
+Until the job publishes its pages, a site that started with AI has no page yet, and
+its address shows a short **coming soon** page with the site's name, which search
 engines are asked not to index.
 
 Every question, step and button of the guided start is walked through on
