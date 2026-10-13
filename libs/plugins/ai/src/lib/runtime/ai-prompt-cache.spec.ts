@@ -872,15 +872,15 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // a timestamp: a live build printed all three on every article. All
       // four grew 6 at AGL-3588, the App Bar's shrink and hide switches, and
       // 4 at AGL-3717, the Image's and the Image List's lightbox switch.
-      layout: { prefixTokens: 4_430, minimum: 512, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_042, minimum: 512, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_042, minimum: 512, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_418, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_030, minimum: 512, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_030, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
       // says plainly that a subject line and a preheader carry no merge token.
       email: { prefixTokens: 2_970, minimum: 512, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_600, minimum: 512, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_717, minimum: 512, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_587, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
       // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
@@ -932,8 +932,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // The edit doors are up 4 at AGL-3717 for the palette's lightbox switch.
       // Both up 101 at AGL-3716: the edit protocol's own Music player line,
       // which is where the player is named now that the catalog leaves it off.
-      'edit-screen': { prefixTokens: 6_075, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 6_063, minimum: 512, caches: true, toolsStable: true },
+      'edit-screen': { prefixTokens: 6_062, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 6_050, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },

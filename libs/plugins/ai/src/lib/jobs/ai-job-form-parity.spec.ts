@@ -168,10 +168,13 @@ describe('the field settings', () => {
 
 describe('the consent field', () => {
   it('is what the editor’s Marketing consent preset places, and what a generated form carries whole', () => {
+    // The editor's preset is the same props rebuilt as MUI's separate form
+    // elements (a lone Checkbox in a Choice Label), so it is offered under
+    // the Form Control it places; the generated form still carries them on
+    // a Form Field until the form job moves to the elements.
     const preset = presetNamed('Marketing consent')
-    expect(preset).toContain('componentId: FORM_FIELD_ID')
-    expect(preset).toMatch(/props: \{ \.\.\.Aglyn\.MARKETING_CONSENT_FORM_FIELD \}/)
-    expect(AI_PALETTE['formField'].presets).toContain('Marketing consent')
+    expect(preset).toMatch(/fieldPresetData\(\{ \.\.\.Aglyn\.MARKETING_CONSENT_FORM_FIELD \}\)/)
+    expect(AI_PALETTE['muiFormControl'].presets).toContain('Marketing consent')
     const draft = aiFormDraft(
       formWith({ fieldName: 'email', label: 'Email', fieldType: 'email' }),
       {},
