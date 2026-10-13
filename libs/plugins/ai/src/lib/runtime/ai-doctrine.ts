@@ -24,6 +24,7 @@ import {
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
   aiHomeScreenIds,
+  aiHomeScreenNames,
   aiInventoryLine,
   aiInventoryRows,
   type AiInventoryKind,
@@ -1012,6 +1013,7 @@ export function aiDoctrineTreeContext(
       : null,
     ...aiNodeTreeContextFromInventory(inventory),
     homeScreenIds: aiHomeScreenIds(inventory),
+    homeLabels: aiHomeScreenNames(inventory),
     ...extra,
   }
 }

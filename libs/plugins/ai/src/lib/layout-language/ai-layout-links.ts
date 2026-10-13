@@ -160,13 +160,11 @@ function pageDestination(
   targets: AiLayoutTargets,
 ): AiLayoutDestination | null {
   if (!page || page.id === targets.pageId) return null
-  if (
-    targets.homeIds.includes(page.id) &&
-    !HOME_WORDS.test(label) &&
-    !isHomeSlug(page.slug)
-  )
-    return null
-  if (isHomeSlug(page.slug) && !HOME_WORDS.test(label)) return null
+  // A link home says so, in English or by the home page's own title: a
+  // Spanish site's home is "Inicio" (AGL-3760).
+  const saysHome = HOME_WORDS.test(label) || (wordsOf(label).join(' ') !== '' && wordsOf(label).join(' ') === wordsOf(page.label).join(' '))
+  if (targets.homeIds.includes(page.id) && !saysHome && !isHomeSlug(page.slug)) return null
+  if (isHomeSlug(page.slug) && !saysHome) return null
   if (page.href) return { kind: 'path', href: page.href, ...(page.standsInFor ? { standsInFor: page.standsInFor, label: page.label } : {}) }
   return { kind: 'page', screenId: page.id }
 }

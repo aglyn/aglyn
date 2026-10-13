@@ -36,7 +36,8 @@ import type {
 import { aiLayoutCopyCheck } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
-import type { AiJob } from '../model/ai-jobs.types'
+import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
+import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import {
   aiHomeScreenIds,
   type AiSiteInventory,
@@ -117,12 +118,14 @@ export function aiLayoutSiteName(job: Pick<AiJob, 'inputs'>): string {
 
 /** The pages a frame's navigation links: the planned pages, else the site's own, in order. */
 export function aiLayoutNavPages(
-  job: Pick<AiJob, 'inputs'>,
+  job: Pick<AiJob, 'inputs'> & { plan?: Pick<AiJobPlan, 'language'> | null },
   inventory: AiSiteInventory | null,
 ): AiLayoutPage[] {
   // The header and the footer link the pages the job was told (AGL-3660),
   // else the site's own, the home page always and first, labelled Home. The
-  // model draws neither list, so it cannot drop a page.
+  // model draws neither list, so it cannot drop a page. A site in another
+  // language keeps its home page's own title: a Spanish start's "Inicio" was
+  // linked as "Home" (AGL-3760).
   const planned = aiLayoutSitePages(job.inputs)
   const own = (inventory?.screens ?? [])
     .filter((row) => !row.template)
@@ -133,7 +136,7 @@ export function aiLayoutNavPages(
   const pages = [...siteHome, ...(planned.length ? planned : own)].filter((page) => page.label.trim())
   const home = pages.find((page) => aiLayoutIsHomeSlug(page.slug))
   return [
-    ...(home ? [{ ...home, label: 'Home' }] : []),
+    ...(home ? [aiLayoutSpeaksOtherThanEnglish(job.plan?.language) ? home : { ...home, label: 'Home' }] : []),
     ...pages.filter((page) => page !== home && !aiLayoutIsHomeSlug(page.slug)),
   ].slice(0, AI_LAYOUT_SITE_PAGES_MAX)
 }
@@ -240,6 +243,11 @@ export function aiLayoutFrameCheck(input: {
       ],
       formIds: input.targets.forms.map((form) => form.id),
       homeScreenIds: input.targets.homeIds,
+      // A link home under the home page's own title says home, in any language (AGL-3760).
+      homeLabels: [
+        ...input.pages.filter((page) => aiLayoutIsHomeSlug(page.slug)),
+        ...input.targets.pages.filter((page) => input.targets.homeIds.includes(page.id)),
+      ].map((page) => page.label),
       // A footer's "Get in touch" goes to the form, wherever it is placed (AGL-3729).
       ...(input.targets.formPageId ? { formScreenIds: [input.targets.formPageId] } : {}),
       codeBuilt: true,
