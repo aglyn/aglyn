@@ -211,9 +211,12 @@ works with, and its **Operations** — numbered steps with **Then do this** and
 When a function is placed on a page in a
 [Function Widget](../besigner/element-catalog.md), each parameter becomes an input. Under
 **What visitors see** in the function builder, give a parameter a **Label** (instead of
-its identifier), a value it **Starts as**, and **Choices** written as
-`value: Label, value: Label`. A parameter with choices is asked as a list, a number as a
-number box, and a true/false as a switch.
+its identifier) and a value it **Starts as**. To ask it as a list, press **Add choice**
+once per answer: **Function gets** is the value the function receives, and **Visitors
+see** is the wording on the list (the value itself when left blank). **×** removes a
+choice. Once a parameter has choices, **Starts as** is picked from them; a true/false
+parameter starts **On** or **Off**. A parameter with choices is asked as a list, a number
+as a number box, and a true/false as a switch.
 
 A widget runs in the visitor's browser, so the function's definition is part of the page,
 along with the site variables that function names — and only those. Do not put anything in
