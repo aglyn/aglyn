@@ -689,7 +689,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     expect(options).toEqual(['1', '2'])
     expect(screen.queryByLabelText('Welcome email')).toBeNull()
     // About what it is likely to cost, and at most (AGL-3722).
-    expect(screen.getByText('About 137 credits (up to 282), of the 300 AI credits you get free each month.')).toBeTruthy()
+    expect(screen.getByText('About 137 credits (up to 283), of the 300 AI credits you get free each month.')).toBeTruthy()
   })
 
   it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
@@ -716,7 +716,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     const warning = screen.getByRole('alert', { name: 'More than your credits left' })
     expect(warning.textContent).toContain(aiCreditsPromptText(prompt, 'site'))
     expect(warning.textContent).toContain(
-      'This site is about 137 credits (up to 282). You have 70 left, so it will build as much as it can and pause when your credits run out.',
+      'This site is about 137 credits (up to 283). You have 70 left, so it will build as much as it can and pause when your credits run out.',
     )
     expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
     // Plan my site alone starts nothing: only an explicit choice does.

@@ -594,7 +594,7 @@ export function AiSiteStartCard({
   const modelMultiplier =
     (pickedModel && modelChoice.options?.options.find((option) => option.id === pickedModel)?.multiplier) || 1
   // What the start is likely to cost and at most (AGL-3722): "About 137
-  // credits (up to 282)", the measured figures scaled by the chosen model.
+  // credits (up to 283)", the measured figures scaled by the chosen model.
   const scaled = (range: AiCreditRange): AiCreditRange => ({
     likely: Math.round(range.likely * modelMultiplier),
     p90: Math.round(range.p90 * modelMultiplier),

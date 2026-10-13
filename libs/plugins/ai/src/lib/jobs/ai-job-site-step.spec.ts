@@ -1055,7 +1055,7 @@ describe('what a scaffold is admitted with', () => {
     const prompt = aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 2)
     expect(asked).toEqual({ status: 409, error: aiCreditsPromptText(prompt!, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt })
     expect(asked?.error).toBe(
-      'This site is about 137 credits (up to 282). You have 70 left, so it will build as much as it can and pause ' +
+      'This site is about 137 credits (up to 283). You have 70 left, so it will build as much as it can and pause ' +
         'when your credits run out. You can upgrade or resume when they renew on November 1.',
     )
     expect(seen).toEqual(['org-1'])

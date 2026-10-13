@@ -317,6 +317,8 @@ describe('the plan step', () => {
     const tool = mockRunAiRequest.mock.calls[1][0].tools?.[0]
     expect(tool?.inputSchema['required']).toContain('language')
     expect(tool?.inputSchema['properties']).toHaveProperty('language')
+    // And what its photos show, in English, which a library is searched by (AGL-3760).
+    expect(tool?.inputSchema['required']).toContain('photoWords')
   })
 
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {

@@ -37,6 +37,8 @@ import {
   type AiLayoutPictureSource,
 } from '../layout-language/ai-layout-pictures'
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
+import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
+import type { AiBuildPlan } from '../model/ai-build-plan'
 
 /**
  * STOCK PHOTOS FOR A LANGUAGE PAGE'S PICTURE SLOTS (AGL-3660).
@@ -1193,6 +1195,13 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
   lead?: boolean
   /** Whether the hit's first tags must name the site's world, where the object need not lead (AGL-3660). */
   leadWorld?: boolean
+  /**
+   * Whether the hit's FIRST tag must name the site's world (AGL-3760): what
+   * the photo is of, most of all. A hero is the site's opening picture; the
+   * copper-fern-candle-co start (beta.246) took a latte with a candle behind
+   * it, its tags "coffee, mobile wallpaper 4k, latte art, …, candle".
+   */
+  first?: boolean
   /** Phrases (as stems) of which one must be among the hit's first tags: a borrowed photo is OF the product's category (AGL-3660). */
   leadAny?: readonly string[]
   /** Whether it fills a product: no room, no scene, no fragrance bottle ({@link PRODUCT_SCENES}, AGL-3660). */
@@ -1535,6 +1544,8 @@ export function aiStockSearchesFor(
           }
         : {}),
       ...(slot.role === 'hero' && core.length ? { category: core } : {}),
+      // A hero is OF the site's world: its first tag names it (AGL-3760).
+      ...(slot.role === 'hero' ? { first: true } : {}),
     })
   }
   return searches
@@ -1563,6 +1574,8 @@ export interface AiStockJudgement {
   lead?: boolean
   /** Whether the hit's first tags must name the site's world ({@link AiStockSearch.leadWorld}). */
   leadWorld?: boolean
+  /** Whether the hit's first tag must name the site's world ({@link AiStockSearch.first}). */
+  first?: boolean
   /** The stems of the site's business type or brief, which let a sensitive topic in ({@link AiStockSiteTerms.named}). */
   named?: readonly string[]
   /** Rival crafts: a hit naming one is rejected unless it names the site's core words ({@link AiStockSiteTerms.rivals}). */
@@ -1717,6 +1730,16 @@ export function aiStockRelevance(
     kinLead ||
     domain.some((stem) => hit.lead.has(stem))
   if (judgement.leadWorld && !worldLead) return 0
+  // The first tag alone, never the page's address: Pixabay's slug repeats a
+  // late tag ("coffee-latte-art-candle-…"). A site whose words name no world
+  // holds its hero to none.
+  const worldStems = new Set([...anyOf, ...required, ...domain])
+  if (judgement.first && (worldStems.size || kin.length)) {
+    const firstWorld =
+      hit.firstPhrase.split(' ').some((stem) => worldStems.has(stem)) ||
+      kin.some((phrase) => among([hit.firstPhrase], phrase))
+    if (!firstWorld) return 0
+  }
   // What the photo is most of all: its first tag names the object, its kin or what it must be OF.
   const firstNamed = (phrases: readonly string[]) =>
     phrases.some((phrase) => Boolean(phrase) && among([hit.firstPhrase], phrase))
@@ -1850,6 +1873,13 @@ export interface AiLayoutStockPhotoSourceInput {
   seed: string
   /** The site's business type, else the job's brief. */
   business: string
+  /** The site's language, from its plan (AGL-3750); absent, English. */
+  language?: string
+  /**
+   * The plan's photo words, in English (AGL-3760): what a site in another
+   * language is searched by, in place of its business type and its alt texts.
+   */
+  photoWords?: string
   /** The page's section names, by plan index. */
   sectionNames: readonly string[]
   /**
@@ -1878,6 +1908,17 @@ interface AiStockChoice {
   repeat?: boolean
 }
 
+/** A job's language and English photo words (AGL-3760), as a stock photo source takes them. */
+export function aiStockPhotoWordsOf(job: {
+  plan?: Pick<AiBuildPlan, 'language' | 'photoWords'> | null
+}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords'> {
+  const plan = job.plan
+  return {
+    ...(plan?.language ? { language: plan.language } : {}),
+    ...(plan?.photoWords ? { photoWords: plan.photoWords } : {}),
+  }
+}
+
 /**
  * The source for one page, or `null` when this deployment has no stock
  * photo library or no media door, which leaves every slot to the starters.
@@ -1889,7 +1930,14 @@ export function aiLayoutStockPhotoSource(
   const provider = (deps.provider ?? stockPhotoProvider)()
   const ingest = (deps.ingest ?? pluginMediaIngest)()
   if (!provider || !ingest || !input.hostId || !input.uid) return null
-  const terms = aiStockSiteTerms(input.business)
+  // The libraries are tagged in English (AGL-3760). A Spanish bakery's type,
+  // "Una panadería familiar de San Antonio con pan dulce…", read as the
+  // business "con pan dulce", and its hero searched that and placed the Río
+  // Dulce at dusk; a site in another language is searched by its plan's
+  // English photo words, and its slots' alt texts, in its own language, name
+  // no subject a search could use.
+  const english = aiLayoutSpeaksOtherThanEnglish(input.language) ? (input.photoWords ?? '').trim() : ''
+  const terms = aiStockSiteTerms(english || input.business)
   return async (slots) => {
     const timeout = AbortSignal.timeout(
       deps.budgetMs ?? AI_LAYOUT_STOCK_PHOTOS_BUDGET_MS,
@@ -1925,6 +1973,7 @@ export function aiLayoutStockPhotoSource(
       delete (request as AiStockSearch).kin
       delete (request as AiStockSearch).lead
       delete (request as AiStockSearch).leadWorld
+      delete (request as AiStockSearch).first
       delete (request as AiStockSearch).category
       const key = JSON.stringify([
         request.query,
@@ -2051,6 +2100,7 @@ export function aiLayoutStockPhotoSource(
       ...(request.kin ? { kin: request.kin } : {}),
       ...(request.lead ? { lead: true } : {}),
       ...(request.leadWorld ? { leadWorld: true } : {}),
+      ...(request.first ? { first: true } : {}),
     })
     /**
      * The craft's own photos, the last thing a slot of a craft's site is
@@ -2072,6 +2122,7 @@ export function aiLayoutStockPhotoSource(
         ...size,
         broad: true,
         category: terms.core,
+        ...(slot.role === 'hero' ? { first: true } : {}),
         ...(slot.product ? { product: true, tier: 'weak' as const } : {}),
       }))
     }
@@ -2085,7 +2136,7 @@ export function aiLayoutStockPhotoSource(
         continue
       }
       const sectionName = input.sectionNames[slot.sectionIndex] ?? ''
-      const subject = aiStockSubjectWords(slot.alt, sectionName)
+      const subject = english ? '' : aiStockSubjectWords(slot.alt, sectionName)
       let choice: AiStockChoice | null = null
       const requests = [
         ...(slot.product

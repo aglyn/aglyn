@@ -289,6 +289,16 @@ export interface AiBuildPlan {
    * whose code was not a language code, which is dropped rather than refused.
    */
   language?: string
+  /**
+   * What a SITE plan's photos show, in English whatever language the brief
+   * is in (AGL-3760): two to four words a stock photo library is searched by,
+   * the business's subject first — "bakery bread pastries" for "una panadería
+   * … con pan dulce, conchas". The libraries are tagged in English, so a site
+   * in another language searches by these rather than its own words. Absent
+   * on every other kind's plan, on one that said null, and on one whose words
+   * were not plain English letters.
+   */
+  photoWords?: string
 }
 
 /**
@@ -615,9 +625,34 @@ const LANGUAGE_SCHEMA = nullableString(
   "The language the brief is written in, which the site's copy is written in too: a code such as en, es, fr or pt-BR. Null when unsure.",
 )
 
+/** The most words a plan's photo words keep. */
+export const AI_PLAN_PHOTO_WORDS_MAX = 4
+
 /**
- * Any plan tool with the site's language (AGL-3750), offered only to a
- * `site` job, whose guided start sets the site's language from it. One
+ * A plan's photo words as a stock photo search takes them (AGL-3760), or
+ * `null`: lowercase English words, at most {@link AI_PLAN_PHOTO_WORDS_MAX}.
+ * Words with letters outside English's — "panadería" — are no English at all,
+ * so the plan is kept without them.
+ */
+export function aiPlanPhotoWords(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const text = value.trim().toLowerCase()
+  if (!text || !/^[a-z][a-z\s,'&-]*$/.test(text)) return null
+  const words = text
+    .split(/[\s,&]+/)
+    .map((word) => word.replace(/^[-']+|[-']+$/g, ''))
+    .filter((word) => word.length > 1)
+  return words.length ? words.slice(0, AI_PLAN_PHOTO_WORDS_MAX).join(' ') : null
+}
+
+const PHOTO_WORDS_SCHEMA = nullableString(
+  "For a brief not in English: 2-4 English words for its stock photos, subject first, e.g. bakery bread pastries; no place. Else null.",
+)
+
+/**
+ * Any plan tool with the site's language (AGL-3750) and its photo words in
+ * English (AGL-3760), offered only to a `site` job, whose guided start sets
+ * the site's language from one and searches its photos by the other. One
  * schema for every site plan, so the tool is the same bytes across briefs
  * and the prompt cache keeps it; every other kind's tool is unchanged.
  */
@@ -626,10 +661,11 @@ export function withPlanLanguage(tool: AiTool): AiTool {
     ...tool,
     inputSchema: {
       ...tool.inputSchema,
-      required: [...(tool.inputSchema['required'] as string[]), 'language'],
+      required: [...(tool.inputSchema['required'] as string[]), 'language', 'photoWords'],
       properties: {
         ...(tool.inputSchema['properties'] as Record<string, unknown>),
         language: LANGUAGE_SCHEMA,
+        photoWords: PHOTO_WORDS_SCHEMA,
       },
     },
   }
@@ -912,6 +948,11 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
     if (typeof root['language'] === 'string' && root['language'].trim() && !language) {
       repairs.push(`language "${root['language'].trim().slice(0, 40)}" is not a language code; ignored`)
     }
+    // Photo words that are not plain English are dropped, never refused (AGL-3760).
+    const photoWords = aiPlanPhotoWords(root['photoWords'])
+    if (typeof root['photoWords'] === 'string' && root['photoWords'].trim() && !photoWords) {
+      repairs.push(`photoWords "${root['photoWords'].trim().slice(0, 40)}" is not plain English; ignored`)
+    }
     // A plan whose brief asks for no player carries no list, as it did before the list existed;
     // so does a plan with no items.
     return {
@@ -923,6 +964,7 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         ...(embeds.length ? { embeds } : {}),
         ...(items.length ? { items } : {}),
         ...(language ? { language } : {}),
+        ...(photoWords ? { photoWords } : {}),
       },
       repairs,
     }

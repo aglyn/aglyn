@@ -473,9 +473,9 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
     expect(aiFreeCreditsResetLabel('2026-11-01')).toBe('November 1')
   })
 
-  it('quotes a start at its measured figures and its worst case: about 137 (p90 213, up to 282) for two pages (AGL-3722)', () => {
+  it('quotes a start at its measured figures and its worst case: about 137 (p90 213, up to 283) for two pages (AGL-3722)', () => {
     expect(aiFreeSiteCreditRange(2)).toEqual({ likely: 137, p90: 213, ceiling: aiFreeSiteCreditEstimate(2) })
-    expect(aiFreeSiteCreditEstimate(2)).toBe(282)
+    expect(aiFreeSiteCreditEstimate(2)).toBe(283)
     expect(aiFreeSiteCreditRange(1)).toEqual({ likely: 107, p90: 173, ceiling: aiFreeSiteCreditEstimate(1) })
   })
 
