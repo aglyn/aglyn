@@ -20,9 +20,11 @@ import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-re
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import {
   lazyCrmFieldSetupWriter,
+  lazyCrmPicklistValuesSetupWriter,
   lazyCrmPipelineSetupWriter,
   registerCrmConsoleServerDeclarations,
 } from './declarations.console-server'
+import { CRM_PICKLIST_VALUES_SETUP_RESOURCE } from './model/crm-picklist-setup-content'
 import { CRM_FIELD_SETUP_RESOURCE, CRM_PIPELINE_SETUP_RESOURCE } from './model/crm-setup-content'
 
 beforeEach(() => resetPluginServicesForTests())
@@ -34,6 +36,12 @@ describe('the CRM’s console-server declarations (AGL-3746)', () => {
     expect(pluginResourceDraftWriter(CRM_FIELD_SETUP_RESOURCE)).toEqual({ pluginId: 'crm', writer: lazyCrmFieldSetupWriter })
     expect(pluginAiCapability('crm-pipeline')?.pluginId).toBe('crm')
     expect(pluginAiCapability('crm-field')?.pluginId).toBe('crm')
+    // AGL-3756: values added to a picklist or a Choice field.
+    expect(pluginResourceDraftWriter(CRM_PICKLIST_VALUES_SETUP_RESOURCE)).toEqual({
+      pluginId: 'crm',
+      writer: lazyCrmPicklistValuesSetupWriter,
+    })
+    expect(pluginAiCapability('crm-picklist-values')?.pluginId).toBe('crm')
     expect(() => registerCrmConsoleServerDeclarations()).not.toThrow()
   })
 
@@ -42,6 +50,10 @@ describe('the CRM’s console-server declarations (AGL-3746)', () => {
       ok: true,
       facts: { name: 'Agency', stages: [] },
     })
-    expect(lazyCrmFieldSetupWriter.check({ object: 'deal', label: 'Budget', type: 'currency' }, { hostId: 'h1' }).ok).toBe(false)
+    expect(lazyCrmFieldSetupWriter.check({ object: 'deal', label: 'Budget', type: 'money' }, { hostId: 'h1' }).ok).toBe(false)
+    expect(lazyCrmPicklistValuesSetupWriter.check({ list: 'opportunityType', values: ['Renewal'] }, { hostId: 'h1' })).toEqual({
+      ok: true,
+      facts: { list: 'opportunityType', values: ['Renewal'] },
+    })
   })
 })

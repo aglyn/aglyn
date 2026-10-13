@@ -32,6 +32,11 @@ import {
   CRM_SETUP_OPEN_STAGES_MAX,
   CRM_SETUP_STAGE_NAME_MAX,
 } from '../model/crm-setup-content'
+import {
+  CRM_PICKLIST_VALUES_LISTS,
+  CRM_PICKLIST_VALUES_SETUP_MAX,
+  CRM_PICKLIST_VALUES_SETUP_RESOURCE,
+} from '../model/crm-picklist-setup-content'
 import { PIPELINE_NAME_MAX } from '../model/deal-board-model'
 
 /**
@@ -59,10 +64,12 @@ import { PIPELINE_NAME_MAX } from '../model/deal-board-model'
 /** The operations' names in a build plan. */
 export const CRM_PIPELINE_AI_OP = 'crm-pipeline'
 export const CRM_FIELD_AI_OP = 'crm-field'
+export const CRM_PICKLIST_VALUES_AI_OP = 'crm-picklist-values'
 
 /** How many of each one build may set up. */
 export const CRM_PIPELINE_AI_MAX_PER_PLAN = 3
 export const CRM_FIELD_AI_MAX_PER_PLAN = 12
+export const CRM_PICKLIST_VALUES_AI_MAX_PER_PLAN = 12
 
 /** The CRM is included from Starter (`crm`); Free has none of it. */
 const CRM_FEATURE = 'crm'
@@ -195,6 +202,77 @@ export const crmFieldAiCapability: PluginAiCapability = {
   draftContent: (item) => crmFieldSetupContentFromArgs(item.args),
 }
 
+/** The picklist values writer's content for an item: its arguments, as they are. Pure. */
+export function crmPicklistValuesSetupContentFromArgs(args: PluginAiCapabilityArgs): Readonly<Record<string, unknown>> {
+  return pick(args, ['list', 'object', 'field', 'values', 'meaning', 'group'])
+}
+
+/**
+ * VALUES ADDED TO A CRM PICKLIST (AGL-3756): "add Nurturing as a lead
+ * status", "add Trade show and Podcast as lead sources", "add Renewal as a
+ * deal type", "add Enterprise to the Tier choices on companies". Written by
+ * the `crm-picklist-values` writer, so the rules are the Fields page's: only
+ * adds, matched without capitals, never removes, renames, reorders or
+ * reactivates. Live, as the console's Add value is; 0 credits.
+ */
+export const crmPicklistValuesAiCapability: PluginAiCapability = {
+  op: CRM_PICKLIST_VALUES_AI_OP,
+  noun: 'CRM picklist values',
+  where: 'CRM → Fields',
+  intents: [
+    'add values to a CRM picklist — a lead status ("Contacted", meaning Working), a lead source (Inbound or Outbound), a deal (opportunity) type or contact role, a company (account) type, industry, rating or ownership, a salutation, a task status, priority, type or subject — or add choices to a custom Choice field; only adds, never removes or renames',
+  ],
+  argsSchema: {
+    type: 'object',
+    properties: {
+      list: {
+        type: 'string',
+        description:
+          'Which list: leadStatus, leadSource, opportunityType (a deal’s Type), opportunityContactRole, accountType (a company’s Type), industry, rating, ownership, salutation, taskStatus, taskPriority, taskType, taskSubject; or custom for a custom Choice field (then give object and field).',
+        enum: CRM_PICKLIST_VALUES_LISTS,
+      },
+      object: {
+        type: 'string',
+        description: 'For custom only: the record the Choice field is on — contact; company; deal; lead.',
+        enum: CRM_FIELD_OBJECTS,
+      },
+      field: {
+        type: 'string',
+        description: 'For custom only: the Choice field’s name, e.g. "Tier".',
+        maxLength: 80,
+      },
+      values: {
+        type: 'array',
+        description:
+          'The values to add, in order, e.g. ["Trade show", "Podcast"]. A value the list already has (any capitals) is left as it is. Never values to remove or rename.',
+        items: { type: 'string', maxLength: 120 },
+        maxItems: CRM_PICKLIST_VALUES_SETUP_MAX,
+      },
+      meaning: {
+        type: 'string',
+        description:
+          'Required for leadStatus, taskStatus, taskPriority and taskType: what every value in this item means. leadStatus: new, nurturing, working or unqualified (never qualified); taskStatus: open or done; taskPriority: low, normal or high; taskType: call, email, meeting or todo. Split values of different meanings into separate items.',
+        maxLength: 40,
+      },
+      group: {
+        type: 'string',
+        description: 'For leadSource only: inbound (the lead came to them) or outbound (they went to the lead), when the request says or it is plain.',
+        enum: ['inbound', 'outbound'],
+      },
+    },
+    required: ['list', 'values'],
+    additionalProperties: false,
+  },
+  maxPerPlan: CRM_PICKLIST_VALUES_AI_MAX_PER_PLAN,
+  freeAllowed: false,
+  feature: CRM_FEATURE,
+  draftResource: CRM_PICKLIST_VALUES_SETUP_RESOURCE,
+  live: true,
+  estimateCredits: () => 0,
+  degrade: 'omit',
+  draftContent: (item) => crmPicklistValuesSetupContentFromArgs(item.args),
+}
+
 /**
  * Registers both capabilities; the console-server declarations call it beside
  * the writers, since only the console runs AI jobs (AGL-3026). Idempotent.
@@ -202,4 +280,5 @@ export const crmFieldAiCapability: PluginAiCapability = {
 export function registerCrmSetupAiCapabilities(): void {
   registerPluginAiCapability(crmPipelineAiCapability, { pluginId: BUNDLE_ID })
   registerPluginAiCapability(crmFieldAiCapability, { pluginId: BUNDLE_ID })
+  registerPluginAiCapability(crmPicklistValuesAiCapability, { pluginId: BUNDLE_ID })
 }

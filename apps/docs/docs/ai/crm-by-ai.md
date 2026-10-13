@@ -16,7 +16,8 @@ what happens next: nothing is saved, sent or imported until you do it yourself.
   fill.
 
 It can also [set up the CRM](#set-up-the-crm) from the Assist chat: your deal pipelines and
-their stages, and your custom fields. You confirm the plan before anything is saved.
+their stages, your custom fields, and new values for your picklists. You confirm the plan
+before anything is saved.
 
 ## Summarize a record {#summarize-a-record}
 
@@ -116,8 +117,9 @@ campaign — is named by its name.
 ## Set up the CRM from the chat {#set-up-the-crm}
 
 Ask Assist to [build](./assist-builds.md) your CRM setup, for example *"set up a sales
-pipeline for my agency: Discovery, Proposal, Negotiation, Won/Lost"* or *"add a Budget field to
-opportunities"*. The plan card lists each pipeline and field; once you confirm, they are saved
+pipeline for my agency: Discovery, Proposal, Negotiation, Won/Lost"*, *"add a Budget field to
+opportunities"* or *"add Renewal as a deal type"*. The plan card lists each pipeline, field and
+list of values; once you confirm, they are saved
 to your CRM exactly as if you had set them up yourself in
 [Deals](../content-and-data/crm/deals.md) and [Custom fields](../content-and-data/crm/custom-fields.md).
 Unlike pages and emails, they are not drafts: a pipeline and a field are in use as soon as they
@@ -133,6 +135,16 @@ are saved.
   the CRM's field types: text, number, date, choice, checkbox, link and currency. An amount
   such as a budget is a [currency field](../content-and-data/crm/custom-fields.md#currency-fields),
   in the currency you name (*"a Budget field in euros"*) or US dollars when you name none.
+- **Picklist values.** Ask to add values to a list the CRM keeps — *"add Contacted as a
+  lead status meaning Working"*, *"add Podcast and Webinar series as inbound lead sources"*,
+  *"add Renewal as a deal type"*, *"add Platinum to the Tier choices on companies"* — and
+  they are added at the end of the list, as **Add value** in
+  [**CRM → Fields**](../content-and-data/crm/custom-fields.md#picklist-values) adds them. Every
+  picklist there can be added to, and a custom Choice field's choices too. A lead status
+  names what it means (never *Qualified*, which only converting a lead sets); a lead
+  source may name its group, Inbound or Outbound. *Nurturing* is already a standard lead
+  status. A value the list has, in any capitals, is left alone — an inactive one too, which
+  you activate yourself — and AI never removes, renames, reorders or deactivates a value.
 - **Nothing twice, nothing removed.** Pipelines, stages and fields are matched by name,
   ignoring capitals, so asking again changes nothing that is already there. AI never removes a
   stage or a field, and a stage it was not told about stays where it is, after the ones you

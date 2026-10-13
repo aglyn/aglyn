@@ -39,18 +39,20 @@ jest.mock('./suite-gate', () => ({
 }))
 
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import type { CrmDealStage } from '@aglyn/aglyn/app-utils/crm'
+import { type CrmDealStage, effectiveCrmPicklist } from '@aglyn/aglyn/app-utils/crm'
 import type { PluginDraftRequest } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import type { CrmFieldDefinitionDoc } from '../model/crm-setup-content'
 import type { PipelineDoc } from '../model/deal-board-model'
 import {
   CRM_SETUP_FIELD_SCOPE_REFUSAL,
   CRM_SETUP_PERMISSION_REFUSAL,
+  CRM_SETUP_PICKLIST_SCOPE_REFUSAL,
   CRM_SETUP_ROLE_REFUSAL,
   CRM_SETUP_SCOPE_REFUSAL,
   type CrmSetupMember,
   type CrmSetupStore,
   createCrmFieldSetupWriter,
+  createCrmPicklistValuesSetupWriter,
   createCrmPipelineSetupWriter,
 } from './crm-setup-writers.server'
 
@@ -63,6 +65,8 @@ let pipelines: Map<string, PipelineDoc>
 let fields: Map<string, CrmFieldDefinitionDoc>
 let writes: number
 let member: CrmSetupMember | null
+let picklists: Map<string, Record<string, unknown>>
+let regrouped: Array<{ object: string; label: string; group: string | null }>
 
 const store: CrmSetupStore = {
   pipelines: async (_orgId, tokens) =>
@@ -84,6 +88,20 @@ const store: CrmSetupStore = {
     writes += 1
     fields.set(id, { ...(fields.get(id) as CrmFieldDefinitionDoc), options })
   },
+  picklist: async (_orgId, id) => picklists.get(id) ?? null,
+  changePicklist: async (_orgId, id, change, stamp) => {
+    const stored = picklists.get(id) ?? null
+    const { write, result } = change(stored)
+    if (write) {
+      writes += 1
+      picklists.set(id, { ...(stored ?? { hostId: stamp.hostId, visibleTo: ['org'] }), ...write })
+    }
+    return result
+  },
+  regroup: async (_orgId, object, _target, label, group) => {
+    regrouped.push({ object, label, group })
+    return 1
+  },
 }
 
 const deps = {
@@ -99,6 +117,8 @@ function request(id: string, content: Record<string, unknown>, extra: Partial<Pl
 beforeEach(() => {
   pipelines = new Map()
   fields = new Map()
+  picklists = new Map()
+  regrouped = []
   writes = 0
   member = { role: 'editor', canManageData: true, member: { role: 'editor', allHosts: true } }
 })
@@ -223,5 +243,91 @@ describe('the crm-field writer', () => {
 
   it('refuses a type the CRM does not have', async () => {
     await expect(writer.write(request('j', { ...budget, type: 'money' }))).resolves.toMatchObject({ ok: false, status: 400 })
+  })
+})
+
+describe('the crm-picklist-values writer (AGL-3756)', () => {
+  const writer = createCrmPicklistValuesSetupWriter(deps)
+  const context = { orgId: 'o1', hostId: 'h1', uid: 'u1', org: ORG, now: NOW }
+
+  it('is gated as the Fields page is, org-wide', async () => {
+    await expect(writer.refusal(context)).resolves.toBeNull()
+    await expect(writer.refusal({ ...context, org: { plan: 'free' } })).resolves.toMatchObject({ status: 403 })
+    member = { role: 'viewer', canManageData: true, member: { role: 'viewer', allHosts: true } }
+    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_ROLE_REFUSAL })
+    member = { role: 'editor', canManageData: true, member: { role: 'editor', allHosts: false, hostAccess: { h1: 'editor' }, scopeTokens: ['host:h1'] } }
+    await expect(writer.refusal(context)).resolves.toEqual({ status: 403, error: CRM_SETUP_PICKLIST_SCOPE_REFUSAL })
+    await expect(writer.write(request('j', { list: 'opportunityType', values: ['Renewal'] }))).resolves.toEqual({
+      ok: false,
+      status: 403,
+      error: CRM_SETUP_PICKLIST_SCOPE_REFUSAL,
+    })
+    expect(writes).toBe(0)
+  })
+
+  it('adds a deal type at the end, stamped org-wide, and adds nothing asked again', async () => {
+    const first = await writer.write(request('j1', { list: 'opportunityType', values: ['Renewal', 'new business'] }))
+    expect(first).toMatchObject({
+      ok: true,
+      replayed: false,
+      id: 'opportunityType',
+      name: 'Type (Deals)',
+      facts: { added: ['Renewal'], existing: ['New Business'], inactive: [] },
+    })
+    const stored = effectiveCrmPicklist('opportunityType', picklists.get('opportunityType'))
+    expect(stored.values.map((one) => one.label)).toEqual(['Existing Business', 'New Business', 'Renewal'])
+    expect(picklists.get('opportunityType')).toMatchObject({ hostId: 'h1', visibleTo: ['org'] })
+    const again = await writer.write(request('j2', { list: 'opportunityType', values: ['RENEWAL'] }))
+    expect(again).toMatchObject({ ok: true, replayed: true, facts: { added: [], existing: ['Renewal'] } })
+    expect(writes).toBe(1)
+    await expect(writer.read({ hostId: 'h1', id: 'opportunityType' })).resolves.toMatchObject({
+      facts: { values: ['Existing Business', 'New Business', 'Renewal'] },
+    })
+  })
+
+  it('adds a lead status under its meaning, and finds Nurturing already standard', async () => {
+    const written = await writer.write(request('j', { list: 'leadStatus', values: ['Nurturing', 'Contacted'], meaning: 'Working' }))
+    expect(written).toMatchObject({ ok: true, facts: { added: ['Contacted'], existing: ['Nurturing'] } })
+    const contacted = effectiveCrmPicklist('leadStatus', picklists.get('leadStatus')).values.find((one) => one.label === 'Contacted')
+    expect(contacted).toMatchObject({ meaning: 'working', active: true })
+    await expect(writer.write(request('k', { list: 'leadStatus', values: ['Won'], meaning: 'qualified' }))).resolves.toMatchObject({
+      ok: false,
+      status: 400,
+    })
+  })
+
+  it('files a lead source under its group and regroups the leads already holding it', async () => {
+    const written = await writer.write(request('j', { list: 'leadSource', values: ['Podcast'], group: 'Inbound' }))
+    expect(written).toMatchObject({ ok: true, facts: { added: ['Podcast'] } })
+    expect(effectiveCrmPicklist('leadSource', picklists.get('leadSource')).values.at(-1)).toMatchObject({ label: 'Podcast', group: 'inbound' })
+    expect(regrouped).toEqual([{ object: 'lead', label: 'Podcast', group: 'inbound' }])
+  })
+
+  it('leaves an inactive value as it is and reports it', async () => {
+    picklists.set('rating', { values: [{ id: 'hot', label: 'Hot', active: false }], defaultValueId: null })
+    const written = await writer.write(request('j', { list: 'rating', values: ['hot'] }))
+    expect(written).toMatchObject({ ok: true, replayed: true, facts: { added: [], inactive: ['Hot'] } })
+    expect(writes).toBe(0)
+  })
+
+  it('adds choices to a custom Choice field, matched without capitals, and refuses a field that is not one', async () => {
+    fields.set('f1', {
+      $id: 'f1', key: 'tier', label: 'Tier', type: 'select', options: ['Gold'], object: 'company', order: 0, visibleTo: ['org'], hostId: 'h1',
+    } as CrmFieldDefinitionDoc)
+    fields.set('f2', {
+      $id: 'f2', key: 'seats', label: 'Seats', type: 'number', object: 'company', order: 1, visibleTo: ['org'], hostId: 'h1',
+    } as CrmFieldDefinitionDoc)
+    const written = await writer.write(request('j', { list: 'custom', object: 'company', field: 'tier', values: ['gold', 'Platinum'] }))
+    expect(written).toMatchObject({ ok: true, id: 'custom:f1', facts: { added: ['Platinum'], existing: ['Gold'] } })
+    expect(fields.get('f1')?.options).toEqual(['Gold', 'Platinum'])
+    await expect(writer.read({ hostId: 'h1', id: 'custom:f1' })).resolves.toMatchObject({ name: 'Tier', facts: { values: ['Gold', 'Platinum'] } })
+    await expect(writer.write(request('k', { list: 'custom', object: 'company', field: 'Seats', values: ['10'] }))).resolves.toMatchObject({
+      ok: false,
+      status: 409,
+    })
+    await expect(writer.write(request('l', { list: 'custom', object: 'deal', field: 'Tier', values: ['x'] }))).resolves.toMatchObject({
+      ok: false,
+      status: 404,
+    })
   })
 })

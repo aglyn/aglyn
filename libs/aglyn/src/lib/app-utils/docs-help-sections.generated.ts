@@ -80,7 +80,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   aiCrm: {
     '#draft-an-email': 'New timeline entry, a new or finished task, or an edited note makes the next summary a new one.',
     '#match-columns': 'R. What you type into the request is kept with the AI request, as every AI request is, and members of your workspace can see it in the list of AI jobs, so describe the email rather than pasting private details into…',
-    '#summarize-a-record': 'He columns of your file and the fields they fill. It can also set up the CRM from the Assist chat: your deal pipelines and their stages, and your custom fields.',
+    '#summarize-a-record': 'Fields they fill. It can also set up the CRM from the Assist chat: your deal pipelines and their stages, your custom fields, and new values for your picklists.',
   },
   aiEmail: {
     '#where-to-start-it': 'Eaders to choose between. Ask for a campaign instead and it writes the same design plus the draft campaign that would send it.',
