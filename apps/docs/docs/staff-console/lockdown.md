@@ -83,6 +83,23 @@ actor `system:page-screen`. Confirm it by re-placing the workspace and account l
 as `abuse` here, or lift all three if it is a false positive. See
 [the automatic security hold](./abuse-reports.md#security-hold).
 
+### The payment-fraud hold {#payment-fraud-hold}
+
+The other lock the platform places by itself is for **payment fraud on a
+workspace's own billing**. When Stripe blocks a workspace's charge at highest
+risk, reports it as fraudulent, sees three or more different cards fail on it
+within 30 minutes, or sends an early fraud warning or a Radar review on it, the
+billing webhook locks the workspace and each of its sites as `security`, `full`,
+`takedown`, with **Email the owners** off and **Cancel subscriptions** on. An
+actionable early fraud warning is also refunded first, so it cannot become a
+dispute. Its audit rows name the actor `system:payment-fraud`.
+
+A workspace 14 or more days old, or one that has paid another invoice, is never
+locked this way; staff get the alert and decide. Confirm a hold by re-placing it
+as `abuse` here, or lift it if it is a false positive. Lifting does not recreate
+the canceled subscriptions. See
+[the payment-fraud hold](./abuse-reports.md#payment-fraud-hold).
+
 ## Modes: full, or read-only {#read-only-mode}
 
 Every lock is armed in one of two **modes**. The dropdown sits beside the reason
@@ -1677,11 +1694,13 @@ says whether a time-boxed lock was released early or a forgotten one was
 cleaned up. A `null` in any of those three means the lock genuinely carried no
 reason, no message, or no expiry.
 
-Two locks are placed by the platform rather than a person, and their rows say so
+Three locks are placed by the platform rather than a person, and their rows say so
 with a `system:` actor and `after.automated: true`: the billing sweep below
-(`system:billing-auto-lock`), and the page screen's automatic security hold
+(`system:billing-auto-lock`), the page screen's automatic security hold
 (`system:page-screen`), whose note names the page, the version, the signal and the
-abuse row.
+abuse row, and the [payment-fraud hold](#payment-fraud-hold)
+(`system:payment-fraud`), whose note names the trigger, the charges and the abuse
+row.
 
 Billing locks for lapsed subscriptions are **manual by default**. The automated
 30-days-past-due sweep exists but ships disabled; it is enabled by setting the
