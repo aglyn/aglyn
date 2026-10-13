@@ -89,7 +89,10 @@ import {
   heldUpdateApplied,
   stripeCallWithKey,
 } from '../../../../utils/server/immediate-charge'
-import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
+import {
+  invoiceClosedBeforeFirstPayment,
+  platformInvoiceRevenue,
+} from '../../../../utils/server/platform-revenue'
 import {
   defaultPaymentMethodChange,
   describeStripePaymentMethod,
@@ -1715,29 +1718,49 @@ async function handler(request: Request): Promise<Response> {
             })
           }
           if (type === 'invoice.voided' || type === 'invoice.marked_uncollectible') {
-            await runPluginEventHandlers('billing.invoice.closed', {
+            const plugins = await runPluginEventHandlers('billing.invoice.closed', {
               orgId,
               invoiceId: String(object?.id ?? ''),
               reason: type === 'invoice.voided' ? 'voided' : 'uncollectible',
               metadata: invoiceMetadata,
             })
-            // Revenue the books expected that is not coming (AGL-3377).
-            await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
-              dedupeKey: `${String(object?.id ?? '')}:${type}`,
-              context: {
-                invoiceId: String(object?.id ?? ''),
+            // A plugin that recognised its own invoice moved its standing.
+            if (plugins.handled > 0) ledger.effect('plugins-told-the-invoice-closed')
+            // A sign-up whose first charge never went through (AGL-3766):
+            // Stripe expires the `incomplete` subscription and voids its
+            // opening invoice. Nothing was ever counted as revenue for it and
+            // the workspace never left Free, so there is nothing to alert on —
+            // but it is a decision, named so it never reads as inert.
+            if (invoiceClosedBeforeFirstPayment(object)) {
+              ledger.skip('invoice-closed-before-first-payment')
+            } else {
+              // Revenue the books expected that is not coming (AGL-3377).
+              const alert = await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
+                dedupeKey: `${String(object?.id ?? '')}:${type}`,
+                context: {
+                  invoiceId: String(object?.id ?? ''),
+                  orgId,
+                  // Off the org document already read for the slug above
+                  // (AGL-3432); blank when it has no name.
+                  orgName: String(invoiceOrg.get('name') ?? '').trim(),
+                  status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
+                  amount: formatOperatorAlertAmount(
+                    Number(object?.amount_due ?? 0),
+                    String(object?.currency ?? 'usd'),
+                  ),
+                },
                 orgId,
-                // Off the org document already read for the slug above
-                // (AGL-3432); blank when it has no name.
-                orgName: String(invoiceOrg.get('name') ?? '').trim(),
-                status: type === 'invoice.voided' ? 'voided' : 'uncollectible',
-                amount: formatOperatorAlertAmount(
-                  Number(object?.amount_due ?? 0),
-                  String(object?.currency ?? 'usd'),
-                ),
-              },
-              orgId,
-            })
+              })
+              // Telling the operator IS this delivery's work (AGL-3766). The
+              // staff console row is written before any email or webhook is
+              // tried, so an `undelivered` that carries those attempts still
+              // reached staff. One WITHOUT them is the raise itself failing,
+              // left unclaimed so the inert alarm surfaces it rather than this
+              // route vouching for an alert nobody received.
+              if (alert.outcome !== 'undelivered' || alert.email || alert.webhook) {
+                ledger.effect('operator-told-the-invoice-closed')
+              }
+            }
           }
         }
       }
