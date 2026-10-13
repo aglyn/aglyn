@@ -152,7 +152,8 @@ describe('a Spanish start is searched in English (AGL-3760, Panadería Sol de Oa
     const words = aiStockPhotoWordsOf({ plan: { language: 'es', photoWords: PANADERIA_WORDS } })
     const [now] = (await aiLayoutStockPhotoSource({ ...base, ...words }, { provider: () => after.provider, ingest: () => after.ingest })?.([slot])) ?? []
     expect(after.asked).not.toContain('con pan dulce')
-    expect(after.asked[0]).toBe('bakery bread pastries')
+    // By the words' subject, which they lead with (AGL-3769).
+    expect(after.asked[0]).toBe('bakery')
     // Nothing recorded answers the English searches, so the starter photos fill it: never the river.
     expect(RIO_DULCE).not.toContain(idOf(now?.src))
   })

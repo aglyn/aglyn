@@ -192,15 +192,14 @@ const SITE_CASES: Array<
     'text, background, divider and tint',
     {
       text: { primary: '#1b1b1f', secondary: '#44474f' },
-      // `paper` left unset falls to MUI's white, not the base's paper — the
-      // palette merge is one level deep.
+      // `paper` left unset keeps the base's paper: the leaf groups merge
+      // per color, on the page as in the email.
       background: { default: '#fffbfe' },
       divider: '#cac4d0',
-      // A partial tint group REPLACES the base's, so the two tints left
-      // unset resolve nowhere — on the page as in the email.
+      // So does a partial tint group: the two tints left unset keep the
+      // base's rather than resolving nowhere.
       tint: { primary: '#fde2e4' },
     },
-    ['tint.secondary', 'tint.tertiary'],
   ],
   // A dark page ground under a light-scheme palette: every derived dark
   // shade is measured against it.

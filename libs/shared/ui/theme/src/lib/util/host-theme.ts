@@ -25,7 +25,12 @@ import type {
   HostThemeSchemeColors,
 } from '@aglyn/shared-data-types'
 import { objectDeepMergeReplaceArrays } from '@aglyn/shared-util-vendor'
-import type { PaletteOptions, ThemeOptions } from '../../vendor/mui'
+import {
+  darken,
+  lighten,
+  type PaletteOptions,
+  type ThemeOptions,
+} from '../../vendor/mui'
 
 /**
  * Components a host theme may override. Persisted overrides are plain JSON;
@@ -397,6 +402,39 @@ export function orderMediaWidths<T>(value: T): T {
 }
 
 /**
+ * A tint is a wash of its accent, so it is derived from `main` the way MUI
+ * derives `light` and `dark`: with its own `lighten`/`darken`.
+ */
+export function accentTint(main: string, mode: PaletteOptions['mode']): string {
+  return mode === 'dark' ? darken(main, 0.7) : lighten(main, 0.9)
+}
+
+/**
+ * The tints a site renders: the base's, each replaced by the site's own where
+ * it sets one, or washed from the site's accent where it sets the accent
+ * without one, so a recolored brand never keeps the theme's old wash.
+ */
+function mergeTints(
+  base: PaletteOptions | undefined,
+  overrides: PaletteOptions | undefined,
+): PaletteOptions['tint'] {
+  if (!overrides?.tint && !overrides?.primary && !overrides?.secondary && !overrides?.tertiary) {
+    return undefined
+  }
+  const tint: Record<string, string> = { ...base?.tint, ...overrides.tint }
+  for (const key of ['primary', 'secondary', 'tertiary'] as const) {
+    const main = (overrides[key] as { main?: unknown } | undefined)?.main
+    if (overrides.tint?.[key] || typeof main !== 'string') continue
+    try {
+      tint[key] = accentTint(main, overrides.mode ?? base?.mode)
+    } catch {
+      // Not a color MUI can parse (a CSS variable): keep the inherited tint.
+    }
+  }
+  return tint
+}
+
+/**
  * Converts a persisted {@link HostTheme} document into MUI `ThemeOptions`
  * for one color scheme. The result is meant to be passed through
  * `createResponsiveTheme` (or `createTheme`) by the consumer; shade and
@@ -481,6 +519,8 @@ export function mergeThemeOptions(
   // the partial-palette behaviour the converter is written for. Overriding
   // `primary` still must not disturb `secondary`, hence the level.
   merged.palette = { ...base.palette, ...overrides.palette }
+  const tint = mergeTints(base.palette, overrides.palette)
+  if (tint) merged.palette.tint = tint
   merged.shape = { ...base.shape, ...overrides.shape }
   // Same reasoning as `palette`: setting `toolbar` must not drop any other
   // mixin the base defines.

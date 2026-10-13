@@ -78,10 +78,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
-import {
-  formatParameterOptions,
-  parseParameterOptions,
-} from '../model/parameter-options'
+import { ParameterChoicesEditor } from './parameter-choices-editor.component'
 import WhereUsedDialog from './where-used-dialog.component'
 import { FormulaBuilderButton } from './formula-builder.component'
 import { formulaNames } from '../model/formula-names'
@@ -143,70 +140,123 @@ function emptyDraft(): FunctionDraft {
 /**
  * What a VISITOR meets for one parameter (AGL-3202): the label above the
  * input, what it starts with, and — for a question with fixed answers — the
- * choices. Empty fields are dropped from the definition rather than stored
- * as empty strings, so a function nobody has dressed for visitors saves
- * exactly the shape it always did.
+ * choices, one row each (AGL-3768). Empty fields are dropped from the
+ * definition rather than stored as empty strings, so a function nobody has
+ * dressed for visitors saves exactly the shape it always did.
  *
- * The choices keep their own text while being typed. Parsing every keystroke
- * back into the box would eat the space after a comma, and the colon after a
- * value, the moment they were typed.
+ * "Starts as" is picked, not typed, wherever there is a list to pick from:
+ * the choices when there are any, on or off for a true/false.
  */
 function ParameterAudienceFields(props: {
   parameter: HostFunctionParameter
   onChange: (next: HostFunctionParameter) => void
 }) {
   const { parameter, onChange } = props
-  const [choices, setChoices] = useState(() =>
-    formatParameterOptions(parameter.options),
-  )
   const assign = (field: 'label' | 'defaultValue', value: string) => {
     const next = { ...parameter }
     if (value) next[field] = value
     else delete next[field]
     onChange(next)
   }
+  const options = parameter.options ?? []
+  const startsAsChoices: { value: string; label: string }[] | null =
+    parameter.type === 'boolean'
+      ? [
+          { value: 'true', label: 'On' },
+          { value: 'false', label: 'Off' },
+        ]
+      : options.length
+        ? options.map((option) => ({
+            value: option.value,
+            label: option.label ?? option.value,
+          }))
+        : null
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ width: 110, flexShrink: 0 }}
-        noWrap
-      >
-        {parameter.name || '—'}
-      </Typography>
-      <TextField
-        label="Label"
-        placeholder={parameter.name}
-        value={parameter.label ?? ''}
-        onChange={(event) => assign('label', event.target.value.slice(0, 80))}
-        size="small"
-        sx={{ flex: 2 }}
-      />
-      <TextField
-        label="Starts as"
-        value={parameter.defaultValue ?? ''}
-        onChange={(event) =>
-          assign('defaultValue', event.target.value.slice(0, 120))
-        }
-        size="small"
-        sx={{ flex: 1 }}
-      />
-      <TextField
-        label="Choices"
-        placeholder="value: Label, value: Label"
-        value={choices}
-        onChange={(event) => {
-          setChoices(event.target.value)
-          const options = parseParameterOptions(event.target.value)
-          const next = { ...parameter }
-          if (options.length) next.options = options
-          else delete next.options
-          onChange(next)
-        }}
-        size="small"
-        sx={{ flex: 3 }}
-      />
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ width: 110, flexShrink: 0 }}
+          noWrap
+        >
+          {parameter.name || '—'}
+        </Typography>
+        <TextField
+          label="Label"
+          placeholder={parameter.name}
+          value={parameter.label ?? ''}
+          onChange={(event) => assign('label', event.target.value.slice(0, 80))}
+          size="small"
+          sx={{ flex: 2 }}
+        />
+        {startsAsChoices ? (
+          <TextField
+            select
+            label="Starts as"
+            value={
+              startsAsChoices.some(
+                (choice) => choice.value === parameter.defaultValue,
+              )
+                ? parameter.defaultValue
+                : ''
+            }
+            onChange={(event) => assign('defaultValue', event.target.value)}
+            size="small"
+            sx={{ flex: 1 }}
+          >
+            <MenuItem value="">
+              <em>{'Nothing chosen'}</em>
+            </MenuItem>
+            {startsAsChoices.map((choice) => (
+              <MenuItem key={choice.value} value={choice.value}>
+                {choice.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : (
+          <TextField
+            label="Starts as"
+            value={parameter.defaultValue ?? ''}
+            onChange={(event) =>
+              assign(
+                'defaultValue',
+                parameter.type === 'number'
+                  ? event.target.value.replace(/[^0-9.-]/g, '')
+                  : event.target.value.slice(0, 120),
+              )
+            }
+            slotProps={
+              parameter.type === 'number'
+                ? { htmlInput: { inputMode: 'decimal' } }
+                : undefined
+            }
+            size="small"
+            sx={{ flex: 1 }}
+          />
+        )}
+      </Stack>
+      {parameter.type === 'boolean' ? null : (
+        <ParameterChoicesEditor
+          parameterName={parameter.name}
+          type={parameter.type}
+          options={parameter.options}
+          onChange={(nextOptions) => {
+            const next = { ...parameter }
+            if (nextOptions.length) next.options = nextOptions
+            else delete next.options
+            // A start that is no longer a choice would preselect nothing.
+            if (
+              nextOptions.length &&
+              next.defaultValue !== undefined &&
+              !nextOptions.some((option) => option.value === next.defaultValue)
+            ) {
+              delete next.defaultValue
+            }
+            onChange(next)
+          }}
+        />
+      )}
     </Stack>
   )
 }
@@ -1001,8 +1051,8 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
               <SectionLabel>{'What visitors see'}</SectionLabel>
               <Typography variant="caption" color="text.secondary">
                 {'Used by a Function Widget on a page. A parameter with ' +
-                  'choices is asked as a list, a number as a number box and ' +
-                  'a true/false as a switch.'}
+                  'choices is asked as a list — Add choice gives it one — a ' +
+                  'number as a number box and a true/false as a switch.'}
               </Typography>
               {(draft?.parameters ?? []).map((parameter, index) => (
                 <ParameterAudienceFields

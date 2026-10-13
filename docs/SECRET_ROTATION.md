@@ -72,7 +72,7 @@ holds the production value.
 | # | Secret | Scope | Grants | On laptops? | Action |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `FIREBASE_PRIVATE_KEY` (+`_ID`) | project, both apps | Firebase **Admin SDK** — total read/write on Firestore, Auth and Storage, **bypassing every security rule** | **yes** | rotate + split |
-| 2 | `STRIPE_SECRET_KEY` | shared (+tenant prod override) | live Stripe API: charges, refunds, payouts, customer PII | **yes** | rotate + **test key** for dev/preview (AGL-2401) |
+| 2 | `STRIPE_SECRET_KEY` | shared (+tenant prod override) | live Stripe API: charges, refunds, payouts, customer PII | **yes** | **exempt by owner decision 2026-10-13** — dev/preview run on live Stripe on purpose; see "Live Stripe outside production" below |
 | 3 | `VERCEL_TOKEN` | project, console | full Vercel API on team `aglyn` — **can rewrite the env vars themselves**, so it revokes every other split on this list | no (preview only) | rotate + remove from preview |
 | 4 | `CRON_SECRET` | shared | every `admin/*` and billing cron route as `system:cron`; **also the live HMAC key for marketing unsubscribe links** | **yes** | rotate, with the pre-step below |
 | 5 | `TOKEN_SIGNING_SECRET` | shared | mints download links, supplier tokens, media signatures, edit tokens the platform then trusts | **yes** | rotate **now, before launch** — see the timing note |
@@ -165,7 +165,11 @@ whole reason this document exists.
    the most deceptive failure on the list: the Measurement Protocol returns
    **2xx for a bad `api_secret`**, so a typo produces zero errors and zero
    data. Verify in GA4 Realtime, never by watching for an error.
-5. **Split `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`** to test-mode
+5. **Not today — owner decision 2026-10-13.** Development and preview of
+   both apps run against the LIVE Stripe account on purpose, and the checker
+   exempts the Stripe key family there (see "Live Stripe outside production"
+   below). This step is kept for the day that decision is reversed.
+   **Split `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`** to test-mode
    credentials on development and preview (AGL-2401). Production keeps the
    live values. This removes the `sk_live_` key from every laptop **and** stops
    `deploymentLivemode()` reading a preview build as the live deployment.
@@ -384,6 +388,26 @@ against the previous one. Two things to know reading it:
   and do not move a finding into the checker's `ACCEPTED` table to quiet it. An
   `ACCEPTED` entry requires a name and a reason and is still printed on every
   run — that is the point. A guard that cannot be red is not a guard.
+
+## Live Stripe outside production (owner decision 2026-10-13)
+
+Development and preview of `aglyn-console` and `aglyn-tenant` deliberately
+use the LIVE Stripe keys, so pre-release builds exercise real production data.
+`verify-env-isolation.mjs` encodes that as one named constant,
+`LIVE_STRIPE_OUTSIDE_PRODUCTION_BY_CHOICE`, scoped on three axes at once:
+
+- **keys** — `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, nothing else;
+- **environments** — `development` and `preview` only;
+- **projects** — the record must reach console and/or tenant. An inert
+  (unlinked) Stripe record is still a finding.
+
+It covers both verdicts — the shared Stripe records (sharing) and the
+`pk_live_`/UNKNOWN publishable key (mode) — and every exempted record is still
+printed on every run under a `NOTE — live Stripe outside production` section
+and in `--json` as `exempted`. Every other finding on this page still fails
+the run. To enforce test-mode keys again, empty the constant's `keys` and
+follow step 5 above; `npm run test:env-isolation` covers both directions.
 
 ## Related
 

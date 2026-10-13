@@ -969,7 +969,10 @@ describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)'
     })
     expect(String(rows[0]['details'])).toContain('56.00 USD')
     expect(String(rows[0]['details'])).toContain('TEST MODE')
-    expect(String(rows[0]['details'])).toContain('This alert refunded and canceled nothing')
+    expect(String(rows[0]['details'])).toContain('refunded and canceled nothing')
+    // The platform's own answer (AGL-3767) is on the row too: with no Stripe
+    // key on this deployment the refund cannot run, and says so.
+    expect(String(rows[0]['details'])).toContain('Automated response (AGL-3767): The refund did not run')
     expect(mockStaffNotifications).toHaveLength(1)
     expect(mockStaffNotifications[0]).toMatchObject({
       type: 'system.abuseReportUrgent',
