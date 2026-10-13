@@ -521,9 +521,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#choose-a-theme': 'Editor Go to Setup → Theme editor. Changes render in a live preview so you see them immediately.',
     '#color-scheme': 'T: every visitor stays on light and the theme mode switcher is hidden on published pages.',
     '#fonts': 'And Nav height, desktop (px) — the height of the top navigation bar on small screens, and from 600px wide up.',
-    '#it-follows-you-into-the-besigner': 'Ing them, so the contrast fixes the platform applies to buttons and links stay in place.',
+    '#it-follows-you-into-the-besigner': 'F it, including the choices above, so every component looks the way your theme ships it.',
     '#shape-and-spacing': 'Ab you are on from the other scheme, a quick start when the two should mostly match.',
-    '#style-components': 'Lete it there. Nothing is sent to anyone else: the check and the conversion run on Aglyn\'s own servers.',
+    '#style-components': 'Ing is sent to anyone else: the check and the conversion run on Aglyn\'s own servers.',
     '#what-you-have-changed': 'Site, not the theme, so it stays as you set it whichever theme you pick.',
   },
   emailCampaigns: {

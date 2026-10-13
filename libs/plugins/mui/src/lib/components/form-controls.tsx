@@ -33,13 +33,19 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import FormHelperText, {
   type FormHelperTextProps,
 } from '@mui/material/FormHelperText'
+import FilledInput from '@mui/material/FilledInput'
 import FormLabel, { type FormLabelProps } from '@mui/material/FormLabel'
 import NativeSelect from '@mui/material/NativeSelect'
 import OutlinedInput from '@mui/material/OutlinedInput'
 import Radio, { type RadioProps } from '@mui/material/Radio'
 import RadioGroup, { type RadioGroupProps } from '@mui/material/RadioGroup'
 import Rating, { type RatingProps } from '@mui/material/Rating'
-import { alpha, type SxProps, type Theme } from '@mui/material/styles'
+import {
+  alpha,
+  type SxProps,
+  type Theme,
+  useTheme,
+} from '@mui/material/styles'
 import {
   createContext,
   forwardRef,
@@ -145,11 +151,16 @@ export interface AglynInputProps {
  * error colors) on the box itself puts every border and corner field on the
  * outline you actually see. The node's own styles come after, so whatever an
  * author sets wins; focus and error still show through their own rules.
+ *
+ * The resting outline sits under `:where()`, which weighs nothing, so the
+ * site theme's input border color (the Style components card) outranks it,
+ * as MUI's own corner radius and the theme's corners already do.
  */
 const outlinedBoxSx = (theme: Theme) => ({
-  borderRadius: 1,
-  border: '1px solid',
-  borderColor: alpha(theme.palette.text.primary, 0.23),
+  '*:where(&)': {
+    border: '1px solid',
+    borderColor: alpha(theme.palette.text.primary, 0.23),
+  },
   '& .MuiOutlinedInput-notchedOutline': { display: 'none' },
   '&:hover': { borderColor: 'text.primary' },
   '&.Mui-focused': {
@@ -159,6 +170,13 @@ const outlinedBoxSx = (theme: Theme) => ({
   '&.Mui-error': { borderColor: 'error.main' },
   '&.Mui-disabled': { borderColor: 'action.disabled' },
 })
+
+/**
+ * Whether the site theme draws inputs filled: the Input style its Style
+ * components card sets, which is MUI's own text field default.
+ */
+const useFilledInputs = () =>
+  useTheme().components?.MuiTextField?.defaultProps?.variant === 'filled'
 
 /** A node's `sx`, as a list the outline can go in front of. */
 const nodeSxList = (sx: unknown): SxProps<Theme>[] =>
@@ -181,20 +199,25 @@ export const AglynInput = forwardRef<HTMLDivElement, AglynInputProps>(
       ...rest
     } = dropClearedProps(props)
     const id = useContext(FieldIdContext)
+    const filled = useFilledInputs()
+    const inputProps = {
+      ...(id ? { id } : {}),
+      name: name || undefined,
+      type: multiline ? undefined : type || 'text',
+      multiline: Boolean(multiline),
+      ...(multiline ? { minRows: minRows || 3 } : {}),
+      placeholder: placeholder || undefined,
+      required: Boolean(required),
+      inputProps: ariaLabel ? { 'aria-label': ariaLabel } : undefined,
+    }
+    if (filled) return <FilledInput ref={ref} {...inputProps} {...rest} />
     return (
       <OutlinedInput
         ref={ref}
         // The label is its own element above the box, so the outline never
         // carries a notch for a floating one.
         notched={false}
-        {...(id ? { id } : {})}
-        name={name || undefined}
-        type={multiline ? undefined : type || 'text'}
-        multiline={Boolean(multiline)}
-        {...(multiline ? { minRows: minRows || 3 } : {})}
-        placeholder={placeholder || undefined}
-        required={Boolean(required)}
-        inputProps={ariaLabel ? { 'aria-label': ariaLabel } : undefined}
+        {...inputProps}
         {...rest}
         sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
       />
@@ -237,14 +260,19 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
       ...rest
     } = dropClearedProps(props)
     const id = useContext(FieldIdContext)
+    const filled = useFilledInputs()
     return (
       <NativeSelect
         ref={ref}
         input={
-          <OutlinedInput
-            notched={false}
-            sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
-          />
+          filled ? (
+            <FilledInput sx={rest['sx']} />
+          ) : (
+            <OutlinedInput
+              notched={false}
+              sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
+            />
+          )
         }
         defaultValue=""
         inputProps={{

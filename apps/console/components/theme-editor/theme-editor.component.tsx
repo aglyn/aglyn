@@ -16,7 +16,8 @@
  */
 
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiChevronDown } from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   consoleOptions,
   getGoogleFontsUrl,
@@ -26,6 +27,9 @@ import {
 import { deepEqual } from '@aglyn/shared-util-vendor/deep-equal'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button,
   Grid,
   MenuItem,
@@ -76,6 +80,7 @@ import {
   writeThemeColor,
   writeToolbarHeight,
 } from './theme-editor.constants'
+import ThemeComponentLooks from './theme-component-looks.component'
 import ThemeFontControl from './theme-font-control.component'
 import ThemePreview from './theme-preview.component'
 
@@ -526,38 +531,60 @@ export function ThemeEditor(props: ThemeEditorProps) {
             header={COMPONENT_OVERRIDES_FIELD.label}
             help={docsHelp('editYourTheme', { anchor: '#style-components' })}
           >
-            <Stack spacing={1}>
-              <Typography variant="body2" color="text.secondary">
-                {draft.components
-                  ? `Advanced: ${
-                      Object.keys(draft.components).length
-                    } component override(s) on this site, deep-merged over the theme's own — name just the property you want to change and the rest of that component is inherited. Emptying the editor to {} drops this site's overrides; the theme's defaults still apply. Unknown components are stripped on apply.`
-                  : `Advanced: no overrides on this site — it renders the theme's own ${
-                      Object.keys(inheritedComponents).length
-                    } component defaults, which the editor opens on. Edits are deep-merged, so you only need to name the property you're changing; only what differs is saved.`}
-              </Typography>
-              <Stack
-                direction="row"
-                spacing={1}
-                useFlexGap
-                sx={{ flexWrap: 'wrap' }}
+            <Stack spacing={2}>
+              <ThemeComponentLooks
+                draft={draft}
+                updateDraft={setDraft}
+                scheme={scheme}
+                siteKey={siteKey}
+              />
+              {/* Every choice above is a component override; this is the
+                  whole set, for the overrides no choice names (an AI
+                  proposal, a site from before the choices). Collapsed, so
+                  nothing a site needs sits behind it. */}
+              <Accordion
+                disableGutters
+                elevation={0}
+                sx={{ border: 1, borderColor: 'divider', '&::before': { display: 'none' } }}
               >
-                <Button size="small" onClick={() => setOverridesOpen(true)}>
-                  {'Edit overrides'}
-                </Button>
-                {/* Clearing the host's overrides IS resetting to the theme
-                    defaults — with nothing stored, the site renders the
-                    brand's own component styles. Saving `{}` from the editor
-                    does the same thing; this is the one-click version. */}
-                <Button
-                  size="small"
-                  color="error"
-                  disabled={!draft.components}
-                  onClick={handleOverridesReset}
+                <AccordionSummary
+                  expandIcon={<MdiIcon path={mdiChevronDown.path} size={0.9} />}
                 >
-                  {'Reset to theme defaults'}
-                </Button>
-              </Stack>
+                  <Typography variant="body2">{'Advanced'}</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      {draft.components
+                        ? `${
+                            Object.keys(draft.components).length
+                          } component(s) styled on this site, over the theme's own look. The choices above cover buttons, inputs and cards; the full set holds anything else.`
+                        : "Nothing styled on this site beyond the theme's own look."}
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      useFlexGap
+                      sx={{ flexWrap: 'wrap' }}
+                    >
+                      <Button size="small" onClick={() => setOverridesOpen(true)}>
+                        {'Edit overrides'}
+                      </Button>
+                      {/* Clearing the host's overrides IS resetting to the
+                          theme defaults — with nothing stored, the site
+                          renders the brand's own component styles. */}
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={!draft.components}
+                        onClick={handleOverridesReset}
+                      >
+                        {'Reset to theme defaults'}
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
             </Stack>
           </CardDisplay>
 

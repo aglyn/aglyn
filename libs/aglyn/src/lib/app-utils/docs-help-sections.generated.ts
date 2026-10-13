@@ -151,7 +151,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-a-page-template-with-aglyn-ai': 'Ate is linked back to the template afterwards. Editing a page will never change the template, and updating a template will never change pages you already made.',
   },
   aiThemes: {
-    '#describe-a-change': 'Olors, font, corner radius, spacing, navigation heights, dark scheme and component overrides you can set by hand.',
+    '#describe-a-change': 'T, corner radius, spacing, navigation heights, dark scheme and button, input and card styles you can set by hand.',
   },
   assistSignals: {
     '#docs-gaps': 'That left writes out would read it as healthy. A signal recorded before kinds were kept is read by its route: the Besigner modes name themselves, a generation job reads as job, and every other turn as assist.',
