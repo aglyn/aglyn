@@ -196,58 +196,27 @@ indexing if you're in a hurry.
 
 ## 6. Verify it actually worked
 
-Three things a crawler reads, and how to read them yourself. Run these against your
-real domain.
+The **SEO check** card, at the top of **Setup → SEO**, reads your site the way a search
+engine does. Select **Run the check** (or **Check again**) and read the first lines of the
+result:
 
-**`robots.txt`** — visit `https://your-site/robots.txt`, or:
+- **Launch status** says whether the site is open to search engines. **Hidden** means the
+  site-wide switch is still on: search engines are asked to stay away and the sitemap lists
+  no pages. **Open to search engines** gives the number of pages listed for them.
+- **Search engines are discouraged**, in red under the score, is the same switch, still on.
+  Go back to step 5.1.
+- A note that **published pages are kept out of search** names each page still set to
+  Unlisted. Set its **Visibility** to **Public** (step 5.2) and check again.
+- The **Checked pages** table lists every page search engines can find. Your real home page
+  should be the one at `/`, not **Coming soon**.
 
-```bash
-curl -s https://your-site/robots.txt
-```
+When the status reads **open to search engines**, no page is named as kept out of search,
+and the table holds every page you expect, the launch is done.
 
-Hidden looks like this — note that no sitemap is named:
-
-```text
-User-agent: *
-Disallow: /
-```
-
-Visible looks like this:
-
-```text
-User-agent: *
-Allow: /
-Sitemap: https://your-site/sitemap.xml
-```
-
-**The page's robots meta** — open the page, **View source**, and search for `robots`.
-Or:
-
-```bash
-curl -s https://your-site/ | grep -i 'name="robots"'
-```
-
-A hidden page returns `<meta name="robots" content="noindex, follow"/>`. A visible page
-returns nothing at all — no robots meta means "index me", which is the default.
-
-**The sitemap** — visit `https://your-site/sitemap.xml`. While the site-wide switch is
-on it is an empty `<urlset>`; once you launch it becomes a **sitemap index** naming one
-child sitemap per section of your site. To count the URLs you are actually submitting,
-follow the index into its children:
-
-```bash
-curl -s https://your-site/sitemap.xml \
-  | grep -o 'https[^<]*' \
-  | xargs -I{} curl -s {} \
-  | grep -c '<loc>'
-```
-
-It should be `0` while the site-wide switch is on, and after launch it should match your
-public pages. Any page you expect to see and don't is a page still set to Unlisted.
-
-:::tip Give it a few minutes
-These three files are cached for about five minutes. If a change hasn't shown up, wait a
-beat and re-run rather than changing another setting.
+:::tip It answers at once; search engines take longer
+The check reads your settings as saved, so it reflects a change the moment you make it.
+What search engines are served catches up within about five minutes, and getting listed
+again takes days — see the caution above.
 :::
 
 ## Related

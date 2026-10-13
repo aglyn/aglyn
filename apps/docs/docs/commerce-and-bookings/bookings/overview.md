@@ -46,8 +46,9 @@ book: each service's length, price and the weekly hours it is offered in.
    **Price** (`0` is free). A paid service needs Stripe connected first (see
    above); **Show the price as** offers a label such as a free estimate instead
    — see [Price labels](#price-labels).
-2. Choose the service's **Timezone** and, under **Weekly availability**, the
-   days and hours slots are offered.
+2. Choose the service's **Timezone**. Under **Weekly availability**, switch on
+   each day slots are offered and pick the **From** and **To** times; select
+   **Add hours** for a second block on the same day, such as after lunch.
 3. Under **Booking form**, choose whether to ask for a phone number or an
    address — see [Asking for a phone number and an address](#phone-and-address).
 4. Select **Save service**. A service you add here is active at once.
