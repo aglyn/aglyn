@@ -197,8 +197,25 @@ async function seedGuideFixtures() {
     }
   }
 
-  // Guide 1: the survey screen — a Form writing to the dataset, with the
-  // AGL-544 field types (rating / radio / checkbox / multiline).
+  // A stored mui form element, and a Choice Label holding its Radio or
+  // Checkbox — the shapes the Besigner's form presets save.
+  const muiNode = (id, componentId, parentId, props, nodes) => ({
+    [id]: {
+      $id: id,
+      componentId,
+      pluginId: 'mui',
+      parentId,
+      ...(nodes ? { nodes } : {}),
+      props,
+    },
+  })
+  const muiChoice = (id, parentId, componentId, label, props = {}) => ({
+    ...muiNode(id, 'muiFormControlLabel', parentId, { label }, [`${id}-input`]),
+    ...muiNode(`${id}-input`, componentId, id, { ...props, value: label }),
+  })
+
+  // Guide 1: the survey screen — a Form writing to the dataset, with a
+  // rating, a radio choice, a multi-choice question and a message box.
   await putScreen(
     'seed-guide-survey-screen',
     { displayName: 'Survey', slug: 'survey' },
@@ -238,52 +255,52 @@ async function seedGuideFixtures() {
           successMessage: 'Thanks — your feedback helps us improve!',
         },
       },
-      f1: {
-        $id: 'f1',
-        componentId: 'formField',
-        pluginId: 'forms',
-        parentId: 'form',
-        props: {
-          fieldName: 'satisfaction',
-          label: 'How satisfied are you?',
-          fieldType: 'rating',
-        },
-      },
-      f2: {
-        $id: 'f2',
-        componentId: 'formField',
-        pluginId: 'forms',
-        parentId: 'form',
-        props: {
-          fieldName: 'visit',
-          label: 'How often do you visit?',
-          fieldType: 'radio',
-          options: 'First time, Monthly, Weekly',
-        },
-      },
-      f3: {
-        $id: 'f3',
-        componentId: 'formField',
-        pluginId: 'forms',
-        parentId: 'form',
-        props: {
-          fieldName: 'topics',
-          label: 'What should we improve?',
-          fieldType: 'checkbox',
-          options: 'Products, Support, Pricing',
-        },
-      },
-      f4: {
-        $id: 'f4',
-        componentId: 'formField',
-        pluginId: 'forms',
-        parentId: 'form',
-        props: {
-          fieldName: 'comments',
-          label: 'Anything else?',
-          fieldType: 'textarea',
-        },
-      },
+      // Each question is MUI's separate form elements, as the picker's
+      // presets build them: a Form Control holding a Form Label and the
+      // element the visitor answers with.
+      ...muiNode('f1', 'muiFormControl', 'form', {}, ['f1-label', 'f1-input']),
+      ...muiNode('f1-label', 'muiFormLabel', 'f1', {
+        children: 'How satisfied are you?',
+      }),
+      ...muiNode('f1-input', 'muiRating', 'f1', { name: 'satisfaction' }),
+      ...muiNode('f2', 'muiFormControl', 'form', {}, ['f2-label', 'f2-input']),
+      ...muiNode('f2-label', 'muiFormLabel', 'f2', {
+        children: 'How often do you visit?',
+      }),
+      ...muiNode('f2-input', 'muiRadioGroup', 'f2', { name: 'visit' }, [
+        'f2-opt-0',
+        'f2-opt-1',
+        'f2-opt-2',
+      ]),
+      ...muiChoice('f2-opt-0', 'f2-input', 'muiRadio', 'First time'),
+      ...muiChoice('f2-opt-1', 'f2-input', 'muiRadio', 'Monthly'),
+      ...muiChoice('f2-opt-2', 'f2-input', 'muiRadio', 'Weekly'),
+      // Three Checkboxes sharing one Field name are one multi-choice
+      // question; the form joins the ticked Values with ", ".
+      ...muiNode('f3', 'muiFormControl', 'form', {}, [
+        'f3-label',
+        'f3-opt-0',
+        'f3-opt-1',
+        'f3-opt-2',
+      ]),
+      ...muiNode('f3-label', 'muiFormLabel', 'f3', {
+        children: 'What should we improve?',
+      }),
+      ...muiChoice('f3-opt-0', 'f3', 'muiCheckbox', 'Products', { name: 'topics' }),
+      ...muiChoice('f3-opt-1', 'f3', 'muiCheckbox', 'Support', { name: 'topics' }),
+      ...muiChoice('f3-opt-2', 'f3', 'muiCheckbox', 'Pricing', { name: 'topics' }),
+      ...muiNode('f4', 'muiFormControl', 'form', { fullWidth: true }, [
+        'f4-label',
+        'f4-input',
+      ]),
+      ...muiNode('f4-label', 'muiFormLabel', 'f4', { children: 'Anything else?' }),
+      ...muiNode('f4-input', 'muiInput', 'f4', {
+        name: 'comments',
+        type: 'text',
+        multiline: true,
+        minRows: 4,
+        fullWidth: true,
+      }),
     },
   )
 
@@ -1281,7 +1298,8 @@ await shot({
     { click: 'text=Document', optional: true, settleMs: 1000 },
     { click: 'text=Container', optional: true, settleMs: 1000 },
     { click: 'text=Stack', optional: true, settleMs: 1000 },
-    { click: 'text=Form', optional: true, settleMs: 1500 },
+    // Exact text: the Form's own fields are Form Control and Form Label.
+    { click: 'text="Form"', optional: true, settleMs: 1500 },
     // The Write to dataset / Form name props live on the Attributes tab.
     {
       click: 'role=tab[name="Attributes"]',
@@ -1557,20 +1575,19 @@ if (selected('survey-walk') || selected('survey-records-after-submit.png')) {
     await page.waitForSelector('text=How satisfied are you?', {
       timeout: TIMEOUT_MS,
     })
-    // Let hydration attach handlers first — the Rating is controlled, so
-    // a pre-hydration star click is silently lost.
+    // Let hydration attach handlers first, so a star click is not lost.
     await page.waitForTimeout(2000)
-    // 4 stars — clicking the star label drives the controlled Rating,
-    // which serializes into the field's hidden input at submit. Poll the
-    // hidden input to confirm the click actually landed post-hydration.
+    // 4 stars. The Rating's stars are radio inputs named `satisfaction`;
+    // poll the checked one to confirm the click landed post-hydration.
+    // Only click while it is not 4: clicking the chosen star clears it.
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await page.locator('.MuiRating-root label').nth(3).click()
-      await page.waitForTimeout(400)
       const rating = await page
-        .locator('input[name="satisfaction"]')
-        .inputValue()
+        .locator('input[name="satisfaction"]:checked')
+        .inputValue({ timeout: 500 })
         .catch(() => '')
       if (rating === '4') break
+      await page.locator('.MuiRating-root label').nth(3).click()
+      await page.waitForTimeout(400)
     }
     await page.getByLabel('Monthly').check()
     await page.getByLabel('Products').check()
