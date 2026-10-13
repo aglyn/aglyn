@@ -520,7 +520,10 @@ describe('the site audit', () => {
   it('says which keyword lines named no checked page', async () => {
     const outcome = await firstPass('/nowhere: lamps')
     const report = readAiSeoProposal(outcome.outputs[0].proposal) as AiSeoAuditReport
-    expect(report.notes).toEqual(['Keywords for /nowhere were not used: no checked page is published at that address.'])
+    expect(report.notes).toEqual([
+      'Keywords for /nowhere were not used: no checked page is published at that address.',
+      '1 published page is kept out of search and was not checked: Hidden. Set its Visibility to Public to list it.',
+    ])
   })
 })
 

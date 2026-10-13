@@ -27,9 +27,9 @@ store's settings, so buyers can collect orders there at the hours you set. On a
 location's row, choose **Pickup**, then:
 
 1. Turn on **Buyers can pick up orders here**.
-2. Enter the **Pickup hours**, one line per set of days, like `Mo-Fr 09:00-17:00`
-   and `Sa 10:00-14:00`. A line that doesn't read as days and times is flagged
-   before you save.
+2. Under **Pickup hours**, switch on each day buyers can collect, then pick the
+   **From** and **To** times. For a split day, such as a lunch break, select
+   **Add hours** on that day.
 3. Add **Arrival instructions** if buyers need them, such as which door to use.
 4. Choose how long an order is **Usually ready in**, or leave it unsaid.
 
@@ -62,8 +62,9 @@ book a delivery time. To set it up:
    as `10010-10020`. Each zone has its own **Fee**, an optional **Minimum order**
    and an optional **Free over** amount. When a postal code is in more than one
    zone, the zone listed first is used.
-4. Enter your **Delivery windows**, one per line, like `Mo-Fr 09:00-12:00`. Each
-   line is offered on each of its days.
+4. Under **Delivery windows**, switch on each day you deliver and pick a window's
+   **From** and **To** times. Select **Add window** for a second window on the
+   same day. Each window is offered on its day.
 5. Choose how long before a window an order must be placed (**Order at least**)
    and how many days ahead buyers can book.
 6. Optionally add **What buyers should know**, such as "We text when we're 10

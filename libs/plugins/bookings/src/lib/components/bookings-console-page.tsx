@@ -30,12 +30,14 @@ import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/pa
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { isBookingReminderDue } from '../model'
 import {
-  BOOKING_WEEKDAYS,
   type BookingServiceDraft,
   bookingServiceDraftFrom,
   bookingServiceFields,
+  formatBookingWindows,
   newBookingServiceDraft,
+  parseBookingWindows,
 } from '../model/booking-service-form'
+import { WeeklyHoursPicker } from '@aglyn/shared-ui-jsx/components/weekly-hours-picker.component'
 import { type BookingServiceStatus, bookingServiceStatus } from '../model/bookings'
 import {
   BOOKING_FIELD_ASKS,
@@ -86,8 +88,6 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-
-const WEEKDAYS = BOOKING_WEEKDAYS
 
 /** The dialog's fields, and the service it edits (`null` for a new one). */
 interface ServiceDraft extends BookingServiceDraft {
@@ -836,30 +836,19 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
             multiline
             minRows={2}
           />
-          <Typography variant="overline" color="text.secondary">
-            {'Weekly availability'}
-          </Typography>
-          {WEEKDAYS.map((day, index) => (
-            <TextField
-              key={day}
-              label={day}
-              placeholder="09:00-12:00, 13:00-17:00 (empty = closed)"
-              value={draft?.windowText[index] ?? ''}
-              onChange={(event) =>
-                setDraft((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        windowText: prev.windowText.map((text, i) =>
-                          i === index ? event.target.value : text,
-                        ),
-                      }
-                    : prev,
-                )
-              }
-              size="small"
-            />
-          ))}
+          <WeeklyHoursPicker
+            label="Weekly availability"
+            value={(draft?.windowText ?? []).map((text) => parseBookingWindows(text))}
+            onChange={(hours) =>
+              setDraft((prev) =>
+                prev
+                  ? { ...prev, windowText: hours.map((day) => formatBookingWindows(day)) }
+                  : prev,
+              )
+            }
+            sameDay
+            helperText="Switch on each day the service is offered, then pick the hours slots are offered in."
+          />
           <Typography variant="overline" color="text.secondary">
             {'Booking form'}
           </Typography>

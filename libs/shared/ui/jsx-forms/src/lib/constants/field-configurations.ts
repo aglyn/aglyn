@@ -19,6 +19,7 @@ import type { ExtendedMapperComponent } from '../vendor/data-driven-forms'
 import optionIsEqualToValue from '../utils/option-is-equal-to-value'
 import {
   FieldBreakpointSpan,
+  FieldWeeklyHours,
   FieldCheckbox,
   FieldColorPicker,
   FieldCssBorder,
@@ -92,6 +93,11 @@ export const FIELD_MAP_CSS_BORDER: ExtendedMapperComponent = {
 export const FIELD_MAP_PRESET_CHOICE: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldPresetChoice,
+}
+/** Opening hours by day, persisted as the hours text. */
+export const FIELD_MAP_WEEKLY_HOURS: ExtendedMapperComponent = {
+  ...fieldSharedOptions,
+  component: FieldWeeklyHours,
 }
 /** Per-breakpoint span/offset row, persisted as one string (AGL-2486). */
 export const FIELD_MAP_BREAKPOINT_SPAN: ExtendedMapperComponent = {

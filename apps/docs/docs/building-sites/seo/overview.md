@@ -261,26 +261,29 @@ It also checks the site as a whole: whether search engines are asked to stay awa
 whether your [structured data](#structured-data) names and describes who publishes the
 site, and whether your [`/llms.txt`](#llmstxt) carries guidance of your own.
 
+The result opens with the site's **Launch status**: **hidden** while
+**Discourage search engines** is on, otherwise **open to search engines** with the number
+of pages listed for them. A published page set to Unlisted is not checked, and the result
+names it, so a page left hidden after a launch shows up here — see
+[Launch a coming-soon page](../../guides/coming-soon-launch.md#6-verify-it-actually-worked).
+
 Each page gets a score out of 100 — a finding takes off more the more it matters — and
 the site's score is the average. Each page in the list links to its detail page, where
 you fix it.
 
 ### Target keywords
 
-The optional **Target keywords by page** box takes one line per page:
+**Target keywords by page** is optional. Select **Add a page**, pick the page from
+the **Page** list, then type each keyword in **Keywords** and press Enter, so it
+becomes a chip. Add another page the same way, and remove one with its **×**.
 
-```text
-/pricing: pricing, plans
-/lamps: brass desk lamps, dimmable
-```
-
-Each page is checked for at most five keywords. Two lines for the same page count as
-one list, and the card names any keyword past the first five that it did not check.
+Each page is checked for at most five keywords. A chip past the first five is shown
+outlined, and the check names it as not checked.
 
 The check reports where each page already says its keywords, and names a keyword a page
 never says. Text a component on the page shows counts. Use a keyword only where the page
-is about it. A line for an address the check did not cover is reported, not silently
-dropped.
+is about it. Keywords for a page the check did not cover, such as one
+set to Unlisted, are reported, not silently dropped.
 
 ### Check one page
 
@@ -582,17 +585,10 @@ that type instead of `Organization`, and four more fields appear:
 - **Areas served** — one city or area per line, published as `areaServed`. This is
   how a business with no storefront says where it works; it does not need a street
   address, and a region and a country on the Address card are enough.
-- **Hours** — one line per set of days, in 24-hour time:
-
-  ```
-  Mo-Fr 08:00-17:00
-  Sa 09:00-13:00
-  ```
-
-  Days can be written `Mo`, `Mon` or `Monday`, joined with `-` for a range or `,`
-  for a list (`Mo,We,Fr 07:00-15:00`). For open all day, use `00:00-23:59`. Each line
-  becomes an `openingHoursSpecification`; a line that does not read is left out
-  rather than guessed at, and the card tells you which one before you save.
+- **Hours** — switch on each day you are open, then pick the **From** and **To**
+  times. For a split day, such as a lunch break, select **Add hours** on that day; to
+  stay open all day, pick 12:00 AM to 11:59 PM. Each day's hours are published as an
+  `openingHoursSpecification`.
 - **Price range** — free text such as `$$` or `$150–$400`, published as `priceRange`.
 - **Payment accepted** — free text such as `Cash, credit card, Zelle`, published as
   `paymentAccepted`.
