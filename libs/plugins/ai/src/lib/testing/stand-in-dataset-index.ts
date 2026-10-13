@@ -30,7 +30,10 @@ import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-ser
  * datasets only, narrowed to a site to those shared with it, each with its
  * fields (`{ id, name, type }` and a `customType` where one rides it, in
  * the dataset page's order) and its
- * `visibleTo`. What the data plugin itself answers is held in its own spec.
+ * `visibleTo`; narrowed to a site, the site's record page for it as
+ * `recordPage` (`{ screenId, base, slugField }`, or `null`, AGL-3747) read off
+ * `hosts/{hostId}/recordPages`. What the data plugin itself answers is held in
+ * its own spec.
  */
 
 const OWNER = 'data'
@@ -88,6 +91,22 @@ export function standInDatasetIndex(firestore: FirebaseFirestore.Firestore): voi
   const datasets = (orgId: string) => firestore.collection('orgs').doc(orgId).collection('datasets')
   const shared = (one: PluginIndexedRecord | null, hostId: string | null | undefined) =>
     one && (!hostId || visibleToHost(one.facts['visibleTo'] as string[], hostId)) ? one : null
+  const recordPages = async (hostId: string) => {
+    const snapshot = await firestore.collection('hosts').doc(hostId).collection('recordPages').get()
+    const pages = new Map<string, { screenId: string; base: string; slugField: string }>()
+    for (const doc of snapshot.docs) {
+      const data = doc.data() ?? {}
+      const base = str(data['base']).replace(/^\/+|\/+$/g, '')
+      if (!str(data['datasetId']) || !base || !str(data['slugField']) || pages.has(str(data['datasetId']))) continue
+      pages.set(str(data['datasetId']), { screenId: doc.id, base, slugField: str(data['slugField']) })
+    }
+    return pages
+  }
+  const withPages = async (records: PluginIndexedRecord[], hostId: string | null | undefined) => {
+    if (!hostId || !records.length) return records
+    const pages = await recordPages(hostId)
+    return records.map((one) => ({ ...one, facts: { ...one.facts, recordPage: pages.get(one.id) ?? null } }))
+  }
   registerPluginRecordIndex(
     'dataset',
     {
@@ -97,12 +116,13 @@ export function standInDatasetIndex(firestore: FirebaseFirestore.Firestore): voi
         const records = snapshot.docs
           .map((doc) => shared(record(doc.id, doc.data()), hostId))
           .filter((one): one is PluginIndexedRecord => one !== null)
-        return { records: records.slice(0, limit), truncated: records.length > limit }
+        return { records: await withPages(records.slice(0, limit), hostId), truncated: records.length > limit }
       },
       async get({ orgId, hostId, id }) {
         if (!orgId) return null
         const snapshot = await datasets(orgId).doc(id).get()
-        return snapshot.exists ? shared(record(snapshot.id, snapshot.data()), hostId) : null
+        const one = snapshot.exists ? shared(record(snapshot.id, snapshot.data()), hostId) : null
+        return one ? (await withPages([one], hostId))[0] : null
       },
     },
     { pluginId: OWNER },

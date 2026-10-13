@@ -131,6 +131,27 @@ describe('the dataset index', () => {
     expect(onH2.records.map((record) => record.id)).toEqual(['team'])
   })
 
+  it('says, narrowed to a site, where each dataset’s records have pages of their own there (AGL-3747)', async () => {
+    // The site's record template for Team, and one for a dataset it may not see.
+    mockDocs['hosts/h1/recordPages/scr-person'] = { datasetId: 'team', base: '/people/', slugField: 'slug', titleField: 'name' }
+    mockDocs['hosts/h1/recordPages/scr-broken'] = { datasetId: 'orders', base: '', slugField: 'slug' }
+    mockDocs['hosts/h2/recordPages/scr-other'] = { datasetId: 'orders', base: 'orders', slugField: 'ref' }
+    const onH1 = await datasetRecordIndex.list({ orgId: 'o1', hostId: 'h1', limit: 10 })
+    expect(onH1.records.map((record) => [record.id, record.facts['recordPage']])).toEqual([
+      // A binding with no base serves nothing, so it is no record page.
+      ['orders', null],
+      ['team', { screenId: 'scr-person', base: 'people', slugField: 'slug' }],
+    ])
+    expect((await datasetRecordIndex.get({ orgId: 'o1', hostId: 'h1', id: 'team' }))?.facts['recordPage']).toEqual({
+      screenId: 'scr-person',
+      base: 'people',
+      slugField: 'slug',
+    })
+    // Not narrowed to a site, there is no site to have record pages on.
+    const everywhere = await datasetRecordIndex.list({ orgId: 'o1', limit: 10 })
+    expect(everywhere.records.every((record) => !('recordPage' in record.facts))).toBe(true)
+  })
+
   it('says when the scope holds more than it answered', async () => {
     const { records, truncated } = await datasetRecordIndex.list({ orgId: 'o1', limit: 1 })
     expect(records).toHaveLength(1)

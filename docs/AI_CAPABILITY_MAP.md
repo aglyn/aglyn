@@ -289,9 +289,15 @@ is a decision about the account, not something to build.
   the link token is admitted only on a page that lists the dataset. The link
   answers once the member saves the binding (rule 13), as the record page's
   row says.
-- **Not yet.** A dataset with a record page saved earlier and no record
-  template in the plan is not linked: the inventory does not read the data
-  plugin's bindings.
+- **Record pages saved earlier (AGL-3747).** The data plugin's `dataset`
+  index, narrowed to a site, says where the site already serves a dataset's
+  records pages of their own (`facts.recordPage`: the saved binding's base
+  and address field). The inventory carries them as the dataset's
+  `recordBase` and `addressField` (never in the prompt's line), and a
+  listing whose plan makes no record template takes them, so its cards link
+  the pages the site already has. A build lists the site's own datasets its
+  plan reuses where a section places them, as it lists the ones it made: the
+  page's section line then says the platform lists the records.
 
 ## Navigation and menus (AGL-3728)
 
