@@ -648,7 +648,7 @@ export function createAiJobSettingsStep(deps: AiJobSettingsStepDeps = {}): AiJob
     if (written.outboxId) {
       // The live site's cached pages go now; the outbox entry stays for the
       // drain unless the drop certainly happened.
-      const dropped = await dropCache({ hostIds: [hostId], reason: 'Aglyn AI changed site settings' }).catch(() => ({ complete: false }))
+      const dropped = await dropCache({ hostIds: [hostId], reason: 'AI build changed site settings' }).catch(() => ({ complete: false }))
       if (dropped.complete) await firestore.collection('publishOutbox').doc(written.outboxId).delete().catch(() => undefined)
     }
     if (written.changed.includes('displayName')) {
