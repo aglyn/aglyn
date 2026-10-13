@@ -380,6 +380,9 @@ describe('a Free workspace’s site start is one or two pages', () => {
     // A paid site start plans no theme change either: its look is a unit of its own (AGL-3660).
     expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)?.create['theme-change'].allowed).toBe(false)
     expect(aiSitePlanCapabilities({ kind: 'page', inputs: {} }, FREE)).toBe(FREE)
+    // A site start's work sections get their fewest pieces in code (AGL-3754).
+    expect(aiSitePlanCapabilities({ kind: 'site', inputs: { pages: 5 } }, PAID)?.galleryMinItems).toBe(3)
+    expect(aiSitePlanCapabilities({ kind: 'build', inputs: {} }, PAID)?.galleryMinItems).toBeUndefined()
   })
 
   // A site start builds no component, so a paid plan draws its repeated items
