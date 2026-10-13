@@ -203,6 +203,8 @@ export function aiLayoutFrameCheck(input: {
   design?: AiLayoutDesign | null
   /** A store's own pages, which the header and footer link by path (AGL-3676). */
   storeLinks?: AiStoreFrameLinks | null
+  /** The site's language, which the frame's own words are written in (AGL-3760). */
+  language?: string
 }): AiGenerationCheck<AiLayoutFrameBuilt> {
   let answers = 0
   return (answer) => {
@@ -224,6 +226,7 @@ export function aiLayoutFrameCheck(input: {
         shopId: aiLayoutShopPageId(input.targets),
         // And its account and policies, written after it (AGL-3676).
         storeLinks: input.storeLinks ?? null,
+        ...(input.language ? { language: input.language } : {}),
       },
       input.targets,
     )
