@@ -486,3 +486,82 @@ describe('readThemeFonts / writeThemeFonts (AGL-3656)', () => {
     expect(readThemeFonts(custom).body?.source).toBe('custom')
   })
 })
+
+describe('component look fields (click-only Style components)', () => {
+  const {
+    clearComponentOverride,
+    readComponentLook,
+    THEME_COMPONENT_LOOK_FIELDS,
+    THEME_LOOK_CUSTOM,
+    THEME_LOOK_DEFAULT,
+    themeComponentLookField,
+    writeComponentLook,
+  } = jest.requireActual('./theme-editor-fields') as typeof import('./theme-editor-fields')
+
+  it('styles only whitelisted components, and every choice round-trips', () => {
+    for (const field of THEME_COMPONENT_LOOK_FIELDS) {
+      for (const target of field.targets) {
+        expect(HOST_THEME_COMPONENT_WHITELIST).toContain(target.component)
+      }
+      expect(readComponentLook({}, field)).toBe(THEME_LOOK_DEFAULT)
+      for (const option of field.options) {
+        const theme = writeComponentLook({}, field, option.value)
+        expect(readComponentLook(theme, field)).toBe(option.value)
+        // What it writes survives the save path's sanitizer unchanged.
+        expect(sanitizeHostTheme(theme).components).toEqual(theme.components)
+        expect(writeComponentLook(theme, field, THEME_LOOK_DEFAULT)).toEqual({})
+      }
+    }
+  })
+
+  it('writes each leaf of a two-target choice, plus its companion', () => {
+    const corners = writeComponentLook({}, themeComponentLookField('input.corners'), 'pill')
+    expect(corners.components).toEqual({
+      MuiOutlinedInput: { sx: { root: { borderRadius: '999px' } } },
+      MuiFilledInput: {
+        sx: { root: { borderRadius: '999px' } },
+        styleOverrides: { root: { overflow: 'hidden' } },
+      },
+    })
+    const padding = writeComponentLook({}, themeComponentLookField('button.padding'), 'roomy')
+    expect(padding.components?.MuiButton?.sx).toEqual({ root: { px: 3, py: 1 } })
+  })
+
+  it('keeps every override it does not own when clearing', () => {
+    const theme: HostTheme = {
+      components: {
+        MuiButton: {
+          defaultProps: { variant: 'outlined', disableElevation: true },
+          styleOverrides: { root: { fontWeight: 600, letterSpacing: 1 } },
+        },
+      },
+    }
+    const cleared = writeComponentLook(
+      writeComponentLook(theme, themeComponentLookField('button.variant'), THEME_LOOK_DEFAULT),
+      themeComponentLookField('button.weight'),
+      THEME_LOOK_DEFAULT,
+    )
+    expect(cleared.components).toEqual({
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+        styleOverrides: { root: { letterSpacing: 1 } },
+      },
+    })
+    expect(
+      clearComponentOverride(cleared, {
+        component: 'MuiCard',
+        target: 'sx',
+        slot: 'root',
+        property: 'borderRadius',
+        media: null,
+      }),
+    ).toBe(cleared)
+  })
+
+  it('reads a value no choice names as custom', () => {
+    const theme: HostTheme = { components: { MuiCard: { defaultProps: { elevation: 5 } } } }
+    expect(readComponentLook(theme, themeComponentLookField('card.elevation'))).toBe(
+      THEME_LOOK_CUSTOM,
+    )
+  })
+})

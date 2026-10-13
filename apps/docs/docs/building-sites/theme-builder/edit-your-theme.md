@@ -199,33 +199,53 @@ What happens to the file:
 
 Nothing is sent to anyone else: the check and the conversion run on Aglyn's own servers.
 
-## Style components
+## Style components {#style-components}
 
-**Component overrides** restyle MUI components site-wide beyond the palette and type. The
-editor takes MUI's component theme API as JSON, keyed by component (`MuiButton`,
-`MuiOutlinedInput`, `MuiCard`, `MuiAlert`…):
+The **Style components** card sets how buttons, form inputs and cards look across the whole
+site. Pick each from a list; the preview updates as you go, and nothing changes on your site
+until you press **Save**.
 
-- `defaultProps` — a prop's default, e.g. `{ "variant": "outlined" }`.
-- `styleOverrides` — literal CSS per slot. `"padding": 8` is 8px.
-- `sx` — the same per-slot styles in **theme terms**, resolved separately for light and
-  dark: palette paths (`"borderColor": "divider"`, `"bgcolor": "primary.main"`), spacing
-  units (`"px": 2` is 16px), radius multiples (`"borderRadius": 2`), shadow levels
-  (`"boxShadow": 3`) and whole text styles (`"typography": "button"`). Use it for anything
-  that should follow the scheme.
-- `variants` — styles that apply only when props match, e.g.
-  `{ "props": { "variant": "outlined" }, "sx": { "borderWidth": 2 } }`.
+![The Style components card](/img/theme-builder/style-components.png)
 
-```json
-{
-  "MuiCard": {
-    "defaultProps": { "variant": "outlined" },
-    "sx": { "root": { "borderColor": "divider", "borderRadius": 2 } }
-  }
-}
-```
+**Buttons**
 
-Your overrides are added to the platform's own component styles rather than replacing them,
-so the contrast fixes the platform applies to buttons and links stay in place.
+- **Button style** — **Filled**, **Outlined** or **Text only**, for every button that does not
+  pick a style of its own.
+- **Button corners** — from **Square** through multiples of your site's **Border radius** to a
+  **Pill**.
+- **Button text case** — **As typed**, **UPPERCASE** or **Capitalize Each Word**.
+- **Button text weight** — **Regular**, **Medium**, **Semibold** or **Bold**.
+- **Button padding** — **Compact**, **Comfortable**, **Roomy** or **Wide**, in steps of your
+  site's **Spacing unit**.
+
+**Form inputs**
+
+- **Input style** — **Outlined** (a box with a border) or **Filled** (a shaded box with a line
+  underneath).
+- **Input corners** — the same corner choices as buttons.
+- **Input background** — **None**, or one of your theme's colors: **Paper**, **Background** or a
+  **tint**.
+- **Input border color** — **Divider**, **Secondary text**, **Text**, or one of your brand
+  colors.
+
+**Cards**
+
+- **Card style** — **Shadow** or **Outline**, for every card that does not pick its own.
+- **Card shadow depth** — **Flat**, **Soft**, **Medium** or **Strong**.
+- **Card corners** — the same corner choices, without the pill.
+
+Colors are your **theme's colors**, not fixed values, so they follow the visitor's light or
+dark scheme and change when you change the palette. Corners and padding follow the **Shape &
+spacing** card the same way. **Theme default** on any of these keeps the look your theme
+ships with.
+
+A single button, input or card you style in the Besigner keeps its own settings; these choices
+set the look of everything you have not styled one by one.
+
+**Advanced**, at the bottom of the card, lists everything styled on your site beyond the
+choices above, such as a change the [Theme assistant](../../ai/theme-assist.md) proposed for
+another component. **Reset to theme defaults** there removes all of it, including the choices
+above, so every component looks the way your theme ships it.
 
 ## It follows you into the Besigner
 

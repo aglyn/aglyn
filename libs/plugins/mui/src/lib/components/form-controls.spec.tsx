@@ -109,12 +109,50 @@ describe('a field built from separate elements', () => {
       />,
     )
     const box = container.firstElementChild as HTMLElement
-    const style = getComputedStyle(box)
-    expect(style.borderTopStyle).toBe('solid')
-    expect(style.borderTopColor).toBe('rgb(255, 0, 0)')
-    expect(style.borderRadius).toBe('12px')
+    // jsdom's cascade ignores specificity (the last matching rule wins), so
+    // the rules are read as written rather than through getComputedStyle.
+    const classes = [...box.classList].filter((name) => name.startsWith('css-'))
+    const rules = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules) as CSSStyleRule[])
+      .filter((rule) => classes.some((name) => rule.selectorText?.includes(name)))
+      .map((rule) => ({ selector: rule.selectorText.trim(), css: rule.cssText }))
+    const own = rules.filter(({ selector }) => classes.some((name) => selector === `.${name}`))
+    expect(own.some(({ css }) => css.includes('border-color: rgb(255, 0, 0)'))).toBe(true)
+    expect(own.some(({ css }) => css.includes('border-radius: 12px'))).toBe(true)
+    // The resting outline weighs nothing (`*:where()`), so the node's styles
+    // and the site theme's input border color both outrank it.
+    const resting = rules.find(({ selector }) => selector.startsWith('*:where('))
+    expect(resting?.css).toContain('border: 1px solid')
+    expect(resting?.css).toContain('border-color: rgba(0, 0, 0, 0.23)')
     // MUI's inner outline would draw a second border over it.
     const fieldset = box.querySelector('fieldset') as HTMLElement
     expect(getComputedStyle(fieldset).display).toBe('none')
+  })
+})
+
+describe("an input under the site theme's Input style", () => {
+  const { ThemeProvider, createTheme } = jest.requireActual(
+    '@mui/material/styles',
+  ) as typeof import('@mui/material/styles')
+
+  it('draws the filled box when the theme sets text fields filled', () => {
+    const { container } = render(
+      <ThemeProvider
+        theme={createTheme({ components: { MuiTextField: { defaultProps: { variant: 'filled' } } } })}
+      >
+        <AglynInput name="email" ariaLabel="Email" />
+        <AglynSelect name="size" ariaLabel="Size">
+          <AglynSelectOption value="s">Small</AglynSelectOption>
+        </AglynSelect>
+      </ThemeProvider>,
+    )
+    expect(container.querySelectorAll('.MuiFilledInput-root')).toHaveLength(2)
+    expect(container.querySelector('.MuiOutlinedInput-root')).toBeNull()
+  })
+
+  it('draws the outlined box otherwise', () => {
+    const { container } = render(<AglynInput name="email" ariaLabel="Email" />)
+    expect(container.querySelector('.MuiOutlinedInput-root')).toBeTruthy()
+    expect(container.querySelector('.MuiFilledInput-root')).toBeNull()
   })
 })
