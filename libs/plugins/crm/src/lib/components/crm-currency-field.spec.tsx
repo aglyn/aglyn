@@ -25,12 +25,12 @@
 
 import { type ContactFieldDefinition, crmContactCustomColumn } from '@aglyn/aglyn'
 import type { GridColDef } from '@mui/x-data-grid'
-import { CONTACT_FACET_KEYS_PATH, contactCustomCurrencies, contactCustomFilterFields, contactQueryClause } from '../constants/contact-filters'
+import { CONTACT_FACET_KEYS_PATH, contactCustomFilterFields, contactQueryClause } from '../constants/contact-filters'
 import { planCrmFieldSetup, readCrmFieldSetup } from '../model/crm-setup-content'
 import { crmFieldAiCapability, crmFieldSetupContentFromArgs } from '../server/crm-setup-ai-capabilities'
 import { customTransferValue, customWriteValues } from '../transfer/common'
 import { crmCustomTransferFields } from '../transfer/fields'
-import { customFieldColumns, formatContactCustomValue } from './contact-custom-columns'
+import { contactCustomAmountReaders, customFieldColumns, formatContactCustomValue } from './contact-custom-columns'
 import { currencyInputText } from './crm-custom-field-control'
 
 // The transfer helpers are pure; their module's server imports are not reached.
@@ -73,17 +73,18 @@ describe('a currency field on a list', () => {
 })
 
 describe('a currency field in the contacts filter', () => {
-  const currencies = contactCustomCurrencies([budget, definition({ key: 'n', type: 'number' })])
+  const amounts = contactCustomAmountReaders([budget, definition({ key: 'n', type: 'number' })])
 
   it('offers equality and presence, as a number field does', () => {
     expect(contactCustomFilterFields([budget])[0]).toMatchObject({ kind: 'number', operators: ['=', 'isNotEmpty'] })
-    expect(currencies).toEqual({ [crmContactCustomColumn('budget')]: 'eur' })
+    expect(Object.keys(amounts)).toEqual([crmContactCustomColumn('budget')])
+    expect(amounts[crmContactCustomColumn('budget')]?.('€1,250.50')).toBe(125050)
   })
 
   it('asks the facet key of the minor units the typed amount is', () => {
     const asked = contactQueryClause(
       { field: crmContactCustomColumn('budget'), op: '=', value: '1,250.50' },
-      { groupId: null, foldsScope: true, currencies },
+      { groupId: null, foldsScope: true, amounts },
     )
     expect(asked).toEqual({ field: CONTACT_FACET_KEYS_PATH, op: 'contains', value: '*:custom.budget=125050' })
   })
@@ -92,7 +93,7 @@ describe('a currency field in the contacts filter', () => {
     expect(
       contactQueryClause(
         { field: crmContactCustomColumn('budget'), op: '=', value: 'lots' },
-        { groupId: null, foldsScope: true, currencies },
+        { groupId: null, foldsScope: true, amounts },
       ),
     ).toEqual({ refused: 'no value yet' })
   })

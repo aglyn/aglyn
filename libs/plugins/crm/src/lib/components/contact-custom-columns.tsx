@@ -22,6 +22,7 @@ import {
   customFieldCurrency,
   crmContactCustomColumn,
   formatCurrencyFieldValue,
+  parseCurrencyInput,
 } from '@aglyn/aglyn'
 import { Link, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -65,6 +66,24 @@ export function formatContactCustomValue(
     default:
       return String(value)
   }
+}
+
+/**
+ * How each active currency field's filter reads a typed amount, by column
+ * (AGL-3756) — `ContactQueryReader.amounts`: major units in, the minor
+ * units its facet key holds out.
+ */
+export function contactCustomAmountReaders(
+  definitions: readonly Pick<ContactFieldDefinition, 'key' | 'type' | 'currency' | 'retiredAt'>[],
+): Record<string, (typed: string) => number | null> {
+  return Object.fromEntries(
+    definitions
+      .filter((definition) => definition.type === 'currency' && !definition.retiredAt)
+      .map((definition) => {
+        const code = customFieldCurrency(definition)
+        return [customFieldColumnId(definition.key), (typed: string) => parseCurrencyInput(typed, code)]
+      }),
+  )
 }
 
 /**

@@ -24,7 +24,6 @@ import {
   crmFacetKey,
   crmFacetKeyValue,
 } from '@aglyn/aglyn/app-utils/crm'
-import { customFieldCurrency, parseCurrencyInput } from '@aglyn/aglyn/app-utils/contact-custom-fields'
 import { EMAIL_STATE_STATUSES } from '@aglyn/aglyn/app-utils/email-state'
 import type {
   ListFilterField,
@@ -451,22 +450,12 @@ export interface ContactQueryReader {
    */
   foldsScope: boolean
   /**
-   * The currency of each custom currency column, by column (AGL-3756): an
-   * amount typed into its `=` is major units, asked as the minor units the
-   * facet key holds. {@link contactCustomCurrencies} builds it.
+   * How each custom CURRENCY column reads a typed amount, by column
+   * (AGL-3756): its `=` is typed in major units and asked as the minor units
+   * the facet key holds, or `null` when it is not one amount. The web side
+   * builds it (`contactCustomAmountReaders`), so this module stays pure.
    */
-  currencies?: Readonly<Record<string, string>>
-}
-
-/** Each active currency field's column and code, for {@link ContactQueryReader.currencies}. */
-export function contactCustomCurrencies(
-  definitions: readonly Pick<ContactFieldDefinition, 'key' | 'type' | 'currency' | 'retiredAt'>[],
-): Record<string, string> {
-  return Object.fromEntries(
-    definitions
-      .filter((definition) => definition.type === 'currency' && !definition.retiredAt)
-      .map((definition) => [crmContactCustomColumn(definition.key), customFieldCurrency(definition)]),
-  )
+  amounts?: Readonly<Record<string, (typed: string) => number | null>>
 }
 
 /** Why a reader whose access is some sites cannot filter by a holder's field. */
@@ -523,13 +512,13 @@ export function contactQueryClause(
     }
   }
   const keys: string[] = []
-  const currency = reader.currencies?.[clause.field]
+  const amount = reader.amounts?.[clause.field]
   for (const value of crmClauseValues(clause)) {
     const asked =
       clause.op !== '='
         ? value
-        : currency
-          ? (parseCurrencyInput(value, currency) ?? Number.NaN)
+        : amount
+          ? (amount(value) ?? Number.NaN)
           : Number(value)
     const key = crmFacetKeyValue(asked)
     if (key === null) return { refused: 'no value yet' }
