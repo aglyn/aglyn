@@ -53,10 +53,15 @@ import {
 /** The operation whose items this settles; the events-calendar plugin's, named, never imported. */
 export const AI_BUILD_EVENT_OP = 'event'
 
-/** The page a build adds for its events. */
+const EVENT_PAGE_TITLE = 'Events'
+
+/**
+ * The page a build adds for its events. Its address is the SITE's page,
+ * spelled from its title so it is never read as the console's Events page.
+ */
 export const AI_BUILD_EVENT_PAGE = {
-  title: 'Events',
-  slug: '/events',
+  title: EVENT_PAGE_TITLE,
+  slug: `/${EVENT_PAGE_TITLE.toLowerCase()}`,
   section: 'Upcoming events',
 } as const
 
