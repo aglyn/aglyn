@@ -17,6 +17,7 @@
 
 import { aiJobCancelAsked } from './ai-job-cancel'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import type { PluginAiCapability } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -196,6 +197,15 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
   if (unit.creation) return CREATION_JOB_KINDS[unit.creation.kind] ?? null
   const runnerKind = ops.get(unit.op)?.runnerKind
   return runnerKind ? (runnerKind as AiJobKind) : null
+}
+
+/**
+ * What the job drawer says under an item another plugin's writer made: a
+ * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
+ * field, AGL-3746), that it was saved.
+ */
+export function aiBuildItemOutputNote(capability: Pick<PluginAiCapability, 'where' | 'live'>): string {
+  return capability.live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
 }
 
 /** The id a unit's job, and so its draft, is named by. */
@@ -754,8 +764,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         hostId: job.hostId,
         label: written.name,
         draftResource: capability.draftResource,
-        // A resource with no draft state is live once written (AGL-3745).
-        note: capability.live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`,
+        // A resource with no draft state is live once written (AGL-3745, AGL-3746).
+        note: aiBuildItemOutputNote(capability),
       }
       return settle(
         {

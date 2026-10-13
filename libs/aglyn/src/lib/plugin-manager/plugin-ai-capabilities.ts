@@ -158,8 +158,9 @@ export interface PluginAiCapability {
   runnerKind?: string
   /**
    * The writer's write takes effect at once, because the resource has no
-   * draft state (a redirect rule, AGL-3745), so the job reports the item as
-   * live rather than as a draft. Absent: the writer writes a draft.
+   * draft state (a redirect rule, AGL-3745; a CRM pipeline or custom field,
+   * AGL-3746), so the job reports the item as live in `where` rather than as
+   * a draft. Absent: the writer writes a draft.
    */
   live?: boolean
   /** The most this item can cost, in AI credits; a draft written without a model costs 0. */

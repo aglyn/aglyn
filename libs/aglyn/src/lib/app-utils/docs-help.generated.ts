@@ -538,7 +538,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiComponent: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   aiCreate: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
   aiCredits: ['#monthly-credits', '#free-plan', '#the-aglyn-ai-add-on', '#what-things-cost', '#before-a-job-starts', '#when-credits-run-out', '#past-the-band', '#credits-given-back', '#see-your-credits', '#related'],
-  aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#set-up-the-crm', '#who-can-use-it', '#related'],
   aiEmail: ['#where-to-start-it', '#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#draft-versions', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],

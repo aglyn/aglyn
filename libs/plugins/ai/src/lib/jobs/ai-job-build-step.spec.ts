@@ -45,7 +45,13 @@ import { AI_OWNED_CAPABILITIES } from './ai-build-capabilities'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { aiBuildStoreLinksToPublish, aiBuildUnitJob, createAiBuildJobAdmission, createAiJobBuildStep } from './ai-job-build-step'
+import {
+  aiBuildItemOutputNote,
+  aiBuildStoreLinksToPublish,
+  aiBuildUnitJob,
+  createAiBuildJobAdmission,
+  createAiJobBuildStep,
+} from './ai-job-build-step'
 import { AI_BUILD_MADE_INPUT, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
@@ -688,5 +694,14 @@ describe('a build’s form that writes to a dataset (AGL-3616)', () => {
       note: 'Its submissions arrive in the Inbox only: the dataset “Attendees” could not be created.',
     })
     expect(seen[0].plan?.create[0]?.writesTo).toBeNull()
+  })
+})
+
+describe('aiBuildItemOutputNote (AGL-3746)', () => {
+  it('calls a writer’s item a draft unless its capability saves it live', () => {
+    expect(aiBuildItemOutputNote({ where: 'Bookings → Services' })).toBe('A draft, in Bookings → Services.')
+    expect(aiBuildItemOutputNote({ where: 'CRM → Deals → Pipelines', live: true })).toBe(
+      'Live now, in CRM → Deals → Pipelines.',
+    )
   })
 })

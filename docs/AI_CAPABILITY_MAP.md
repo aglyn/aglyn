@@ -73,6 +73,8 @@ checks the member's role and the allowance when the item runs.
 | `funnel` | funnels | funnel writer | `screenAnalytics` (`FUNNEL_FEATURE`) | | no |
 | `redirect` (10), AGL-3745 | redirects | `redirect` writer (`libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts`); creates, updates or removes a rule, live once written | `redirects` | `redirectsPerHost` (creates only) | no |
 | `dataset` (3), **new in this PR** | data | `dataset` writer (`libs/plugins/data/src/lib/server/dataset-drafts.ts`) | `dataStore` | `datasetsPerOrg` | no |
+| `crm-pipeline` (3), AGL-3746 | crm | `crm-pipeline` writer (`libs/plugins/crm/src/lib/server/crm-setup-writers.server.ts`), saved live | `crm` | | no |
+| `crm-field` (12), AGL-3746 | crm | `crm-field` writer, saved live | `crm` | 100 definitions per org (`CONTACT_FIELDS_MAX_PER_ORG`) | no |
 | `event` (6), AGL-3743 | events-calendar | `event` writer, no model (`libs/plugins/events-calendar/src/lib/server/event-drafts.server.ts`); a page section that uses it places `eventList` | `eventCalendar` (the add-on) | | yes |
 
 Checked against the code on 2026-10-10. `FUNNEL_FEATURE` is
@@ -186,7 +188,7 @@ gap.
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
 | Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
-| CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; no records, pipelines, custom fields or views |
+| CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); no records, picklist values or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
 | Bookings | services, availability, payment, reminders | partial: a booking service draft |
 | Marketing overlays | bars and popups | yes (`overlay`) |
@@ -222,6 +224,9 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    build's `redirect` op creates, updates and removes a site's redirect rules.
    See "Redirects" below.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
+   **Setup CLOSED (AGL-3746):** a build's `crm-pipeline` and `crm-field` ops
+   set up pipelines, stages and custom fields. See "CRM setup" below. Still
+   no records (contacts, deals, leads), picklist values or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
    order emails. **CLOSED for shipping, pickup, delivery and tax
    (AGL-3749):** four build ops set what the console's Shipping, Local
@@ -315,6 +320,52 @@ is a decision about the account, not something to build.
   the pages the site already has. A build lists the site's own datasets its
   plan reuses where a section places them, as it lists the ones it made: the
   page's section line then says the platform lists the records.
+
+## CRM setup (AGL-3746)
+
+- **The CRM plugin owns it.** `libs/plugins/crm/src/lib/server/crm-setup-ai-capabilities.ts`
+  registers two build ops, each executed by a CRM writer on the
+  resource-drafts seam (`server/crm-setup-writers.server.ts`), registered
+  from the CRM's console-server declarations. The rules are pure, in
+  `model/crm-setup-content.ts`, built from the console's own:
+  `newPipelineDocument`, `newStageId`, `stagesProblem`,
+  `pipelineNameProblem` (`model/deal-board-model.ts`), and the Fields
+  section's create (`normalizeContactFieldKey`, `CONTACT_FIELD_TYPES`,
+  `crmFieldListFields`, the drawer's choice bounds, now shared).
+- **`crm-pipeline`** (at most 3 a plan) takes `name`, an optional
+  `renameFrom`, `stages` (the open stages in order, each `Name` or
+  `Name (40%)`), `wonStage`, `lostStage` and `makeDefault`. A stage listed as
+  Won or Lost names the closing stage. A new pipeline gets exactly the asked
+  open stages (the standard set when none), the default's Won and Lost, the
+  board seed's scope from the job's site (`crmScopeTokens`), and is the
+  default where the site reads no active pipeline yet or when asked. An
+  unasked probability is spread by position (25/50/75 for three stages).
+- **`crm-field`** (at most 12 a plan) takes `object` (contact, company,
+  deal, lead — `CRM_FIELD_OBJECTS`), `label`, `type` (text, number, date,
+  select, checkbox, url — `CONTACT_FIELD_TYPES`; no currency type exists, so
+  money is a number), `options` for select, and `required`. Org-wide, last
+  on its object's tab.
+- **Idempotent.** The job's attempt key is a new pipeline's or field's id.
+  An active pipeline is matched by name, a stage within it by name, a field
+  by label or key within its object, all without case; a match is brought to
+  the ask (stages added, reordered, probabilities set, Won/Lost renamed, a
+  Choice field's missing choices added) and nothing is ever removed. A name
+  differing only in case keeps its own. A key a retired field holds is
+  refused, as the drawer refuses it.
+- **Saved live, not drafted.** Neither has a draft state, so the contract
+  gains `live` (`plugin-ai-capabilities.ts`) and the build step's drawer note
+  says "Live now, in …" for it (`aiBuildItemOutputNote`). The plan card is the
+  confirmation. The job drawer links each to its CRM section (record routes
+  `crm-pipeline` → Deals, `crm-field` → Fields).
+- **Gates** are the Firestore rules' for those writes, since the Admin SDK
+  skips them: the `crm` feature (Starter and up), an owner, admin or editor
+  whose org access is not suspended, `data.manage`, and a scope the member
+  can create in (`memberCanSee`); a field is org-wide, so only an org-wide
+  member. The org's 100-definition ceiling holds for fields.
+- **Cost.** No model: 0 credits, Free not offered (no CRM on Free).
+- **Not yet.** No stage forecast category beyond `pipeline`, no picklist
+  values (lead status or source, deal type), no stage or field removal, no
+  archiving, no records or saved views.
 
 ## Navigation and menus (AGL-3728)
 
