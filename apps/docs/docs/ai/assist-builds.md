@@ -43,6 +43,9 @@ One message can ask for any mix of:
 - **an announcement bar** or **a popup**;
 - **an A/B test** of a page or of an email's subject line;
 - **a funnel** that counts visits from one step to the next;
+- **CRM setup**: a [deal pipeline](./crm-by-ai.md#set-up-the-crm) with its stages, and
+  [custom fields](./crm-by-ai.md#set-up-the-crm) on contacts, companies, deals or leads.
+  These are saved straight to your CRM, as they are when you set them up yourself;
 - **a change to a page or layout** the site already has, saved as a new version visitors do
   not see until you publish it.
 
@@ -149,8 +152,8 @@ your products, set shipping and tax, and fill in your policies.
 ## What it costs {#what-it-costs}
 
 A build spends [AI credits](./ai-credits.md) for each part it makes, and the card shows the
-estimate before you confirm. Products, booking services, overlays, A/B tests, funnels and
-variables cost almost nothing. If the build fails because of something on our side, the
+estimate before you confirm. Products, booking services, overlays, A/B tests, funnels,
+variables and CRM setup cost almost nothing. If the build fails because of something on our side, the
 credits are given back, and the card says so. See
 [Credits given back](./ai-credits.md#credits-given-back).
 
