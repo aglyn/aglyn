@@ -100,4 +100,21 @@ describe('a field built from separate elements', () => {
       (screen.getByRole('checkbox', { name: 'Email me news' }) as HTMLInputElement).checked,
     ).toBe(true)
   })
+
+  it('puts its outline on its own box, where the Styles panel reaches it', () => {
+    const { container } = render(
+      <AglynInput
+        name="email"
+        sx={{ borderColor: 'rgb(255, 0, 0)', borderRadius: '12px' }}
+      />,
+    )
+    const box = container.firstElementChild as HTMLElement
+    const style = getComputedStyle(box)
+    expect(style.borderTopStyle).toBe('solid')
+    expect(style.borderTopColor).toBe('rgb(255, 0, 0)')
+    expect(style.borderRadius).toBe('12px')
+    // MUI's inner outline would draw a second border over it.
+    const fieldset = box.querySelector('fieldset') as HTMLElement
+    expect(getComputedStyle(fieldset).display).toBe('none')
+  })
 })

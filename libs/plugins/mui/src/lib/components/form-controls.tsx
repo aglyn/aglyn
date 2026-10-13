@@ -39,6 +39,7 @@ import OutlinedInput from '@mui/material/OutlinedInput'
 import Radio, { type RadioProps } from '@mui/material/Radio'
 import RadioGroup, { type RadioGroupProps } from '@mui/material/RadioGroup'
 import Rating, { type RatingProps } from '@mui/material/Rating'
+import { alpha, type SxProps, type Theme } from '@mui/material/styles'
 import {
   createContext,
   forwardRef,
@@ -134,6 +135,37 @@ export interface AglynInputProps {
   [key: string]: any
 }
 
+/**
+ * The outline an Input or Select draws, ON ITS OWN BOX.
+ *
+ * MUI paints an outlined input's border with an inner `<fieldset>`, so the
+ * Styles panel's Border Color, Border and Corner Radius — which reach the
+ * element's own box — would change nothing a visitor can see. Hiding that
+ * fieldset and drawing the same outline (MUI's resting, hover, focus and
+ * error colors) on the box itself puts every border and corner field on the
+ * outline you actually see. The node's own styles come after, so whatever an
+ * author sets wins; focus and error still show through their own rules.
+ */
+const outlinedBoxSx = (theme: Theme) => ({
+  borderRadius: 1,
+  border: '1px solid',
+  borderColor: alpha(theme.palette.text.primary, 0.23),
+  '& .MuiOutlinedInput-notchedOutline': { display: 'none' },
+  '&:hover': { borderColor: 'text.primary' },
+  '&.Mui-focused': {
+    borderColor: 'primary.main',
+    boxShadow: `0 0 0 1px ${theme.palette.primary.main}`,
+  },
+  '&.Mui-error': { borderColor: 'error.main' },
+  '&.Mui-disabled': { borderColor: 'action.disabled' },
+})
+
+/** A node's `sx`, as a list the outline can go in front of. */
+const nodeSxList = (sx: unknown): SxProps<Theme>[] =>
+  sx === undefined || sx === null
+    ? []
+    : ((Array.isArray(sx) ? sx : [sx]) as SxProps<Theme>[])
+
 /** The box a visitor types in. */
 export const AglynInput = forwardRef<HTMLDivElement, AglynInputProps>(
   (props, ref) => {
@@ -164,6 +196,7 @@ export const AglynInput = forwardRef<HTMLDivElement, AglynInputProps>(
         required={Boolean(required)}
         inputProps={ariaLabel ? { 'aria-label': ariaLabel } : undefined}
         {...rest}
+        sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
       />
     )
   },
@@ -207,7 +240,12 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
     return (
       <NativeSelect
         ref={ref}
-        input={<OutlinedInput notched={false} />}
+        input={
+          <OutlinedInput
+            notched={false}
+            sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
+          />
+        }
         defaultValue=""
         inputProps={{
           ...(id ? { id } : {}),
@@ -216,6 +254,9 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
           ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
         }}
         {...rest}
+        // The node's styles ride the outlined box above, where they reach
+        // what a visitor sees.
+        sx={undefined}
       >
         <option value="" disabled={Boolean(required)}>
           {placeholder || ''}
