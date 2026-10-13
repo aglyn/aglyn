@@ -65,6 +65,13 @@ const mockReads: string[] = []
 /** Path → doc data. A path absent from here reads as a non-existent doc. */
 const mockDocs = new Map<string, Record<string, unknown>>()
 
+// The reader's workspace pins (AGL-3762) are a read of their own account
+// document; none of these assertions is about them.
+jest.mock('../hooks/use-pinned-orgs', () => ({
+  __esModule: true,
+  usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+  default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+}))
 jest.mock('firebase/firestore', () => ({
   collection: (_firestore: unknown, ...segments: string[]) =>
     segments.join('/'),

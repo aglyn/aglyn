@@ -38,6 +38,13 @@ const mockHardNavigate = jest.fn()
 let mockStoredUserDoc: Record<string, unknown> = {}
 let mockSearchParams = new URLSearchParams()
 
+// The reader's workspace pins (AGL-3762) are a read of their own account
+// document; none of these assertions is about them.
+jest.mock('../hooks/use-pinned-orgs', () => ({
+  __esModule: true,
+  usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+  default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+}))
 jest.mock('next/navigation', () => {
   // Stable identity: the jump effect depends on `router`, so a fresh object
   // per render would re-fire it.

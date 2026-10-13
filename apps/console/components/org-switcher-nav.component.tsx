@@ -24,6 +24,7 @@ import {
   ICON_VARIANT_SYMBOL_SECURE,
   ICON_VARIANT_USER_SETTINGS,
 } from '@aglyn/shared-data-enums'
+import { mdiPin } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Avatar,
@@ -39,7 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState, type UIEvent } from 'react'
+import { useEffect, useMemo, useState, type UIEvent } from 'react'
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
@@ -49,11 +50,13 @@ import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
+import { usePinnedOrgs } from '../hooks/use-pinned-orgs'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
 import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 import { onlyInScheme } from '../utils/scheme-visibility'
+import { arrangeWorkspaces } from '../utils/workspace-list'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 
@@ -107,15 +110,30 @@ export function OrgSwitcherNav() {
   // the tier badges follow the eye, not the membership count.
   const [revealed, setRevealed] = useState(PLAN_BADGE_PAGE)
 
+  // The reader's pins (AGL-3762), read only while the menu is open.
+  const { pinned } = usePinnedOrgs(Boolean(anchor))
+  /*
+   * The menu lists what the chooser lists, in its order: pinned first, then
+   * by name (AGL-3762). An order is only stable over the whole set, so an
+   * open menu grows the membership window until the listen says it is
+   * complete — the rows are tiny, and it is the per-row PLAN reads below
+   * that stay bounded to what has been scrolled into view.
+   */
+  useEffect(() => {
+    if (anchor && hasMoreOrgs) loadMoreOrgs()
+  }, [anchor, hasMoreOrgs, loadMoreOrgs, orgs.length])
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    if (!needle) return orgs
-    return orgs.filter((item) =>
-      [item.orgName, item.slug, item.$id].some((field) =>
-        field?.toLowerCase().includes(needle),
-      ),
-    )
-  }, [orgs, query])
+    const matched = needle
+      ? orgs.filter((item) =>
+          [item.orgName, item.slug, item.$id].some((field) =>
+            field?.toLowerCase().includes(needle),
+          ),
+        )
+      : orgs
+    return arrangeWorkspaces(matched, { pinned })
+  }, [orgs, query, pinned])
 
   // Each org's billing tier for the row badges — read only while the menu is
   // open (AGL-631), and only for the rows revealed so far (AGL-2336). The
@@ -433,6 +451,14 @@ export function OrgSwitcherNav() {
                       secondary: { noWrap: true, variant: 'caption' },
                     }}
                   />
+                  {item.pinned ? (
+                    <MdiIcon
+                      aria-label="Pinned"
+                      path={mdiPin.path}
+                      fontSize="small"
+                      color="action"
+                    />
+                  ) : null}
                   {tier ? (
                     <Chip
                       label={tier}
