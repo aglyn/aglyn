@@ -219,6 +219,72 @@ describe('the event writer', () => {
     expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ facts: { status: 'published' }, live: true })
   })
 
+  describe('its cover (AGL-3755)', () => {
+    const PICK = { src: 'media:hosts/host-1/m-1', url: '/api/media/cdn/hosts/host-1/m-1', width: 1600, height: 1067, origin: 'library' as const }
+    const picking = (answer: unknown = PICK) => {
+      const pick = jest.fn(async () => answer as never)
+      return { pick, writer: createEventDraftWriter({ firestore: () => firestore, stockPhotos: () => ({ pick }) }) }
+    }
+
+    it('asks the picker for a photo of the title, scoped to the act, and stores its address in the cover field', async () => {
+      const { pick, writer: covered } = picking()
+      const written = await covered.write({ ...request(), act: { id: 'job-1', business: 'a sourdough bakery in Austin' } })
+      expect(pick).toHaveBeenCalledWith({
+        hostId: 'host-1',
+        uid: 'uid-1',
+        subject: 'Autumn sourdough workshop',
+        business: 'a sourdough bakery in Austin',
+        orientation: 'horizontal',
+        scope: 'job-1',
+        seed: 'job-1-i0',
+      })
+      expect(written).toMatchObject({ ok: true, facts: { coverImage: PICK.url } })
+      const stored = store.get('hosts/host-1/events/job-1-i0') as Record<string, unknown>
+      expect(stored['coverImage']).toBe(PICK.url)
+      // No description is invented: the list shows the cover beside the title that names it.
+      expect(stored['coverImageAlt']).toBeUndefined()
+    })
+
+    it('takes a starter photo’s path as it takes a library photo’s', async () => {
+      const { writer: covered } = picking({ ...PICK, src: '/_static/starter/desk.jpg', url: '/_static/starter/desk.jpg', origin: 'starter' })
+      await covered.write(request())
+      expect(store.get('hosts/host-1/events/job-1-i0')).toMatchObject({ coverImage: '/_static/starter/desk.jpg' })
+    })
+
+    it('keeps the cover the content names, and asks for none', async () => {
+      const { pick, writer: covered } = picking()
+      await covered.write(request({ content: { ...CONTENT, coverImage: 'https://example.com/loaf.jpg' } }))
+      expect(pick).not.toHaveBeenCalled()
+      expect(store.get('hosts/host-1/events/job-1-i0')).toMatchObject({ coverImage: 'https://example.com/loaf.jpg' })
+    })
+
+    it('fetches nothing for a replay, a refused member or a workspace without the add-on', async () => {
+      const { pick, writer: covered } = picking()
+      await covered.write(request())
+      pick.mockClear()
+      await covered.write(request())
+      await covered.write(request({ id: 'job-1-i1', uid: 'uid-2' }))
+      await covered.write(request({ id: 'job-1-i2', org: WITHOUT_ADDON }))
+      expect(pick).not.toHaveBeenCalled()
+    })
+
+    it('writes the event without a cover when the picker has none, fails, or answers an address the field refuses', async () => {
+      for (const [index, answer] of [null, { ...PICK, url: 'javascript:alert(1)' }].entries()) {
+        const { writer: covered } = picking(answer)
+        await covered.write(request({ id: `job-1-n${index}` }))
+        expect(store.get(`hosts/host-1/events/job-1-n${index}`)).not.toHaveProperty('coverImage')
+      }
+      const failing = createEventDraftWriter({
+        firestore: () => firestore,
+        stockPhotos: () => ({ pick: async () => { throw new Error('library down') } }),
+      })
+      expect(await failing.write(request({ id: 'job-1-f' }))).toMatchObject({ ok: true })
+      expect(store.get('hosts/host-1/events/job-1-f')).not.toHaveProperty('coverImage')
+      const none = createEventDraftWriter({ firestore: () => firestore, stockPhotos: () => null })
+      expect(await none.write(request({ id: 'job-1-x' }))).toMatchObject({ ok: true })
+    })
+  })
+
   it('refuses content the check refuses, with its first problem', async () => {
     expect(await writer.write(request({ name: '', content: { ...CONTENT, title: ' ' } }))).toEqual({
       ok: false,

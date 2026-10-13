@@ -55,6 +55,9 @@ export const EVENT_DRAFT_RESOURCE = 'event'
 /** A wall time as the content states it: `YYYY-MM-DDTHH:MM`. */
 export const EVENT_DRAFT_WALL_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
 
+/** A cover address the content may carry: https, or a path on the site. */
+export const EVENT_DRAFT_COVER_ADDRESS = /^(https:\/\/|\/)\S+$/
+
 /** The longest cover image address the content may carry. */
 export const EVENT_DRAFT_COVER_MAX_LENGTH = 2048
 
@@ -143,7 +146,7 @@ export function readEventDraftContent(content: Readonly<Record<string, unknown>>
   const organizer = optional(content, 'organizer', 'organizer', EVENT_ORGANIZER_MAX_LENGTH, problems)
   const description = optional(content, 'description', 'description', EVENT_DESCRIPTION_MAX_LENGTH, problems, true)
   const coverImage = optional(content, 'coverImage', 'cover image address', EVENT_DRAFT_COVER_MAX_LENGTH, problems)
-  if (coverImage && !/^(https:\/\/|\/)\S+$/.test(coverImage)) {
+  if (coverImage && !EVENT_DRAFT_COVER_ADDRESS.test(coverImage)) {
     problems.push('The cover image is an https address or a path on the site')
   }
   const coverImageAlt = optional(content, 'coverImageAlt', 'cover description', EVENT_COVER_ALT_MAX_LENGTH, problems)

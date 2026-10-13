@@ -59,7 +59,7 @@ import {
   type AiCreditsPrompt,
   type AiCreditsSmaller,
 } from '../model/ai-credit-estimate'
-import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
+import { aiFreeCreditsNoneLeftText, aiSiteWords } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiModelForStep } from '../providers/routing'
 import {
@@ -759,6 +759,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         uid: job.createdBy,
         org,
         now: context.now,
+        // Drafts of one build share what must not repeat (a cover photo) and read its business (AGL-3755).
+        act: { id: aiOriginJobId(job), business: aiSiteWords(job.inputs).about || job.brief || '' },
         id,
         name: item.name,
         content,

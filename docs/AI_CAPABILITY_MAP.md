@@ -186,7 +186,7 @@ gap.
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
-| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op makes dated events (title, start and end in the business's time zone, location, organizer, description), published for the publishing role (AGL-3755), and a page section that uses them places the Event List. No cover photo from a build yet |
+| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op makes dated events (title, start and end in the business's time zone, location, organizer, description), published for the publishing role, each with a stock cover photo (AGL-3755), and a page section that uses them places the Event List |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); no records, picklist values or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
@@ -497,10 +497,21 @@ is a decision about the account, not something to build.
   `live: false` with a notice, so the job row reads "A draft, in Events."
   and says why. The capability declares `live: true`; the row of a
   published one reads "Live now, in Events." (`aiBuildItemOutputNote`).
-- **Not yet.** No cover photo: the capability seam has no way for a plugin's
-  writer to ask the AI plugin for a stock photo, and a planner-written image
-  address would be invented. Events are not part of a guided site start, which
-  still lists events as a dataset or as written-out copy.
+- **Cover photos (AGL-3755).** An event the content gives no cover gets one
+  from the stock photo picker, core's `core.stock-photo-picker` seam
+  (`registerStockPhotoPicker` / `stockPhotoPicker` in
+  `libs/aglyn/src/lib/plugin-manager/stock-photo-provider.ts`), which the AI
+  plugin registers from its server declarations
+  (`jobs/ai-stock-photo-picker.ts`). Any plugin's writer may call it: it
+  hands a `subject` (the event's title), the `business` and the act's `scope`
+  (the build's job, from the draft context's new `act`), and gets a photo
+  chosen as a page's pictures are (subject nouns, tag-overlap scoring, the
+  business's world, nothing twice in one job), copied into the site's
+  library once and reused after, or a starter photo when the library is
+  down or finds nothing. The writer stores its site-relative address in the
+  editor's own `coverImage` field and writes no cover description (the list
+  shows the cover beside the title that names it). A process with no picker
+  writes the event without a cover.
 
 ## Site settings (AGL-3748)
 

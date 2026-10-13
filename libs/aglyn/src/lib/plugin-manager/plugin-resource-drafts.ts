@@ -76,6 +76,21 @@ export interface PluginDraftContext {
   /** The org document the caller already read, for the owner's entitlement and allowance reads. */
   org: Readonly<Record<string, unknown>> | null
   now: Date
+  /**
+   * The act the draft is one part of, where there is one: an AI build's job
+   * (AGL-3755). Drafts of one act share what must not repeat across them (a
+   * cover photo), and a writer that fetches something for the draft reads
+   * what the act says the business is.
+   */
+  act?: PluginDraftAct
+}
+
+/** The act a draft is one part of ({@link PluginDraftContext.act}). */
+export interface PluginDraftAct {
+  /** Stable across the act's retries. */
+  id: string
+  /** What the act says the business is, in its own words: "a sourdough bakery in Austin". */
+  business?: string
 }
 
 /** Why a draft cannot be made. */

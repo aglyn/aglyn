@@ -21,12 +21,18 @@ import type {
   PluginDraftContext,
   PluginDraftRecord,
   PluginDraftRefusal,
+  PluginDraftRequest,
   PluginDraftWrite,
   PluginResourceDraftWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
+import {
+  stockPhotoPicker,
+  type StockPhotoPicker,
+} from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import {
   checkEventDraftContent,
+  EVENT_DRAFT_COVER_ADDRESS,
   eventDraftWallText,
   readEventDraftContent,
 } from '../model/event-draft-content'
@@ -56,6 +62,13 @@ import { eventWrite } from '../model/event-write'
  *  - THE START is after the write. A draft that would open on the Events page
  *    already over is a mistake in what was asked, so it is refused rather
  *    than stored.
+ *  - THE COVER (AGL-3755), when the content names none: a photo of the
+ *    event's title from the deployment's stock photo picker
+ *    (`core.stock-photo-picker`), kept in the site's own media library once
+ *    and reused after, or a starter photo when the library is down. It is
+ *    the editor's own "Cover image URL" field, `coverImage`, holding the
+ *    photo's site-relative address. Photos of one act (the AI build) never
+ *    repeat. A process with no picker writes the event without a cover.
  *
  * The writer touches the one new document.
  */
@@ -118,10 +131,38 @@ function planRefusal(org: PluginDraftContext['org']): PluginDraftRefusal | null 
 export interface EventDraftWriterDeps {
   /** The Admin SDK handle; specs hand in a double. */
   firestore?: () => Firestore
+  /** The stock photo picker a cover comes from; specs hand in a double. */
+  stockPhotos?: () => StockPhotoPicker | null
+}
+
+/** A cover for an event the content gave none: the picker's, held to what the editor's field takes. */
+async function coverFor(
+  picker: StockPhotoPicker | null,
+  request: PluginDraftRequest,
+  title: string,
+): Promise<string | null> {
+  if (!picker) return null
+  try {
+    const pick = await picker.pick({
+      hostId: request.hostId,
+      uid: request.uid,
+      subject: title,
+      ...(request.act?.business ? { business: request.act.business } : {}),
+      orientation: 'horizontal',
+      ...(request.act?.id ? { scope: request.act.id } : {}),
+      // The draft's id: asked again, the same photo.
+      seed: request.id,
+    })
+    return pick && EVENT_DRAFT_COVER_ADDRESS.test(pick.url) ? pick.url : null
+  } catch (error) {
+    console.warn('event draft: no cover photo', { error: String(error) })
+    return null
+  }
 }
 
 export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginResourceDraftWriter {
   const firestore = deps.firestore ?? (() => firebaseAdmin.app().firestore() as unknown as Firestore)
+  const stockPhotos = deps.stockPhotos ?? stockPhotoPicker
   return {
     refusal: async (context) => {
       const host = await firestore().collection('hosts').doc(context.hostId).get()
@@ -151,6 +192,15 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
       const db = firestore()
       const hostRef = db.collection('hosts').doc(request.hostId)
       const eventRef = hostRef.collection('events').doc(request.id)
+      // A cover is fetched only for a new event a member may write, before
+      // the transaction: a photo's copy is too slow to hold one open.
+      if (!read.value.coverImage) {
+        const [host, existing] = await Promise.all([hostRef.get(), eventRef.get()])
+        if (host.exists && !existing.exists && !roleRefusal(host, request.uid) && !planRefusal(request.org)) {
+          const cover = await coverFor(stockPhotos(), request, read.value.title)
+          if (cover) read.value.coverImage = cover
+        }
+      }
       return db.runTransaction(async (tx): Promise<PluginDraftWrite> => {
         const [host, existing] = await Promise.all([tx.get(hostRef), tx.get(eventRef)])
         if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
