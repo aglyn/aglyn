@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.248 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.247...v1.0.0-beta.248)
+
+### Fixed
+
+- **billing:** a voided invoice no longer also raises "delivery changed nothing"
+
 ## v1.0.0-beta.247 — 2026-10-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.246...v1.0.0-beta.247)
