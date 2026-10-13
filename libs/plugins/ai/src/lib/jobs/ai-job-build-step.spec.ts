@@ -199,6 +199,21 @@ describe('the build step (AGL-3616)', () => {
     })
   })
 
+  it('reports an item whose resource has no draft state as live, not as a draft (AGL-3745)', async () => {
+    const live: PluginAiCapability = { ...SERVICE, live: true, where: 'Redirects' }
+    const outcome = await createAiJobBuildStep({
+      runnerFor: (() => null) as never,
+      writerFor: (resource) => (resource === 'bookingService' ? writer().impl : null),
+      opsFor: async () => new Map([...OPS, [live.op, live]]),
+      pluginAdmission: async () => null,
+      readNodes: readNodes as never,
+    })(context(job()))
+    expect(outcome).toMatchObject({
+      item: { slot: 'i0', status: 'succeeded' },
+      outputs: [{ resource: 'draft', id: 'svc-1', note: 'Live now, in Redirects.' }],
+    })
+  })
+
   it('tells the page to place the Booking block for the service it built', async () => {
     const { impl } = writer()
     const seen: AiJob[] = []

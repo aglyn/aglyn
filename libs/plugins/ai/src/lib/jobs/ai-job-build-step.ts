@@ -748,7 +748,8 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         hostId: job.hostId,
         label: written.name,
         draftResource: capability.draftResource,
-        note: `A draft, in ${capability.where}.`,
+        // A resource with no draft state is live once written (AGL-3745).
+        note: capability.live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`,
       }
       return settle(
         {
