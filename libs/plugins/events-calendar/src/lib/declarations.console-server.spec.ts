@@ -22,8 +22,21 @@ import {
   resolveTransferResource,
   transferResourceCatalog,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+let mockServerHalfLoaded = false
+jest.mock('./server/event-drafts.server', () => {
+  mockServerHalfLoaded = true
+  return { eventDraftWriter: null }
+})
+
+import { pluginAiCapability } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { registerEventsCalendarConsoleServerDeclarations } from './declarations.console-server'
+import {
+  lazyEventDraftWriter,
+  registerEventsCalendarConsoleServerDeclarations,
+} from './declarations.console-server'
+import { EVENT_DRAFT_RESOURCE } from './model/event-draft-content'
 
 /**
  * The console boot registers the `events` resource against the real
@@ -60,6 +73,25 @@ describe('events-calendar console-server declarations', () => {
     ] as const) {
       expect(typeof resolved.impl[hook]).toBe('function')
     }
+  })
+
+  it('registers the event draft writer and the build operation it executes, and checks without loading the Admin SDK (AGL-3743)', () => {
+    resetPluginServicesForTests()
+    registerEventsCalendarConsoleServerDeclarations()
+    expect(pluginResourceDraftWriter(EVENT_DRAFT_RESOURCE)).toEqual({
+      pluginId: BUNDLE_ID,
+      writer: lazyEventDraftWriter,
+    })
+    expect(pluginAiCapability('event')?.pluginId).toBe(BUNDLE_ID)
+    expect(pluginAiCapability('event')?.capability.draftResource).toBe(EVENT_DRAFT_RESOURCE)
+    // The check is pure: it answered, and no server module was asked for.
+    expect(
+      lazyEventDraftWriter.check(
+        { title: 'Tasting night', startsAt: '2026-12-03T18:30', timezone: 'America/New_York' },
+        { hostId: 'host-1' },
+      ),
+    ).toMatchObject({ ok: true, facts: { status: 'draft' } })
+    expect(mockServerHalfLoaded).toBe(false)
   })
 
   it('answers the catalog without loading the resource', async () => {
