@@ -185,7 +185,13 @@ function mockMakeFirestore() {
 }
 
 const mockAfterScheduled: Array<() => unknown> = []
-const mockRaiseOperatorAlert = jest.fn(async (..._args: unknown[]) => ({ outcome: 'delivered' }))
+const mockRaiseOperatorAlert = jest.fn(
+  async (..._args: unknown[]): Promise<Record<string, unknown>> => ({ outcome: 'delivered' }),
+)
+/** What the plugin fan-out answers for `billing.invoice.closed` (AGL-3766). */
+const mockRunPluginEventHandlers = jest.fn(
+  async (..._args: unknown[]) => ({ handled: 0, failed: [] as string[] }),
+)
 
 jest.mock('next/server', () => ({
   after: (work: () => unknown) => {
@@ -201,7 +207,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The platform's billing events (AGL-3011). The webhook raises them once an
   // invoice or a dispute resolves to a workspace; what a plugin does with one
   // is proved in the plugin's own suite, so this only has to exist.
-  runPluginEventHandlers: async () => ({ handled: 0, failed: [] }),
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
   __esModule: true,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING', ADMIN_OVERVIEW: 'ADMIN_OVERVIEW' },
@@ -346,6 +352,9 @@ const OUR_SUBSCRIPTION = {
 describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
   beforeEach(() => {
     mockRaiseOperatorAlert.mockClear()
+    mockRaiseOperatorAlert.mockImplementation(async () => ({ outcome: 'delivered' }))
+    mockRunPluginEventHandlers.mockClear()
+    mockRunPluginEventHandlers.mockImplementation(async () => ({ handled: 0, failed: [] }))
     docs = new Map()
     docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'starter' })
     mockDispatched.length = 0
@@ -649,5 +658,160 @@ describe('the webhook records a delivery that did nothing (AGL-1954)', () => {
       ),
     )
     expect(response.status).toBe(200)
+  })
+
+  /*==========================================
+   * A CLOSED INVOICE (AGL-3766).
+   *
+   * Production, 2026-10-13: a Pro sign-up's first charge failed every card,
+   * Stripe expired the subscription and voided its opening invoice. The
+   * branch ran the plugin raise and the revenue alert and recorded neither,
+   * so the delivery read as inert and `/api/health/billing` answered 503.
+   *=========================================*/
+
+  /** The voided opening invoice exactly as Stripe sent it (evt_1UQBjJDYHP4psn7hAeri5aXB). */
+  const SIGNUP_INVOICE = {
+    id: 'in_signup_void',
+    object: 'invoice',
+    customer: 'cus_own_1',
+    billing_reason: 'subscription_create',
+    collection_method: 'charge_automatically',
+    status: 'void',
+    paid: false,
+    amount_due: 5600,
+    amount_paid: 0,
+    amount_remaining: 5600,
+    currency: 'usd',
+    status_transitions: {
+      finalized_at: 1760300000,
+      paid_at: null,
+      voided_at: 1760384000,
+      marked_uncollectible_at: null,
+    },
+    parent: {
+      type: 'subscription_details',
+      subscription_details: {
+        subscription: 'sub_signup_expired',
+        metadata: { orgId: 'org-real', plan: 'pro' },
+      },
+    },
+    metadata: {},
+  }
+
+  /** A renewal that was paid for once already and is now written off. */
+  const RENEWAL_INVOICE = {
+    ...SIGNUP_INVOICE,
+    id: 'in_renewal_void',
+    billing_reason: 'subscription_cycle',
+    parent: {
+      type: 'subscription_details',
+      subscription_details: {
+        subscription: 'sub_own_1',
+        metadata: { orgId: 'org-real', plan: 'pro' },
+      },
+    },
+  }
+
+  const alertsOfType = (alertType: string) =>
+    mockRaiseOperatorAlert.mock.calls.filter((call) => call[0] === alertType)
+
+  it.each(['invoice.voided', 'invoice.marked_uncollectible'])(
+    'a sign-up invoice closed before its first payment (%s) is a named skip: NOT marked, no revenue alert',
+    async (eventType) => {
+      const id = `evt_signup_${eventType}`
+      const response = await loadWebhook()(
+        signed(
+          event(id, eventType, {
+            ...SIGNUP_INVOICE,
+            status: eventType === 'invoice.voided' ? 'void' : 'uncollectible',
+          }),
+          'whsec_live_fake',
+        ),
+      )
+      expect(response.status).toBe(200)
+      expect(wasMarkedInert(id)).toBe(false)
+      // Never counted as revenue, so nothing is "not coming".
+      expect(alertsOfType('billing.platformInvoiceUncollectible')).toHaveLength(0)
+      expect(alertsOfType('billing.webhookInert')).toHaveLength(0)
+      // A plugin that billed on its own invoice still hears it closed.
+      expect(mockRunPluginEventHandlers).toHaveBeenCalledWith(
+        'billing.invoice.closed',
+        expect.objectContaining({ orgId: 'org-real', invoiceId: 'in_signup_void' }),
+      )
+    },
+  )
+
+  it('a renewal written off on a paying subscription is not a sign-up: it still alerts', async () => {
+    await loadWebhook()(
+      signed(event('evt_renewal_void', 'invoice.voided', RENEWAL_INVOICE), 'whsec_live_fake'),
+    )
+    expect(alertsOfType('billing.platformInvoiceUncollectible')).toEqual([
+      [
+        'billing.platformInvoiceUncollectible',
+        expect.objectContaining({
+          dedupeKey: 'in_renewal_void:invoice.voided',
+          orgId: 'org-real',
+          context: expect.objectContaining({ status: 'voided', amount: '$56.00' }),
+        }),
+      ],
+    ])
+    expect(mockRunPluginEventHandlers).toHaveBeenCalledWith(
+      'billing.invoice.closed',
+      expect.objectContaining({ reason: 'voided' }),
+    )
+    expect(wasMarkedInert('evt_renewal_void')).toBe(false)
+  })
+
+  it('a net-30 first invoice written off IS lost revenue and alerts', async () => {
+    // `send_invoice` subscriptions are active from the start, so their
+    // opening invoice is not a failed sign-up.
+    await loadWebhook()(
+      signed(
+        event('evt_net30', 'invoice.marked_uncollectible', {
+          ...SIGNUP_INVOICE,
+          id: 'in_net30',
+          collection_method: 'send_invoice',
+          status: 'uncollectible',
+        }),
+        'whsec_live_fake',
+      ),
+    )
+    expect(alertsOfType('billing.platformInvoiceUncollectible')).toHaveLength(1)
+    expect(wasMarkedInert('evt_net30')).toBe(false)
+  })
+})
+
+describe('invoiceClosedBeforeFirstPayment (AGL-3766)', () => {
+  const { invoiceClosedBeforeFirstPayment } = jest.requireActual(
+    '../utils/server/platform-revenue',
+  ) as typeof import('../utils/server/platform-revenue')
+  const base = {
+    billing_reason: 'subscription_create',
+    collection_method: 'charge_automatically',
+    amount_due: 5600,
+    amount_paid: 0,
+    paid: false,
+    status: 'void',
+    status_transitions: { paid_at: null },
+  }
+
+  it('is true for an unpaid opening invoice of a charge-automatically subscription', () => {
+    expect(invoiceClosedBeforeFirstPayment(base)).toBe(true)
+  })
+
+  it.each([
+    ['a renewal', { billing_reason: 'subscription_cycle' }],
+    ['a plan change', { billing_reason: 'subscription_update' }],
+    ['a one-off invoice', { billing_reason: 'manual' }],
+    ['a net-30 subscription', { collection_method: 'send_invoice' }],
+    ['a part-paid invoice', { amount_paid: 100 }],
+    ['an invoice Stripe calls paid', { paid: true }],
+    ['an invoice once stamped paid', { status_transitions: { paid_at: 1760300000 } }],
+  ])('is false for %s', (_label, change) => {
+    expect(invoiceClosedBeforeFirstPayment({ ...base, ...change })).toBe(false)
+  })
+
+  it('is false for no invoice at all', () => {
+    expect(invoiceClosedBeforeFirstPayment(null)).toBe(false)
   })
 })
