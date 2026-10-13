@@ -99,7 +99,7 @@ export function isContactFieldType(value: unknown): value is ContactFieldType {
 export const CONTACT_FIELD_DEFAULT_CURRENCY = 'usd'
 
 /** A currency field's code, lowercase, or the default when it names none. */
-export function contactFieldCurrency(
+export function customFieldCurrency(
   definition: Pick<ContactFieldDefinition, 'currency'> | null | undefined,
 ): string {
   const code = String(definition?.currency ?? '').trim().toLowerCase()
@@ -107,7 +107,7 @@ export function contactFieldCurrency(
 }
 
 /** Whether `code` is an ISO 4217 code `Intl` can format. */
-export function isContactFieldCurrency(code: unknown): code is string {
+export function isCustomFieldCurrency(code: unknown): code is string {
   if (typeof code !== 'string' || !/^[a-z]{3}$/i.test(code.trim())) return false
   try {
     new Intl.NumberFormat('en-US', { style: 'currency', currency: code.trim().toUpperCase() })
@@ -274,7 +274,7 @@ export function coerceContactCustomValue(
       // text is what a person typed or a form posted, in major units.
       if (typeof raw === 'number') return Number.isFinite(raw) ? Math.round(raw) : undefined
       if (typeof raw === 'boolean' || typeof raw === 'object') return undefined
-      const minor = parseCurrencyInput(raw, contactFieldCurrency(definition))
+      const minor = parseCurrencyInput(raw, customFieldCurrency(definition))
       return minor === null ? undefined : minor
     }
     case 'checkbox': {
@@ -410,7 +410,7 @@ function customValueExpectation(
     case 'number':
       return 'Must be a number'
     case 'currency':
-      return `Must be a whole number of ${contactFieldCurrency(definition).toUpperCase()} minor units, or an amount as text`
+      return `Must be a whole number of ${customFieldCurrency(definition).toUpperCase()} minor units, or an amount as text`
     case 'checkbox':
       return 'Must be true or false'
     case 'date':

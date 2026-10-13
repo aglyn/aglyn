@@ -22,7 +22,7 @@ import {
   CONTACT_FIELD_TYPES,
   CONTACT_FIELDS_MAX_PER_ORG,
   fieldDefinitionsForObject,
-  isContactFieldCurrency,
+  isCustomFieldCurrency,
   isContactFieldType,
 } from '@aglyn/aglyn/app-utils/contact-custom-fields'
 import {
@@ -389,7 +389,7 @@ export function readCrmFieldSetup(
   if (type === 'select' && !options.length) problems.push('A Choice field needs its choices.')
   // A currency field's code, as the drawer offers it: named, or the default.
   const asked = text(content['currency']).toLowerCase()
-  if (type === 'currency' && asked && !isContactFieldCurrency(asked)) {
+  if (type === 'currency' && asked && !isCustomFieldCurrency(asked)) {
     problems.push('A currency field’s currency is an ISO 4217 code, such as USD or EUR.')
   }
   if (problems.length) return { ok: false, problems }

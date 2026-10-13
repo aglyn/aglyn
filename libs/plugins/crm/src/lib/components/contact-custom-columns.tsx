@@ -19,7 +19,7 @@
 import {
   type ContactCustomValue,
   type ContactFieldDefinition,
-  contactFieldCurrency,
+  customFieldCurrency,
   crmContactCustomColumn,
   formatCurrencyFieldValue,
 } from '@aglyn/aglyn'
@@ -60,7 +60,7 @@ export function formatContactCustomValue(
       return typeof value === 'number' ? value.toLocaleString() : String(value)
     case 'currency':
       return typeof value === 'number'
-        ? formatCurrencyFieldValue(value, contactFieldCurrency(definition))
+        ? formatCurrencyFieldValue(value, customFieldCurrency(definition))
         : String(value)
     default:
       return String(value)

@@ -62,7 +62,7 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_SOURCE_LABELS,
-  contactFieldCurrency,
+  customFieldCurrency,
   currencyMinorToMajor,
   DYNAMIC_LIST_CUSTOM_OPS,
   parseCurrencyInput,
@@ -975,7 +975,7 @@ const CustomClauseRow = memo(function CustomClauseRow(props: {
   // A currency field (AGL-3756) is typed in major units and stored as the
   // minor units its values are, so the matcher compares like with like. The
   // box keeps the text as typed ("12.50") while it reads as the stored amount.
-  const currency = definition?.type === 'currency' ? contactFieldCurrency(definition) : null
+  const currency = definition?.type === 'currency' ? customFieldCurrency(definition) : null
   const storedAmount =
     currency && typeof clause.value === 'number' ? String(currencyMinorToMajor(clause.value, currency)) : valueText
   const [typedAmount, setTypedAmount] = useState(storedAmount)

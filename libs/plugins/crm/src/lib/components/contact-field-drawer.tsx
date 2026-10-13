@@ -19,7 +19,7 @@
 import {
   CONTACT_FIELD_TYPE_LABELS,
   CONTACT_FIELD_TYPES,
-  contactFieldCurrency,
+  customFieldCurrency,
   type ContactFieldType,
   type CrmFieldObject,
   isContactFieldType,
@@ -153,7 +153,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
   const [keyTouched, setKeyTouched] = useState(false)
   const [type, setType] = useState<ContactFieldType>('text')
   const [optionsText, setOptionsText] = useState('')
-  const [currency, setCurrency] = useState(contactFieldCurrency(null))
+  const [currency, setCurrency] = useState(customFieldCurrency(null))
   const [required, setRequired] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +167,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
     setKeyTouched(Boolean(definition))
     setType(definition?.type ?? 'text')
     setOptionsText((definition?.options ?? []).join('\n'))
-    setCurrency(contactFieldCurrency(definition))
+    setCurrency(customFieldCurrency(definition))
     setRequired(definition?.required === true)
     setBusy(false)
     setError(null)

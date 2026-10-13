@@ -24,7 +24,7 @@ import {
   crmFacetKey,
   crmFacetKeyValue,
 } from '@aglyn/aglyn/app-utils/crm'
-import { contactFieldCurrency, parseCurrencyInput } from '@aglyn/aglyn/app-utils/contact-custom-fields'
+import { customFieldCurrency, parseCurrencyInput } from '@aglyn/aglyn/app-utils/contact-custom-fields'
 import { EMAIL_STATE_STATUSES } from '@aglyn/aglyn/app-utils/email-state'
 import type {
   ListFilterField,
@@ -465,7 +465,7 @@ export function contactCustomCurrencies(
   return Object.fromEntries(
     definitions
       .filter((definition) => definition.type === 'currency' && !definition.retiredAt)
-      .map((definition) => [crmContactCustomColumn(definition.key), contactFieldCurrency(definition)]),
+      .map((definition) => [crmContactCustomColumn(definition.key), customFieldCurrency(definition)]),
   )
 }
 

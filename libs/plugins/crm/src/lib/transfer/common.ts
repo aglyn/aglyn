@@ -56,7 +56,7 @@ import {
   normalizeCrmPicklist,
   ORG_SCOPE_TOKEN,
   readCrmCustomInput,
-  contactFieldCurrency,
+  customFieldCurrency,
   currencyMinorToMajor,
   visibleToTokens,
 } from '@aglyn/aglyn/server'
@@ -742,7 +742,7 @@ export function customTransferValue(
   if (value === null || value === undefined) return null
   if (definition?.type === 'currency') {
     return typeof value === 'number' && Number.isFinite(value)
-      ? currencyMinorToMajor(value, contactFieldCurrency(definition))
+      ? currencyMinorToMajor(value, customFieldCurrency(definition))
       : null
   }
   if (definition?.type === 'date') {

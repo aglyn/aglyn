@@ -35,11 +35,11 @@ import {
   CONTACT_FIELD_TYPE_LABELS,
   CONTACT_FIELD_TYPES,
   CONTACT_FIELDS_MAX_PER_ORG,
-  contactFieldCurrency,
+  customFieldCurrency,
   currencyFractionDigits,
   currencyMinorToMajor,
   formatCurrencyFieldValue,
-  isContactFieldCurrency,
+  isCustomFieldCurrency,
   parseCurrencyInput,
   fieldDefinitionsForObject,
   readContactCustomInput,
@@ -357,11 +357,11 @@ describe('currency fields (AGL-3756)', () => {
   })
 
   it('reads a field’s code lowercase, and USD when it names none or a bad one', () => {
-    expect(contactFieldCurrency({ currency: 'EUR' })).toBe('eur')
-    expect(contactFieldCurrency({})).toBe(CONTACT_FIELD_DEFAULT_CURRENCY)
-    expect(contactFieldCurrency({ currency: 'dollars' })).toBe('usd')
-    expect(isContactFieldCurrency('eur')).toBe(true)
-    expect(isContactFieldCurrency('zz')).toBe(false)
+    expect(customFieldCurrency({ currency: 'EUR' })).toBe('eur')
+    expect(customFieldCurrency({})).toBe(CONTACT_FIELD_DEFAULT_CURRENCY)
+    expect(customFieldCurrency({ currency: 'dollars' })).toBe('usd')
+    expect(isCustomFieldCurrency('eur')).toBe(true)
+    expect(isCustomFieldCurrency('zz')).toBe(false)
   })
 
   it('knows each currency’s minor unit from Intl', () => {

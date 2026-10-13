@@ -19,7 +19,7 @@
 import {
   type ContactFieldDefinition,
   type CrmCustomValue,
-  contactFieldCurrency,
+  customFieldCurrency,
   currencyFractionDigits,
   currencyMinorToMajor,
   parseCurrencyInput,
@@ -165,7 +165,7 @@ export function currencyInputText(value: CrmCustomValue | undefined, code: strin
  */
 function CurrencyFieldControl(props: CrmCustomFieldControlProps & { label: string }) {
   const { definition, value, onChange, disabled, label } = props
-  const code = contactFieldCurrency(definition)
+  const code = customFieldCurrency(definition)
   const [text, setText] = useState(() => currencyInputText(value, code))
   useEffect(() => {
     setText((typed) => (parseCurrencyInput(typed, code) === (typeof value === 'number' ? value : null) ? typed : currencyInputText(value, code)))
