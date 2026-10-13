@@ -18,6 +18,7 @@
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { createTheme } from '../../vendor/mui'
 import {
+  accentTint,
   getGoogleFontsUrl,
   hasHostTheme,
   hostThemeToThemeOptions,
@@ -422,6 +423,27 @@ describe('mergeThemeOptions (AGL-1180)', () => {
       secondary: '#571e61',
       tertiary: '#333b44',
     })
+  })
+
+  it('washes the tint of an accent the site recolors without one', () => {
+    const tintOf = (light: Record<string, unknown>) =>
+      (
+        mergeThemeOptions(
+          consoleOptions,
+          hostThemeToThemeOptions({ colorSchemes: { light } } as HostTheme, 'light'),
+        ).palette as Record<string, Record<string, string>>
+      )['tint']
+    // MUI's own lighten of the new main; the base's other tints stay.
+    expect(tintOf({ primary: { main: '#b3261e' } })).toEqual({
+      primary: accentTint('#b3261e', 'light'),
+      secondary: '#FBE6FE',
+      tertiary: '#EEF0F2',
+    })
+    // A tint the site sets itself wins.
+    expect(
+      tintOf({ primary: { main: '#b3261e' }, tint: { primary: '#fbeae8' } })?.['primary'],
+    ).toBe('#fbeae8')
+    expect(accentTint('#d7392f', 'dark')).toBe('rgb(64, 17, 14)')
   })
 
   it('applies the override without dropping its siblings', () => {

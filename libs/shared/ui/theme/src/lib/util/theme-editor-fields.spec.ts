@@ -229,6 +229,31 @@ describe('the editor writes (AGL-2938)', () => {
     expect(theme.colorSchemes?.light?.primary?.dark).toBe('#3730a3')
   })
 
+  it('drops the recolored accent tint, which was washed from the old main', () => {
+    const theme: HostTheme = {
+      colorSchemes: {
+        light: {
+          primary: { main: '#0d6efd', dark: '#0a58ca' },
+          tint: { primary: '#cfe2ff', secondary: '#e2e3e5' },
+        },
+        dark: { tint: { primary: '#031633' } },
+      },
+    }
+    const next = writeThemeColor(theme, 'light', 'primary', '#b3261e')
+    expect(next.colorSchemes?.light).toEqual({
+      primary: { main: '#b3261e' },
+      tint: { secondary: '#e2e3e5' },
+    })
+    // The other scheme keeps its own tint until its own accent changes.
+    expect(next.colorSchemes?.dark).toEqual({ tint: { primary: '#031633' } })
+    // A tint group left empty goes with it.
+    const secondary = writeThemeColor(next, 'light', 'secondary', '#f2b705')
+    expect(secondary.colorSchemes?.light?.tint).toBeUndefined()
+    // Setting a tint itself still works, and survives later tint edits.
+    const authored = writeThemeColor(secondary, 'light', 'tint.primary', '#fbeae8')
+    expect(authored.colorSchemes?.light?.tint).toEqual({ primary: '#fbeae8' })
+  })
+
   it('sets a palette color on main and clears it back to inherit', () => {
     const theme: HostTheme = {
       colorSchemes: { light: { primary: { main: '#111111', contrastText: '#fff' } } },

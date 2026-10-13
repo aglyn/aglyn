@@ -773,7 +773,22 @@ export function buildEmailPalette(input: EmailPaletteInput): EmailPalette {
     ? { primary: { main: primaryColor } }
     : {}
 
-  const layered = { ...base, ...siteColorOverrides(input.colors), ...brand }
+  const site = siteColorOverrides(input.colors)
+  const layered: PaletteDraft = { ...base, ...site, ...brand }
+  // `mergeThemeOptions`: a tint the site leaves unset is washed from an
+  // accent it does set (`accentTint`), and the base's others stay.
+  const siteTint = isRecord(site['tint']) ? site['tint'] : {}
+  const tint: Record<string, unknown> = { ...(isRecord(base['tint']) ? base['tint'] : {}), ...siteTint }
+  for (const key of ['primary', 'secondary', 'tertiary'] as const) {
+    const main = isRecord(site[key]) ? site[key]['main'] : undefined
+    if (siteTint[key] || typeof main !== 'string') continue
+    try {
+      tint[key] = lighten(main, 0.9)
+    } catch {
+      // Not a color the manipulators parse: keep the inherited tint.
+    }
+  }
+  layered['tint'] = tint
   try {
     return derivePalette(layered)
   } catch {
