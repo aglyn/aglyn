@@ -217,6 +217,7 @@ export interface AglynSelectProps {
   placeholder?: string
   ariaLabel?: string
   fullWidth?: boolean
+  size?: 'small' | 'medium'
   children?: ReactNode
   [key: string]: any
 }
@@ -233,6 +234,7 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
       placeholder,
       ariaLabel,
       children,
+      size,
       datasetFieldId: _datasetFieldId,
       ...rest
     } = dropClearedProps(props)
@@ -243,6 +245,7 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
         input={
           <OutlinedInput
             notched={false}
+            size={size}
             sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
           />
         }
@@ -376,6 +379,16 @@ const FIELD_DATASET_FIELD: Aglyn.AglynAttributeSchema = {
     'empty, it matches a dataset field by its Field name.',
   component: Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
 }
+const FIELD_INPUT_SIZE: Aglyn.AglynAttributeSchema = {
+  name: 'size',
+  label: 'Size',
+  description: 'Normal is 56px tall; Small is 40px, to sit beside a button.',
+  component: Aglyn.FieldComponentType.SELECT,
+  options: [
+    { value: 'medium', label: 'Normal' },
+    { value: 'small', label: 'Small' },
+  ],
+}
 const FIELD_REQUIRED: Aglyn.AglynAttributeSchema = {
   name: 'required',
   label: 'Required?',
@@ -474,6 +487,7 @@ export const inputSchema: Aglyn.ComponentSchema<AglynInputProps> = {
       description: 'A message box instead of a single line.',
       component: Aglyn.FieldComponentType.SWITCH,
     },
+    FIELD_INPUT_SIZE,
     FIELD_FULL_WIDTH,
     FIELD_ARIA_LABEL,
   ],
@@ -506,6 +520,7 @@ export const selectSchema: Aglyn.ComponentSchema<AglynSelectProps> = {
     FIELD_DATASET_FIELD,
     { ...FIELD_PLACEHOLDER, description: 'Shown until a choice is made; never sent.' },
     FIELD_REQUIRED,
+    FIELD_INPUT_SIZE,
     FIELD_FULL_WIDTH,
     FIELD_ARIA_LABEL,
   ],
