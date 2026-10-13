@@ -64,12 +64,10 @@ import {
  * need a person to connect an account; none of them is offered here.
  *
  * Settings are live once written: the cards save them live, and a store
- * setting has no draft. `live` tells the build step so (it lands with the
- * shared contract from AGL-3745; until then the field is carried and unread).
+ * setting has no draft. `live` (the contract's flag, AGL-3745) tells the
+ * build step so, and the job reports the change as live.
  * Free has no commerce, so a Free workspace's build is never offered one.
  */
-
-type LiveCapability = PluginAiCapability & { live?: boolean }
 
 export const STORE_SHIPPING_AI_OP = 'store-shipping'
 export const STORE_PICKUP_AI_OP = 'store-pickup'
@@ -99,7 +97,7 @@ function storeSetupCapability(
   op: string,
   section: StoreSetupSection,
   rest: Pick<PluginAiCapability, 'noun' | 'intents' | 'argsSchema' | 'maxPerPlan'>,
-): LiveCapability {
+): PluginAiCapability {
   return {
     op,
     where: WHERE,
@@ -311,7 +309,7 @@ export const storeTaxAiCapability = storeSetupCapability(STORE_TAX_AI_OP, 'tax',
   maxPerPlan: 6,
 })
 
-export const STORE_SETUP_AI_CAPABILITIES: readonly LiveCapability[] = [
+export const STORE_SETUP_AI_CAPABILITIES: readonly PluginAiCapability[] = [
   storeShippingAiCapability,
   storePickupAiCapability,
   storeDeliveryAiCapability,

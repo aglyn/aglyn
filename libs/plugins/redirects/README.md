@@ -16,6 +16,8 @@ Peer dependencies: `react`, `@mui/material`, `firebase`, and `firebase-admin` fo
 
 **Console** (`registerRedirectsConsole`, the `console` registrar): a `Redirects` nav item at `/redirects`, gated by the `redirects` entitlement. The page is code-split and loads when opened.
 
+**Console server declarations** (`registerRedirectsConsoleServerDeclarations`, the `consoleServerDeclarations` registrar): the server half of the redirects import and export, and the `redirect` writer on the resource-drafts seam with the `redirect` build operation an Aglyn AI build uses to create, update or remove a site's redirect rule. The writer makes the redirects page's checks (publishing role, the `redirects` feature, `redirectsPerHost` on a create, lockdown, validation, duplicates and loops), keeps a published page's path unless the item says it was asked for, and stamps an off-site destination with the member. A rule has no draft state, so it is live once written. The console's `redirect` record route opens the Redirects page.
+
 **The rule model**, exported from `.`:
 
 - `HostRedirect`: a rule's `source`, `destination`, `statusCode` (`REDIRECT_STATUS_CODES`), `kind` (`REDIRECT_KINDS`: `exact`, `prefix`, `regex`), `priority` and `enabled`.

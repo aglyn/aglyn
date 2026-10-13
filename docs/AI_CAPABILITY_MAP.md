@@ -68,7 +68,9 @@ checks the member's role and the allowance when the item runs.
 | `overlay` | marketing | overlay writer | `marketingOverlays` | | no |
 | `experiment` | marketing | experiment writer | `abTesting` | | no |
 | `funnel` | funnels | funnel writer | `screenAnalytics` (`FUNNEL_FEATURE`) | | no |
+| `redirect` (10), AGL-3745 | redirects | `redirect` writer (`libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts`); creates, updates or removes a rule, live once written | `redirects` | `redirectsPerHost` (creates only) | no |
 | `dataset` (3), **new in this PR** | data | `dataset` writer (`libs/plugins/data/src/lib/server/dataset-drafts.ts`) | `dataStore` | `datasetsPerOrg` | no |
+| `event` (6), AGL-3743 | events-calendar | `event` writer, no model (`libs/plugins/events-calendar/src/lib/server/event-drafts.server.ts`); a page section that uses it places `eventList` | `eventCalendar` (the add-on) | | yes |
 
 Checked against the code on 2026-10-10. `FUNNEL_FEATURE` is
 `'screenAnalytics'` (`libs/plugins/funnels/src/lib/model/funnels.types.ts`),
@@ -166,12 +168,12 @@ gap.
 | Besigner elements | animations, lightbox and galleries, music player, video, markdown, interactions, repeat over a dataset | partial: pages place what the layout language compiles; repeat over a dataset (this PR); no animations, interactions, lightbox or video placement op |
 | Reusable components | components with properties | yes (build `component`; a site start draws repeats inline) |
 | Theme builder | colors, fonts, light and dark | yes: the site look; theme proposals |
-| Menus and navigation | dropdown, mega menu, drawer | yes (AGL-3728): a build's `navigation` op adds, removes, renames, relinks and reorders header and footer items and puts items under a dropdown; a guided start writes header links at publish; no mega menu panels or new drawers |
+| Menus and navigation | dropdown, mega menu, drawer | yes (AGL-3728): a build's `navigation` op adds, removes, renames, relinks and reorders header and footer items and puts items under a dropdown; a guided start adds its header links at publish through the same code (AGL-3747); no mega menu panels or new drawers |
 | Bindings and logic | variables, functions | yes (`variable`, `function`) |
 | Templates and blog | page templates, blog collections, entries | partial: entry, product and author templates; a blog start's first 3 posts; no collection create, authors or scheduled posts outside a site start |
 | Site backup and packages | export, import, merge | no, by design: a person's decision |
 | Custom domains | connect and verify a domain | no, by design (out of scope) |
-| Redirects | rules, loop checks, hit counts | no |
+| Redirects | rules, loop checks, hit counts | yes (AGL-3745): a build's `redirect` op creates, updates and removes rules; no hit counts or import |
 | SEO | per-page listing, sitemap, structured data, audit | yes: listings, audit fixes, the site listing |
 | Site protection | password a page, error pages, maintenance mode | no |
 | Multilingual | locale variants, hreflang, Weglot | no |
@@ -179,7 +181,7 @@ gap.
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
-| Events calendar | events, publish to pages, event schema | no |
+| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; no records, pipelines, custom fields or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
@@ -209,8 +211,13 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
 4. **Forms that write to a dataset. CLOSED (Zach, 2026-10-10).** A form's
    creation says the dataset it writes to (`writesTo`); see "Forms that write
    to a dataset" below.
-5. **Events calendar.** No `event` capability. It is an add-on on every plan.
-6. **Redirects.** No capability. Starter includes 25.
+5. **Events calendar.** **CLOSED (AGL-3743):** a build's `event` op drafts
+   dated events through the events-calendar plugin's own writer, and the page
+   section that lists them places the Event List block. See "Events calendar"
+   below.
+6. **Redirects.** No capability. Starter includes 25. **CLOSED (AGL-3745):** a
+   build's `redirect` op creates, updates and removes a site's redirect rules.
+   See "Redirects" below.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
    order emails. **CLOSED for shipping, pickup, delivery and tax
@@ -293,9 +300,15 @@ is a decision about the account, not something to build.
   the link token is admitted only on a page that lists the dataset. The link
   answers once the member saves the binding (rule 13), as the record page's
   row says.
-- **Not yet.** A dataset with a record page saved earlier and no record
-  template in the plan is not linked: the inventory does not read the data
-  plugin's bindings.
+- **Record pages saved earlier (AGL-3747).** The data plugin's `dataset`
+  index, narrowed to a site, says where the site already serves a dataset's
+  records pages of their own (`facts.recordPage`: the saved binding's base
+  and address field). The inventory carries them as the dataset's
+  `recordBase` and `addressField` (never in the prompt's line), and a
+  listing whose plan makes no record template takes them, so its cards link
+  the pages the site already has. A build lists the site's own datasets its
+  plan reuses where a section places them, as it lists the ones it made: the
+  page's section line then says the platform lists the records.
 
 ## Navigation and menus (AGL-3728)
 
@@ -337,10 +350,20 @@ is a decision about the account, not something to build.
 - **Cost and audit.** No model, so 0 credits in the estimate and none spent.
   The layout version is the job's output, recorded as an `ai.job.output`
   activity row like every other op's.
-- **Not yet.** A site start still writes its navigation at publish
-  (`aiLayoutWithNavigation`) rather than through this op; mega menu panels'
-  columns and new drawers are not made, and a menu change never publishes on
-  its own, even in a build that publishes its pages.
+- **The site start shares it (AGL-3747).** A guided start still adds its
+  pages' header entries when it publishes (`aiLayoutWithNavigation`), since
+  only then does it know which pages went live, but it adds them through this
+  op's `aiLayoutWithMenuChanges`: into the bar's menu and the phone menu,
+  after their items (after the brand in a starter's Toolbar), like their
+  neighbours, and never a second item of a name already there. Its link
+  repair is unchanged: links to a retired starter home move to the new home,
+  and links to pages it did not write come out. A blog whose posts part
+  failed is published with its links out; once Try again puts its posts live
+  (AGL-3739), the same code puts its header entry back, after the home
+  page's item (`aiRestoreGuidedBlogEntry`), as a new live layout version.
+- **Not yet.** Mega menu panels' columns and new drawers are not made, and a
+  menu change never publishes on its own, even in a build that publishes its
+  pages.
 
 ## Duplicating (AGL-3740)
 
@@ -378,6 +401,45 @@ is a decision about the account, not something to build.
 - **Not yet.** A later item or page in the same plan cannot cite the copy as
   `new:<name>`; a page that should start from another is still the page
   runner's `duplicateOf`.
+
+## Events calendar (AGL-3743)
+
+- **The events-calendar plugin owns it**, as bookings owns `booking-service`.
+  `server/event-drafts.server.ts` is the `event` writer on the resource-drafts
+  seam and `server/event-ai-capability.ts` the `event` build operation, both
+  registered from the plugin's console-server declarations (the console runs
+  AI jobs). The writer is loaded lazily; its check is pure
+  (`model/event-draft-content.ts`). Nothing in the AI plugin names it.
+- **What an event is.** Exactly what the Events page edits, stored through
+  `eventWrite` (`model/event-write.ts`), the rule the editor and the import
+  already share: title, start, end (default one hour), location, organizer,
+  description, and a cover image with its description. The plugin has no
+  recurrence, tickets, RSVP, online link or time zone field, so the op offers
+  none. A start and end are a wall time `YYYY-MM-DDTHH:MM` in an IANA zone,
+  read into the instant the event stores; "Online" is a location.
+- **The op.** `event` (at most six a plan) takes `title`, `startsAt`,
+  `endsAt` (optional), `timezone`, `location`, `organizer` and `description`.
+  One item is one event. A page section that uses one or more of them places
+  the `eventList` block once, naming every event built; if one event fails
+  and another in the section was built, the block stays and only that event
+  is missing. The planner fills the arguments: no model pass, 0 credits.
+- **Business-specific, in the future.** The argument descriptions ask for a
+  title specific to the business (never "Event 1"), a description in its
+  voice with no price, ticket, sign-up or link the request does not state,
+  and no person's name it does not give. A build's plan is told today's date
+  (`aiPlanTodaySentence`), and the writer refuses a start that is not after
+  the write, so a past event fails its item rather than being stored.
+- **Gates.** The `eventCalendar` add-on (on no plan by itself; Free with the
+  add-on may use it, since an event costs no credits), the plugin on for the
+  site and past its release flag, and a member with a write role on the site.
+- **Draft only.** Every event is born `status: 'draft'`. The public listing
+  shows only published events, so the Event List the build placed is empty
+  until the owner publishes the events on the Events page, where the job's
+  link (`event` record route) opens.
+- **Not yet.** No cover photo: the capability seam has no way for a plugin's
+  writer to ask the AI plugin for a stock photo, and a planner-written image
+  address would be invented. Events are not part of a guided site start, which
+  still lists events as a dataset or as written-out copy.
 
 ## Forms that write to a dataset
 
@@ -419,6 +481,38 @@ catering inquiry into Inquiries.
   its row noting that submissions arrive in the Inbox only.
 - **Not yet.** A copied form (`duplicateOf`) keeps the copy's own binding,
   and no form adds a field to a dataset it writes to.
+
+## Redirects (AGL-3745)
+
+- **The redirects plugin owns it.** `libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts`
+  is the `redirect` writer on the resource-drafts seam and
+  `redirect-ai-capability.ts` the `redirect` build operation, both registered
+  from the plugin's console-server declarations. The AI plugin's build step
+  runs the item like any other plugin's draft item; there is no new job kind.
+- **One change per item.** `action` is `create`, `update` or `remove`; the rule
+  is named by its from-path (`source`) and, when two modes share it, its
+  `kind`. The arguments are the rule's own fields (`destination`, `newSource`,
+  `kind`, `statusCode`, `priority`, `enabled`) plus `replacesLivePage`. The
+  planner fills them, so an item costs 0 credits.
+- **The page's checks, through its own functions.** The writer reuses the
+  importer's `withDefaults`, `ruleProblem` and `storedFields` and the model's
+  `findDuplicateRedirect`, `walkRedirectChain` and `redirectSourceIsLivePage`:
+  the publishing role, the `redirects` feature, lockdown (a write verdict),
+  lookalike destinations, self-redirects, duplicates, and loops. A create is
+  counted and written in one transaction against `redirectsPerHost`; an update
+  or a remove takes no slot. An off-site destination carries the member's uid
+  (`externalDestinationApprovedBy`), and every touched path is announced to the
+  site cache.
+- **Stricter than the page in two places.** A from-path the site publishes a
+  page at is refused unless the item sets `replacesLivePage` (the page only
+  warns), and a destination that leads into a loop other rules make is refused
+  (the page only warns, the importer reports it).
+- **Live once written.** A redirect has no draft state, so the capability sets
+  the contract's new `live` flag and the job's output reads "Live now, in
+  Redirects." rather than "A draft". The plan card is the person's agreement.
+- **Remove is the page's Delete:** `deletedAt` and `enabled: false`.
+- **Not done:** hit counts, import and export, and a destination that is a page
+  the same build creates (an unpublished page has no live path).
 
 ## Store setup (AGL-3749)
 
@@ -464,9 +558,8 @@ catering inquiry into Inquiries.
   live at once (Zach, 2026-10-12). Free has no commerce.
 - **Live, not a draft.** Store settings have no draft state, and the cards
   save them live; the plan card's Confirm is the agreement. The capabilities
-  carry `live: true`, which the build step reads once the shared contract
-  from AGL-3745 lands; until then the job row says "A draft, in Products →
-  Settings".
+  carry the contract's `live` flag (AGL-3745), so the job's output reads
+  "Live now, in Products → Settings." rather than "A draft".
 - **Idempotent.** Each change is applied inside a transaction to the
   settings the site has; a new zone or rate takes an id derived from the
   item, and a change the settings already hold writes nothing (`replayed`).
