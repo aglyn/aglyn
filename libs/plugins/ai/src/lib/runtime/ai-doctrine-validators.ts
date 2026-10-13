@@ -4076,6 +4076,40 @@ export function aiSettlePlanLayouts(
   }
 }
 
+/**
+ * A page section that is a layout region — a header, navigation or footer,
+ * read by the name rule 2's `plan-layout-region-section` reads — is taken off
+ * the page before the rules read the plan (AGL-3750). The region is already
+ * the layout's, so the rule's own answer, "take the section off the page", is
+ * the only one: a live Free start of 2026-10-12 (a bakery that sells cakes to
+ * order) planned a Header and a Footer on its pages three times and stopped.
+ *
+ * Only a section that places nothing, or nothing but a layout (which rule 2
+ * refuses placing as well), is taken off: one that places a form or a
+ * component may be a band misnamed, so the rule still asks. A page whose
+ * every section is a region keeps them all, and is re-asked as before, since
+ * a page of no sections has no answer here. A home this leaves under its
+ * fewest sections, or a Free plan still past its wall, is the existing
+ * checks' to settle or refuse.
+ */
+export function aiSettlePlanLayoutRegionSections(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+): AiBuildPlan {
+  const kinds = inventoryKinds(inventory)
+  const removable = (section: AiBuildPlan['screens'][number]['sections'][number]) =>
+    LAYOUT_REGION_NAME.test(section.name) &&
+    section.uses.every((ref) => refKind(ref, plan, kinds) === 'layout')
+  let changed = false
+  const screens = plan.screens.map((screen) => {
+    const kept = screen.sections.filter((section) => !removable(section))
+    if (kept.length === screen.sections.length || !kept.length) return screen
+    changed = true
+    return { ...screen, sections: kept }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
 /** A saved form a plan section could place: one the plan creates, or one the site has. */
 interface AiPlanFormChoice {
   /** As a section's uses names it: `new:<name>` or the inventory id. */

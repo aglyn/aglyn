@@ -280,6 +280,13 @@ export interface AiBuildPlan {
    * and built by a unit of their own after every planned one. Absent is none.
    */
   storePages?: AiBuildStorePages
+  /**
+   * The language a SITE plan's brief and copy are written in (AGL-3750), as
+   * the Languages card stores a code (`aiPlanLanguage`). Absent is the site's
+   * own language: every other kind's plan, a plan that said null, and one
+   * whose code was not a language code, which is dropped rather than refused.
+   */
+  language?: string
 }
 
 /**
@@ -602,10 +609,58 @@ export function withBuildItems(tool: AiTool): AiTool {
   }
 }
 
+/** The Languages card's own pattern for one language code (`LOCALE_PATTERN`). */
+export const AI_PLAN_LANGUAGE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
+
+/**
+ * A plan's language as the Languages card would store it (AGL-3750), or
+ * `null`: a two-letter language, optionally with a region or a script, in
+ * BCP 47 casing — `es`, `pt-BR`, `zh-Hant`; `_` reads as `-`. Anything the
+ * card would not accept is no language at all, so a plan carrying one is
+ * kept without it.
+ */
+export function aiPlanLanguage(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const match = /^([A-Za-z]{2})(?:-([A-Za-z]{2}|[A-Za-z]{4}))?$/.exec(value.trim().replace(/_/g, '-'))
+  if (!match) return null
+  const [, language, sub] = match
+  const lower = language.toLowerCase()
+  const tag = !sub
+    ? lower
+    : sub.length === 2
+      ? `${lower}-${sub.toUpperCase()}`
+      : `${lower}-${sub[0].toUpperCase()}${sub.slice(1).toLowerCase()}`
+  return AI_PLAN_LANGUAGE_PATTERN.test(tag) ? tag : null
+}
+
+const LANGUAGE_SCHEMA = nullableString(
+  "The language the brief is written in, which the site's copy is written in too: a code such as en, es, fr or pt-BR. Null when unsure.",
+)
+
+/**
+ * Any plan tool with the site's language (AGL-3750), offered only to a
+ * `site` job, whose guided start sets the site's language from it. One
+ * schema for every site plan, so the tool is the same bytes across briefs
+ * and the prompt cache keeps it; every other kind's tool is unchanged.
+ */
+export function withPlanLanguage(tool: AiTool): AiTool {
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      required: [...(tool.inputSchema['required'] as string[]), 'language'],
+      properties: {
+        ...(tool.inputSchema['properties'] as Record<string, unknown>),
+        language: LANGUAGE_SCHEMA,
+      },
+    },
+  }
+}
+
 /** The plan tool a brief is answered with, on a job that may or may not bind a dataset. */
 export function aiBuildPlanToolFor(
   brief: string,
-  options: { records?: boolean; items?: boolean } = {},
+  options: { records?: boolean; items?: boolean; language?: boolean } = {},
 ): AiTool {
   const video = AI_PLAN_ASKS_FOR_VIDEO.test(brief)
   const tool = options.records
@@ -615,7 +670,8 @@ export function aiBuildPlanToolFor(
     : video
       ? AI_BUILD_PLAN_EMBEDS_TOOL
       : AI_BUILD_PLAN_TOOL
-  return options.items ? withBuildItems(tool) : tool
+  const built = options.items ? withBuildItems(tool) : tool
+  return options.language ? withPlanLanguage(built) : built
 }
 
 export type AiBuildPlanParse =
@@ -872,6 +928,12 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         }
       },
     )
+    // A language that is no code is dropped, never refused (AGL-3750): the
+    // site keeps the language it has.
+    const language = aiPlanLanguage(root['language'])
+    if (typeof root['language'] === 'string' && root['language'].trim() && !language) {
+      repairs.push(`language "${root['language'].trim().slice(0, 40)}" is not a language code; ignored`)
+    }
     // A plan whose brief asks for no player carries no list, as it did before the list existed;
     // so does a plan with no items.
     return {
@@ -882,6 +944,7 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
         screens,
         ...(embeds.length ? { embeds } : {}),
         ...(items.length ? { items } : {}),
+        ...(language ? { language } : {}),
       },
       repairs,
     }

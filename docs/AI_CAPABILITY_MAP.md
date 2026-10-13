@@ -27,7 +27,9 @@ never writes another plugin's documents itself.
    the plan's page count, `jobs/ai-job-site-store-pages.ts`), then the welcome
    email. It writes the site's search title and description at
    no cost (`aiSiteSeoOutputs`). A guided start (`inputs.autoConfirm`) then
-   adds navigation and publishes (`jobs/ai-site-publish.ts`).
+   adds navigation and publishes (`jobs/ai-site-publish.ts`), and sets the
+   site's one language from the language its plan says the brief is written
+   in (`aiSiteLanguageUpdates`, AGL-3750).
 2. **The build job** (`jobs/ai-job-build-step.ts`) builds what one request
    asks for: creations, pages and ITEMS. An item is an operation a plugin
    registered on `libs/aglyn/src/lib/plugin-manager/plugin-ai-capabilities.ts`.
@@ -176,7 +178,7 @@ gap.
 | Redirects | rules, loop checks, hit counts | yes (AGL-3745): a build's `redirect` op creates, updates and removes rules; no hit counts or import |
 | SEO | per-page listing, sitemap, structured data, audit | yes: listings, audit fixes, the site listing |
 | Site protection | password a page, error pages, maintenance mode | no |
-| Multilingual | locale variants, hreflang, Weglot | no |
+| Multilingual | locale variants, hreflang, Weglot | partial: a guided start sets a site's one language from its brief (AGL-3750); no locale variants, translation or second language |
 | Site search | search box, search page | no |
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
