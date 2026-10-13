@@ -193,8 +193,6 @@ export function aiTrackingRequestEmpty(request: AiTrackingRequest): boolean {
 const getPath = (data: Record<string, unknown>, path: string): unknown =>
   path.split('.').reduce<unknown>((at, key) => (at && typeof at === 'object' ? (at as Record<string, unknown>)[key] : undefined), data)
 
-const labelOf = (path: string): string => AI_TRACKING_TAGS.find((tag) => tag.path === path)?.label ?? path
-
 /** One change to the host document, with the sentence that says it was made. */
 export interface AiTrackingChange {
   path: string
