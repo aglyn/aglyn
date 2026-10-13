@@ -117,8 +117,9 @@ export default function ElementPickMode({ consoleOrigin }: { consoleOrigin: stri
     }
   }, [consoleOrigin])
 
-  // Plain inline styles: this runs outside any theme provider, over
-  // whatever the site looks like, and must read on all of it.
+  // Plain inline styles in CSS SYSTEM colors: this draws over whatever the
+  // site looks like and must read on all of it, which the site's own theme
+  // cannot promise and the browser's selection colors do.
   return (
     <>
       <div
@@ -129,13 +130,13 @@ export default function ElementPickMode({ consoleOrigin }: { consoleOrigin: stri
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 2147483647,
-          background: '#111827',
-          color: '#ffffff',
+          background: 'CanvasText',
+          color: 'Canvas',
           font: '600 13px/1.4 system-ui, sans-serif',
           padding: '6px 12px',
           borderRadius: 6,
           pointerEvents: 'none',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          boxShadow: '0 2px 8px color-mix(in srgb, CanvasText 30%, transparent)',
         }}
       >
         {'Click the element to use · Esc to cancel'}
@@ -150,8 +151,8 @@ export default function ElementPickMode({ consoleOrigin }: { consoleOrigin: stri
             width: box.width,
             height: box.height,
             zIndex: 2147483646,
-            outline: '2px solid #2563eb',
-            background: 'rgba(37, 99, 235, 0.12)',
+            outline: '2px solid Highlight',
+            background: 'color-mix(in srgb, Highlight 15%, transparent)',
             pointerEvents: 'none',
           }}
         >
@@ -160,8 +161,8 @@ export default function ElementPickMode({ consoleOrigin }: { consoleOrigin: stri
               position: 'absolute',
               top: box.top > 24 ? -22 : '100%',
               left: 0,
-              background: '#2563eb',
-              color: '#ffffff',
+              background: 'Highlight',
+              color: 'HighlightText',
               font: '600 11px/1.6 system-ui, sans-serif',
               padding: '0 6px',
               borderRadius: 3,
