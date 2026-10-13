@@ -22,8 +22,9 @@
  *
  *  - THE REFUSAL is the Events page's gate: the add-on, and a write role.
  *  - THE CHECK reads wall times in a zone and holds the rest to `eventWrite`.
- *  - THE WRITE makes a draft that starts after it, and asked again finds it.
- *  - A DRAFT is listed nowhere until a person publishes it.
+ *  - THE WRITE makes an event that starts after it, and asked again finds it.
+ *  - PUBLISHED for the publishing role, as the Events page publishes; a
+ *    member who may write but not publish gets a draft and a notice (AGL-3755).
  */
 
 jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({ __esModule: true, firebaseAdmin: {} }))
@@ -34,6 +35,7 @@ import {
   createEventDraftWriter,
   EVENT_DRAFT_PLAN_REFUSAL,
   EVENT_DRAFT_ROLE_REFUSAL,
+  EVENT_DRAFT_UNPUBLISHED_NOTICE,
   eventDraftPastRefusal,
 } from './event-drafts.server'
 
@@ -124,11 +126,11 @@ const request = (patch: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   store.clear()
   commits = []
-  store.set('hosts/host-1', { memberRoles: { 'uid-1': 'editor', 'uid-2': 'viewer' } })
+  store.set('hosts/host-1', { memberRoles: { 'uid-1': 'editor', 'uid-2': 'viewer', 'uid-3': 'author' } })
 })
 
 describe('the event writer', () => {
-  it('writes the event the editor saves, born a draft, at the instant its wall time names', async () => {
+  it('writes and publishes the event the editor saves, at the instant its wall time names (AGL-3755)', async () => {
     const written = await writer.write(request())
     expect(written).toEqual({
       ok: true,
@@ -136,7 +138,8 @@ describe('the event writer', () => {
       id: 'job-1-i0',
       name: 'Autumn sourdough workshop',
       versionId: null,
-      facts: { status: 'draft', startsAtMs: STARTS, endsAtMs: STARTS + 3 * 60 * 60 * 1000 },
+      facts: { status: 'published', startsAtMs: STARTS, endsAtMs: STARTS + 3 * 60 * 60 * 1000 },
+      live: true,
     })
     expect(store.get('hosts/host-1/events/job-1-i0')).toEqual({
       title: 'Autumn sourdough workshop',
@@ -145,7 +148,7 @@ describe('the event writer', () => {
       location: CONTENT.location,
       organizer: CONTENT.organizer,
       description: CONTENT.description,
-      status: 'draft',
+      status: 'published',
       createdAt: NOW,
       updatedAt: NOW,
       createdBy: 'uid-1',
@@ -174,7 +177,8 @@ describe('the event writer', () => {
       replayed: true,
       id: 'job-1-i0',
       name: 'Autumn sourdough workshop',
-      facts: { status: 'draft' },
+      facts: { status: 'published' },
+      live: true,
     })
     expect(commits).toEqual([])
     expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ id: 'job-1-i0', versionId: null })
@@ -188,10 +192,31 @@ describe('the event writer', () => {
     expect(await writer.write(request())).toMatchObject({ ok: false, status: 409 })
   })
 
-  it('reports a published draft as published when read back', async () => {
+  it('keeps an author’s event as a draft, saying why, since an author may write but not publish (AGL-3755)', async () => {
+    const written = await writer.write(request({ uid: 'uid-3' }))
+    expect(written).toMatchObject({
+      ok: true,
+      facts: { status: 'draft' },
+      live: false,
+      notice: EVENT_DRAFT_UNPUBLISHED_NOTICE,
+    })
+    expect(store.get('hosts/host-1/events/job-1-i0')).toMatchObject({ status: 'draft', createdBy: 'uid-3' })
+  })
+
+  it('publishes for an admin too, and nothing beyond the status the Events page sets', async () => {
+    store.set('hosts/host-1', { memberRoles: { 'uid-1': 'admin' } })
     await writer.write(request())
+    const stored = store.get('hosts/host-1/events/job-1-i0') as Record<string, unknown>
+    expect(stored['status']).toBe('published')
+    expect(Object.keys(stored).sort()).toEqual(
+      ['createdAt', 'createdBy', 'description', 'endsAtMs', 'location', 'organizer', 'startsAtMs', 'status', 'title', 'updatedAt'],
+    )
+  })
+
+  it('reports an author’s draft as published once a person publishes it', async () => {
+    await writer.write(request({ uid: 'uid-3' }))
     store.set('hosts/host-1/events/job-1-i0', { ...store.get('hosts/host-1/events/job-1-i0'), status: 'published' })
-    expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ facts: { status: 'published' } })
+    expect(await writer.read({ hostId: 'host-1', id: 'job-1-i0' })).toMatchObject({ facts: { status: 'published' }, live: true })
   })
 
   it('refuses content the check refuses, with its first problem', async () => {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { hostRoleCanPublish, hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type {
   PluginDraftContext,
@@ -41,9 +41,14 @@ import { eventWrite } from '../model/event-write'
  *
  *  - THE DOCUMENT is a `hosts/{hostId}/events/{id}` event stored through
  *    `eventWrite`, the one rule the Events page's editor and the events
- *    import write through, born `status: 'draft'`. A draft is listed nowhere
- *    on the site — the public listing asks for `status == 'published'` —
- *    until a person sets it published on the Events page.
+ *    import write through.
+ *  - PUBLISHED when the member may publish (AGL-3755): the Events page's
+ *    "Set published" is the event's `status` set to `published` and nothing
+ *    else, so that is all this writer changes. The member must hold the
+ *    publishing role (`hostRoleCanPublish`, admin or editor), the axis every
+ *    other publish asks. A member who may write but not publish (`author`)
+ *    gets the event as a draft, `live: false`, with a notice saying why, and
+ *    it waits on the Events page for someone who may.
  *  - THE PLAN is the `eventCalendar` add-on the Events page is gated on, read
  *    from the workspace's own document the way the listing and the import
  *    read it. There is no allowance to count.
@@ -52,7 +57,7 @@ import { eventWrite } from '../model/event-write'
  *    already over is a mistake in what was asked, so it is refused rather
  *    than stored.
  *
- * Nothing is published. The writer touches the one new document.
+ * The writer touches the one new document.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -64,6 +69,10 @@ export const EVENT_DRAFT_ROLE_REFUSAL = 'Editing requires the editor role'
 export const EVENT_DRAFT_PLAN_REFUSAL =
   'The Event Calendar is a paid add-on: enable it from Billing → Add-ons'
 
+/** Why an event a member wrote was kept as a draft: they may write the site, not publish it. */
+export const EVENT_DRAFT_UNPUBLISHED_NOTICE =
+  'Kept as a draft: publishing an event takes the editor role, so someone who has it publishes it on the Events page.'
+
 /** The refusal for a start that is not after the write. */
 export function eventDraftPastRefusal(wallText: string): string {
   return `A drafted event starts in the future: ${wallText} has already passed`
@@ -73,17 +82,25 @@ function isDeleted(data: Readonly<Record<string, unknown>> | undefined): boolean
   return Boolean(data?.['deletedAt']) || data?.['status'] === 'deleted'
 }
 
+/** What a written event reports: published or a draft, and why a draft when it is one. */
+function liveOf(published: boolean): Pick<PluginDraftRecord, 'live' | 'notice'> {
+  return published ? { live: true } : { live: false, notice: EVENT_DRAFT_UNPUBLISHED_NOTICE }
+}
+
 function recordOf(event: FirebaseFirestore.DocumentSnapshot): PluginDraftRecord {
   const data = (event.data() ?? {}) as Record<string, unknown>
+  const published = data['status'] === 'published'
   return {
     id: event.id,
     name: String(data['title'] ?? ''),
     versionId: null,
     facts: {
-      status: data['status'] === 'published' ? 'published' : 'draft',
+      status: published ? 'published' : 'draft',
       startsAtMs: Number(data['startsAtMs'] ?? 0),
       endsAtMs: Number(data['endsAtMs'] ?? 0),
+      ...(typeof data['coverImage'] === 'string' ? { coverImage: data['coverImage'] } : {}),
     },
+    ...liveOf(published),
   }
 }
 
@@ -131,7 +148,6 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
           error: eventDraftPastRefusal(eventDraftWallText(read.value.startsAtMs, read.timezone)),
         }
       }
-      const write = eventWrite(read.value)
       const db = firestore()
       const hostRef = db.collection('hosts').doc(request.hostId)
       const eventRef = hostRef.collection('events').doc(request.id)
@@ -147,6 +163,9 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
         }
         const early = roleRefusal(host, request.uid) ?? planRefusal(request.org)
         if (early) return { ok: false, ...early }
+        // The Events page's publish: `status`, and only for the publishing role.
+        const published = hostRoleCanPublish((host.get('memberRoles') ?? {})[request.uid])
+        const write = eventWrite({ ...read.value, status: published ? 'published' : 'draft' })
         tx.create(eventRef, {
           ...write.fields,
           createdAt: request.now,
@@ -160,10 +179,12 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
           name: write.fields.title,
           versionId: null,
           facts: {
-            status: 'draft',
+            status: write.fields.status,
             startsAtMs: write.fields.startsAtMs,
             endsAtMs: write.fields.endsAtMs,
+            ...(write.fields.coverImage ? { coverImage: write.fields.coverImage } : {}),
           },
+          ...liveOf(published),
         }
       })
     },

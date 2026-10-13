@@ -93,6 +93,15 @@ export interface PluginDraftRecord {
   versionId: string | null
   /** What the owner reports about the draft beyond its identity, in the shape its writer documents. */
   facts: Readonly<Record<string, unknown>>
+  /**
+   * For a resource its writer makes live when the member may (an event the
+   * publishing role publishes, AGL-3755): whether this one went live. `false`
+   * means it was kept as a draft, and `notice` says why. Absent: the
+   * capability's own `live` stands.
+   */
+  live?: boolean
+  /** Customer-safe: a sentence a caller shows beside the record, such as why it stayed a draft. */
+  notice?: string
 }
 
 export interface PluginDraftRequest extends PluginDraftContext {

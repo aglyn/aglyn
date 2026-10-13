@@ -186,7 +186,7 @@ gap.
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
-| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
+| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op makes dated events (title, start and end in the business's time zone, location, organizer, description), published for the publishing role (AGL-3755), and a page section that uses them places the Event List. No cover photo from a build yet |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); no records, picklist values or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
@@ -489,10 +489,14 @@ is a decision about the account, not something to build.
 - **Gates.** The `eventCalendar` add-on (on no plan by itself; Free with the
   add-on may use it, since an event costs no credits), the plugin on for the
   site and past its release flag, and a member with a write role on the site.
-- **Draft only.** Every event is born `status: 'draft'`. The public listing
-  shows only published events, so the Event List the build placed is empty
-  until the owner publishes the events on the Events page, where the job's
-  link (`event` record route) opens.
+- **Published (AGL-3755).** An event is published the way the Events page's
+  "Set published" publishes one: `status: 'published'`, nothing else. It
+  takes the publishing role (`hostRoleCanPublish`: admin or editor), so the
+  Event List the build placed shows the events at once. A member who may
+  write but not publish (`author`) gets drafts, and the writer answers
+  `live: false` with a notice, so the job row reads "A draft, in Events."
+  and says why. The capability declares `live: true`; the row of a
+  published one reads "Live now, in Events." (`aiBuildItemOutputNote`).
 - **Not yet.** No cover photo: the capability seam has no way for a plugin's
   writer to ask the AI plugin for a stock photo, and a planner-written image
   address would be invented. Events are not part of a guided site start, which

@@ -220,6 +220,38 @@ describe('the build step (AGL-3616)', () => {
     })
   })
 
+  it('reports an item a live writer kept as a draft as a draft, saying why (AGL-3755)', async () => {
+    const live: PluginAiCapability = { ...SERVICE, live: true, where: 'Events' }
+    const kept = writer({
+      write: async (request) => ({
+        ok: true,
+        replayed: false,
+        id: request.id,
+        name: request.name,
+        versionId: null,
+        facts: { status: 'draft' },
+        live: false,
+        notice: 'Kept as a draft: publishing takes the editor role.',
+      }),
+    })
+    const outcome = await createAiJobBuildStep({
+      runnerFor: (() => null) as never,
+      writerFor: (resource) => (resource === 'bookingService' ? kept.impl : null),
+      opsFor: async () => new Map([...OPS, [live.op, live]]),
+      pluginAdmission: async () => null,
+      readNodes: readNodes as never,
+    })(context(job()))
+    expect(outcome).toMatchObject({
+      outputs: [{ note: 'A draft, in Events. Kept as a draft: publishing takes the editor role.' }],
+    })
+  })
+
+  it('names the output note from the capability alone when the writer says nothing (AGL-3755)', () => {
+    expect(aiBuildItemOutputNote({ where: 'Events', live: true })).toBe('Live now, in Events.')
+    expect(aiBuildItemOutputNote({ where: 'Events', live: true }, { live: true })).toBe('Live now, in Events.')
+    expect(aiBuildItemOutputNote({ where: 'Notes' })).toBe('A draft, in Notes.')
+  })
+
   it('tells the page to place the Booking block for the service it built', async () => {
     const { impl } = writer()
     const seen: AiJob[] = []
