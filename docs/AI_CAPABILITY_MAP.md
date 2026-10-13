@@ -63,6 +63,7 @@ checks the member's role and the allowance when the item runs.
 | `duplicate` (3), AGL-3740 | ai | duplicate runner, no model, core's `duplicateResource` (an unpublished copy) | the kind's own, checked by the copy | the kind's create counter | yes |
 | `settings` (1), AGL-3748 | ai | settings runner, no model, the console settings cards' fields saved LIVE on confirm | | | yes |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
+| `store-shipping` (10), `store-pickup` (5), `store-delivery` (5), `store-tax` (6), AGL-3749 | commerce | `store-settings` writer, no model, live (`libs/plugins/commerce/src/lib/server/store-setup-ai-capability.ts`) | `commerce` | | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
 | `variable` | logic | `variable` writer | | `variablesPerHost` | yes |
 | `overlay` | marketing | overlay writer | `marketingOverlays` | | no |
@@ -184,7 +185,7 @@ gap.
 | Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
 | CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; no records, pipelines, custom fields or views |
-| Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; no shipping, tax, pickup, payments, POS or order emails |
+| Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
 | Bookings | services, availability, payment, reminders | partial: a booking service draft |
 | Marketing overlays | bars and popups | yes (`overlay`) |
 | Email campaigns | campaigns, designed emails | yes, drafted and unsent (`campaign`, `email`) |
@@ -220,7 +221,10 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    See "Redirects" below.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
-   order emails.
+   order emails. **CLOSED for shipping, pickup, delivery and tax
+   (AGL-3749):** four build ops set what the console's Shipping, Local
+   delivery, Taxes and Inventory locations cards set. Payments, POS, carrier
+   rates, tax services and order emails stay open. See "Store setup" below.
 9. **Site settings.** **PARTLY CLOSED (AGL-3748):** a build's `settings` op
    changes the site's name, search defaults, favicon, logo and social image,
    language, time zone, contact details and cookie banner mode, live on
@@ -566,3 +570,54 @@ catering inquiry into Inquiries.
 - **Remove is the page's Delete:** `deletedAt` and `enabled: false`.
 - **Not done:** hit counts, import and export, and a destination that is a page
   the same build creates (an unpublished page has no live path).
+
+## Store setup (AGL-3749)
+
+- **Commerce owns it.** `libs/plugins/commerce/src/lib/server/store-setup-ai-writer.ts`
+  is the `store-settings` writer on the resource-drafts seam;
+  `store-setup-ai-capability.ts` registers four build ops it executes, from
+  `registerCommerceConsoleApi`. The change is read and applied by the pure
+  `model/store-setup-content.ts`, through the cards' own normalizers and
+  checks. `store-settings` is the record route the job drawer links to.
+- **`store-shipping`**: one zone (by name, or by the same countries) and one
+  rate in it: `flat`, `free_over`, `price_tiers` or `weight_tiers`, the
+  Shipping card's kinds. Set adds or replaces a rate by name, keeping its
+  id. Remove takes a rate, or a zone and its rates as the card's ✕ does. A
+  layout that turns buyers away comes back as a warning
+  (`summarizeShippingCoverage`). Carrier rates are refused: they need a
+  carrier account.
+- **`store-pickup`**: the store-wide "Offer free local pickup" switch, or
+  pickup at an inventory location the request names (by name, city or
+  street) with its hours, instructions and preparation time. A location is
+  found, never created: "pickup in Austin" with no Austin location is
+  refused with where to add one.
+- **`store-delivery`**: the Local delivery card's settings with postal-code
+  zones (fee, minimum, free-over), windows, lead time, days ahead and
+  instructions. Distance zones need the store placed on a map and stay the
+  card's. Switching delivery on is refused while `localDeliveryProblems`
+  says checkout would not offer it.
+- **`store-tax`**: the mode (manual rates, automatic, or not collecting),
+  whether prices include tax, the store origin, and a manual rate by
+  country and state. Lodging and service rates are kept. Manual mode with
+  no origin is refused (it refuses every sale, AGL-2145). A rate on a store
+  that calculates automatically is refused unless the change switches it to
+  manual. Tax services (Avalara, TaxJar) need credentials and are not
+  offered.
+- **No number the person did not give.** Every amount, fee and percentage is
+  described to the planner as "only when the request states it", and the
+  writer refuses a flat or free-over rate without its amount, a new delivery
+  zone without its fee and a tax rate without its percentage. "Set up tax"
+  alone is meant to be a question back, not an item.
+- **Gates.** An admin or editor on the site (`hostRoleCanPublish`), checked
+  at the build's admission and again in the write; the plan's `commerce`
+  feature; and no lockdown refusing a write. This is stricter than the cards,
+  which an author may also save: an AI change of what checkout charges is
+  live at once (Zach, 2026-10-12). Free has no commerce.
+- **Live, not a draft.** Store settings have no draft state, and the cards
+  save them live; the plan card's Confirm is the agreement. The capabilities
+  carry the contract's `live` flag (AGL-3745), so the job's output reads
+  "Live now, in Products → Settings." rather than "A draft".
+- **Idempotent.** Each change is applied inside a transaction to the
+  settings the site has; a new zone or rate takes an id derived from the
+  item, and a change the settings already hold writes nothing (`replayed`).
+- **Cost.** No model, so 0 credits.
