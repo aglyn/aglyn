@@ -68,6 +68,7 @@ checks the member's role and the allowance when the item runs.
 | `overlay` | marketing | overlay writer | `marketingOverlays` | | no |
 | `experiment` | marketing | experiment writer | `abTesting` | | no |
 | `funnel` | funnels | funnel writer | `screenAnalytics` (`FUNNEL_FEATURE`) | | no |
+| `redirect` (10), AGL-3745 | redirects | `redirect` writer (`libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts`); creates, updates or removes a rule, live once written | `redirects` | `redirectsPerHost` (creates only) | no |
 | `dataset` (3), **new in this PR** | data | `dataset` writer (`libs/plugins/data/src/lib/server/dataset-drafts.ts`) | `dataStore` | `datasetsPerOrg` | no |
 | `event` (6), AGL-3743 | events-calendar | `event` writer, no model (`libs/plugins/events-calendar/src/lib/server/event-drafts.server.ts`); a page section that uses it places `eventList` | `eventCalendar` (the add-on) | | yes |
 
@@ -172,7 +173,7 @@ gap.
 | Templates and blog | page templates, blog collections, entries | partial: entry, product and author templates; a blog start's first 3 posts; no collection create, authors or scheduled posts outside a site start |
 | Site backup and packages | export, import, merge | no, by design: a person's decision |
 | Custom domains | connect and verify a domain | no, by design (out of scope) |
-| Redirects | rules, loop checks, hit counts | no |
+| Redirects | rules, loop checks, hit counts | yes (AGL-3745): a build's `redirect` op creates, updates and removes rules; no hit counts or import |
 | SEO | per-page listing, sitemap, structured data, audit | yes: listings, audit fixes, the site listing; a build's `settings` op (AGL-3748) sets the site's search title, description, separator, title pattern, favicon, social image and publisher details live |
 | Site protection | password a page, error pages, maintenance mode | no |
 | Multilingual | locale variants, hreflang, Weglot | partial (AGL-3748): a build's `settings` op sets a site's one language or a multilingual site's default among its languages; no locale variants, no adding a language |
@@ -214,7 +215,9 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    dated events through the events-calendar plugin's own writer, and the page
    section that lists them places the Event List block. See "Events calendar"
    below.
-6. **Redirects.** No capability. Starter includes 25.
+6. **Redirects.** No capability. Starter includes 25. **CLOSED (AGL-3745):** a
+   build's `redirect` op creates, updates and removes a site's redirect rules.
+   See "Redirects" below.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
    order emails.
@@ -531,3 +534,35 @@ catering inquiry into Inquiries.
   its row noting that submissions arrive in the Inbox only.
 - **Not yet.** A copied form (`duplicateOf`) keeps the copy's own binding,
   and no form adds a field to a dataset it writes to.
+
+## Redirects (AGL-3745)
+
+- **The redirects plugin owns it.** `libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts`
+  is the `redirect` writer on the resource-drafts seam and
+  `redirect-ai-capability.ts` the `redirect` build operation, both registered
+  from the plugin's console-server declarations. The AI plugin's build step
+  runs the item like any other plugin's draft item; there is no new job kind.
+- **One change per item.** `action` is `create`, `update` or `remove`; the rule
+  is named by its from-path (`source`) and, when two modes share it, its
+  `kind`. The arguments are the rule's own fields (`destination`, `newSource`,
+  `kind`, `statusCode`, `priority`, `enabled`) plus `replacesLivePage`. The
+  planner fills them, so an item costs 0 credits.
+- **The page's checks, through its own functions.** The writer reuses the
+  importer's `withDefaults`, `ruleProblem` and `storedFields` and the model's
+  `findDuplicateRedirect`, `walkRedirectChain` and `redirectSourceIsLivePage`:
+  the publishing role, the `redirects` feature, lockdown (a write verdict),
+  lookalike destinations, self-redirects, duplicates, and loops. A create is
+  counted and written in one transaction against `redirectsPerHost`; an update
+  or a remove takes no slot. An off-site destination carries the member's uid
+  (`externalDestinationApprovedBy`), and every touched path is announced to the
+  site cache.
+- **Stricter than the page in two places.** A from-path the site publishes a
+  page at is refused unless the item sets `replacesLivePage` (the page only
+  warns), and a destination that leads into a loop other rules make is refused
+  (the page only warns, the importer reports it).
+- **Live once written.** A redirect has no draft state, so the capability sets
+  the contract's new `live` flag and the job's output reads "Live now, in
+  Redirects." rather than "A draft". The plan card is the person's agreement.
+- **Remove is the page's Delete:** `deletedAt` and `enabled: false`.
+- **Not done:** hit counts, import and export, and a destination that is a page
+  the same build creates (an unpublished page has no live path).

@@ -341,7 +341,7 @@ describe('the settings step (AGL-3748)', () => {
     expect(outcome.outputs).toEqual([
       expect.objectContaining({ resource: 'settings', id: 'site', hostId: 'host-1', hostSubdomain: 'juniper', label: 'Site settings' }),
     ])
-    expect(outcome.outputs[0].note).toContain('Saved to the live site.')
+    expect(outcome.outputs[0].note).toContain('Live now, in the site’s Settings.')
     expect(lockdownOpen).toHaveBeenCalledWith(expect.objectContaining({ staff: false, uid: 'uid-1', intent: 'write' }))
   })
 
@@ -383,7 +383,7 @@ describe('the settings operation a build plans (AGL-3748)', () => {
   const capability = AI_OWNED_CAPABILITIES.find((one) => one.op === 'settings')
 
   it('is one item per plan, Free included, at no cost, and offers no field outside the console’s settings', () => {
-    expect(capability).toMatchObject({ runnerKind: 'settings', maxPerPlan: 1, freeAllowed: true, degrade: 'omit' })
+    expect(capability).toMatchObject({ runnerKind: 'settings', maxPerPlan: 1, freeAllowed: true, degrade: 'omit', live: true, where: 'the site’s Settings' })
     expect(capability?.feature).toBeUndefined()
     expect(capability?.estimateCredits({ name: 'X' })).toBe(0)
     const schema = capability?.argsSchema as NonNullable<typeof capability>['argsSchema']

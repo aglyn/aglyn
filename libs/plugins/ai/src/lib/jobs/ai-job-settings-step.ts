@@ -104,6 +104,9 @@ export const AI_SETTINGS_ROLE_COPY = 'Changing the site’s settings needs the a
 export const AI_SETTINGS_LOCKED_COPY = 'This site is not accepting changes right now.'
 export const AI_SETTINGS_NOTHING_COPY = 'The request named no site setting this could change.'
 
+/** Where a person finds what the op changed, as the build's notes name it. */
+export const AI_SETTINGS_WHERE = 'the site’s Settings'
+
 /** The output's fixed id: one site's settings, whatever changed. */
 export const AI_SETTINGS_OUTPUT_ID = 'site'
 
@@ -590,7 +593,8 @@ export async function aiSettingsAccessRefusal(
 
 /** The output's note: what changed, that it is live, and what was not done. */
 export function aiSettingsOutputNote(done: readonly string[], notDone: readonly string[], language: boolean): string {
-  const did = done.length ? `${done.join(' ')} Saved to the live site.` : 'Nothing needed changing.'
+  // The build's own wording for an item with no draft state (AGL-3745).
+  const did = done.length ? `${done.join(' ')} Live now, in ${AI_SETTINGS_WHERE}.` : 'Nothing needed changing.'
   const translate = language ? ' The pages keep the words they have: changing the language does not translate them.' : ''
   const not = notDone.length ? ` Not done: ${notDone.join(' ')}` : ''
   return `${did}${translate}${not}`.slice(0, 1_000)

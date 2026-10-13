@@ -35,7 +35,7 @@ import { AI_EDIT_TARGET_KINDS } from '../model/ai-edit-job'
 import { AI_CAMPAIGN_RESOURCE } from './ai-job-campaign-step'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
-import { AI_SETTINGS_ARGS_SCHEMA } from './ai-job-settings-step'
+import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -355,7 +355,7 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     // not arguments, so they cannot be asked for.
     op: 'settings',
     noun: 'settings change',
-    where: 'the site’s Settings, saved live',
+    where: AI_SETTINGS_WHERE,
     intents: [
       'changing the site’s settings — its name, search title and description, title pattern, favicon, logo or social image (from images already in the media library), language, time zone, business name, description (tagline), phone, contact email or address, or the cookie banner’s mode — saved to the live site when the plan is confirmed',
     ],
@@ -363,6 +363,8 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     maxPerPlan: 1,
     freeAllowed: true,
     runnerKind: 'settings',
+    // A setting has no draft state: saved, it is what the live site renders.
+    live: true,
     // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',

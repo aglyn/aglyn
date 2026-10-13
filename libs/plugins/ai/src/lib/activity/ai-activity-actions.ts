@@ -129,7 +129,6 @@ const AI_OUTPUT_NOUNS: Readonly<Record<string, string>> = {
   seo: 'search fixes',
   crm: 'CRM answer',
   insight: 'insight',
-  settings: 'site settings',
 }
 
 /**
