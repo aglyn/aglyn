@@ -99,6 +99,7 @@ import {
   AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
+  aiStockPhotoWordsOf,
   aiStockPlacedSrcs,
 } from './ai-layout-stock-photos'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
@@ -833,6 +834,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           uid: job.createdBy,
           seed,
           business: aiSiteWords(job.inputs).about,
+          ...aiStockPhotoWordsOf(job),
           sectionNames,
           jobId: aiOriginJobId(job),
           ...(avoid.length ? { avoid } : {}),

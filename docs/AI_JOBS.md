@@ -239,7 +239,7 @@ only the quote and the Free admission moved.
 has left is the less of its own band and its owner's allowance across every
 Free workspace they hold (`readFreeAiCreditsLeft`), net of give-backs. A Free
 site start (`createAiSiteJobAdmission`, on `aiFreeSiteCreditRange`: 137 / 213
-/ 282 for two pages) and a Free build's confirm and Try again
+/ 283 for two pages) and a Free build's confirm and Try again
 (`aiBuildFreeCreditsRefusal`, on `aiBuildCreditRange`) are admitted with no
 prompt when the p90 fits. When it does not, the door answers 409 with
 `code: 'credits-confirm'` and `credits` (the range, what is left, the reset
@@ -3085,7 +3085,8 @@ the element budget its request asks for.
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
-  35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
+  36 credits, its answer and its re-ask together (35 until its tool asked for the photo
+  words in English, AGL-3760). The site's look (AGL-3660) is one
   fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
   The build is priced as the layout language builds it (re-derived in AGL-3660; the
   per-section passes it replaced no longer run on a site): a guided start creates its
@@ -3101,7 +3102,7 @@ the element budget its request asks for.
   ceilings; every answer at its full ceiling would come to more than the 300 for the
   layout, the form and two pages alone, which no section count changes. A Free site
   plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
-  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 282 credits
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 283 credits
   of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
   figures it derives, and the Free wall holds a Free site's plan to that section count
   and to its page cap. That leaves 18 credits, and one post at its worst on the fast

@@ -40,7 +40,7 @@ import {
   type AiLayoutPictureSlot,
 } from '../layout-language/ai-layout-pictures'
 import { aiOriginJobId } from './ai-job-draft-ids'
-import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
+import { aiLayoutStockPhotoSource, aiStockPhotoWordsOf } from './ai-layout-stock-photos'
 import {
   aiLayoutListingId,
   aiLayoutListingPlacements,
@@ -216,7 +216,7 @@ const AI_SITE_POST_COVER_ASPECT = 3 / 2
  * Never throws: a post whose search fails takes its starter.
  */
 export async function aiSitePostCover(input: {
-  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief' | 'plan'>
   title: string
   index: number
   total: number
@@ -231,6 +231,7 @@ export async function aiSitePostCover(input: {
         uid: job.createdBy,
         seed: `${job.$id}:posts:${index}`,
         business: aiSiteWords(job.inputs).about || job.brief,
+        ...aiStockPhotoWordsOf(job),
         sectionNames: ['Blog'],
         jobId: aiOriginJobId(job),
         ...(input.signal ? { signal: input.signal } : {}),
@@ -370,7 +371,7 @@ export interface AiSiteProductsRunnerDeps {
  * throws: a product with no photo is still written.
  */
 export async function aiSiteProductPhotos(input: {
-  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief' | 'plan'>
   names: readonly string[]
   /** What each product's photo should show, as its catalog proposed it, by position (AGL-3676). */
   shows?: readonly string[]
@@ -399,6 +400,7 @@ export async function aiSiteProductPhotos(input: {
       uid: input.job.createdBy,
       seed,
       business: aiSiteWords(input.job.inputs).about || input.job.brief,
+      ...aiStockPhotoWordsOf(input.job),
       sectionNames: ['Products'],
       jobId: aiOriginJobId(input.job),
       // Each product may try its name, its photo's subject, its category, a
