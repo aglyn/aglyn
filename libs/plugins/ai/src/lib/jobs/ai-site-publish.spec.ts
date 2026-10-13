@@ -34,9 +34,11 @@ import type { AiJobOutput } from '../model/ai-jobs.types'
 import {
   AI_SITE_PUBLISH_DELETED,
   aiJobPublishesSite,
+  aiLayoutWithBlogEntry,
   aiLayoutWithNavigation,
   aiMergeSitePublish,
   aiPublishGuidedSite,
+  aiRestoreGuidedBlogEntry,
   aiSiteUnwrittenBlogHrefs,
   aiSitePublishTakenCopy,
 } from './ai-site-publish'
@@ -410,5 +412,91 @@ describe('aiLayoutWithNavigation', () => {
     expect(aiSiteUnwrittenBlogHrefs(false)).toEqual([])
     expect(aiLayoutWithNavigation(nodes as never, { entries: [], droppedHrefs: aiSiteUnwrittenBlogHrefs(false) })).toBeNull()
     expect(aiLayoutWithNavigation(STARTER_LAYOUT as never, { entries: [], droppedHrefs: aiSiteUnwrittenBlogHrefs(true) })).toBeNull()
+  })
+})
+
+/*
+ * AGL-3747: a start whose posts part failed published with every link to the
+ * blog taken out (AGL-3660); once Try again's posts are live, the header
+ * links the blog again, through the navigation op's code.
+ */
+describe('the blog’s header entry, put back once Try again’s posts are live (AGL-3747)', () => {
+  const BLOG = { label: 'Blog', href: '/blog' }
+  const link = (parentId: string, props: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+    componentId: 'muiScreenLink',
+    pluginId: 'mui',
+    parentId,
+    props: { renderAs: 'link', color: 'inherit', ...props },
+    nodes: [],
+    ...extra,
+  })
+  const close = [{ trigger: 'click', action: 'closeDrawer' }]
+  const frame = () => ({
+    root: { componentId: 'div', nodes: ['bar', 'footer'] },
+    bar: { componentId: 'muiAppBar', parentId: 'root', nodes: ['toolbar'] },
+    toolbar: { componentId: 'muiToolbar', parentId: 'bar', nodes: ['ll-brand', 'nav', 'drawer'] },
+    'll-brand': link('toolbar', { children: 'Clay Notes', screenId: 'drft-home' }),
+    nav: { componentId: 'muiStack', parentId: 'toolbar', props: { component: 'nav' }, nodes: ['n-home', 'n-about', 'n-contact'] },
+    'n-home': link('nav', { children: 'Home', screenId: 'drft-home' }),
+    'n-about': link('nav', { children: 'About', screenId: 'drft-about' }),
+    'n-contact': link('nav', { children: 'Contact', screenId: 'drft-contact' }),
+    drawer: { componentId: 'muiDrawer', parentId: 'toolbar', nodes: ['menu'] },
+    menu: { componentId: 'muiStack', parentId: 'drawer', props: { component: 'nav' }, nodes: ['m-home', 'm-about'] },
+    'm-home': link('menu', { children: 'Home', screenId: 'drft-home' }, { interactions: close }),
+    'm-about': link('menu', { children: 'About', screenId: 'drft-about' }, { interactions: close }),
+    footer: { componentId: 'section', parentId: 'root', props: { element: 'footer' }, nodes: [] },
+  })
+  type Out = Record<string, { props?: Record<string, unknown>; nodes?: string[]; interactions?: unknown }>
+  const labels = (nodes: Out, id: string) => (nodes[id].nodes ?? []).map((child) => nodes[child].props?.['children'])
+
+  it('adds it second, after the home page’s item, to the bar’s menu and the phone menu', () => {
+    const next = aiLayoutWithBlogEntry(frame() as never, { blog: BLOG, homeId: 'drft-home' }) as unknown as Out
+    expect(labels(next, 'nav')).toEqual(['Home', 'Blog', 'About', 'Contact'])
+    expect(labels(next, 'menu')).toEqual(['Home', 'Blog', 'About'])
+    const blog = next[(next['menu'].nodes ?? [])[1]]
+    expect(blog.props).toMatchObject({ children: 'Blog', href: '/blog' })
+    expect(blog.props).not.toHaveProperty('screenId')
+    expect(blog.interactions).toEqual(close)
+  })
+
+  it('goes last where no item opens the home page', () => {
+    const next = aiLayoutWithBlogEntry(frame() as never, { blog: BLOG, homeId: 'drft-elsewhere' }) as unknown as Out
+    // Home's item links the page by id, and `/` by address is not among them either.
+    expect(labels(next, 'nav')).toEqual(['Home', 'About', 'Contact', 'Blog'])
+  })
+
+  it('changes nothing where a link already opens the blog, at any of its addresses', () => {
+    const linked = { ...frame(), 'n-blog': link('nav', { children: 'Journal', href: '/journal' }) }
+    linked.nav = { ...linked.nav, nodes: [...linked.nav.nodes, 'n-blog'] }
+    expect(aiLayoutWithBlogEntry(linked as never, { blog: { label: 'Blog', href: '/journal' }, homeId: 'drft-home' })).toBeNull()
+    const footer = { ...frame(), 'f-blog': link('footer', { children: 'Blog', href: '/blog' }) }
+    expect(aiLayoutWithBlogEntry(footer as never, { blog: BLOG, homeId: 'drft-home' })).toBeNull()
+  })
+
+  it('writes it as a new live version of the pages’ layout, announces the change, and does it once', async () => {
+    seedSite()
+    const restore = () =>
+      aiRestoreGuidedBlogEntry(firestore, { job: JOB, pageIds: ['drft-home', 'drft-book'], homeId: 'drft-home', blog: BLOG, now: NOW }, { dropCache })
+    expect(await restore()).toBe(true)
+    const layout = docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>
+    expect(layout['versionId']).not.toBe('v-lay')
+    const version = docs.get(`hosts/host-1/layouts/lay-site/versions/${layout['versionId']}`) as Record<string, unknown>
+    expect(version).toMatchObject({ layoutId: 'lay-site', hostId: 'host-1', aiJobId: 'job-1', displayName: 'Navigation for the blog' })
+    const nodes = decodeStoredNodes<Out>(version['nodes'] as never) ?? {}
+    // The starter's header: after the brand, before the search.
+    const toolbar = nodes['dl_toolbar'].nodes ?? []
+    expect(toolbar.map((id) => nodes[id].props?.['children'] ?? id)).toEqual(['Hillside', 'Blog', 'dl_search'])
+    expect(dropCache).toHaveBeenCalledWith(expect.objectContaining({ hostIds: ['host-1'] }))
+    expect([...docs.keys()].filter((key) => key.startsWith('publishOutbox/'))).toEqual([])
+    // A later retry finds the blog linked, and writes nothing.
+    expect(await restore()).toBe(false)
+    expect((docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>)['versionId']).toBe(layout['versionId'])
+  })
+
+  it('writes nothing where the pages share no one layout', async () => {
+    seedSite()
+    docs.set('hosts/host-1/screens/drft-book/versions/v-book', { layoutId: 'lay-other', aiJobId: 'job-1' })
+    expect(await aiRestoreGuidedBlogEntry(firestore, { job: JOB, pageIds: ['drft-home', 'drft-book'], blog: BLOG, now: NOW }, { dropCache })).toBe(false)
+    expect((docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>)['versionId']).toBe('v-lay')
   })
 })

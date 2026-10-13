@@ -77,9 +77,21 @@ export interface AiMenuEntryRef {
   label: string
 }
 
+/** An entry to add, and where it goes. */
+export type AiMenuAddition = AiMenuEntryRef & {
+  to: AiMenuTarget
+  /**
+   * A top-level entry goes right after the first item linking one of these
+   * (a page by id, an address), where the menu has one, instead of last. Set
+   * by code, never read off a planner's words: the blog's entry, put back
+   * second after Home (AGL-3747).
+   */
+  after?: readonly AiMenuTarget[]
+}
+
 /** What a navigation change does to a menu. */
 export interface AiMenuChanges {
-  add: Array<AiMenuEntryRef & { to: AiMenuTarget }>
+  add: AiMenuAddition[]
   remove: AiMenuEntryRef[]
   rename: Array<AiMenuEntryRef & { name: string }>
   relink: Array<AiMenuEntryRef & { to: AiMenuTarget }>
@@ -249,6 +261,9 @@ export function aiLayoutWithMenuChanges(
     }
     return id
   }
+  /** Whether a link opens a destination: the same page, or the same address. */
+  const opens = (node: Node | undefined, to: AiMenuTarget) =>
+    'screenId' in to ? node?.props?.['screenId'] === to.screenId : node?.props?.['href'] === to.href
   /** Every link in a dropdown, at any depth (a Mega Menu's columns). */
   const linksIn = (dropdown: string) => [...under([map[dropdown]])].filter((id) => id !== dropdown && isLink(id))
   /** An entry in one list: a top-level item, or a link in a dropdown (or, in a flat list, the item itself). */
@@ -313,9 +328,11 @@ export function aiLayoutWithMenuChanges(
         const lastOf = (test: (id: string) => boolean) => children.reduce((at, id, index) => (test(id) ? index : at), -1)
         const lastItem = lastOf(isItem) !== -1 ? lastOf(isItem) : lastOf((id) => map[id]?.componentId === LINK)
         if (!entry.parent || isFlat) {
-          // After its parent in a flat list, else after the list's last item.
+          // After its parent in a flat list, else after the item it is to
+          // follow, else after the list's last item.
           const parentAt = entry.parent ? children.findIndex((id) => isItem(id) && same(labelOf(id), entry.parent as string)) : -1
-          let at = parentAt !== -1 ? parentAt : lastItem
+          const afterAt = !entry.parent && entry.after?.length ? children.findIndex((id) => isLink(id) && (entry.after ?? []).some((to) => opens(map[id], to))) : -1
+          let at = parentAt !== -1 ? parentAt : afterAt !== -1 ? afterAt : lastItem
           if (parentAt !== -1) {
             // After the entries already following the parent from an earlier add.
             while (at + 1 < children.length && isLink(children[at + 1]) && String(children[at + 1]).startsWith('ai_nav_')) at += 1

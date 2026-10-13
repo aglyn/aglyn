@@ -346,7 +346,10 @@ is a decision about the account, not something to build.
   after their items (after the brand in a starter's Toolbar), like their
   neighbours, and never a second item of a name already there. Its link
   repair is unchanged: links to a retired starter home move to the new home,
-  and links to pages it did not write come out.
+  and links to pages it did not write come out. A blog whose posts part
+  failed is published with its links out; once Try again puts its posts live
+  (AGL-3739), the same code puts its header entry back, after the home
+  page's item (`aiRestoreGuidedBlogEntry`), as a new live layout version.
 - **Not yet.** Mega menu panels' columns and new drawers are not made, and a
   menu change never publishes on its own, even in a build that publishes its
   pages.
