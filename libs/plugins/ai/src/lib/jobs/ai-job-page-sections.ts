@@ -26,7 +26,7 @@ import {
 } from '../model/ai-build-plan'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, aiHomeScreenNames, type AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiTool } from '../providers/contract'
 import {
   AI_REASK_OFFENDING_MAX_CHARS,
@@ -120,7 +120,7 @@ export const AI_JOB_PAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build a web page one section at a time, in the order a confirmed plan gives. Each answer is ONE section: call submit_section with a flat node map whose root is the document wrapper (componentId "div") holding exactly one Section (section).',
       'The first section is the top of the page and holds the page’s one h1, its title. Every later section opens with an h2, and headings below it step down one level at a time.',
       'Place what the section’s plan line names. A component the site has is placed as an instance, never drawn again: componentId "reusableInstance", props {"refId": "<component id>", "propValues": {…}} filling the props the inventory lists. A form the site has is a Form (form) whose formId is that form’s id. Another page of the site is linked by its page id, with a Page Link (muiScreenLink) or a Button (muiButton) whose screenId is that id.',
-      'Where the request says the site keeps no reusable components, draw a repeated item in the section instead, written once. A form is only ever a saved one placed by its formId: where the plan line names no form, the section draws no form and no form fields.',
+      'Where the request says the site keeps no reusable components, draw a repeated item in the section instead, written once. A form is only ever a saved one placed by its formId: where the plan line names no form, the section draws no form and no field of one.',
       'Lay the section out with a Container, a Stack or a Grid ("container": true, "spacing": 3) of Grid items sized like "xs:12 md:4", and size nothing with a fixed width. Colors come from the theme’s palette tokens such as primary.main, spacing from the spacing scale, and type from the text variants.',
       'The page renders inside the site’s layout, so a section is never a header, navigation or footer.',
       'A picture is an Image (image) with alt text that says what it should show and no src, for the site owner to fill from the media library.',
@@ -508,6 +508,7 @@ export function aiPageCheckContext(
     ...tree,
     ...(tree.screenIds || options.linkablePages?.length ? { screenIds } : {}),
     homeScreenIds: aiHomeScreenIds(inventory),
+    homeLabels: aiHomeScreenNames(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
     ...(options.sections?.length ? { pageSections: options.sections } : {}),
     ...(options.embeds?.length ? { plannedEmbeds: options.embeds } : {}),

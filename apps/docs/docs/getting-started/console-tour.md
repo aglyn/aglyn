@@ -51,6 +51,31 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   only when your workspace has a higher plan to move to, and only to members who can open
   Billing — **Sign out**, and a footer naming your current workspace and plan.
 
+## Choose a workspace {#choose-a-workspace}
+
+If you belong to more than one organization, signing in opens **Workspaces**: one card
+per workspace, with its name, its workspace address underneath, and **Open**, which
+takes you to its sites. With just one workspace you skip this page and go straight in.
+
+- **Order** — the cards are in name order, A to Z, with any workspaces you pinned first.
+- **Pin** — the pin in a card's top corner keeps that workspace at the front of the
+  list. Click it again to unpin. Pins are saved to your account, so they follow you to
+  every device and browser, and nobody else sees them. If you leave a workspace, its
+  pin simply stops counting.
+- **Search** — finds a workspace by the start of any word in its name or its address:
+  `rea` and `roll` both find *Ready To Roll*.
+- **Filters** — narrows the cards by **Plan** (Free, Starter, Pro and so on), by **Your
+  role** in that workspace (Owner, Admin, Editor or Viewer), or by **Pinned**. Each
+  filter in force shows as a chip above the cards; remove a chip to drop it.
+
+The search and the filters cover every workspace you belong to, not only the cards on
+the current page. The pager at the foot of the list turns through the matches, five at
+a time.
+
+The **workspace switcher** in the app bar lists your workspaces in the same order,
+pinned first, and marks each pinned one with a pin. Type in its search box to find one
+by name or address.
+
 ## In-context help
 
 Look for the small **?** icons throughout the console — next to page titles,

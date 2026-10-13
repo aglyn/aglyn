@@ -36,6 +36,8 @@ import { AI_CAMPAIGN_RESOURCE } from './ai-job-campaign-step'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
 import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
+import { AI_MEDIA_ARGS_SCHEMA, AI_MEDIA_LIMITS, AI_MEDIA_WHERE } from './ai-job-media-step'
+import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingMissingInput } from './ai-job-tracking-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -51,8 +53,10 @@ import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-st
  * runner calls when its job is a build's unit. A change to a page or layout
  * the site already has is the `edit` runner's, and a change to its header or
  * footer menu the `navigation` runner's (AGL-3728), a copy of something
- * it has the `duplicate` runner's (AGL-3740), and a change to its settings
- * the `settings` runner's (AGL-3748).
+ * it has the `duplicate` runner's (AGL-3740), a change to its settings
+ * the `settings` runner's (AGL-3748), organizing its media library the
+ * `media` runner's (AGL-3752), and a change to its analytics and
+ * advertising tags the `tracking` runner's (AGL-3751).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -365,6 +369,56 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     runnerKind: 'settings',
     // A setting has no draft state: saved, it is what the live site renders.
     live: true,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // Organizing files already in the site's own media library (AGL-3752):
+    // the folder each is filed in, its tags, its alt text and its name, as
+    // the library's Details drawer and bulk actions write them, saved live
+    // when the plan is confirmed. Never an upload, a copy, a replacement or a
+    // deletion, and never the organization's shared library. No model, so no
+    // credits; every plan has a media library, so the Free taste may too.
+    op: 'media',
+    noun: 'media library change',
+    where: AI_MEDIA_WHERE,
+    intents: [
+      `organizing files already in the site’s media library — filing them in a folder (made if missing), adding or removing tags, renaming one, or writing alt text for an image the request describes or from the caption the library already holds — up to ${AI_MEDIA_LIMITS.files} files a change, saved live when the plan is confirmed; never uploading, copying or deleting a file`,
+    ],
+    argsSchema: AI_MEDIA_ARGS_SCHEMA,
+    maxPerPlan: 4,
+    freeAllowed: true,
+    runnerKind: 'media',
+    // A library file's details have no draft state: saved, they are what the library shows.
+    live: true,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // The site's analytics and advertising tags (AGL-3751): the ids the
+    // console's Setup → Tracking card sets — Google Analytics, Tag Manager,
+    // and the Meta, Google Ads, LinkedIn, TikTok and Pinterest tags — each
+    // held to the card's own pattern, set or removed, saved live on confirm.
+    // Only public ids the person states: never a credential (Ad conversions'
+    // tokens, Zapier, webhook secrets), and never the consent banner, which
+    // still decides where every tag loads. No model, so no credits; the card
+    // is on every plan, so the Free taste may ask too.
+    op: 'tracking',
+    noun: 'tracking change',
+    where: AI_TRACKING_WHERE,
+    intents: [
+      'connecting or removing the site’s Google Analytics, Google Tag Manager, Meta pixel, Google Ads, LinkedIn Insight, TikTok pixel or Pinterest tag by the ID the person gives (never one it makes up; ask for the ID when the request has none) — saved to the live site when the plan is confirmed, loading only where a visitor’s cookie consent allows',
+    ],
+    argsSchema: AI_TRACKING_ARGS_SCHEMA,
+    maxPerPlan: 1,
+    freeAllowed: true,
+    runnerKind: 'tracking',
+    // A tag has no draft state: saved, it is on every live page.
+    live: true,
+    // An item with no usable id asks for it instead of being built (AGL-3751).
+    missingInput: aiTrackingMissingInput,
     // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',

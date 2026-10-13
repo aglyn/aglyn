@@ -150,8 +150,10 @@ yourself).
   (Navigation group) inserts exactly this pattern with both
   interactions pre-wired — see
   [menus & navigation](../menus-and-navigation/overview.md#the-dropdown-panel-preset).
-- **Scroll reveal**: on a section, *When scrolled into view → Append class
-  `visible`* with a CSS transition, frequency *once per visitor*.
+- **Scroll reveal**: no interaction needed. Select the section, open
+  **Attributes → Animation**, pick a preset such as **Slide up**, and leave
+  **Plays** on **On scroll into view** — see
+  [element animations](animations.md).
 - **Announcement click-through**: *When clicked → Track analytics event*
   plus *Go to a URL*.
 - **"Watch the demo" button**: *When clicked → Scroll to element* and

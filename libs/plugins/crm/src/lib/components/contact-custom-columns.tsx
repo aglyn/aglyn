@@ -19,7 +19,10 @@
 import {
   type ContactCustomValue,
   type ContactFieldDefinition,
+  customFieldCurrency,
   crmContactCustomColumn,
+  formatCurrencyFieldValue,
+  parseCurrencyInput,
 } from '@aglyn/aglyn'
 import { Link, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -37,12 +40,13 @@ export const customFieldColumnId = crmContactCustomColumn
  *
  * A checkbox reads as Yes or an em dash rather than `true`/`false`; a date
  * as the local day rather than the ISO stamp it is stored as; a link as an
- * anchor. Everything else is the value itself, and nothing is `null` on
+ * anchor; an amount as money in the field's currency (AGL-3756). Everything
+ * else is the value itself, and nothing is `null` on
  * screen — a cleared value and an absent one look the same, because to the
  * reader of a list they are.
  */
 export function formatContactCustomValue(
-  definition: Pick<ContactFieldDefinition, 'type'>,
+  definition: Pick<ContactFieldDefinition, 'type' | 'currency'>,
   value: ContactCustomValue | undefined,
 ): string {
   if (value === undefined || value === null || value === '') return ''
@@ -55,9 +59,31 @@ export function formatContactCustomValue(
     }
     case 'number':
       return typeof value === 'number' ? value.toLocaleString() : String(value)
+    case 'currency':
+      return typeof value === 'number'
+        ? formatCurrencyFieldValue(value, customFieldCurrency(definition))
+        : String(value)
     default:
       return String(value)
   }
+}
+
+/**
+ * How each active currency field's filter reads a typed amount, by column
+ * (AGL-3756) — `ContactQueryReader.amounts`: major units in, the minor
+ * units its facet key holds out.
+ */
+export function contactCustomAmountReaders(
+  definitions: readonly Pick<ContactFieldDefinition, 'key' | 'type' | 'currency' | 'retiredAt'>[],
+): Record<string, (typed: string) => number | null> {
+  return Object.fromEntries(
+    definitions
+      .filter((definition) => definition.type === 'currency' && !definition.retiredAt)
+      .map((definition) => {
+        const code = customFieldCurrency(definition)
+        return [customFieldColumnId(definition.key), (typed: string) => parseCurrencyInput(typed, code)]
+      }),
+  )
 }
 
 /**
@@ -69,10 +95,12 @@ export function formatContactCustomValue(
  * The value is read off `row.custom`: on a contact the list projects it
  * from THIS holder's facet — the same projection that puts `tags` and
  * `notes` on the row — so a column can never show another holder's value;
- * on a company or a deal it is the document's own map. Sorting and
- * filtering are off: the value lives under a map no index covers, and a
- * column that sorted the loaded window would look like it sorted the
- * collection.
+ * on a company or a deal it is the document's own map. The grid's own
+ * sorting and filtering are off: the value lives under a map no index
+ * covers, so a list's column sort sorts the PAGE through `valueGetter` and
+ * says so (AGL-3680), and its filters ask the query (`contact-filters.ts`).
+ * A currency column's `valueGetter` is the stored amount, so the page sorts
+ * by money rather than by the formatted text.
  *
  * Retired definitions get no column. Their values are still on the rows,
  * and an export can still read them; a column for a field the merchant
@@ -90,8 +118,11 @@ export function customFieldColumns(
       minWidth: 140,
       sortable: false,
       filterable: false,
-      valueGetter: (_value: unknown, row: { custom?: Record<string, ContactCustomValue> }) =>
-        formatContactCustomValue(definition, row.custom?.[definition.key]),
+      valueGetter: (_value: unknown, row: { custom?: Record<string, ContactCustomValue> }) => {
+        const raw = row.custom?.[definition.key]
+        if (definition.type === 'currency') return typeof raw === 'number' ? raw : null
+        return formatContactCustomValue(definition, raw)
+      },
       renderCell: ({ row }: { row: { custom?: Record<string, ContactCustomValue> } }) => {
         const raw = row.custom?.[definition.key]
         const text = formatContactCustomValue(definition, raw)

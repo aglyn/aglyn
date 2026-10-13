@@ -97,6 +97,7 @@ export const CORE_ELEMENTS = {
 export const list = () => import('./components/list')
 export const listItem = () => import('./components/list-item')
 export const listItemText = () => import('./components/list-item-text')
+export const formControls = () => import('./components/form-controls')
 export const blocks = () => import('./components/blocks')
 export const dataTable = () => import('./components/data-table')
 // The collection family is one module per element (AGL-3401): a page placing

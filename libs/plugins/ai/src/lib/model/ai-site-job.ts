@@ -148,7 +148,7 @@ export interface AiFreeSiteWorstCase {
  * moves and this does not.
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
-  plan: 35,
+  plan: 36,
   look: 7,
   layout: 23,
   form: 29,
@@ -220,7 +220,7 @@ export function aiFreeSiteSectionsWithin(
  * (`aiFreeSiteSectionsWithin` at the month's whole taste, which is what the
  * plan step allows) and the room for one retried page.
  *
- * The CEILING a start is quoted with ("up to 282"), no longer the figure it
+ * The CEILING a start is quoted with ("up to 283"), no longer the figure it
  * is admitted on (AGL-3722): that is the measured p90
  * (`aiFreeSiteCreditRange`), and a start past what is left is asked to be
  * confirmed and pauses with Resume when its credits run out, instead of
@@ -282,7 +282,7 @@ export function aiFreeCreditsResetLabel(resetsOn: string): string {
  * nominal section count, at what each MEASURED in production
  * (`AI_MEASURED_UNIT_CREDITS`); the ceiling is the whole worst case the wall
  * is proven with (`aiFreeSiteCreditEstimate`). Two pages: about 137
- * (p90 213, up to 282).
+ * (p90 213, up to 283).
  */
 export function aiFreeSiteCreditRange(pages: number): AiCreditRange {
   const count = Math.max(1, Math.floor(pages))

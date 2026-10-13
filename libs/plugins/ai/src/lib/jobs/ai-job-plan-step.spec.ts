@@ -57,6 +57,7 @@ jest.mock('./ai-jobs', () => ({
 }))
 
 import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
+import { AI_JAZZ_EVENTS_BRIEF, AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER } from './fixtures/ai-jazz-events-build-plan-recording'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -317,6 +318,38 @@ describe('the plan step', () => {
     const tool = mockRunAiRequest.mock.calls[1][0].tools?.[0]
     expect(tool?.inputSchema['required']).toContain('language')
     expect(tool?.inputSchema['properties']).toHaveProperty('language')
+    // And what its photos show, in English, which a library is searched by (AGL-3760).
+    expect(tool?.inputSchema['required']).toContain('photoWords')
+  })
+
+  it('offers an event-led start the event items it may plan, and every other start none (AGL-3755)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
+    const event = {
+      op: 'event',
+      noun: 'event',
+      where: 'Events',
+      intents: ['dated events'],
+      argsSchema: { type: 'object' as const, properties: { title: { type: 'string' as const, description: 'Its name.' } }, required: ['title'], additionalProperties: false as const },
+      maxPerPlan: 6,
+      freeAllowed: true,
+      draftResource: 'event',
+      estimateCredits: () => 0,
+      degrade: 'omit' as const,
+    }
+    const readSiteEvents = jest.fn(async () => ({ ops: new Map([['event', event]]), timeZone: 'America/Chicago' }))
+    const club = job({ kind: 'site', brief: 'A website for a jazz club.' })
+    await planStep({ readSiteEvents })({ job: club, stepIndex: 0, now: NOW, firestore })
+    expect(readSiteEvents).toHaveBeenCalledWith(expect.objectContaining({ job: club, now: NOW }))
+    const [request] = mockRunAiRequest.mock.calls[0]
+    expect(request.tools[0].inputSchema.required).toContain('items')
+    expect(request.messages[0].content).toContain('plan its first 3 upcoming events in items, each with op event')
+    expect(request.messages[0].content).toContain("The business's time zone is America/Chicago")
+    // A start the gate gives no events is told nothing of them, and offered no items.
+    await planStep({ readSiteEvents: async () => null })({ job: club, stepIndex: 0, now: NOW, firestore })
+    const [plain] = mockRunAiRequest.mock.calls[mockRunAiRequest.mock.calls.length - 1]
+    expect(plain.tools[0].inputSchema.required).not.toContain('items')
+    expect(plain.messages[0].content).not.toContain('op event')
   })
 
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {
@@ -965,6 +998,76 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
       expect.objectContaining({ slot: 'i0', args: { durationMinutes: 30 }, id: expect.stringMatching(RESOURCE_ID), credits: 0 }),
     ])
     expect(outcome.plan?.screens[0]?.id).toMatch(RESOURCE_ID)
+  })
+
+  describe('a build whose events no page lists (AGL-3755)', () => {
+    const EVENT = {
+      op: 'event',
+      noun: 'event',
+      where: 'Events',
+      intents: ['dated events'],
+      argsSchema: {
+        type: 'object' as const,
+        properties: {
+          title: { type: 'string' as const, description: 'Its name.' },
+          startsAt: { type: 'string' as const, description: 'When.' },
+          timezone: { type: 'string' as const, description: 'Zone.' },
+          description: { type: 'string' as const, description: 'What.' },
+        },
+        required: ['title', 'startsAt', 'timezone', 'description'],
+        additionalProperties: false as const,
+      },
+      maxPerPlan: 6,
+      freeAllowed: true,
+      draftResource: 'event',
+      live: true,
+      estimateCredits: () => 0,
+      degrade: 'omit' as const,
+      pageBlocks: ['eventList'],
+    }
+    const EVENT_OPS = new Map([[EVENT.op, EVENT]])
+    const answer = { ...PLAN, ...AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER }
+    const names = AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER.items.map((item) => `new:${item.name}`)
+
+    it('settles the recorded jazz-nights answer with an Events page that lists them, without a re-ask', async () => {
+      mockRunAiRequest.mockResolvedValue(planAnswer(answer as never))
+      const outcome = await planStep({ readOps: async () => EVENT_OPS })({
+        job: job({ kind: 'build', brief: AI_JAZZ_EVENTS_BRIEF }),
+        stepIndex: 0,
+        now: NOW,
+        firestore,
+      })
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect(outcome.plan?.items?.map((item) => item.args['startsAt'])).toEqual(['2026-10-16T20:00', '2026-10-23T20:00', '2026-10-30T20:00'])
+      expect(outcome.plan?.screens).toEqual([
+        expect.objectContaining({
+          title: 'Events',
+          slug: '/events',
+          nav: true,
+          // In the site's layout, as its Home page is.
+          layout: 'lay-site',
+          id: expect.stringMatching(RESOURCE_ID),
+          sections: [{ name: 'Upcoming events', uses: names, items: 0 }],
+        }),
+      ])
+    })
+
+    it('re-asks once, naming the events, where the site already has an events page', async () => {
+      mockReadInventory.mockResolvedValue({
+        ...INVENTORY,
+        screens: [...INVENTORY.screens, { id: 'scr-events', name: 'Events', slug: '/events', layoutId: 'lay-site', template: false }],
+      })
+      mockRunAiRequest.mockResolvedValue(planAnswer(answer as never))
+      await planStep({ readOps: async () => EVENT_OPS })({
+        job: job({ kind: 'build', brief: AI_JAZZ_EVENTS_BRIEF }),
+        stepIndex: 0,
+        now: NOW,
+        firestore,
+      })
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      const [, second] = mockRunAiRequest.mock.calls.map(([request]) => request)
+      expect(JSON.stringify(second.messages)).toContain('are listed on no page, so no visitor would see them')
+    })
   })
 
   it('tells a build, and only a build, the date its dated items fall after (AGL-3743)', () => {

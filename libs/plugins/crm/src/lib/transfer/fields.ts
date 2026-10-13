@@ -378,6 +378,9 @@ const CUSTOM_TYPES: Readonly<Record<string, TransferFieldType>> = {
   select: 'picklist',
   checkbox: 'boolean',
   url: 'url',
+  // An amount in the field's own currency, read as a number of major units
+  // (`customWriteValues` turns it into the minor units it stores, AGL-3756).
+  currency: 'number',
 }
 
 /**
@@ -718,6 +721,7 @@ export const FIELD_DEFINITION_TRANSFER_FIELDS: readonly TransferField[] = [
   { id: 'object', label: 'Record', type: 'text', readOnly: true },
   { id: 'type', label: 'Type', type: 'text', readOnly: true },
   { id: 'options', label: 'Choices', type: 'tags', readOnly: true },
+  { id: 'currency', label: 'Currency', type: 'text', readOnly: true },
   { id: 'required', label: 'Required', type: 'boolean', readOnly: true },
   { id: 'position', label: 'Position', type: 'integer', readOnly: true },
   { id: 'retired', label: 'Retired', type: 'boolean', readOnly: true },

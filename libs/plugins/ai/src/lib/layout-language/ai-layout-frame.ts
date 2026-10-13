@@ -36,6 +36,7 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from './ai-layout-language'
+import { AI_LAYOUT_LABELS_EN, aiLayoutLabel } from './ai-layout-labels'
 import {
   aiLayoutRenamedLabel,
   aiLayoutResolveLink,
@@ -93,16 +94,18 @@ export interface AiLayoutFramePlan {
    * linked by their addresses, as the blog is.
    */
   storeLinks?: AiStoreFrameLinks | null
+  /** The site's language (AGL-3760): the frame's own words are in it where `ai-layout-labels.ts` lists it. */
+  language?: string
 }
 
-/** What the header's link to a store's account page says (AGL-3676). */
-export const AI_LAYOUT_ACCOUNT_LINK = 'Account'
+/** What the header's link to a store's account page says (AGL-3676), in English. */
+export const AI_LAYOUT_ACCOUNT_LINK = AI_LAYOUT_LABELS_EN.account
 
 /** What a store's announcement bar says where its design gave it no line (AGL-3676): true of every store. */
-export const AI_LAYOUT_STORE_ANNOUNCEMENT = 'Shop the full collection'
+export const AI_LAYOUT_STORE_ANNOUNCEMENT = AI_LAYOUT_LABELS_EN.storeAnnouncement
 
 /** The way into the shop beside the design's own announcement (AGL-3676). */
-export const AI_LAYOUT_STORE_ANNOUNCEMENT_LINK = 'Shop now'
+export const AI_LAYOUT_STORE_ANNOUNCEMENT_LINK = AI_LAYOUT_LABELS_EN.shopNow
 
 export interface AiLayoutCompiledFrame {
   tree: AiLayoutRawTree
@@ -191,7 +194,7 @@ export function aiCompileLayoutFrame(
     plan: { title: plan.siteName, sections: [] },
     targets: { ...targets, pages: [...targets.pages, ...storePages], pageId: null },
     // A footer is drawn compact: its lines are lines, never blocks rule 1 would ask to share.
-    options: { reusableComponents: true },
+    options: { reusableComponents: true, ...(plan.language ? { language: plan.language } : {}) },
     settled: [],
     scrollTo: {},
     // A frame's lines are its own, never a page section's items.
@@ -351,7 +354,7 @@ export function aiCompileLayoutFrame(
   const accountLink = (role: string, interactions?: unknown[], sx?: Record<string, unknown>) => {
     const id = tree.add(
       'muiScreenLink',
-      { children: AI_LAYOUT_ACCOUNT_LINK, href: accountPath, renderAs: 'link', color: 'inherit' },
+      { children: aiLayoutLabel('account', plan.language), href: accountPath, renderAs: 'link', color: 'inherit' },
       { textDecoration: 'none', whiteSpace: 'nowrap', ...sx },
       null,
       role,
@@ -461,7 +464,7 @@ export function aiCompileLayoutFrame(
           const link = tree.add(
             'muiScreenLink',
             {
-              children: said ? AI_LAYOUT_STORE_ANNOUNCEMENT_LINK : AI_LAYOUT_STORE_ANNOUNCEMENT,
+              children: aiLayoutLabel(said ? 'shopNow' : 'storeAnnouncement', plan.language),
               screenId: plan.shopId,
               renderAs: 'link',
               color: 'inherit',
@@ -510,7 +513,7 @@ export function aiCompileLayoutFrame(
 }
 
 /** What a store's own column of account and policy links is headed where the footer design gave no store heading (AGL-3735). */
-export const AI_LAYOUT_STORE_FOOTER_HEADING = 'Customer care'
+export const AI_LAYOUT_STORE_FOOTER_HEADING = AI_LAYOUT_LABELS_EN.customerCare
 
 /** A footer heading a store's account and policies belong under (AGL-3735). */
 const STORE_HEADING = /\b(?:shop|store|shopping|help|customer|care|support|service|orders?|account|policies|policy|legal|info|information|shipping|returns)\b/i
@@ -639,7 +642,7 @@ function compileFooter(
       home.column.splice(home.end, 0, list)
       page.settled.push({ at: 'footer', what: `the store's account and policy links under "${home.heading}"` })
     } else {
-      columns.push([{ kind: 'heading', text: AI_LAYOUT_STORE_FOOTER_HEADING }, list])
+      columns.push([{ kind: 'heading', text: aiLayoutLabel('customerCare', plan.language) }, list])
       weights.push(1)
     }
   }

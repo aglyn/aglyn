@@ -949,22 +949,20 @@ const seoLocalBusinessSchema: FormSchema = {
       },
     },
     {
-      component: FieldComponentType.TEXT_FIELD,
+      component: FieldComponentType.WEEKLY_HOURS,
       name: 'seo.entity.openingHours',
       label: 'Hours',
-      multiline: true,
-      rows: 3,
-      placeholder: 'Mo-Fr 08:00-17:00\nSa 09:00-13:00',
       helperText:
-        'One line per set of days, in 24-hour time, e.g. Mo-Fr 08:00-17:00',
+        'Switch on each day you are open, then pick the times. Add hours ' +
+        'for a split day, such as a lunch break',
       condition: LOCAL_BUSINESS_CHOSEN,
       validate: [
         (value: unknown) => {
           const lines = invalidOpeningHoursLines(value)
           if (!lines.length) return undefined
           return lines.length === 1
-            ? `Line ${lines[0]} doesn’t read as days and hours, e.g. Sa 09:00-13:00`
-            : `Lines ${lines.join(', ')} don’t read as days and hours, e.g. Sa 09:00-13:00`
+            ? `Saved hours line ${lines[0]} can’t be read; set the days again above`
+            : `Saved hours lines ${lines.join(', ')} can’t be read; set the days again above`
         },
       ],
     },

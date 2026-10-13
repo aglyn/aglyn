@@ -83,6 +83,8 @@ import {
   parseParameterOptions,
 } from '../model/parameter-options'
 import WhereUsedDialog from './where-used-dialog.component'
+import { FormulaBuilderButton } from './formula-builder.component'
+import { formulaNames } from '../model/formula-names'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   HOST_LOGIC_ZONE,
@@ -400,6 +402,37 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     ...(draft?.variables ?? []).map((variable) => variable.name),
   ].filter((name) => VARIABLE_NAME_PATTERN.test(name))
 
+  /**
+   * The site's variables, for the formula builder's value picker
+   * (AGL-3757). Read the first time a builder opens, like the test run's
+   * read below, so an author who never builds a formula costs nothing.
+   */
+  const [siteVariables, setSiteVariables] = useState<HostVariable[] | null>(
+    null,
+  )
+  const loadSiteVariables = useCallback(() => {
+    if (siteVariables) return
+    setSiteVariables([])
+    getDocs(query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)))
+      .then((snapshot) => {
+        const rows: HostVariable[] = []
+        snapshot.forEach((row) => {
+          const data = row.data() as HostVariable & { deletedAt?: unknown }
+          if (data?.name && !data.deletedAt) rows.push(data)
+        })
+        setSiteVariables(rows)
+      })
+      .catch((error) => {
+        // The builder still offers the function's own names.
+        console.error(error)
+      })
+  }, [siteVariables, firestore, hostId])
+  const formulaNameOptions = formulaNames({
+    parameters: draft?.parameters ?? [],
+    locals: draft?.variables ?? [],
+    siteVariables: siteVariables ?? [],
+  })
+
   // Case-insensitive uniqueness (AGL-185): function names must stay
   // unambiguous for legacy {{fn:name(...)}} token resolution.
   const nameTaken = Boolean(
@@ -638,6 +671,14 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
               }
               size="small"
               sx={{ flex: 1 }}
+            />
+            <FormulaBuilderButton
+              current={row.expression}
+              names={formulaNameOptions}
+              onOpen={loadSiteVariables}
+              onUse={(expression) =>
+                setRow(section, operationIndex, rowIndex, 'expression', expression)
+              }
             />
             <IconButton
               size="small"
@@ -1069,7 +1110,9 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
 
           <SectionLabel>{'Operations'}</SectionLabel>
           <Typography variant="caption" color="text.secondary">
-            {'An expression can use + − × ÷ and parentheses, any site ' +
+            {'Press ƒx beside a box to build its formula by picking values — ' +
+              'add, smallest of, format as money and more. A box also takes ' +
+              'a formula written out: + − × ÷ and parentheses, any site ' +
               'variable by its name (a dictionary’s members as ' +
               'name.member), and ' +
               `${FUNCTION_BUILTIN_NAMES.map((name) => `${name}()`).join(', ')}.`}
@@ -1104,6 +1147,21 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                   }
                   size="small"
                   sx={{ flex: 1 }}
+                />
+                <FormulaBuilderButton
+                  current={operation.if.left}
+                  names={formulaNameOptions}
+                  onOpen={loadSiteVariables}
+                  onUse={(expression) =>
+                    patch((previous) => ({
+                      ...previous,
+                      operations: previous.operations.map((op, index2) =>
+                        index2 === index
+                          ? { ...op, if: { ...op.if, left: expression } }
+                          : op,
+                      ),
+                    }))
+                  }
                 />
                 <TextField
                   value={operation.if.comparator}
@@ -1149,6 +1207,21 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                   }
                   size="small"
                   sx={{ flex: 1 }}
+                />
+                <FormulaBuilderButton
+                  current={operation.if.right}
+                  names={formulaNameOptions}
+                  onOpen={loadSiteVariables}
+                  onUse={(expression) =>
+                    patch((previous) => ({
+                      ...previous,
+                      operations: previous.operations.map((op, index2) =>
+                        index2 === index
+                          ? { ...op, if: { ...op.if, right: expression } }
+                          : op,
+                      ),
+                    }))
+                  }
                 />
               </Stack>
               <Typography variant="caption" color="text.secondary">

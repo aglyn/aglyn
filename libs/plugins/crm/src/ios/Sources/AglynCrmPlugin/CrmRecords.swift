@@ -283,6 +283,8 @@ func customFieldsOf(_ kind: CrmKind, _ definitions: [CustomFieldDefinition]) -> 
     let fieldKind: FieldKind =
       switch def.type {
       case "number": .number
+      // An amount in minor units, as a deal's (AGL-3756).
+      case "currency": .money
       case "date": .date
       case "select": .select
       case "checkbox": .toggle
@@ -292,6 +294,7 @@ func customFieldsOf(_ kind: CrmKind, _ definitions: [CustomFieldDefinition]) -> 
     let stored: Stored =
       switch def.type {
       case "number": .number
+      case "currency": .cents
       case "date": .day
       case "checkbox": .bool
       default: .text

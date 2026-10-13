@@ -57,6 +57,7 @@ import {
   type AiLayoutListingRole,
 } from './ai-layout-listings'
 import { aiStorefrontItemIcons } from './ai-layout-storefront'
+import { AI_LAYOUT_LABELS_EN, aiLayoutLabel } from './ai-layout-labels'
 import {
   aiLayoutRenamedLabel,
   aiLayoutResolveLink,
@@ -138,6 +139,12 @@ export interface AiLayoutCompileOptions {
    * uneven grid of pictures. Absent, the compiler's first design.
    */
   design?: AiLayoutDesign
+  /**
+   * The site's language (AGL-3760), a code such as `es`: the words the
+   * compiler writes itself — "See all", a post's link — are in it where it is
+   * one `ai-layout-labels.ts` lists. Absent, English.
+   */
+  language?: string
 }
 
 /**
@@ -2483,10 +2490,15 @@ export const AI_LAYOUT_POST_ADDRESS_TOKENS: readonly string[] = ['{{entry.url}}'
 
 /** The button under a featured band that opens the whole list, where the site has one and the design gave none. */
 function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBlock | null {
-  if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
+  const language = page.options.language
+  if (listing.kind === 'posts')
+    return listing.href ? { kind: 'button', text: aiLayoutLabel('allPosts', language), to: listing.href, style: 'secondary' } : null
   const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
   if (!index) return null
-  const text = listing.kind === 'tracks' ? 'All music' : listing.kind === 'records' ? 'See all' : 'Shop all'
+  const text = aiLayoutLabel(
+    listing.kind === 'tracks' ? 'allMusic' : listing.kind === 'events' ? 'allEvents' : listing.kind === 'records' ? 'seeAll' : 'shopAll',
+    language,
+  )
   return { kind: 'button', text, to: `page:${index.screenId}`, style: 'secondary' }
 }
 
@@ -2570,7 +2582,7 @@ function listingSection(
 }
 
 /** What a store's reviews are headed with where neither the design nor the plan says. */
-export const AI_LAYOUT_REVIEWS_HEADING = 'What our customers say'
+export const AI_LAYOUT_REVIEWS_HEADING = AI_LAYOUT_LABELS_EN.reviewsHeading
 
 /**
  * A store's own customer reviews (AGL-3676): the commerce plugin's Product
@@ -2587,7 +2599,7 @@ function reviewsSection(scope: SectionScope, blocks: readonly AiLayoutBlock[]): 
   const heading =
     aiLayoutWords(given?.text, 'heading', page.targets.facts) ||
     aiLayoutFitText(page.plan.sections[index]?.name, 'heading') ||
-    AI_LAYOUT_REVIEWS_HEADING
+    aiLayoutLabel('reviewsHeading', page.options.language)
   page.settled.push({ at, what: "the store's own reviews placed: shown once shoppers leave them, never written for them" })
   const id = tree.add(
     AI_LAYOUT_LISTING_ELEMENTS.reviews,
@@ -2604,7 +2616,7 @@ function reviewsSection(scope: SectionScope, blocks: readonly AiLayoutBlock[]): 
 }
 
 /** What a store's sign-up is headed with where neither the design nor the plan says. */
-export const AI_LAYOUT_SIGNUP_HEADING = 'Join our newsletter'
+export const AI_LAYOUT_SIGNUP_HEADING = AI_LAYOUT_LABELS_EN.signupHeading
 
 /**
  * A store's newsletter sign-up (AGL-3676): the design's heading and words
@@ -2618,10 +2630,10 @@ function signupSection(scope: SectionScope, blocks: readonly AiLayoutBlock[]): s
     .filter((block) => WORD_KINDS.has(block.kind) && block.kind !== 'button')
     .map(({ col: _col, ...block }) => block)
   if (!flow.some((block) => speaksHeading(scope, block))) {
-    flow.unshift({ kind: 'heading', text: page.plan.sections[index]?.name || AI_LAYOUT_SIGNUP_HEADING })
+    flow.unshift({ kind: 'heading', text: page.plan.sections[index]?.name || aiLayoutLabel('signupHeading', page.options.language) })
   }
   page.settled.push({ at, what: "the store's newsletter sign-up placed" })
-  const field = tree.add(AI_LAYOUT_LISTING_ELEMENTS.signup, { buttonLabel: 'Subscribe' }, null, null, 'signup')
+  const field = tree.add(AI_LAYOUT_LISTING_ELEMENTS.signup, { buttonLabel: aiLayoutLabel('subscribe', page.options.language) }, null, null, 'signup')
   noted(scope, [field, field])
   const words = compileFlow(scope, flow, scope.centered ? 'full' : 'half')
   const body = scope.centered
@@ -2700,14 +2712,15 @@ function sellingHero(scope: SectionScope, flow: AiLayoutBlock[]): void {
   for (const [at, block] of flow.entries()) {
     if (block.kind === 'button' && (block.style ?? 'primary') === 'primary') flow[at] = { ...block, style: 'secondary' }
   }
-  const shopAll: AiLayoutBlock = { kind: 'button', text: AI_LAYOUT_SHOP_ALL, to: `page:${shop}`, style: 'primary' }
+  const text = aiLayoutLabel('shopAll', scope.page.options.language)
+  const shopAll: AiLayoutBlock = { kind: 'button', text, to: `page:${shop}`, style: 'primary' }
   if (firstButton === -1) flow.push(shopAll)
   else flow.splice(firstButton, 0, shopAll)
-  scope.page.settled.push({ at: scope.at, what: `the hero opens the shop: "${AI_LAYOUT_SHOP_ALL}" leads its buttons` })
+  scope.page.settled.push({ at: scope.at, what: `the hero opens the shop: "${text}" leads its buttons` })
 }
 
 /** The button a storefront's hero opens its shop with. */
-export const AI_LAYOUT_SHOP_ALL = 'Shop all'
+export const AI_LAYOUT_SHOP_ALL = AI_LAYOUT_LABELS_EN.shopAll
 
 /**
  * A storefront's reasons to buy as open columns, each led by an icon over its
@@ -2773,6 +2786,14 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
     noted(scope, [id, id])
     return id
   }
+  if (listing.kind === 'events') {
+    // The site's published events (AGL-3755), each with its date, place and
+    // cover: the section's heading is the model's, so the list adds none.
+    id = tree.add(element, featured ? { maxItems: String(shown) } : null, null, null, 'events')
+    page.settled.push({ at: scope.at, what: 'the site’s events listed by the Event List' })
+    noted(scope, [id, id])
+    return id
+  }
   if (listing.kind === 'products') {
     id = tree.add(
       element,
@@ -2789,9 +2810,17 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
         quickAdd: true,
         // A store that opens before its first products are in says so, with a
         // way to hear when they land (AGL-3676): never placeholder products.
-        emptyTitle: AI_LAYOUT_STORE_EMPTY.title,
-        emptyText: listing.emptyAction ? AI_LAYOUT_STORE_EMPTY.text : AI_LAYOUT_STORE_EMPTY.textAlone,
-        ...(listing.emptyAction ? { emptyActionLabel: listing.emptyAction.label, emptyActionHref: listing.emptyAction.href } : {}),
+        emptyTitle: aiLayoutLabel('storeEmptyTitle', page.options.language),
+        emptyText: aiLayoutLabel(listing.emptyAction ? 'storeEmptyText' : 'storeEmptyTextAlone', page.options.language),
+        ...(listing.emptyAction
+          ? {
+              emptyActionLabel:
+                listing.emptyAction.label === AI_LAYOUT_LABELS_EN.getInTouch
+                  ? aiLayoutLabel('getInTouch', page.options.language)
+                  : listing.emptyAction.label,
+              emptyActionHref: listing.emptyAction.href,
+            }
+          : {}),
       },
       null,
       null,
@@ -2810,10 +2839,10 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
 
 /** What a store's Product grid says while the store lists nothing yet (AGL-3676). */
 export const AI_LAYOUT_STORE_EMPTY = {
-  title: 'New pieces are on the way',
-  text: 'Our first pieces are being finished now. Get in touch and we will let you know the moment they land.',
+  title: AI_LAYOUT_LABELS_EN.storeEmptyTitle,
+  text: AI_LAYOUT_LABELS_EN.storeEmptyText,
   /** Said where the site has no page to get in touch on. */
-  textAlone: 'Our first pieces are being finished now. Check back soon.',
+  textAlone: AI_LAYOUT_LABELS_EN.storeEmptyTextAlone,
 } as const
 
 /** The most posts a page of the site lists where it is the writing's own page. */
@@ -2838,7 +2867,7 @@ function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: numb
   const excerpt = tree.add('muiTypography', { children: '{{entry.excerpt}}', variant: 'body2' }, muted(scope), null, 'postExcerpt')
   const more = tree.add(
     'muiScreenLink',
-    { children: 'Read the post', href: '{{entry.url}}', renderAs: 'link', color: 'inherit' },
+    { children: aiLayoutLabel('readPost', page.options.language), href: '{{entry.url}}', renderAs: 'link', color: 'inherit' },
     { alignSelf: 'flex-start' },
     null,
     'postLink',
@@ -2876,7 +2905,7 @@ function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: numb
 // ── A dataset's records (AGL-3616) ───────────────────────────────────────
 
 /** The words of the link under each record's card to its own page (AGL-3727). */
-export const AI_LAYOUT_RECORD_LINK_LABEL = 'View details'
+export const AI_LAYOUT_RECORD_LINK_LABEL = AI_LAYOUT_LABELS_EN.viewDetails
 
 /** A field whose name says it is a record's kicker: its category, role, time or place. */
 const RECORD_KICKER = /\b(category|categories|type|kind|role|title|position|section|course|date|dates|time|times|when|day|days|location|place|where|venue|city|duration|level|tag|tags)\b/i
@@ -2962,7 +2991,7 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
   const more = recordHref
     ? tree.add(
         'muiScreenLink',
-        { children: AI_LAYOUT_RECORD_LINK_LABEL, href: recordHref, renderAs: 'link', color: 'inherit' },
+        { children: aiLayoutLabel('viewDetails', page.options.language), href: recordHref, renderAs: 'link', color: 'inherit' },
         { alignSelf: scope.centered && !questions ? 'center' : 'flex-start' },
         null,
         'recordLink',

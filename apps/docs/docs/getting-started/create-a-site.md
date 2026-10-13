@@ -14,23 +14,25 @@ settings. Everything you build lives under a site, and you can own several.
 ## Create your first site
 
 1. Sign in to the console.
-2. Open the **site switcher** in the app bar (top-left) and choose **Create site**.
-3. Give it a name. Aglyn generates a working subdomain immediately, so the site has a
-   real address from the first moment — you can attach a
+2. Choose **Create site** on the **All Sites** page, or in the **site switcher** in
+   the app bar (top-left). With no workspace yet, **Create site** on the empty console
+   sets your workspace up first, then opens the same window in it.
+3. Give it a name. Aglyn suggests a subdomain from it and checks that it is free as
+   you type, so the site has a real address from the first moment — you can attach a
    [custom domain](../building-sites/custom-domains/overview.md) later.
 
-   When you can use Aglyn AI, the new site opens on **Start your site**, which
-   asks how you want to start: **Start from the starter site**, or **Start with
-   AI**, which plans your pages from a few questions — see
-   [Generate a website from a prompt](../ai/generate-a-site.md). Choosing the
-   starter site, skipping or closing the window all give the site the starter
-   described below. Choosing **Start from the starter site** publishes it at once,
-   and the console says so: **Your site is live**, with the site's address,
-   **View your site** and **Edit your pages**. Until you choose, the site's address shows a short *coming
-   soon* page with its name, kept out of search results.
+   When you can use Aglyn AI, **Create site** opens **Start your site**, which asks
+   for the name and address and how you want to start: **Start from the starter
+   site**, or **Start with AI**, which plans your pages from a few questions — see
+   [Start a new site with AI](../ai/start-with-ai.md). Nothing is created until you
+   choose: **Start from the starter site** or **Skip** creates the site with the
+   starter described below and publishes it at once, and the console says so: **Your
+   site is live**, with the site's address, **View your site** and **Edit your
+   pages**. Closing the window creates nothing.
 
-   Every other new site starts with the starter straight away. The starter is a
-   complete website, published and open to search engines from the first visit:
+   Otherwise **Create site** asks for the name and address and creates the site with
+   the starter straight away. The starter is a complete website, published and open
+   to search engines from the first visit:
 
    - a **Home** page at the site root with the sections an ordinary business site
      has — a hero with your site's name, what you offer, an about section, a photo
@@ -49,15 +51,15 @@ settings. Everything you build lives under a site, and you can own several.
    publish at the site root — one you build, one the AI drafts for you, or a
    [starter template](../building-sites/site-templates/overview.md)'s home page —
    takes over `/`, and the starting Home page is kept as an unpublished draft.
-4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
-   Basic details, SEO, Tracking, Theme, and Emails; the custom domain and the
+4. You land on the new site's dashboard. Its **Setup** page (titled *Host Setup*) has
+   tabs for Basic details, SEO, Tracking, Theme, and Emails; the custom domain and the
    activity log are under **Admin**. To start building
    rather than configuring, use the **Pages** tab in the site navigation — see
    [Publish your first page](publish-your-first-screen.md).
 
 :::tip Name collisions
 Site names must be unique enough to generate a valid subdomain. If a name is taken,
-the console suggests an available variation.
+the console says so as you type and suggests available variations to pick.
 :::
 
 ## What a site contains

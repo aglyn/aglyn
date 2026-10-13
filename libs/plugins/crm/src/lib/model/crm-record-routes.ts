@@ -19,6 +19,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { crmRoutes, type CrmRoutes } from './crm-routes'
+import { CRM_PICKLIST_VALUES_SETUP_RESOURCE } from './crm-picklist-setup-content'
 import { CRM_FIELD_SETUP_RESOURCE, CRM_PIPELINE_SETUP_RESOURCE } from './crm-setup-content'
 
 /**
@@ -96,6 +97,11 @@ export function registerCrmRecordRoutes(): void {
     record: (context) => hub(context).section('deals'),
   }, owner)
   registerPluginRecordRoute(CRM_FIELD_SETUP_RESOURCE, {
+    list: (context) => hub(context).section('fields'),
+    record: (context) => hub(context).section('fields'),
+  }, owner)
+  // A picklist's values and a Choice field's choices are kept on Fields (AGL-3756).
+  registerPluginRecordRoute(CRM_PICKLIST_VALUES_SETUP_RESOURCE, {
     list: (context) => hub(context).section('fields'),
     record: (context) => hub(context).section('fields'),
   }, owner)

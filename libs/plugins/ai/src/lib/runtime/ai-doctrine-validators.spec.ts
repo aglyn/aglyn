@@ -490,6 +490,28 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
     expect(unbound).toMatchObject([{ code: 'inline-form', nodeIds: ['n2'] }])
   })
 
+  it.each([
+    ['an Input', { componentId: 'muiInput', props: { name: 'email', type: 'email' } }],
+    ['a Select', { componentId: 'muiSelect', props: { name: 'topic' } }],
+    ['a Radio Group', { componentId: 'muiRadioGroup', props: { name: 'plan' } }],
+    ['a Checkbox', { componentId: 'muiCheckbox', props: { name: 'agree', value: 'Yes' } }],
+    ['a Rating', { componentId: 'muiRating', props: { name: 'score' } }],
+  ] as const)('refuses %s of MUI’s separate form elements drawn outside any form', (_name, answer) => {
+    // A Form Control over a Form Label and the answer: the answer is what is loose.
+    const loose = detectInlineForms(
+      tree(
+        page(
+          section({
+            componentId: 'muiFormControl',
+            children: [{ componentId: 'muiFormLabel', props: { children: 'Question' } }, answer as Nested],
+          }),
+        ),
+      ),
+      'page',
+    )
+    expect(loose).toMatchObject([{ rule: 3, code: 'inline-form', nodeIds: ['n4'] }])
+  })
+
   it('refuses fields drawn inside a form placed by its id', () => {
     const shadowed = detectInlineForms(
       tree(page(section({ componentId: 'form', props: { formId: 'frm-contact' }, children: [field('email')] }))),
@@ -505,6 +527,23 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
     expect(
       detectInlineForms(tree({ componentId: 'form', children: [field('email'), field('name')] }), 'form'),
     ).toEqual([])
+  })
+
+  it('holds a form’s own design of like fields to no rule 1: a field is one shape, and a form places no instances', () => {
+    const labelled = (label: string, name: string): Nested => ({
+      componentId: 'muiFormControl',
+      props: { fullWidth: true },
+      children: [
+        { componentId: 'muiFormLabel', props: { children: label } },
+        { componentId: 'muiInput', props: { name, fullWidth: true } },
+      ],
+    })
+    const design = tree({
+      componentId: 'form',
+      props: { formName: 'Quote request' },
+      children: [labelled('Full name', 'fullName'), labelled('Phone', 'phone'), labelled('Property address', 'address')],
+    })
+    expect(validateAiDoctrineTree(design, 'form').violations).toEqual([])
   })
 
   it('in a plan: a section that collects answers places a form', () => {
@@ -2155,8 +2194,8 @@ describe('rule 17 — a measured budget for every output', () => {
     const fields = tree({
       componentId: 'form',
       children: Array.from({ length: AI_OUTPUT_BUDGETS.form.nodes }, (_, i) => ({
-        componentId: 'formField',
-        props: { fieldName: `field${i}`, fieldType: 'text' },
+        componentId: 'muiInput',
+        props: { name: `field${i}` },
       })),
     })
     const found = detectOverBudget(scoreAiOutput(fields, 'form'), 'form', fields)

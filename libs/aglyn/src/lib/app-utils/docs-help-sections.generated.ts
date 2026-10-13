@@ -80,7 +80,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   aiCrm: {
     '#draft-an-email': 'New timeline entry, a new or finished task, or an edited note makes the next summary a new one.',
     '#match-columns': 'R. What you type into the request is kept with the AI request, as every AI request is, and members of your workspace can see it in the list of AI jobs, so describe the email rather than pasting private details into…',
-    '#summarize-a-record': 'He columns of your file and the fields they fill. It can also set up the CRM from the Assist chat: your deal pipelines and their stages, and your custom fields.',
+    '#summarize-a-record': 'Fields they fill. It can also set up the CRM from the Assist chat: your deal pipelines and their stages, your custom fields, and new values for your picklists.',
   },
   aiEmail: {
     '#where-to-start-it': 'Eaders to choose between. Ask for a campaign instead and it writes the same design plus the draft campaign that would send it.',
@@ -110,7 +110,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-a-layout-with-aglyn-ai': 'Copy until you assign it, so nothing on the live site changes.',
   },
   aiLogic: {
-    '#change': 'Ariable} Create with AI at the top of the Variables card writes one site variable — a name, a type and a value in that type\'s stored form, such as a dictionary of plan prices {"starter":19,"pro":49}.',
+    '#change': 'Top of the Variables card writes one site variable — a name, a type and a value, such as a dictionary of plan prices with a starter entry of 19 and a pro entry of 49.',
     '#function': '. Nothing is saved for you. What Aglyn AI writes opens in the function or variable editor, unsaved, exactly as if you had typed it.',
     '#variable': 'Tten, saying why. Where your description needs a number your site does not hold, it becomes a parameter rather than a guess.',
   },
@@ -145,13 +145,13 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#details': 'Nt, a blog and so on. One is picked for you from your first answer; choose another to change it.',
     '#how-do-you-want-to-start': 'Hrough each question and what happens after you choose Plan my site.',
     '#the-sites-search-listing': 'Se the site\'s search indexing setting. Until the site is built, its address shows a short coming soon page with the site\'s name, which search engines are asked not to index.',
-    '#your-business': 'Ite does not ask again. If you have typed or picked something, the window first asks Leave without your answers?, because what you typed is not saved.',
+    '#your-business': 'Ites, or your plan has no site left, Create site says so before asking anything.',
   },
   aiTemplate: {
     '#generate-a-page-template-with-aglyn-ai': 'Ate is linked back to the template afterwards. Editing a page will never change the template, and updating a template will never change pages you already made.',
   },
   aiThemes: {
-    '#describe-a-change': 'Olors, font, corner radius, spacing, navigation heights, dark scheme and component overrides you can set by hand.',
+    '#describe-a-change': 'T, corner radius, spacing, navigation heights, dark scheme and button, input and card styles you can set by hand.',
   },
   assistSignals: {
     '#docs-gaps': 'That left writes out would read it as healthy. A signal recorded before kinds were kept is read by its route: the Besigner modes name themselves, a generation job reads as job, and every other turn as assist.',
@@ -192,7 +192,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   bindings: {
     '#functions-card': 'N explain, change or fix it — each opens unsaved in the editor.',
     '#insert-a-variable': 'K. A published page resolves only the id form, so a name token that was never converted — because no variable had that name — shows exactly as typed.',
-    '#no-code-functions': 'E.',
+    '#no-code-functions': 'The next value in the list, and × removes one. On a page, a bare {{name}} shows a dictionary as name: value pairs and a list comma-separated.',
     '#site-details': 'Taset/webhook, and computed variables pick their workflow. Renaming an entity never breaks anything that references it — the display name is just a label.',
     '#typed-variables': 'The site you are editing, exactly as the published page does.',
     '#where-used--safety': 'Riable for every figure on the page, and a true/false for every row a filter can turn off.',
@@ -250,12 +250,12 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#a-sites-dashboard': 'It is a billing change — see Billing & plans.',
     '#alerts-on-this-device': 'D by clearing its Remind me field. See Reminders.',
     '#all-notifications': '-search). There is no search box, because a notification\'s words are not indexed.',
+    '#choose-a-workspace': 'En Billing — Sign out, and a footer naming your current workspace and plan.',
     '#daily-digests': 'Are about the platform, not about any one workspace, so there is nothing for a workspace answer to change.',
     '#notification-settings': 'Nder the table\'s Columns, Filters and Export controls](/img/getting-started/notifications-page.png)',
     '#organization-general': 'Ith the organization name and workspace URL](/img/getting-started/org-settings-page.png)',
     '#organization-settings': 'Nding and installing new ones, not for administering what you already run.',
     '#recent-activity': 'Rs, and the announcement bar and promotional popup live under Marketing.',
-    '#the-app-bar': 'Er — switch between the sites in your workspace.',
     '#the-sites-list': 'N you want to design it, open the Besigner.',
     '#workspace-and-site-overrides': 'Ins: a workspace or site answer overrides what you said about the kind of notification here.',
   },
@@ -265,8 +265,8 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#the-recent-activity-feed': 'The whole organization when the organization has chosen an org-wide default.',
   },
   contactFields: {
-    '#define-a-field': 'O Plan availability Custom fields are part of the CRM, included from Starter.',
-    '#save-a-form-field': 'Xports and the API carry the values under their keys. A value belongs to the site that recorded it.',
+    '#define-a-field': 'N.',
+    '#save-a-form-field': 'S of that currency\'s smallest unit. To track a second currency, add a second field.',
   },
   contactRecord: {
     '#contact-properties': 'Checkbox to complete it, and a New task shortcut — see Tasks & follow-ups.',

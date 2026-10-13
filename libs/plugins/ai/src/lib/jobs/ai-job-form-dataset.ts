@@ -19,6 +19,9 @@ import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   collectFormFieldNodeIds,
   FORM_COMPONENT_ID,
+  formFieldDeclsFromNodes,
+  formInputName,
+  formInputType,
   isMarketingConsentFieldName,
 } from '@aglyn/aglyn/app-utils/forms'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
@@ -37,7 +40,7 @@ import { AI_DATASET_DRAFT_RESOURCE } from './ai-build-unit-outcome'
  * first — a site start's dataset unit, a build's dataset item, or one the
  * site already has — and the form step binds the form it generated the way a
  * person binds one on the Form element: the form node's `datasetId`, and
- * each Form Field's `datasetFieldId` where the dataset has a field of the
+ * each answer element's `datasetFieldId` where the dataset has a field of the
  * same name and a type the submitted value can be stored as. A field the
  * dataset lacks is left unbound, as the Form element's mapping leaves one:
  * its value stays in the Inbox copy, and a form never adds a field to a
@@ -98,10 +101,13 @@ export interface AiFormDatasetBinding {
 
 /**
  * Binds a form design to a dataset, in place: the form node's `datasetId`,
- * and `datasetFieldId` on each Form Field the dataset has a field for, by its
- * `fieldName` or its label, each dataset field taken once. The platform's
- * consent field is never bound. A binding the design already carried is
- * replaced, so what the model drew never chooses where a record lands.
+ * and `datasetFieldId` on each answer element (an Input, Select, Radio Group,
+ * Checkbox or Rating) the dataset has a field for, by the name it submits
+ * under or its label — the Form Label or Choice Label beside it — each
+ * dataset field taken once. Checkboxes sharing a name are one answer and are
+ * bound together. The platform's consent field is never bound. A binding the
+ * design already carried is replaced, so what the model drew never chooses
+ * where a record lands.
  */
 export function aiBindFormToDataset(
   nodes: NodesMap,
@@ -115,17 +121,27 @@ export function aiBindFormToDataset(
   delete props['datasetName']
   props['datasetId'] = dataset.id
   form.props = props as never
+  const labels = new Map(
+    formFieldDeclsFromNodes(nodes as never, formNodeId).map((decl) => [decl.fieldName, decl.label ?? ''] as const),
+  )
   const taken = new Set<string>()
+  /** The dataset field each answer's name was bound to, or `null` where none was. */
+  const byName = new Map<string, string | null>()
   for (const id of collectFormFieldNodeIds(nodes as never, formNodeId)) {
     const field = nodes[id]
     if (!field) continue
     const fieldProps = { ...((field.props ?? {}) as Record<string, unknown>) }
     delete fieldProps['datasetFieldId']
     field.props = fieldProps as never
-    const fieldName = String(fieldProps['fieldName'] ?? '').trim()
+    const fieldName = formInputName(field as never)
     if (!fieldName || isMarketingConsentFieldName(fieldName)) continue
-    const label = String(fieldProps['label'] ?? '').trim()
-    const fieldType = String(fieldProps['fieldType'] ?? 'text')
+    if (byName.has(fieldName)) {
+      const already = byName.get(fieldName)
+      if (already) fieldProps['datasetFieldId'] = already
+      continue
+    }
+    const label = labels.get(fieldName) ?? ''
+    const fieldType = formInputType(field as never)
     // Its name first, then its label: `fullName` is "Full name" before "Your name" is.
     const matching = (key: string) =>
       key
@@ -133,10 +149,12 @@ export function aiBindFormToDataset(
         : undefined
     const match = matching(aiFormFieldKey(fieldName)) ?? matching(aiFormFieldKey(label))
     if (!match) {
+      byName.set(fieldName, null)
       result.unbound.push(label || fieldName)
       continue
     }
     taken.add(match.id)
+    byName.set(fieldName, match.id)
     fieldProps['datasetFieldId'] = match.id
     result.bound.push(fieldName)
   }

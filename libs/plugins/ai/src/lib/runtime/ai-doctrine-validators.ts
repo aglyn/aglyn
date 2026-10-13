@@ -16,6 +16,7 @@
  */
 
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
+import { isFormInputNode } from '@aglyn/aglyn/app-utils/forms'
 import {
   formatBytes,
   measureNodeMap,
@@ -63,7 +64,12 @@ import {
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiFreeSiteSectionsWithin, aiSiteHomeMinSections, aiSitePlanIsHome } from '../model/ai-site-job'
+import {
+  aiFreeSiteSectionsWithin,
+  aiSiteHomeMinSections,
+  aiSitePlanIsHome,
+  aiSiteSectionShowsWork,
+} from '../model/ai-site-job'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import {
@@ -242,6 +248,11 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * to when the site has none for what it promises. Absent: none is known.
    */
   homeScreenIds?: readonly string[]
+  /**
+   * The home pages' own titles (AGL-3760): a link home under one of them says
+   * where it goes in the site's language, as "Inicio" does on a Spanish site.
+   */
+  homeLabels?: readonly string[]
   /**
    * The site's pages that place its form, by id (AGL-3729): where a link whose
    * words ask a visitor to get in touch (`aiAsksToGetInTouch`) does what it
@@ -750,7 +761,9 @@ export function detectLayoutRegions(
 /**
  * Rule 3. A form on a page is a Form bound by id to a form built on the
  * Forms page — fields, validation, consent and routing kept in one place.
- * Loose fields, an unbound Form, and fields drawn inside a bound Form (which
+ * Loose fields — a Form Field, or any of MUI's answer elements (an Input,
+ * Select, Radio Group, Checkbox or Rating) — an unbound Form, and fields
+ * drawn inside a bound Form (which
  * the page never renders: the placed form's own design replaces them) are
  * refused. A form's own design is the one place fields are drawn.
  *
@@ -771,7 +784,7 @@ export function detectInlineForms(
   const shadowed: string[] = []
   for (const visit of walkTree(tree)) {
     if (
-      visit.node.componentId === 'formField' &&
+      isFormInputNode(visit.node as never) &&
       !hasAncestor(tree, visit, (node) => node.componentId === 'form')
     ) {
       loose.push(visit.id)
@@ -2019,6 +2032,9 @@ export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputK
 /** A link's words that say it goes home. */
 const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 
+/** A label's words, lowercase, for comparing one label with another. */
+const labelWords = (label: string) => label.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ')
+
 /** Words that ask a visitor to get in touch, which the site's form answers. */
 const GET_IN_TOUCH_WORDS =
   /\b(?:contact|book|booking|call|quote|estimate|appointment|schedule|reserve|reservation|get in touch|request|visit|enquire|inquire|enquiry|inquiry|message|talk|consult|consultation|order|pre-?order|sign up|join|apply|start)\b/i
@@ -2040,11 +2056,12 @@ export function aiAsksToGetInTouch(label: string): boolean {
 function unrelatedScreenLinks(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'>,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'>,
 ): Array<{ id: string; label: string }> {
   if (outputKind === 'email' || outputKind === 'form') return []
   const home = new Set(context.homeScreenIds ?? [])
   const forms = new Set(context.formScreenIds ?? [])
+  const homeLabels = new Set((context.homeLabels ?? []).map(labelWords).filter(Boolean))
   const sent: Array<{ id: string; label: string }> = []
   for (const visit of walkTree(tree)) {
     const { node } = visit
@@ -2052,7 +2069,7 @@ function unrelatedScreenLinks(
     const screenId = node.props?.['screenId']
     const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
     const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
-    if (!linksHome || !label || HOME_WORDS.test(label)) continue
+    if (!linksHome || !label || HOME_WORDS.test(label) || homeLabels.has(labelWords(label))) continue
     // Home holds the site's form, and the words ask for what it does (AGL-3729).
     if (typeof screenId === 'string' && forms.has(screenId) && aiAsksToGetInTouch(label)) continue
     // The header and the navigation link home by name and by the site's own brand.
@@ -2092,7 +2109,7 @@ function unrelatedScreenLinks(
 export function aiSettleUnrelatedScreenLinks<T extends AiDoctrineTree>(
   tree: T,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'> & {
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'> & {
     /** The page being checked, by every id it goes by: a link never goes to itself. */
     ownScreenIds?: readonly string[]
   } = {},
@@ -2142,7 +2159,7 @@ export function aiSettleUnrelatedScreenLinks<T extends AiDoctrineTree>(
 export function detectUnrelatedScreenLinks(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds'> = {},
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'> = {},
 ): AiDoctrineViolation[] {
   const sent = unrelatedScreenLinks(tree, outputKind, context)
   if (!sent.length) return []
@@ -3516,7 +3533,10 @@ export function validateAiDoctrineTree(
   const storedOf = (id: string): unknown => written[validated.sourceIds[id] ?? id]
   const violations = [
     ...publish,
-    ...detectRepeatedSubtrees(tree, otherPages, context),
+    // A form's fields share a shape because a field IS one shape — a Form
+    // Control over a Form Label and an answer — and a form places no
+    // instances, so rule 1 has nothing to ask of one.
+    ...(outputKind === 'form' ? [] : detectRepeatedSubtrees(tree, otherPages, context)),
     ...detectLayoutRegions(tree, outputKind),
     ...detectInlineForms(tree, outputKind),
     ...detectLiteralStyles(tree, outputKind),
@@ -4106,6 +4126,44 @@ export function aiSettlePlanLayoutRegionSections(
     if (kept.length === screen.sections.length || !kept.length) return screen
     changed = true
     return { ...screen, sections: kept }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
+/**
+ * A section that shows the work — a gallery, a portfolio, selected works, by
+ * the name `aiSiteSectionShowsWork` reads — planned with fewer pieces than
+ * the job's `galleryMinItems` is raised to it before the rules read the plan
+ * (AGL-3754). The site start's `plan-empty-gallery` refusal names one answer,
+ * "plan it with three to six items", and the fewest is the one that keeps
+ * the plan's own count closest: a section's items move no section cap, Free
+ * wall or credit figure, which count sections and pages.
+ *
+ * A section the rule reads as one item of a list split into sections is
+ * left for rule 1's re-ask to join, as the Free wall's trim leaves it: raised
+ * here, it would hide the split. A job that sets no `galleryMinItems` (every
+ * job but a site start) is returned unchanged.
+ */
+export function aiSettlePlanGalleries(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  const least = capabilities?.galleryMinItems ?? 0
+  const thin = (section: AiBuildPlanSection) => aiSiteSectionShowsWork(section.name) && section.items < least
+  if (!plan.screens.some((screen) => screen.sections.some(thin))) return plan
+  const split = new Set(detectPlanSplitLists(plan, inventory, capabilities).flatMap((violation) => violation.paths ?? []))
+  let changed = false
+  const screens = plan.screens.map((screen, screenIndex) => {
+    if (!screen.sections.some(thin)) return screen
+    return {
+      ...screen,
+      sections: screen.sections.map((section, sectionIndex) => {
+        if (!thin(section) || split.has(`screens[${screenIndex}].sections[${sectionIndex}]`)) return section
+        changed = true
+        return { ...section, items: least }
+      }),
+    }
   })
   return changed ? { ...plan, screens } : plan
 }

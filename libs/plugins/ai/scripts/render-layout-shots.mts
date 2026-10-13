@@ -233,19 +233,43 @@ async function main(): Promise<void> {
   const reusable = await load('libs/aglyn/src/lib/app-utils/compose-reusable-components.ts')
   /** A contact form's design, as a form job writes one: a form root over its fields. */
   const contactDesign = (formId: string) => {
-    const field = (name: string, label: string, extra: Dict = {}) => ({
-      $id: `${formId}__${name}`,
-      componentId: 'formField',
-      pluginId: 'forms',
-      parentId: `${formId}__root`,
-      props: { fieldName: name, label, required: name !== 'phone', ...extra },
-      nodes: [],
-    })
+    // Each field is MUI's separate form elements (Form Control › Form Label +
+    // Input), as every form is built now.
+    const field = (name: string, label: string, input: Dict = {}) => {
+      const id = `${formId}__${name}`
+      const required = name !== 'phone' ? { required: true } : {}
+      return [
+        {
+          $id: id,
+          componentId: 'muiFormControl',
+          pluginId: 'mui',
+          parentId: `${formId}__root`,
+          props: { fullWidth: true, ...required },
+          nodes: [`${id}-label`, `${id}-input`],
+        },
+        {
+          $id: `${id}-label`,
+          componentId: 'muiFormLabel',
+          pluginId: 'mui',
+          parentId: id,
+          props: { children: label },
+          nodes: [],
+        },
+        {
+          $id: `${id}-input`,
+          componentId: 'muiInput',
+          pluginId: 'mui',
+          parentId: id,
+          props: { name, type: 'text', fullWidth: true, ...required, ...input },
+          nodes: [],
+        },
+      ]
+    }
     const fields = [
       field('name', 'Name'),
-      field('email', 'Email', { fieldType: 'email' }),
-      field('phone', 'Phone', { fieldType: 'tel' }),
-      field('message', 'Message', { fieldType: 'textarea' }),
+      field('email', 'Email', { type: 'email' }),
+      field('phone', 'Phone', { type: 'tel' }),
+      field('message', 'Message', { multiline: true, minRows: 3 }),
     ]
     return {
       rootId: `${formId}__root`,
@@ -255,9 +279,9 @@ async function main(): Promise<void> {
           componentId: 'form',
           pluginId: 'forms',
           props: { formId, formName: 'Contact', submitLabel: 'Send message' },
-          nodes: fields.map((entry) => entry.$id),
+          nodes: fields.map((entry) => entry[0].$id),
         },
-        ...Object.fromEntries(fields.map((entry) => [entry.$id, entry])),
+        ...Object.fromEntries(fields.flat().map((entry) => [entry.$id, entry])),
       },
     }
   }

@@ -8,7 +8,9 @@ description: "Pages Aglyn AI writes for a new site use free stock photos from Pi
 
 When Aglyn AI writes the pages of a [site started with AI](./start-with-ai.md), each
 picture it needs, such as a hero, a service card or a blog cover, is found as a free stock
-photo that matches what that part of the page is about.
+photo that matches what that part of the page is about. An
+[event Aglyn AI adds](../content-and-data/events/overview.md#ask-aglyn-ai) gets its cover
+photo the same way, from the event's title.
 
 ## Where the photos come from {#where-the-photos-come-from}
 

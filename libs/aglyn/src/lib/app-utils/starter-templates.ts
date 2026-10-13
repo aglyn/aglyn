@@ -31,6 +31,7 @@ import {
   starterHeroSection as heroSection,
   starterSection as section,
   starterText as text,
+  starterTextField,
   type StarterNodeSpec as NodeSpec,
   type StarterTemplate,
 } from './starter-template-nodes'
@@ -46,6 +47,7 @@ export {
   starterHeroSection,
   starterSection,
   starterText,
+  starterTextField,
 } from './starter-template-nodes'
 
 /**
@@ -167,31 +169,19 @@ const contactForm = (prefix: string): NodeSpec => ({
     successMessage: 'Thanks — we will get back to you soon.',
   },
   children: [
-    {
-      id: `${prefix}fName`,
-      componentId: 'formField',
-      props: { fieldName: 'name', label: 'Name', required: true },
-    },
-    {
-      id: `${prefix}fEmail`,
-      componentId: 'formField',
-      props: {
-        fieldName: 'email',
-        label: 'Email',
-        fieldType: 'email',
-        required: true,
-      },
-    },
-    {
-      id: `${prefix}fMessage`,
-      componentId: 'formField',
-      props: {
-        fieldName: 'message',
-        label: 'Message',
-        fieldType: 'textarea',
-        required: true,
-      },
-    },
+    starterTextField(`${prefix}fName`, { name: 'name', label: 'Name', required: true }),
+    starterTextField(`${prefix}fEmail`, {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      required: true,
+    }),
+    starterTextField(`${prefix}fMessage`, {
+      name: 'message',
+      label: 'Message',
+      multiline: true,
+      required: true,
+    }),
   ],
 })
 

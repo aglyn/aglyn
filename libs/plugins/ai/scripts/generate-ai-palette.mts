@@ -179,8 +179,9 @@ const CODE_ONLY_IDS: Readonly<Record<string, readonly string[]>> = {
   // The store's Product grid, which a page lists the site's catalog with
   // (AGL-3676): bound to the catalog by code, never written by a model; and
   // a selling store's own reviews and its newsletter sign-up, which the
-  // storefront's sections place the same way (AGL-3676).
-  screen: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup'],
+  // storefront's sections place the same way (AGL-3676); and the Event List
+  // an event-led start lists its first events with (AGL-3755).
+  screen: ['icon', 'product-grid', 'product-reviews', 'newsletter-signup', 'eventList'],
   // And a selling site's cart button in its header (AGL-3676).
   layout: ['icon', 'muiDrawer', 'muiDrawerToggle', 'cart'],
 }
@@ -200,6 +201,21 @@ const UNLISTED_IDS: ReadonlySet<string> = new Set(['musicPlayer', 'musicTrack'])
  * hatch, a code-invoking widget, the canvas root, a reference into another
  * document, and third-party plugin elements.
  */
+/** MUI's separate form elements (libs/plugins/mui form-controls.tsx). */
+const FORM_ELEMENT_IDS = new Set([
+  'muiFormControl',
+  'muiFormLabel',
+  'muiInput',
+  'muiFormHelperText',
+  'muiSelect',
+  'muiSelectOption',
+  'muiCheckbox',
+  'muiRadioGroup',
+  'muiRadio',
+  'muiFormControlLabel',
+  'muiRating',
+])
+
 const NEVER_IDS = new Set([
   'custom-html',
   'div',
@@ -754,12 +770,19 @@ async function main(): Promise<void> {
   ]
     .map(registered)
     .filter((id) => !NEVER_IDS.has(id))
+    // MUI's separate form elements are drawn by the form job, inside a saved
+    // form; a page places that form rather than building one inline
+    // (`detectInlineForms`), so its prompt carries none of them.
+    .filter((id) => !FORM_ELEMENT_IDS.has(id))
     .sort()
   const emailAllow = (PORTABLE_EMAIL_COMPONENT_ID_ALLOWLIST as string[])
     .map(registered)
     .filter((id) => !NEVER_IDS.has(id))
     .sort()
-  const formAllow = ['form', 'formField'].map(registered)
+  // A generated form is built from MUI's separate form elements — each piece
+  // of a field its own element — and an optional Submit button; never the
+  // all-in-one Form Field.
+  const formAllow = ['form', ...FORM_ELEMENT_IDS, 'muiButton'].map(registered).sort()
   const surfaces = {
     screen: { root: 'div', allow: pageAllow, codeOnly: CODE_ONLY_IDS.screen.map(registered) },
     email: { root: 'div', allow: emailAllow },

@@ -178,6 +178,17 @@ import { publishAiJob } from './ai-jobs-store'
  * starter site, and no job, no draft, no record of a site half begun. After,
  * they close through `leave`, and the job builds the site.
  *
+ * ── Or before the site exists (AGL-3761) ─────────────────────────────────
+ *
+ * "Create site" draws this straight away, with the zone's `pendingSite` and
+ * no site. Step 1 then asks the site's name and address (the shell's own
+ * fields) above the two cards, and the site is created only by a choice that
+ * needs one: the starter card or Skip (`startBlank`, which creates it with the
+ * starter), or Plan my site, which creates it and then starts the job on it.
+ * The close control and Escape create nothing there: they are `leave`. If the
+ * site was created and its job could not start, the site is a real one, and
+ * every way out gives it the starter as above, so none is left empty.
+ *
  * Escape and the close control are DISMISSALS, though, and Skip is a choice
  * (AGL-3660, 2026-10-08). Once anything is typed or picked, a dismissal asks
  * "Leave without your answers?" first, focused on Keep editing, so a stray
@@ -394,6 +405,7 @@ export function AiSiteStartCard({
   host,
   startBlank,
   leave,
+  pendingSite,
   initialAnswers = null,
 }: AiSiteStartCardProps) {
   const { data: user } = useUser()
@@ -424,6 +436,13 @@ export function AiSiteStartCard({
   const [confirmingLeave, setConfirmingLeave] = useState(false)
   // The dialog's own root, to tell its Escape from a nested popup's.
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  // Drawn by "Create site" before the site exists (AGL-3761): the shell's
+  // name and address are asked on step 1, and the site is created only by
+  // the starter, Skip, or Plan my site. Read through a ref by the verdict
+  // below, which must not re-run when the shell re-renders it.
+  const pendingRef = useRef(pendingSite)
+  pendingRef.current = pendingSite
+  const creating = Boolean(pendingSite) && !pendingSite?.created
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -447,10 +466,16 @@ export function AiSiteStartCard({
               welcomeEmail: false,
             }))
           }
-          setVerdict(response.status === 404 || response.status === 403 ? 'hidden' : 'ready')
+          const shown = response.status !== 404 && response.status !== 403
+          setVerdict(shown ? 'ready' : 'hidden')
+          // "Create site" shows its own dialog when this one will not draw.
+          pendingRef.current?.ready(shown)
         }
       } catch {
-        if (active) setVerdict('hidden')
+        if (active) {
+          setVerdict('hidden')
+          pendingRef.current?.ready(false)
+        }
       }
     })()
     return () => {
@@ -499,12 +524,26 @@ export function AiSiteStartCard({
     setNotice(null)
     setServerPrompt(null)
     try {
+      // The site, created now when it does not exist yet (AGL-3761): this is
+      // the moment the person asked for it. A refusal is said here, and one
+      // about the name or address goes back to step 1, where they are typed.
+      let site = { hostId, host, orgSlug }
+      if (!hostId && pendingSite) {
+        const made = await pendingSite.create()
+        if ('error' in made) {
+          setNotice(made.error)
+          if (made.address) setStep('choose')
+          return
+        }
+        site = { hostId: made.hostId, host: made.host, orgSlug: made.orgSlug || orgSlug }
+      }
+      if (!site.hostId) return
       const response = await authorizedFetch(userRef.current, '/api/ai/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
-          hostId,
+          hostId: site.hostId,
           kind: 'site',
           brief: aiSiteStartBrief(asked),
           // The guided start confirms its own plan (AGL-3594): the build
@@ -538,7 +577,7 @@ export function AiSiteStartCard({
       // Where the next step is (AGL-3594): the site's "Building your site"
       // page for this job. The zone closes without the starter first, so the
       // setup page does not ask again behind it.
-      const href = aiSiteBuildHref(orgSlug, host, created.id)
+      const href = aiSiteBuildHref(site.orgSlug, site.host, created.id)
       if (href) {
         ;(leave ?? (() => undefined))()
         router.push(href)
@@ -550,29 +589,54 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite])
 
-  const chooseStarter = useCallback(() => {
-    setStartingStarter(true)
-    trackEvent('site_start_choice', { choice: 'starter' })
-    startBlank()
+  // The zone's `startBlank`. Before the site exists it creates it with the
+  // starter, and answers `false` when it could not — most often a name or
+  // address to fix, which step 1 shows.
+  const runStartBlank = useCallback(() => {
+    const result = startBlank()
+    if (result && typeof result.then === 'function') {
+      void result.then((done) => {
+        if (done) return
+        setStartingStarter(false)
+        setStep('choose')
+      })
+    }
   }, [startBlank])
 
+  const chooseStarter = useCallback(() => {
+    if (pendingSite && !pendingSite.created && !pendingSite.check()) return
+    setStartingStarter(true)
+    trackEvent('site_start_choice', { choice: 'starter' })
+    runStartBlank()
+  }, [pendingSite, runStartBlank])
+
   const chooseAi = useCallback(() => {
+    if (pendingSite && !pendingSite.created && !pendingSite.check()) return
     trackEvent('site_start_choice', { choice: 'ai' })
     setStep('describe')
-  }, [])
+  }, [pendingSite])
 
   if (verdict !== 'ready') return null
 
-  // Before a job is started every way out is the blank site, which writes the
-  // starter (AGL-3594); after, it only closes — the job builds the site.
-  const exit = started ? (leave ?? startBlank) : startBlank
+  // Before a job is started Skip is the blank site, which writes the starter
+  // (AGL-3594); after, it only closes — the job builds the site.
+  const exit = started ? (leave ?? runStartBlank) : runStartBlank
+  // Escape and the close control. Before "Create site" has made the site
+  // (AGL-3761) there is nothing to give a starter to, so they only close,
+  // and nothing is created; otherwise they are the same way out as Skip.
+  const dismissTo = creating && !started ? (leave ?? runStartBlank) : exit
   // Anything the person typed or picked, which a dismissal must not discard
   // silently (AGL-3660). After a job starts there is nothing left to lose.
   const drafted =
     !started &&
-    Boolean(answers.siteType.trim() || answers.audience.trim() || answers.kind !== null)
+    Boolean(
+      answers.siteType.trim() ||
+        answers.audience.trim() ||
+        answers.kind !== null ||
+        (creating && pendingSite?.dirty),
+    )
   // Escape and the close control: a dismissal, never a choice. Escape that
   // bubbled here through React from a portal outside this dialog's own DOM is
   // a nested menu's, already handled there, and is not this dialog's to act on.
@@ -583,18 +647,18 @@ export function AiSiteStartCard({
       if (root && target instanceof Node && !root.contains(target)) return
     }
     if (drafted) setConfirmingLeave(true)
-    else exit()
+    else dismissTo()
   }
   const leaveDraft = () => {
     setConfirmingLeave(false)
-    exit()
+    dismissTo()
   }
 
   // The chosen model's cost against Auto's, as the model list states it.
   const modelMultiplier =
     (pickedModel && modelChoice.options?.options.find((option) => option.id === pickedModel)?.multiplier) || 1
   // What the start is likely to cost and at most (AGL-3722): "About 137
-  // credits (up to 282)", the measured figures scaled by the chosen model.
+  // credits (up to 283)", the measured figures scaled by the chosen model.
   const scaled = (range: AiCreditRange): AiCreditRange => ({
     likely: Math.round(range.likely * modelMultiplier),
     p90: Math.round(range.p90 * modelMultiplier),
@@ -689,7 +753,9 @@ export function AiSiteStartCard({
               <Typography variant="body1" color="text.secondary">
                 {choosing ? <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} /> : null}
                 {choosing
-                  ? 'You can change everything later.'
+                  ? creating
+                    ? 'Name your site, then choose how it starts. You can change everything later.'
+                    : 'You can change everything later.'
                   : `A few answers and ${PLATFORM_BRAND_NAME} AI plans and writes your pages, then publishes your site.`}
               </Typography>
             </Stack>
@@ -718,6 +784,12 @@ export function AiSiteStartCard({
                 onSmaller={() => void plan({ creditsConfirmed: true, pages: 1 })}
               />
             )}
+            {choosing && creating && pendingSite ? (
+              <Stack spacing={2} component="section" aria-label="Your site">
+                <SectionLabel>{'Your site'}</SectionLabel>
+                {pendingSite.fields}
+              </Stack>
+            ) : null}
             {choosing ? (
               <Box
                 sx={{
@@ -928,12 +1000,14 @@ export function AiSiteStartCard({
         <DialogTitle id={`${TITLE_ID}-leave`}>{'Leave without your answers?'}</DialogTitle>
         <DialogContent>
           <DialogContentText id={`${TITLE_ID}-leave-text`}>
-            {'What you typed is not saved. Leaving starts your site from the starter site instead.'}
+            {creating
+              ? 'What you typed is not saved, and no site is created.'
+              : 'What you typed is not saved. Leaving starts your site from the starter site instead.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={leaveDraft}>
-            {'Leave and start blank'}
+            {creating ? 'Leave' : 'Leave and start blank'}
           </Button>
           <Button variant="contained" autoFocus onClick={() => setConfirmingLeave(false)}>
             {'Keep editing'}

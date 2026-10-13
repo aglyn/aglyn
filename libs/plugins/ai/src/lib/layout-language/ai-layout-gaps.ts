@@ -58,6 +58,8 @@ const SPEAKS_ALONE = new Set([
   'cart',
   // A music site's player, placed empty for the owner's tracks (AGL-3716).
   'musicPlayer',
+  // The site's events, listed by the events-calendar plugin (AGL-3755).
+  'eventList',
 ])
 
 const HEADING_VARIANTS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'overline'])

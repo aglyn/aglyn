@@ -107,6 +107,10 @@ const MUI_DECLARED_CONTAINERS: readonly string[] = [
   'muiCardContent',
   'muiContainer',
   'muiDrawer',
+  // A field's frame: its label, input and help text (form-controls.tsx).
+  'muiFormControl',
+  // The control a Choice Label names is its child.
+  'muiFormControlLabel',
   'muiGrid',
   'muiImageList',
   'muiImageListItem',
@@ -116,6 +120,10 @@ const MUI_DECLARED_CONTAINERS: readonly string[] = [
   'muiMegaMenu',
   'muiNavMenu',
   'muiPaper',
+  // Its Radio choices.
+  'muiRadioGroup',
+  // Its Select Options.
+  'muiSelect',
   'muiStack',
   'muiTabPanel',
   'muiTabs',

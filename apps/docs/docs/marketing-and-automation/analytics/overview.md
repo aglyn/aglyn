@@ -180,6 +180,16 @@ Tag for ads and remarketing, under the same consent as the other advertising tag
 The ID is 4–10 digits. LinkedIn also sets cookies on its own domain, which only LinkedIn
 can clear.
 
+### Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask Assist to fill in or clear this card, such as *connect Google Analytics
+G-4R7KX2PQ9Z* or *remove the Meta pixel*. Give the ID itself: Aglyn AI never guesses one,
+and asks for it when your message has none. Each ID is checked against the same shape the
+field checks, and the change is saved to your live site when you confirm the plan, just as
+a save here is. Assist never changes the Cookie consent card, so every tag still loads only
+where a visitor's consent allows. It cannot connect anything that needs a token or a
+secret, such as the Conversions API on the Ad conversions card.
+
 ## Related
 
 - [Google Analytics events](./google-analytics.md)

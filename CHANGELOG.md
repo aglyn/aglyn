@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.247 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.246...v1.0.0-beta.247)
+
+### Added
+
+- **ai:** the form job builds fields from mui's separate form elements
+- **email:** name a separate mui form element by the label beside it
+- **forms:** seeds, templates and presets build fields from mui's form elements
+- **tools:** backfill every saved form field to mui's separate form elements
+- **aglyn:** rebuild an all-in-one form field from mui's separate form elements
+- **mui,forms:** every piece of a form field is its own Besigner element
+
+### Fixed
+
+- **mui:** an input's outline is on its own box, so Border and Corner fields reach it
+
+### Changed
+
+- **forms:** keep the form field converter in the forms plugin, not core
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **ai:** regenerate the palette now the form field has no presets
+
+</details>
+
 ## v1.0.0-beta.246 — 2026-10-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.245...v1.0.0-beta.246)

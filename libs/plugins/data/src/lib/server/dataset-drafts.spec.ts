@@ -43,6 +43,7 @@ import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugi
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { DATASET_IMAGE_FIELD, DATASET_IMAGE_FIELD_TYPE, isDatasetImageValue } from '../model/dataset-image-field'
+import { DATASET_PAGE_FIELD_TYPE } from '../model/dataset-page-field'
 import { validateDocument, type DatasetModel } from '../model/dataset-models'
 import { RECORD_PAGE_ADDRESS_FIELD_TYPE } from '../record-pages/record-pages'
 import {
@@ -208,7 +209,7 @@ describe('reading what a caller sends', () => {
     })
     expect(read).toEqual({
       ok: false,
-      problems: ['The field "Price" is one of text, number, integer, boolean, list, image'],
+      problems: ['The field "Price" is one of text, number, integer, boolean, list, image, page'],
     })
     const values = readDatasetDraftContent({
       name: 'Menu',
@@ -282,6 +283,29 @@ describe('reading what a caller sends', () => {
     expect(
       readDatasetDraftContent({ name: 'Pieces', fields: [{ name: 'Image', type: 'image' }], pageAddressFrom: 'Image' }).ok,
     ).toBe(false)
+  })
+
+  it('keeps a record’s page in a page field, as a page reference only (AGL-3763)', () => {
+    const read = readDatasetDraftContent({
+      name: 'Services',
+      fields: [{ name: 'Name' }, { name: 'Details page', type: 'page' }],
+      records: [{ Name: 'Drywall repair', 'Details page': 'screen:drywall-1' }, { Name: 'Painting' }],
+    })
+    expect(read.ok).toBe(true)
+    if (read.ok !== true) return
+    expect(read.value.model.fields['details_page'] ?? Object.values(read.value.model.fields)[1]).toEqual({
+      name: 'Details page',
+      type: 'text',
+      customType: DATASET_PAGE_FIELD_TYPE,
+    })
+    for (const bad of ['/services/drywall', 'drywall-1', 'https://example.com/drywall', 'collection:blog']) {
+      const refused = readDatasetDraftContent({
+        name: 'Services',
+        fields: [{ name: 'Name' }, { name: 'Page', type: 'page' }],
+        records: [{ Name: 'Drywall', Page: bad }],
+      })
+      expect(refused).toMatchObject({ ok: false })
+    }
   })
 })
 

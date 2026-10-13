@@ -18,6 +18,7 @@
 import {
   definePluginServiceContract,
   registerPluginService,
+  resolvePluginService,
   resolvePluginServices,
 } from './plugin-services'
 
@@ -184,4 +185,88 @@ export function stockPhotoProvider(): StockPhotoProvider | null {
     }
   }
   return null
+}
+
+/**
+ * A PHOTO FOR A SUBJECT, KEPT IN THE SITE'S LIBRARY (AGL-3755).
+ *
+ * The providers above answer searches; choosing well among the hits is
+ * work of its own — subject nouns rather than whole sentences, hits scored
+ * by how their tags meet the subject and the business's world, nothing
+ * placed twice in one act, the business's own world when the subject finds
+ * nothing, and a starter photo when the library is down — and it lives in
+ * the plugin that learned it on live site starts (the AI plugin). A plugin's
+ * draft writer that wants a picture (an event's cover) asks
+ * {@link stockPhotoPicker} for the deployment's one picker and gets a photo
+ * the site can serve, or `null` where no picker is registered. It never
+ * imports the plugin that picks.
+ *
+ * The picker copies a stock photo into the site's own library as the member
+ * named, through `core.media-ingest`, and only once: a photo the library
+ * already holds (by its source key) is reused, never stored a second time.
+ */
+export interface StockPhotoPickRequest {
+  hostId: string
+  /** The member the photo is stored as; their access, the site's lockdown and the plan's storage are checked as for an upload of theirs. */
+  uid: string
+  /** What the photo shows, in plain words: an event's title, a product's name. The picker reads the subject's nouns out of it. */
+  subject: string
+  /** The business in its own words ("a sourdough bakery"), which holds the photo to its world and is searched when the subject finds nothing. */
+  business?: string
+  /** The asset's description in the library; the subject where absent. */
+  alt?: string
+  /** The frame the photo fills; `horizontal` where absent. */
+  orientation?: StockPhotoOrientation
+  /**
+   * The act the photo is one of (an AI job's id): no photo is placed twice
+   * within it. Absent, only the site library's own reuse applies.
+   */
+  scope?: string
+  /** Turns the choice among equally good photos; the same seed picks the same photo again. */
+  seed?: string
+  /** Source keys or asset srcs the act already shows. */
+  avoid?: readonly string[]
+  signal?: AbortSignal
+}
+
+export interface StockPhotoPick {
+  /** What an `image` node's `src` holds: the asset's media reference, or a starter photo's path. */
+  src: string
+  /** An address an `<img src>` or an image-address field takes as it stands: site-relative. */
+  url: string
+  width: number
+  height: number
+  /**
+   * `library`: a stock photo in the site's own media library, copied there
+   * now or reused. `starter`: one of the platform's starter photos, the
+   * picture of last resort when the library is down or found nothing.
+   */
+  origin: 'library' | 'starter'
+}
+
+export interface StockPhotoPicker {
+  /** A photo for the subject, or `null` when none can be had. Never throws. */
+  pick(request: StockPhotoPickRequest): Promise<StockPhotoPick | null>
+}
+
+/** One picker per deployment: the plugin whose choosing it is registers it. */
+export const STOCK_PHOTO_PICKER = definePluginServiceContract<StockPhotoPicker>(
+  'core.stock-photo-picker',
+  { multiple: false },
+)
+
+/** Registers the deployment's picker; registering again replaces it. */
+export function registerStockPhotoPicker(
+  picker: StockPhotoPicker,
+  options?: { pluginId?: string },
+): void {
+  if (typeof picker?.pick !== 'function') throw new Error('a stock photo picker needs pick')
+  registerPluginService(STOCK_PHOTO_PICKER, picker, {
+    ...(options?.pluginId ? { pluginId: options.pluginId } : {}),
+  })
+}
+
+/** The registered picker, or `null` in a process that registered none. */
+export function stockPhotoPicker(): StockPhotoPicker | null {
+  return resolvePluginService(STOCK_PHOTO_PICKER) ?? null
 }

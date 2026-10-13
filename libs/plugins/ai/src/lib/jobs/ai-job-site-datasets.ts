@@ -46,7 +46,7 @@ import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJobAdmissionContext } from './ai-job-admission'
 import { aiOriginJobId } from './ai-job-draft-ids'
 import { aiSiteProductPhotoSrc } from './ai-job-site-content'
-import { aiLayoutStockPhotoSource } from './ai-layout-stock-photos'
+import { aiLayoutStockPhotoSource, aiStockPhotoWordsOf } from './ai-layout-stock-photos'
 import { AI_DATASET_DRAFT_RESOURCE } from './ai-build-unit-outcome'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
@@ -336,7 +336,7 @@ export interface AiSiteDatasetRecordPhoto {
  * reaches it. No AI model is asked, so no credits; never throws.
  */
 export async function aiSiteDatasetRecordPhotos(input: {
-  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief'>
+  job: Pick<AiJob, '$id' | 'hostId' | 'createdBy' | 'inputs' | 'brief' | 'plan'>
   /** The dataset, as the plan named it. */
   name: string
   /** Each record's name, by position. */
@@ -367,6 +367,7 @@ export async function aiSiteDatasetRecordPhotos(input: {
         uid: job.createdBy,
         seed,
         business: aiSiteWords(job.inputs).about || job.brief,
+        ...aiStockPhotoWordsOf(job),
         sectionNames: [input.name],
         jobId: aiOriginJobId(job),
         // Each record may try its name, its object and the site's world.

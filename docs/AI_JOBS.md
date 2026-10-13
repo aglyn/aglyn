@@ -239,7 +239,7 @@ only the quote and the Free admission moved.
 has left is the less of its own band and its owner's allowance across every
 Free workspace they hold (`readFreeAiCreditsLeft`), net of give-backs. A Free
 site start (`createAiSiteJobAdmission`, on `aiFreeSiteCreditRange`: 137 / 213
-/ 282 for two pages) and a Free build's confirm and Try again
+/ 283 for two pages) and a Free build's confirm and Try again
 (`aiBuildFreeCreditsRefusal`, on `aiBuildCreditRange`) are admitted with no
 prompt when the p90 fits. When it does not, the door answers 409 with
 `code: 'credits-confirm'` and `credits` (the range, what is left, the reset
@@ -792,8 +792,16 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   is one the rule reads as a region and it places nothing, or only a layout. One that
   places a form or a component, and a page whose every section is a region, are
   re-asked as before; a home left under its fewest sections is the thin-home check's.
-  `plan-empty-gallery` is not settled: how many pieces a section shows, and whether it
-  shows the work at all, has no one answer.
+- **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
+  `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
+  `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
+  name `aiSiteSectionShowsWork` reads, never a framing one like "Portfolio Hero")
+  planned with fewer than `AI_SITE_GALLERY_MIN_ITEMS` (3) to exactly 3, before the rules
+  read the plan. The job opts in through the `galleryMinItems` capability, which only
+  `aiSitePlanCapabilities` sets for a `site` job. A section's items move no section cap,
+  Free wall or credit figure, which count sections and pages, and a site start keeps no
+  components, so rule 1 asks none for the raised count. One item of a list split into
+  sections is left for rule 1's re-ask to join; the gallery check stays as the backstop.
 - **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
   inline sentence's old words, "draw a repeated item in its own section", as a section an
   item, and planned "the four areas we practice" as four sections of one item: none was
@@ -1452,7 +1460,7 @@ nothing itself.
   schema for every brief, so the request still caches across briefs
   (`site-plan` in `runtime/ai-prompt-cache.spec.ts`, 54 tokens over the plain
   plan); every other kind's tool is the same bytes as before. The reader keeps
-  a code the Languages card would accept (`aiPlanLanguage`: `es`, `pt-BR`,
+  a code the Languages card would accept (`siteLanguageCode`, `@aglyn/aglyn/app-utils/seo-locale`: `es`, `pt-BR`,
   `zh-Hant`, in BCP 47 casing) and drops anything else as a repair, never a
   refusal. A guided start's publish then writes `locales: [code]` and
   `defaultLocale: code`, as the Languages card saves one language
@@ -2915,7 +2923,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,053 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,058 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
@@ -2934,7 +2942,9 @@ needs, and the machine does not start it with less.
   instructions, 4,596, and left five. The Image's and the Image List's
   lightbox switch (AGL-3717) put 4 back, 4,600, and left three: the catalog
   line names the switch and none of the lightbox's dozen look settings, and
-  the Image's `loading` left the line to pay for it. The Music player
+  the Image's `loading` left the line to pay for it. The all-in-one Form
+  Field leaving the Add Element picker for MUI's separate form elements took
+  its two preset names off its catalog line, 4,587, and left eight. The Music player
   (AGL-3716) costs a page pass nothing: its elements and its Music playlist
   block stay off the catalog (Assist's edit protocol names them, and a music
   site's player is placed by the compiler), so its 65 tokens never reach the
@@ -3083,7 +3093,8 @@ the element budget its request asks for.
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
-  35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
+  36 credits, its answer and its re-ask together (35 until its tool asked for the photo
+  words in English, AGL-3760). The site's look (AGL-3660) is one
   fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
   The build is priced as the layout language builds it (re-derived in AGL-3660; the
   per-section passes it replaced no longer run on a site): a guided start creates its
@@ -3099,7 +3110,7 @@ the element budget its request asks for.
   ceilings; every answer at its full ceiling would come to more than the 300 for the
   layout, the form and two pages alone, which no section count changes. A Free site
   plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
-  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 282 credits
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 283 credits
   of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
   figures it derives, and the Free wall holds a Free site's plan to that section count
   and to its page cap. That leaves 18 credits, and one post at its worst on the fast

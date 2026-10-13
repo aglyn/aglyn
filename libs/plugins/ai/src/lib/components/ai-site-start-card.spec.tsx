@@ -689,7 +689,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     expect(options).toEqual(['1', '2'])
     expect(screen.queryByLabelText('Welcome email')).toBeNull()
     // About what it is likely to cost, and at most (AGL-3722).
-    expect(screen.getByText('About 137 credits (up to 282), of the 300 AI credits you get free each month.')).toBeTruthy()
+    expect(screen.getByText('About 137 credits (up to 283), of the 300 AI credits you get free each month.')).toBeTruthy()
   })
 
   it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
@@ -716,7 +716,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     const warning = screen.getByRole('alert', { name: 'More than your credits left' })
     expect(warning.textContent).toContain(aiCreditsPromptText(prompt, 'site'))
     expect(warning.textContent).toContain(
-      'This site is about 137 credits (up to 282). You have 70 left, so it will build as much as it can and pause when your credits run out.',
+      'This site is about 137 credits (up to 283). You have 70 left, so it will build as much as it can and pause when your credits run out.',
     )
     expect(screen.getByRole('link', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
     // Plan my site alone starts nothing: only an explicit choice does.
@@ -1003,5 +1003,130 @@ describe('the guided start is drawn on the console’s own surface', () => {
     const expected = document.createElement('div')
     expected.style.backgroundColor = theme.palette.background.default
     expect(style.backgroundColor).toBe(expected.style.backgroundColor)
+  })
+})
+
+/**
+ * "Create site" draws the start before the site exists (AGL-3761).
+ *
+ * The site's name and address are the shell's fields, drawn on step 1, and
+ * the site is created only by a choice that needs it: the starter or Skip
+ * (`startBlank`), or Plan my site (`pendingSite.create`, then the job on the
+ * site it made). The close control and Escape create nothing: they are
+ * `leave`, and the question they ask with something typed says so.
+ */
+describe('before the site exists (AGL-3761)', () => {
+  const LEAVE_QUESTION = 'Leave without your answers?'
+  let leave: jest.Mock
+
+  const pendingSite = (patch: Record<string, unknown> = {}) => ({
+    fields: <div>{'The site’s name and address'}</div>,
+    check: jest.fn(() => true),
+    dirty: false,
+    create: jest.fn(async () => ({ hostId: 'host-new', host: 'royal-styles', orgSlug: 'acme' })),
+    created: null,
+    ready: jest.fn(),
+    ...patch,
+  })
+  const pendingProps = (site: ReturnType<typeof pendingSite>) =>
+    ({ hostId: null, host: null, leave, pendingSite: site }) as Partial<ConsoleHostFirstRunZoneProps>
+
+  beforeEach(() => {
+    leave = jest.fn()
+    mockPush.mockReset()
+  })
+
+  it('draws the shell’s name and address on step 1, and tells the shell it is here', async () => {
+    const site = pendingSite()
+    await openChoice(pendingProps(site))
+    expect(screen.getByText('The site’s name and address')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Your site' })).toBeTruthy()
+    expect(site.ready).toHaveBeenCalledWith(true)
+  })
+
+  it('tells the shell when it will not draw, so the shell asks its own way', async () => {
+    const Widget = widget()
+    const site = pendingSite()
+    mockFetch.mockResolvedValue(json({ error: 'No' }, 404))
+    render(<Widget {...zoneProps(pendingProps(site))} />)
+    await waitFor(() => expect(site.ready).toHaveBeenCalledWith(false))
+  })
+
+  it('closes through `leave` on the close control and Escape, never the starter', async () => {
+    await openChoice(pendingProps(pendingSite()))
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    expect(leave).toHaveBeenCalledTimes(2)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('asks before a name typed is dropped, and says no site is created', async () => {
+    await openChoice(pendingProps(pendingSite({ dirty: true })))
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    expect(await screen.findByText(LEAVE_QUESTION)).toBeTruthy()
+    expect(screen.getByText('What you typed is not saved, and no site is created.')).toBeTruthy()
+    expect(screen.queryByText(/starts your site from the starter site/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Leave' }))
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('keeps both cards waiting on a name and address the shell will take', async () => {
+    const site = pendingSite({ check: jest.fn(() => false) })
+    await openChoice(pendingProps(site))
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the starter site' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    expect(site.check).toHaveBeenCalledTimes(2)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+    expect(screen.getByText('How do you want to start?')).toBeTruthy()
+  })
+
+  it('takes the starter through startBlank, and frees the card when the shell could not create it', async () => {
+    mockStartBlank.mockResolvedValueOnce(false)
+    await openChoice(pendingProps(pendingSite()))
+    const starter = screen.getByRole('button', { name: 'Start from the starter site' })
+    fireEvent.click(starter)
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(starter.getAttribute('aria-busy')).toBeNull())
+  })
+
+  it('creates the site on Plan my site, then starts the job on it and opens its build page', async () => {
+    const site = pendingSite()
+    await openChoice(pendingProps(site))
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText('Tell us about your site')
+    // Nothing is created by answering.
+    expect(site.create).not.toHaveBeenCalled()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob({ hostId: 'host-new' }) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles/ai-jobs/job-1'))
+    expect(site.create).toHaveBeenCalledTimes(1)
+    const [, init] = postCall()
+    expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ hostId: 'host-new', kind: 'site' }))
+    expect(leave).toHaveBeenCalledTimes(1)
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('says a refused create, starts no job, and returns to the name when it is the address', async () => {
+    const site = pendingSite({
+      create: jest.fn(async () => ({ error: 'That subdomain is taken', address: true })),
+    })
+    await openChoice(pendingProps(site))
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText('Tell us about your site')
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    expect(await screen.findByText('That subdomain is taken')).toBeTruthy()
+    expect(await screen.findByText('How do you want to start?')).toBeTruthy()
+    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it('gives a site it created, whose job could not start, the starter on the way out', async () => {
+    const created = { hostId: 'host-new', host: 'royal-styles', orgSlug: 'acme' }
+    await openChoice(pendingProps(pendingSite({ created })))
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+    expect(leave).not.toHaveBeenCalled()
   })
 })

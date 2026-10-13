@@ -37,6 +37,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ header, children }: { header?: ReactNode; children: ReactNode }) => (
     <section aria-label={typeof header === 'string' ? header : undefined}>{children}</section>
   ),
+  MdiIcon: () => null,
 }))
 
 jest.mock('@aglyn/shared-ui-color-picker', () => ({ ColorPicker: () => null }))
@@ -58,6 +59,7 @@ import ThemeEditor from './theme-editor.component'
 import {
   INHERITED_SPACING,
   THEME_COLOR_FIELDS,
+  THEME_COMPONENT_LOOK_FIELDS,
   THEME_EDITOR_CONTROLS,
 } from './theme-editor.constants'
 
@@ -85,13 +87,16 @@ describe('the editor renders exactly the catalog (AGL-2938)', () => {
             expect(screen.getByRole('spinbutton', { name: control.label })).toBeTruthy()
           }
           break
-        case 'json':
-          expect(
-            within(screen.getByRole('region', { name: control.label })).getByRole('button', {
-              name: 'Edit overrides',
-            }),
-          ).toBeTruthy()
+        case 'components': {
+          // Click-only fields, one per look; the overrides themselves sit
+          // behind a collapsed Advanced section.
+          const card = within(screen.getByRole('region', { name: control.label }))
+          for (const field of THEME_COMPONENT_LOOK_FIELDS) {
+            expect(card.getByRole('combobox', { name: startsWith(field.label) })).toBeTruthy()
+          }
+          expect(card.getByRole('button', { name: 'Advanced' })).toBeTruthy()
           break
+        }
         default:
           break
       }
@@ -104,9 +109,9 @@ describe('the editor renders exactly the catalog (AGL-2938)', () => {
       screen.getAllByRole('button', { name: COLOR_BUTTON }).length +
       screen.getAllByRole('combobox').length +
       screen.getAllByRole('spinbutton').length +
-      screen.getAllByRole('slider').length +
-      screen.getAllByRole('button', { name: 'Edit overrides' }).length
-    expect(rendered).toBe(THEME_EDITOR_CONTROLS.length)
+      screen.getAllByRole('slider').length
+    // The components control is its look fields, every one a combobox.
+    expect(rendered).toBe(THEME_EDITOR_CONTROLS.length - 1 + THEME_COMPONENT_LOOK_FIELDS.length)
   })
 
   it('writes what it renders the way the catalog writes it', () => {
@@ -125,6 +130,45 @@ describe('the editor renders exactly the catalog (AGL-2938)', () => {
         },
       },
     })
+  })
+})
+
+describe('the Style components card', () => {
+  it('writes a choice into the component overrides, and Theme default clears it', () => {
+    const onSave = jest.fn()
+    render(<ThemeEditor theme={{}} onSave={onSave} />)
+    const pick = (label: string, option: string) => {
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: startsWith(label) }))
+      fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: option }))
+    }
+    pick('Button style', 'Outlined')
+    pick('Card corners', 'Twice the site radius')
+    pick('Input border color', 'Primary')
+    pick('Card corners', 'Theme default')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith({
+      components: {
+        MuiButton: { defaultProps: { variant: 'outlined' } },
+        MuiOutlinedInput: {
+          sx: {
+            root: { borderColor: 'primary.main' },
+            notchedOutline: { borderColor: 'primary.main' },
+          },
+        },
+      },
+    })
+  })
+
+  it('shows an override no choice names as custom, without changing it', () => {
+    render(
+      <ThemeEditor
+        theme={{ components: { MuiButton: { styleOverrides: { root: { fontWeight: 300 } } } } }}
+        onSave={jest.fn()}
+      />,
+    )
+    expect(
+      screen.getByRole('combobox', { name: startsWith('Button text weight') }).textContent,
+    ).toContain('Custom')
   })
 })
 

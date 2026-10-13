@@ -64,6 +64,8 @@ checks the member's role and the allowance when the item runs.
 | `navigation` (1), AGL-3728 | ai | navigation runner, no model (a layout version, unpublished) | `versioning` | | no |
 | `duplicate` (3), AGL-3740 | ai | duplicate runner, no model, core's `duplicateResource` (an unpublished copy) | the kind's own, checked by the copy | the kind's create counter | yes |
 | `settings` (1), AGL-3748 | ai | settings runner, no model, the console settings cards' fields saved LIVE on confirm | | | yes |
+| `tracking` (1), AGL-3751 | ai | tracking runner, no model (`jobs/ai-job-tracking-step.ts`), the Setup → Tracking card's ids set or removed LIVE on confirm | | | yes |
+| `media` (4), AGL-3752 | ai | media runner, no model, the media library Details drawer's folder, tags, alt text and file name saved LIVE on confirm | | | yes |
 | `product` (12) | commerce | `product` writer (`libs/plugins/commerce/src/lib/server/product-ai-capability.ts`) | `commerce` | `productsPerHost` | no |
 | `store-shipping` (10), `store-pickup` (5), `store-delivery` (5), `store-tax` (6), AGL-3749 | commerce | `store-settings` writer, no model, live (`libs/plugins/commerce/src/lib/server/store-setup-ai-capability.ts`) | `commerce` | | no |
 | `booking-service` (5) | bookings | `booking-service` writer | `bookings` | `servicesPerHost` | no |
@@ -75,6 +77,7 @@ checks the member's role and the allowance when the item runs.
 | `dataset` (3), **new in this PR** | data | `dataset` writer (`libs/plugins/data/src/lib/server/dataset-drafts.ts`) | `dataStore` | `datasetsPerOrg` | no |
 | `crm-pipeline` (3), AGL-3746 | crm | `crm-pipeline` writer (`libs/plugins/crm/src/lib/server/crm-setup-writers.server.ts`), saved live | `crm` | | no |
 | `crm-field` (12), AGL-3746 | crm | `crm-field` writer, saved live | `crm` | 100 definitions per org (`CONTACT_FIELDS_MAX_PER_ORG`) | no |
+| `crm-picklist-values` (12), AGL-3756 | crm | `crm-picklist-values` writer, saved live; only adds | `crm` | 200 values a picklist, 50 choices a Choice field | no |
 | `event` (6), AGL-3743 | events-calendar | `event` writer, no model (`libs/plugins/events-calendar/src/lib/server/event-drafts.server.ts`); a page section that uses it places `eventList` | `eventCalendar` (the add-on) | | yes |
 
 Checked against the code on 2026-10-10. `FUNNEL_FEATURE` is
@@ -186,15 +189,15 @@ gap.
 | Live chat | Tidio, LiveChat | no |
 | **Datasets** | typed fields, references, records, import and export, a page per record | **yes in this PR**: creates a dataset with typed fields and seeded records, lists it on pages, drafts its record page, and each listed card links its record's page (AGL-3727); no references, import or record edits after the build |
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
-| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
-| Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
-| CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); no records, picklist values or views |
+| Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op makes dated events (title, start and end in the business's time zone, location, organizer, description), published for the publishing role, each with a stock cover photo, and an event-led guided start drafts its first three (AGL-3755); a page section that uses them places the Event List |
+| Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; a build's `media` op (AGL-3752) files the site's own files in folders (made where missing), adds and removes tags, renames one, and writes alt text from the request or from the caption the library holds, live; no uploads, edits, crops, sharing or the organization library |
+| CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); values added to every picklist and Choice field (`crm-picklist-values`, AGL-3756); no records or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
 | Bookings | services, availability, payment, reminders | partial: a booking service draft |
 | Marketing overlays | bars and popups | yes (`overlay`) |
 | Email campaigns | campaigns, designed emails | yes, drafted and unsent (`campaign`, `email`) |
-| Analytics, funnels, A/B tests | insights, funnels, experiments, GA4, conversions | partial: insights, `funnel`, `experiment`; no GA4 or conversions setup |
-| Workflows | workflows, actions, webhooks, Zapier | partial: `workflow` (can name a `webhookPost` step); no webhook or Zapier setup |
+| Analytics, funnels, A/B tests | insights, funnels, experiments, GA4, conversions | partial: insights, `funnel`, `experiment`; a build's `tracking` op (AGL-3751) connects or removes Google Analytics, Tag Manager and the Meta, Google Ads, LinkedIn, TikTok and Pinterest tags; no Conversions API (it needs an access token) |
+| Workflows | workflows, actions, webhooks, Zapier | partial: `workflow` (can name a `webhookPost` step); no order webhook or Zapier setup, by design (AGL-3751: a signing secret shown once, a Zapier account) |
 | Teams and roles, billing | members, roles, plans, add-ons | no, by design |
 
 ## Gaps, ranked
@@ -225,8 +228,9 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    See "Redirects" below.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
    **Setup CLOSED (AGL-3746):** a build's `crm-pipeline` and `crm-field` ops
-   set up pipelines, stages and custom fields. See "CRM setup" below. Still
-   no records (contacts, deals, leads), picklist values or saved views.
+   set up pipelines, stages and custom fields, and `crm-picklist-values`
+   (AGL-3756) adds picklist values. See "CRM setup" below. Still no records
+   (contacts, deals, leads) or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
    order emails. **CLOSED for shipping, pickup, delivery and tax
    (AGL-3749):** four build ops set what the console's Shipping, Local
@@ -238,8 +242,17 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    confirm. See "Site settings" below. Still no maintenance mode, password or
    error pages, site search or multilingual variants.
 10. **Integrations.** No webhooks, Zapier or GA4/conversions setup.
+    **CLOSED for tracking tags (AGL-3751):** a build's `tracking` op sets
+    or removes what the console's Setup → Tracking card sets (Google
+    Analytics, Tag Manager, Meta, Google Ads, LinkedIn, TikTok, Pinterest),
+    live on confirm. Server-side conversions, order webhooks, Zapier and
+    marketing-platform connections stay a person's: each needs a secret or an
+    account the person holds. See "Integrations" below.
 11. **Media library.** No tags, folders or metadata, and no video, music or
-    lightbox placement ops.
+    lightbox placement ops. **Organization CLOSED (AGL-3752):** a build's
+    `media` op files, tags, renames and writes alt text for files already in
+    the site's own library, as the Details drawer saves them. See "Media
+    library" below. Placement ops (video, music, lightbox) stay open.
 12. **Duplicating.** `duplicate_resource` exists and nothing calls it.
     **CLOSED (AGL-3740):** a build's `duplicate` op copies a page, component,
     layout, template, form, email design or workflow the site has, so "make
@@ -342,9 +355,9 @@ is a decision about the account, not something to build.
   unasked probability is spread by position (25/50/75 for three stages).
 - **`crm-field`** (at most 12 a plan) takes `object` (contact, company,
   deal, lead — `CRM_FIELD_OBJECTS`), `label`, `type` (text, number, date,
-  select, checkbox, url — `CONTACT_FIELD_TYPES`; no currency type exists, so
-  money is a number), `options` for select, and `required`. Org-wide, last
-  on its object's tab.
+  select, checkbox, url, currency — `CONTACT_FIELD_TYPES`; "Budget" is
+  currency, AGL-3756), `options` for select, `currency` (ISO 4217, USD when
+  unsaid) for currency, and `required`. Org-wide, last on its object's tab.
 - **Idempotent.** The job's attempt key is a new pipeline's or field's id.
   An active pipeline is matched by name, a stage within it by name, a field
   by label or key within its object, all without case; a match is brought to
@@ -363,9 +376,29 @@ is a decision about the account, not something to build.
   can create in (`memberCanSee`); a field is org-wide, so only an org-wide
   member. The org's 100-definition ceiling holds for fields.
 - **Cost.** No model: 0 credits, Free not offered (no CRM on Free).
-- **Not yet.** No stage forecast category beyond `pipeline`, no picklist
-  values (lead status or source, deal type), no stage or field removal, no
-  archiving, no records or saved views.
+- **`crm-picklist-values`** (AGL-3756, at most 12 a plan;
+  `model/crm-picklist-setup-content.ts`) ADDS values the way CRM → Fields'
+  Add value and a Choice field's choices do: `list` is any of
+  `CRM_PICKLIST_IDS` (lead status and source, deal type and contact role,
+  company type, industry, rating and ownership, salutation, task status,
+  priority, type and subject) or `custom` with `object` + `field` for a
+  custom Choice field; `values`; `meaning` where the list has meanings (lead
+  status: new, nurturing, working, unqualified — never qualified, which only
+  a conversion sets; task status, priority and type); `group` for lead source
+  (inbound, outbound). Each value is `addPicklistValue`, appended; a value
+  already held in any capitals is left as is, an INACTIVE one reported, not
+  reactivated; nothing is removed, renamed or reordered, so a re-run adds
+  nothing. The list is read and written in one transaction with the
+  console's org-wide stamp; a lead source added where leads already hold the
+  label regroups them (`leadSourceDirection`, the shared `picklistRegroup`
+  module the route uses too). Org-wide gate, as fields. Record route →
+  Fields. Every CRM picklist the console extends is covered; Nurturing is
+  already a standard lead status. Not covered: deal stages (pipeline
+  stages, `crm-pipeline`'s) and the hard-coded enums no console page
+  extends (contact lifecycle stage, deal status, forecast category).
+- **Not yet.** No stage forecast category beyond `pipeline`, no stage or
+  field removal, no picklist value rename, reorder, default or
+  deactivation, no archiving, no records or saved views.
 
 ## Navigation and menus (AGL-3728)
 
@@ -489,14 +522,56 @@ is a decision about the account, not something to build.
 - **Gates.** The `eventCalendar` add-on (on no plan by itself; Free with the
   add-on may use it, since an event costs no credits), the plugin on for the
   site and past its release flag, and a member with a write role on the site.
-- **Draft only.** Every event is born `status: 'draft'`. The public listing
-  shows only published events, so the Event List the build placed is empty
-  until the owner publishes the events on the Events page, where the job's
-  link (`event` record route) opens.
-- **Not yet.** No cover photo: the capability seam has no way for a plugin's
-  writer to ask the AI plugin for a stock photo, and a planner-written image
-  address would be invented. Events are not part of a guided site start, which
-  still lists events as a dataset or as written-out copy.
+- **Published (AGL-3755).** An event is published the way the Events page's
+  "Set published" publishes one: `status: 'published'`, nothing else. It
+  takes the publishing role (`hostRoleCanPublish`: admin or editor), so the
+  Event List the build placed shows the events at once. A member who may
+  write but not publish (`author`) gets drafts, and the writer answers
+  `live: false` with a notice, so the job row reads "A draft, in Events."
+  and says why. The capability declares `live: true`; the row of a
+  published one reads "Live now, in Events." (`aiBuildItemOutputNote`).
+- **Cover photos (AGL-3755).** An event the content gives no cover gets one
+  from the stock photo picker, core's `core.stock-photo-picker` seam
+  (`registerStockPhotoPicker` / `stockPhotoPicker` in
+  `libs/aglyn/src/lib/plugin-manager/stock-photo-provider.ts`), which the AI
+  plugin registers from its server declarations
+  (`jobs/ai-stock-photo-picker.ts`). Any plugin's writer may call it: it
+  hands a `subject` (the event's title), the `business` and the act's `scope`
+  (the build's job, from the draft context's new `act`), and gets a photo
+  chosen as a page's pictures are (subject nouns, tag-overlap scoring, the
+  business's world, nothing twice in one job), copied into the site's
+  library once and reused after, or a starter photo when the library is
+  down or finds nothing. The writer stores its site-relative address in the
+  editor's own `coverImage` field and writes no cover description (the list
+  shows the cover beside the title that names it). A process with no picker
+  writes the event without a cover.
+- **Listed on a page (AGL-3755).** A build's events are seen only through
+  an Event List, so a plan whose events no section names is settled in code
+  before the doctrine reads it (`model/ai-build-event-page.ts`, the plan
+  check's new `settle` hook): on a page the plan makes about them (its
+  section named for them, else its second), else on a new Events page at
+  `/events` in the site's layout, where the address is free and the page cap
+  has room; otherwise the plan is re-asked once, naming the events. The
+  build's page lists the events it wrote through the same `events` listing
+  a guided start uses (`eventList`, placed by code), and its brief no longer
+  asks the page to place the block. The live eval of 2026-10-13 ("add our
+  next three Friday night jazz shows at 8pm to an events page", a site with
+  only Home) made three correct events and no page; its recorded answer is
+  `jobs/fixtures/ai-jazz-events-build-plan-recording.ts`.
+- **Guided site starts (AGL-3755).** A start whose brief reads as event-led
+  (a venue, club, studio with classes, meetup, church, theater) and whose
+  site admits the `event` op (the build's own gate: the `eventCalendar`
+  add-on, the plugin on and released) and whose member the writer admits is
+  offered `items` of op `event` only, at most three
+  (`jobs/ai-job-site-events.ts`). Its turn is told today's date, the site's
+  or workspace's time zone where one is set, never to date against a day the
+  brief gives, and to name the events in the uses of a section the plan
+  already has, so the section caps stay its budget; a plan that does
+  otherwise is re-asked once. The scaffold drafts each through the writer
+  (published per the role, with its cover, the site's zone over the plan's)
+  as an `event` unit before the pages, and the section that names them lists
+  them by the Event List (`events` listing, `eventList` code-only on the page
+  surface). A start that cannot have events is told nothing about them.
 
 ## Site settings (AGL-3748)
 
@@ -522,7 +597,7 @@ is a decision about the account, not something to build.
   billing, lockdown, deletion, search engine indexing
   (`seo.discourageSearchEngines`), analytics and ad ids, verification tokens,
   and turning the consent banner off are not arguments, so the planner cannot
-  ask for them. There is no tagline field on a site; "tagline" maps to the
+  ask for them (tracking ids are the `tracking` op's, AGL-3751). There is no tagline field on a site; "tagline" maps to the
   publisher's one-sentence description (`seo.entity.description`).
 - **Language.** As the Languages card saves it: a site with no language or one
   now publishes in the one asked for (`locales: [code]`, `defaultLocale:
@@ -550,6 +625,59 @@ is a decision about the account, not something to build.
   brief: nothing in the site plan says which language the brief is in, and
   adding that changes the plan prompt (see the PR). Clearing a setting is
   not offered.
+
+## Media library (AGL-3752)
+
+- **The library is core's, so the op is the AI plugin's**, as `settings` is
+  (`jobs/ai-job-media-step.ts`): no plugin owns the media library, and core
+  registers no capability. No model, so 0 credits; every plan has a library,
+  so the Free taste may ask.
+- **What the console supports, and nothing else.** Checked against
+  `apps/console/components/media/media-library.component.tsx` (the Details
+  drawer's save, the grid's bulk tag and New folder) and `/api/media/folders`
+  (`create-folder`, `update-details`): folders, tags, alt text, a file name
+  and a description. The op writes four of them:
+
+  | argument | field | rule (the console's) |
+  | -- | -- | -- |
+  | `folder` (a path, `Studio / Kilns`) | `folderId`, legacy `folder`; a new `mediaFolders` doc | `newMediaFolderDoc`, `normalizeFolderName` (60), sibling names unique without case, `MEDIA_FOLDER_MAX_DEPTH` (5); a missing folder is made, an existing one used |
+  | `addTags`, `removeTags` | `tags` | `normalizeMediaTags` (lower case, 20 of 40 characters); a tag a full file cannot take is named |
+  | `rename` (one file) | `fileName` | 200 characters; the file's address never changes |
+  | `alt` (one image), `altFromDetails` | `alt` | `MEDIA_ALT_MAX_LENGTH` (300); images only |
+
+  Each write re-derives the library's filter and search keys
+  (`mediaFilterKeys`) as the drawer does. Filing writes the folder as the
+  drawer's save does; the stored object takes the folder's path the next time
+  that folder is renamed or moved (`relocateAsset`), and every address stays.
+- **Files** are named by media id or exact file name from the site's own
+  library (never the organization's, which every site shares); a deleted file
+  is not found, and two of one name are refused, as for `settings`.
+  `missingAlt` selects up to 20 images the library's "Alt text is missing"
+  filter (`hasAlt == false`) finds. Up to 20 files an item.
+- **Alt text is specific to the image.** `alt` is for exactly one image the
+  request says what it shows. `altFromDetails` fills a MISSING alt from what
+  the library already holds: the file's description, else the caption,
+  headline or title read from inside it (`embeddedMetadata`, only while it
+  describes the file's bytes). An image with none is named ("say what it
+  shows"); nothing calls a vision model. Alt that is only a word like "image"
+  or repeats the file name is refused (`inheritedMediaAlt`'s rule). The
+  library's alt is what a placement takes when placed; placements already on a
+  page keep their own, and the output says so.
+- **Never.** Uploading, copying, replacing or deleting a file, editing its
+  bytes or the details inside them, crops, sharing (`visibleTo`), privacy,
+  custom metadata, the description, and renaming, moving or deleting a folder
+  are not arguments. A file is organized in place: no second copy.
+- **Live on confirm.** A file's details have no draft. One transaction reads
+  the site, its folders and the named files, re-checks the role, makes only
+  the missing folders and writes only what differs, so a pass asked again
+  writes nothing. No cache drop: nothing a published page renders changes.
+  The job row reads "Live now, in the site's Media library." and links to it.
+- **Gates.** The site library's rules (`canWriteHostContent`,
+  `hostWritesFrozen`): admin, editor or author, no lockdown, at the door,
+  before the write and inside it.
+- **Not yet.** The planner sees no list of the library (the site inventory
+  carries none), so a file is named by the person; a description, a folder's
+  rename or move, and the organization library are not offered.
 
 ## Forms that write to a dataset
 
@@ -674,3 +802,60 @@ catering inquiry into Inquiries.
   settings the site has; a new zone or rate takes an id derived from the
   item, and a change the settings already hold writes nothing (`replayed`).
 - **Cost.** No model, so 0 credits.
+
+## Integrations (AGL-3751)
+
+What the console can connect, and what Aglyn AI may do with each. Only what
+a console card already sets, and only values that are not secrets.
+
+| integration | console surface | Aglyn AI |
+| -- | -- | -- |
+| Google Analytics 4, Google Tag Manager | Setup → Tracking (`analytics.gaMeasurementId`, `analytics.gtmContainerId`) | **yes**, the `tracking` op |
+| Meta pixel, Google Ads tag, LinkedIn Insight, TikTok pixel, Pinterest tag | Setup → Tracking (`analytics.adTags.*`) | **yes**, the `tracking` op |
+| Meta, TikTok, Pinterest Conversions API | the Ad conversions card (`ad-conversions` plugin) | no: connecting needs the vendor's access token, which the person pastes |
+| Order webhooks | Products → Settings → Order webhooks (commerce) | no: the endpoint's signing secret is shown once, to the person who adds it, and the endpoint sends buyers' order data to an outside address |
+| Zapier | the Zapier card (`zapier` plugin) | no: a Zap is made in Zapier with the person's API key; the card only lists and disconnects |
+| Klaviyo, Mailchimp, Omnisend, Attentive | the Marketing platforms card | no: OAuth or an API key |
+| A workflow's `webhookPost` step | Workflows | already the `workflow` op |
+
+- **The op.** `tracking` (`jobs/ai-job-tracking-step.ts`, at most one a
+  plan) takes `googleAnalytics`, `googleTagManager`, `metaPixel`,
+  `googleAds`, `linkedinInsight`, `tiktokPixel`, `pinterestTag` (each an id
+  exactly as the person gave it) and `remove` (a list of those names). The
+  argument descriptions and the intent tell the planner never to make an id
+  up and to ask for it when the request has none. The planner sees the op in
+  the op catalog and Assist's build intents, so the plan prompt changed.
+- **Asked, never built empty.** The live eval's "add my Meta pixel" planned a
+  `tracking` item with no id. A capability may now say what only the person
+  can give (`missingInput` on the core contract); `aiBuildPlanMissingInput`
+  reads it, and the build's admission refuses such a plan with the question
+  ("What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your
+  pixel in Meta Events Manager."), so the plan step does not keep it and the
+  card shows the question. It is not a plan rule: a re-ask cannot supply what
+  only the person knows. The tag is read from the item's arguments, else its
+  name, else its reason; an id of the wrong shape is named before the
+  question.
+- **The card's own rules.** Each id is held to the pattern the card's field
+  and the tenant's loader share (`GA_MEASUREMENT_ID_PATTERN`,
+  `GTM_CONTAINER_ID_PATTERN`, `META_PIXEL_ID_PATTERN` and the rest in
+  `libs/aglyn/src/lib/app-utils/visitor-consent.ts`), written to the field
+  the card writes; a removal deletes the field, as the card's cleared box does
+  (`CLEARABLE_TRACKING_PATHS`). An id of the wrong shape is named in the
+  output and the rest are still written; an id both set and removed is left
+  alone.
+- **Consent is untouched.** No `consent.*` key is an argument, so the op
+  cannot turn the banner off, change its mode or its advertising question,
+  and search indexing is not reachable either. The tenant gates every tag on
+  the stored ids and the visitor's consent, whoever saved them. The output
+  says the tags load only where consent allows, warns where the site's banner
+  is off for its own consent tool, and repeats the card's double-counting
+  warning when a Tag Manager container sits beside a direct Analytics or Ads
+  tag.
+- **Live on confirm, idempotent.** As `settings` (AGL-3748): one transaction
+  re-reads the host, re-checks the role, writes only what differs with a
+  site-wide `publishOutbox` entry, then drops the site's cached pages. The
+  output reads "Live now, in Setup → Tracking." and links to that card.
+- **Gates and cost.** The Firestore rules' for the host document: an admin,
+  editor or author, while no lockdown freezes the site, at the door, before
+  the write and inside it. The card is on every plan, so Free may ask. No
+  model, so 0 credits.

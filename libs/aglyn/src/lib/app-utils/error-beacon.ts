@@ -237,6 +237,33 @@ export function isBenignBrowserNotice(message: string): boolean {
 }
 
 /**
+ * Whether the document is a page a visitor navigated to over the web
+ * (AGL-3759).
+ *
+ * Only `http:` and `https:` qualify. A document at `about:blank` or
+ * `about:srcdoc` is a COPY of our page: a translator extension or a site that
+ * frames our markup renders it into a fresh document with no URL of its own,
+ * and our scripts run there too. Next.js's app router then throws
+ * `Failed to construct 'URL': Invalid URL` resolving its canonical URL against
+ * `window.location.href`, which no code of ours can prevent and no visitor on
+ * the real page ever sees. `file:` (a saved page) and an extension's own
+ * scheme are copies in the same sense.
+ *
+ * A missing or unreadable location is not a web document either: nothing
+ * from it can be traced to a page we serve.
+ */
+export function isWebDocument(
+  location: { protocol?: string } | null | undefined,
+): boolean {
+  try {
+    const protocol = location?.protocol
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
  * A rejection that says only "this was cancelled" (AGL-3734).
  *
  * `AbortError` is what a request rejects with when its `AbortSignal` fires —
@@ -647,13 +674,16 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   // (the rejection handler below), because a tab left on a dead deploy is a
   // visitor's problem whether or not its errors are counted.
   const sampled = Math.random() < sampleRate
+  // A copy of the page in a document that is not on the web reports nothing
+  // by either door, whatever it throws: see `isWebDocument`.
+  const reporting = sampled && isWebDocument(window.location)
   // The document's language as SERVED, read before hydration and before any
   // translator has had a chance to rewrite it (`pageTranslationSignal`).
   const servedLang = document.documentElement?.getAttribute('lang') ?? null
   // Watched from now, because React's recovery erases the translator's marks
   // before a mismatch is reported (`watchPageTranslation`, AGL-3738).
   const translation = watchPageTranslation(document, servedLang)
-  if (sampled) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
+  if (reporting) raiseStackTraceLimit(BEACON_STACK_TRACE_LIMIT)
   // Classified once, here, and only the family is kept: the user-agent
   // string itself never reaches the queue (AGL-3732).
   let browser: BrowserFamily = 'other'
@@ -691,7 +721,7 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   }
 
   const enqueue = (event: ErrorBeaconEvent) => {
-    if (!sampled || sent >= maxPerPage) return
+    if (!reporting || sent >= maxPerPage) return
     // Message + first stack line: enough identity to collapse a render loop
     // without collapsing distinct errors that share a message.
     const key = `${event.message}\x00${(event.stack ?? '').split('\n', 2).join('\n')}`
@@ -701,9 +731,9 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
     queued.push({ ...event, browser })
     if (!timer) timer = setTimeout(flush, FLUSH_DELAY_MS)
   }
-  // Null on an unsampled pageview, so it reports nothing by either door
-  // rather than one by one and none by the other.
-  publishEvent = sampled ? enqueue : null
+  // Null on a pageview that does not report, so it reports nothing by either
+  // door rather than one by one and none by the other.
+  publishEvent = reporting ? enqueue : null
 
   window.addEventListener('error', (event) => {
     try {

@@ -109,7 +109,7 @@ import { useCrmApi } from './use-crm-api'
 import { useOrgMembers } from './use-org-members'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
-import { customFieldColumns } from './contact-custom-columns'
+import { contactCustomAmountReaders, customFieldColumns } from './contact-custom-columns'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
@@ -338,12 +338,14 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    */
   const foldsScope = useCrmFoldsScope(orgId, visibleToTokens)
   const groupId = consentGroup?.groupId ?? null
+  // A currency field's `=` is typed in major units (AGL-3756).
+  const amounts = useMemo(() => contactCustomAmountReaders(customFields.active), [customFields.active])
   const asked = useMemo(
     () =>
       crmAskClauses(views.state.filters, (clause) =>
-        contactQueryClause(clause, { groupId, foldsScope }),
+        contactQueryClause(clause, { groupId, foldsScope, amounts }),
       ),
-    [views.state.filters, groupId, foldsScope],
+    [views.state.filters, groupId, foldsScope, amounts],
   )
   const impliesScope = useMemo(() => contactClauseImpliesScope(groupId), [groupId])
   // The quick search is the grid's box, answered by the same query.
