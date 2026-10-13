@@ -160,7 +160,8 @@ describe('a site’s AI jobs', () => {
     const kinds = screen.getByText(/Each job is one of these kinds:/).textContent ?? ''
     expect(aiJobKindLabels().length).toBeGreaterThan(5)
     for (const label of aiJobKindLabels()) expect(kinds).toContain(label)
-    expect(kinds).toMatch(/Site, .* and \w+\./)
+    // The last label may be more than one word, as "Media library change" is.
+    expect(kinds).toMatch(/Site, .* and \w[\w ]*\./)
     expect(screen.queryByLabelText('Loading AI jobs')).toBeNull()
   })
 
