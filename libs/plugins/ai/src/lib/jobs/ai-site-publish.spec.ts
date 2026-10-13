@@ -30,7 +30,8 @@
 
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { FieldValue } from 'firebase-admin/firestore'
-import { AI_BUILD_PLAN_TOOL, aiBuildPlanToolFor, aiPlanLanguage, parseAiBuildPlan } from '../model/ai-build-plan'
+import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
+import { AI_BUILD_PLAN_TOOL, aiBuildPlanToolFor, parseAiBuildPlan } from '../model/ai-build-plan'
 import type { AiJobOutput } from '../model/ai-jobs.types'
 import {
   AI_SITE_PUBLISH_DELETED,
@@ -559,11 +560,11 @@ describe('the site publishes in the language its brief was written in (AGL-3750)
   })
 
   it('reads a code the way the Languages card stores it', () => {
-    expect(aiPlanLanguage('pt_br')).toBe('pt-BR')
-    expect(aiPlanLanguage('ZH-hant')).toBe('zh-Hant')
-    expect(aiPlanLanguage(' fr ')).toBe('fr')
-    expect(aiPlanLanguage('spa')).toBeNull()
-    expect(aiPlanLanguage(3)).toBeNull()
+    expect(siteLanguageCode('pt_br')).toBe('pt-BR')
+    expect(siteLanguageCode('ZH-hant')).toBe('zh-Hant')
+    expect(siteLanguageCode(' fr ')).toBe('fr')
+    expect(siteLanguageCode('spa')).toBeNull()
+    expect(siteLanguageCode(3)).toBeNull()
   })
 
   it('replaces a site’s one language, and never touches a multilingual site', async () => {

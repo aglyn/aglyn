@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import type { AiTool } from '../providers/contract'
 import type { AiBuildStorePages } from './ai-build-store-pages'
 
@@ -23,9 +24,10 @@ import type { AiBuildStorePages } from './ai-build-store-pages'
  * (`jobs/ai-job-plan-step.ts`) returns, before a single node is generated.
  *
  * This module is the plan's MODEL — its shape, its tool schema and its
- * reader — and imports nothing at runtime, so the doctrine validators, the
- * plan step, the job document and the proposal can all read it without
- * importing each other.
+ * reader — and imports nothing of the plugin's at runtime (its one runtime
+ * import is core's `seo-locale`, which imports nothing), so the doctrine
+ * validators, the plan step, the job document and the proposal can all read
+ * it without importing each other.
  *
  * A plan is REFERENCES, never documents (AGL-2937). It names what the site
  * already has by inventory id, what the job will create by a short name, and
@@ -282,7 +284,7 @@ export interface AiBuildPlan {
   storePages?: AiBuildStorePages
   /**
    * The language a SITE plan's brief and copy are written in (AGL-3750), as
-   * the Languages card stores a code (`aiPlanLanguage`). Absent is the site's
+   * the Languages card stores a code (`siteLanguageCode`). Absent is the site's
    * own language: every other kind's plan, a plan that said null, and one
    * whose code was not a language code, which is dropped rather than refused.
    */
@@ -609,30 +611,6 @@ export function withBuildItems(tool: AiTool): AiTool {
   }
 }
 
-/** The Languages card's own pattern for one language code (`LOCALE_PATTERN`). */
-export const AI_PLAN_LANGUAGE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
-
-/**
- * A plan's language as the Languages card would store it (AGL-3750), or
- * `null`: a two-letter language, optionally with a region or a script, in
- * BCP 47 casing — `es`, `pt-BR`, `zh-Hant`; `_` reads as `-`. Anything the
- * card would not accept is no language at all, so a plan carrying one is
- * kept without it.
- */
-export function aiPlanLanguage(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const match = /^([A-Za-z]{2})(?:-([A-Za-z]{2}|[A-Za-z]{4}))?$/.exec(value.trim().replace(/_/g, '-'))
-  if (!match) return null
-  const [, language, sub] = match
-  const lower = language.toLowerCase()
-  const tag = !sub
-    ? lower
-    : sub.length === 2
-      ? `${lower}-${sub.toUpperCase()}`
-      : `${lower}-${sub[0].toUpperCase()}${sub.slice(1).toLowerCase()}`
-  return AI_PLAN_LANGUAGE_PATTERN.test(tag) ? tag : null
-}
-
 const LANGUAGE_SCHEMA = nullableString(
   "The language the brief is written in, which the site's copy is written in too: a code such as en, es, fr or pt-BR. Null when unsure.",
 )
@@ -930,7 +908,7 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
     )
     // A language that is no code is dropped, never refused (AGL-3750): the
     // site keeps the language it has.
-    const language = aiPlanLanguage(root['language'])
+    const language = siteLanguageCode(root['language'])
     if (typeof root['language'] === 'string' && root['language'].trim() && !language) {
       repairs.push(`language "${root['language'].trim().slice(0, 40)}" is not a language code; ignored`)
     }
