@@ -331,6 +331,58 @@ describe('a page that cannot go live stays a draft, and the rest still publish',
 })
 
 describe('aiLayoutWithNavigation', () => {
+  /*
+   * AGL-3747: the start's header entries went in through code of their own —
+   * straight into the first Toolbar, beside the `nav` row rather than in it,
+   * and never into the phone menu. They now go in through the navigation op's
+   * `aiLayoutWithMenuChanges`, as Assist's menu changes do.
+   */
+  it('adds the entries the way the navigation op does: in the bar’s menu and the phone menu, after their items, like their neighbours (AGL-3747)', () => {
+    const close = [{ trigger: 'click', action: 'closeDrawer' }]
+    const link = (parentId: string, props: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      componentId: 'muiScreenLink',
+      pluginId: 'mui',
+      parentId,
+      props: { renderAs: 'link', color: 'inherit', ...props },
+      sx: { textDecoration: 'none', fontWeight: 500 },
+      nodes: [],
+      ...extra,
+    })
+    const nodes = {
+      root: { componentId: 'div', nodes: ['bar'] },
+      bar: { componentId: 'muiAppBar', parentId: 'root', nodes: ['toolbar'] },
+      toolbar: { componentId: 'muiToolbar', parentId: 'bar', nodes: ['ll-brand', 'nav', 'cta', 'drawer'] },
+      'll-brand': link('toolbar', { children: 'Hillside', screenId: 'drft-home' }),
+      nav: { componentId: 'muiStack', parentId: 'toolbar', props: { component: 'nav' }, nodes: ['n-home', 'n-about'] },
+      'n-home': link('nav', { children: 'Home', screenId: 'drft-home' }),
+      'n-about': link('nav', { children: 'About', screenId: 'drft-about' }),
+      cta: { componentId: 'muiButton', parentId: 'toolbar', props: { children: 'Book' } },
+      drawer: { componentId: 'muiDrawer', parentId: 'toolbar', nodes: ['menu'] },
+      menu: { componentId: 'muiStack', parentId: 'drawer', props: { component: 'nav' }, nodes: ['m-home', 'm-about'] },
+      'm-home': link('menu', { children: 'Home', screenId: 'drft-home' }, { interactions: close }),
+      'm-about': link('menu', { children: 'About', screenId: 'drft-about' }, { interactions: close }),
+    }
+    const next = aiLayoutWithNavigation(nodes as never, {
+      entries: [
+        { screenId: 'drft-home', label: 'Home' },
+        { screenId: 'drft-book', label: 'Book Now' },
+        // An item of that name is already in the menu, linking elsewhere: not a second one.
+        { screenId: 'drft-about-2', label: 'About' },
+        { screenId: 'drft-gallery', label: 'Gallery' },
+      ],
+    }) as unknown as Record<string, { props?: Record<string, unknown>; nodes?: string[]; interactions?: unknown }>
+    const labels = (id: string) => (next[id].nodes ?? []).map((child) => next[child].props?.['children'])
+    expect(labels('nav')).toEqual(['Home', 'About', 'Book Now', 'Gallery'])
+    expect(labels('menu')).toEqual(['Home', 'About', 'Book Now', 'Gallery'])
+    // Nothing beside the menu: the brand, the call to action and the drawer stay where they were.
+    expect(next['toolbar'].nodes).toEqual(['ll-brand', 'nav', 'cta', 'drawer'])
+    const added = (next['menu'].nodes ?? []).slice(2).map((id) => next[id])
+    expect(added.map((node) => node.props?.['screenId'])).toEqual(['drft-book', 'drft-gallery'])
+    // A phone menu's link closes the menu when followed, as its neighbours do.
+    expect(added.every((node) => JSON.stringify(node.interactions) === JSON.stringify(close))).toBe(true)
+    expect((next['nav'].nodes ?? []).slice(2).every((id) => /^ai_nav_/.test(id))).toBe(true)
+  })
+
   it('changes nothing when every entry is already linked and no home moved', () => {
     expect(aiLayoutWithNavigation(STARTER_LAYOUT as never, { entries: [{ screenId: 'scr-starter', label: 'Home' }] })).toBeNull()
   })

@@ -39,6 +39,7 @@ import {
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
+import { aiLayoutWithMenuChanges, aiNoMenuChanges } from '../model/ai-layout-menus'
 import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
 
 /**
@@ -163,10 +164,12 @@ export function aiSiteUnwrittenBlogHrefs(blogUnwritten: boolean | undefined): st
 
 /**
  * The layout's nodes with its links to the retired starter home pointed at
- * the new home, and a link for each proposed entry the header does not
- * already carry, placed in the header's toolbar after its existing links.
- * `null` when nothing changes, or when the layout has no toolbar to hold an
- * entry and no link to repoint.
+ * the new home, its links to pages the start did not write taken out, and a
+ * link for each proposed entry the header does not already carry, added by
+ * the navigation op's `aiLayoutWithMenuChanges` (AGL-3747): to the header's
+ * menu and its phone menu, after their items, or after the brand in a
+ * starter's Toolbar. `null` when nothing changes, or when the layout has no
+ * header to hold an entry and no link to repoint or take out.
  */
 export function aiLayoutWithNavigation(
   nodes: NodesMap,
@@ -213,32 +216,20 @@ export function aiLayoutWithNavigation(
       }
     }
   }
+  // The entries go into the header through the navigation op's own code
+  // (AGL-3747): the bar's menu and the phone menu's, after the items already
+  // there, each looking like its neighbours. A page some link already opens,
+  // or an item of the same name, is not added again.
   const linked = new Set(links.map((link) => link.props?.['screenId']).filter(Boolean))
-  const toolbar = Object.values(map).find((node) => node.componentId === 'muiToolbar')
   const missing = input.entries.filter((entry) => !linked.has(entry.screenId))
-  if (toolbar && missing.length) {
-    const children = toolbar.nodes ?? []
-    // After the last link already in the toolbar (the brand), before the
-    // search, the mode switch and the call to action.
-    const lastLink = children.reduce(
-      (at, id, index) => (map[id]?.componentId === 'muiScreenLink' ? index : at),
-      -1,
+  if (missing.length) {
+    const added = aiLayoutWithMenuChanges(
+      map,
+      ['header'],
+      { ...aiNoMenuChanges(), add: missing.map((entry) => ({ parent: null, label: entry.label, to: { screenId: entry.screenId } })) },
+      { newId: () => `ai_nav_${createResourceUid()}` },
     )
-    const added = missing.map((entry) => {
-      const id = `ai_nav_${createResourceUid()}`
-      map[id] = {
-        $id: id,
-        componentId: 'muiScreenLink',
-        pluginId: 'mui',
-        parentId: toolbar.$id,
-        props: { children: entry.label, screenId: entry.screenId, renderAs: 'link', color: 'inherit' },
-        sx: { textDecoration: 'none', whiteSpace: 'nowrap' },
-        nodes: [],
-      }
-      return id
-    })
-    toolbar.nodes = [...children.slice(0, lastLink + 1), ...added, ...children.slice(lastLink + 1)]
-    changed = true
+    if (added.nodes) return added.nodes as unknown as NodesMap
   }
   return changed ? (map as unknown as NodesMap) : null
 }

@@ -34,8 +34,9 @@
  *    element that renders `header`): the bar's own row and the phone menu's.
  *    Where it has lists that render `nav`, only those are its menu, so the
  *    brand and an account link beside it never are. Failing any list, a
- *    Toolbar holding a link. The brand (a link the compiler named `brand`)
- *    is never a menu item.
+ *    Toolbar holding a link (the brand's counts), else the first Toolbar.
+ *    The brand (a link the compiler named `brand`) is never a menu item, and
+ *    an item added beside nothing but the brand goes after it.
  *  - THE FOOTER's list is the longest list of links inside the element that
  *    renders `footer`.
  *
@@ -49,6 +50,12 @@
  * Dropdown Menu of that name in a bar's row, made where there is none (the
  * link of that name, if any, becoming its first entry); a phone menu and a
  * footer have no dropdowns, so there it joins the list after its parent.
+ *
+ * ONE implementation for every menu change the AI makes (AGL-3747): the
+ * `navigation` op's (`ai-job-navigation-step.ts`), and the header entries a
+ * guided site start adds to its layout when it publishes
+ * (`aiLayoutWithNavigation` in `ai-site-publish.ts`), including the /blog
+ * entry a retried posts part puts back.
  *
  * Pure: nodes in, nodes out.
  */
@@ -188,7 +195,10 @@ export function aiLayoutWithMenuChanges(
     const landmarks = lists.filter((node) => renders(node, 'nav'))
     if (landmarks.length) return landmarks
     if (lists.length) return lists
-    const toolbar = all.find((node) => node.componentId === 'muiToolbar' && itemsOf(node).length >= 1)
+    // A bar's Toolbar holding a link, the brand's included (a starter's
+    // header is a brand and a search), else its first Toolbar.
+    const toolbars = all.filter((node) => node.componentId === 'muiToolbar')
+    const toolbar = toolbars.find((node) => (node.nodes ?? []).some((id) => map[id]?.componentId === LINK)) ?? toolbars[0]
     return toolbar ? [toolbar] : []
   }
   // A phone menu (in a Drawer) and a footer hold no dropdowns: their entries stay flat.
@@ -298,7 +308,10 @@ export function aiLayoutWithMenuChanges(
         }
         const children = list.nodes ?? []
         const template = map[children.filter(isLink).slice(-1)[0]]
-        const lastItem = children.reduce((at, id, index) => (isItem(id) ? index : at), -1)
+        // After the list's last item, else after its brand: before a search,
+        // a mode switch or a call to action that follows them.
+        const lastOf = (test: (id: string) => boolean) => children.reduce((at, id, index) => (test(id) ? index : at), -1)
+        const lastItem = lastOf(isItem) !== -1 ? lastOf(isItem) : lastOf((id) => map[id]?.componentId === LINK)
         if (!entry.parent || isFlat) {
           // After its parent in a flat list, else after the list's last item.
           const parentAt = entry.parent ? children.findIndex((id) => isItem(id) && same(labelOf(id), entry.parent as string)) : -1
@@ -409,7 +422,7 @@ export function aiMenuChangesOf(
   target: (destination: string) => AiMenuTarget | null,
 ): AiMenuChangesRead {
   const problems: string[] = []
-  const changes: AiMenuChanges = { add: [], remove: [], rename: [], relink: [], order: [] }
+  const changes = aiNoMenuChanges()
   const linked = (entry: string, verb: 'add' | 'relink') => {
     const [name, destination, ...rest] = entry.split(ARROW)
     const ref = entryRefOf(name ?? '')
@@ -440,6 +453,11 @@ export function aiMenuChangesOf(
   }
   changes.order = list(args['order']).map((label) => label.slice(0, AI_MENU_LABEL_MAX))
   return { changes, problems }
+}
+
+/** A change that does nothing, to build one from. */
+export function aiNoMenuChanges(): AiMenuChanges {
+  return { add: [], remove: [], rename: [], relink: [], order: [] }
 }
 
 /** Whether a change does anything at all. */
