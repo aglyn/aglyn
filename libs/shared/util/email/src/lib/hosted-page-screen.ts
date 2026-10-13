@@ -126,12 +126,36 @@ export interface HostedPageScreenVerdict {
 interface WalkedNode {
   componentId: string
   props: Record<string, unknown>
+  /** Its stored `$id`, when it has one. */
+  id?: string
+  /** Its stored `parentId`, when it has one (a flat node map). */
+  parentId?: string
+  /** The nearest node it is NESTED in, by walk index (a nested tree). */
+  parentIndex?: number
 }
 
 /** The most a page's text is read to, so a huge page costs a bounded scan. */
 const MAX_PAGE_TEXT = 2_000_000
 /** The most nodes the walk visits. */
 const MAX_NODES = 20_000
+
+/**
+ * MUI's separate form elements that take an answer (`libs/plugins/mui`
+ * form-controls.tsx). Each is a field the author defined, and none carries
+ * its own words: those sit BESIDE it, in a Form Label inside the same Form
+ * Control or in the Choice Label holding a Checkbox or Radio.
+ */
+const FIELD_ELEMENT_COMPONENTS = new Set([
+  'muiInput',
+  'muiSelect',
+  'muiCheckbox',
+  'muiRadioGroup',
+  'muiRadio',
+  'muiRating',
+])
+const FORM_CONTROL_COMPONENT = 'muiFormControl'
+const FORM_LABEL_COMPONENT = 'muiFormLabel'
+const CHOICE_LABEL_COMPONENT = 'muiFormControlLabel'
 
 /** Props that describe a field the author defined, rather than content. */
 const FIELD_PROP_KEYS = ['fieldType', 'fieldName', 'inputType', 'autoComplete', 'autocomplete']
@@ -215,21 +239,28 @@ interface CallToAction {
 function walkNodes(root: unknown): WalkedNode[] {
   const found: WalkedNode[] = []
   const seen = new Set<unknown>()
-  const stack: unknown[] = [root]
+  // Each queued value carries the walk index of the node it is nested in, so
+  // a nested tree knows its parents without stored ids.
+  const stack: Array<{ value: unknown; parentIndex?: number }> = [{ value: root }]
   for (let head = 0; head < stack.length && found.length < MAX_NODES; head += 1) {
-    const value = stack[head]
+    const { value, parentIndex } = stack[head] as { value: unknown; parentIndex?: number }
     if (!value || typeof value !== 'object' || seen.has(value)) continue
     seen.add(value)
     const record = value as Record<string, unknown>
+    let enclosing = parentIndex
     if (typeof record['componentId'] === 'string') {
       const props = record['props']
+      enclosing = found.length
       found.push({
         componentId: record['componentId'] as string,
         props: props && typeof props === 'object' ? (props as Record<string, unknown>) : {},
+        ...(typeof record['$id'] === 'string' ? { id: record['$id'] } : {}),
+        ...(typeof record['parentId'] === 'string' ? { parentId: record['parentId'] } : {}),
+        ...(parentIndex !== undefined ? { parentIndex } : {}),
       })
     }
     for (const child of Array.isArray(value) ? value : Object.values(record)) {
-      if (child && typeof child === 'object') stack.push(child)
+      if (child && typeof child === 'object') stack.push({ value: child, parentIndex: enclosing })
     }
   }
   return found
@@ -255,20 +286,73 @@ function propStrings(props: Record<string, unknown>, skip: ReadonlySet<string> =
 
 /** Does this node describe a field its author defined? */
 function isAuthoredField(node: WalkedNode): boolean {
+  if (FIELD_ELEMENT_COMPONENTS.has(node.componentId)) return true
   if (/field|input/i.test(node.componentId)) return true
   return FIELD_PROP_KEYS.some((key) => node.props[key] !== undefined)
 }
 
+/**
+ * The words BESIDE one of MUI's separate form elements, which carries none of
+ * its own: the Choice Label holding a Checkbox or Radio, and the Form Label in
+ * the Form Control around it. Read through stored `parentId`s (a flat node
+ * map) or through nesting (a tree), whichever the page has.
+ */
+function siblingLabelOf(nodes: readonly WalkedNode[], index: number): string {
+  const node = nodes[index]
+  if (!node || !FIELD_ELEMENT_COMPONENTS.has(node.componentId)) return ''
+  const byId = new Map<string, number>()
+  nodes.forEach((one, at) => {
+    if (one.id && !byId.has(one.id)) byId.set(one.id, at)
+  })
+  const parentOf = (at: number): number | undefined => {
+    const one = nodes[at]
+    const stored = one?.parentId !== undefined ? byId.get(one.parentId) : undefined
+    return stored !== undefined && stored !== at ? stored : one?.parentIndex
+  }
+  const textOf = (one: WalkedNode | undefined, key: string) =>
+    typeof one?.props[key] === 'string' ? (one.props[key] as string).trim() : ''
+  const words: string[] = []
+  let at = parentOf(index)
+  for (let depth = 0; at !== undefined && depth < 8; depth += 1) {
+    const ancestor = nodes[at]
+    if (ancestor?.componentId === CHOICE_LABEL_COMPONENT && textOf(ancestor, 'label')) {
+      words.push(textOf(ancestor, 'label'))
+    }
+    if (ancestor?.componentId === FORM_CONTROL_COMPONENT) {
+      const control = at
+      const formLabel = nodes.find(
+        (one, oneAt) => one.componentId === FORM_LABEL_COMPONENT && parentOf(oneAt) === control,
+      )
+      if (textOf(formLabel, 'children')) words.unshift(textOf(formLabel, 'children'))
+      break
+    }
+    at = parentOf(at)
+  }
+  return words.join(' ')
+}
+
 /** The credential a field asks for, or null. */
-function credentialOf(node: WalkedNode): { field: 'password' | 'card' | 'otp'; label: string } | null {
+function credentialOf(
+  node: WalkedNode,
+  besideLabel = '',
+): { field: 'password' | 'card' | 'otp'; label: string } | null {
   const text = (key: string) => (typeof node.props[key] === 'string' ? (node.props[key] as string) : '')
   const type = [text('fieldType'), text('type'), text('inputType')].join(' ').toLowerCase()
-  const label = text('label') || text('placeholder') || text('fieldName') || text('name')
+  const label =
+    text('label') || besideLabel || text('ariaLabel') || text('placeholder') || text('fieldName') || text('name')
   if (/\bpassword\b/.test(type)) return { field: 'password', label: label || 'password' }
   const autocomplete = (text('autoComplete') || text('autocomplete')).toLowerCase().trim()
   const byToken = CREDENTIAL_AUTOCOMPLETE[autocomplete]
   if (byToken) return { field: byToken, label: label || autocomplete }
-  const wording = [text('label'), text('placeholder'), text('fieldName'), text('name'), text('helperText')]
+  const wording = [
+    text('label'),
+    besideLabel,
+    text('ariaLabel'),
+    text('placeholder'),
+    text('fieldName'),
+    text('name'),
+    text('helperText'),
+  ]
     .filter(Boolean)
     .join(' ')
   for (const { field, pattern } of CREDENTIAL_LABELS) {
@@ -368,7 +452,7 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
   }
   nodes.forEach((node, index) => {
     if (isAuthoredField(node)) {
-      const credential = credentialOf(node)
+      const credential = credentialOf(node, siblingLabelOf(nodes, index))
       if (credential) noteCredential(credential.field, credential.label)
     }
     for (const html of nodeStrings[index]) {

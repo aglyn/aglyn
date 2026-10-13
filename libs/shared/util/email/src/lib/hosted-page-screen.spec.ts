@@ -128,6 +128,62 @@ describe('what holds on a page', () => {
     ).toEqual(['credential-field'])
   })
 
+  describe('a field built from MUI’s separate form elements, named by the label BESIDE it', () => {
+    /** A flat node map, as stored: Form Control › Form Label + the answer. */
+    const control = (id: string, labelText: string, answer: { componentId: string; props: Record<string, unknown> }) => ({
+      [id]: { $id: id, componentId: 'muiFormControl', parentId: 'form', props: {}, nodes: [`${id}-label`, `${id}-input`] },
+      [`${id}-label`]: { $id: `${id}-label`, componentId: 'muiFormLabel', parentId: id, props: { children: labelText } },
+      [`${id}-input`]: { $id: `${id}-input`, parentId: id, ...answer },
+    })
+
+    it('reads a Form Label in the same Form Control', () => {
+      const verdict = screenHostedPage({
+        nodes: {
+          form: { $id: 'form', componentId: 'form', props: {}, nodes: ['a', 'b', 'c'] },
+          ...control('a', 'Password', { componentId: 'muiInput', props: { name: 'f1' } }),
+          ...control('b', 'Card number', { componentId: 'muiInput', props: { name: 'f2' } }),
+          ...control('c', 'Enter the verification code we texted you', {
+            componentId: 'muiInput',
+            props: { name: 'f3' },
+          }),
+        },
+      })
+      expect(verdict.signals).toEqual([
+        { code: 'credential-field', field: 'password', label: 'Password' },
+        { code: 'credential-field', field: 'card', label: 'Card number' },
+        expect.objectContaining({ code: 'credential-field', field: 'otp' }),
+      ])
+    })
+
+    it('reads the Choice Label holding a Checkbox, through nesting as well as parentId', () => {
+      expect(
+        codes([
+          {
+            componentId: 'muiFormControlLabel',
+            props: { label: 'Remember my password' },
+            nodes: [{ componentId: 'muiCheckbox', props: { name: 'x', value: 'Yes' } }],
+          },
+        ]),
+      ).toEqual(['credential-field'])
+    })
+
+    it('THE CONTROL: an ordinary label beside an Input is not a credential', () => {
+      expect(
+        codes({
+          form: { $id: 'form', componentId: 'form', props: {}, nodes: ['a'] },
+          ...control('a', 'Your email', { componentId: 'muiInput', props: { name: 'email', type: 'email' } }),
+          ...control('z', 'ZIP code', { componentId: 'muiInput', props: { name: 'zip' } }),
+        }),
+      ).toEqual([])
+    })
+
+    it('a Form Label alone, with no input beside it, is not a field', () => {
+      expect(
+        codes(page({ componentId: 'muiFormLabel', props: { children: 'Password' } })),
+      ).toEqual([])
+    })
+  })
+
   it('a credential input in the author’s own HTML', () => {
     expect(
       codes(
