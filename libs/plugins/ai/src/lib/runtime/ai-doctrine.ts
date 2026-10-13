@@ -54,6 +54,7 @@ import {
   aiSettlePlanFormDatasets,
   aiSettlePlanForms,
   aiSettlePlanFreeWall,
+  aiSettlePlanGalleries,
   aiSettlePlanLayoutRegionSections,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
@@ -704,7 +705,8 @@ export function aiDoctrinePlanCheck(
     // lists it.
     // A page section that is a layout region (header, navigation, footer) is
     // taken off the page (AGL-3750), first after the refs, so the wall
-    // counts what the page keeps.
+    // counts what the page keeps. A site start's section that shows the work
+    // with fewer pieces than its fewest is given that many (AGL-3754).
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
     // last, once every creation the wall counts is settled.
     const plan = aiSettlePlanFreeWall(
@@ -712,7 +714,11 @@ export function aiDoctrinePlanCheck(
         aiSettlePlanLayouts(
           aiSettlePlanDatasets(
             aiSettlePlanFormDatasets(
-              aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(parsed.plan, inventory), inventory),
+              aiSettlePlanGalleries(
+                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(parsed.plan, inventory), inventory),
+                inventory,
+                capabilities,
+              ),
               inventory,
               capabilities,
             ),
