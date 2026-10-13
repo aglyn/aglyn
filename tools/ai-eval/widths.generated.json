@@ -202,7 +202,7 @@
     {
       "caseId": "form-custom-cake-order",
       "of": "candidate 0",
-      "answer": "7b60688fb8068cd2",
+      "answer": "dad7cd10323efdb6",
       "devices": [
         {
           "device": "XS",
@@ -235,7 +235,7 @@
     {
       "caseId": "form-custom-cake-order",
       "of": "control 0",
-      "answer": "be718ce1bb83742b",
+      "answer": "b6003215b9da69e5",
       "devices": [
         {
           "device": "XS",

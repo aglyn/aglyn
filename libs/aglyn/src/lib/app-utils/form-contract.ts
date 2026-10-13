@@ -85,6 +85,9 @@ import type {
 } from '../foundation/definitions/components.types'
 import {
   collectFormFieldNodeIds,
+  FORM_INPUT_ELEMENT_IDS,
+  formInputName,
+  formInputType,
   FORM_COMPONENT_ID,
   type FormDocument,
   isMarketingConsentFieldName,
@@ -123,6 +126,8 @@ interface DrawnField {
   nodeId: NodeId
   fieldName: string
   fieldType: string
+  /** One of MUI's separate Checkbox elements, which may share a name. */
+  isCheckboxElement: boolean
 }
 
 /**
@@ -149,11 +154,13 @@ function drawnFields(
 ): DrawnField[] {
   return collectFormFieldNodeIds(nodes, formNodeId, formFieldComponentId).map(
     (nodeId) => {
-      const props = (nodes?.[nodeId]?.props ?? {}) as Record<string, unknown>
+      const node = nodes?.[nodeId]
       return {
         nodeId,
-        fieldName: String(props['fieldName'] ?? '').trim(),
-        fieldType: String(props['fieldType'] ?? 'text'),
+        fieldName: formInputName(node),
+        fieldType: formInputType(node),
+        isCheckboxElement:
+          node?.componentId === FORM_INPUT_ELEMENT_IDS.checkbox,
       }
     },
   )
@@ -329,6 +336,7 @@ export function checkFormContract(options: {
   const fields = drawnFields(nodes, formNodeId as NodeId, formFieldComponentId)
 
   const seen = new Map<string, NodeId>()
+  const checkboxNames = new Set<string>()
   for (const field of fields) {
     if (!field.fieldName) {
       violations.push({
@@ -342,6 +350,16 @@ export function checkFormContract(options: {
       continue
     }
     const first = seen.get(field.fieldName)
+    // Checkboxes sharing a name are ONE question with several boxes — how a
+    // multi-choice question is built from MUI's separate Checkbox elements.
+    // Their ticks are joined into one answer, so nothing is lost.
+    if (
+      first !== undefined &&
+      field.isCheckboxElement &&
+      checkboxNames.has(field.fieldName)
+    ) {
+      continue
+    }
     if (first !== undefined) {
       violations.push({
         code: 'field-name-duplicated',
@@ -355,6 +373,7 @@ export function checkFormContract(options: {
       continue
     }
     seen.set(field.fieldName, field.nodeId)
+    if (field.isCheckboxElement) checkboxNames.add(field.fieldName)
   }
 
   const consentFieldName = String(form?.consentFieldName ?? '').trim()

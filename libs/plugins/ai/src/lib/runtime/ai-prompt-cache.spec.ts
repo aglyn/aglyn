@@ -858,7 +858,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       plan: { prefixTokens: 2_984, minimum: 512, caches: true, toolsStable: true },
       // A site's plan says the language its brief is in (AGL-3750): the plain
       // plan's prefix and one nullable field, up 54.
-      'site-plan': { prefixTokens: 3_038, minimum: 512, caches: true, toolsStable: true },
+      'site-plan': { prefixTokens: 3_039, minimum: 512, caches: true, toolsStable: true },
       // The layout, template, component and section doors each grew 20 when
       // the palette learned the layout elements' Color scheme (AGL-3284).
       // All four then came DOWN 2 at AGL-3411: Tertiary
@@ -872,15 +872,21 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // a timestamp: a live build printed all three on every article. All
       // four grew 6 at AGL-3588, the App Bar's shrink and hide switches, and
       // 4 at AGL-3717, the Image's and the Image List's lightbox switch.
-      layout: { prefixTokens: 4_431, minimum: 512, caches: true, toolsStable: true },
-      template: { prefixTokens: 5_043, minimum: 512, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_042, minimum: 512, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_418, minimum: 512, caches: true, toolsStable: true },
+      template: { prefixTokens: 5_030, minimum: 512, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_030, minimum: 512, caches: true, toolsStable: true },
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
       // says plainly that a subject line and a preheader carry no merge token.
       email: { prefixTokens: 2_970, minimum: 512, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_728, minimum: 512, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_600, minimum: 512, caches: true, toolsStable: true },
+      // 2,728 while a form was the Form and its all-in-one Form Fields. Up 594
+      // when the form job moved to MUI's separate form elements: the form
+      // catalog lists each piece of a field, and the instructions say how a
+      // field, a choice and a checkbox are put together. Most requests that
+      // carry the document doctrine are up 1, from rule 17's larger form
+      // budget, which the same fields now need.
+      form: { prefixTokens: 3_337, minimum: 512, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_588, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
       // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
@@ -890,7 +896,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'layout-frame': { prefixTokens: 2_212, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
-      theme: { prefixTokens: 3_517, minimum: 512, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_518, minimum: 512, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request
       // within a provider's union limit (AGL-3096). Up 84 at AGL-3538: a
@@ -903,8 +909,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // Up 249 at AGL-3611, the order and return triggers the draft may start
       // on, and 7 for the two steps that ride a larger variant naming its
       // empty field.
-      'workflow-draft': { prefixTokens: 5_000, minimum: 512, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_215, minimum: 512, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 5_001, minimum: 512, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_216, minimum: 512, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -913,7 +919,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_006, minimum: 512, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_007, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
@@ -932,8 +938,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // The edit doors are up 4 at AGL-3717 for the palette's lightbox switch.
       // Both up 101 at AGL-3716: the edit protocol's own Music player line,
       // which is where the player is named now that the catalog leaves it off.
-      'edit-screen': { prefixTokens: 6_075, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 6_063, minimum: 512, caches: true, toolsStable: true },
+      'edit-screen': { prefixTokens: 6_063, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 6_051, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
       'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },
@@ -945,8 +951,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'product-copy': { prefixTokens: 2_424, minimum: 512, caches: true, toolsStable: true },
       // The catalog is up 132 at AGL-3733 (Zach, 2026-10-12): each product's
       // suggested price, its field and the rule that prices it by kind.
-      catalog: { prefixTokens: 2_581, minimum: 512, caches: true, toolsStable: true },
-      categories: { prefixTokens: 2_348, minimum: 512, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_582, minimum: 512, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_349, minimum: 512, caches: true, toolsStable: true },
       // A site's first post (AGL-3676): the doctrine's fields block, its rules and its tool.
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
@@ -963,7 +969,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
       'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
       'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
-      'copy.section': { prefixTokens: 694, minimum: 512, caches: true, toolsStable: true },
+      'copy.section': { prefixTokens: 736, minimum: 512, caches: true, toolsStable: true },
     })
   })
 

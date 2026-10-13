@@ -23,9 +23,10 @@ import {
 import {
   collectFormFieldNodeIds,
   FORM_COMPONENT_ID,
-  FORM_FIELD_COMPONENT_ID,
   FORM_ID_PROP,
+  FORM_INPUT_ELEMENT_IDS,
   formFieldDeclsFromNodes,
+  formInputName,
   formNodeIdIn,
   isMarketingConsentFieldName,
   MARKETING_CONSENT_FORM_FIELD,
@@ -103,9 +104,9 @@ import { registerAiJobStep } from './ai-jobs'
  *
  *  - `fields` is `formFieldDeclsFromNodes` over the design;
  *  - a form that can yield an email address gets the platform's marketing
- *    consent field (`MARKETING_CONSENT_FORM_FIELD`, the Forms editor preset's own
- *    props) in place of any consent-like field the model drew, named as its
- *    `consentFieldName`;
+ *    consent field (`aiFormConsentNodes`: a Choice Label holding one Checkbox,
+ *    worded as the Forms editor preset's option) in place of any consent-like
+ *    field the model drew, named as its `consentFieldName`;
  *  - `routing` is `{ lead: true }` when the answer proposes a lead, and
  *    nothing otherwise. The stored routing has no place for an email list,
  *    so a list proposal leaves the form on the Inbox and says, in the output's
@@ -168,16 +169,96 @@ export const AI_FORM_CANNOT_COLLECT_MAX = 3
 const CANNOT_COLLECT_MAX_CHARS = 60
 const LIST_NAME_MAX_CHARS = 80
 
-/** The node id the platform's consent field takes in a generated design. */
+/**
+ * The node id the platform's consent field takes in a generated design: the
+ * Choice Label that holds its Checkbox.
+ */
 export const AI_FORM_CONSENT_NODE_ID = 'marketingConsentField'
+
+/** The node id of the consent field's Checkbox, inside {@link AI_FORM_CONSENT_NODE_ID}. */
+export const AI_FORM_CONSENT_CHECKBOX_NODE_ID = 'marketingConsentCheckbox'
+
+/** The name the consent Checkbox submits under, and the form's `consentFieldName`. */
+export const AI_FORM_CONSENT_FIELD_NAME = MARKETING_CONSENT_FORM_FIELD.fieldName
+
+/** What a ticked consent Checkbox posts: an affirmative value `isConsentCheckboxTicked` reads as the tick. */
+export const AI_FORM_CONSENT_VALUE = 'Yes'
+
+/**
+ * The platform's marketing consent field as MUI's separate elements: a Choice
+ * Label whose words say what the person agrees to — the Forms editor preset's
+ * own option text — holding one unticked, unrequired Checkbox named
+ * `marketingConsent`. Ids are fixed, so a re-asked design gets the same nodes.
+ */
+export function aiFormConsentNodes(formNodeId: string): NodesMap[string][] {
+  const { choiceLabel, checkbox } = FORM_INPUT_ELEMENT_IDS
+  return [
+    {
+      $id: AI_FORM_CONSENT_NODE_ID,
+      type: NodeType.NODE,
+      componentId: choiceLabel,
+      pluginId: AI_PALETTE[choiceLabel]?.pluginId,
+      parentId: formNodeId,
+      nodes: [AI_FORM_CONSENT_CHECKBOX_NODE_ID],
+      props: { label: MARKETING_CONSENT_FORM_FIELD.options },
+    } as NodesMap[string],
+    {
+      $id: AI_FORM_CONSENT_CHECKBOX_NODE_ID,
+      type: NodeType.NODE,
+      componentId: checkbox,
+      pluginId: AI_PALETTE[checkbox]?.pluginId,
+      parentId: AI_FORM_CONSENT_NODE_ID,
+      nodes: [],
+      props: { name: AI_FORM_CONSENT_FIELD_NAME, value: AI_FORM_CONSENT_VALUE },
+    } as NodesMap[string],
+  ]
+}
+
+/**
+ * The node to remove for a consent input the model drew: the input itself,
+ * or the Choice Label and Form Control around it when they frame nothing but
+ * consent — so no empty label or orphaned Form Label is left behind. The
+ * all-in-one Form Field of an older design is its own frame.
+ */
+function consentWrapperId(nodes: NodesMap, inputId: string, formNodeId: string): string {
+  const framing = new Set<string>([FORM_INPUT_ELEMENT_IDS.choiceLabel, FORM_INPUT_ELEMENT_IDS.formControl])
+  let outer = inputId
+  let parentId = String(nodes[inputId]?.parentId ?? '')
+  while (parentId && parentId !== formNodeId) {
+    const parent = nodes[parentId]
+    if (!parent || !framing.has(String(parent.componentId))) break
+    const answers = collectFormFieldNodeIds(nodes as never, parentId)
+    if (!answers.every((id) => isMarketingConsentFieldName(formInputName(nodes[id] as never)))) break
+    outer = parentId
+    parentId = String(parent.parentId ?? '')
+  }
+  return outer
+}
+
+/** Removes a node and everything under it, and its id from its parent's children. */
+function removeSubtree(nodes: NodesMap, id: string): void {
+  const parent = nodes[String(nodes[id]?.parentId ?? '')]
+  if (parent && Array.isArray(parent.nodes)) {
+    parent.nodes = (parent.nodes as string[]).filter((child) => child !== id)
+  }
+  const stack = [id]
+  while (stack.length) {
+    const next = stack.pop() as string
+    const node = nodes[next]
+    if (!node) continue
+    if (Array.isArray(node.nodes)) stack.push(...(node.nodes as string[]))
+    delete nodes[next]
+  }
+}
 
 /** The form step's own instructions, cached after the doctrine. */
 export const AI_JOB_FORM_INSTRUCTIONS: readonly AiSystemBlock[] = [
   {
     text: [
       'You build one form for a website: the fields a visitor fills in and the button that sends them. Answer with submit_form: the whole form as one flat node map, how its submissions are routed, and what the brief asks for that a form cannot collect.',
-      'The root is one Form (form) holding its Form Fields (formField) in the order a visitor fills them in. Give the form a submitLabel and a successMessage in the site’s voice.',
-      'Every field has a fieldName that is unique in the form and says what it holds in camelCase, such as fullName, email, phone or roofType; a label a visitor reads; and required only when the form cannot do its job without it. Use fieldType email for an email address, textarea for a description, select or radio with options for one choice, checkbox with options for several, and rating for a score. Put each option on its own line and never put a comma inside an option, because a comma starts a new one.',
+      'The root is one Form (form) holding its fields in the order a visitor fills them in. Each piece of a field is its own element: a field is a Form Control (muiFormControl) holding a Form Label (muiFormLabel) whose text a visitor reads, then the answer, then optionally Helper Text (muiFormHelperText). Give the form a submitLabel and a successMessage in the site’s voice. The Form draws its own button, so a Button (muiButton) with type submit is optional.',
+      'The answer is an Input (muiInput) to type in: type email for an email address, tel for a phone number, multiline true for a description; a Select (muiSelect) holding one Select Option (muiSelectOption) per choice, or a Radio Group (muiRadioGroup) holding one Choice Label (muiFormControlLabel) per choice, each holding a Radio (muiRadio) whose value is the choice, for one choice; a Choice Label holding a Checkbox (muiCheckbox) per choice, the Checkboxes sharing one name, for several; and a Rating (muiRating) for a score. A single yes-or-no tick is a Choice Label holding one Checkbox, outside any Form Control.',
+      'Every Input, Select, Radio Group, Checkbox and Rating has a name that is unique in the form, apart from Checkboxes of one question, and says what it holds in camelCase, such as fullName, email, phone or roofType; and required only when the form cannot do its job without it.',
       'A form collects text, choices and ratings only. When the brief asks for something else, such as a file or photo upload, a signature or a payment, leave it out and name it in cannotCollect.',
       'Never draw a marketing consent, newsletter or subscribe checkbox: when the form asks for an email address, the platform adds its own.',
       'routing.kind is inbox when submissions only need to be read, lead when each one is a sales lead to follow up, and list when the people who send it should join an email list. routing.list is the list’s name only when the brief names one, and null otherwise.',
@@ -339,26 +420,13 @@ export function aiFormDraft(
     props['formName'] = identity.name
 
     for (const id of collectFormFieldNodeIds(nodes as never, formNodeId)) {
-      const fieldName = (nodes[id]?.props as Record<string, unknown> | undefined)?.['fieldName']
-      if (!isMarketingConsentFieldName(fieldName)) continue
-      const parent = nodes[String(nodes[id]?.parentId ?? '')]
-      if (parent && Array.isArray(parent.nodes)) {
-        parent.nodes = (parent.nodes as string[]).filter((child) => child !== id)
-      }
-      delete nodes[id]
+      if (!nodes[id] || !isMarketingConsentFieldName(formInputName(nodes[id] as never))) continue
+      removeSubtree(nodes, consentWrapperId(nodes, id, formNodeId))
     }
     if (formFieldsCanYieldAnEmail(formFieldDeclsFromNodes(nodes as never, formNodeId))) {
-      nodes[AI_FORM_CONSENT_NODE_ID] = {
-        $id: AI_FORM_CONSENT_NODE_ID,
-        type: NodeType.NODE,
-        componentId: FORM_FIELD_COMPONENT_ID,
-        pluginId: AI_PALETTE[FORM_FIELD_COMPONENT_ID]?.pluginId,
-        parentId: formNodeId,
-        nodes: [],
-        props: { ...MARKETING_CONSENT_FORM_FIELD },
-      } as NodesMap[string]
+      for (const node of aiFormConsentNodes(formNodeId)) nodes[node.$id as string] = node
       form.nodes = [...(form.nodes as string[]), AI_FORM_CONSENT_NODE_ID]
-      consentFieldName = MARKETING_CONSENT_FORM_FIELD.fieldName
+      consentFieldName = AI_FORM_CONSENT_FIELD_NAME
     }
     form.parentId = CANVAS_ROOT_ELEMENT_ID
   }
@@ -626,7 +694,7 @@ export function aiFormOutputNote(answer: AiFormAnswer): string | null {
   if (answer.routing.kind === 'list') {
     const list = answer.routing.list ? `your "${answer.routing.list}" list` : 'an email list'
     sentences.push(
-      `Submissions arrive in the Inbox. To add the people who tick "${MARKETING_CONSENT_FORM_FIELD.label}" to ${list}, add an action on form submissions in Automation that enrolls them.`,
+      `Submissions arrive in the Inbox. To add the people who tick "${MARKETING_CONSENT_FORM_FIELD.options}" to ${list}, add an action on form submissions in Automation that enrolls them.`,
     )
   }
   if (answer.cannotCollect.length) {

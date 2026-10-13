@@ -893,7 +893,7 @@ export const AI_EVAL_CAPABILITIES_GRADER_NOTE =
  * forms, which the capability lines have already said.
  */
 export const AI_EVAL_INLINE_GRADER_NOTE =
-  "On this workspace, a list's repeated items drawn in one section and a form drawn on the page, as a Form element holding its Form Fields, are the correct build and never a missed reuse."
+  "On this workspace, a list's repeated items drawn in one section and a form drawn on the page, as a Form element holding its fields, are the correct build and never a missed reuse."
 
 /**
  * What a section's `uses` can hold on such a workspace (AGL-3143).

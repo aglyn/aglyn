@@ -136,6 +136,44 @@ export const starterText = (
 })
 
 /**
+ * One labelled text field, as MUI's separate form elements: a Form Control
+ * holding a Form Label and an Input — exactly the tree the forms plugin's
+ * `formFieldToElements` rebuilds an all-in-one Form Field into, so a starter's fields and a migrated
+ * site's look and submit alike. Ids are `id`, `id-label` and `id-input`.
+ */
+export const starterTextField = (
+  id: string,
+  field: {
+    name: string
+    label: string
+    type?: 'text' | 'email'
+    multiline?: boolean
+    required?: boolean
+  },
+): StarterNodeSpec => {
+  const required = field.required ? { required: true } : {}
+  return {
+    id,
+    componentId: 'muiFormControl',
+    props: { fullWidth: true, ...required },
+    children: [
+      { id: `${id}-label`, componentId: 'muiFormLabel', props: { children: field.label } },
+      {
+        id: `${id}-input`,
+        componentId: 'muiInput',
+        props: {
+          name: field.name,
+          type: field.type ?? 'text',
+          ...(field.multiline ? { multiline: true, minRows: 3 } : {}),
+          ...required,
+          fullWidth: true,
+        },
+      },
+    ],
+  }
+}
+
+/**
  * The stock widths a starter band may be (AGL-1932, AGL-1298).
  *
  * Three cases, and only three, because the standard has three. There is no

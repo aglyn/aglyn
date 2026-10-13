@@ -106,7 +106,9 @@ import { validateAiSystemBlocks } from '../runtime/ai-runtime'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_DRAFT_FIELDS } from './ai-job-drafts'
 import {
+  AI_FORM_CONSENT_CHECKBOX_NODE_ID,
   AI_FORM_CONSENT_NODE_ID,
+  AI_FORM_CONSENT_VALUE,
   AI_JOB_FORM_INSTRUCTIONS,
   AI_JOB_FORM_MAX_TOKENS,
   AI_JOB_FORM_TOOL,
@@ -345,7 +347,7 @@ const EXPECTED: Record<
     consent: true,
     routing: { lead: false },
     note:
-      'Submissions arrive in the Inbox. To add the people who tick "Marketing emails" to your "Monthly Roundup" list, add an action on form submissions in Automation that enrolls them.',
+      'Submissions arrive in the Inbox. To add the people who tick "Email me news and offers" to your "Monthly Roundup" list, add an action on form submissions in Automation that enrolls them.',
   },
   clinicSurvey: {
     fields: ['satisfaction', 'visitFrequency', 'improvements', 'comments'],
@@ -431,28 +433,40 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
 
     if (expected.consent) {
       expect(stored['consentFieldName']).toBe(MARKETING_CONSENT_FORM_FIELD.fieldName)
+      // A Choice Label in the editor preset's words, holding one unticked Checkbox.
       expect(nodes[AI_FORM_CONSENT_NODE_ID]).toMatchObject({
-        componentId: 'formField',
+        componentId: 'muiFormControlLabel',
+        pluginId: 'mui',
         parentId: formNodeId,
-        props: { ...MARKETING_CONSENT_FORM_FIELD },
+        nodes: [AI_FORM_CONSENT_CHECKBOX_NODE_ID],
+        props: { label: MARKETING_CONSENT_FORM_FIELD.options },
       })
+      expect(nodes[AI_FORM_CONSENT_CHECKBOX_NODE_ID]).toMatchObject({
+        componentId: 'muiCheckbox',
+        pluginId: 'mui',
+        parentId: AI_FORM_CONSENT_NODE_ID,
+        props: { name: MARKETING_CONSENT_FORM_FIELD.fieldName, value: AI_FORM_CONSENT_VALUE },
+      })
+      expect(nodes[AI_FORM_CONSENT_CHECKBOX_NODE_ID].props).not.toHaveProperty('required')
       const declared = {
         consentFieldName: String(stored['consentFieldName']),
         fields: stored['fields'] as never,
       }
-      // Ticked, the box posts its option's text, which the submit route reads as consent.
+      // Ticked, the box posts its value, which the submit route reads as consent.
       expect(
         readFormDeclaredConsent(declared, {
           email: 'visitor@example.com',
-          [MARKETING_CONSENT_FORM_FIELD.fieldName]: MARKETING_CONSENT_FORM_FIELD.options,
+          [MARKETING_CONSENT_FORM_FIELD.fieldName]: AI_FORM_CONSENT_VALUE,
         }),
       ).toBe(true)
       expect(readFormDeclaredConsent(declared, { email: 'visitor@example.com' })).toBe(false)
       // No box the model drew under a consent name survives beside it.
       const consentLike = Object.values(nodes).filter((node) =>
-        ['subscribe', 'newsletterOptIn', 'emailOptIn'].includes(String(node?.props?.fieldName)),
+        ['subscribe', 'newsletterOptIn', 'emailOptIn'].includes(String(node?.props?.name ?? node?.props?.fieldName)),
       )
       expect(consentLike).toEqual([])
+      // Nor the Choice Label that framed it.
+      expect(Object.values(nodes).filter((node) => node?.props?.label === 'Yes, keep me posted')).toEqual([])
     } else {
       expect(stored).not.toHaveProperty('consentFieldName')
       expect(nodes[AI_FORM_CONSENT_NODE_ID]).toBeUndefined()
@@ -538,13 +552,13 @@ describe('the form step', () => {
       message: 'Aglyn AI couldn’t build this cleanly, so we stopped rather than give you something broken.',
       detail: expect.stringContaining('Rule 3'),
       findings: [{ rule: 3, code: 'lead-routing-has-no-email-field', message: expect.any(String), nodeIds: ['survey'] }],
-      // The form, and each field under it by the names of what it sets, never a label (AGL-3078).
-      outline: [
-        expect.objectContaining({ id: 'survey', depth: 0, componentId: 'form', children: Array(4).fill('formField') }),
-        ...['satisfaction', 'frequency', 'improve', 'comments'].map((id) =>
-          expect.objectContaining({ id, depth: 1, componentId: 'formField', props: expect.arrayContaining(['fieldName', 'label', 'fieldType']) }),
-        ),
-      ],
+      // The form, and each piece of a field under it by the names of what it sets, never a label (AGL-3078).
+      outline: expect.arrayContaining([
+        expect.objectContaining({ id: 'survey', depth: 0, componentId: 'form', children: Array(4).fill('muiFormControl') }),
+        expect.objectContaining({ id: 'satisfaction', depth: 1, componentId: 'muiFormControl', children: ['muiFormLabel', 'muiRating'] }),
+        expect.objectContaining({ id: 'satisfactionLabel', depth: 2, componentId: 'muiFormLabel', props: ['children'] }),
+        expect.objectContaining({ id: 'satisfactionInput', depth: 2, componentId: 'muiRating', props: ['name'] }),
+      ]),
     })
     expect(commits).toEqual([])
   })
@@ -956,7 +970,7 @@ describe('aiFormOutputNote', () => {
 
   it('names a list only when the brief did, and joins several gaps in one sentence', () => {
     expect(aiFormOutputNote(parseAiFormAnswer({ routing: { kind: 'list', list: null } }))).toBe(
-      'Submissions arrive in the Inbox. To add the people who tick "Marketing emails" to an email list, add an action on form submissions in Automation that enrolls them.',
+      'Submissions arrive in the Inbox. To add the people who tick "Email me news and offers" to an email list, add an action on form submissions in Automation that enrolls them.',
     )
     expect(aiFormOutputNote(parseAiFormAnswer({ cannotCollect: ['photo upload', 'signature', 'payment'] }))).toBe(
       'Forms cannot collect photo upload, signature and payment yet, so this form leaves them out.',
