@@ -18,7 +18,13 @@
 // The registry's own module, not the `@aglyn/aglyn/server` barrel: boot needs
 // one registry, not the whole server surface.
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import {
+  registerPluginResourceDraftWriter,
+  type PluginResourceDraftWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { checkEventDraftContent, EVENT_DRAFT_RESOURCE } from './model/event-draft-content'
+import { registerEventAiCapability } from './server/event-ai-capability'
 import type { EventsTransferResource } from './transfer/events-transfer'
 import {
   EVENTS_ALIASES,
@@ -45,6 +51,31 @@ function eventsResource(): Promise<EventsTransferResource> {
   return loading
 }
 
+let writerLoading: Promise<PluginResourceDraftWriter> | null = null
+
+/** The `event` draft writer over the Admin SDK, loaded on its first read or write. */
+function eventWriter(): Promise<PluginResourceDraftWriter> {
+  writerLoading ??= import('./server/event-drafts.server')
+    .then(({ eventDraftWriter }) => eventDraftWriter)
+    .catch((error: unknown) => {
+      writerLoading = null
+      throw error
+    })
+  return writerLoading
+}
+
+/**
+ * The `event` draft writer as boot registers it (AGL-3743): the check is pure
+ * and answers at once; the hooks that read or write load the Admin SDK half
+ * on first use.
+ */
+export const lazyEventDraftWriter: PluginResourceDraftWriter = {
+  check: (content) => checkEventDraftContent(content),
+  refusal: async (context) => (await eventWriter()).refusal(context),
+  read: async (context) => (await eventWriter()).read(context),
+  write: async (request) => (await eventWriter()).write(request),
+}
+
 /**
  * The events-calendar plugin's CONSOLE-ONLY server declarations, named under
  * `consoleServerDeclarations` in `plugins.config.json` and run at the
@@ -55,6 +86,10 @@ function eventsResource(): Promise<EventsTransferResource> {
  * aliases are plain data registered as they are; every hook that reads or
  * writes loads the resource on first use. Registering again replaces this
  * plugin's own.
+ *
+ * And the `event` draft writer with the build operation it executes
+ * (AGL-3743): what an AI build drafts when a request asks for events, under
+ * this plugin's rules. The console runs AI jobs (AGL-3026).
  */
 export function registerEventsCalendarConsoleServerDeclarations(): void {
   registerPluginTransferResource(
@@ -79,4 +114,7 @@ export function registerEventsCalendarConsoleServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  registerPluginResourceDraftWriter(EVENT_DRAFT_RESOURCE, lazyEventDraftWriter, { pluginId: BUNDLE_ID })
+  // …and the operation an AI build plans for it, which that writer executes.
+  registerEventAiCapability()
 }

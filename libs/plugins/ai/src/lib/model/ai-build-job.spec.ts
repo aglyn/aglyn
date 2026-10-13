@@ -172,6 +172,60 @@ describe('units and their order', () => {
   })
 })
 
+/*
+ * Several items one block shows (AGL-3743): a section listing a bakery's
+ * events uses each event, and places the Event List once. One event that
+ * could not be made leaves the block in place for the others.
+ */
+describe('a section that places one block for several items', () => {
+  const EVENT_OPS: AiBuildOps = new Map([
+    ['page', capability('page')],
+    [
+      'event',
+      capability('event', { runnerKind: undefined, draftResource: 'event', pageBlocks: ['eventList'], estimateCredits: () => 0 }),
+    ],
+  ])
+  const plan: AiBuildPlan = {
+    reuse: [],
+    create: [],
+    screens: [screen('Events', '/events', ['new:Sourdough workshop', 'new:Pie social', 'new:Bread tasting'])],
+    items: [
+      item(0, { op: 'event', name: 'Sourdough workshop', args: {} }),
+      item(1, { op: 'event', name: 'Pie social', args: {} }),
+      item(2, { op: 'event', name: 'Bread tasting', args: {} }),
+    ],
+  }
+  const units = aiBuildUnits(plan)
+  const page = units.find((one) => one.slot === 'p0') as (typeof units)[number]
+
+  it('places the block once, naming every built item', () => {
+    const ledger = ledgerOf(plan, { i0: 'succeeded', i1: 'succeeded', i2: 'succeeded' }, { i0: ['e0'], i1: ['e1'], i2: ['e2'] })
+    expect(aiBuildPlacedItemLines(page, { units, ledger, ops: EVENT_OPS })).toEqual([
+      'In the “Events main” section, place the eventList block for the events “Sourdough workshop”, “Pie social” and “Bread tasting”.',
+    ])
+  })
+
+  it('keeps the block when one item failed and another was built, leaving out only the failed one', () => {
+    const ledger = ledgerOf(plan, { i0: 'succeeded', i1: 'failed', i2: 'succeeded' }, { i0: ['e0'], i2: ['e2'] })
+    const degradation = aiBuildDegradation(page, { units, ledger, ops: EVENT_OPS })
+    expect(degradation).toMatchObject({ skip: null, degradedBy: ['i1'] })
+    expect(degradation.notes).toEqual(['Built without the event “Pie social”: it could not be created.'])
+    expect(degradation.briefLines).toEqual(['Leave the event “Pie social” out of the “Events main” section: it could not be created.'])
+    expect(degradation.briefLines.join(' ')).not.toContain('without the eventList block')
+    expect(aiBuildPlacedItemLines(page, { units, ledger, ops: EVENT_OPS })).toEqual([
+      'In the “Events main” section, place the eventList block for the events “Sourdough workshop” and “Bread tasting”.',
+    ])
+  })
+
+  it('takes the block out when none of its items was built', () => {
+    const ledger = ledgerOf(plan, { i0: 'failed', i1: 'failed', i2: 'failed' })
+    const degradation = aiBuildDegradation(page, { units, ledger, ops: EVENT_OPS })
+    expect(degradation.notes).toHaveLength(3)
+    expect(degradation.briefLines.every((line) => line.includes('without the eventList block'))).toBe(true)
+    expect(aiBuildPlacedItemLines(page, { units, ledger, ops: EVENT_OPS })).toEqual([])
+  })
+})
+
 describe('the shape a build holds', () => {
   it('admits the canonical request', () => {
     expect(aiBuildPlanShapeRefusal(canonical(), { ops: OPS })).toBeNull()
