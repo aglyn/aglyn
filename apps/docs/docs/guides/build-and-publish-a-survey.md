@@ -53,7 +53,7 @@ organization **Data** page (or any site's Data page — both edit the same data)
 Each field's **Display name** is what you see in dialogs and table headers; the
 **field id** next to it (a slug generated once from the display name) is the
 stable key records store values under — the key `{{item.fieldId}}` bindings
-reference, and what a form field's **Maps to schema field** picker stores.
+reference, and what the **Maps to schema field** picker on a form's input stores.
 Renaming the display name later never changes the id.
 
 ![The Schema dialog for the Survey responses dataset with field rows, type chips, and the Add field button](/img/guides/survey-schema-dialog.png)
@@ -79,27 +79,35 @@ With the page open, add the form:
 
 1. In the Elements panel choose **Add Element** (or right-click a node and pick
    **Add element**). The **Choose element** picker opens, grouped by category.
-2. Expand the **Forms** group. It contains the **Form** container, the
-   **Form Field** element, and a ready-made **Contact Form** preset.
-3. Insert a **Form**. Then, with the Form selected, add one **Form Field**
-   child per question (the picker's **Form Field** preset drops a field with
-   sensible defaults).
+2. Expand the **Forms** group. It holds the **Form** container, the ready-made
+   field presets (**Text field**, **Email field**, **Message field**, **Dropdown
+   field**, **Radio choice field**, **Checkbox**, **Rating field**, **Helper Text**),
+   the **Contact Form** and **Marketing consent** presets, and the separate elements
+   those presets are built from.
+3. Insert a **Form**. Then, with the Form selected, insert one preset per question:
+   - a **Rating field** for satisfaction,
+   - a **Radio choice field** for how often they visit,
+   - a **Form Control** holding three **Checkbox** presets, for what to improve,
+   - a **Message field** for comments.
 
-![The Choose element picker open on the Forms group, showing the Form and Form Field elements and the Contact Form preset](/img/guides/survey-element-picker-forms.png)
+![The Choose element picker open on the Forms group, showing the Form, the field presets and the Contact Form preset](/img/guides/survey-element-picker-forms.png)
 
 ## 4. Configure the fields
 
-Select each Form Field and set its properties in the inspector:
+Each preset is a few separate elements: a **Form Control** frame holding a
+**Form Label** (the visible question) and the element the visitor answers with —
+a **Rating**, a **Radio Group** of **Radio**s, **Checkbox**es or an **Input**.
+Select a piece in the canvas or the Hierarchy and set it in the inspector:
 
-| Property | What it does |
-| --- | --- |
-| **Field name** | The key the value is stored under in submissions (and in the inbox copy). |
-| **Maps to schema field** | Which of the dataset's schema fields this value is stored under. The dropdown lists the fields of the dataset chosen on the Form (see step 5) and stores the stable **field id**, so renaming the field later never breaks the mapping. Left on **None**, the value matches a dataset field by name instead. |
-| **Label** | The visible input label ("How satisfied are you?"). |
-| **Placeholder** | An optional gray hint inside the empty input ("you@company.com"). It is not a label — it disappears as soon as someone types, so always keep **Label** set. Radio, checkbox, and rating fields ignore it; a dropdown shows it until a choice is made. Clear it to remove the hint. |
-| **Type** | **Text** (default), **Email**, **Multiline**, **Dropdown**, **Radio choice**, **Checkboxes**, or **Star rating**. |
-| **Options** | Choices for dropdown, radio, and checkbox fields — one per line or comma-separated. Ignored by other types. |
-| **Required?** | Whether the field must be filled; a required checkbox group needs at least one box ticked. |
+| Setting | On | What it does |
+| --- | --- | --- |
+| **Text** | Form Label | The question the visitor reads ("How satisfied are you?"). |
+| **Field name** | Rating, Radio Group, Checkbox, Input, Select | The key the answer is stored under in submissions (and in the inbox copy). |
+| **Maps to schema field** | Rating, Radio Group, Checkbox, Input, Select | Which of the dataset's schema fields this answer is stored under. The dropdown lists the fields of the dataset chosen on the Form (see step 5) and stores the stable **field id**, so renaming the field later never breaks the mapping. Left on **None**, the answer matches a dataset field by its Field name instead. |
+| **Value** | Radio, Checkbox | What is sent when this choice is picked or ticked. |
+| **Text** | Choice Label | The words beside a Radio or Checkbox; clicking them ticks it. |
+| **Placeholder** | Input, Select | An optional gray hint inside the empty input ("you@company.com"). It is not a label — it disappears as soon as someone types, so keep the Form Label. |
+| **Required?** | Input, Select, Checkbox, Radio | Whether it must be answered before the form sends. |
 
 :::tip Pick the dataset first
 "Maps to schema field" lists the fields of whichever dataset the **Form** is
@@ -109,14 +117,27 @@ fields, or the dropdown reads *No dataset selected on the form*.
 
 For this survey:
 
-1. `satisfaction` — Type **Star rating**, label "How satisfied are you?". The
-   five stars submit their count (`4`), which the form stores as text.
-2. `visit` — Type **Radio choice**, Options `First time, Monthly, Weekly`.
-3. `topics` — Type **Checkboxes**, Options `Products, Support, Pricing`.
-   Visitors can tick several; the submission joins them with `, `.
-4. `comments` — Type **Multiline** for free-form feedback.
+1. **Rating field** — Form Label "How satisfied are you?"; select the **Rating**
+   and set **Field name** `satisfaction` and **Maps to schema field**
+   *Satisfaction*. The stars submit their count (`4`).
+2. **Radio choice field** — Form Label "How often do you visit?"; select the
+   **Radio Group** and set **Field name** `visit` and **Maps to schema field**
+   *Visit*. Set the three Choice Labels' **Text**, and their Radios' **Value**,
+   to `First time`, `Monthly` and `Weekly`.
+3. **Checkboxes** — a **Form Control** with the Form Label "What should we
+   improve?" and three **Checkbox** presets inside it. Give each **Checkbox** the
+   same **Field name**, `topics`, and **Maps to schema field** *Topics*, and the
+   Values `Products`, `Support` and `Pricing` (with the same words as their Choice
+   Label's Text). Boxes sharing a Field name are one question: visitors can tick
+   several, and the submission joins them with `, `.
+4. **Message field** — Form Label "Anything else?"; select the **Input** and set
+   **Field name** `comments` and **Maps to schema field** *Comments*.
 
 ![The survey page in the Besigner with the Form selected and the properties panel showing Form name, Write to dataset, Submit label, and Success message](/img/guides/survey-besigner-form.png)
+
+To restyle any piece — the stars, the box comments are typed in, the question
+text — select it and use the **Styles** panel. See
+[Style a field](../content-and-data/forms/overview.md#style-a-field).
 
 ## 5. Point the form at the dataset
 
