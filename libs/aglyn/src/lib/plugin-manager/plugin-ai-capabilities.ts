@@ -157,10 +157,10 @@ export interface PluginAiCapability {
    */
   runnerKind?: string
   /**
-   * The writer saves the item as live setup rather than as a draft: a CRM
-   * pipeline or custom field has no draft state, and is in use once saved
-   * (AGL-3746). The build then says it was saved in `where`, never that it
-   * is a draft. Absent means a draft.
+   * The writer's write takes effect at once, because the resource has no
+   * draft state (a redirect rule, AGL-3745; a CRM pipeline or custom field,
+   * AGL-3746), so the job reports the item as live in `where` rather than as
+   * a draft. Absent: the writer writes a draft.
    */
   live?: boolean
   /** The most this item can cost, in AI credits; a draft written without a model costs 0. */

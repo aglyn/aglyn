@@ -205,7 +205,7 @@ export function aiBuildUnitJobKind(unit: AiBuildUnit, ops: AiBuildOps): AiJobKin
  * field, AGL-3746), that it was saved.
  */
 export function aiBuildItemOutputNote(capability: Pick<PluginAiCapability, 'where' | 'live'>): string {
-  return capability.live ? `Saved in ${capability.where}.` : `A draft, in ${capability.where}.`
+  return capability.live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
 }
 
 /** The id a unit's job, and so its draft, is named by. */
@@ -764,7 +764,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
         hostId: job.hostId,
         label: written.name,
         draftResource: capability.draftResource,
-        // Setup a writer saves live (a CRM pipeline or field, AGL-3746) is no draft.
+        // A resource with no draft state is live once written (AGL-3745, AGL-3746).
         note: aiBuildItemOutputNote(capability),
       }
       return settle(
