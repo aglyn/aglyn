@@ -39,12 +39,29 @@ import SeoPageCheck from '../components/seo-page-check.component'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
+  useFirestore: () => ({}),
+}))
+jest.mock('firebase/firestore', () => ({
+  collection: () => null,
+  doc: () => null,
+  limit: () => null,
+  query: () => null,
+}))
+// The page picker's list: the host's routing map, and the screens' names.
+jest.mock('../hooks/use-firestore-doc', () => ({
+  __esModule: true,
+  default: () => ({ data: { screens: { home: '/', lamps: 'lamps' } } }),
+}))
+jest.mock('../hooks/use-firestore-collection', () => ({
+  __esModule: true,
+  default: () => ({ data: [{ $id: 'home', displayName: 'Home' }, { $id: 'lamps', displayName: 'Lamps' }] }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ header, children }: { header?: ReactNode; children: ReactNode }) => (
     <section aria-label={typeof header === 'string' ? header : undefined}>{children}</section>
   ),
   AppLink: ({ children, href }: { children?: ReactNode; href?: string }) => <a href={href}>{children}</a>,
+  MdiIcon: () => null,
 }))
 
 const report = {
@@ -92,12 +109,16 @@ describe('the SEO check card', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('checks the site with the keyword lines typed, and hands the report on', async () => {
+  it('checks the site with a page picked and its keyword chips, and hands the report on', async () => {
     const onChecked = jest.fn()
     render(<SeoCheckCard hostId="h1" orgSlug="acme" host="shop" check={null} onChecked={onChecked} />)
-    fireEvent.change(screen.getByLabelText('Target keywords by page (optional)'), {
-      target: { value: '/lamps: dimmable' },
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add a page' }))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Page' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Lamps (/lamps)' }))
+    const keywordBox = screen.getByLabelText('Keywords 1')
+    fireEvent.change(keywordBox, { target: { value: 'dimmable' } })
+    fireEvent.keyDown(keywordBox, { key: 'Enter' })
+    expect(screen.getByText('dimmable')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Run the check' }))
     await waitFor(() => expect(onChecked).toHaveBeenCalledWith({ report, keywords: '/lamps: dimmable' }))
     expect(fetchMock.mock.calls[0][0]).toBe('/api/hosts/seo-check?hostId=h1&keywords=%2Flamps%3A+dimmable')
@@ -109,6 +130,7 @@ describe('the SEO check card', () => {
     )
     expect(screen.getByText('Score 89 of 100 · 2 pages · 3 findings')).toBeTruthy()
     expect(screen.getByText('Search engines are discouraged')).toBeTruthy()
+    expect(screen.getByLabelText('Launch status').textContent).toMatch(/^Launch status: hidden\./)
     const table = screen.getByRole('table', { name: 'Checked pages' })
     expect(within(table).getByText('Title too long')).toBeTruthy()
     expect(within(table).getByText('Target keyword not covered: dimmable')).toBeTruthy()

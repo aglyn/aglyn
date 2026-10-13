@@ -24,14 +24,15 @@ import {
   type SeoAuditReport,
   type SeoFinding,
 } from '@aglyn/aglyn/app-utils/seo-audit'
-import { SEO_KEYWORD_LINES_MAX_CHARS, SEO_MAX_KEYWORDS } from '@aglyn/aglyn/app-utils/seo-keywords'
+import { SEO_KEYWORD_LINES_MAX_CHARS } from '@aglyn/aglyn/app-utils/seo-keywords'
 import type { ConsoleSeoCheck } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Box,
@@ -43,11 +44,20 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material'
+import { collection, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
+import {
+  type SeoKeywordPage,
+  type SeoTargetKeywordRow,
+  SeoTargetKeywords,
+  seoKeywordLinesFromRows,
+  seoKeywordRowsFromLines,
+} from './seo-target-keywords.component'
 
 type SignedInUser = Parameters<typeof authorizedFetch>[0]
 
@@ -107,6 +117,31 @@ export function SeoFindingChips({ findings }: { findings: readonly SeoFinding[] 
   )
 }
 
+/**
+ * The site's routed pages, by name and path, for the keyword page picker:
+ * the host's routing map says each page's path, and the screens their names.
+ */
+function useSeoKeywordPages(hostId: string): SeoKeywordPage[] {
+  const firestore = useFirestore()
+  const { data: host } = useFirestoreDoc<any>(() => doc(firestore, 'hosts', hostId), [firestore, hostId])
+  const { data: screens } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const routes: Record<string, unknown> = host?.screens ?? {}
+  const names = new Map<string, string>(
+    (screens ?? []).map((screen: any) => [screen.$id, String(screen.displayName ?? screen.name ?? '')]),
+  )
+  return Object.entries(routes)
+    .filter(([, path]) => typeof path === 'string')
+    .map(([screenId, route]) => {
+      const path = screenRoutePathToUrl(route as string)
+      return { path, name: names.get(screenId) || path }
+    })
+    .sort((a, b) => a.path.localeCompare(b.path))
+}
+
 export interface SeoCheckCardProps {
   hostId: string
   orgSlug: string
@@ -136,7 +171,11 @@ export function SeoCheckCard(props: SeoCheckCardProps) {
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
-  const [keywords, setKeywords] = useState('')
+  const [keywordRows, setKeywordRows] = useState<SeoTargetKeywordRow[]>(() =>
+    seoKeywordRowsFromLines(check?.keywords ?? ''),
+  )
+  const keywords = seoKeywordLinesFromRows(keywordRows)
+  const keywordPages = useSeoKeywordPages(hostId)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -179,17 +218,7 @@ export function SeoCheckCard(props: SeoCheckCardProps) {
         <Typography variant="body2" color="text.secondary">
           {'Checks every published page for what search results and AI agents need: titles, descriptions, headings, image descriptions, links and your target keywords. It changes nothing on your site.'}
         </Typography>
-        <TextField
-          multiline
-          minRows={2}
-          fullWidth
-          label="Target keywords by page (optional)"
-          placeholder={'/pricing: pricing, plans\n/lamps: brass desk lamps'}
-          helperText={`One line per page, up to ${SEO_MAX_KEYWORDS} keywords each. The check says where each page already uses its keywords.`}
-          value={keywords}
-          onChange={(event) => setKeywords(event.target.value.slice(0, SEO_KEYWORD_LINES_MAX_CHARS))}
-          disabled={busy}
-        />
+        <SeoTargetKeywords rows={keywordRows} onChange={setKeywordRows} pages={keywordPages} disabled={busy} />
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Button variant="contained" disabled={busy || !user} onClick={() => void run()}>
             {report ? 'Check again' : 'Run the check'}
@@ -202,6 +231,11 @@ export function SeoCheckCard(props: SeoCheckCardProps) {
           <Stack spacing={2} aria-label="SEO check results">
             <Typography variant="subtitle1">
               {`Score ${report.score} of 100 · ${report.pages.length} ${report.pages.length === 1 ? 'page' : 'pages'} · ${findings} ${findings === 1 ? 'finding' : 'findings'}`}
+            </Typography>
+            <Typography variant="body2" aria-label="Launch status">
+              {report.site.some((entry) => entry.code === 'search-discouraged')
+                ? 'Launch status: hidden. Search engines are asked to stay away from the whole site, and its sitemap lists no pages.'
+                : `Launch status: open to search engines, with ${report.pages.length + report.skipped} ${report.pages.length + report.skipped === 1 ? 'page' : 'pages'} listed.`}
             </Typography>
             {report.skipped > 0 ? (
               <Alert severity="info">
