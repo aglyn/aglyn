@@ -1722,7 +1722,10 @@ async function handler(request: Request): Promise<Response> {
               metadata: invoiceMetadata,
             })
             // Revenue the books expected that is not coming (AGL-3377).
-            await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
+            // The alert IS this branch's effect: without it in the ledger the
+            // delivery reads as inert and the operator gets a second email
+            // saying no handler acted, beside the one this just sent.
+            const closedAlert = await raiseOperatorAlert('billing.platformInvoiceUncollectible', {
               dedupeKey: `${String(object?.id ?? '')}:${type}`,
               context: {
                 invoiceId: String(object?.id ?? ''),
@@ -1738,6 +1741,11 @@ async function handler(request: Request): Promise<Response> {
               },
               orgId,
             })
+            if (closedAlert.outcome === 'undelivered') {
+              ledger.skip('invoice-closed-alert-undelivered')
+            } else {
+              ledger.effect('operator-told-invoice-closed')
+            }
           }
         }
       }
