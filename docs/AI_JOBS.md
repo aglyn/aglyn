@@ -1460,7 +1460,7 @@ nothing itself.
   schema for every brief, so the request still caches across briefs
   (`site-plan` in `runtime/ai-prompt-cache.spec.ts`, 54 tokens over the plain
   plan); every other kind's tool is the same bytes as before. The reader keeps
-  a code the Languages card would accept (`aiPlanLanguage`: `es`, `pt-BR`,
+  a code the Languages card would accept (`siteLanguageCode`, `@aglyn/aglyn/app-utils/seo-locale`: `es`, `pt-BR`,
   `zh-Hant`, in BCP 47 casing) and drops anything else as a repair, never a
   refusal. A guided start's publish then writes `locales: [code]` and
   `defaultLocale: code`, as the Languages card saves one language
