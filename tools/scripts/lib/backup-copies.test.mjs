@@ -36,8 +36,10 @@ import test from 'node:test'
 import {
   ACKNOWLEDGED,
   MAX_EXPORT_AGE_DAYS,
+  MAX_MIRROR_LAG_DAYS,
   PRODUCTION_DATA_STORES,
   assessBackupCopies,
+  compareMirrorListings,
   resolveStoreName,
 } from './backup-copies.mjs'
 
@@ -453,7 +455,10 @@ test('no mirror configured is the AGL-2422 condition', () => {
   const finding = verdict.failing[0]
   // Counted from the declaration, so a third primary store added to
   // PRODUCTION_DATA_STORES is covered with no edit to this file.
-  assert.match(finding.title, /2 store\(s\) of primary data are copied by nothing/)
+  assert.match(
+    finding.title,
+    /2 store\(s\) of primary data are copied by nothing/,
+  )
 })
 
 test('GREEN: a complete off-project mirror satisfies the storage half', () => {
@@ -498,6 +503,85 @@ test('a mirror missing objects is incomplete, and says by how many', () => {
   assert.ok(finding)
   assert.match(finding.detail, /451 object\(s\)/)
   assert.match(finding.detail, /holds 300/)
+})
+
+test('uploads since the last sync are not missing objects', () => {
+  // 2026-10-12: the 09:00 UTC transfer had copied all 3540 source objects;
+  // by the next check the source held 3848, and a count comparison read the
+  // 308 new uploads as a broken mirror.
+  const now = Date.parse('2026-10-12T17:51:00.000Z')
+  const result = compareMirrorListings({
+    source: [
+      { name: 'orgs/a.png', timeCreated: '2026-10-01T00:00:00.000Z' },
+      { name: 'orgs/b.png', timeCreated: '2026-10-12T15:37:35.705Z' },
+    ],
+    mirror: [{ name: 'media/orgs/a.png' }],
+    prefix: 'media/',
+    now,
+  })
+  assert.deepEqual(result, { missingObjects: 0, missingRecent: 1 })
+})
+
+test('an old object absent from the mirror is missing even when extras offset the count', () => {
+  // The mirror still holds an object the source deleted since the last sync,
+  // so the counts match while a settled object was never copied.
+  const now = Date.parse('2026-10-12T17:51:00.000Z')
+  const old = new Date(
+    now - (MAX_MIRROR_LAG_DAYS + 1) * 86_400_000,
+  ).toISOString()
+  const result = compareMirrorListings({
+    source: [
+      { name: 'orgs/a.png', timeCreated: old },
+      { name: 'orgs/never-copied.png', timeCreated: old },
+    ],
+    mirror: [
+      { name: 'media/orgs/a.png' },
+      { name: 'media/orgs/deleted-at-source.png' },
+    ],
+    prefix: 'media/',
+    now,
+  })
+  assert.deepEqual(result, { missingObjects: 1, missingRecent: 0 })
+})
+
+test('an object with no readable creation time is reported, never excused', () => {
+  const result = compareMirrorListings({
+    source: [{ name: 'orgs/a.png' }],
+    mirror: [],
+    prefix: 'media/',
+    now: Date.now(),
+  })
+  assert.deepEqual(result, { missingObjects: 1, missingRecent: 0 })
+})
+
+test('a by-name deficit decides the verdict over the raw counts', () => {
+  const stores = healthyMirror().stores
+  // Source grew by 308 since the last sync; none of them is settled.
+  stores[0] = {
+    ...stores[0],
+    sourceObjects: 3848,
+    mirrorObjects: 3540,
+    missingObjects: 0,
+    missingRecent: 308,
+  }
+  const clean = assess({
+    strict: true,
+    copies: [offProjectCopy()],
+    storageMirror: healthyMirror({ stores }),
+  })
+  assert.deepEqual(codes(clean.failing), [])
+
+  stores[0] = { ...stores[0], mirrorObjects: 3848, missingObjects: 2 }
+  const broken = assess({
+    strict: true,
+    copies: [offProjectCopy()],
+    storageMirror: healthyMirror({ stores }),
+  })
+  const finding = broken.failing.find(
+    (f) => f.code === 'storage-mirror-incomplete',
+  )
+  assert.ok(finding)
+  assert.match(finding.detail, /2 source object\(s\) older than/)
 })
 
 test('a mirror holding MORE than its source is not a finding', () => {

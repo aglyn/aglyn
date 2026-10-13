@@ -180,11 +180,16 @@ whole reason this document exists.
      it into every browser bundle) and required to match the secret key's mode.
      Set the **test** publishable key on development and preview in the same
      pass, or the run stays red and correctly so.
-   - ⚠️ Store that publishable key as `encrypted`, **not** `sensitive` — see
-     "What not to do". `sensitive` is write-only, so the checker cannot read it
-     back and reports the environment's mode as **UNKNOWN**, which is a
-     finding, not a pass. `aglyn-tenant`'s development and preview copies were
-     added `encrypted`/`sensitive` on 2026-08-23 and are in that state now.
+   - ⚠️ Store that publishable key as `plain` — **not** `encrypted` and **not**
+     `sensitive`. The project env listing the checker reads returns a value
+     only for `plain` records (measured 2026-10-12: aglyn-console's `plain`
+     record comes back with its value; aglyn-tenant's `encrypted` development
+     record and `sensitive` preview record come back without one), so either
+     of the other types reports the environment's mode as **UNKNOWN**, which
+     is a finding, not a pass. The CLI's `vercel env add` cannot create a
+     `plain` record; use the API (`vercel api /v10/projects/<project>/env`
+     with `"type":"plain"`). `aglyn-tenant`'s development (`encrypted`) and
+     preview (`sensitive`) copies are in the unreadable state as of 2026-10-12.
 
 Redeploy both projects, then re-run `npm run check:env-isolation`. Everything
 above should have dropped off the findings list, and the mode section should be
@@ -372,7 +377,9 @@ against the previous one. Two things to know reading it:
   nothing, and the twin usually ends up production-only, splitting prod from
   preview by accident.
 - **Do not** mark a public identifier `sensitive`. It is write-only, so the
-  value can never be read back and verified. Prefer `encrypted`, the default.
+  value can never be read back and verified. A `NEXT_PUBLIC_` value the
+  env-isolation check must read (the Stripe publishable key) has to be `plain`;
+  `encrypted` is not returned by the env listing either.
 - **Do not** add `continue-on-error` to `.github/workflows/env-isolation.yml`,
   and do not move a finding into the checker's `ACCEPTED` table to quiet it. An
   `ACCEPTED` entry requires a name and a reason and is still printed on every

@@ -95,6 +95,7 @@ import {
   PRODUCTION_DATA_STORES,
   ageInDays,
   assessBackupCopies,
+  compareMirrorListings,
   resolveStoreName,
 } from './lib/backup-copies.mjs'
 
@@ -284,38 +285,40 @@ for (const target of copyTargets) {
 // of them under a prefix each (`mirrorPrefix` in PRODUCTION_DATA_STORES);
 // unset means "no mirror", which is a finding, not a skip.
 //
-// Objects are listed with `fields=items(updated),nextPageToken` — names are
-// deliberately NOT requested. The count and the newest copy time are all the
-// comparison needs, and a checker that pulls a list of every customer's media
-// paths into CI logs is a data-exposure decision nobody asked for.
+// Objects are listed with `fields=items(name,timeCreated,updated)`. Names are
+// needed because counts cannot prove completeness on a bucket with churn (see
+// compareMirrorListings), but they stay in memory: only counts are printed, so
+// no customer media path reaches a CI log.
 
 /** Pages of 1000. 20 is ~20k objects — two orders of magnitude over today's 451. */
 const MAX_LIST_PAGES = 20
 
 /**
- * @returns {Promise<{ objects: number, newest: string | null, truncated: boolean }>}
+ * @returns {Promise<{ objects: number, newest: string | null, truncated: boolean, items: { name: string, timeCreated?: string }[] }>}
  */
 async function listObjects(bucket, prefix, what) {
   let objects = 0
   let newest = null
+  const items = []
   let pageToken = null
   for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
     const url =
       `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o` +
-      `?prefix=${encodeURIComponent(prefix)}&fields=items(updated),nextPageToken&maxResults=1000` +
+      `?prefix=${encodeURIComponent(prefix)}&fields=items(name,timeCreated,updated),nextPageToken&maxResults=1000` +
       (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
     const body = await getJson(url, what)
     for (const item of body.items ?? []) {
       objects += 1
+      items.push({ name: item.name, timeCreated: item.timeCreated })
       if (item.updated && (newest === null || item.updated > newest)) {
         newest = item.updated
       }
     }
     pageToken = body.nextPageToken ?? null
-    if (!pageToken) return { objects, newest, truncated: false }
+    if (!pageToken) return { objects, newest, truncated: false, items }
   }
   // Ran out of pages with a token still in hand: the count is a floor.
-  return { objects, newest, truncated: true }
+  return { objects, newest, truncated: true, items }
 }
 
 const mirrorBucket = envBucket('STORAGE_MIRROR_BUCKET')
@@ -348,6 +351,12 @@ if (mirrorBucket) {
         mirrorObjects: mirrored.objects,
         mirrorNewest: mirrored.newest,
         mirrorTruncated: mirrored.truncated,
+        ...compareMirrorListings({
+          source: source.items,
+          mirror: mirrored.items,
+          prefix: store.mirrorPrefix,
+          now: Date.now(),
+        }),
       })
     }
     storageMirror = {
@@ -435,7 +444,10 @@ if (!storageMirror) {
     '  STORAGE_MIRROR_BUCKET is not set — no copy of Cloud Storage exists.\n' +
       `  ${verdict.inventory.mirroredStores.length} store(s) of primary data are copied by nothing:\n` +
       verdict.inventory.mirroredStores
-        .map((store) => `    gs://${store.name} → would mirror to ${store.mirrorPrefix}`)
+        .map(
+          (store) =>
+            `    gs://${store.name} → would mirror to ${store.mirrorPrefix}`,
+        )
         .join('\n'),
   )
 } else {
@@ -455,6 +467,7 @@ if (!storageMirror) {
     console.log(
       `    gs://${store.name} → ${store.prefix}: ` +
         `${store.mirrorObjects}/${store.sourceObjects} objects, ` +
+        `${store.missingObjects ?? 'n/a'} missing, ${store.missingRecent ?? 'n/a'} awaiting next sync, ` +
         `source newest ${store.sourceNewest ?? 'n/a'}, mirror newest ${store.mirrorNewest ?? 'n/a'}${flag}`,
     )
   }
