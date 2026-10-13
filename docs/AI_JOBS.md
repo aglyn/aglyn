@@ -784,6 +784,16 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   opening, a section that places something, one that collects answers or says how to
   reach the owner, or a storefront's listing parts. A plan further over, past its page
   cap, or with a list split into sections is still re-asked.
+- **A page's header, navigation or footer comes off the page (AGL-3750).** Rule 2's
+  `plan-layout-region-section` has one answer, "take the section off the page", so
+  `aiSettlePlanLayoutRegionSections` takes it, before the rules and the Free wall read
+  the plan: the live Free bakery start of 2026-10-12 planned a Header and a Footer on
+  its pages on all three answers and stopped. A section is taken off only where its name
+  is one the rule reads as a region and it places nothing, or only a layout. One that
+  places a form or a component, and a page whose every section is a region, are
+  re-asked as before; a home left under its fewest sections is the thin-home check's.
+  `plan-empty-gallery` is not settled: how many pieces a section shows, and whether it
+  shows the work at all, has no one answer.
 - **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
   inline sentence's old words, "draw a repeated item in its own section", as a section an
   item, and planned "the four areas we practice" as four sections of one item: none was
