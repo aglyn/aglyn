@@ -704,6 +704,16 @@ a console card already sets, and only values that are not secrets.
   argument descriptions and the intent tell the planner never to make an id
   up and to ask for it when the request has none. The planner sees the op in
   the op catalog and Assist's build intents, so the plan prompt changed.
+- **Asked, never built empty.** The live eval's "add my Meta pixel" planned a
+  `tracking` item with no id. A capability may now say what only the person
+  can give (`missingInput` on the core contract); `aiBuildPlanMissingInput`
+  reads it, and the build's admission refuses such a plan with the question
+  ("What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your
+  pixel in Meta Events Manager."), so the plan step does not keep it and the
+  card shows the question. It is not a plan rule: a re-ask cannot supply what
+  only the person knows. The tag is read from the item's arguments, else its
+  name, else its reason; an id of the wrong shape is named before the
+  question.
 - **The card's own rules.** Each id is held to the pattern the card's field
   and the tenant's loader share (`GA_MEASUREMENT_ID_PATTERN`,
   `GTM_CONTAINER_ID_PATTERN`, `META_PIXEL_ID_PATTERN` and the rest in

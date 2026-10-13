@@ -33,6 +33,7 @@ import {
   aiBuildNextUnit,
   aiBuildOrder,
   aiBuildPlacedItemLines,
+  aiBuildPlanMissingInput,
   aiBuildPlanShapeRefusal,
   aiBuildSmaller,
   aiBuildUnits,
@@ -951,6 +952,9 @@ export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJo
     const ops = await opsFor({ orgId: context.orgId, hostId: context.hostId, org, host, freeTaste })
     const shape = aiBuildPlanShapeRefusal(plan, { freeTaste, ops })
     if (shape) return { status: 400, error: shape }
+    // Something only the person can give (AGL-3751): asked, never built without.
+    const missing = aiBuildPlanMissingInput(plan, ops)
+    if (missing) return { status: 400, error: missing }
     if (freeTaste) {
       const refusal = await aiBuildFreeCreditsRefusal({
         firestore: context.firestore,

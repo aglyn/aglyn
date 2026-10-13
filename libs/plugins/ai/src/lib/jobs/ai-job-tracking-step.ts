@@ -102,18 +102,82 @@ export interface AiTrackingTag {
   pattern: RegExp
   /** What the card's field says the id looks like. */
   shape: string
+  /** Asked when a request names this tag and no usable id, from the card's helper text. */
+  ask: string
+  /** Words that name this tag in an item's name. */
+  named: RegExp
 }
 
 /** The Tracking card's fields, in its order (`trackingSchema`, host-settings-scope.tsx). */
 export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
-  { arg: 'googleAnalytics', path: 'analytics.gaMeasurementId', label: 'Google Analytics', pattern: GA_MEASUREMENT_ID_PATTERN, shape: 'G-XXXXXXXXXX' },
-  { arg: 'googleTagManager', path: 'analytics.gtmContainerId', label: 'Google Tag Manager', pattern: GTM_CONTAINER_ID_PATTERN, shape: 'GTM-XXXXXXX' },
-  { arg: 'metaPixel', path: 'analytics.adTags.meta', label: 'the Meta pixel', pattern: META_PIXEL_ID_PATTERN, shape: '8–20 digits' },
-  { arg: 'googleAds', path: 'analytics.adTags.google-ads', label: 'the Google Ads tag', pattern: GOOGLE_ADS_ID_PATTERN, shape: 'AW-123456789' },
-  { arg: 'linkedinInsight', path: 'analytics.adTags.linkedin', label: 'the LinkedIn Insight Tag', pattern: LINKEDIN_PARTNER_ID_PATTERN, shape: '4–10 digits' },
-  { arg: 'tiktokPixel', path: 'analytics.adTags.tiktok', label: 'the TikTok pixel', pattern: TIKTOK_PIXEL_ID_PATTERN, shape: '16–24 capital letters and digits' },
-  { arg: 'pinterestTag', path: 'analytics.adTags.pinterest', label: 'the Pinterest tag', pattern: PINTEREST_TAG_ID_PATTERN, shape: '10–16 digits' },
+  {
+    arg: 'googleAnalytics',
+    path: 'analytics.gaMeasurementId',
+    label: 'Google Analytics',
+    pattern: GA_MEASUREMENT_ID_PATTERN,
+    shape: 'G-XXXXXXXXXX',
+    ask: 'What’s your Google Analytics measurement ID? It looks like G-XXXXXXXXXX.',
+    named: /google analytics|\bga4?\b|\banalytics\b/i,
+  },
+  {
+    arg: 'googleTagManager',
+    path: 'analytics.gtmContainerId',
+    label: 'Google Tag Manager',
+    pattern: GTM_CONTAINER_ID_PATTERN,
+    shape: 'GTM-XXXXXXX',
+    ask: 'What’s your Google Tag Manager container ID? It looks like GTM-XXXXXXX.',
+    named: /tag manager|\bgtm\b/i,
+  },
+  {
+    arg: 'metaPixel',
+    path: 'analytics.adTags.meta',
+    label: 'the Meta pixel',
+    pattern: META_PIXEL_ID_PATTERN,
+    shape: '8–20 digits',
+    ask: 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.',
+    named: /\bmeta\b|facebook|instagram/i,
+  },
+  {
+    arg: 'googleAds',
+    path: 'analytics.adTags.google-ads',
+    label: 'the Google Ads tag',
+    pattern: GOOGLE_ADS_ID_PATTERN,
+    shape: 'AW-123456789',
+    ask: 'What’s your Google Ads conversion ID? It looks like AW-123456789, from Google Ads.',
+    named: /google ads|adwords/i,
+  },
+  {
+    arg: 'linkedinInsight',
+    path: 'analytics.adTags.linkedin',
+    label: 'the LinkedIn Insight Tag',
+    pattern: LINKEDIN_PARTNER_ID_PATTERN,
+    shape: '4–10 digits',
+    ask: 'What’s your LinkedIn partner ID? It’s the number (4–10 digits) in LinkedIn Campaign Manager.',
+    named: /linkedin/i,
+  },
+  {
+    arg: 'tiktokPixel',
+    path: 'analytics.adTags.tiktok',
+    label: 'the TikTok pixel',
+    pattern: TIKTOK_PIXEL_ID_PATTERN,
+    shape: '16–24 capital letters and digits',
+    ask: 'What’s your TikTok pixel code? It’s in TikTok Ads Manager → Events, like C4ABCDEFGH1234567890.',
+    named: /tiktok/i,
+  },
+  {
+    arg: 'pinterestTag',
+    path: 'analytics.adTags.pinterest',
+    label: 'the Pinterest tag',
+    pattern: PINTEREST_TAG_ID_PATTERN,
+    shape: '10–16 digits',
+    ask: 'What’s your Pinterest tag ID? It’s the number (10–16 digits) in Pinterest Ads → Conversions.',
+    named: /pinterest/i,
+  },
 ]
+
+/** Asked when an item names no tag at all. */
+export const AI_TRACKING_WHICH_COPY =
+  'Which tag should be connected, and what is its ID? Google Analytics, Google Tag Manager, the Meta pixel, Google Ads, LinkedIn, TikTok or Pinterest.'
 
 const TAG_ARGS = AI_TRACKING_TAGS.map((tag) => tag.arg)
 
@@ -181,6 +245,25 @@ export function aiTrackingRequestOf(inputs: Readonly<Record<string, unknown>> | 
 
 function capitalized(label: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+/**
+ * The question a planned tracking change asks the person, or `null` when it
+ * sets or removes something (AGL-3751). An item with no usable id — the
+ * planner kept "add my Meta pixel" with no id, or an id of the wrong shape —
+ * is never built: it asks for the id of the tag its arguments or its name
+ * name, in the card's own words, and says why an id given was not one.
+ */
+export function aiTrackingMissingInput(item: { name?: string; why?: string; args: Readonly<Record<string, unknown>> }): string | null {
+  const read = aiTrackingRequestOf(item.args)
+  if (!aiTrackingRequestEmpty(read.request)) return null
+  // The tags its arguments tried to set, else the ones its name or reason names.
+  const tried = AI_TRACKING_TAGS.filter((tag) => text(item.args[tag.arg]))
+  const naming = (words: string | undefined) => AI_TRACKING_TAGS.filter((tag) => tag.named.test(words ?? ''))
+  const byName = naming(item.name)
+  const named = tried.length ? tried : byName.length ? byName : naming(item.why)
+  const asks = named.length ? named.map((tag) => tag.ask) : [AI_TRACKING_WHICH_COPY]
+  return [...read.problems, ...asks].join(' ')
 }
 
 /** Whether a read request asks for anything at all. */

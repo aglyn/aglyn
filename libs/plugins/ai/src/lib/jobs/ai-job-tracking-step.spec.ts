@@ -48,7 +48,9 @@ import {
   AI_TRACKING_NOTHING_COPY,
   AI_TRACKING_ROLE_COPY,
   AI_TRACKING_TAGS,
+  AI_TRACKING_WHICH_COPY,
   aiTrackingChanges,
+  aiTrackingMissingInput,
   aiTrackingOutputNote,
   aiTrackingRequestOf,
   aiTrackingWarnings,
@@ -124,6 +126,37 @@ describe('what a tracking change may ask (AGL-3751)', () => {
       'analytics.adTags.tiktok',
       'analytics.adTags.pinterest',
     ])
+  })
+})
+
+describe('what a tracking change with no usable id asks (AGL-3751)', () => {
+  it('asks nothing of an item that sets or removes a tag', () => {
+    expect(aiTrackingMissingInput({ name: 'Analytics', args: { googleAnalytics: 'G-4R7KX2PQ9Z' } })).toBeNull()
+    expect(aiTrackingMissingInput({ name: 'Remove TikTok', args: { remove: ['tiktokPixel'] } })).toBeNull()
+  })
+
+  it('asks for the id of the tag its name names, in the card’s words', () => {
+    expect(aiTrackingMissingInput({ name: 'Meta pixel', args: {} })).toBe(
+      'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.',
+    )
+    expect(aiTrackingMissingInput({ name: 'Connect Google Tag Manager', args: {} })).toBe('What’s your Google Tag Manager container ID? It looks like GTM-XXXXXXX.')
+    expect(aiTrackingMissingInput({ name: 'Google Ads tag', args: {} })).toBe('What’s your Google Ads conversion ID? It looks like AW-123456789, from Google Ads.')
+  })
+
+  it('reads its reason when its name names no tag, and asks which tag when neither does', () => {
+    expect(aiTrackingMissingInput({ name: 'Tracking', why: 'They want their Facebook pixel installed.', args: {} })).toContain('Meta pixel ID')
+    expect(aiTrackingMissingInput({ name: 'Tracking', why: 'Set up tracking.', args: {} })).toBe(AI_TRACKING_WHICH_COPY)
+  })
+
+  it('names an id of the wrong shape, and asks for that tag’s id', () => {
+    expect(aiTrackingMissingInput({ name: 'Tracking', args: { tiktokPixel: 'my pixel' } })).toBe(
+      '“my pixel” is not an ID for the TikTok pixel, which looks like 16–24 capital letters and digits. What’s your TikTok pixel code? It’s in TikTok Ads Manager → Events, like C4ABCDEFGH1234567890.',
+    )
+  })
+
+  it('is the capability’s plan-time check', () => {
+    const capability = AI_OWNED_CAPABILITIES.find((one) => one.op === 'tracking')
+    expect(capability?.missingInput).toBe(aiTrackingMissingInput)
   })
 })
 

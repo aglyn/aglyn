@@ -107,6 +107,8 @@ export interface PluginAiCapabilityItem {
   /** The item's name in the plan, unique within it; other items cite it as `new:<name>`. */
   name: string
   args: PluginAiCapabilityArgs
+  /** Why the planner says the request needs it, where it said. */
+  why?: string
 }
 
 /** What a capability's `draftContent` is told beside the item. */
@@ -165,6 +167,15 @@ export interface PluginAiCapability {
   live?: boolean
   /** The most this item can cost, in AI credits; a draft written without a model costs 0. */
   estimateCredits(args: PluginAiCapabilityArgs): number
+  /**
+   * The question to ask the person when an item leaves out something only
+   * they can give — an account id the planner must never make up — or
+   * `null` when the item can be built. Pure. A plan holding such an item is
+   * not kept: the build asks this instead of building nothing, or building
+   * it from a made-up value. Absent: every item that passes its schema can
+   * be built.
+   */
+  missingInput?(item: PluginAiCapabilityItem): string | null
   /** Operations an item of this one may depend on. */
   dependsOnOps?: readonly string[]
   degrade: PluginAiCapabilityDegrade

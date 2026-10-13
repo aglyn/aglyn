@@ -36,7 +36,7 @@ import { AI_CAMPAIGN_RESOURCE } from './ai-job-campaign-step'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
 import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
-import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE } from './ai-job-tracking-step'
+import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingMissingInput } from './ai-job-tracking-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -392,6 +392,8 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     runnerKind: 'tracking',
     // A tag has no draft state: saved, it is on every live page.
     live: true,
+    // An item with no usable id asks for it instead of being built (AGL-3751).
+    missingInput: aiTrackingMissingInput,
     // Written by code from the plan's values: no model pass.
     estimateCredits: () => 0,
     degrade: 'omit',
