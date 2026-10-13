@@ -699,11 +699,17 @@ async function seedGuideFixtures() {
     bio: 'Sample publisher for the Aglyn marketplace guides.',
   })
   await put(orgRef, {
-    // The Publish tab needs the selling entitlement to render its form.
-    'entitlements.features.marketplaceSelling': true,
-    // Sequences is behind an entitlement no plan carries; with it, the org
-    // strip draws the flagged tab the staff-only guard must see hidden.
-    'entitlements.features.outreach': true,
+    // Nested, not dotted: `put` is a merging `set`, which stores a dotted key
+    // as one literal field name — the grant then exists for nobody.
+    entitlements: {
+      features: {
+        // The Publish tab needs the selling entitlement to render its form.
+        marketplaceSelling: true,
+        // Sequences is behind an entitlement no plan carries; with it, the
+        // org strip draws the flagged tab the staff-only guard must see hidden.
+        outreach: true,
+      },
+    },
     // The two plugins whose tabs ride release flags that are off. Without
     // them installed neither tab renders, so the guard's preflight finds no
     // marker to prove hidden and refuses every run.
@@ -805,12 +811,15 @@ async function seedGuideFixtures() {
   // the site theme (palette-sx.ts).
   const NEWSLETTER_FORM = 'seed-guide-newsletter-form'
   const NEWSLETTER_BAND = 'seed-guide-newsletter-band'
-  const visuallyHidden = {
-    position: 'absolute', width: '1px', height: '1px', overflow: 'hidden',
-    clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', m: 0, p: 0,
-  }
+  // The form is built from separate elements and styled ONLY with what the
+  // Besigner's Styles fields write — no nested selectors, nothing a site
+  // builder would have to type: the Form is a row from tablet width up
+  // (Flexbox & Grid, per breakpoint), the Input is white with no outline
+  // (Colors, Borders, Sizing), and the Button is the form's Submit button
+  // (its Type) in the theme's dark gray, a shade lighter on Hover.
   const newsletterForm = (parentId) => ({
-    $id: 'nl-form', componentId: 'form', pluginId: 'forms', parentId, nodes: ['nl-email'],
+    $id: 'nl-form', componentId: 'form', pluginId: 'forms', parentId,
+    nodes: ['nl-email', 'nl-submit'],
     props: {
       formId: NEWSLETTER_FORM,
       formName: 'Product updates',
@@ -818,32 +827,42 @@ async function seedGuideFixtures() {
       successMessage: 'Thanks — you’re on the list. No spam, ever.',
     },
     sx: {
-      width: '100%', mt: 0.75,
-      flexDirection: { xs: 'column', sm: 'row' }, flexWrap: 'wrap',
-      justifyContent: 'center', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1.25,
-      '& > :not(style) ~ :not(style)': { mt: 0 },
-      '& .MuiAlert-root': { flexBasis: '100%' },
-      '& button[type="submit"]': {
-        alignSelf: 'auto', bgcolor: 'grey.900', color: 'common.white', px: 2.75, py: 1.5,
-        '&:hover': { bgcolor: 'grey.800' },
-      },
+      width: '100%',
+      flexDirection: { xs: 'column', sm: 'row' },
+      alignItems: { xs: 'stretch', sm: 'center' },
+      justifyContent: 'center',
+      gap: 2,
     },
   })
   const newsletterEmail = {
-    $id: 'nl-email', componentId: 'formField', pluginId: 'forms', parentId: 'nl-form',
+    $id: 'nl-email', componentId: 'muiInput', pluginId: 'mui', parentId: 'nl-form',
     props: {
-      fieldName: 'email', label: 'Email address', fieldType: 'email',
-      required: true, placeholder: 'you@company.com',
+      name: 'email',
+      type: 'email',
+      placeholder: 'you@company.com',
+      required: true,
+      ariaLabel: 'Email address',
+      size: 'small',
     },
     sx: {
-      width: { xs: '100%', sm: 320 }, flex: { sm: '0 1 auto' },
-      '& .MuiInputLabel-root': visuallyHidden,
-      '& .MuiOutlinedInput-root': { bgcolor: 'common.white', color: 'grey.900', borderRadius: 1 },
-      '& .MuiOutlinedInput-notchedOutline': { borderColor: 'transparent' },
-      '& .MuiOutlinedInput-notchedOutline legend': { maxWidth: 0 },
-      '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'grey.900' },
-      '& .MuiOutlinedInput-input': { py: 1.5, px: 2 },
-      '& .MuiOutlinedInput-input::placeholder': { color: 'grey.500', opacity: 1 },
+      backgroundColor: 'common.white',
+      color: 'grey.900',
+      borderColor: 'common.white',
+      borderRadius: 1,
+      width: { sm: '320px' },
+    },
+  }
+  const newsletterSubmit = {
+    $id: 'nl-submit', componentId: 'muiButton', pluginId: 'mui', parentId: 'nl-form',
+    props: { children: 'Subscribe', type: 'submit', variant: 'contained' },
+    sx: {
+      backgroundColor: 'grey.900',
+      color: 'common.white',
+      paddingTop: 1,
+      paddingBottom: 1,
+      paddingLeft: 3,
+      paddingRight: 3,
+      '&:hover': { backgroundColor: 'grey.800' },
     },
   }
   // A re-run starts from no sign-up, so the contact shot shows one
@@ -866,7 +885,11 @@ async function seedGuideFixtures() {
     optInOnSubmit: true,
     routing: { lead: false },
     rootId: 'nl-form',
-    nodes: { 'nl-form': newsletterForm(null), 'nl-email': newsletterEmail },
+    nodes: {
+      'nl-form': newsletterForm(null),
+      'nl-email': newsletterEmail,
+      'nl-submit': newsletterSubmit,
+    },
     versionId: `${NEWSLETTER_FORM}-v1`,
     campaignIds: [],
     inCampaign: false,
@@ -886,6 +909,7 @@ async function seedGuideFixtures() {
       '_@_': { $id: '_@_', componentId: 'div', nodes: ['nl-form'] },
       'nl-form': newsletterForm('_@_'),
       'nl-email': newsletterEmail,
+      'nl-submit': newsletterSubmit,
     },
     createdAt: now,
   })
@@ -918,26 +942,36 @@ async function seedGuideFixtures() {
       $id: 'nl-band', componentId: 'section', parentId: rootParent,
       nodes: ['nl-heading', 'nl-copy', 'nl-form'],
       props: { element: 'section', ariaLabel: 'Newsletter sign-up' },
+      // What Background Fill (theme stops), Text Color, Flexbox & Grid and the
+      // spacing ring write.
       sx: {
         backgroundImage:
           'linear-gradient(243deg, var(--mui-palette-primary-main) 0%, var(--mui-palette-secondary-main) 100%)',
-        color: 'common.white', textAlign: 'center',
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        py: 8, px: 3, gap: 2.25,
+        color: 'common.white',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        paddingTop: 8,
+        paddingBottom: 8,
+        paddingLeft: 3,
+        paddingRight: 3,
       },
     },
     'nl-heading': {
       $id: 'nl-heading', componentId: 'muiTypography', parentId: 'nl-band',
       props: { children: '{{prop.heading}}', component: 'h2', variant: 'h4' },
-      sx: { fontWeight: 'bold', color: 'inherit', m: 0 },
+      sx: { fontWeight: 'fontWeightBold' },
     },
     'nl-copy': {
       $id: 'nl-copy', componentId: 'muiTypography', parentId: 'nl-band',
       props: { children: '{{prop.description}}', variant: 'body1' },
-      sx: { color: 'inherit', opacity: 0.92, maxWidth: 'sm', m: 0 },
+      sx: { opacity: '0.92', maxWidth: '600px' },
     },
     'nl-form': newsletterForm('nl-band'),
     'nl-email': newsletterEmail,
+    'nl-submit': newsletterSubmit,
   })
   const bandProps = [
     { name: 'heading', label: 'Heading', type: 'text', defaultValue: 'Get product updates' },
@@ -1673,21 +1707,69 @@ await shot({
     { fill: ['role=textbox[name="Display name"]', 'Product updates'], optional: true },
   ],
 })
+// The form's own besigner, one element at a time.
+const pickInForm = (label) => [
+  { click: 'text=Document', optional: true, settleMs: 1000 },
+  // Selecting the Form opens it, so its Input and Button rows show.
+  { click: 'text=/^Form$/ >> visible=true', settleMs: 1500 },
+  // Visible only: the Elements tab keeps a hidden "Input"/"Button" entry.
+  ...(label === 'Form'
+    ? []
+    : [{ click: `text=/^${label}$/ >> visible=true`, settleMs: 1500 }]),
+]
 await shot({
-  out: 'newsletter-form-field-attributes.png',
+  out: 'newsletter-input-attributes.png',
   base: CONSOLE_BASE,
   path: newsletterFormBesigner,
   waitFor: 'Properties',
   settleMs: 6000,
   actions: [
-    // The hierarchy, a level at a time — canvas clicks can't reach the
-    // closed shadow root.
-    { click: 'text=Document', optional: true, settleMs: 1000 },
-    { click: 'text=Form', optional: true, settleMs: 1000 },
-    { click: 'text=Form Field', optional: true, settleMs: 1500 },
-    { click: 'role=tab[name="Attributes"]', optional: true, waitFor: 'Placeholder' },
+    ...pickInForm('Input'),
+    { click: 'role=tab[name="Attributes"]', optional: true, waitFor: 'Accessible label' },
   ],
 })
+await shot({
+  out: 'newsletter-button-attributes.png',
+  base: CONSOLE_BASE,
+  path: newsletterFormBesigner,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    ...pickInForm('Button'),
+    { click: 'role=tab[name="Attributes"]', optional: true, waitFor: 'Type' },
+    { scroll: 'text=Submit sends the form', optional: true, settleMs: 1000 },
+  ],
+})
+await shot({
+  out: 'newsletter-form-layout.png',
+  base: CONSOLE_BASE,
+  path: newsletterFormBesigner,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    ...pickInForm('Form'),
+    // Tablet width up: where the row starts.
+    { click: 'role=button[name="device preview mode"]', settleMs: 1000 },
+    { click: 'text=/^SM/', settleMs: 2000 },
+    { click: 'role=tab[name="Styles"]', settleMs: 1500 },
+    { click: 'text=/^Flexbox & Grid$/ >> visible=true', settleMs: 1500 },
+    { scroll: 'text=/^Align items/ >> visible=true', settleMs: 1000 },
+  ],
+})
+await shot({
+  out: 'newsletter-input-styles.png',
+  base: CONSOLE_BASE,
+  path: newsletterFormBesigner,
+  waitFor: 'Properties',
+  settleMs: 6000,
+  actions: [
+    ...pickInForm('Input'),
+    { click: 'role=tab[name="Styles"]', settleMs: 1500 },
+    { click: 'text=/^Colors$/ >> visible=true', settleMs: 1200 },
+    { scroll: 'text=/^Colors$/ >> visible=true', optional: true, settleMs: 800 },
+  ],
+})
+
 await shot({
   out: 'newsletter-form-crm-routing.png',
   base: CONSOLE_BASE,
@@ -1723,7 +1805,7 @@ await shot({
   ],
 })
 await shot({
-  out: 'newsletter-component-styles-jss.png',
+  out: 'newsletter-section-fill.png',
   base: CONSOLE_BASE,
   path: newsletterBandBesigner,
   waitFor: 'Properties',
@@ -1733,26 +1815,8 @@ await shot({
     { click: 'role=button[name="Expand children"]', settleMs: 1000 },
     { click: 'text=Section', settleMs: 1500 },
     { click: 'role=tab[name="Styles"]', settleMs: 1500 },
-    { click: 'text=Classes & custom CSS', settleMs: 1200 },
-    { click: 'role=button[name="JSS (sx)"]', settleMs: 1500 },
-    { scroll: 'role=button[name="Apply JSS"]', optional: true, settleMs: 1000 },
-  ],
-})
-await shot({
-  // In the SAVED FORM's besigner: a placed form draws its styling from the
-  // form itself, so the row layout is authored here, once, for every page.
-  out: 'newsletter-form-styles-jss.png',
-  base: CONSOLE_BASE,
-  path: newsletterFormBesigner,
-  waitFor: 'Properties',
-  settleMs: 6000,
-  actions: [
-    { click: 'text=Document', optional: true, settleMs: 1000 },
-    { click: 'text=/^Form$/', settleMs: 1500 },
-    { click: 'role=tab[name="Styles"]', settleMs: 1500 },
-    { click: 'text=Classes & custom CSS', settleMs: 1200 },
-    { click: 'role=button[name="JSS (sx)"]', settleMs: 1500 },
-    { scroll: 'role=button[name="Apply JSS"]', optional: true, settleMs: 1000 },
+    { click: 'text=/^Colors$/ >> visible=true', settleMs: 1500 },
+    { scroll: 'text=Background Fill >> visible=true', optional: true, settleMs: 1000 },
   ],
 })
 await shot({
@@ -1805,7 +1869,8 @@ if (selected('newsletter-walk') || selected('newsletter-contact.png')) {
     // Hydration first, or the submit is a native form post.
     await page.waitForTimeout(2000)
     await band.locator('input[type="email"]').fill('reader@example.com')
-    await band.locator('button[type="submit"]').click()
+    // The placed Subscribe button; the form's built-in one is hidden.
+    await band.locator('button[type="submit"]:not(.aglyn-form-submit-built-in)').click()
     await page.waitForSelector('text=Thanks — you’re on the list', { timeout: TIMEOUT_MS })
     console.log('WALK  newsletter sign-up submitted end-to-end')
   } catch (error) {

@@ -1020,7 +1020,7 @@ export const DOCS_HELP_ANCHORS = {
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
-  newsletterSignUpBand: ['#why-not-the-newsletter-signup-block', '#1-create-the-saved-form', '#2-design-the-form-one-email-field-and-a-button', '#3-style-the-form-on-one-line', '#4-make-it-a-sign-up-form', '#5-create-the-live-audience', '#6-build-the-band-as-a-reusable-component', '#7-place-the-band-on-your-pages', '#8-check-it-on-the-live-site', '#troubleshooting', '#related'],
+  newsletterSignUpBand: ['#why-not-the-newsletter-signup-block', '#1-create-the-saved-form', '#2-add-an-input-and-a-button', '#3-style-the-form-with-the-styles-panel', '#4-make-it-a-sign-up-form', '#5-create-the-live-audience', '#6-build-the-band-as-a-reusable-component', '#7-place-the-band-on-your-pages', '#8-check-it-on-the-live-site', '#troubleshooting', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   operatorAlerts: ['#channels', '#settings', '#alert-list', '#health', '#render-monitor', '#self-hosting'],
   orderNotifications: ['#customer-emails', '#tracking-links', '#turning-emails-off', '#changing-the-wording-and-colors', '#order-status-page', '#resend-receipt', '#text-messages', '#related'],
