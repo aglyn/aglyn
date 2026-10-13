@@ -425,7 +425,7 @@ your dashboard stays green, and the state it drives simply never moves — a
 refund that never revokes an entitlement looks exactly like a healthy
 integration.
 
-Subscribe your platform endpoint to **all nineteen**:
+Subscribe your platform endpoint to **all twenty**:
 
 ```
 customer.subscription.created
@@ -445,12 +445,14 @@ payment_method.attached
 payment_method.detached
 radar.early_fraud_warning.created
 review.opened
+charge.failed
 terminal.reader.action_succeeded
 terminal.reader.action_failed
 ```
 
 `radar.early_fraud_warning.created` and `review.opened` raise fraud signals to
-staff. The two `terminal.reader` events complete a card-reader payment at the
+staff. `charge.failed` lets a workspace's own failed subscription payment place
+an automatic security hold when Stripe flags it as fraud. The two `terminal.reader` events complete a card-reader payment at the
 point-of-sale register; without them a reader payment still completes while the
 register screen is open, because the register checks the reader itself.
 

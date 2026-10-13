@@ -126,6 +126,18 @@ import {
   recordPaymentFraudSignal,
   recordSellerFraudSignal,
 } from '@aglyn/tenant-data-admin/server/payment-fraud-signal'
+// The automatic payment-fraud hold (AGL-3767): its state is the lib's, its
+// locks the console's.
+import {
+  chargeEvidence,
+  chargeFraudTrigger,
+  isPaymentFraudHeld,
+  recordWorkspaceChargeFailure,
+} from '@aglyn/tenant-data-admin/server/payment-fraud-hold'
+import {
+  placePaymentFraudHold,
+  workspaceFraudSignalResponder,
+} from '../../../../utils/server/payment-fraud-hold'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
@@ -1694,18 +1706,26 @@ async function handler(request: Request): Promise<Response> {
              * failed $12 invoice and a failed $1,200 one get different
              * attention on the same morning.
              */
-            try {
-              await notifyStaff({
-                type: 'staff.paymentFailed',
-                title: NOTIFICATION_TYPE_LABELS['staff.paymentFailed'],
-                // `orgSlug` is already in hand from the read above, so the
-                // line costs no extra Firestore hit; the id is the fallback
-                // when the workspace has no slug.
-                body: `${orgSlug ?? orgId} failed a $${dollars} payment.`,
-                link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: String(orgId) }),
-              })
-            } catch (staffError) {
-              console.error('staff payment-failed notification skipped', staffError)
+            // ONE ping per held workspace, not one per card (AGL-3767). A
+            // workspace on an automatic payment-fraud hold has already raised
+            // its one alert with every charge on its row; a card tester's
+            // next attempts are the same event, not five more.
+            const fraudHeld = await isPaymentFraudHeld(observed(), orgId).catch(() => false)
+            if (fraudHeld) ledger.skip('staff-payment-failed-collapsed-into-fraud-hold')
+            if (!fraudHeld) {
+              try {
+                await notifyStaff({
+                  type: 'staff.paymentFailed',
+                  title: NOTIFICATION_TYPE_LABELS['staff.paymentFailed'],
+                  // `orgSlug` is already in hand from the read above, so the
+                  // line costs no extra Firestore hit; the id is the fallback
+                  // when the workspace has no slug.
+                  body: `${orgSlug ?? orgId} failed a $${dollars} payment.`,
+                  link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: String(orgId) }),
+                })
+              } catch (staffError) {
+                console.error('staff payment-failed notification skipped', staffError)
+              }
             }
             await runPluginEventHandlers('billing.invoice.failed', {
               orgId,
@@ -2225,6 +2245,68 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /*==========================================
+     * A WORKSPACE'S OWN FAILED CHARGE, READ FOR FRAUD (AGL-3767).
+     *
+     * `invoice.payment_failed` says a bill went unpaid; only the CHARGE says
+     * why — Radar's outcome and risk level, Stripe's own fraud report, and
+     * the card's fingerprint, which is what tells one customer retrying one
+     * card from a tester cycling through a list. So every failed charge
+     * that resolves to a workspace is kept on its `paymentFraudHolds` doc,
+     * and the hold is asked for when:
+     *
+     *  - Radar BLOCKED it at `highest` risk, or Stripe reported it
+     *    `fraudulent`; or
+     *  - 3+ distinct cards have now failed on the workspace within 30 min.
+     *
+     * Only charges whose customer resolves through `stripeCustomers` — the
+     * index only a workspace's own billing stamps. A shopper's failed charge
+     * on a storefront resolves to nothing and is named as a skip.
+     *=========================================*/
+    if (type === 'charge.failed') {
+      dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
+      const customerId =
+        typeof object?.customer === 'string'
+          ? object.customer
+          : String(object?.customer?.id ?? '')
+      const orgId = customerId
+        ? await findOrgIdByStripeCustomer(customerId).catch(() => null)
+        : null
+      if (!orgId) {
+        ledger.skip('failed-charge-is-not-a-workspace-charge')
+      } else {
+        const nowMs = Date.now()
+        const evidence = chargeEvidence(object, nowMs)
+        const failure = await recordWorkspaceChargeFailure(
+          observed(),
+          orgId,
+          evidence,
+          nowMs,
+        )
+        // Written in a transaction, which the observed handle cannot see —
+        // so the effect is named here, after it commits (AGL-1954).
+        if (failure.added) ledger.effect('workspace-charge-failure-recorded')
+        else ledger.skip('failed-charge-already-recorded')
+        const trigger =
+          chargeFraudTrigger(evidence) ??
+          (failure.cycling.matched ? 'card-cycling' : null)
+        if (failure.added && trigger) {
+          const hold = await placePaymentFraudHold({
+            firestore: observed(),
+            orgId,
+            trigger,
+            charges: failure.recent,
+            livemode: event?.livemode === true,
+            nowMs,
+          })
+          if (hold.outcome === 'held') ledger.effect('payment-fraud-hold-placed')
+          else if (hold.outcome === 'alert-only') ledger.effect('payment-fraud-alert-raised')
+          else ledger.skip(`payment-fraud-hold-${hold.outcome}`)
+        }
+      }
+    }
+
+    /*==========================================
      * STRIPE'S FRAUD SIGNALS (AGL-3356, AGL-3360).
      *
      * An issuer's early fraud warning, a Radar review and a dispute each say
@@ -2246,7 +2328,12 @@ async function handler(request: Request): Promise<Response> {
      *   warning or review nobody owns is still worth a look. A dispute that
      *   is neither is left to the platform-fault branch below.
      *
-     * NOTHING IS REFUNDED OR CANCELED HERE. Merchants and staff decide.
+     * A NEW early fraud warning or Radar review on a WORKSPACE's own charge
+     * also gets the platform's own answer (AGL-3767): an `actionable`
+     * warning is refunded in full as fraudulent and the subscriptions
+     * canceled — a refunded charge cannot then become a dispute — and the
+     * automatic security hold is asked for. A seller's sale is never
+     * refunded here; merchants and staff decide those.
      *=========================================*/
     let sellerFraudSignal: {
       signal: PaymentFraudSignal
@@ -2304,10 +2391,24 @@ async function handler(request: Request): Promise<Response> {
         sellerFraudSignal = { signal, sellerAccountId: subject.sellerAccountId }
       }
       if (orgId || (!subject.sellerAccountId && kind !== 'dispute')) {
-        await recordPaymentFraudSignal(signal, {
+        const filed = await recordPaymentFraudSignal(signal, {
           firestore: observed(),
           notifyRisk: notifyRiskEvent,
+          ...(orgId && !subject.sellerAccountId && !connectAccount
+            ? {
+                respond: workspaceFraudSignalResponder({
+                  firestore: observed(),
+                  actionable: object?.actionable === true,
+                  connectAccount,
+                  sellerAccountId: subject.sellerAccountId,
+                }),
+              }
+            : {}),
         })
+        // The row is written in a transaction the observed handle cannot
+        // see, so the filing is named here (AGL-1954).
+        ledger.effect('fraud-signal-filed')
+        if (filed.response) ledger.effect('fraud-signal-answered')
       } else if (!subject.sellerAccountId) {
         // Neither a workspace's charge nor a seller's; the platform-fault
         // branch below reports it if no plugin claims it. Said out loud.
