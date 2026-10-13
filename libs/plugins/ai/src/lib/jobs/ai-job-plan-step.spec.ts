@@ -99,6 +99,7 @@ import {
   aiJobPlanKey,
   aiJobPlanMaxTokens,
   aiJobPlanPrompt,
+  aiPlanTodaySentence,
   aiReusablePlan,
   createAiJobPlanStep,
   readAiJobPlanCapabilities,
@@ -946,11 +947,23 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
     expect(first.tools[0].inputSchema.required).toContain('items')
     expect(first.messages[0].content).toContain('- booking-service: a booking service, at most 2')
     expect(first.messages[0].content).toContain('places the Booking block')
+    // A dated item, such as an event (AGL-3743), is dated after the build.
+    expect(first.messages[0].content).toContain(aiPlanTodaySentence(NOW))
     expect(second.messages[2].content).toContain('"durationMinutes" must be at least 5')
     expect(outcome.plan?.items).toEqual([
       expect.objectContaining({ slot: 'i0', args: { durationMinutes: 30 }, id: expect.stringMatching(RESOURCE_ID), credits: 0 }),
     ])
     expect(outcome.plan?.screens[0]?.id).toMatch(RESOURCE_ID)
+  })
+
+  it('tells a build, and only a build, the date its dated items fall after (AGL-3743)', () => {
+    const now = new Date('2026-10-12T23:30:00.000Z')
+    expect(aiPlanTodaySentence(now)).toBe(
+      'Today is 2026-10-12 (UTC). Anything an item dates, such as an event, falls after today.',
+    )
+    expect(aiJobPlanPrompt(job({ kind: 'build' }), null, null, OPS, now)).toContain('Today is 2026-10-12')
+    expect(aiJobPlanPrompt(job(), null, null, OPS, now)).not.toContain('Today is')
+    expect(aiJobPlanPrompt(job({ kind: 'build' }), null, null, OPS)).not.toContain('Today is')
   })
 
   it('scopes a build to the creations it builds', () => {

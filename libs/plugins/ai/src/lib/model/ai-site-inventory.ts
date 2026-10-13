@@ -134,9 +134,19 @@ export interface AiInventoryDataset {
   imageField?: string
   /**
    * The id of the record's page-address field, where it has one (AGL-3727):
-   * what a listing's card links each record's own page by.
+   * what a listing's card links each record's own page by. Where the site
+   * already serves record pages for the dataset, the field those pages are
+   * served by (AGL-3747).
    */
   addressField?: string
+  /**
+   * Where this site already serves each record a page of its own (AGL-3747):
+   * the base of the dataset's saved record template (AGL-3475), without
+   * slashes at either end — `team` for `/team/ada`. Absent where the site
+   * keeps no record template for it. Never shown in the prompt: code links a
+   * listing's cards by it.
+   */
+  recordBase?: string
 }
 
 export interface AiInventoryCollection {

@@ -618,6 +618,19 @@ export function aiBuildDegradation(
       const section = unit.screen.sections.find((one) =>
         one.uses.some((ref) => isAiPlanNewRef(ref) && aiBuildRefName(ref) === dep.label.toLowerCase()),
       )
+      // Another item this section places with the same block was built (one
+      // of several events, AGL-3743): the block stays, and only this item is
+      // missing from what it shows.
+      const blockStays = Boolean(
+        section &&
+          capability?.pageBlocks?.length &&
+          aiBuildSectionDeliveredBlocks(section, { ...context, rows, except: slot }).has(aiBuildBlocksKey(capability.pageBlocks)),
+      )
+      if (blockStays) {
+        result.notes.push(`Built without the ${noun} “${dep.label}”: it could not be created.`)
+        result.briefLines.push(`Leave the ${noun} “${dep.label}” out of the “${section?.name}” section: it could not be created.`)
+        continue
+      }
       const blocks = capability?.pageBlocks?.length ? ` the ${capability.pageBlocks.join(' or ')} block` : ''
       result.notes.push(
         `Built without${blocks || ` the ${noun}`}: the ${noun} “${dep.label}” could not be created.`,
@@ -655,21 +668,61 @@ export function aiBuildPlacedItemLines(
   const rows = new Map(context.ledger.map((row) => [row.slot, row]))
   const lines: string[] = []
   for (const section of unit.screen.sections) {
-    for (const ref of section.uses) {
-      if (!isAiPlanNewRef(ref)) continue
-      const dep = context.units.find((one) => one.item && one.item.name.toLowerCase() === aiBuildRefName(ref))
-      if (!dep?.item) continue
+    // One line per block a section places, naming every built item it shows:
+    // a section listing four events places the Event List once (AGL-3743).
+    const placed = new Map<string, { blocks: readonly string[]; noun: string; labels: string[] }>()
+    for (const { dep, capability } of aiBuildSectionItems(section, context.units, context.ops)) {
       const row = rows.get(dep.slot)
       if (!row || !aiBuildItemDelivered(row)) continue
-      const capability = context.ops?.get(dep.op)
       const blocks = capability?.pageBlocks ?? []
       if (!blocks.length) continue
-      lines.push(
-        `In the “${section.name}” section, place the ${blocks.join(' or ')} block for the ${capability?.noun ?? dep.op} “${dep.label}”.`,
-      )
+      const key = aiBuildBlocksKey(blocks)
+      const entry = placed.get(key) ?? { blocks, noun: capability?.noun ?? dep.op, labels: [] }
+      entry.labels.push(`“${dep.label}”`)
+      placed.set(key, entry)
+    }
+    for (const { blocks, noun, labels } of placed.values()) {
+      const named =
+        labels.length === 1
+          ? `the ${noun} ${labels[0]}`
+          : `the ${noun}s ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+      lines.push(`In the “${section.name}” section, place the ${blocks.join(' or ')} block for ${named}.`)
     }
   }
   return lines
+}
+
+/** The items a page section places, each with its capability, in the order its uses name them. */
+function aiBuildSectionItems(
+  section: { uses: readonly string[] },
+  units: readonly AiBuildUnit[],
+  ops: AiBuildOps | undefined,
+): Array<{ dep: AiBuildUnit; capability: PluginAiCapability | undefined }> {
+  const found: Array<{ dep: AiBuildUnit; capability: PluginAiCapability | undefined }> = []
+  for (const ref of section.uses) {
+    if (!isAiPlanNewRef(ref)) continue
+    const dep = units.find((one) => one.item && one.item.name.toLowerCase() === aiBuildRefName(ref))
+    if (dep?.item) found.push({ dep, capability: ops?.get(dep.op) })
+  }
+  return found
+}
+
+/** The blocks a section's built items place, each set as one key; `except` leaves one item out. */
+function aiBuildSectionDeliveredBlocks(
+  section: { uses: readonly string[] },
+  context: { units: readonly AiBuildUnit[]; rows: ReadonlyMap<string, AiJobItemLedger>; ops?: AiBuildOps; except: string },
+): Set<string> {
+  const keys = new Set<string>()
+  for (const { dep, capability } of aiBuildSectionItems(section, context.units, context.ops)) {
+    if (dep.slot === context.except || !capability?.pageBlocks?.length) continue
+    const row = context.rows.get(dep.slot)
+    if (row && aiBuildItemDelivered(row)) keys.add(aiBuildBlocksKey(capability.pageBlocks))
+  }
+  return keys
+}
+
+function aiBuildBlocksKey(blocks: readonly string[]): string {
+  return [...blocks].sort().join('|')
 }
 
 /** What a build came to: whether anything was delivered, and whether anything is left. */

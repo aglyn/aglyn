@@ -259,3 +259,39 @@ describe('a menu change as an item’s arguments carry it (AGL-3728)', () => {
     ])
   })
 })
+
+/*
+ * AGL-3747: a guided site start's header entries go in through this same
+ * code, and its starter layout's header is a Toolbar holding only the brand
+ * and a search — no list of two items for a menu.
+ */
+describe('a starter’s header, which holds only the brand (AGL-3747)', () => {
+  const starter = (): Nodes => ({
+    root: { $id: 'root', componentId: 'div', nodes: ['dl_header'] },
+    dl_header: { $id: 'dl_header', componentId: 'muiAppBar', parentId: 'root', nodes: ['dl_toolbar'] },
+    dl_toolbar: { $id: 'dl_toolbar', componentId: 'muiToolbar', parentId: 'dl_header', nodes: ['dl_brand', 'dl_search'] },
+    dl_brand: link('dl_brand', 'dl_toolbar', 'Hillside', { screenId: 'home' }),
+    dl_search: { $id: 'dl_search', componentId: 'searchBox', parentId: 'dl_toolbar', nodes: [] },
+  })
+
+  it('adds after the brand and before the search, in the order asked, as plain links', () => {
+    let next = 0
+    const result = aiLayoutWithMenuChanges(
+      starter(),
+      ['header'],
+      { ...none(), add: [{ parent: null, label: 'Book Now', to: { screenId: 'book' } }, { parent: null, label: 'About', to: { screenId: 'about' } }] },
+      { newId: () => `ai_nav_${++next}` },
+    )
+    const nodes = result.nodes as Nodes
+    expect(nodes['dl_toolbar'].nodes).toEqual(['dl_brand', 'ai_nav_1', 'ai_nav_2', 'dl_search'])
+    // The brand is no item to copy: a new link is the plain one.
+    expect(nodes['ai_nav_1'].props).toEqual({ renderAs: 'link', color: 'inherit', children: 'Book Now', screenId: 'book' })
+    expect(nodes['ai_nav_2'].props).toMatchObject({ children: 'About', screenId: 'about' })
+    expect(result.found).toEqual({ header: true })
+  })
+
+  it('takes nothing of the brand for an item: it is never taken out or moved', () => {
+    const result = aiLayoutWithMenuChanges(starter(), ['header'], { ...none(), remove: [{ parent: null, label: 'Hillside' }], order: ['Hillside'] })
+    expect(result.nodes).toBeNull()
+  })
+})
