@@ -1352,6 +1352,16 @@ Notes that keep these honest:
   frame of ours, including a URL of ours inside an `eval at` origin, keeps the
   report, and a stack with no frame the rule can read is kept too. It applies
   to unhandled rejections as well as to uncaught errors.
+- **A copy of the page that is not on the web never reports (AGL-3759).**
+  The beacon sends nothing from a document whose `location.protocol` is not
+  `http:` or `https:` (`isWebDocument`): `about:blank` and `about:srcdoc` (a
+  translator extension or a framing site rendering our markup into a fresh
+  document), a saved page on `file:`, an extension's own scheme. Next.js's
+  app router throws `Failed to construct 'URL': Invalid URL` in such a
+  document, because it resolves its canonical URL against a location that is
+  not a URL; one such report from a tenant site opened the `Client error
+  beacon` incident of 2026-10-12. No visitor on the real page sees it, and no
+  code of ours can prevent it.
 - **The `ResizeObserver` loop notice never arrives (AGL-3423).** `ResizeObserver
   loop completed with undelivered notifications` (older wording: `…loop limit
   exceeded`) is the browser deferring resize callbacks to the next frame. It
