@@ -41,6 +41,8 @@ import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
 import { registerCommerceRecurringCharges } from './server/recurring-charges'
 import { registerProductCardReader } from './server/product-card'
 import { registerProductAiCapability } from './server/product-ai-capability'
+import { registerStoreSetupAiCapabilities } from './server/store-setup-ai-capability'
+import { registerStoreSetupAiWriter } from './server/store-setup-ai-writer.console'
 import { registerProductDraftWriter } from './server/product-drafts'
 import { registerCommerceTaxProfile } from './server/tax-profile'
 import { registerTaxReturnSource } from '@aglyn/aglyn/plugin-manager/plugin-tax-return-sources'
@@ -401,6 +403,11 @@ export function registerCommerceConsoleApi(): void {
   registerProductDraftWriter()
   // …and the operation an AI build plans for it, which that writer executes.
   registerProductAiCapability()
+  // …and the store's shipping, pickup, local delivery and tax settings an AI
+  // build sets up (AGL-3749), written live as the console's cards write them,
+  // with the four operations that writer executes.
+  registerStoreSetupAiWriter()
+  registerStoreSetupAiCapabilities()
   // …and why a file somebody is SELLING may not be made public (AGL-3080).
   // The media library asks before it hands an asset its permanent CDN URL
   // back; what a product is, and which of its fields hold paid media, is
