@@ -129,3 +129,6 @@ export {
   default as validationError,
   type ExtendedFieldMeta,
 } from './validation-error'
+// Type only: the field itself loads through `dynamic-fields`, so the picker
+// is not pulled into every import of this barrel.
+export type { WeeklyHoursProps } from './weekly-hours'
