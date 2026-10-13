@@ -24,7 +24,7 @@ import {
   SCREEN_ROOT_PATH,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/app-utils/screen-route'
-import { resolvePageLocale } from '@aglyn/aglyn/app-utils/seo-locale'
+import { resolvePageLocale, siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
@@ -37,7 +37,6 @@ import {
   aiLayoutRepairFrameHollows,
   aiLayoutWithoutFrameHollows,
 } from '../layout-language/ai-layout-frame-hollows'
-import { aiPlanLanguage } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
@@ -116,7 +115,7 @@ export function aiSiteLanguageUpdates(
   host: { locales?: unknown; defaultLocale?: unknown },
   language: string | null | undefined,
 ): { locales: string[]; defaultLocale: string } | null {
-  const code = aiPlanLanguage(language)
+  const code = siteLanguageCode(language)
   if (!code) return null
   const locales = Array.isArray(host.locales)
     ? host.locales.filter((one): one is string => typeof one === 'string' && one.trim() !== '')

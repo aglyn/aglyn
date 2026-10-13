@@ -28,9 +28,18 @@ start from [Your first API call](../../guides/your-first-api-call.md).
 
 ## Build a form
 
-1. Drop **form components** onto a page in the Besigner (fields, submit button).
-2. Configure the fields and the submit behavior.
-3. Publish — the form posts to Aglyn's submit API.
+1. In the Besigner, open the element picker's **Forms** group and drop a **Form** onto
+   the page — or the ready-made **Contact Form** or **Contact Section**, which arrive
+   with name, email and message fields already in them.
+2. With the Form selected, add a field preset per question: **Text field**, **Email
+   field**, **Message field**, **Dropdown field**, **Radio choice field**,
+   **Checkbox** or **Rating field**. Each preset is built from separate elements — a
+   **Form Control** holding a **Form Label** and the input itself — so you can select
+   and change any piece of it. [Field types](#field-types) lists every element.
+3. Give each input a **Field name**, set the Form's **Submit label** and **After
+   submit**, and style the pieces with the **Styles** panel (see
+   [Style a field](#style-a-field)).
+4. Publish — the form posts to Aglyn's submit API.
 
 You can also describe the form you need and have Aglyn AI build it as a draft on the
 **Forms** page, with its fields, marketing consent and routing agreeing with each other.
@@ -163,47 +172,79 @@ traffic, **contact support** and we will raise the ceiling for your site.
 
 ## Field types
 
-Each **Form Field** has a type that controls what visitors see and what is submitted:
+A field is not one element but a few, each one you can select, move and style on its
+own. The picker's presets put them together for you; the table lists every piece, all
+in the element picker's **Forms** group:
 
-| Type | Visitor sees | Submitted value |
+| Element | What it is | Its settings |
 | --- | --- | --- |
-| **Text** (default) | Single-line input | The text |
-| **Email** | Email input | The address |
-| **Multiline** | Multi-row text area | The text |
-| **Dropdown** | Select menu | The chosen option |
-| **Radio choice** | One radio button per option | The chosen option |
-| **Checkboxes** | One checkbox per option | All ticked options, joined with `, ` |
-| **Star rating** | Five stars | The number of stars (e.g. `4`) |
+| **Form Control** | One field's frame. It holds the field's label, its input and any help text, and ties the label to the input. | **Full width?**, **Required?** (adds an asterisk to the label) |
+| **Form Label** | The words that name a field, above its input. | **Text** |
+| **Input** | A box a visitor types in. | **Field name**, **Maps to schema field**, **Type** (Text, Email, Phone, Link or Number), **Placeholder**, **Required?**, **Several lines?** (a message box instead of one line), **Full width?**, **Accessible label** |
+| **Helper Text** | A line of guidance under a field. | **Text** |
+| **Select** | A dropdown. It holds **Select Option**s; a visitor picks one. | **Field name**, **Maps to schema field**, **Placeholder**, **Required?**, **Full width?**, **Accessible label** |
+| **Select Option** | One choice in a Select. | **Text**, **Value** (what is sent; left empty, the Text is sent) |
+| **Checkbox** | A tick box. | **Field name**, **Maps to schema field**, **Value** (what a tick sends, such as `Yes`), **Required?** |
+| **Radio Group** | A set of **Radio**s; a visitor picks one. | **Field name**, **Maps to schema field**, **In a row?** |
+| **Radio** | One choice in a Radio Group. | **Value**, **Required?** |
+| **Choice Label** | The words beside a Checkbox or Radio placed inside it. Clicking the words ticks the box. | **Text** |
+| **Rating** | Stars a visitor picks. | **Field name**, **Maps to schema field**, **Stars** (how many to show) |
 
-Dropdown, radio, and checkbox fields take their choices from the field's
-**Options** setting — enter one choice per line (or separate them with commas).
-Blank entries are ignored. The **Required?** switch works per type: a required
-checkbox group needs at least one box ticked.
+What each one sends:
+
+| Element | Submitted value |
+| --- | --- |
+| **Input** | What the visitor typed |
+| **Select** | The chosen option's **Value** (or its Text) |
+| **Radio Group** | The chosen Radio's **Value** |
+| **Checkbox** | Its **Value** when ticked, nothing when not |
+| **Rating** | The number of stars (e.g. `4`) |
+
+The **Field name** is the key the answer is stored under, so two inputs in one form need
+two names. The exception is a multi-choice question: give several Checkboxes the **same
+Field name** and they are one question, sent as every ticked box's Value joined with `, `.
+Put them in a **Form Control** with a **Form Label** above them for the question.
+
+**Required?** works per element: a required Input or Select must be answered, a
+required Checkbox must be ticked, and a required Radio means one of its group must be
+picked. Turn on **Required?** on the Form Control too, so the label shows its asterisk.
+**Maps to schema field** picks the field of the Form's dataset the answer is stored
+under; see [Where submissions go](#where-submissions-go).
+
+Forms built before these elements used a single all-in-one **Form Field**. Those pages
+keep working and were converted to the separate elements, so you edit them the same way.
 
 ### Labels and placeholders
 
-Every field has a **Label** — the visible name of the input, and the one screen
-readers announce. A field can also carry a **Placeholder**: a gray example
-inside the empty input, such as `you@company.com` or "Tell us about your setup".
-Set one and the label moves above the box so both are readable at once; leave it
-empty and the label keeps its floating behavior.
+Three settings name or hint at an input, and they do different jobs:
 
-A placeholder is a hint, never a substitute for the label — it vanishes the
-moment a visitor starts typing, and a field labeled only by its placeholder is
-unusable with a screen reader. Text, email, and multiline fields show it inside
-the input; a dropdown displays it until a choice is made; radio, checkbox, and
-rating fields ignore it. Clearing the setting removes the hint.
+- **Form Label** — the visible name above the input, such as "Email". It is what screen
+  readers announce, so every field the visitor fills should have one. The presets
+  include it.
+- **Placeholder** (on an Input or a Select) — a gray example inside the empty input,
+  such as `you@company.com` or "Tell us about your setup". It vanishes the moment a
+  visitor starts typing, and a Select shows it only until a choice is made, so it is a
+  hint, never a substitute for the label. Clear the setting to remove it.
+- **Accessible label** (on an Input or a Select) — a name read to screen readers but
+  never shown on the page. Use it only when a design has no Form Label beside the
+  input, such as a one-line email sign-up whose button already says what to type.
+
+Checkboxes and Radios take their words from the **Choice Label** they sit in.
 
 ### Example: a quick survey
 
-Build a feedback survey with four fields:
+Build a feedback survey from four presets dropped into a Form:
 
-1. A **Star rating** field named `satisfaction`, labeled "How satisfied are you?".
-2. A **Radio choice** field named `visit-frequency` with options
-   `First time`, `Monthly`, `Weekly`.
-3. A **Checkboxes** field named `topics` with options
-   `Products, Support, Pricing` — visitors can tick several.
-4. A **Multiline** field named `comments` for anything else.
+1. A **Rating field**. Set its Form Label to "How satisfied are you?" and the Rating's
+   **Field name** to `satisfaction`.
+2. A **Radio choice field**. Set the Form Label to "How often do you visit?" and the
+   Radio Group's **Field name** to `visit-frequency`, then set each Choice Label's
+   **Text** and its Radio's **Value** to `First time`, `Monthly` and `Weekly`.
+3. A **Form Control** with a **Form Label** "What should we improve?" and three
+   **Checkbox** presets inside it. Give all three Checkboxes the **Field name** `topics`
+   and the Values `Products`, `Support` and `Pricing` (with the same words as their
+   Choice Label Text). Visitors can tick several.
+4. A **Message field** whose Input is named `comments`, for anything else.
 
 Submissions land in the inbox like any other form — a visitor who ticks two
 checkboxes submits `topics: Products, Pricing`, and the rating arrives as `4`.
@@ -211,6 +252,32 @@ The Inbox keeps every value as the visitor typed it. A bound
 [dataset](../datasets/overview.md) stores each value as its field's type instead: the
 rating `4` becomes the number 4 in a number field, and `Products, Pricing` becomes a
 two-item list in a list field.
+
+### Style a field {#style-a-field}
+
+Every piece of a field is an ordinary element, so you style it the way you style
+anything else: select it and use the **Styles** panel.
+
+- **The box a visitor types in.** Select the **Input** or **Select**. **Borders &
+  Shadows** (the border's color and the **Corner Radius**) change its outline, and
+  **Colors** (background color and text color) its fill and text. The outline is drawn
+  on the input's own box, so what you set is what visitors see. The **Hover** and
+  **Focus** [state chips](../../building-sites/besigner/responsive-styling.md#interaction-states)
+  at the top of the panel style the box while the pointer is over it or while someone
+  is typing in it.
+- **The words.** Select a **Form Label**, **Helper Text** or **Choice Label** and use
+  **Typography** and **Colors**.
+- **The button.** Out of the box, the Form draws its own button, labeled with its
+  **Submit label**. To design the button yourself, put a **Button** inside the Form and
+  set its **Type** to **Submit**. That Button sends the form, the built-in one steps
+  aside, and you style it like any other Button. (**Reset** clears the form; **Button**
+  does nothing on its own.)
+- **Fields side by side.** The Form spaces its fields with a gap. Select the Form and,
+  under **Styles → Flexbox & Grid**, set **Flex direction** to **Row** to line its fields
+  and button up in one row — for example an email box and a Subscribe button. Pick a
+  screen size with the toolbar's breakpoint picker first to make it a row only from that
+  size up, so phones keep the fields stacked (see
+  [Style per breakpoint](../../building-sites/besigner/responsive-styling.md#style-per-breakpoint)).
 
 ## After submit
 
@@ -232,10 +299,12 @@ page was deleted, the URL was rejected), the form falls back to the success mess
 
 Combine an outcome with a [conditional automation](../../marketing-and-automation/workflows-and-actions/actions-builder.md#only-run-when-a-field-matches):
 
-1. Add the **Marketing consent** field from **Forms** in the Besigner's element picker: a
-   **Checkboxes** field named `marketingConsent`, labeled `Marketing emails`, with one
-   option, `Email me news and offers`. If you reword the option, keep it free of commas:
-   the Options setting starts a new box at every comma.
+1. Add the **Marketing consent** preset from **Forms** in the Besigner's element picker:
+   a **Choice Label** reading `Email me news and offers` holding one unticked
+   **Checkbox** whose **Field name** is `marketingConsent`. Reword the Choice Label's
+   **Text** as you like; a tick sends the Checkbox's **Value**. Keep it the only
+   Checkbox with that Field name, because several boxes under one name are a question
+   with several answers, not an opt-in.
 2. On the form's own page, pick `marketingConsent` as the **Marketing consent field**, so a
    tick is recorded as the person's consent.
 3. Set **After submit** to *Redirect the visitor* and pick your `/thanks` page.
@@ -256,10 +325,15 @@ either of two topic boxes is ticked.
 
 If your organization has declared this site [one
 sender](../../marketing-and-automation/email-campaigns/overview.md#consent-groups) with
-others, the form shows one more line under its **Marketing consent field**: *"You'll
+others, the form shows one more line beside its **Marketing consent field**: *"You'll
 receive marketing email from \{name\}, which covers \{n\} sites."* That line is what lets
 a tick count for every site in the group, because it tells the person who they will hear
 from. Without it, consent is recorded for this site alone.
+
+You don't place the line yourself. When the declared consent field is one of the
+separate form elements, such as the Checkbox in the **Marketing consent** preset, the
+Form draws the sentence at the foot of the form, beside the button that sends it, so it
+stays with the form however you arrange the fields.
 
 - The line comes from the group's name, so renaming the group changes it on every form at
   once. A form on a site in no group shows nothing extra.

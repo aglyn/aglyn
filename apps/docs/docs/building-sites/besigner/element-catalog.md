@@ -431,8 +431,30 @@ them, thumbnails. See [Lightboxes](lightbox.md#image-list-gallery).
 
 ## Forms
 
-Forms and their fields, covered with the feature they belong to — see
+Forms and their fields, covered in full with the feature they belong to — see
 [Forms](../../content-and-data/forms/overview.md).
+
+A **Form** holds the fields and sends them. Each field is built from separate elements,
+so every piece can be selected and styled with the **Styles** panel on its own:
+
+| Element | What it's for |
+| --- | --- |
+| **Form Control** | One field's frame: holds its Form Label, input and Helper Text. |
+| **Form Label** | The words naming a field, above its input. |
+| **Input** | A box to type in — Text, Email, Phone, Link or Number, one line or several. |
+| **Helper Text** | A line of guidance under a field. |
+| **Select** / **Select Option** | A dropdown and its choices. |
+| **Checkbox** | A tick box. Several sharing one **Field name** are one multi-choice question. |
+| **Radio Group** / **Radio** | A set of choices of which one may be picked. |
+| **Choice Label** | The words beside a Checkbox or Radio placed inside it. |
+| **Rating** | Stars a visitor picks. |
+
+The group's presets put these together: **Text field**, **Email field**, **Message
+field**, **Dropdown field**, **Radio choice field**, **Checkbox**, **Rating field** and
+**Helper Text**, plus **Contact Form**, **Contact Section** and **Marketing consent**.
+Every setting is described under
+[Field types](../../content-and-data/forms/overview.md#field-types); to design the button
+yourself, see [Style a field](../../content-and-data/forms/overview.md#style-a-field).
 
 ## Commerce
 
@@ -447,6 +469,12 @@ The member sign-in and sign-up elements, covered in
 ## Input
 
 Buttons and widgets.
+
+A **Button**'s **Type** decides what it does inside a Form: **Submit** sends the form (and
+the Form's built-in button steps aside, so the one you designed is the only one),
+**Reset** clears it, and **Button** does nothing on its own, for buttons that run an
+[interaction](interactions-and-custom-html.md). A Button that links to a page or URL
+ignores its Type.
 
 The calculator elements belong to no built-in feature. They come from **Calculators**, a
 plugin you install from the marketplace, and appear under **Input** once it is installed:

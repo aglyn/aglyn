@@ -240,6 +240,7 @@ export interface AglynSelectProps {
   placeholder?: string
   ariaLabel?: string
   fullWidth?: boolean
+  size?: 'small' | 'medium'
   children?: ReactNode
   [key: string]: any
 }
@@ -256,6 +257,7 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
       placeholder,
       ariaLabel,
       children,
+      size,
       datasetFieldId: _datasetFieldId,
       ...rest
     } = dropClearedProps(props)
@@ -266,10 +268,11 @@ export const AglynSelect = forwardRef<HTMLDivElement, AglynSelectProps>(
         ref={ref}
         input={
           filled ? (
-            <FilledInput sx={rest['sx']} />
+            <FilledInput size={size} sx={rest['sx']} />
           ) : (
             <OutlinedInput
               notched={false}
+              size={size}
               sx={[outlinedBoxSx, ...nodeSxList(rest['sx'])] as SxProps<Theme>}
             />
           )
@@ -404,6 +407,16 @@ const FIELD_DATASET_FIELD: Aglyn.AglynAttributeSchema = {
     'empty, it matches a dataset field by its Field name.',
   component: Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
 }
+const FIELD_INPUT_SIZE: Aglyn.AglynAttributeSchema = {
+  name: 'size',
+  label: 'Size',
+  description: 'Normal is 56px tall; Small is 40px, to sit beside a button.',
+  component: Aglyn.FieldComponentType.SELECT,
+  options: [
+    { value: 'medium', label: 'Normal' },
+    { value: 'small', label: 'Small' },
+  ],
+}
 const FIELD_REQUIRED: Aglyn.AglynAttributeSchema = {
   name: 'required',
   label: 'Required?',
@@ -502,6 +515,7 @@ export const inputSchema: Aglyn.ComponentSchema<AglynInputProps> = {
       description: 'A message box instead of a single line.',
       component: Aglyn.FieldComponentType.SWITCH,
     },
+    FIELD_INPUT_SIZE,
     FIELD_FULL_WIDTH,
     FIELD_ARIA_LABEL,
   ],
@@ -534,6 +548,7 @@ export const selectSchema: Aglyn.ComponentSchema<AglynSelectProps> = {
     FIELD_DATASET_FIELD,
     { ...FIELD_PLACEHOLDER, description: 'Shown until a choice is made; never sent.' },
     FIELD_REQUIRED,
+    FIELD_INPUT_SIZE,
     FIELD_FULL_WIDTH,
     FIELD_ARIA_LABEL,
   ],
@@ -688,7 +703,90 @@ const preset = (
   data,
 })
 
+/**
+ * Each element on its own, so any piece can be inserted by itself — a bare
+ * Input beside a Button in a sign-up row, a Form Label above a field the
+ * author is assembling, one more Radio in a group. The field presets below
+ * are ready-made arrangements of the same pieces.
+ */
+const singleElementPresets: Aglyn.PresetSchema[] = [
+  preset(
+    generatePresetId(FORM_CONTROL_ID),
+    'Form Control',
+    'An empty field frame: put a Form Label, an input and Helper Text in it.',
+    mdiFormTextbox.path,
+    node(FORM_CONTROL_ID, { fullWidth: true }),
+  ),
+  preset(
+    generatePresetId(FORM_LABEL_ID),
+    'Form Label',
+    'The words that name a field, above its input.',
+    mdiTagOutline.path,
+    node(FORM_LABEL_ID, { children: 'Label' }),
+  ),
+  preset(
+    generatePresetId(INPUT_ID),
+    'Input',
+    'A box a visitor types in, on its own.',
+    mdiTextShort.path,
+    node(INPUT_ID, { name: 'field', placeholder: 'Type here' }),
+  ),
+  preset(
+    generatePresetId(SELECT_ID),
+    'Select',
+    'A dropdown with two options.',
+    mdiFormDropdown.path,
+    node(SELECT_ID, { name: 'choice', placeholder: 'Choose…' }, [
+      node(SELECT_OPTION_ID, { children: 'Option one' }),
+      node(SELECT_OPTION_ID, { children: 'Option two' }),
+    ]),
+  ),
+  preset(
+    generatePresetId(SELECT_OPTION_ID),
+    'Select Option',
+    'One more choice for a Select.',
+    mdiFormSelect.path,
+    node(SELECT_OPTION_ID, { children: 'Option' }),
+  ),
+  preset(
+    generatePresetId(RADIO_GROUP_ID),
+    'Radio Group',
+    'A set of Radio choices sharing one Field name.',
+    mdiRadioboxMarked.path,
+    node(RADIO_GROUP_ID, { name: 'pick' }, [
+      node(CHOICE_LABEL_ID, { label: 'First' }, [node(RADIO_ID, { value: 'First' })]),
+      node(CHOICE_LABEL_ID, { label: 'Second' }, [node(RADIO_ID, { value: 'Second' })]),
+    ]),
+  ),
+  preset(
+    generatePresetId(RADIO_ID),
+    'Radio',
+    'One more choice for a Radio Group, with its words.',
+    mdiRadioboxMarked.path,
+    node(CHOICE_LABEL_ID, { label: 'Another choice' }, [
+      node(RADIO_ID, { value: 'Another choice' }),
+    ]),
+  ),
+  preset(
+    generatePresetId(CHOICE_LABEL_ID),
+    'Choice Label',
+    'Words beside a tick box; holds a Checkbox.',
+    mdiTagOutline.path,
+    node(CHOICE_LABEL_ID, { label: 'Yes, please' }, [
+      node(CHECKBOX_ID, { name: 'agree', value: 'Yes' }),
+    ]),
+  ),
+  preset(
+    generatePresetId(RATING_ID),
+    'Rating',
+    'Five stars, on their own.',
+    mdiStarOutline.path,
+    node(RATING_ID, { name: 'rating' }),
+  ),
+]
+
 export const formControlPresets: Aglyn.PresetSchema[] = [
+  ...singleElementPresets,
   preset(
     generatePresetId(FORM_CONTROL_ID, 'text'),
     'Text field',
