@@ -21,6 +21,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import {
   AI_BUILD_PLAN_TOOL,
   aiBuildPlanToolFor,
+  aiPlanSlugKey,
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
@@ -93,6 +94,7 @@ import {
   type AiBuildOps,
 } from '../model/ai-build-job'
 import { aiBuildOpLines, aiBuildOps } from './ai-build-capabilities'
+import { aiBuildUnlistedEventsCheck, aiSettleBuildEventPage } from '../model/ai-build-event-page'
 import {
   aiSiteEventItemsCheck,
   aiSiteEventPlanLines,
@@ -599,6 +601,13 @@ function planViolations(
   }
 }
 
+/** The layout a site's pages render in (AGL-3755): its home page's, else its only layout, else none. */
+function aiSiteLayoutOf(inventory: AiSiteInventory | null): string | null {
+  const home = inventory?.screens.find((screen) => !screen.template && aiPlanSlugKey(screen.slug) === '/')
+  if (home?.layoutId) return home.layoutId
+  return inventory?.layouts.length === 1 ? (inventory.layouts[0]?.id ?? null) : null
+}
+
 /**
  * A site plan's violations with its events' (AGL-3755): its items are only
  * the events it may plan. Every other kind's are as they are.
@@ -606,10 +615,13 @@ function planViolations(
 function aiSiteWithEventItemsCheck(
   violations: (plan: AiBuildPlan) => AiDoctrineViolation[],
   siteEvents: AiSiteEventPlanning | null | undefined,
+  ops: AiBuildOps | null = null,
 ): (plan: AiBuildPlan) => AiDoctrineViolation[] {
-  if (siteEvents === undefined) return violations
-  const events = aiSiteEventItemsCheck(siteEvents)
-  return (plan) => [...violations(plan), ...events(plan)]
+  // A build's events left on no page are re-asked once (AGL-3755).
+  const unlisted = ops ? aiBuildUnlistedEventsCheck(ops) : null
+  const events = siteEvents === undefined ? null : aiSiteEventItemsCheck(siteEvents)
+  if (!unlisted && !events) return violations
+  return (plan) => [...violations(plan), ...(events ? events(plan) : []), ...(unlisted ? unlisted(plan) : [])]
 }
 
 /**
@@ -1077,6 +1089,19 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
       capabilities,
+      // A build's events are listed on a page (AGL-3755): on the one it makes
+      // about them, else on an Events page of its own where there is room.
+      ...(ops
+        ? {
+            settle: (answered: AiBuildPlan) =>
+              aiSettleBuildEventPage(answered, {
+                ops,
+                siteSlugs: (inventory?.screens ?? []).map((screen) => screen.slug),
+                pageLimit: aiBuildPageLimit(freeTaste),
+                siteLayout: aiSiteLayoutOf(inventory),
+              }),
+          }
+        : {}),
       extend: aiSiteWithEventItemsCheck(
         planViolations(
           scope,
@@ -1089,6 +1114,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
           site && aiSiteKindOfInputs(job.inputs)?.id === 'store',
         ),
         site ? siteEvents : undefined,
+        ops,
       ),
     })
     const spent: AiJobStepOutcome = {

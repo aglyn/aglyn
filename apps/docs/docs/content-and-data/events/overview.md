@@ -146,7 +146,9 @@ published event can take about a minute to appear.
 
 [Aglyn AI](../../ai/assist-builds.md) can add events for you, such as *add our autumn
 sourdough workshops*, and a [site started with AI](../../ai/start-with-ai.md#events-from-the-start)
-for a business that holds events adds its first three. Each event gets a title, a start and
+for a business that holds events adds its first three. The events are listed on the page
+you name, or a page about them the request makes; if neither exists, an **Events** page at
+`/events` is added to your site's menu to list them. Each event gets a title, a start and
 end in your business's time zone, a place, an organizer and a description, and a
 [stock photo](../../ai/stock-photos.md) as its cover, copied into your media library. A page
 section that shows them gets the **Event List**.

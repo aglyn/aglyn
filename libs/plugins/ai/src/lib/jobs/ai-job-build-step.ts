@@ -90,6 +90,7 @@ import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
 import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import { aiDatasetListingsOf } from './ai-job-site-datasets'
+import { AI_SITE_EVENT_OP, aiEventsListings } from './ai-job-site-events'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
 import {
@@ -274,7 +275,10 @@ export function aiBuildUnitJob(
       },
     ]
     brief.push(`Build the page “${screen.title}”, at ${screen.slug}.`)
-    brief.push(...aiBuildPlacedItemLines(unit, { units: context.units, ledger: context.ledger, ops: context.ops }))
+    // A build's events are listed by the platform (AGL-3755), never written by the page.
+    brief.push(
+      ...aiBuildPlacedItemLines(unit, { units: context.units, ledger: context.ledger, ops: context.ops, placedByCode: [AI_SITE_EVENT_OP] }),
+    )
   }
   const item = unit.item
   if (item) {
@@ -327,6 +331,21 @@ export function aiBuildUnitJob(
       datasets.push({ id: entry.id, name: plan.labels?.[entry.id] ?? entry.id })
     }
     const listings = aiDatasetListingsOf(datasets, plan.screens)
+    // The events this build wrote, in the sections that name them (AGL-3755).
+    const eventUnits = context.units.filter((one) => one.item?.op === AI_SITE_EVENT_OP)
+    const ledgerRows = new Map(context.ledger.map((row) => [row.slot, row]))
+    listings.push(
+      ...aiEventsListings({
+        written: eventUnits
+          .filter((one) => {
+            const row = ledgerRows.get(one.slot)
+            return Boolean(row && aiBuildItemDelivered(row) && row.outputs.length)
+          })
+          .map((one) => one.item?.name ?? one.label),
+        planned: eventUnits.map((one) => one.item?.name ?? one.label),
+        screens: plan.screens,
+      }),
+    )
     if (listings.length) inputs[AI_LAYOUT_LISTINGS_INPUT] = listings
   }
   // A build that makes the site a store links its account and policies from

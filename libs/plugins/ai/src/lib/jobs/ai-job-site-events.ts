@@ -256,19 +256,34 @@ export function aiSiteEventListings(input: {
   items: readonly AiBuildItem[]
   screens: readonly AiLayoutListingScreen[]
 }): AiLayoutListing[] {
-  const written = eventOutputs(input.outputs)
-  if (!written.length || !input.items.length) return []
-  const placements = aiLayoutEventsPlacements(
-    input.items.map((item) => item.name),
-    input.screens,
-  )
+  return aiEventsListings({
+    written: eventOutputs(input.outputs).map((output) => output.label),
+    planned: input.items.map((item) => item.name),
+    screens: input.screens,
+  })
+}
+
+/**
+ * The `events` listing for events a job wrote (AGL-3755): placed in each
+ * section whose plan names any event the job planned, naming the ones it
+ * wrote. None where it wrote none or no section names one. A guided start's
+ * and a build's alike.
+ */
+export function aiEventsListings(input: {
+  written: readonly string[]
+  planned: readonly string[]
+  screens: readonly AiLayoutListingScreen[]
+}): AiLayoutListing[] {
+  const written = input.written.filter(Boolean)
+  if (!written.length || !input.planned.length) return []
+  const placements = aiLayoutEventsPlacements(input.planned, input.screens)
   if (!placements.length) return []
   return [
     {
       id: aiLayoutListingId('events'),
       kind: 'events',
       name: 'the events',
-      records: written.map((output) => output.label).filter(Boolean).slice(0, 12),
+      records: written.slice(0, 12),
       placements,
     },
   ]

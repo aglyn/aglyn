@@ -512,6 +512,19 @@ is a decision about the account, not something to build.
   editor's own `coverImage` field and writes no cover description (the list
   shows the cover beside the title that names it). A process with no picker
   writes the event without a cover.
+- **Listed on a page (AGL-3755).** A build's events are seen only through
+  an Event List, so a plan whose events no section names is settled in code
+  before the doctrine reads it (`model/ai-build-event-page.ts`, the plan
+  check's new `settle` hook): on a page the plan makes about them (its
+  section named for them, else its second), else on a new Events page at
+  `/events` in the site's layout, where the address is free and the page cap
+  has room; otherwise the plan is re-asked once, naming the events. The
+  build's page lists the events it wrote through the same `events` listing
+  a guided start uses (`eventList`, placed by code), and its brief no longer
+  asks the page to place the block. The live eval of 2026-10-13 ("add our
+  next three Friday night jazz shows at 8pm to an events page", a site with
+  only Home) made three correct events and no page; its recorded answer is
+  `jobs/fixtures/ai-jazz-events-build-plan-recording.ts`.
 - **Guided site starts (AGL-3755).** A start whose brief reads as event-led
   (a venue, club, studio with classes, meetup, church, theater) and whose
   site admits the `event` op (the build's own gate: the `eventCalendar`

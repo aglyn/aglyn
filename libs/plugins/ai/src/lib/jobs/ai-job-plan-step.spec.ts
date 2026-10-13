@@ -57,6 +57,7 @@ jest.mock('./ai-jobs', () => ({
 }))
 
 import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
+import { AI_JAZZ_EVENTS_BRIEF, AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER } from './fixtures/ai-jazz-events-build-plan-recording'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -995,6 +996,76 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
       expect.objectContaining({ slot: 'i0', args: { durationMinutes: 30 }, id: expect.stringMatching(RESOURCE_ID), credits: 0 }),
     ])
     expect(outcome.plan?.screens[0]?.id).toMatch(RESOURCE_ID)
+  })
+
+  describe('a build whose events no page lists (AGL-3755)', () => {
+    const EVENT = {
+      op: 'event',
+      noun: 'event',
+      where: 'Events',
+      intents: ['dated events'],
+      argsSchema: {
+        type: 'object' as const,
+        properties: {
+          title: { type: 'string' as const, description: 'Its name.' },
+          startsAt: { type: 'string' as const, description: 'When.' },
+          timezone: { type: 'string' as const, description: 'Zone.' },
+          description: { type: 'string' as const, description: 'What.' },
+        },
+        required: ['title', 'startsAt', 'timezone', 'description'],
+        additionalProperties: false as const,
+      },
+      maxPerPlan: 6,
+      freeAllowed: true,
+      draftResource: 'event',
+      live: true,
+      estimateCredits: () => 0,
+      degrade: 'omit' as const,
+      pageBlocks: ['eventList'],
+    }
+    const EVENT_OPS = new Map([[EVENT.op, EVENT]])
+    const answer = { ...PLAN, ...AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER }
+    const names = AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER.items.map((item) => `new:${item.name}`)
+
+    it('settles the recorded jazz-nights answer with an Events page that lists them, without a re-ask', async () => {
+      mockRunAiRequest.mockResolvedValue(planAnswer(answer as never))
+      const outcome = await planStep({ readOps: async () => EVENT_OPS })({
+        job: job({ kind: 'build', brief: AI_JAZZ_EVENTS_BRIEF }),
+        stepIndex: 0,
+        now: NOW,
+        firestore,
+      })
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect(outcome.plan?.items?.map((item) => item.args['startsAt'])).toEqual(['2026-10-16T20:00', '2026-10-23T20:00', '2026-10-30T20:00'])
+      expect(outcome.plan?.screens).toEqual([
+        expect.objectContaining({
+          title: 'Events',
+          slug: '/events',
+          nav: true,
+          // In the site's layout, as its Home page is.
+          layout: 'lay-site',
+          id: expect.stringMatching(RESOURCE_ID),
+          sections: [{ name: 'Upcoming events', uses: names, items: 0 }],
+        }),
+      ])
+    })
+
+    it('re-asks once, naming the events, where the site already has an events page', async () => {
+      mockReadInventory.mockResolvedValue({
+        ...INVENTORY,
+        screens: [...INVENTORY.screens, { id: 'scr-events', name: 'Events', slug: '/events', layoutId: 'lay-site', template: false }],
+      })
+      mockRunAiRequest.mockResolvedValue(planAnswer(answer as never))
+      await planStep({ readOps: async () => EVENT_OPS })({
+        job: job({ kind: 'build', brief: AI_JAZZ_EVENTS_BRIEF }),
+        stepIndex: 0,
+        now: NOW,
+        firestore,
+      })
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      const [, second] = mockRunAiRequest.mock.calls.map(([request]) => request)
+      expect(JSON.stringify(second.messages)).toContain('are listed on no page, so no visitor would see them')
+    })
   })
 
   it('tells a build, and only a build, the date its dated items fall after (AGL-3743)', () => {

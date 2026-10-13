@@ -631,6 +631,33 @@ describe('a build’s datasets (AGL-3616)', () => {
     expect(template.plan?.screens[0].record).toEqual({ dataset: 'ds-menu', base: 'menu' })
   })
 
+  it('lists the events it wrote by the Event List where a page names them, and asks the page to place no block for them (AGL-3755)', () => {
+    const EVENT: PluginAiCapability = { ...DATASET, op: 'event', noun: 'event', where: 'Events', draftResource: 'event', live: true, pageBlocks: ['eventList'] }
+    const eventsPlan = (): AiJobPlan => ({
+      ...plan(),
+      screens: [
+        { ...plan().screens[0], title: 'Events', slug: '/events', sections: [{ name: 'Upcoming events', uses: ['new:Jazz Oct 16', 'new:Jazz Oct 23'], items: 0 }], id: 'page-events' },
+      ],
+      items: [
+        { slot: 'i0', op: 'event', name: 'Jazz Oct 16', why: '', dependsOn: [], degrade: 'omit', args: {}, id: 'ev-16' },
+        { slot: 'i1', op: 'event', name: 'Jazz Oct 23', why: '', dependsOn: [], degrade: 'omit', args: {}, id: 'ev-23' },
+      ],
+    })
+    const units = aiBuildUnits(eventsPlan())
+    // The second event failed: the list still shows the first.
+    const ledger = aiBuildInitialLedger(units).map((row) =>
+      row.slot === 'i0' ? { ...row, status: 'succeeded' as const, outputs: ['ev-16'] } : row.slot === 'i1' ? { ...row, status: 'failed' as const } : row,
+    )
+    const ops: AiBuildOps = new Map([...OPS, ['event', EVENT]])
+    const page = units.find((unit) => unit.screen) as (typeof units)[number]
+    const derived = aiBuildUnitJob(job({ plan: eventsPlan() }), page, { kind: 'page', units, ledger, ops })
+    expect(aiLayoutListingsOf(derived.inputs)).toEqual([
+      { id: 'listing:events', kind: 'events', name: 'the events', records: ['Jazz Oct 16'], placements: [{ screenId: 'page-events', section: 0, role: 'index' }] },
+    ])
+    expect(derived.brief).not.toContain('eventList')
+    expect(derived.plan?.screens[0].sections[0].uses).toEqual([])
+  })
+
   /*
    * AGL-3747: a build that lists one of the site's own datasets placed no
    * listing for it, so its cards could never link the record pages the site
