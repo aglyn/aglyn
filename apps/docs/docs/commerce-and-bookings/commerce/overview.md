@@ -543,6 +543,8 @@ confirm the plan:
 - Lodging and service tax rates are left as they are. Avalara and TaxJar need your account
   details, so you connect them yourself.
 - It costs no AI credits.
+- Only an admin or editor on the site can ask Aglyn AI for these changes. An author can
+  still make them on the card.
 
 ### Lodging tax on reservations
 

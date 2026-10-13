@@ -49,7 +49,8 @@ One message can ask for any mix of:
   such as *free shipping over $50, otherwise $5 flat in the US*. See
   [Shipping](../commerce-and-bookings/commerce/shipping.md#ask-aglyn-ai),
   [Pickup & local delivery](../commerce-and-bookings/commerce/pickup-and-local-delivery.md#ask-aglyn-ai)
-  and [Tax settings](../commerce-and-bookings/commerce/overview.md#tax-settings).
+  and [Tax settings](../commerce-and-bookings/commerce/overview.md#tax-settings). Store
+  setup needs the admin or editor role on the site.
 
 One build holds up to 16 things and 8 pages. On the Free plan it holds 2 pages, and some
 parts, such as templates, campaigns, automations, products and edits to existing pages,

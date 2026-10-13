@@ -100,6 +100,8 @@ const firestore = {
 const HOST = 'host-1'
 const EDITOR = 'uid-editor'
 const VIEWER = 'uid-viewer'
+const AUTHOR = 'uid-author'
+const ADMIN = 'uid-admin'
 const SETTINGS = `hosts/${HOST}/settings/store`
 const BUSINESS = { plan: 'business' }
 const FREE = { plan: 'free' }
@@ -138,7 +140,7 @@ beforeEach(() => {
   docs.clear()
   writes = 0
   locked = false
-  docs.set(`hosts/${HOST}`, { memberRoles: { [EDITOR]: 'editor', [VIEWER]: 'viewer' } })
+  docs.set(`hosts/${HOST}`, { memberRoles: { [ADMIN]: 'admin', [EDITOR]: 'editor', [AUTHOR]: 'author', [VIEWER]: 'viewer' } })
   docs.set(SETTINGS, {
     currency: 'USD',
     tax: { mode: 'none' },
@@ -147,6 +149,18 @@ beforeEach(() => {
 })
 
 describe('who may change the store setup', () => {
+  it('admits an admin or an editor, and refuses an author the cards would let save (Zach, 2026-10-12)', async () => {
+    expect(await writer.refusal(request({}, { uid: ADMIN }))).toBeNull()
+    expect(await writer.refusal(request({}, { uid: EDITOR }))).toBeNull()
+    expect(await writer.refusal(request({}, { uid: AUTHOR }))).toEqual({ status: 403, error: STORE_SETUP_ROLE_REFUSAL })
+    expect(await writer.write(request(FREE_OVER_FIFTY, { uid: AUTHOR }))).toEqual({
+      ok: false,
+      status: 403,
+      error: STORE_SETUP_ROLE_REFUSAL,
+    })
+    expect(writes).toBe(0)
+  })
+
   it('refuses a viewer, a plan without commerce, a locked site and an unknown site', async () => {
     expect(await writer.refusal(request({}, { uid: VIEWER }))).toEqual({ status: 403, error: STORE_SETUP_ROLE_REFUSAL })
     expect(await writer.refusal(request({}, { org: FREE }))).toEqual({ status: 403, error: STORE_SETUP_PLAN_REFUSAL })

@@ -64,6 +64,8 @@ plan** saves it.
 - Carrier rates need a carrier account, so you set those up yourself.
 - Changes work as soon as they are saved, like a save on this card. They cost no AI
   credits.
+- Only an admin or editor on the site can ask Aglyn AI for these changes. An author can
+  still make them on the card.
 
 ## Where parcels ship from
 

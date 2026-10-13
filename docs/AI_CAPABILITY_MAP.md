@@ -457,9 +457,11 @@ catering inquiry into Inquiries.
   writer refuses a flat or free-over rate without its amount, a new delivery
   zone without its fee and a tax rate without its percentage. "Set up tax"
   alone is meant to be a question back, not an item.
-- **Gates.** The role the Firestore rules let save those cards (admin,
-  editor or author: `hostRoleCanWrite`), the plan's `commerce` feature, and
-  no lockdown refusing a write. Free has no commerce.
+- **Gates.** An admin or editor on the site (`hostRoleCanPublish`), checked
+  at the build's admission and again in the write; the plan's `commerce`
+  feature; and no lockdown refusing a write. This is stricter than the cards,
+  which an author may also save: an AI change of what checkout charges is
+  live at once (Zach, 2026-10-12). Free has no commerce.
 - **Live, not a draft.** Store settings have no draft state, and the cards
   save them live; the plan card's Confirm is the agreement. The capabilities
   carry `live: true`, which the build step reads once the shared contract

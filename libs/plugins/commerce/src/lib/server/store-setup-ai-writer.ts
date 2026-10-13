@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { hostRoleCanPublish } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type {
   PluginDraftContext,
@@ -40,10 +40,12 @@ import {
  * (`store-setup-ai-capability.ts`). It writes exactly what the console's
  * Shipping, Local delivery, Taxes and Inventory locations cards write:
  *
- *  - who: the role the Firestore rules let save those cards (an admin, an
- *    editor or an author: `canWriteHostContent`), the plan's `commerce`
- *    feature, and no lockdown refusing a write to the site, its workspace or
- *    the member (`hostWritesFrozen`);
+ *  - who: an admin or an editor on the site (`hostRoleCanPublish`), the
+ *    plan's `commerce` feature, and no lockdown refusing a write to the site, its workspace or
+ *    the member (`hostWritesFrozen`). The role is stricter than the cards,
+ *    which the Firestore rules let an author save too (`canWriteHostContent`):
+ *    these settings change what checkout charges, and an AI change of them
+ *    is live at once, so it takes the publishing role (Zach, 2026-10-12);
  *  - what: the change is read and applied by `store-setup-content.ts`,
  *    through the cards' own normalizers and checks — the zone-coverage
  *    summary, the pickup and delivery normalizers, delivery's "can't offer
@@ -68,8 +70,8 @@ import {
 type Firestore = FirebaseFirestore.Firestore
 type Stored = Record<string, unknown>
 
-/** The rules' refusal for a member who may not write the site. */
-export const STORE_SETUP_ROLE_REFUSAL = 'Changing store settings requires the editor role'
+/** The refusal for a member without the publishing role (admin or editor). */
+export const STORE_SETUP_ROLE_REFUSAL = 'Changing store settings with Aglyn AI needs an admin or editor role'
 /** The refusal for a plan without commerce. */
 export const STORE_SETUP_PLAN_REFUSAL = 'Selling online is not included in your plan — see Billing'
 /** What a member is told while a lockdown refuses writes to the site. */
@@ -116,7 +118,7 @@ export function createStoreSetupAiWriter(deps: StoreSetupAiWriterDeps): PluginRe
     if (!host.exists) return { status: 404, error: 'Unknown site' }
     const data = (host.data() ?? {}) as Stored
     const role = ((data['memberRoles'] ?? {}) as Stored)[context.uid]
-    if (!hostRoleCanWrite(role)) return { status: 403, error: STORE_SETUP_ROLE_REFUSAL }
+    if (!hostRoleCanPublish(role)) return { status: 403, error: STORE_SETUP_ROLE_REFUSAL }
     if (!checkEntitlement((context.org ?? {}) as never, 'commerce')) {
       return { status: 403, error: STORE_SETUP_PLAN_REFUSAL }
     }
