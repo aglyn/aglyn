@@ -75,6 +75,7 @@ checks the member's role and the allowance when the item runs.
 | `dataset` (3), **new in this PR** | data | `dataset` writer (`libs/plugins/data/src/lib/server/dataset-drafts.ts`) | `dataStore` | `datasetsPerOrg` | no |
 | `crm-pipeline` (3), AGL-3746 | crm | `crm-pipeline` writer (`libs/plugins/crm/src/lib/server/crm-setup-writers.server.ts`), saved live | `crm` | | no |
 | `crm-field` (12), AGL-3746 | crm | `crm-field` writer, saved live | `crm` | 100 definitions per org (`CONTACT_FIELDS_MAX_PER_ORG`) | no |
+| `crm-picklist-values` (12), AGL-3756 | crm | `crm-picklist-values` writer, saved live; only adds | `crm` | 200 values a picklist, 50 choices a Choice field | no |
 | `event` (6), AGL-3743 | events-calendar | `event` writer, no model (`libs/plugins/events-calendar/src/lib/server/event-drafts.server.ts`); a page section that uses it places `eventList` | `eventCalendar` (the add-on) | | yes |
 
 Checked against the code on 2026-10-10. `FUNNEL_FEATURE` is
@@ -188,7 +189,7 @@ gap.
 | Forms | forms, submissions inbox, write submissions into a dataset | yes: makes forms, and binds one to a dataset where the plan says it writes to one (`writesTo`, AGL-3616) |
 | Events calendar | events, publish to pages, event schema | yes (AGL-3743): a build's `event` op drafts dated events (title, start and end in the business's time zone, location, organizer, description), and a page section that uses them places the Event List; the owner publishes each event. No cover photo from a build yet |
 | Media library | folders, transforms, CDN, tags | partial: Create with AI and stock photos into the library; no folders, tags or metadata |
-| CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); no records, picklist values or views |
+| CRM | contacts, companies, deals and pipelines, leads, tasks, custom fields, views | partial: record insight, email draft, import matching; pipelines and their stages, and custom fields on contacts, companies, deals and leads (`crm-pipeline`, `crm-field`, AGL-3746); values added to every picklist and Choice field (`crm-picklist-values`, AGL-3756); no records or views |
 | Commerce | catalog, orders, shipping, tax, POS, channels | partial: products (drafts, listed at a starting price on a site start), categories and discounts proposals; shipping zones and rates, local pickup, local delivery and sales tax setup (AGL-3749); no carrier rates, tax services, payments, POS or order emails |
 | Bookings | services, availability, payment, reminders | partial: a booking service draft |
 | Marketing overlays | bars and popups | yes (`overlay`) |
@@ -225,8 +226,9 @@ Ranked by how often a brief needs it and how much of the docs it unlocks.
    See "Redirects" below.
 7. **CRM records.** No pipelines, deals, custom fields or saved views.
    **Setup CLOSED (AGL-3746):** a build's `crm-pipeline` and `crm-field` ops
-   set up pipelines, stages and custom fields. See "CRM setup" below. Still
-   no records (contacts, deals, leads), picklist values or saved views.
+   set up pipelines, stages and custom fields, and `crm-picklist-values`
+   (AGL-3756) adds picklist values. See "CRM setup" below. Still no records
+   (contacts, deals, leads) or saved views.
 8. **Store setup.** No shipping, tax, pickup and delivery, payments, POS or
    order emails. **CLOSED for shipping, pickup, delivery and tax
    (AGL-3749):** four build ops set what the console's Shipping, Local
@@ -342,9 +344,9 @@ is a decision about the account, not something to build.
   unasked probability is spread by position (25/50/75 for three stages).
 - **`crm-field`** (at most 12 a plan) takes `object` (contact, company,
   deal, lead — `CRM_FIELD_OBJECTS`), `label`, `type` (text, number, date,
-  select, checkbox, url — `CONTACT_FIELD_TYPES`; no currency type exists, so
-  money is a number), `options` for select, and `required`. Org-wide, last
-  on its object's tab.
+  select, checkbox, url, currency — `CONTACT_FIELD_TYPES`; "Budget" is
+  currency, AGL-3756), `options` for select, `currency` (ISO 4217, USD when
+  unsaid) for currency, and `required`. Org-wide, last on its object's tab.
 - **Idempotent.** The job's attempt key is a new pipeline's or field's id.
   An active pipeline is matched by name, a stage within it by name, a field
   by label or key within its object, all without case; a match is brought to
@@ -363,9 +365,29 @@ is a decision about the account, not something to build.
   can create in (`memberCanSee`); a field is org-wide, so only an org-wide
   member. The org's 100-definition ceiling holds for fields.
 - **Cost.** No model: 0 credits, Free not offered (no CRM on Free).
-- **Not yet.** No stage forecast category beyond `pipeline`, no picklist
-  values (lead status or source, deal type), no stage or field removal, no
-  archiving, no records or saved views.
+- **`crm-picklist-values`** (AGL-3756, at most 12 a plan;
+  `model/crm-picklist-setup-content.ts`) ADDS values the way CRM → Fields'
+  Add value and a Choice field's choices do: `list` is any of
+  `CRM_PICKLIST_IDS` (lead status and source, deal type and contact role,
+  company type, industry, rating and ownership, salutation, task status,
+  priority, type and subject) or `custom` with `object` + `field` for a
+  custom Choice field; `values`; `meaning` where the list has meanings (lead
+  status: new, nurturing, working, unqualified — never qualified, which only
+  a conversion sets; task status, priority and type); `group` for lead source
+  (inbound, outbound). Each value is `addPicklistValue`, appended; a value
+  already held in any capitals is left as is, an INACTIVE one reported, not
+  reactivated; nothing is removed, renamed or reordered, so a re-run adds
+  nothing. The list is read and written in one transaction with the
+  console's org-wide stamp; a lead source added where leads already hold the
+  label regroups them (`leadSourceDirection`, the shared `picklistRegroup`
+  module the route uses too). Org-wide gate, as fields. Record route →
+  Fields. Every CRM picklist the console extends is covered; Nurturing is
+  already a standard lead status. Not covered: deal stages (pipeline
+  stages, `crm-pipeline`'s) and the hard-coded enums no console page
+  extends (contact lifecycle stage, deal status, forecast category).
+- **Not yet.** No stage forecast category beyond `pipeline`, no stage or
+  field removal, no picklist value rename, reorder, default or
+  deactivation, no archiving, no records or saved views.
 
 ## Navigation and menus (AGL-3728)
 

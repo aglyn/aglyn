@@ -57,7 +57,7 @@ import {
 /** One definition, as the picker and the value control need it. */
 export type OrgContactFieldOption = Pick<
   ContactFieldDefinition,
-  'key' | 'label' | 'type' | 'options' | 'order'
+  'key' | 'label' | 'type' | 'options' | 'order' | 'currency'
 > & { $id: string }
 
 /** The picker's window. Matches the list and segment pickers beside it. */
@@ -95,12 +95,13 @@ export function useOrgContactFields(
       fields: (data ?? [])
         .filter((field) => !field.retiredAt && typeof field.key === 'string')
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        .map(({ $id, key, label, type, options, order }) => ({
+        .map(({ $id, key, label, type, options, order, currency }) => ({
           $id,
           key,
           label: label || key,
           type,
           ...(options ? { options } : {}),
+          ...(currency ? { currency } : {}),
           order: order ?? 0,
         })),
       ready: loaded && status !== 'loading',

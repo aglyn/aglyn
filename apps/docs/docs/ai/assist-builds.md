@@ -43,8 +43,9 @@ One message can ask for any mix of:
 - **an announcement bar** or **a popup**;
 - **an A/B test** of a page or of an email's subject line;
 - **a funnel** that counts visits from one step to the next;
-- **CRM setup**: a [deal pipeline](./crm-by-ai.md#set-up-the-crm) with its stages, and
-  [custom fields](./crm-by-ai.md#set-up-the-crm) on contacts, companies, deals or leads.
+- **CRM setup**: a [deal pipeline](./crm-by-ai.md#set-up-the-crm) with its stages,
+  [custom fields](./crm-by-ai.md#set-up-the-crm) on contacts, companies, deals or leads, and
+  new values for a [picklist](./crm-by-ai.md#set-up-the-crm) such as lead status or source.
   These are saved straight to your CRM, as they are when you set them up yourself;
 - **a change to a page or layout** the site already has, saved as a new version visitors do
   not see until you publish it;
@@ -118,8 +119,8 @@ page that places them.
   Products have no photo and the price you stated, if any. Booking services and funnels are
   drafts to activate. Overlays and automations are switched off, A/B tests are stopped, and
   campaigns are unsent and aimed at nobody. The exceptions are a **redirect**, **CRM
-  setup**, **store setup** and **site settings**: a redirect rule, a CRM pipeline or custom
-  field, the shipping, pickup, delivery and tax settings, and the site's settings have no
+  setup**, **store setup** and **site settings**: a redirect rule, a CRM pipeline, custom
+  field or picklist value, the shipping, pickup, delivery and tax settings, and the site's settings have no
   draft, so they work as soon as the build saves them, as they do when you save them
   yourself. The plan card lists each one before you confirm, and Aglyn AI uses only the
   prices and rates you state.

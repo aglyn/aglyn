@@ -62,6 +62,7 @@ export const CONTACT_FIELD_TYPES: readonly ContactFieldType[] = [
   'select',
   'checkbox',
   'url',
+  'currency',
 ]
 
 /** How a field type reads on screen — typed so a type cannot ship unlabeled. */
@@ -72,6 +73,7 @@ export const CONTACT_FIELD_TYPE_LABELS: Record<ContactFieldType, string> = {
   select: 'Choice',
   checkbox: 'Checkbox',
   url: 'Link',
+  currency: 'Currency',
 }
 
 export function isContactFieldType(value: unknown): value is ContactFieldType {
@@ -79,6 +81,84 @@ export function isContactFieldType(value: unknown): value is ContactFieldType {
     typeof value === 'string' &&
     (CONTACT_FIELD_TYPES as readonly string[]).includes(value)
   )
+}
+
+/*------------------------------------------
+ * CURRENCY FIELDS (AGL-3756).
+ *
+ * A currency field's value is a WHOLE NUMBER of its currency's minor unit —
+ * cents for USD, yen for JPY — the convention every amount in the CRM
+ * already keeps (a deal's `amountCents`, a company's `annualRevenueCents`)
+ * and the import engine's `CurrencyAmount.amountMinor`. The currency is the
+ * definition's (`currency`, lowercase ISO 4217), never the value's, so a
+ * column of one field is always one currency and sorts and filters as
+ * plain numbers.
+ *-----------------------------------------*/
+
+/** The currency a currency field is in when nothing names one: a deal's default. */
+export const CONTACT_FIELD_DEFAULT_CURRENCY = 'usd'
+
+/** A currency field's code, lowercase, or the default when it names none. */
+export function customFieldCurrency(
+  definition: Pick<ContactFieldDefinition, 'currency'> | null | undefined,
+): string {
+  const code = String(definition?.currency ?? '').trim().toLowerCase()
+  return /^[a-z]{3}$/.test(code) ? code : CONTACT_FIELD_DEFAULT_CURRENCY
+}
+
+/** Whether `code` is an ISO 4217 code `Intl` can format. */
+export function isCustomFieldCurrency(code: unknown): code is string {
+  if (typeof code !== 'string' || !/^[a-z]{3}$/i.test(code.trim())) return false
+  try {
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: code.trim().toUpperCase() })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** How many decimal places a currency's minor unit is — 2 for USD, 0 for JPY — as `Intl` knows it. */
+export function currencyFractionDigits(code: string): number {
+  try {
+    return (
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: code.toUpperCase() }).resolvedOptions()
+        .maximumFractionDigits ?? 2
+    )
+  } catch {
+    return 2
+  }
+}
+
+/** A stored amount (minor units) as the major-unit number a person types, `1250.5` for 125050 cents. */
+export function currencyMinorToMajor(minor: number, code: string): number {
+  return minor / 10 ** currencyFractionDigits(code)
+}
+
+/**
+ * A typed amount — "$1,250.50", "1250.5", "-40" — as the minor units it
+ * stores, rounded to the currency's unit, or `null` when it is not one
+ * number. Symbols, codes, spaces and thousands separators are dropped, as
+ * a deal's amount field drops them.
+ */
+export function parseCurrencyInput(input: unknown, code: string): number | null {
+  const cleaned = String(input ?? '')
+    .replace(/[^0-9.-]/g, '')
+    .trim()
+  if (!cleaned || !/^-?\d*\.?\d*$/.test(cleaned) || cleaned === '-' || cleaned === '.') return null
+  const value = Number(cleaned)
+  if (!Number.isFinite(value)) return null
+  return Math.round(value * 10 ** currencyFractionDigits(code))
+}
+
+/** A stored amount as money in the reader's locale — "$1,250.50" — or the plain number when `Intl` cannot. */
+export function formatCurrencyFieldValue(minor: number, code: string, locale?: string): string {
+  const upper = code.toUpperCase()
+  const major = currencyMinorToMajor(minor, code)
+  try {
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: upper }).format(major)
+  } catch {
+    return `${major.toFixed(currencyFractionDigits(code))} ${upper}`
+  }
 }
 
 /** The longest string a text or link field stores. */
@@ -155,9 +235,12 @@ const NEGATIVE = new Set(['false', 'off', 'no', '0', 'unchecked'])
  *    an export reads as a date, whichever locale typed it.
  *  - `select` stores one of the declared options, exactly, or nothing: a
  *    choice outside the list would be a value the picker could never show.
+ *  - `currency` stores a whole number of the field's minor unit: a number
+ *    as given (rounded), which is the stored shape an API reads back, and
+ *    text — a form's post, "$1,250.50" — read as major units.
  */
 export function coerceContactCustomValue(
-  definition: Pick<ContactFieldDefinition, 'type' | 'options'>,
+  definition: Pick<ContactFieldDefinition, 'type' | 'options' | 'currency'>,
   raw: unknown,
 ): ContactCustomValue | undefined {
   if (raw === undefined || raw === null) return undefined
@@ -185,6 +268,14 @@ export function coerceContactCustomValue(
       if (!text) return undefined
       const parsed = Number(text)
       return Number.isFinite(parsed) ? parsed : undefined
+    }
+    case 'currency': {
+      // A number is minor units, the stored shape an API client reads back;
+      // text is what a person typed or a form posted, in major units.
+      if (typeof raw === 'number') return Number.isFinite(raw) ? Math.round(raw) : undefined
+      if (typeof raw === 'boolean' || typeof raw === 'object') return undefined
+      const minor = parseCurrencyInput(raw, customFieldCurrency(definition))
+      return minor === null ? undefined : minor
     }
     case 'checkbox': {
       if (typeof raw === 'boolean') return raw
@@ -313,11 +404,13 @@ export function withContactFieldMapping(
 
 /** What one coercion refusal tells an API caller, per type. */
 function customValueExpectation(
-  definition: Pick<ContactFieldDefinition, 'type' | 'options'>,
+  definition: Pick<ContactFieldDefinition, 'type' | 'options' | 'currency'>,
 ): string {
   switch (definition.type) {
     case 'number':
       return 'Must be a number'
+    case 'currency':
+      return `Must be a whole number of ${customFieldCurrency(definition).toUpperCase()} minor units, or an amount as text`
     case 'checkbox':
       return 'Must be true or false'
     case 'date':

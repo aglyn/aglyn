@@ -49,7 +49,7 @@ flowchart LR
 | **[Deals](./deals.md)** | `/crm/deals` | The sales pipeline — open deals by stage, with an amount, an owner and an expected close, as a board or a table with [export and bulk actions](./bulk-actions.md#deals); a deal's page is `/crm/deals/{id}`. |
 | **[Tasks](./tasks.md)** | `/crm/tasks` | Calls, emails, meetings and to-dos by due date, each linked to the contact, company or deal it is for, with [export and bulk actions](./bulk-actions.md#tasks). |
 | **[Reports](./reports.md)** | `/crm/reports` | New contacts over time, sources and the lifecycle funnel, conversion by source, the lead funnel, the open pipeline and its forecast, won and lost, activity by teammate, and the task load — every table exportable as CSV. |
-| **[Fields](./custom-fields.md)** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox or link — which a form field can save into. |
+| **[Fields](./custom-fields.md)** | `/crm/fields` | The custom fields on a contact — text, number, date, choice, checkbox, link or currency — which a form field can save into. |
 | **[Settings](./settings.md)** | `/crm/settings` | What the CRM does on its own for every site in the workspace — whether a company is created from a captured contact's work email domain — and the [email templates](./email-templates.md) your team sends from a record. |
 
 Three things cut across the sections rather than having one of their own.
