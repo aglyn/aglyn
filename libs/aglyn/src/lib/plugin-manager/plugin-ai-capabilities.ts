@@ -156,6 +156,13 @@ export interface PluginAiCapability {
    * Exactly one of this and `draftResource` is set.
    */
   runnerKind?: string
+  /**
+   * The writer saves the item as live setup rather than as a draft: a CRM
+   * pipeline or custom field has no draft state, and is in use once saved
+   * (AGL-3746). The build then says it was saved in `where`, never that it
+   * is a draft. Absent means a draft.
+   */
+  live?: boolean
   /** The most this item can cost, in AI credits; a draft written without a model costs 0. */
   estimateCredits(args: PluginAiCapabilityArgs): number
   /** Operations an item of this one may depend on. */
