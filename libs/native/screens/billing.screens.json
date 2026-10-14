@@ -225,19 +225,212 @@
         {
           "type": "notice",
           "tone": "info",
-          "text": "Pick a plan to continue on Stripe's secure checkout, where the price and terms are shown. A workspace already on a paid plan changes it under Manage subscription."
+          "text": "A workspace with a plan changes it here: you see what it would cost or credit first, then confirm. A new subscription continues on Stripe's secure checkout, where the price and terms are shown."
         },
         {
           "type": "list",
           "items": "const.plans",
+          "count": false,
           "primary": "{item.label}",
           "secondary": "{item.blurb}",
           "icon": "sparkles|workspace_premium",
+          "badges": [
+            {
+              "text": "Current plan",
+              "when": "item.id == @data.org.plan",
+              "tone": "success"
+            }
+          ],
           "actions": [
+            {
+              "id": "switch",
+              "label": "Switch to this plan",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "when": "org.manager && data.org.subscription.status == active,trialing,past_due && item.id != free && item.id != @data.org.plan",
+              "check": {
+                "label": "Preview",
+                "url": "/api/billing/subscription",
+                "body": {
+                  "orgId": "{org.id}",
+                  "action": "preview",
+                  "plan": "{item.id}",
+                  "interval": "{data.billing.subscription.interval|data.org.subscription.interval}"
+                }
+              },
+              "confirm": [
+                {
+                  "when": "preview.downgrade",
+                  "text": "Move down to {item.label}? Nothing is charged today, and nothing changes yet. You keep {const.labels[@data.org.plan]|'your current plan'} — and everything you've already paid for — until {preview.periodEnd|'the end of your billing period':date}, when this organization moves to {item.label}. You can keep your current plan any time before then."
+                },
+                {
+                  "when": "!preview.downgrade",
+                  "text": "Switch to {item.label}? "
+                },
+                {
+                  "when": "!preview.downgrade && !preview.prorationCents && preview.prorationCents != 0 && preview.chargesNow",
+                  "text": "You'll be charged the prorated difference for the rest of this period as soon as you confirm, and your plan changes once the payment goes through."
+                },
+                {
+                  "when": "!preview.downgrade && !preview.prorationCents && preview.prorationCents != 0 && !preview.chargesNow",
+                  "text": "The change is prorated for the rest of this period and billed on your next invoice on {preview.periodEnd|'the end of your billing period':date}."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0",
+                  "text": "You'll be charged {preview.chargedNowCents:cents/preview.currency} {preview.currency|'usd':upper} now for the rest of this period, and your plan changes as soon as the payment goes through."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete == false",
+                  "text": " Tax is calculated once we have your billing address. This total does not include it yet."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.prorationTaxCents > 0",
+                  "text": " That includes {preview.prorationTaxCents:cents/preview.currency} {preview.currency|'usd':upper} tax."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.taxReason == reverse_charge && !preview.prorationTaxCents",
+                  "text": " No tax charged — reverse charge applies, so you account for it under your own registration."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.taxReason == customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax charged — this account is registered as tax-exempt."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents > 0 && preview.taxComplete != false && preview.taxReason != reverse_charge,customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax applies to this charge in your location."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0",
+                  "text": "Prorated for the rest of this period: {preview.prorationCents:cents/preview.currency} {preview.currency|'usd':upper}, billed on your next invoice on {preview.periodEnd|'the end of your billing period':date}."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0",
+                  "text": "Unused time credits {0 - preview.prorationCents:cents/preview.currency} {preview.currency|'usd':upper} back on your next invoice on {preview.periodEnd|'the end of your billing period':date}."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete == false",
+                  "text": " Tax is calculated once we have your billing address. This total does not include it yet."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.prorationTaxCents > 0",
+                  "text": " Plus {preview.prorationTaxCents:cents/preview.currency} {preview.currency|'usd':upper} tax."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.taxReason == reverse_charge && !preview.prorationTaxCents",
+                  "text": " No tax charged — reverse charge applies, so you account for it under your own registration."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.taxReason == customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax charged — this account is registered as tax-exempt."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents == 0 && preview.taxComplete != false && preview.taxReason != reverse_charge,customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax applies to this charge in your location."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete == false",
+                  "text": " Tax is calculated once we have your billing address. This total does not include it yet."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.prorationTaxCents > 0",
+                  "text": " Plus {preview.prorationTaxCents:cents/preview.currency} {preview.currency|'usd':upper} tax."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.taxReason == reverse_charge && !preview.prorationTaxCents",
+                  "text": " No tax charged — reverse charge applies, so you account for it under your own registration."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.taxReason == customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax charged — this account is registered as tax-exempt."
+                },
+                {
+                  "when": "!preview.downgrade && preview.prorationCents < 0 && preview.taxComplete != false && preview.taxReason != reverse_charge,customer_exempt && !preview.prorationTaxCents",
+                  "text": " No tax applies to this charge in your location."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon && !const.aiPrice[@item.id]",
+                  "text": " Your Aglyn AI add-on is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons ~= aiAddon",
+                  "text": " Your Aglyn AI add-on is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                },
+                {
+                  "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons !~= aiAddon",
+                  "text": " Your Aglyn AI add-on carries over at ${const.aiPrice[@item.id]}/mo on {item.label}, billed with the plan."
+                },
+                {
+                  "when": "data.billing.subscription.cancelAtPeriodEnd",
+                  "text": " This also cancels your scheduled cancellation: the subscription continues on {item.label} instead of ending. You can cancel again at any time."
+                },
+                {
+                  "when": "data.collab.sites.length > const.limits[@item.id].hostLimit",
+                  "text": " Heads up — you'll be over the {item.label} plan on: {data.collab.sites:count} sites ({item.label} includes {const.limits[@item.id].hostLimit})."
+                },
+                {
+                  "when": "data.seats.managerSeats > const.limits[@item.id].managersPerOrg",
+                  "text": " Heads up — you'll be over the {item.label} plan on: {data.seats.managerSeats} team members ({item.label} includes {const.limits[@item.id].managersPerOrg})."
+                },
+                {
+                  "when": "data.datasets.count > const.limits[@item.id].datasetsPerOrg",
+                  "text": " Heads up — you'll be over the {item.label} plan on: {data.datasets.count} datasets ({item.label} includes {const.limits[@item.id].datasetsPerOrg})."
+                },
+                {
+                  "when": "data.collab.sites.length > const.limits[@item.id].hostLimit || data.seats.managerSeats > const.limits[@item.id].managersPerOrg || data.datasets.count > const.limits[@item.id].datasetsPerOrg",
+                  "text": " Nothing is deleted and these keep working, but you can't add more until you're back under the limit."
+                }
+              ],
+              "url": "/api/billing/subscription",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "switch",
+                "plan": "{item.id}",
+                "interval": "{data.billing.subscription.interval|data.org.subscription.interval}"
+              },
+              "instead": [
+                {
+                  "when": "response.paymentPending && response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; you move to {item.label} once it is paid.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.paymentPending && response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has changed and nothing has been charged."
+                },
+                {
+                  "when": "response.declined",
+                  "title": "Card declined",
+                  "text": "Your saved card was declined, so nothing has changed. Update your payment method under Billing details and try again."
+                },
+                {
+                  "when": "response.paymentPending",
+                  "title": "Payment did not go through",
+                  "text": "The payment did not go through, so nothing has changed. Try again in a moment."
+                },
+                {
+                  "when": "response.scheduled",
+                  "title": "Plan change scheduled",
+                  "text": "Moving to {item.label} on {response.effectiveAt:date} — you keep your current plan until then."
+                }
+              ],
+              "success": "Plan switched to {item.label}"
+            },
+            {
+              "id": "leave",
+              "label": "Cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "org.manager && data.org.subscription.status == active,trialing,past_due && item.id == free && !data.billing.subscription.cancelAtPeriodEnd",
+              "navigate": {
+                "screen": "core.billing.cancel"
+              }
+            },
             {
               "id": "monthly",
               "label": "Continue, billed monthly",
               "icon": "calendar|event",
+              "when": "org.manager && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -251,6 +444,7 @@
               "id": "yearly",
               "label": "Continue, billed yearly",
               "icon": "calendar.badge.clock|event",
+              "when": "org.manager && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -266,26 +460,130 @@
       "constants": {
         "plans": [
           {
+            "id": "free",
+            "label": "Free",
+            "blurb": "1 site, 1 team member, 0 datasets"
+          },
+          {
             "id": "starter",
             "label": "Starter",
-            "blurb": "One site, the essentials"
+            "blurb": "1 site, 2 team members, 2 datasets"
           },
           {
             "id": "pro",
             "label": "Pro",
-            "blurb": "More sites, store and forms"
+            "blurb": "3 sites, 3 team members, 5 datasets"
           },
           {
             "id": "business",
             "label": "Business",
-            "blurb": "Teams and higher limits"
+            "blurb": "10 sites, 5 team members, 10 datasets"
+          },
+          {
+            "id": "scale",
+            "label": "Scale",
+            "blurb": "15 sites, 5 team members, 15 datasets"
+          },
+          {
+            "id": "advanced",
+            "label": "Advanced",
+            "blurb": "25 sites, 10 team members, 25 datasets"
           },
           {
             "id": "agency",
             "label": "Agency",
-            "blurb": "Client workspaces and white-label"
+            "blurb": "100 sites, 10 team members, 50 datasets"
           }
-        ]
+        ],
+        "labels": {
+          "free": "Free",
+          "starter": "Starter",
+          "pro": "Pro",
+          "business": "Business",
+          "scale": "Scale",
+          "advanced": "Advanced",
+          "agency": "Agency",
+          "enterprise": "Enterprise"
+        },
+        "limits": {
+          "free": {
+            "hostLimit": 1,
+            "managersPerOrg": 1,
+            "datasetsPerOrg": 0
+          },
+          "starter": {
+            "hostLimit": 1,
+            "managersPerOrg": 2,
+            "datasetsPerOrg": 2
+          },
+          "pro": {
+            "hostLimit": 3,
+            "managersPerOrg": 3,
+            "datasetsPerOrg": 5
+          },
+          "business": {
+            "hostLimit": 10,
+            "managersPerOrg": 5,
+            "datasetsPerOrg": 10
+          },
+          "scale": {
+            "hostLimit": 15,
+            "managersPerOrg": 5,
+            "datasetsPerOrg": 15
+          },
+          "advanced": {
+            "hostLimit": 25,
+            "managersPerOrg": 10,
+            "datasetsPerOrg": 25
+          },
+          "agency": {
+            "hostLimit": 100,
+            "managersPerOrg": 10,
+            "datasetsPerOrg": 50
+          },
+          "enterprise": {
+            "hostLimit": 200,
+            "managersPerOrg": 20,
+            "datasetsPerOrg": 100
+          }
+        },
+        "aiPrice": {
+          "starter": 9,
+          "pro": 19,
+          "business": 39,
+          "scale": 69,
+          "advanced": 99,
+          "agency": 299
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}"
+        },
+        "billing": {
+          "doc": "orgs/{org.id}/billing/stripe",
+          "optional": true
+        },
+        "seats": {
+          "url": "/api/orgs/members?orgId={org.id}&counts=1",
+          "optional": true
+        },
+        "collab": {
+          "url": "/api/billing/collaborator-allocations",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
+        },
+        "datasets": {
+          "query": {
+            "collection": "orgs/{org.id}/datasets",
+            "count": true
+          },
+          "optional": true
+        }
       }
     },
     {

@@ -299,6 +299,42 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun thePlanChangeQuotesWhatTheConsoleQuotes() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.plans" }
+    val list = spec.blocks.first { it.type == "list" }
+    val switchPlan = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.first { it.id == "switch" }
+    assertNotNull(switchPlan.check)
+    val constants = spec.raw.obj("constants").toString()
+    fun scope(item: String, preview: String, data: String): JsonElement = Json.parseToJsonElement(
+      """{"item":$item,"const":$constants,"data":$data,"preview":$preview}""",
+    )
+    val data = """{"org":{"plan":"pro","subscription":{"status":"active"}},"billing":{"subscription":{}},"collab":{"sites":[{"hostId":"a"},{"hostId":"b"}]},"seats":{"managerSeats":2},"datasets":{"count":1}}"""
+    val business = """{"id":"business","label":"Business"}"""
+    assertEquals(
+      "Switch to Business? You'll be charged $11.00 USD now for the rest of this period, and your plan changes as soon as the payment goes through. That includes $1.00 USD tax.",
+      switchPlan.confirmText(scope(business, """{"downgrade":false,"chargesNow":true,"prorationCents":1000,"chargedNowCents":1100,"prorationTaxCents":100,"taxComplete":true,"currency":"usd","periodEnd":"2026-11-01T00:00:00Z"}""", data)),
+    )
+    assertEquals(
+      "Switch to Business? Unused time credits $2.50 USD back on your next invoice on Nov 1, 2026. Tax is calculated once we have your billing address. This total does not include it yet.",
+      switchPlan.confirmText(scope(business, """{"downgrade":false,"prorationCents":-250,"taxComplete":false,"currency":"usd","periodEnd":"2026-11-01T00:00:00Z"}""", data)),
+    )
+    assertEquals(
+      "Move down to Business? Nothing is charged today, and nothing changes yet. You keep Pro — and everything you've already paid for — until Nov 1, 2026, when this organization moves to Business. You can keep your current plan any time before then.",
+      switchPlan.confirmText(scope(business, """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z"}""", data)),
+    )
+    val withAi = """{"org":{"plan":"pro","subscription":{"status":"active"},"seatAddons":{"aiAddon":1}},"billing":{"subscription":{}},"collab":{"sites":[{"hostId":"a"},{"hostId":"b"}]},"seats":{"managerSeats":7},"datasets":{"count":1}}"""
+    val text = switchPlan.confirmText(scope("""{"id":"free","label":"Free"}""", """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z","droppedAddons":["aiAddon"]}""", withAi))!!
+    assertTrue("Your Aglyn AI add-on is not sold on Free, so it is removed" in text)
+    assertTrue("over the Free plan on: 2 sites (Free includes 1)" in text)
+    assertTrue("7 team members (Free includes 1)" in text)
+    assertTrue("Nothing is deleted and these keep working" in text)
+    val manager = Json.parseToJsonElement("""{"org":{"manager":true,"plan":"pro"},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"business"}}""")
+    assertTrue(ScreenValues.condition(switchPlan.whenCondition, manager))
+    val current = Json.parseToJsonElement("""{"org":{"manager":true},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"pro"}}""")
+    assertFalse(ScreenValues.condition(switchPlan.whenCondition, current))
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)

@@ -453,6 +453,54 @@
     {
       "when": "!data.addons.quantities[@data.kindKey]",
       "expect": false
+    },
+    {
+      "when": "data.money > 100000",
+      "expect": true
+    },
+    {
+      "when": "data.money >= 123456",
+      "expect": true
+    },
+    {
+      "when": "data.money < data.bytes",
+      "expect": true
+    },
+    {
+      "when": "data.money <= 100",
+      "expect": false
+    },
+    {
+      "when": "data.missing > 1",
+      "expect": false
+    },
+    {
+      "when": "data.list ~= x",
+      "expect": true
+    },
+    {
+      "when": "data.list ~= z",
+      "expect": false
+    },
+    {
+      "when": "org.name ~= cm",
+      "expect": true
+    },
+    {
+      "when": "params.uid == @data.members.1.$id",
+      "expect": true
+    },
+    {
+      "when": "params.uid != @data.members.0.$id",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= z",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= x",
+      "expect": false
     }
   ]
 }

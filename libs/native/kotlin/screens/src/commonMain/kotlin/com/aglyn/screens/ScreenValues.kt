@@ -317,13 +317,42 @@ object ScreenValues {
 
   private fun clause(raw: String, context: JsonElement): Boolean {
     val clause = raw.trim()
+    val equality = "==" in clause || "!=" in clause
+    // `path ~= x`: a list holds x, or a text contains it.
+    if (!equality) {
+      val at = clause.indexOf("~=")
+      if (at >= 0) {
+        // `path !~= x` is the other way round.
+        val negated = clause.substring(0, at).endsWith("!")
+        val left = lookup(clause.substring(0, at).trimEnd('!', ' '), context)
+        var right = clause.substring(at + 2).trim()
+        if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
+        val holds = if (left is JsonArray) left.any { text(it) == right } else text(left).contains(right)
+        return if (negated) !holds else holds
+      }
+      // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers, each side a literal or a path.
+      for (op in listOf(">=", "<=", ">", "<")) {
+        val place = clause.indexOf(op)
+        if (place < 0) continue
+        fun side(part: String): Double? = part.trim().let { it.toDoubleOrNull() ?: number(lookup(it, context)) }
+        val left = side(clause.substring(0, place)) ?: return false
+        val right = side(clause.substring(place + op.length)) ?: return false
+        return when (op) {
+          ">=" -> left >= right
+          "<=" -> left <= right
+          ">" -> left > right
+          else -> left < right
+        }
+      }
+    }
     for (op in listOf("!=", "==")) {
       val at = clause.indexOf(op)
       if (at >= 0) {
         val left = text(lookup(clause.substring(0, at), context))
         var right = clause.substring(at + 2).trim()
         if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
-        val options = right.split(',').map { it.trim() }
+        // `a == @path`: the other side is read from the context (the plan a row stands for against the current one).
+        val options = if (right.startsWith("@")) listOf(text(lookup(right.substring(1), context))) else right.split(',').map { it.trim() }
         return if (op == "==") left in options else left !in options
       }
     }

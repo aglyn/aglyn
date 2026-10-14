@@ -326,12 +326,44 @@ public enum ScreenValues {
 
   private static func clause(_ raw: String, in context: JSONValue) -> Bool {
     let clause = raw.trimmingCharacters(in: .whitespaces)
+    // `path ~= x`: a list holds x, or a text contains it.
+    if !clause.contains("=="), !clause.contains("!="), let range = clause.range(of: "~=") {
+      // `path !~= x` is the other way round.
+      let negated = clause[..<range.lowerBound].hasSuffix("!")
+      let leftPath = String(clause[..<range.lowerBound]).trimmingCharacters(in: CharacterSet(charactersIn: "! "))
+      let left = lookup(leftPath, in: context)
+      var right = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
+      if right.count >= 2, right.hasPrefix("'"), right.hasSuffix("'") { right = String(right.dropFirst().dropLast()) }
+      let holds: Bool
+      if case .array(let items)? = left { holds = items.contains { text($0) == right } } else { holds = text(left).contains(right) }
+      return negated ? !holds : holds
+    }
+    // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers, each side a literal or a path.
+    if !clause.contains("=="), !clause.contains("!=") {
+      for op in [">=", "<=", ">", "<"] {
+        guard let range = clause.range(of: op) else { continue }
+        func side(_ text: Substring) -> Double? {
+          let trimmed = text.trimmingCharacters(in: .whitespaces)
+          return Double(trimmed) ?? number(lookup(trimmed, in: context))
+        }
+        guard let left = side(clause[..<range.lowerBound]), let right = side(clause[range.upperBound...]) else { return false }
+        switch op {
+        case ">=": return left >= right
+        case "<=": return left <= right
+        case ">": return left > right
+        default: return left < right
+        }
+      }
+    }
     for op in ["!=", "=="] {
       if let range = clause.range(of: op) {
         let left = text(lookup(String(clause[..<range.lowerBound]), in: context))
         var right = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
         if right.count >= 2, right.hasPrefix("'"), right.hasSuffix("'") { right = String(right.dropFirst().dropLast()) }
-        let options = right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        // `a == @path`: the other side is read from the context (the plan a row stands for against the current one).
+        let options = right.hasPrefix("@")
+          ? [text(lookup(String(right.dropFirst()), in: context))]
+          : right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         return op == "==" ? options.contains(left) : !options.contains(left)
       }
     }
