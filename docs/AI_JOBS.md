@@ -466,7 +466,17 @@ request and 16 batched.
   arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
   `Promise.all` over the briefs — go as one batch, and the re-asks, asked
   only once their answers are read, gather into the next. Half price, in
-  minutes rather than seconds; the adapter waits up to an hour.
+  minutes rather than seconds.
+- **A slow batch costs part of the discount, never the round** (AGL-3781). A
+  batch is waited on for `AGLYN_LIVE_AI_BATCH_WAIT_MS` (half an hour by
+  default). One still processing then is canceled and read once the cancel
+  has ended it: what it already answered comes back at half price, and each
+  request it never reached is asked on its own, at full price, with the same
+  request and cache breakpoints, the first alone so the rest read the prefix
+  it writes. The run prints one line when it happens, and the ledger counts
+  those requests as `batchFallbacks` rather than `batchedRequests`. A golden
+  run's second batch once sat in progress for over an hour, was canceled
+  whole, and took every grade in it.
 - **The first request over a prefix goes alone.** A cache entry is readable
   only once the request writing it has started answering, so a `Promise.all`
   over N briefs on one prompt wrote the prefix N times and read it none.
@@ -485,9 +495,18 @@ request and 16 batched.
 - **An effort A/B arm.** `AGLYN_AI_EFFORT=job.form:medium,job.text:low` (or
   `*:medium`) asks those step kinds at that effort in a development run, and
   `npm run eval:ai-live` records the arm's answers beside the defaults'
-  (`<case>.<model>.effort-<arm>.json`) and prints one score line a brief, so
-  one round compares two efforts. Production's efforts move only once such a
-  round shows the lower one holds.
+  (`<case>.<model>.effort-<8 hex>.json`, a hash of the parsed arm; the
+  recording's `arm` holds the tag and every effort it named) and prints one
+  score line a brief, `score <case> (<kind>) <model> effort-<8 hex>: …`,
+  which pairs with the default run's line for the same brief. The file name
+  once spelled the whole list out and failed with ENAMETOOLONG. The run's
+  ledger prints after the run, however it ended. Production's efforts move
+  only once such a round shows the lower one holds.
+- **A live run is verbose.** Under an AI agent jest 30 reports through its
+  agent reporter, which prints only a failing file's console, so a passing
+  live run over two spec files printed nothing. `AGLYN_LIVE_AI=1` and the
+  launcher's mark turn jest's verbose mode on (`jest.config.ts`), which
+  writes each test's console straight out.
 
 ## Rules a kind can actually break
 

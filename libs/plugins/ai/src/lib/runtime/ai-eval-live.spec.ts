@@ -96,11 +96,15 @@ import {
   AI_EVAL_UNRECORDED_DOORS,
   AiEvalLiveRefusedError,
   aiEvalCasesNamed,
+  aiEvalEffortArm,
   aiEvalGraderOutput,
   aiEvalGraderPrompt,
   aiEvalLayoutOutline,
   aiEvalPlanOutline,
   aiEvalRecorderFor,
+  aiEvalRecordingBody,
+  aiEvalRecordingFileName,
+  aiEvalScoreLine,
   readAiEvalGrade,
   recordAiEvalLive,
 } from './ai-eval-live'
@@ -1053,5 +1057,73 @@ describe('readAiEvalGrade', () => {
     })
     expect(readAiEvalGrade({ structure: 0, copy: 3, reuse: 2 }, 'g')).toBeNull()
     expect(readAiEvalGrade({ structure: 4.5, copy: 3, reuse: 2 }, 'g')).toBeNull()
+  })
+})
+
+describe('an effort A/B arm’s recordings (AGL-3781)', () => {
+  // The arm round 3 ran, five kinds long: spelled into the file name it was
+  // past the limit, and the round's recordings were lost to ENAMETOOLONG.
+  const long = 'job.page:low,job.layout:low,job.plan:medium,job.form:low,job.text:low,job.section:low'
+  const candidate = {
+    source: 'recorded',
+    scope: 'full',
+    step: 'job.page',
+    model: 'claude-sonnet-5-5',
+    effort: 'low',
+    plan: null,
+    answer: {},
+    usage: { inputTokens: 1, outputTokens: 985, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    rubric: { structure: 4, copy: 4, reuse: 3 },
+  } as unknown as Parameters<typeof aiEvalScoreLine>[0]['candidate']
+
+  it('is named by a short tag, the same for the same efforts in any order or spacing', () => {
+    const arm = aiEvalEffortArm({ AGLYN_AI_EFFORT: long })
+    expect(arm?.tag).toMatch(/^effort-[0-9a-f]{8}$/)
+    const shuffled = ' job.section:low , job.text:low,job.form:low,job.plan:medium,job.layout:low,job.page:low'
+    expect(aiEvalEffortArm({ AGLYN_AI_EFFORT: shuffled })?.tag).toBe(arm?.tag)
+    expect(aiEvalEffortArm({ AGLYN_AI_EFFORT: 'job.page:medium' })?.tag).not.toBe(aiEvalEffortArm({ AGLYN_AI_EFFORT: 'job.page:low' })?.tag)
+    expect(aiEvalEffortArm({})).toBeNull()
+    expect(aiEvalEffortArm({ AGLYN_AI_EFFORT: 'job.page:bogus' })).toBeNull()
+  })
+
+  it('keeps the file name short and the whole arm inside the recording', () => {
+    const arm = aiEvalEffortArm({ AGLYN_AI_EFFORT: long })
+    const name = aiEvalRecordingFileName('page-bakery-home', 'claude-sonnet-5-5', arm)
+    expect(name).toBe(`page-bakery-home.claude-sonnet-5-5.${arm?.tag}.json`)
+    expect(name.length).toBeLessThan(80)
+    expect(aiEvalRecordingFileName('page-bakery-home', 'claude-sonnet-5-5', null)).toBe(
+      'page-bakery-home.claude-sonnet-5-5.json',
+    )
+    const body = JSON.parse(aiEvalRecordingBody('page-bakery-home', candidate, arm))
+    expect(body.arm).toEqual({
+      tag: arm?.tag,
+      efforts: {
+        'job.form': 'low',
+        'job.layout': 'low',
+        'job.page': 'low',
+        'job.plan': 'medium',
+        'job.section': 'low',
+        'job.text': 'low',
+      },
+    })
+    expect(body.caseId).toBe('page-bakery-home')
+    expect(body.candidate).toEqual(candidate)
+    // The default run's recording holds no arm at all.
+    expect(JSON.parse(aiEvalRecordingBody('page-bakery-home', candidate, null))).not.toHaveProperty('arm')
+  })
+
+  it('prints score lines that pair an arm with the defaults by brief', () => {
+    const arm = aiEvalEffortArm({ AGLYN_AI_EFFORT: long })
+    const entry = { caseId: 'page-bakery-home', kind: 'page' as const, candidate }
+    const byDefault = aiEvalScoreLine(entry, true, null)
+    const byArm = aiEvalScoreLine(entry, false, arm)
+    expect(byDefault).toBe(
+      'score page-bakery-home (page) claude-sonnet-5-5: pass, structure 4, copy 4, reuse 3, output 985 tokens',
+    )
+    expect(byArm).toBe(
+      `score page-bakery-home (page) claude-sonnet-5-5 ${arm?.tag}: fail, structure 4, copy 4, reuse 3, output 985 tokens`,
+    )
+    const key = (line: string) => line.slice(0, line.indexOf(':')).replace(/ effort-[0-9a-f]{8}$/, '')
+    expect(key(byArm)).toBe(key(byDefault))
   })
 })

@@ -384,10 +384,14 @@ export function resetAiDevWarmPrefixes(): void {
  * the live ones cost at list, and how many batches carried them. A table
  * whose `live` is 0 proved nothing new — every prompt in it had been answered
  * before — and is not a live pass; `AGLYN_AI_REPLAY=refresh` asks again.
+ * `batchedRequests` are the ones a batch answered, at half price;
+ * `batchFallbacks` are the ones a batch left unanswered past its wait and
+ * that were asked on their own, at full price (AGL-3781). Both count in `live`.
  */
 export function aiLiveRunLedger(env: Env = process.env): AiDevReplayStats & {
   batches: number
   batchedRequests: number
+  batchFallbacks: number
   allReplayed: boolean
 } {
   const replay = aiDevReplayStats(env)
@@ -396,6 +400,7 @@ export function aiLiveRunLedger(env: Env = process.env): AiDevReplayStats & {
     ...replay,
     batches: batch.batches,
     batchedRequests: batch.requests,
+    batchFallbacks: batch.fallbacks,
     allReplayed: replay.live === 0 && replay.replayed > 0,
   }
 }
