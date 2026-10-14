@@ -131,6 +131,16 @@ export function loyaltyConnectorCredentialsProblem(
 export type LoyaltySyncStatus =
   'pending' | 'sending' | 'synced' | 'retry' | 'unmatched' | 'skipped'
 
+/** Where a movement stands, in words for the card and the app's rewards account screen. */
+export const LOYALTY_SYNC_STATUS_WORDS: Record<LoyaltySyncStatus, string> = {
+  pending: 'Waiting to send',
+  sending: 'Sending',
+  synced: 'Sent',
+  retry: 'Not sent yet',
+  unmatched: 'Not a member there',
+  skipped: 'Not sent',
+}
+
 /** Statuses a later pass sends again. */
 export const LOYALTY_SYNC_OPEN: readonly LoyaltySyncStatus[] = [
   'pending',

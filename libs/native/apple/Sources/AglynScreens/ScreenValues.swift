@@ -301,14 +301,16 @@ public enum ScreenValues {
       let value = resolveBody(record["$orNull"] ?? .null, in: context)
       return truthy(value) ? value : .null
     case .object(let record) where record.count == 1 && record["$cents"] != nil:
-      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`) as whole cents; null when it is not an amount.
-      let typed = Self.text(resolveBody(record["$cents"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
+      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`, and `-5.50` to take money away) as whole cents; null when it is not an amount.
+      var typed = Self.text(resolveBody(record["$cents"] ?? .null, in: context)).trimmingCharacters(in: .whitespaces)
         .replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")
+      let negative = typed.hasPrefix("-")
+      if negative { typed.removeFirst() }
       guard typed.range(of: #"^(\d+(\.\d{0,2})?|\.\d{1,2})$"#, options: .regularExpression) != nil else { return .null }
       let parts = typed.split(separator: ".", omittingEmptySubsequences: false)
       let whole = Int(parts[0].isEmpty ? "0" : String(parts[0])) ?? 0
       let fraction = parts.count > 1 ? Int(String(parts[1]).padding(toLength: 2, withPad: "0", startingAt: 0)) ?? 0 : 0
-      return .number(Double(whole * 100 + fraction))
+      return .number(Double((whole * 100 + fraction) * (negative ? -1 : 1)))
     case .object(let record) where record.count == 1 && record["$gather"] != nil:
       // `{"$gather": {"from": "{form}", "prefix": "restock_", "key": "lineItemId", "value": "quantity"}}`: the entries of
       // an object whose names start with `prefix`, as `{ key: <rest of the name>, value: <entry> }` rows in name order.

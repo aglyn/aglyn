@@ -2986,8 +2986,10 @@
             "shipping.connectCarrier",
             "shipping.own",
             "shipping.connectOwn",
-            "shipping.spend"
-          , "shipping.order", "shipping.returnLabel"]
+            "shipping.spend",
+            "shipping.order",
+            "shipping.returnLabel"
+          ]
         }
       },
       "package": "@aglyn/plugins-shipping",
@@ -3052,8 +3054,9 @@
         },
         "contributes": {
           "screens": [
-            "post-purchase.service"
-          , "post-purchase.order"]
+            "post-purchase.service",
+            "post-purchase.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-post-purchase",
@@ -3099,8 +3102,9 @@
         },
         "contributes": {
           "screens": [
-            "review-platforms.service"
-          , "review-platforms.order"]
+            "review-platforms.service",
+            "review-platforms.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-review-platforms",
@@ -3134,6 +3138,26 @@
     },
     {
       "id": "loyalty",
+      "mobile": {
+        "$comment": "AGL-3652: Rewards natively, from the spec in src/android/screens/loyalty.screens.json: the program (earn and redeem rates, referral offer, emails, what members hold), the store's own Smile.io or Yotpo Loyalty account, members and their history, and adjusting a balance by hand with a key per press. The program, account and members sit in Commerce promotions' commercePromotions zone; what one order earned and spent is the order screen's.",
+        "ios": {
+          "module": "AglynLoyaltyPlugin",
+          "register": "registerLoyaltyNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.loyalty",
+          "register": "registerLoyaltyNative"
+        },
+        "contributes": {
+          "screens": [
+            "loyalty.rewards",
+            "loyalty.connection",
+            "loyalty.members",
+            "loyalty.member",
+            "loyalty.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-loyalty",
       "register": {
         "console": "registerLoyaltyConsole",
@@ -3429,8 +3453,9 @@
         "contributes": {
           "screens": [
             "fulfillment-networks.service",
-            "fulfillment-networks.network"
-          , "fulfillment-networks.order"]
+            "fulfillment-networks.network",
+            "fulfillment-networks.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-fulfillment-networks",
@@ -3491,8 +3516,9 @@
         },
         "contributes": {
           "screens": [
-            "couriers.service"
-          , "couriers.order"]
+            "couriers.service",
+            "couriers.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-couriers",
@@ -3555,8 +3581,9 @@
         "contributes": {
           "screens": [
             "marketplaces.service",
-            "marketplaces.marketplace"
-          , "marketplaces.order"]
+            "marketplaces.marketplace",
+            "marketplaces.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-marketplaces",
@@ -3621,8 +3648,9 @@
             "print-on-demand.connection",
             "print-on-demand.catalog",
             "print-on-demand.imported",
-            "print-on-demand.orders"
-          , "print-on-demand.order"]
+            "print-on-demand.orders",
+            "print-on-demand.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-print-on-demand",
@@ -3689,8 +3717,9 @@
         },
         "contributes": {
           "screens": [
-            "inventory-sync.service"
-          , "inventory-sync.order"]
+            "inventory-sync.service",
+            "inventory-sync.order"
+          ]
         }
       },
       "package": "@aglyn/plugins-inventory-sync",

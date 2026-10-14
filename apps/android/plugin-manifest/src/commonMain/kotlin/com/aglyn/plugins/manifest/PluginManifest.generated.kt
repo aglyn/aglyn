@@ -24,6 +24,7 @@ import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.inventorysync.registerInventorySyncNative
 import com.aglyn.plugins.livechat.registerLiveChatNative
 import com.aglyn.plugins.logic.registerLogicNative
+import com.aglyn.plugins.loyalty.registerLoyaltyNative
 import com.aglyn.plugins.marketing.registerMarketingNative
 import com.aglyn.plugins.marketingplatforms.registerMarketingPlatformsNative
 import com.aglyn.plugins.marketplace.registerMarketplaceNative
@@ -131,6 +132,11 @@ object NativePluginManifest {
             id = "logic",
             contributes = mapOf("screens" to listOf("logic.function", "logic.page"), "quickActions" to listOf("logic.open"), "deepLinks" to listOf("logic.page")),
             register = ::registerLogicNative,
+        ),
+        NativePluginManifestEntry(
+            id = "loyalty",
+            contributes = mapOf("screens" to listOf("loyalty.connection", "loyalty.member", "loyalty.members", "loyalty.order", "loyalty.rewards")),
+            register = ::registerLoyaltyNative,
         ),
         NativePluginManifestEntry(
             id = "marketing",

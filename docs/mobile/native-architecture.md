@@ -952,7 +952,7 @@ pages, as the console's `writeSiteWideChange` does. A field value is resolved li
 body, and these operations shape it: `{"$timestamp": true}` (the server's time),
 `{"$orNull": v}` (null when empty, which a merge write turns into a cleared field; a
 template that found nothing is otherwise left out), `{"$cents": "{form.amount}"}` (typed
-dollars as whole cents), `{"$dateMs": {value, time, local}}` (a date and a time of day as
+dollars as whole cents, and `-5.50` as -550 where a change may take money away), `{"$dateMs": {value, time, local}}` (a date and a time of day as
 epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": v}`,
 `{"$split": v}` (lines or commas to a list) and `{"$gather": {from, prefix, key, value}}`
 (the entries of `{form}` whose names start with `prefix`, as `{ key, value }` rows).

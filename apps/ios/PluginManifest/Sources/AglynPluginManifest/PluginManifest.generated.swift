@@ -20,6 +20,7 @@ import AglynFunnelsPlugin
 import AglynInboxPlugin
 import AglynInventorySyncPlugin
 import AglynLiveChatPlugin
+import AglynLoyaltyPlugin
 import AglynMarketingPlugin
 import AglynMarketingPlatformsPlugin
 import AglynMarketplacesPlugin
@@ -116,6 +117,11 @@ public enum NativePluginManifest {
       id: "live-chat",
       contributes: ["screens": ["live-chat.settings"]],
       register: AglynLiveChatPlugin.registerLiveChatNative
+    ),
+    NativePluginManifestEntry(
+      id: "loyalty",
+      contributes: ["screens": ["loyalty.connection", "loyalty.member", "loyalty.members", "loyalty.order", "loyalty.rewards"]],
+      register: AglynLoyaltyPlugin.registerLoyaltyNative
     ),
     NativePluginManifestEntry(
       id: "marketing",

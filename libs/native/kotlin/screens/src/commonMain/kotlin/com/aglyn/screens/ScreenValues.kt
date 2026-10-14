@@ -266,11 +266,14 @@ object ScreenValues {
       // `{"$orNull": "{form.parentId}"}`: the value, or an explicit null when it is empty (a merge write clears the field).
       resolveBody(body.getValue("\$orNull"), context).let { if (truthy(it)) it else JsonNull }
     } else if (body.size == 1 && body["\$cents"] != null) {
-      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`) as whole cents; null when it is not an amount.
-      val typed = text(resolveBody(body.getValue("\$cents"), context)).trim().removePrefix("$").replace(",", "")
+      // `{"$cents": "{form.amount}"}`: typed dollars (`12.50`, `$1,200`, and `-5.50` to take money away) as whole cents; null when it is not an amount.
+      val signed = text(resolveBody(body.getValue("\$cents"), context)).trim().removePrefix("$").replace(",", "")
+      val negative = signed.startsWith("-")
+      val typed = signed.removePrefix("-").removePrefix("$")
       if (Regex("""\d+(\.\d{0,2})?|\.\d{1,2}""").matches(typed)) {
         val (whole, fraction) = typed.split('.').let { it[0] to it.getOrElse(1) { "" } }
-        JsonPrimitive(whole.ifEmpty { "0" }.toLong() * 100 + fraction.padEnd(2, '0').take(2).ifEmpty { "0" }.toLong())
+        val cents = whole.ifEmpty { "0" }.toLong() * 100 + fraction.padEnd(2, '0').take(2).ifEmpty { "0" }.toLong()
+        JsonPrimitive(if (negative) -cents else cents)
       } else JsonNull
     } else if (body.size == 1 && body["\$gather"] is JsonObject) {
       // `{"$gather": {"from": "{form}", "prefix": "restock_", "key": "lineItemId", "value": "quantity"}}`: the entries of
