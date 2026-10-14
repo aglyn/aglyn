@@ -860,6 +860,11 @@ public enum ScreenValues {
     case "tail":
       let parts = text(value).split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
       return parts.count > 1 ? String(parts[1]) : ""
+    // The instance a resource key names (`email.list-members:abc` is the list `abc`); empty for a resource with none.
+    case "instance":
+      let text = text(value)
+      guard let colon = text.firstIndex(of: ":") else { return "" }
+      return String(text[text.index(after: colon)...])
     case "json":
       return (try? value.map { String(data: try $0.encoded(), encoding: .utf8) ?? "" }) ?? ""
     default:

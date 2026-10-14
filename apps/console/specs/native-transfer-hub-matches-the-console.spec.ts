@@ -177,6 +177,17 @@ describe('native imports and exports hub', () => {
       expect(options('blank')).toEqual(Object.fromEntries(Object.entries(BLANK_WORDS).map(([key, word]) => [key, word.label])))
     })
 
+    it('keeps the plan it asked for and sends a plugin step\u2019s answers with it, as the console\u2019s wizard does', () => {
+      // The plan request carries what a plugin\u2019s extra wizard steps collected (`extras`), by step id (TransferPlanChoices).
+      expect(importText).toContain('"extras?": "{stash.importExtras}"')
+      expect(importText).toContain('"importPlanBody"')
+      // The review draws the steps a plugin contributes for this resource, in the zone it names.
+      const review = (JSON.parse(importText) as { screens: Array<{ id: string; blocks: Array<{ type: string; name?: string }> }> }).screens.find(
+        (screen) => screen.id === 'core.settings.data.import.review',
+      )
+      expect(review?.blocks.filter((block) => block.type === 'zone').map((block) => block.name)).toEqual(['transferStep'])
+    })
+
     it('uploads in the parts, with the separators and the choices the routes take', () => {
       expect(importText).toContain(`"bytes": ${TRANSFER_UPLOAD_PART_MAX_BYTES}`)
       expect(TRANSFER_UPLOAD_MAX_BYTES).toBe(24_000_000)

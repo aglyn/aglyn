@@ -878,7 +878,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `group`, `order` | where the shell lists it: `workspace`, `site`, `account`, `staff` |
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
-| `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
+| `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `transferStep` (the import wizard's review: a step a plugin adds for its resource), `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
 | `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
@@ -973,7 +973,14 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   one another deeply. A row's position is `index`; `*` also walks an object's values; the format
   `first3` keeps a list's first three entries; a condition may mix `&&` and `||` (`&&` binds
   tighter). `$index` takes a `filter` too, run with the outer row (the item a button was pressed
-  on) as `parent`; `head` and `tail` are the two halves of a `kind/id` key.
+  on) as `parent`; `head` and `tail` are the two halves of a `kind/id` key, and `instance` is what follows the colon of a resource key (`email.list-members:abc` is the list `abc`).
+- A plugin's own step in the records import (the console's `registerPluginTransferResourceUi`
+  `extraSteps`): the review draws a `transferStep` zone with the resource, site and job as params,
+  and a plugin contributes a screen to it, shown only for its resource by `requires` (`stash.importResource ==
+  commerce.gift-cards`). The rules step keeps the plan body it sent as `stash.importPlanBody`; a step answers by asking
+  the same plan again with its answer added, `{"$merge": ["{stash.importPlanBody}", {"extras": {"$put": …}}]}`, and keeps
+  the answers as `stash.importExtras` (the plan's `extras`, by step id), so the steps after it add to them. Today the
+  gift card import's Confirm step (commerce) and the email list's two steps (email) use it.
 - `after` chains: an action's `after` may carry an `after` of its own, each step reading the stash
   the one before made (the site package import works its decisions out, then who is still waiting,
   so every change to a default or a choice shares the two steps).

@@ -1,0 +1,160 @@
+{
+  "$comment": "The gift card import's own step (AGL-3671), contributed to the transferStep zone of the import wizard's review: every card the import issues and the total typed back. It asks /api/transfer/plan again with the answer under extras['gift-card-total'], as the console's Confirm step does. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "commerce.import.giftCards",
+      "title": "Confirm the cards",
+      "subtitle": "Every card this import issues, and the total typed back",
+      "icon": "giftcard|card_giftcard",
+      "scope": "org",
+      "zones": [
+        "transferStep"
+      ],
+      "requires": "stash.importResource == commerce.gift-cards",
+      "load": {
+        "cards": {
+          "url": "/api/transfer/plan",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{params.jobId}",
+            "action": "rows",
+            "limit": 200,
+            "verdicts": [
+              "create"
+            ]
+          },
+          "cursor": "rows.next",
+          "cursorParam": "offset",
+          "items": "rows.rows"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.cards.rows.rows",
+          "text": "No card in this file can be issued. The review lists every row with the reason."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.cards.rows.rows && data.cards.rows.rows.0.giftCard.totalCents && stash.importPlan.summary.create == 1",
+          "text": "1 gift card worth {data.cards.rows.rows.0.giftCard.totalCents:cents}. Each card is spendable money the moment it is issued. Check every code and value, then type the total to issue them."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.cards.rows.rows && data.cards.rows.rows.0.giftCard.totalCents && stash.importPlan.summary.create != 1",
+          "text": "{stash.importPlan.summary.create:number} gift cards worth {data.cards.rows.rows.0.giftCard.totalCents:cents}. Each card is spendable money the moment it is issued. Check every code and value, then type the total to issue them."
+        },
+        {
+          "type": "list",
+          "title": "Gift cards this import issues",
+          "when": "data.cards.rows.rows",
+          "items": "data.cards.rows.rows",
+          "count": true,
+          "primary": "{item.giftCard.code}",
+          "secondary": "{item.giftCard.amountCents:cents} · {item.giftCard.recipientEmail|'No recipient'}",
+          "tertiary": "{item.giftCard.note|''}",
+          "badges": [
+            {
+              "text": "New code: the file's was taken",
+              "when": "item.giftCard.newCode"
+            },
+            {
+              "text": "New code",
+              "when": "item.giftCard.madeCode"
+            }
+          ],
+          "icon": "giftcard|card_giftcard"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.cards.rows.next",
+          "text": "Load every card to see the total you are asked to type."
+        },
+        {
+          "type": "form",
+          "id": "confirm",
+          "when": "data.cards.rows.rows && data.cards.rows.rows.0.giftCard.totalCents && !data.cards.rows.next",
+          "fields": [
+            {
+              "key": "typed",
+              "label": "Type the total value to issue these cards",
+              "kind": "text",
+              "required": true,
+              "mustMatch": "{data.cards.rows.rows.0.giftCard.totalCents:cents}",
+              "help": "Type {data.cards.rows.rows.0.giftCard.totalCents:cents}, with the dollar sign."
+            },
+            {
+              "key": "email",
+              "label": "Email each recipient their code as the card is issued",
+              "kind": "toggle",
+              "initial": "false",
+              "help": "Leave this off when the shoppers already hold these codes."
+            }
+          ],
+          "submit": {
+            "label": "Confirm the total",
+            "url": "/api/transfer/plan",
+            "body": {
+              "$merge": [
+                "{stash.importPlanBody}",
+                {
+                  "extras": {
+                    "$put": {
+                      "map": "{stash.importExtras}",
+                      "key": "gift-card-total",
+                      "value": {
+                        "typed": "{form.typed}",
+                        "totalCents": "{data.cards.rows.rows.0.giftCard.totalCents}",
+                        "email": "{form.email}"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "stash": {
+              "importPlan": "{response}",
+              "importExtras": {
+                "$put": {
+                  "map": "{stash.importExtras}",
+                  "key": "gift-card-total",
+                  "value": {
+                    "typed": "{form.typed}",
+                    "totalCents": "{data.cards.rows.rows.0.giftCard.totalCents}",
+                    "email": "{form.email}"
+                  }
+                }
+              },
+              "importPlanBody": {
+                "$merge": [
+                  "{stash.importPlanBody}",
+                  {
+                    "extras": {
+                      "$put": {
+                        "map": "{stash.importExtras}",
+                        "key": "gift-card-total",
+                        "value": {
+                          "typed": "{form.typed}",
+                          "totalCents": "{data.cards.rows.rows.0.giftCard.totalCents}",
+                          "email": "{form.email}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "back": true,
+            "reload": false,
+            "success": "Confirmed"
+          }
+        }
+      ]
+    }
+  ]
+}
