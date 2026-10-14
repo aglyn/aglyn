@@ -551,7 +551,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#experiments-across-sites': 'Your organization\'s own Marketing → A/B testing lists every site\'s tests, grouped by site, with what each one tests, how many variants it has and its status.',
     '#last-campaign-card': 'The Last campaign card on a site\'s dashboard shows how many emails your most recent sent campaign sent, and how many opens and clicks it has had; Campaigns in its header opens the full history.',
     '#list-members': 'Press Members on any list row to open it. You get the membership a page at a time — address, name, when they joined, how they got there, and what their consent record says — plus the controls to change it.',
-    '#lists-built-from-a-rule': 'A dynamic list holds everyone matching a rule, re-checked about every fifteen minutes.',
+    '#lists-built-from-a-rule': 'A dynamic list holds everyone matching a rule, re-checked about once an hour, and sooner after you edit the rule.',
     '#manual-lists': 'A manual list holds the people you put in it. Grow it with the "Enroll in a list" automation step (e.g.',
     '#messages-list': 'Emails → Messages lists every email this site has sent, scheduled or is still writing, newest first, a page at a time, and each row opens that email\'s own page.',
     '#monthly-send-cap': 'From Pro up, a plan includes a number of campaign emails per calendar month.',
