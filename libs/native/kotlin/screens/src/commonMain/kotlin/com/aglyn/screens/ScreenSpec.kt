@@ -143,7 +143,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   /**
    * Request headers, name to template. `{attempt}` is a key that stays the same while the same
    * action sends the same body (a retry) and changes with the body: `Idempotency-Key` for a
-   * route that provisions something (enterprise billing).
+   * route that provisions something (enterprise billing). A route that wants the key in its body
+   * (`idempotencyKey`) writes `{attempt}` there and gets the same key.
    */
   val headers: Map<String, String> = json.entries("headers").associate { (k, v) -> k to ((v as? JsonPrimitive)?.contentOrNull ?: ScreenValues.text(v)) }
   val confirm: String? = json.str("confirm")

@@ -316,10 +316,11 @@ public final class ScreenModel {
     guard let api else { return .failed("Sign in to continue.") }
     var path = ScreenValues.renderURL(urlTemplate, in: scope)
     if let filters = Self.filtersParameter(action.filters, in: scope) { path += (path.contains("?") ? "&" : "?") + filters }
-    let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
+    let keyed = withAttempt(for: action, path: path, in: scope)
+    let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: keyed) }
     do {
       let sentBody = body ?? (action.method == .get ? nil : [:])
-      let headers = headers(for: action, path: path, body: sentBody, in: scope)
+      let headers = action.headers.mapValues { ScreenValues.render($0, in: keyed) }
       let response: JSONValue?
       if let loop = action.loop {
         response = try await Self.paged(loop) { cursor in
@@ -360,12 +361,14 @@ public final class ScreenModel {
 
   static func reportLines(_ report: [ReportLine], in context: JSONValue) -> [String] {
     var lines: [String] = []
-    for line in report where ScreenValues.condition(line.when, in: context) {
+    for line in report {
       if let each = line.each {
+        // A `when` on a repeated line is read for each row, with `item` its row (the give-back's meters that moved nothing).
         for row in ScreenValues.rows(ScreenValues.lookup(each, in: context)) {
-          lines.append(ScreenValues.render(line.text, in: ScreenContext.with(context, item: row)))
+          let scope = ScreenContext.with(context, item: row)
+          if ScreenValues.condition(line.when, in: scope) { lines.append(ScreenValues.render(line.text, in: scope)) }
         }
-      } else {
+      } else if ScreenValues.condition(line.when, in: context) {
         lines.append(ScreenValues.render(line.text, in: context))
       }
     }
@@ -397,14 +400,17 @@ public final class ScreenModel {
     return .object(record)
   }
 
-  /// The action's request headers, rendered; `{attempt}` is the key held for this exact request.
-  func headers(for action: ActionSpec, path: String, body: JSONValue?, in scope: JSONValue) -> [String: String] {
-    guard !action.headers.isEmpty else { return [:] }
-    let signature = "\(action.id)|\(path)|\(String(data: (try? body?.encoded()) ?? Data(), encoding: .utf8) ?? "")"
+  /// `scope` with `attempt` set when the action's headers or body use `{attempt}`: the key held for this exact
+  /// request, found with `{attempt}` blank so a body that carries the key does not change its own signature.
+  func withAttempt(for action: ActionSpec, path: String, in scope: JSONValue) -> JSONValue {
+    let bodyText = action.body.flatMap { try? $0.encoded() }.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    guard !action.headers.isEmpty || bodyText.contains("{attempt") else { return scope }
+    let blank = ScreenContext.with(scope, "attempt", .string(""))
+    let draft = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: blank) }
+    let signature = "\(action.id)|\(path)|\(String(data: (try? draft?.encoded()) ?? Data(), encoding: .utf8) ?? "")"
     let key = attempts[signature] ?? UUID().uuidString.lowercased()
     attempts[signature] = key
-    let withAttempt = ScreenContext.with(scope, "attempt", .string(key))
-    return action.headers.mapValues { ScreenValues.render($0, in: withAttempt) }
+    return ScreenContext.with(scope, "attempt", .string(key))
   }
 
   /// A route's "sign in again first" answer, in any of the shapes the routes use.

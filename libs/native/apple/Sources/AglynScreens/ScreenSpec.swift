@@ -158,7 +158,8 @@ public struct ActionSpec: Sendable, Identifiable {
   public let filters: [JSONValue]
   /// Request headers, name to template. `{attempt}` is a key that stays the same while the same
   /// action sends the same body (a retry), and changes with the body: `Idempotency-Key` for a
-  /// route that provisions something (enterprise billing).
+  /// route that provisions something (enterprise billing). A route that wants the key in its body
+  /// (`idempotencyKey`) writes `{attempt}` there and gets the same key.
   public let headers: [String: String]
   public let confirm: String?
   /// When set, the confirmation is asked only while this condition holds.

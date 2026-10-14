@@ -268,9 +268,10 @@ class ScreenModel(
     val path = ScreenValues.renderUrl(template, scope).let { rendered ->
       filtersParameter(action.filters, scope)?.let { rendered + (if ('?' in rendered) "&" else "?") + it } ?: rendered
     }
-    val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
+    val keyed = withAttempt(action, path, scope)
+    val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, keyed) } ?: JsonObject(emptyMap()))
     return try {
-      val sent = headers(action, path, body, scope)
+      val sent = action.headers.mapValues { (_, template) -> ScreenValues.render(template, keyed) }
       val response = action.loop?.let { loop ->
         paged(loop) { cursor ->
           val page = if (cursor != null && body is JsonObject) JsonObject(body + (loop.param to JsonPrimitive(cursor))) else body
@@ -307,10 +308,13 @@ class ScreenModel(
   internal fun reportLines(report: List<ReportLine>, context: JsonElement): List<String> {
     val lines = mutableListOf<String>()
     for (line in report) {
-      if (!ScreenValues.condition(line.whenCondition, context)) continue
       if (line.each != null) {
-        for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) lines += ScreenValues.render(line.text, ScreenContext.withItem(context, row))
-      } else {
+        // A `when` on a repeated line is read for each row, with `item` its row (the give-back's meters that moved nothing).
+        for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) {
+          val scope = ScreenContext.withItem(context, row)
+          if (ScreenValues.condition(line.whenCondition, scope)) lines += ScreenValues.render(line.text, scope)
+        }
+      } else if (ScreenValues.condition(line.whenCondition, context)) {
         lines += ScreenValues.render(line.text, context)
       }
     }
@@ -344,14 +348,17 @@ class ScreenModel(
     return JsonObject(record)
   }
 
-  /** The action's request headers, rendered; `{attempt}` is the key held for this exact request. */
+  /**
+   * `scope` with `attempt` set when the action's headers or body use `{attempt}`: the key held for this exact
+   * request, found with `{attempt}` blank so a body that carries the key does not change its own signature.
+   */
   @OptIn(ExperimentalUuidApi::class)
-  internal fun headers(action: ActionSpec, path: String, body: JsonElement?, scope: JsonElement): Map<String, String> {
-    if (action.headers.isEmpty()) return emptyMap()
-    val signature = "${action.id}|$path|${body ?: ""}"
-    val key = attempts.getOrPut(signature) { Uuid.random().toString() }
-    val withAttempt = ScreenContext.with(scope, "attempt", JsonPrimitive(key))
-    return action.headers.mapValues { (_, template) -> ScreenValues.render(template, withAttempt) }
+  internal fun withAttempt(action: ActionSpec, path: String, scope: JsonElement): JsonElement {
+    if (action.headers.isEmpty() && "{attempt" !in (action.body?.toString() ?: "")) return scope
+    val blank = ScreenContext.with(scope, "attempt", JsonPrimitive(""))
+    val draft = if (action.method == ApiMethod.GET) null else action.body?.let { ScreenValues.resolveBody(it, blank) }
+    val key = attempts.getOrPut("${action.id}|$path|${draft ?: ""}") { Uuid.random().toString() }
+    return ScreenContext.with(scope, "attempt", JsonPrimitive(key))
   }
 
   companion object {

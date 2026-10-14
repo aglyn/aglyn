@@ -156,6 +156,28 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(transport.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), keys[0])
   }
 
+  /// A route that wants its key in the body (the AI credit give-back) writes `{attempt}` there: the same press
+  /// sends the same key, and a different reason is a different act with its own.
+  @MainActor
+  func testAttemptKeyFillsABodyToo() async throws {
+    let transport = RecordingTransport(responses: [(200, "{}"), (200, "{}"), (200, "{}")])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Give back", "url": "/api/ai/admin/credits",
+        "body": ["reason": "{form.reason}", "idempotencyKey": "{attempt}"],
+      ]))
+    _ = await model.run(action, in: ["form": ["reason": "planner fault"]])
+    _ = await model.run(action, in: ["form": ["reason": "second look"]])
+    _ = await model.run(action, in: ["form": ["reason": "planner fault"]])
+    let keys = transport.requests.map { JSONValue.decode($0.httpBody ?? Data())?["idempotencyKey"]?.stringValue }
+    XCTAssertEqual(keys.count, 3)
+    XCTAssertEqual(keys[0]?.count, 36)
+    XCTAssertNotEqual(keys[0], keys[1])
+    XCTAssertEqual(keys[0], keys[2])
+  }
+
   /// A paged job sends the cursor back until the route is done, adds the pages up, and reports lines.
   @MainActor
   func testLoopAddsPagesUpAndReportsLines() async throws {
@@ -179,6 +201,28 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(outcome.response?["pages"], 2)
     XCTAssertEqual(outcome.response?["bounded"], false)
     XCTAssertEqual(JSONValue.decode(transport.requests[1].httpBody ?? Data()), ["dryRun": true, "cursor": "c1"])
+  }
+
+  /// A `when` on a repeated report line is read for each row: the give-back names the meters that moved credits
+  /// and says nothing of the one that did not, and a repeat it already made says only that.
+  @MainActor
+  func testReportWhenIsReadForEachRow() async throws {
+    let rows = #"{"duplicate":false,"lines":[{"meter":"workspace","credits":40},{"meter":"account","credits":0}]}"#
+    let transport = RecordingTransport(responses: [(200, rows), (200, #"{"duplicate":true,"lines":[{"meter":"workspace","credits":40}]}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Give back", "url": "/api/ai/admin/credits", "body": ["action": "give"],
+        "report": [
+          ["text": "Already given back.", "when": "response.duplicate"],
+          ["each": "response.lines", "when": "item.credits && !response.duplicate", "text": "Returned {item.credits:number} credits to the {item.meter}."],
+        ],
+      ]))
+    guard case .done(let first, _) = await model.run(action, in: model.context) else { return XCTFail("expected done") }
+    XCTAssertEqual(first, "Returned 40 credits to the workspace.")
+    guard case .done(let message, _) = await model.run(action, in: model.context) else { return XCTFail("expected done") }
+    XCTAssertEqual(message, "Already given back.")
   }
 
   /// A probe that answers 503 is reporting: its body is the answer.

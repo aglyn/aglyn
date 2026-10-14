@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.util.Base64
 import kotlin.test.BeforeTest
@@ -193,6 +194,29 @@ class ScreenSpecTest {
     assertEquals(keys[0], sent.last().headers["Idempotency-Key"])
   }
 
+  /** A route that wants its key in the body (the AI credit give-back) writes `{attempt}` there and gets one key per act. */
+  @Test
+  fun attemptKeyFillsABodyToo() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to "{}", 200 to "{}", 200 to "{}", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("{}"), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Give back","url":"/api/ai/admin/credits",
+           "body":{"reason":"{form.reason}","idempotencyKey":"{attempt}"}}""",
+      ),
+    )!!
+    model.run(action, Json.parseToJsonElement("""{"form":{"reason":"planner fault"}}"""))
+    model.run(action, Json.parseToJsonElement("""{"form":{"reason":"second look"}}"""))
+    model.run(action, Json.parseToJsonElement("""{"form":{"reason":"planner fault"}}"""))
+    val keys = sent.map { (Json.parseToJsonElement((it.body as TextContent).text) as JsonObject)["idempotencyKey"]?.jsonPrimitive?.content }
+    assertEquals(3, keys.size)
+    assertEquals(36, keys[0]?.length)
+    assertNotEquals(keys[0], keys[1])
+    assertEquals(keys[0], keys[2])
+  }
+
   /** A paged job sends the cursor back until the route is done, adds the pages up, and reports lines. */
   @Test
   fun loopAddsPagesUpAndReportsLines() = runTest {
@@ -217,6 +241,31 @@ class ScreenSpecTest {
     assertEquals(Json.parseToJsonElement("2"), outcome.response.obj("pages"))
     assertEquals(Json.parseToJsonElement("false"), outcome.response.obj("bounded"))
     assertEquals(Json.parseToJsonElement("""{"dryRun":true,"cursor":"c1"}"""), Json.parseToJsonElement((sent[1].body as TextContent).text))
+  }
+
+  /** A `when` on a repeated report line is read for each row: the meters that moved credits are named, and a repeat says only that. */
+  @Test
+  fun reportWhenIsReadForEachRow() = runTest {
+    val api = client(
+      200 to """{"duplicate":false,"lines":[{"meter":"workspace","credits":40},{"meter":"account","credits":0}]}""",
+      200 to """{"duplicate":true,"lines":[{"meter":"workspace","credits":40}]}""",
+      sent = mutableListOf(),
+    )
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Give back","url":"/api/ai/admin/credits","body":{"action":"give"},
+           "report":[{"text":"Already given back.","when":"response.duplicate"},
+                     {"each":"response.lines","when":"item.credits && !response.duplicate",
+                      "text":"Returned {item.credits:number} credits to the {item.meter}."}]}""",
+      ),
+    )!!
+    val first = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Done>(first)
+    assertEquals("Returned 40 credits to the workspace.", first.message)
+    val second = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Done>(second)
+    assertEquals("Already given back.", second.message)
   }
 
   /** A probe that answers 503 is reporting: its body is the answer. */

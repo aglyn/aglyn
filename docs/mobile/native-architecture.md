@@ -897,7 +897,7 @@ A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
 
 `report` is a list of lines (`{ text, when, each }`, or a plain string) appended to `success`, one per
-line; `file` (`{ name, type, from }`) hands text to the device as a file, its name a template and `from` the path of the
+line (a `when` on an `each` line is read for each row, with `item` that row); `file` (`{ name, type, from }`) hands text to the device as a file, its name a template and `from` the path of the
 text over the screen and the route's `response` (Save, or the share sheet: the working papers' CSV); `failure` is the same list for a refusal, appended to the route's own words and read over the route's
 answer as `response` (the workspaces that still need an owner); `each` repeats a line for every row or map entry as `item`. `loop` (`{ cursor, param, until, max }`)
 sends a route that works in pages again, with the cursor it answered, until it says it is done, and
@@ -909,7 +909,9 @@ the last page was not reached. Formats `facts` (an object's plain values as `wor
 (action, route, resolved body): sending the same request again, a retry or a second tap,
 reuses it, and a changed body gets a new one. A route that provisions something
 (enterprise billing) takes it as `Idempotency-Key`, and a write that carries one is retried
-like a read.
+like a read. A route that wants the key in its body (the AI credit give-back's `idempotencyKey`)
+writes `{attempt}` there; the key is found with `{attempt}` blank, so carrying it does not
+change the request it identifies.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
