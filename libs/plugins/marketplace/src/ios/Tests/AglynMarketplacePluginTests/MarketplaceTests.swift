@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynScreens
 import XCTest
 
 @testable import AglynMarketplacePlugin
@@ -105,5 +106,16 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertEqual(query.collection, ["marketplacePurchases"])
     XCTAssertTrue(query.filters.contains { $0.path == "buyerOrgId" && ($0.value as? String) == "org1" })
     XCTAssertTrue(query.filters.contains { $0.path == "refundedAt" && $0.value is NSNull })
+  }
+
+  /// Publishing the site as a template is the spec screens its Kotlin module reads too: bundled here, they are the ones the
+  /// manifest declares, and the template one fills the `siteTemplate` zone of Backup & restore.
+  @MainActor
+  func testThePublishScreensAreBundledAndFillTheSiteTemplateZone() throws {
+    let specs = ScreenCatalog.load(from: .module)
+    XCTAssertEqual(specs.map(\.id).sorted(), ["marketplace.publishTemplate", "marketplace.publisherAgreement"])
+    XCTAssertEqual(specs.first { $0.id == "marketplace.publishTemplate" }?.zones, ["siteTemplate"])
+    let declared = SpecScreens.declaration(specs).screens
+    XCTAssertEqual(declared, ["marketplace.publishTemplate", "marketplace.publisherAgreement"])
   }
 }
