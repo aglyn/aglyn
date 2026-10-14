@@ -4,6 +4,7 @@
 // block in plugins.config.json.
 
 import AglynPluginHost
+import AglynAccountingPlugin
 import AglynAdConversionsPlugin
 import AglynAiPlugin
 import AglynBookingsPlugin
@@ -35,6 +36,11 @@ import AglynZapierPlugin
 
 public enum NativePluginManifest {
   public static let entries: [NativePluginManifestEntry] = [
+    NativePluginManifestEntry(
+      id: "accounting",
+      contributes: ["screens": ["accounting.activity", "accounting.attention", "accounting.books"]],
+      register: AglynAccountingPlugin.registerAccountingNative
+    ),
     NativePluginManifestEntry(
       id: "ad-conversions",
       contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"]],

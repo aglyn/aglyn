@@ -1571,6 +1571,24 @@
     },
     {
       "id": "accounting",
+      "mobile": {
+        "$comment": "AGL-3652: accounting natively (QuickBooks Online, Xero, and other software through Codat): connect (the provider's sign-in opens in the secure browser), the account and tax mapping, how sales post, disconnect, and the sync log with retry, from the spec in src/android/screens/accounting.screens.json.",
+        "ios": {
+          "module": "AglynAccountingPlugin",
+          "register": "registerAccountingNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.accounting",
+          "register": "registerAccountingNative"
+        },
+        "contributes": {
+          "screens": [
+            "accounting.books",
+            "accounting.attention",
+            "accounting.activity"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-accounting",
       "register": {
         "console": "registerAccountingConsole",

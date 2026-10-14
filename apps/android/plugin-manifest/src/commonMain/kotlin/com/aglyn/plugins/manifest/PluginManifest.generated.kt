@@ -6,6 +6,7 @@
 package com.aglyn.plugins.manifest
 
 import com.aglyn.pluginhost.NativePluginManifestEntry
+import com.aglyn.plugins.accounting.registerAccountingNative
 import com.aglyn.plugins.adconversions.registerAdConversionsNative
 import com.aglyn.plugins.ai.registerAINative
 import com.aglyn.plugins.bookings.registerBookingsNative
@@ -40,6 +41,11 @@ import com.aglyn.plugins.zapier.registerZapierNative
 
 object NativePluginManifest {
     val entries: List<NativePluginManifestEntry> = listOf(
+        NativePluginManifestEntry(
+            id = "accounting",
+            contributes = mapOf("screens" to listOf("accounting.activity", "accounting.attention", "accounting.books")),
+            register = ::registerAccountingNative,
+        ),
         NativePluginManifestEntry(
             id = "ad-conversions",
             contributes = mapOf("screens" to listOf("ad-conversions.provider", "ad-conversions.service")),

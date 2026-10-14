@@ -846,4 +846,100 @@ class CommerceServiceSpecsTest {
       "Meta has no ad account, so an empty one is not sent",
     )
   }
+
+  // ---- accounting --------------------------------------------------------------------------------------------------
+
+  private val ledgerOptions = """{"accounts":[
+    {"id":"a1","code":"4000","name":"Sales","type":"Income","classification":"income","currency":null},
+    {"id":"a2","code":null,"name":"Stripe clearing","type":"Bank","classification":"bank","currency":null},
+    {"id":"a3","code":null,"name":"Main bank","type":"Bank","classification":"bank","currency":null},
+    {"id":"a4","code":"6100","name":"Fees","type":"Expense","classification":"expense","currency":null},
+    {"id":"a5","code":null,"name":"Sales tax","type":"Liability","classification":"liability","currency":null}],
+    "taxCodes":[{"id":"t1","name":"Texas 8.25%","ratePercent":8.25},{"id":"t2","name":"Exempt","ratePercent":null}]}"""
+
+  private fun ledgerConnection(provider: String, status: String, extra: String = "") =
+    """{"provider":"$provider","status":"$status","tenantId":"x","tenantName":"Acme Books","homeCurrency":"USD","multiCurrency":false,"environment":"sandbox","connectedAtMs":1760000000000,"connectedByEmail":"owner@example.com",
+       "mapping":{"accounts":{"income":"a1","clearing":"a2"},"taxCodes":{"taxed":"t1","rate9":"t2"},"syncMode":"per-order","startDate":null,"timeZone":"America/Chicago"},
+       "missingRoles":["feeExpense","payoutBank"],"lastSyncAtMs":null,"lastError":null$extra}"""
+
+  private fun books(connection: String?, providers: String = """{"quickbooks":true,"xero":true,"codat":false}""", options: String = ledgerOptions, seen: String = """["taxed","untaxed","rate9"]""") =
+    screen(spec("accounting", "accounting.books"), emptyMap(),
+      """{"status":{"providers":$providers,"connection":${connection ?: "null"},"counts":{"pending":2,"synced":10,"needsAttention":1},"seenTaxKeys":$seen},"options":$options}""")
+
+  @Test
+  fun accountingOffersOnlyTheLedgersTheDeploymentHasCredentialsFor() {
+    val bare = books(null)
+    assertEquals(listOf("intro", "connect"), bare.shown())
+    assertEquals(listOf("connectQuickbooks", "connectXero"), bare.actionsShown("connect"))
+    val connect = bare.action("connect", "connectXero")
+    assertEquals("url", connect.openUrl)
+    assertEquals(json("""{"orgId":"o1","provider":"xero"}"""), bare.body(connect))
+    assertEquals(listOf("unavailable", "connect"), books(null, providers = """{"quickbooks":false,"xero":false,"codat":false}""").shown())
+  }
+
+  @Test
+  fun aConnectedLedgerShowsItsStateAndFiltersTheAccountChoicesByKind() {
+    val model = books(ledgerConnection("quickbooks", "connected"))
+    assertEquals(listOf("status", "missing", "manage", "mapping", "taxKeys", "logs"), model.shown())
+    assertEquals("Acme Books", ScreenValues.render(model.spec.blocks.first { it.id == "status" }.title!!, model.context))
+    val fields = model.spec.blocks.first { it.id == "mapping" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    fun choices(key: String) = fields.first { it.key == key }.choices(model.context).map { it.first }
+    assertEquals(listOf("", "a1"), choices("income"))
+    assertEquals(listOf("", "a1"), choices("shippingIncome"))
+    assertEquals(listOf("a2", "a3"), choices("clearing").filter { it.isNotEmpty() })
+    assertEquals(listOf("a4"), choices("feeExpense").filter { it.isNotEmpty() })
+    assertEquals(listOf("a5"), choices("taxLiability").filter { it.isNotEmpty() })
+    assertEquals(listOf("", "t1", "t2"), choices("taxed"))
+    val perOrder = fields.filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json("""{"syncMode":"per-order"}"""))) }.map { it.key }
+    assertFalse("taxLiability" in perOrder)
+    assertTrue("taxLiability" in fields.filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json("""{"syncMode":"daily-summary"}"""))) }.map { it.key })
+    // The form keeps the finer tax rates it does not show and sets the two it does.
+    assertEquals(
+      json("""{"orgId":"o1","mapping":{"accounts":{"income":"a1","shippingIncome":"","clearing":"a2","feeExpense":"a4","payoutBank":"a3"},"taxCodes":{"taxed":"t2","rate9":"t2"},"syncMode":"per-order","startDate":"2026-01-01","timeZone":"America/Chicago"}}"""),
+      model.body(model.form("mapping"), """{"syncMode":"per-order","income":"a1","shippingIncome":"","clearing":"a2","feeExpense":"a4","payoutBank":"a3","taxed":"t2","untaxed":"","startDate":"2026-01-01","timeZone":"America/Chicago"}"""),
+    )
+    val other = model.spec.blocks.first { it.id == "taxKeys" }
+    fun keyRow(key: String) = ScreenContext.with(model.context, "item", JsonPrimitive(key))
+    assertTrue(!ScreenValues.condition(other.string("filter"), keyRow("taxed")) && ScreenValues.condition(other.string("filter"), keyRow("rate9")))
+    assertEquals("t2", ScreenValues.render("{data.status.connection.mapping.taxCodes[@item]}", keyRow("rate9")))
+    val setTax = other.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertEquals(
+      json("""{"orgId":"o1","mapping":{"accounts":{"income":"a1","clearing":"a2"},"taxCodes":{"taxed":"t1","rate9":"t1"},"syncMode":"per-order","timeZone":"America/Chicago"}}"""),
+      ScreenValues.resolveBody(setTax.body!!, ScreenContext.with(keyRow("rate9"), "form", json("""{"code":"t1"}"""))),
+    )
+  }
+
+  @Test
+  fun aXeroGrantReachingSeveralOrganizationsAsksForOneAndAReconnectOpensTheConsentPage() {
+    val choose = books(ledgerConnection("xero", "choose-tenant", ",\"tenants\":[{\"id\":\"o-1\",\"name\":\"Acme Ltd\"},{\"id\":\"o-2\",\"name\":\"Acme Pty\"}]"))
+    assertTrue("tenants" in choose.shown() && "mapping" !in choose.shown())
+    val pick = choose.spec.blocks.first { it.id == "tenants" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val row = ScreenContext.with(choose.context, "item", json("""{"id":"o-2","name":"Acme Pty"}"""))
+    assertEquals(json("""{"orgId":"o1","tenantId":"o-2"}"""), ScreenValues.resolveBody(pick.body!!, row))
+    val reconnect = books(ledgerConnection("xero", "reconnect-required"))
+    assertEquals(listOf("reconnect", "disconnect"), reconnect.actionsShown("manage"))
+    assertEquals(json("""{"orgId":"o1","provider":"xero"}"""), reconnect.body(reconnect.action("manage", "reconnect")))
+    assertEquals("Reconnect Xero", ScreenValues.render(reconnect.action("manage", "reconnect").label, reconnect.context))
+    assertTrue("reconnectNotice" in reconnect.shown() && "mapping" !in reconnect.shown())
+    assertEquals(listOf("disconnect"), books(ledgerConnection("quickbooks", "connected")).actionsShown("manage"))
+  }
+
+  @Test
+  fun theSyncLogPagesByBeforeAndRetriesOneItemOrAll() {
+    val attention = spec("accounting", "accounting.attention")
+    val load = attention.loads.first()
+    assertEquals("before", load.cursorParam)
+    assertEquals("nextBefore", load.cursor)
+    assertEquals("/api/accounting/log?orgId=o1&filter=attention", ScreenValues.renderUrl(load.url, screen(attention, emptyMap(), """{"log":{"items":[]}}""").context))
+    assertEquals("/api/accounting/log?orgId=o1&filter=all", ScreenValues.renderUrl(spec("accounting", "accounting.activity").loads.first().url, screen(attention, emptyMap(), """{"log":{"items":[]}}""").context))
+    val model = screen(attention, emptyMap(), """{"log":{"items":[{"id":"i1","kind":"sale","label":"Order #1042","externalId":"INV-9","status":"needs_attention","lastError":"Account closed","amountCents":12345,"currency":"usd","occurredAtMs":1760000000000}],"nextBefore":99}}""")
+    val block = attention.blocks.first()
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["log"]!!.jsonObject["items"]!!.jsonArray[0])
+    assertEquals("Account closed", ScreenValues.render(block.string("secondary")!!, row))
+    assertEquals("$123.45", ScreenValues.render(block.string("trailing")!!, row))
+    val retry = block.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertEquals(json("""{"orgId":"o1","itemId":"i1"}"""), ScreenValues.resolveBody(retry.body!!, row))
+    assertEquals(json("""{"orgId":"o1","all":true}"""), ScreenValues.resolveBody(attention.actions.first().body!!, model.context))
+    assertTrue(spec("accounting", "accounting.activity").actions.isEmpty(), "retry all belongs to the attention list")
+  }
 }
