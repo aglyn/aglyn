@@ -32,11 +32,11 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Analytics | `hosts/[host]/analytics` | AGL-3670 | [x] | [x] |
 | Automations | `workflows` | AGL-3670 | [x] | [x] |
 | Notifications and their settings | `manage/notifications/*` | AGL-3670 | [x] | [x] |
-| AI | `ai` (credits, jobs, settings) | AGL-3671 | [ ] | [ ] |
-| Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [ ] | [ ] |
+| AI | `ai` (credits, jobs, settings) | AGL-3671 | [x] | [x] |
+| Site admin | `hosts/[host]/admin/{activity,backup,danger,domain,error-pages,general,plugins,security}`, `hosts/[host]/users` | AGL-3671 | [x] | [x] |
 | Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [ ] | [ ] |
 | Team and roles | `[orgSlug]/team/*` | AGL-3671 | [x] | [x] |
-| Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [ ] | [ ] |
+| Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [x] | [x] |
 | Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [x] | [x] |
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [x] | [x] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [ ] | [ ] |
