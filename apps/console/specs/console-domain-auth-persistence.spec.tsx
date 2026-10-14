@@ -66,6 +66,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   FirebaseServicesProvider: function FirebaseServicesProvider() {
     return null
   },
+  // The module-scope boot (AGL-3660), which must be told the same class.
+  prebootFirebaseServices: jest.fn(),
   setFirestoreSessionReporters: jest.fn(),
   setStaleSessionCheck: jest.fn(),
   // The layout registers its visitor-consent gate at module scope, beside the
@@ -157,7 +159,10 @@ jest.mock('../utils/internal-traffic', () => ({
   resolveInternalTraffic: () => false,
 }))
 
-import { FirebaseServicesProvider } from '@aglyn/tenant-feature-instance'
+import {
+  FirebaseServicesProvider,
+  prebootFirebaseServices,
+} from '@aglyn/tenant-feature-instance'
 // A namespace import so the seam can be spied. NOT mocked with a factory:
 // the last case in this file runs the REAL function, and a factory mock
 // would leave nothing to run.
@@ -242,6 +247,22 @@ describe('the console declares its origin class to FirebaseServicesProvider', ()
   it('agrees with the pure mapping for the same host', () => {
     expect(workspaceDomain.currentOriginPersistenceClass()).toBe(
       workspaceDomain.originPersistenceClass(window.location.host),
+    )
+  })
+
+  it('boots Firebase early under the same class the provider is given (AGL-3660)', () => {
+    // A preboot under another class is never adopted, so a mismatch would not
+    // be unsafe, only slow: the provider would quietly boot a second time.
+    // Module scope ran at import, against the real localhost origin.
+    expect(prebootFirebaseServices).toHaveBeenCalledTimes(1)
+    expect(prebootFirebaseServices).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appName: 'console',
+        authPersistence: workspaceDomain.currentOriginPersistenceClass(),
+      }),
+    )
+    expect(declaredPersistence()).toBe(
+      (prebootFirebaseServices as jest.Mock).mock.calls[0][0].authPersistence,
     )
   })
 })

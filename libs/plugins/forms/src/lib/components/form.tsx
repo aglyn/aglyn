@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { advertisingConsentField } from '@aglyn/aglyn/app-utils/advertising-consent'
+import { advertisingEventId, mintAdvertisingLeadKey } from '@aglyn/aglyn/app-utils/advertising-events'
 import { sendAnalyticsBeacon } from '@aglyn/aglyn/app-utils/analytics-beacon'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { recordSiteJourneyStep, siteJourneyField } from '@aglyn/aglyn/app-utils/site-journey'
@@ -31,6 +33,7 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import Alert from '@mui/material/Alert'
+import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
 import FormControl from '@mui/material/FormControl'
@@ -44,6 +47,7 @@ import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
 import Rating from '@mui/material/Rating'
 import Stack from '@mui/material/Stack'
+import { useForkRef } from '@mui/material/utils'
 import TextField from '@mui/material/TextField'
 import {
   createContext,
@@ -56,6 +60,11 @@ import {
   useState,
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  formFieldToElements,
+  LEGACY_FORM_FIELD_COMPONENT_ID,
+  type StoredFormNode,
+} from '../model/form-field-elements'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 /*
@@ -150,6 +159,49 @@ export const FIELD_MAP_INPUT_PREFIX = '__map__'
  * recorded for the one site the visitor is on.
  */
 export const CONSENT_GROUP_INPUT = '__consentGroup'
+
+/**
+ * The class on a form's built-in submit button. It hides while the form holds
+ * a Button the author placed with Type: Submit (see the Form's `:has` rule).
+ */
+const BUILT_IN_SUBMIT_CLASS = 'aglyn-form-submit-built-in'
+
+/**
+ * The consent-group sentence (AGL-3320), as the all-in-one Form Field draws it
+ * under the opt-in, and as the Form draws it for a form built from MUI's own
+ * form elements, which know nothing of consent. The Form's copy hides while a
+ * Form Field's is on the page, so a form never shows it twice.
+ */
+const FIELD_CONSENT_NOTE_CLASS = 'aglyn-form-consent-note-field'
+const FORM_CONSENT_NOTE_CLASS = 'aglyn-form-consent-note'
+
+/**
+ * Whether the form's opt-in is one of MUI's form elements (an input named as
+ * the declared opt-in field) rather than an all-in-one Form Field, which
+ * draws its own sentence. Read off the rendered form after mount: the
+ * elements know nothing of consent, and until it is read the form shows no
+ * sentence and posts no key — the safe way to be early.
+ */
+function useOptInDrawnByElements(
+  formRef: { current: HTMLFormElement | null },
+  fieldName: string | null | undefined,
+): boolean {
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    const form = formRef.current
+    if (!form || !fieldName) {
+      setDrawn(false)
+      return
+    }
+    const hasInput = Array.from(form.elements).some(
+      (element) => (element as HTMLInputElement).name === fieldName,
+    )
+    setDrawn(
+      hasInput && !form.querySelector(`.${FIELD_CONSENT_NOTE_CLASS}`),
+    )
+  }, [formRef, fieldName])
+  return drawn
+}
 
 /** The site's consent-group sentence, as `/api/consent/disclosure` answers it. */
 export interface FormConsentDisclosure {
@@ -293,6 +345,8 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   } = props
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const handleRef = useForkRef(ref, formRef)
   // Resolves the redirect screen like ScreenLink does (rename-safe) and
   // flags editing surfaces, where outcomes must never fire (AGL-557).
   const { href: redirectScreenHref, suppressNavigation } = Aglyn.useScreenLink(
@@ -386,6 +440,10 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       current = false
     }
   }, [hostId, formId, siteFetch])
+  const optInDrawnByElements = useOptInDrawnByElements(
+    formRef,
+    disclosure?.fieldName,
+  )
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -417,6 +475,10 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         ).slice(0, 2000)
       }
       setStatus('sending')
+      // The id this submission's lead is reported under by the site's own
+      // advertising tags AND by the server's Conversions API (AGL-3694), so
+      // each vendor pairs the two instead of counting the lead twice.
+      const adLeadKey = mintAdvertisingLeadKey()
       try {
         const response = await siteFetch('/api/forms/submit', {
           method: 'POST',
@@ -451,6 +513,10 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             // the server ties it to the address submitted, so a funnel's
             // drop-off follow-up can reach this person.
             ...siteJourneyField(),
+            // The visitor's advertising consent, only where it grants
+            // advertising (AGL-3694); absent otherwise, so the server reports
+            // no lead for anyone who did not say yes.
+            ...advertisingConsentField(hostId, { lead: adLeadKey }),
           }),
         })
         if (response.ok) {
@@ -491,10 +557,14 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           // A funnel step (AGL-3605): the form, by its id. Dropped unless the
           // site records journeys and the visitor's consent grants.
           recordSiteJourneyStep('form', formId)
-          await trackEventBeforeNavigation('generate_lead', {
-            form_name: formName || 'Form',
-            form_location: window.location.pathname,
-          })
+          await trackEventBeforeNavigation(
+            'generate_lead',
+            {
+              form_name: formName || 'Form',
+              form_location: window.location.pathname,
+            },
+            { advertisingEventId: advertisingEventId('lead', adLeadKey) },
+          )
           if (afterSubmit === 'redirect' && !suppressNavigation) {
             const target = resolveRedirectTarget(
               redirectScreenHref,
@@ -577,12 +647,27 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
 
   return (
     <Stack
-      ref={ref}
+      ref={handleRef}
       component="form"
       spacing={2}
+      // Gap, not margins, between children: a form turned into a row with
+      // the Styles panel's Flex direction lines its input and button up
+      // instead of pushing every item after the first down a step.
+      useFlexGap
       onSubmit={handleSubmit}
       onInput={handleFirstInput}
       {...rest}
+      sx={[
+        {
+          // A Button placed in the form with Type: Submit is the form's
+          // button — styled like any element — so the built-in one steps
+          // aside. CSS rather than a registration, so the server's first
+          // paint is already right.
+          [`&:has(button[type="submit"]:not(.${BUILT_IN_SUBMIT_CLASS})) .${BUILT_IN_SUBMIT_CLASS}`]:
+            { display: 'none' },
+        },
+        ...(Array.isArray(rest['sx']) ? rest['sx'] : [rest['sx']]),
+      ]}
     >
       {/* Hides the reveal target until submit (AGL-557); rendered by the
           form so SSR ships it hidden — no flash, no target-side props.
@@ -593,6 +678,21 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       <FormConsentDisclosureContext.Provider value={disclosure}>
         {children}
       </FormConsentDisclosureContext.Provider>
+      {/*
+        The sentence for a form built from MUI's form elements: shown when the
+        form declares its opt-in field, beside the button that sends it.
+      */}
+      {disclosure && optInDrawnByElements ? (
+        <Box className={FORM_CONSENT_NOTE_CLASS}>
+          <FormHelperText>{disclosure.text}</FormHelperText>
+          <input
+            type="hidden"
+            name={CONSENT_GROUP_INPUT}
+            value={disclosure.key}
+            readOnly
+          />
+        </Box>
+      ) : null}
       {/* Honeypot: humans never see or fill this. */}
       <input
         type="text"
@@ -650,6 +750,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       <Button
         type="submit"
         variant="contained"
+        className={BUILT_IN_SUBMIT_CLASS}
         disabled={status === 'sending'}
         sx={{ alignSelf: 'flex-start' }}
       >
@@ -772,7 +873,9 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
   const consentNote =
     disclosure && describesOptIn ? (
       <>
-        <FormHelperText>{disclosure.text}</FormHelperText>
+        <FormHelperText className={FIELD_CONSENT_NOTE_CLASS}>
+          {disclosure.text}
+        </FormHelperText>
         <input
           type="hidden"
           name={CONSENT_GROUP_INPUT}
@@ -1108,6 +1211,51 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
   ],
 }
 
+/**
+ * A field as a preset: the all-in-one Form Field's props rebuilt as MUI's
+ * separate form elements by `formFieldToElements` — the same function the
+ * backfill migrates saved fields with, so a field added today and a field
+ * migrated from a Form Field are the same tree. Ids are left `null` (fresh
+ * ones are minted at insertion) and every node names `mui`, the bundle that
+ * registers it.
+ */
+export function fieldPresetData(
+  props: FormFieldProps,
+): Aglyn.NodePresetData {
+  const built = formFieldToElements({
+    $id: 'field',
+    componentId: LEGACY_FORM_FIELD_COMPONENT_ID,
+    props: props as Record<string, unknown>,
+  })
+  if (!built) throw new Error('formFieldToElements refused a Form Field')
+  const nest = (id: string): Aglyn.NodePresetData => {
+    const node = built.nodes[id] as StoredFormNode
+    const children = (node.nodes ?? []).map(String)
+    return {
+      $id: null,
+      componentId: node.componentId,
+      pluginId: node.pluginId,
+      props: node.props ?? {},
+      ...(children.length ? { nodes: children.map(nest) } : {}),
+    } as unknown as Aglyn.NodePresetData
+  }
+  return nest(built.rootId)
+}
+
+/** The name/email/message fields every contact form starts with. */
+const contactFields = (): Aglyn.NodePresetData[] => [
+  fieldPresetData({ fieldName: 'name', label: 'Name', required: true }),
+  fieldPresetData({ fieldName: 'email', label: 'Email', fieldType: 'email', required: true }),
+  fieldPresetData({ fieldName: 'message', label: 'Message', fieldType: 'textarea', required: true }),
+]
+
+/*
+ * The all-in-one Form Field has no preset: every piece of a field is its own
+ * element in the mui plugin now (Form Control, Form Label, Input, …, with
+ * Text/Email/Message/Dropdown/Radio/Checkbox/Rating field presets there), so
+ * the Add Element picker no longer offers it. Its component and schema stay
+ * registered so a document nobody has migrated keeps drawing and editing.
+ */
 export const formPresets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(FORM_ID, 'contact'),
@@ -1122,58 +1270,16 @@ export const formPresets: Aglyn.PresetSchema[] = [
       componentId: FORM_ID,
       pluginId: BUNDLE_ID,
       props: { formName: 'Contact' },
-      nodes: [
-        {
-          $id: null,
-          componentId: FORM_FIELD_ID,
-          pluginId: BUNDLE_ID,
-          props: { fieldName: 'name', label: 'Name', required: true },
-        },
-        {
-          $id: null,
-          componentId: FORM_FIELD_ID,
-          pluginId: BUNDLE_ID,
-          props: {
-            fieldName: 'email',
-            label: 'Email',
-            fieldType: 'email',
-            required: true,
-          },
-        },
-        {
-          $id: null,
-          componentId: FORM_FIELD_ID,
-          pluginId: BUNDLE_ID,
-          props: {
-            fieldName: 'message',
-            label: 'Message',
-            fieldType: 'textarea',
-            required: true,
-          },
-        },
-      ],
-    },
-  },
-  {
-    $id: generatePresetId(FORM_FIELD_ID),
-    type: Aglyn.NodeType.PRESET,
-    displayName: 'Form Field',
-    pluginId: BUNDLE_ID,
-    description: 'Single input inside a form',
-    category: Aglyn.ComponentCategory.FORMS,
-    icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
-    data: {
-      $id: null,
-      componentId: FORM_FIELD_ID,
-      pluginId: BUNDLE_ID,
-      props: { fieldName: 'field', label: 'Field' },
+      nodes: contactFields(),
     },
   },
   /*
-   * The marketing consent field as one preset rather than a recipe. Its props
-   * are the platform's `MARKETING_CONSENT_FORM_FIELD`, which every place that adds
-   * this field reads, so each adds the same unticked one-option checkbox. It
-   * records consent once the form names it as its Marketing consent field.
+   * The marketing consent field as one preset rather than a recipe. It is the
+   * platform's `MARKETING_CONSENT_FORM_FIELD` rebuilt as elements — a lone,
+   * unticked, not-required Checkbox named `marketingConsent` in a Choice
+   * Label whose words say what the person agrees to and are also what the box
+   * posts — so every place that adds this field adds the same one. It records
+   * consent once the form names it as its Marketing consent field.
    */
   {
     $id: generatePresetId(FORM_FIELD_ID, 'marketing-consent'),
@@ -1183,12 +1289,7 @@ export const formPresets: Aglyn.PresetSchema[] = [
     description: 'An unticked checkbox asking permission to send marketing emails',
     category: Aglyn.ComponentCategory.FORMS,
     icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
-    data: {
-      $id: null,
-      componentId: FORM_FIELD_ID,
-      pluginId: BUNDLE_ID,
-      props: { ...Aglyn.MARKETING_CONSENT_FORM_FIELD },
-    },
+    data: fieldPresetData({ ...Aglyn.MARKETING_CONSENT_FORM_FIELD }),
   },
 ]
 
@@ -1239,25 +1340,12 @@ export const formBlockPresets: Aglyn.PresetSchema[] = [
             submitLabel: 'Send message',
             successMessage: 'Thanks — we will get back to you soon.',
           },
-          nodes: [
-            contactField('name', 'Name'),
-            contactField('email', 'Email', { fieldType: 'email' }),
-            contactField('message', 'Message', { fieldType: 'textarea' }),
-          ],
+          nodes: contactFields(),
         },
       ],
     },
   },
 ]
-
-function contactField(fieldName: string, label: string, extra?: object) {
-  return {
-    $id: null,
-    componentId: FORM_FIELD_ID,
-    pluginId: BUNDLE_ID,
-    props: { fieldName, label, required: true, ...extra },
-  }
-}
 
 export { Form, FormField }
 export default Form

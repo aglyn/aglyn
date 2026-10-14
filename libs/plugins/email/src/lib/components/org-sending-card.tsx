@@ -370,7 +370,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
   return (
     <CardDisplay
       header="Sending"
-      help={pluginDocsHelp('emailCampaigns', { anchor: '#sending-domains' })}
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#two-ways-to-get-a-domain' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

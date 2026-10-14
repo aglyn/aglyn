@@ -19,7 +19,7 @@
 // The POST climbs `aiGateLadder`, whose lockdown rung is the verdict.
 
 import { randomUUID } from 'crypto'
-import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
+import { aiJobAdmissionRefusal, aiJobSiteRefusal, type AiJobAdmissionRefusal } from '../jobs/ai-job-admission'
 import {
   AI_JOB_INLINE_BUDGET_MS,
   aiJobNextStepMinimumMs,
@@ -32,8 +32,16 @@ import {
   writeAiJobAudit,
 } from '../jobs/ai-jobs'
 import type { AiJob } from '../model/ai-jobs.types'
-import { aiBuildFreeBalanceRefusal, aiBuildFreeTaste } from '../jobs/ai-job-build-step'
-import { aiBuildCreditEstimate, aiBuildRetryLedger, aiBuildUnits, aiLedgerUnits } from '../model/ai-build-job'
+import { aiBuildFreeCreditsRefusal, aiBuildFreeTaste } from '../jobs/ai-job-build-step'
+import {
+  aiBuildCreditRange,
+  aiBuildFirstPagePlan,
+  aiBuildRetryLedger,
+  aiBuildUnits,
+  aiLedgerUnits,
+} from '../model/ai-build-job'
+import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
 
@@ -93,17 +101,61 @@ export async function POST(
     await release()
     return Response.json({ error: 'That job belongs to another site' }, { status: 400 })
   }
+  // "Build what fits" (AGL-3722): a Free job past what is left, started on
+  // the person's go-ahead, which the job keeps.
+  const creditsConfirmed = payload?.['creditsConfirmed'] === true
+  let confirmedCredits: AiCreditsPrompt | null = null
+  const onCreditsConfirmed = (prompt: AiCreditsPrompt) => {
+    confirmedCredits = prompt
+  }
+  // "Build the home page first" (AGL-3722): the plan waiting for its
+  // confirmation narrowed to its home page and what that page needs.
+  const reduceToFirstPage =
+    payload?.['reduce'] === 'first-page' && existing.kind === 'build' && existing.status === 'needs_review'
+  const reduced = reduceToFirstPage && existing.plan ? aiBuildFirstPagePlan(existing.plan) : null
+  if (reduceToFirstPage && !reduced) {
+    await release()
+    return Response.json(
+      { error: 'This plan has no smaller first build', job: aiJobSummary(existing, new Date()) },
+      { status: 409 },
+    )
+  }
+  // A refusal as the door answers it: a Free job past what is left carries
+  // its prompt, and a plan card the figures it should now show.
+  const refused = async (refusal: AiJobAdmissionRefusal) => {
+    await release()
+    const now = new Date()
+    const summary = aiJobSummary(existing, now)
+    const fresh = refusal.credits
+      ? { left: refusal.credits.left, total: FREE_AI_TASTE_CREDITS_PER_MONTH, resetsOn: refusal.credits.resetsOn }
+      : null
+    const job = fresh && summary.review ? { ...summary, review: { ...summary.review, freeCredits: fresh } } : summary
+    return Response.json(
+      {
+        error: refusal.error,
+        ...(refusal.code ? { code: refusal.code } : {}),
+        ...(refusal.credits ? { credits: refusal.credits } : {}),
+        job,
+      },
+      { status: refusal.status },
+    )
+  }
   // Try again on a build (AGL-3616): its failed items and what they left
   // unbuilt, never what succeeded, and never its plan again.
   const retryFailedItems = payload?.['retry'] === 'failed-items'
   if (retryFailedItems) {
-    const refusal = await aiBuildRetryRefusal(gate, existing).catch((error: unknown) => {
-      console.error('ai build retry admission failed', { orgId: gate.orgId, jobId, error })
-      return { status: 500 as const, error: 'The AI job could not be resumed' }
-    })
+    const refusal = await aiBuildRetryRefusal(gate, existing, { confirmed: creditsConfirmed, onCreditsConfirmed }).catch(
+      (error: unknown) => {
+        console.error('ai build retry admission failed', { orgId: gate.orgId, jobId, error })
+        return { status: 500 as const, error: 'The AI job could not be resumed' }
+      },
+    )
     if (refusal) {
-      await release()
-      return Response.json({ error: refusal.error, job: aiJobSummary(existing, new Date()) }, { status: refusal.status })
+      if (refusal.status === 500) {
+        await release()
+        return Response.json({ error: refusal.error, job: aiJobSummary(existing, new Date()) }, { status: 500 })
+      }
+      return refused(refusal)
     }
   }
   // A confirmed plan runs the step that writes, and an allowance free when the
@@ -125,28 +177,28 @@ export async function POST(
           hostId: existing.hostId ?? null,
           inputs: existing.inputs ?? {},
           org: gate.org,
-          // The plan being confirmed, for a kind that builds only some plans.
-          plan: existing.plan ?? null,
+          // The plan being confirmed, for a kind that builds only some plans —
+          // the smaller first build where the person chose it (AGL-3722).
+          plan: reduced ?? existing.plan ?? null,
           uid: gate.uid,
+          creditsConfirmed,
+          onCreditsConfirmed,
         }))
     } catch (error) {
       await release()
       console.error('ai job admission failed', { orgId: gate.orgId, jobId, error })
       return Response.json({ error: 'The AI job could not be resumed' }, { status: 500 })
     }
-    if (refusal) {
-      await release()
-      return Response.json(
-        { error: refusal.error, job: aiJobSummary(existing, new Date()) },
-        { status: refusal.status },
-      )
-    }
+    if (refusal) return refused(refusal)
   }
   const now = new Date()
+  const confirmation = aiCreditsConfirmation(confirmedCredits, gate.uid, now)
   const { job, changed } = retryFailedItems
-    ? await retryAiBuildJob(gate.firestore, gate.orgId, jobId, now)
+    ? await retryAiBuildJob(gate.firestore, gate.orgId, jobId, now, { creditsConfirmed: confirmation })
     : await resumeAiJob(gate.firestore, gate.orgId, jobId, { uid: gate.uid }, now, {
         publishConfirmed: payload?.['publish'] === true,
+        creditsConfirmed: confirmation,
+        ...(reduced ? { reducePlan: aiBuildFirstPagePlan } : {}),
       })
   if (!changed) {
     await release()
@@ -206,9 +258,10 @@ export async function POST(
  * month's Free credits do not cover what the retried items are estimated at.
  */
 async function aiBuildRetryRefusal(
-  gate: { firestore: FirebaseFirestore.Firestore; org: object | null },
+  gate: { firestore: FirebaseFirestore.Firestore; orgId: string; org: object | null },
   job: AiJob,
-): Promise<{ status: 400 | 403 | 404 | 409 | 429; error: string } | null> {
+  credits: { confirmed: boolean; onCreditsConfirmed: (prompt: AiCreditsPrompt) => void },
+): Promise<AiJobAdmissionRefusal | null> {
   const plan = job.plan?.status === 'confirmed' ? job.plan : null
   if (!aiBuildRetryable(job) || !plan || !job.items?.length) {
     return { status: 409, error: 'Only a finished build can try its failed items again' }
@@ -218,15 +271,18 @@ async function aiBuildRetryRefusal(
   const { retried } = aiBuildRetryLedger(job.items, job.kind === 'site' ? aiLedgerUnits(job.items) : aiBuildUnits(plan))
   if (!retried.length) return { status: 409, error: 'Nothing in this build is left to try again' }
   // A site's retried parts are its own pages and creations, held by the
-  // reservation each pass takes; a build's are estimated against the Free taste.
+  // reservation each pass takes; a build's are admitted on their measured p90
+  // against the Free taste, or on the person's go-ahead (AGL-3722).
   if (job.kind === 'site' || !aiBuildFreeTaste(gate.org)) return null
-  const refusal = await aiBuildFreeBalanceRefusal({
+  return aiBuildFreeCreditsRefusal({
     firestore: gate.firestore,
+    orgId: gate.orgId,
     org: gate.org,
-    estimate: aiBuildCreditEstimate(plan, { slots: new Set(retried) }),
+    range: aiBuildCreditRange(plan, { slots: new Set(retried) }),
+    confirmed: credits.confirmed,
+    onConfirmed: credits.onCreditsConfirmed,
     now: new Date(),
   })
-  return refusal ? { status: 403, error: refusal } : null
 }
 
 export const dynamic = 'force-dynamic'

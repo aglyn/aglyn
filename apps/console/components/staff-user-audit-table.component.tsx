@@ -17,7 +17,7 @@
 
 'use client'
 
-import { orgOverrideReasonSummary } from '@aglyn/aglyn'
+import { describeStaffAudit } from '@aglyn/aglyn/app-utils/activity-labels'
 import {
   listPluginActivityFilters,
   pluginStaffAuditActionGroupLabel,
@@ -38,7 +38,7 @@ import { useListColumnSort } from '@aglyn/shared-ui-jsx/hooks/use-list-column-so
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Chip, Stack } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useStaffListQuery } from '../hooks/use-staff-list-query'
 import {
   ADMIN_AUDIT_SORT,
@@ -48,6 +48,10 @@ import {
   type UserAuditRow,
 } from '../utils/admin-audit-list-query'
 import ActivityTable from './activity-table.component'
+import { staffActivityLinks } from '../utils/activity-details'
+
+/** One audit row in the shared words (AGL-3660): never a code or a path. */
+const describe = (row: UserAuditRow) => describeStaffAudit(row, row.names ?? {})
 
 export interface StaffUserAuditTableProps {
   uid: string
@@ -103,10 +107,40 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
     [audit.rows, clauses],
   )
 
+  /** The actor as an address where the route could name one; the uid stays the tooltip. */
+  const actorLabel = useCallback(
+    (row: UserAuditRow): string =>
+      row.actorUid === uid
+        ? 'this account'
+        : (row.actorUid ? row.names?.users?.[row.actorUid] : null) ?? row.actorUid ?? '—',
+    [uid],
+  )
+
   const columns = useMemo((): GridColDef[] => {
     const shown: GridColDef[] = [
-      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
-      { field: 'target', headerName: 'Target', flex: 1.2, minWidth: 180 },
+      {
+        // The stored code stays the cell's value — the route's Action filter
+        // compares it — and the shared sentence is what is drawn, with the
+        // code as its tooltip (AGL-3660).
+        field: 'action',
+        headerName: 'Action',
+        flex: 1.4,
+        minWidth: 200,
+        renderCell: ({ row }: { row: UserAuditRow }) => {
+          const described = describe(row)
+          return <span title={described.code ?? undefined}>{described.action}</span>
+        },
+      },
+      {
+        field: 'target',
+        headerName: 'Target',
+        flex: 1.2,
+        minWidth: 180,
+        renderCell: ({ row }: { row: UserAuditRow }) => {
+          const described = describe(row)
+          return <span title={described.path ?? undefined}>{described.target}</span>
+        },
+      },
       {
         // An `org.override` this account performed shows up here too, so the
         // reason has to reach this table as well (AGL-1652) — the audit page
@@ -115,8 +149,18 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
         headerName: 'Why',
         flex: 1,
         minWidth: 160,
-        valueGetter: (_value: unknown, row: UserAuditRow) =>
-          orgOverrideReasonSummary(row.reason, row.note) ?? '—',
+        valueGetter: (_value: unknown, row: UserAuditRow) => describe(row).why ?? '—',
+      },
+      {
+        field: 'credits',
+        headerName: 'Credits',
+        flex: 0.5,
+        minWidth: 90,
+        type: 'number',
+        sortable: false,
+        filterable: false,
+        valueGetter: (_value: unknown, row: UserAuditRow) => describe(row).credits,
+        renderCell: ({ row }: { row: UserAuditRow }) => describe(row).credits ?? '—',
       },
       {
         field: 'actorUid',
@@ -128,13 +172,12 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
          * either one this account performed or one performed about it, and a
          * bare uid in the second case is the staff member who acted.
          */
-        valueGetter: (_value: unknown, row: UserAuditRow) =>
-          row.actorUid === uid ? 'this account' : (row.actorUid ?? '—'),
+        valueGetter: (_value: unknown, row: UserAuditRow) => actorLabel(row),
         renderCell: ({ row }: { row: UserAuditRow }) =>
           row.actorUid === uid ? (
             <Chip size="small" variant="outlined" label="this account" />
           ) : (
-            (row.actorUid ?? '—')
+            <span title={row.actorUid ?? undefined}>{actorLabel(row)}</span>
           ),
       },
       {
@@ -160,7 +203,7 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
       },
     ]
     return listFilterGridColumns(shown, USER_AUDIT_LIST_FIELDS, options, USER_AUDIT_LIST_HEADERS)
-  }, [uid, options])
+  }, [uid, options, actorLabel])
 
   /*
    * HEADER SORTS (AGL-3680). The route merges four queries — what this
@@ -172,12 +215,12 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
    */
   const pageSorts = useMemo(
     () => ({
-      action: (row: UserAuditRow) => row.action,
-      target: (row: UserAuditRow) => row.target,
-      reason: (row: UserAuditRow) => orgOverrideReasonSummary(row.reason, row.note) ?? null,
-      actorUid: (row: UserAuditRow) => (row.actorUid === uid ? 'this account' : row.actorUid),
+      action: (row: UserAuditRow) => describe(row).action,
+      target: (row: UserAuditRow) => describe(row).target,
+      reason: (row: UserAuditRow) => describe(row).why,
+      actorUid: (row: UserAuditRow) => actorLabel(row),
     }),
-    [uid],
+    [actorLabel],
   )
   const columnSort = useListColumnSort<UserAuditRow>({
     sorts: [ADMIN_AUDIT_SORT],
@@ -206,6 +249,23 @@ export function StaffUserAuditTable(props: StaffUserAuditTableProps) {
       rows={audit.rows}
       columnSort={columnSort}
       getRowId={(row: UserAuditRow) => row.id}
+      staff
+      details={(row: UserAuditRow) => {
+        const described = describe(row)
+        return {
+          description: described,
+          who: actorLabel(row),
+          when: row.at
+            ? `${new Date(row.at).toLocaleString()}${row.repeatCount > 1 ? ` · ${row.repeatCount}x` : ''}`
+            : '—',
+          links: staffActivityLinks(described),
+          staffFields: [
+            { label: 'Actor uid', value: row.actorUid ?? '—' },
+            ...(row.subjectUid ? [{ label: 'Subject uid', value: row.subjectUid }] : []),
+            { label: 'Entry id', value: row.id },
+          ],
+        }
+      }}
       loading={audit.loading}
       unreadable={audit.failed}
       emptyLabel={emptyLabel}

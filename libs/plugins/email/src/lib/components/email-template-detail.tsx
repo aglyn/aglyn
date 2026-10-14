@@ -49,21 +49,9 @@ import {
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
-const previewDocsHelp = pluginDocsHelp('designedEmails', {
-  anchor: '#send-it',
-  excerpt:
-    'The template as an inbox receives it, drawn by the same renderer the ' +
-    'send path uses. Merge tokens are left standing — a real send fills them ' +
-    'from each recipient.',
-})
+const previewDocsHelp = pluginDocsHelp('designedEmails', { anchor: '#template-preview' })
 
-const templateDocsHelp = pluginDocsHelp('designedEmails', {
-  anchor: '#send-it',
-  excerpt:
-    'One email template: its name, where it came from, and what it looks ' +
-    'like. The emails sent from it are reported beneath, by the plugin that ' +
-    'sends them.',
-})
+const templateDocsHelp = pluginDocsHelp('designedEmails', { anchor: '#template-page' })
 
 export interface EmailTemplateDetailProps {
   hostId: string

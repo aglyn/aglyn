@@ -37,6 +37,7 @@ jest.mock('@aglyn/aglyn/app-utils/docs-help', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
+  HelpTip: () => null,
   CardDisplay: ({ children }: { children?: ReactNode }) => <section>{children}</section>,
 }))
 

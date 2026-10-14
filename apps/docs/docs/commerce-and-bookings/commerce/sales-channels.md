@@ -13,10 +13,35 @@ Copilot). Each channel reads its own **product feed** from your store on a
 schedule you set on the channel's side, so a price, photo or stock change
 reaches it without another upload.
 
-Sales channels come with every plan that sells online. They are set up under
-**Products → Settings → Sales channels**, with one card per channel.
+Sales channels come with every plan that sells online. They are set up in the
+store's settings, under **Sales channels**, with one card per channel.
+
+## Set up sales channels {#set-up-sales-channels}
+
+The **Sales channels** card, in the store's settings, lists your products on
+shopping channels: set the feed defaults, check your products, then turn on each
+channel and paste its feed address there.
+
+You need the store selling, a web address for the site, and an account with each
+channel you want — Google Merchant Center, Meta Commerce Manager and so on.
+
+1. Fill in **Defaults for every feed** — the brand and other values sent for a
+   product that leaves them blank — and select **Save**. See
+   [Brand, barcode and category](#brand-barcode-and-category).
+2. Select **Check products**. Each channel's card counts what it would list,
+   leave out and list with suggestions. See
+   [Check your products](#check-your-products).
+3. On each channel you want, switch the feed **On** and paste its address into
+   the channel. See [Turn on a channel](#turn-on-a-channel).
+
+After that, the channel reads your feed on its own schedule, and each card shows
+when it last did.
 
 ## Turn on a channel {#turn-on-a-channel}
+
+Each channel has its own card: switch its feed on, copy the feed's address and
+paste it into the channel's own setup, which then fetches your products on a
+schedule.
 
 1. On the channel's card, switch the feed **On**. The card shows the feed's
    address.
@@ -75,6 +100,10 @@ Each listing carries:
 There is no limit on catalog size.
 
 ### Brand, barcode and category {#brand-barcode-and-category}
+
+Channels match your listings to products they know by brand, barcode and
+category: set them for each product in the product editor, and store-wide on
+**Defaults for every feed**.
 
 Channels match listings to products they know by their identifiers. In the
 product editor, the **Shopping channels** section holds a product's:

@@ -1,7 +1,21 @@
 package com.aglyn.site
 
 import com.aglyn.contracts.MediaSort
+import com.aglyn.core.ConsoleApiClient
+import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
+import com.aglyn.ui.PickedFile
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.test.assertFailsWith
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreOrder
@@ -43,6 +57,19 @@ import com.aglyn.site.content.contentSlug
 import com.aglyn.site.content.entryQuery
 import com.aglyn.site.content.newCategoryId
 import com.aglyn.site.content.sortedCollections
+import com.aglyn.site.setup.FONT_UPLOAD_MAX_BYTES
+import com.aglyn.site.setup.FontRole
+import com.aglyn.site.setup.FontUploadPlan
+import com.aglyn.site.setup.FontsApi
+import com.aglyn.site.setup.InstalledFace
+import com.aglyn.site.setup.InstalledFont
+import com.aglyn.site.setup.PreparedFont
+import com.aglyn.site.setup.ThemeFontOption
+import com.aglyn.site.setup.filterFonts
+import com.aglyn.site.setup.fontFileSize
+import com.aglyn.site.setup.installedFontsOf
+import com.aglyn.site.setup.isFontFileName
+import com.aglyn.site.setup.themePresetsOf
 import com.aglyn.site.setup.SetupSection
 import com.aglyn.site.setup.ThemeEdit
 import com.aglyn.site.setup.ThemeValues
@@ -54,6 +81,7 @@ import com.aglyn.site.setup.trackingError
 import com.aglyn.site.setup.verificationError
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -262,5 +290,74 @@ class SiteTest {
     assertEquals(FirestoreDelete, payload["category"])
     assertEquals(listOf("a"), payload["tags"])
     assertEquals(false, entry.hasByline)
+  }
+
+  @Test
+  fun readsTheBuiltInThemesAndFiltersTheFontBrowser() {
+    val presets = themePresetsOf(Json.parseToJsonElement("""[{"id":"ocean","name":"Ocean","description":"Cool blues","swatches":["#0a3d62","#3c6382"]},{"name":"no id"},{"id":"bare"}]"""))
+    assertEquals(listOf("ocean", "bare"), presets.map { it.id })
+    assertEquals(listOf("#0a3d62", "#3c6382"), presets[0].swatches)
+    assertEquals("bare", presets[1].name)
+    assertTrue(themePresetsOf(null).isEmpty())
+    val fonts = listOf(ThemeFontOption("Open Sans", "sans-serif"), ThemeFontOption("Playfair Display", "serif"), ThemeFontOption("Open Dyslexic", "display"))
+    assertEquals(listOf("Open Sans", "Open Dyslexic"), filterFonts(fonts, " open ", null).map { it.family })
+    assertEquals(listOf("Playfair Display"), filterFonts(fonts, "display play", null).map { it.family })
+    assertEquals(listOf("Open Dyslexic"), filterFonts(fonts, "open", "display").map { it.family })
+    assertEquals(3, filterFonts(fonts, "", null).size)
+  }
+
+  private val preparedFont = """{"face":{"family":"Acme Sans","weight":400,"style":"normal","category":"sans-serif","metrics":{"unitsPerEm":1000},
+    "contentHash":"abcd","fileName":"acme-sans-400.woff2","bytesIn":4000,"bytesOut":1200,"warnings":["Subset to latin"],"license":{"embedding":"installable"},"unicodeRange":"U+0000-00FF"},"woff2":"d09GMg=="}"""
+
+  @Test
+  fun namesTheFilesTheInstallerTakesAndReadsAPreparedFace() {
+    assertTrue(isFontFileName("Inter.WOFF2"))
+    assertTrue(isFontFileName("a.ttf"))
+    assertFalse(isFontFileName("photo.png"))
+    assertFalse(isFontFileName("ttf"))
+    assertEquals("512 B", fontFileSize(512))
+    assertEquals("2 KB", fontFileSize(2048))
+    assertEquals("1.5 MB", fontFileSize(3L * 1024 * 1024 / 2))
+    val font = PreparedFont.of(Json.parseToJsonElement(preparedFont))!!
+    assertEquals("Acme Sans", font.family)
+    assertEquals("400", font.weightLabel)
+    assertEquals(listOf("Subset to latin"), font.warnings)
+    assertEquals(listOf<Byte>(0x77, 0x4F, 0x46, 0x32), font.woff2.toList())
+    assertEquals(setOf("family", "weight", "style", "category", "metrics", "unicodeRange"), font.installable.keys)
+    assertNull(PreparedFont.of(Json.parseToJsonElement("""{"face":{}}""")))
+    assertNull(PreparedFont.of(null))
+  }
+
+  @Test
+  fun installsAFontThroughTheConsolesRoutes() = runTest {
+    val seen = mutableListOf<Triple<String, String?, String>>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      seen += Triple(request.url.encodedPath, request.url.parameters["hostId"], text)
+      val answer = when (request.url.encodedPath) {
+        "/api/fonts/prepare" -> preparedFont
+        "/api/fonts/theme" -> when (Json.parseToJsonElement(text).jsonObject["op"]?.jsonPrimitive?.content) {
+          "plan" -> """{"plan":{"mode":"replace","mediaId":"m1"}}"""
+          else -> """{"fonts":[{"family":"Acme Sans","category":"sans-serif","roles":["body"],"faces":[{"weight":400,"style":"normal","label":"400"}]}]}"""
+        }
+        "/api/media/replace" -> if (seen.count { it.first == "/api/media/replace" } == 1) "{}" else """{"contentHash":"h2"}"""
+        else -> """{"mediaId":"m2"}"""
+      }
+      respond(answer, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = FontsApi(ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1), "h1")
+    assertFailsWith<ConsoleApiError> { api.prepare(PickedFile("photo.png", "image/png", byteArrayOf(1))) }
+    assertFailsWith<ConsoleApiError> { api.prepare(PickedFile("big.ttf", "font/ttf", ByteArray(FONT_UPLOAD_MAX_BYTES + 1))) }
+    assertTrue(seen.isEmpty())
+    val font = api.prepare(PickedFile("acme.ttf", "font/ttf", byteArrayOf(1, 2)))
+    val plan = api.plan(font)
+    assertEquals(FontUploadPlan.Replace("m1"), plan)
+    val stored = api.store(font, plan)
+    assertTrue(stored.replaced)
+    val fonts = api.install(font, stored.mediaId, stored.version)
+    assertEquals(listOf(InstalledFont("Acme Sans", "sans-serif", listOf(FontRole.BODY), listOf(InstalledFace(400, null, "normal", "400")))), fonts)
+    assertTrue(seen.all { it.second == null || it.second == "h1" })
+    assertEquals(listOf("/api/fonts/prepare", "/api/fonts/theme", "/api/media/replace", "/api/fonts/theme"), seen.map { it.first })
+    assertEquals(emptyList(), installedFontsOf(null))
   }
 }

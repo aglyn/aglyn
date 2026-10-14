@@ -262,11 +262,7 @@ function TaxReturnSourceCard({ section }: TaxReturnSourceCardProps) {
     return (
       <CardDisplay
         header={`Sales from the “${section.pluginId}” plugin`}
-        help={docsHelp('salesTaxReturn', {
-          anchor: '#the-figures',
-          excerpt:
-            'Sales a plugin made through the platform that could not be read for this period. They are in no figure on this page, and the return is not to be filed until they are.',
-        })}
+        help={docsHelp('salesTaxReturn', { anchor: '#plugin-sales' })}
         contentGutterX
         contentGutterY
       >
@@ -280,10 +276,7 @@ function TaxReturnSourceCard({ section }: TaxReturnSourceCardProps) {
   return (
     <CardDisplay
       header={section.title}
-      help={docsHelp('salesTaxReturn', {
-        anchor: '#the-figures',
-        excerpt: section.help,
-      })}
+      help={docsHelp('salesTaxReturn', { anchor: '#plugin-sales' })}
       contentGutterX
       contentGutterY
     >
@@ -519,7 +512,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Sales tax', href: buildRoute(Route.ADMIN_TAX_RETURN) },
       ]}
-      help="salesTaxReturn"
+      help={{ topic: 'salesTaxReturn', anchor: '#tax-return-page' }}
       header={{
         children: payload
           ? `${filing.label} Sales Tax Return`
@@ -899,9 +892,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     <CardDisplay
                       header={'Period bounds'}
                       help={docsHelp('salesTaxReturn', {
-                        anchor: '#the-figures',
-                        excerpt:
-                          'The exact UTC window the figures were swept from — echoed so a filed return can be reproduced later.',
+                        anchor: '#period-bounds',
                       })}
                       contentGutterX
                       contentGutterY

@@ -71,7 +71,7 @@ describe('the product capability', () => {
     expect(productAiCapability.estimateCredits(ARGS as never)).toBe(0)
   })
 
-  it('turns arguments the schema admits into an unpriced draft the writer accepts', () => {
+  it('turns arguments the schema admits into a draft at the default price (AGL-3676)', () => {
     expect(pluginAiCapabilityArgsProblems(productAiCapability.argsSchema, ARGS)).toEqual([])
     const content = contentOf(ARGS)
     expect(content).toEqual({
@@ -83,15 +83,18 @@ describe('the product capability', () => {
     })
     expect(checkProductDraftContent(content)).toMatchObject({
       ok: true,
-      facts: { status: 'draft', variants: 2, priceMissing: true },
+      facts: { status: 'draft', variants: 2, priceMissing: false },
     })
   })
 
-  it('prices it only when a price was given', () => {
+  it('uses the given price, and leaves a draft unpriced only when told to', () => {
     expect(checkProductDraftContent(contentOf({ name: 'Wax melt', priceUsd: 6 }))).toMatchObject({
       ok: true,
       facts: { variants: 1, priceMissing: false },
     })
+    expect(
+      checkProductDraftContent({ ...contentOf({ name: 'Wax melt' }), priceUsd: null } as never),
+    ).toMatchObject({ ok: true, facts: { priceMissing: true } })
   })
 
   it('hands on half an option for the writer to refuse by name', () => {

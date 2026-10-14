@@ -111,6 +111,21 @@ export interface AiPlanCapabilities {
    * typed out twice, and rule 1 asks no component of them (AGL-3660).
    */
   repeatsCompiled?: boolean
+  /**
+   * The most datasets this job's plan keeps (AGL-3616): a site start builds
+   * at most a few. A plan naming more is settled in code before the rules
+   * read it (`aiSettlePlanDatasets`), never re-asked. Absent is no cap beyond
+   * `create.dataset.left`.
+   */
+  datasetsMax?: number
+  /**
+   * The fewest pieces a section that shows the work is planned with
+   * (AGL-3754): a site start's `AI_SITE_GALLERY_MIN_ITEMS`. A plan naming
+   * fewer is raised to it in code before the rules read it
+   * (`aiSettlePlanGalleries`), never re-asked. Absent leaves every count as
+   * planned.
+   */
+  galleryMinItems?: number
 }
 
 /** What a job of one kind builds from its own plan, where it builds only some creations. */

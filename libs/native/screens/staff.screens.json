@@ -332,6 +332,10 @@
         "deliveries": {
           "url": "/api/admin/email-deliveries?orgId={params.orgId}&pageSize=20",
           "optional": true
+        },
+        "charges": {
+          "url": "/api/admin/org-refund?orgId={params.orgId}",
+          "optional": true
         }
       },
       "blocks": [
@@ -445,6 +449,98 @@
         },
         {
           "type": "list",
+          "title": "Charges",
+          "when": "data.charges.hasCustomer",
+          "items": "data.charges.charges",
+          "primary": "{item.invoiceNumber|item.id}",
+          "secondary": "{item.amountCents:cents/item.currency} · refunded {item.refundedCents:cents/item.currency}",
+          "tertiary": "{item.created:datetime}",
+          "icon": "creditcard|credit_card",
+          "badges": [
+            {
+              "text": "Disputed",
+              "when": "item.disputed",
+              "tone": "error"
+            },
+            {
+              "text": "Not paid",
+              "when": "!item.paid",
+              "tone": "warning"
+            }
+          ],
+          "actions": [
+            {
+              "id": "refund",
+              "label": "Refund",
+              "icon": "arrow.uturn.backward.circle|undo",
+              "destructive": true,
+              "when": "item.paid && !item.disputed",
+              "prompt": [
+                {
+                  "key": "amountCents",
+                  "label": "Amount in cents (blank refunds everything still refundable)",
+                  "kind": "number"
+                },
+                {
+                  "key": "reason",
+                  "label": "Reason",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "duplicate",
+                      "label": "Duplicate charge"
+                    },
+                    {
+                      "value": "billing-error",
+                      "label": "Billing error on our side"
+                    },
+                    {
+                      "value": "service-failure",
+                      "label": "Outage or service failure"
+                    },
+                    {
+                      "value": "goodwill",
+                      "label": "Goodwill or retention"
+                    },
+                    {
+                      "value": "cancellation",
+                      "label": "Cancellation: unused period"
+                    },
+                    {
+                      "value": "fraud",
+                      "label": "Fraudulent or unauthorized charge"
+                    },
+                    {
+                      "value": "other",
+                      "label": "Other (say what, in the note)"
+                    }
+                  ]
+                },
+                {
+                  "key": "note",
+                  "label": "Note (required for Other)",
+                  "kind": "multiline"
+                }
+              ],
+              "confirm": "Refund {item.invoiceNumber|item.id}? Stripe does not return its processing fee, and a refund cannot be undone.",
+              "url": "/api/admin/org-refund",
+              "body": {
+                "orgId": "{params.orgId}",
+                "chargeId": "{item.id}",
+                "amountCents": "{form.amountCents}",
+                "reason": "{form.reason}",
+                "note": "{form.note}",
+                "idempotencyKey": "{item.id}-{now.ms}"
+              },
+              "success": "Refund sent",
+              "reload": true
+            }
+          ],
+          "empty": "No charges."
+        },
+        {
+          "type": "list",
           "title": "Usage by month",
           "items": "data.usage.months",
           "primary": "{item.month}",
@@ -488,6 +584,25 @@
           "params": {
             "orgId": "{params.orgId}"
           }
+        },
+        {
+          "type": "fields",
+          "title": "Upgrade proposal",
+          "when": "data.detail.org.upgradeProposal.plan",
+          "rows": [
+            {
+              "label": "Proposed plan",
+              "value": "{data.detail.org.upgradeProposal.plan:title}"
+            },
+            {
+              "label": "Proposed by",
+              "value": "{data.detail.org.upgradeProposal.proposedBy}"
+            },
+            {
+              "label": "Note",
+              "value": "{data.detail.org.upgradeProposal.note|'—'}"
+            }
+          ]
         },
         {
           "type": "actions",
@@ -642,6 +757,73 @@
                 "reason": "{form.reason}"
               },
               "success": "Removed"
+            },
+            {
+              "id": "propose",
+              "label": "Propose a plan",
+              "icon": "sparkles|workspace_premium",
+              "url": "/api/admin/org-upgrade-proposal",
+              "prompt": [
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
+                }
+              ],
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "propose",
+                "plan": "{form.plan}",
+                "note": "{form.note}"
+              },
+              "success": "Proposed; the owner is told",
+              "reload": true
+            },
+            {
+              "id": "withdraw",
+              "label": "Withdraw the proposal",
+              "icon": "xmark.circle|cancel",
+              "when": "data.detail.org.upgradeProposal.plan",
+              "confirm": "Withdraw the plan proposed to this workspace?",
+              "url": "/api/admin/org-upgrade-proposal",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "withdraw"
+              },
+              "success": "Withdrawn",
+              "reload": true
             }
           ]
         }
@@ -973,6 +1155,24 @@
           "cursor": "nextCursor",
           "items": "entries",
           "optional": true
+        },
+        "mail": {
+          "url": "/api/admin/users/email-history?uid={params.uid}&pageSize=25",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "optional": true
+        },
+        "changes": {
+          "url": "/api/admin/users/audit?uid={params.uid}&kind=change&pageSize=25",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "optional": true
+        },
+        "access": {
+          "url": "/api/admin/users/audit?uid={params.uid}&kind=access&pageSize=25",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "optional": true
         }
       },
       "blocks": [
@@ -1065,6 +1265,39 @@
           "tertiary": "{item.createdAt:datetime}",
           "count": false,
           "empty": "Nothing yet."
+        },
+        {
+          "type": "list",
+          "title": "Email history",
+          "items": "data.mail.rows",
+          "primary": "{item.subject|'No subject recorded'}",
+          "secondary": "{item.to} · {item.status:title} · opened {item.openCount:number}, clicked {item.clickCount:number}",
+          "tertiary": "{item.firstSeenAtMs:datetime}",
+          "icon": "envelope|mail",
+          "load": "mail",
+          "empty": "No mail recorded for this person's addresses."
+        },
+        {
+          "type": "list",
+          "title": "Changes to and by this account",
+          "items": "data.changes.rows",
+          "primary": "{item.action|'Entry'}",
+          "secondary": "{item.target|'—'} · {item.reason|item.note|'no reason recorded'}",
+          "tertiary": "{item.at:datetime}",
+          "icon": "list.bullet.clipboard|fact_check",
+          "load": "changes",
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Sign-ins and reads",
+          "items": "data.access.rows",
+          "primary": "{item.action|'Entry'}",
+          "secondary": "{item.target|'—'} · {item.reason|item.note|'no reason recorded'}",
+          "tertiary": "{item.at:datetime}",
+          "icon": "list.bullet.clipboard|fact_check",
+          "load": "access",
+          "empty": "None."
         },
         {
           "type": "zone",
@@ -2265,6 +2498,14 @@
         "csp": {
           "url": "/api/admin/csp-reports?days=7",
           "optional": true
+        },
+        "gateways": {
+          "url": "/api/admin/email-health/gateways",
+          "optional": true
+        },
+        "config": {
+          "url": "/api/admin/server-config",
+          "optional": true
         }
       },
       "blocks": [
@@ -2297,6 +2538,54 @@
           "secondary": "{item.documentUri} · {item.count|'1'}×",
           "count": false,
           "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Held sending domains",
+          "when": "data.gateways",
+          "items": "data.gateways.held",
+          "primary": "{item.sendingDomain}",
+          "secondary": "{item.gateway:title} · refused {item.blocked30:number} in 30 days · {item.lastBlockedDetail|'no detail'}",
+          "badges": [
+            {
+              "text": "Shared sender",
+              "when": "item.shared",
+              "tone": "error"
+            }
+          ],
+          "icon": "exclamationmark.octagon|report",
+          "count": false,
+          "empty": "None held."
+        },
+        {
+          "type": "list",
+          "title": "Mail gateway refusals, last 30 days",
+          "when": "data.gateways",
+          "items": "data.gateways.refused",
+          "primary": "{item.sendingDomain}",
+          "secondary": "{item.gateway:title} · refused {item.blocked30:number}, delivered {item.delivered30:number}",
+          "tertiary": "{item.lastBlockedAtMs:datetime}",
+          "badges": [
+            {
+              "text": "{item.holds:yesno}",
+              "tones": {
+                "Yes": "error",
+                "*": "success"
+              }
+            }
+          ],
+          "count": false,
+          "empty": "No refusals."
+        },
+        {
+          "type": "list",
+          "title": "Resolved server config",
+          "when": "data.config",
+          "items": "data.config",
+          "primary": "{item.key}",
+          "trailing": "{item.value}",
+          "count": false,
+          "empty": "—"
         }
       ]
     },
@@ -2495,6 +2784,10 @@
         "filing": {
           "url": "/api/admin/tax-filing",
           "optional": true
+        },
+        "purchases": {
+          "url": "/api/admin/tax-purchases?period={params.period|now.quarter}",
+          "optional": true
         }
       },
       "blocks": [
@@ -2568,6 +2861,82 @@
               "success": "Saved"
             }
           ]
+        },
+        {
+          "type": "fields",
+          "title": "Item 3: taxable purchases",
+          "when": "data.purchases",
+          "footer": "Use tax on Aglyn's own purchases, typed in by hand each period. A period nobody has entered reads not computed, never zero.",
+          "rows": [
+            {
+              "label": "Period",
+              "value": "{data.purchases.period}"
+            },
+            {
+              "label": "Amount",
+              "value": "{data.purchases.entry.amountDollars|'Not computed'}"
+            },
+            {
+              "label": "Note",
+              "value": "{data.purchases.entry.note|'—'}"
+            },
+            {
+              "label": "Entered by",
+              "value": "{data.purchases.entry.enteredBy|'—'}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "staff.super && data.purchases",
+          "items": [
+            {
+              "id": "enter",
+              "label": "Enter the amount",
+              "icon": "square.and.pencil|edit",
+              "method": "PUT",
+              "url": "/api/admin/tax-purchases",
+              "prompt": [
+                {
+                  "key": "amount",
+                  "label": "Amount in dollars (0.00 if you looked and there was none)",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{data.purchases.entry.amountDollars}"
+                },
+                {
+                  "key": "note",
+                  "label": "Where it came from",
+                  "kind": "multiline",
+                  "initial": "{data.purchases.entry.note}"
+                }
+              ],
+              "body": {
+                "period": "{data.purchases.period}",
+                "amount": "{form.amount}",
+                "note": "{form.note}"
+              },
+              "success": "Saved",
+              "reload": true
+            },
+            {
+              "id": "clear",
+              "label": "Clear the entry",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "data.purchases.entry",
+              "method": "DELETE",
+              "url": "/api/admin/tax-purchases",
+              "reason": true,
+              "body": {
+                "period": "{data.purchases.period}",
+                "note": "{form.reason}"
+              },
+              "confirm": "Clear the taxable purchases entered for {data.purchases.period}?",
+              "success": "Cleared",
+              "reload": true
+            }
+          ]
         }
       ]
     },
@@ -2583,7 +2952,15 @@
         "/admin/settings"
       ],
       "load": {
-        "cap": "/api/admin/free-workspace-cap"
+        "cap": "/api/admin/free-workspace-cap",
+        "rate": {
+          "url": "/api/admin/email-send-rate",
+          "optional": true
+        },
+        "hosts": {
+          "url": "/api/admin/first-party-hosts",
+          "optional": true
+        }
       },
       "blocks": [
         {
@@ -2623,6 +3000,182 @@
             },
             "success": "Saved"
           }
+        },
+        {
+          "type": "form",
+          "title": "Platform send rate",
+          "id": "rate",
+          "when": "data.rate.config",
+          "object": "data.rate.config",
+          "footer": "Campaign emails per hour across the platform, between {data.rate.bounds.min:number} and {data.rate.bounds.max:number}.",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Pace sends",
+              "kind": "toggle",
+              "initial": "{item.enabled}"
+            },
+            {
+              "key": "perHour",
+              "label": "Emails per hour",
+              "kind": "number",
+              "initial": "{item.perHour}"
+            },
+            {
+              "key": "note",
+              "label": "Note",
+              "kind": "text",
+              "initial": "{item.note}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "when": "staff.super",
+            "method": "PUT",
+            "url": "/api/admin/email-send-rate",
+            "body": {
+              "enabled": "{form.enabled}",
+              "perHour": "{form.perHour}",
+              "note": "{form.note}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "fields",
+          "title": "First-party hosts",
+          "when": "data.hosts",
+          "footer": "Hosts the platform treats as its own, beyond the built-in ones.",
+          "rows": [
+            {
+              "label": "Built in",
+              "value": "{data.hosts.builtIn}"
+            },
+            {
+              "label": "Added",
+              "value": "{data.hosts.configured|'None'}"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "title": "Change the added hosts",
+          "id": "hosts",
+          "when": "data.hosts && staff.super",
+          "fields": [
+            {
+              "key": "hosts",
+              "label": "Hosts, separated by commas",
+              "kind": "text",
+              "initial": "{data.hosts.configured}"
+            },
+            {
+              "key": "note",
+              "label": "Reason (written to the audit log)",
+              "kind": "multiline",
+              "required": true
+            }
+          ],
+          "submit": {
+            "label": "Save hosts",
+            "method": "PUT",
+            "url": "/api/admin/first-party-hosts",
+            "body": {
+              "hosts": {
+                "$split": "{form.hosts}"
+              },
+              "note": "{form.note}"
+            },
+            "success": "Saved",
+            "reload": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.staff.churn",
+      "title": "Why people leave",
+      "subtitle": "Cancellation surveys, by reason, surface and plan",
+      "icon": "person.crop.circle.badge.minus|person_remove",
+      "scope": "staff",
+      "group": "staff",
+      "order": 20,
+      "requires": "staff.is",
+      "links": [
+        "/admin/churn"
+      ],
+      "load": {
+        "churn": "/api/admin/churn-report"
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Overview",
+          "rows": [
+            {
+              "label": "Surveys answered",
+              "value": "{data.churn.surveys:number}"
+            },
+            {
+              "label": "Cancellations",
+              "value": "{data.churn.cancels.total:number}"
+            },
+            {
+              "label": "Skipped the retention step",
+              "value": "{data.churn.cancels.funnelSkipped:number}"
+            },
+            {
+              "label": "Win-backs offered",
+              "value": "{data.churn.winbacks.reserved:number}"
+            },
+            {
+              "label": "Win-backs taken",
+              "value": "{data.churn.winbacks.applied:number}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.churn.capped",
+          "text": "Only the most recent surveys are counted."
+        },
+        {
+          "type": "list",
+          "title": "By reason",
+          "items": "data.churn.byReason",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "By surface",
+          "items": "data.churn.bySurface",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "By plan",
+          "items": "data.churn.byPlan",
+          "primary": "{item.key:title}",
+          "trailing": "{item.value:number}",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "In their words",
+          "items": "data.churn.comments",
+          "primary": "{item.detail}",
+          "secondary": "{item.reason:title} · {item.plan:title}",
+          "tertiary": "{item.atMs:datetime}",
+          "count": false,
+          "empty": "No comments."
         }
       ]
     }

@@ -125,6 +125,12 @@ function Fact(props: { label: string; children: React.ReactNode }) {
   )
 }
 
+/**
+ * The help on a lead's header card — one card, so the page's loading and
+ * not-found branches carry the same link as the loaded one.
+ */
+export const LEAD_PAGE_HELP = Aglyn.pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })
+
 export interface LeadPropertiesCardProps {
   /**
    * The site this lead is acted on as — the mounted one, or at the
@@ -446,7 +452,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         // The name is the heading; the address is the one line under it,
         // unless the address IS the name, in which case there is no second fact.
         subtitle={lead['name'] ? String(lead['email'] ?? '') : undefined}
-        help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#working-a-lead-from-the-row' })}
+        help={LEAD_PAGE_HELP}
         backHref={routes.section('leads')}
         backLabel="Back to leads"
         // The booking door (AGL-2660), while the lead is still the record
@@ -650,7 +656,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       */}
       <CardDisplay
         header={'Details'}
-        help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
+        help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#lead-details' })}
         contentGutterX
         contentGutterY
         HeaderProps={{

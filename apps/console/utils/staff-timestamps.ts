@@ -71,3 +71,39 @@ export function formatWireTimestamp(
     typeof seconds === 'number' ? seconds * 1000 : null,
   )
 }
+
+/**
+ * How long ago something happened, in the one unit a reader wants: "just
+ * now", "12 min ago", "3 h ago", "5 d ago", "4 mo ago", "2 y ago". Absent or
+ * unparseable is `null`, so the caller decides what nothing looks like.
+ *
+ * A moment in the future (a clock ahead of the reader's) reads as "just now"
+ * rather than as a negative age.
+ */
+export function formatStaffAgo(value: unknown, nowMs: number = Date.now()): string | null {
+  if (value === null || value === undefined || value === '') return null
+  const at = new Date(value as string | number | Date).getTime()
+  if (Number.isNaN(at)) return null
+  const minutes = Math.floor(Math.max(0, nowMs - at) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} d ago`
+  const months = Math.floor(days / 30.4375)
+  if (months < 12) return `${months} mo ago`
+  return `${Math.floor(days / 365.25)} y ago`
+}
+
+/**
+ * A last-activity moment for a staff surface: the local date and time, then
+ * how long ago — "10/9/2026, 3:12:04 PM · 2 h ago". The date and time are
+ * what a reader compares against a report; the age is what they scan a
+ * column for. An em dash when there is nothing, as `formatStaffTimestamp`.
+ */
+export function formatStaffActivity(value: unknown, nowMs: number = Date.now()): string {
+  const stamp = formatStaffTimestamp(value)
+  const ago = formatStaffAgo(value, nowMs)
+  return ago ? `${stamp} · ${ago}` : stamp
+}

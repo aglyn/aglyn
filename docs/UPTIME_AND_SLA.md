@@ -1317,6 +1317,25 @@ Notes that keep these honest:
   folded into `message` on the stackless path only, so every stacked error
   arrived unclassifiable and the policy could express nothing narrower than
   "any entry at all".
+  ⚑ **A mismatch on a page a translator rewrote never arrives (AGL-3738).**
+  React reports a mismatch only after its recovery render has reset `<html>`
+  and replaced every translated node, so a translator's marks are gone by the
+  time the report is built; the six es-US #418s of 2026-10-12 arrived with
+  none. The beacon now watches for the marks from install
+  (`watchPageTranslation`: Chrome's `translated-*` class and `<font>`
+  wrappers, Microsoft's `_msttexthash`, a rewritten `<html lang>`) and drops a
+  hydration report from a page that carried one. An UNMARKED mismatch is still
+  reported, and is the one to read.
+- **Every beacon entry names a coarse browser family (AGL-3732).**
+  `jsonPayload.browser` is exactly one of `safari | chrome | firefox | edge |
+  samsung | webview | other`, classified in the browser by
+  `libs/aglyn/src/lib/app-utils/browser-family.ts` (an Android `; wv)` or an
+  iOS WKWebView/in-app browser is `webview`). The user-agent string and the
+  version never leave the page, and the ingest route drops any value outside
+  the seven. Added to read the en-GB #418 reports on aglyn.com that carried no
+  translator mark: filter `client-errors` on `jsonPayload.kind="hydration"`
+  and group by `jsonPayload.browser`. `client_hydration_errors` has no
+  `browser` label yet; adding one is a metric edit in Cloud Logging, not code.
 - **A stack with no frame of ours never arrives.** `isInjectedThirdPartyFrame`
   drops an error whose every frame is the DOCUMENT rather than a script we
   served — the signature of code a webview or extension evaluated inline. Found
@@ -1333,6 +1352,16 @@ Notes that keep these honest:
   frame of ours, including a URL of ours inside an `eval at` origin, keeps the
   report, and a stack with no frame the rule can read is kept too. It applies
   to unhandled rejections as well as to uncaught errors.
+- **A copy of the page that is not on the web never reports (AGL-3759).**
+  The beacon sends nothing from a document whose `location.protocol` is not
+  `http:` or `https:` (`isWebDocument`): `about:blank` and `about:srcdoc` (a
+  translator extension or a framing site rendering our markup into a fresh
+  document), a saved page on `file:`, an extension's own scheme. Next.js's
+  app router throws `Failed to construct 'URL': Invalid URL` in such a
+  document, because it resolves its canonical URL against a location that is
+  not a URL; one such report from a tenant site opened the `Client error
+  beacon` incident of 2026-10-12. No visitor on the real page sees it, and no
+  code of ours can prevent it.
 - **The `ResizeObserver` loop notice never arrives (AGL-3423).** `ResizeObserver
   loop completed with undelivered notifications` (older wording: `…loop limit
   exceeded`) is the browser deferring resize callbacks to the next frame. It
@@ -2732,7 +2761,8 @@ Four things changed.
 
 `/api/health/signups` → **`/api/health/signup-volume`**, with three checks in
 one body: `signupVolume` (the wave), `signupRefusals` (refusals, including the
-fail-closed ones) and `signupDrought` (below).
+fail-closed ones) and `signupDrought` (below). A fourth, `signupLanding`, was
+added by AGL-3725 and is described after the drought.
 
 **The old path still answers**, served by a thin alias — not a redirect, since
 this repo's own probe refuses to follow a `3xx` and would report one as an
@@ -2791,6 +2821,33 @@ Forced failure, to prove the alert path: set `SIGNUP_DROUGHT_MIN_TRAFFIC=0` in
 the console's Vercel env. Every hour with no creations then reports a drought,
 including a healthy quiet one → expect the email → unset. It breaks signup for
 nobody.
+
+
+### The landing: a workspace and no site (AGL-3725)
+
+Every question above is about workspaces. On 2026-10-10/11 (AGL-3724), Google
+sign-ups that finished on `auth.aglyn.com` got their workspace and were then
+sent to `auth.aglyn.com/<slug>/hosts`, which that host refuses with a 404 by
+design (AGL-3090). Each workspace was created, so volume, refusals and drought
+all read healthy, and so did the signup canary, which graded "a workspace
+exists". Three people were lost over nine hours. The activation sweep found it.
+
+`signupLanding` measures the outcome instead. It reads orgs created between
+twelve hours and thirty minutes ago and reds when **two or more have no
+site** (`code: signups-stranded`). It does not know or care about the cause:
+a dead landing, a broken create-site dialog and a `hosts/create` that 500s
+all end with an org and no host.
+
+The numbers come from a backtest on production, 2026-09-11 → 2026-10-11.
+That month had 44 orgs, and 38 made a site with a median under a minute and a
+slowest of 8.2 minutes, so thirty minutes never counts someone still typing.
+Six never made one: the three AGL-3724 orgs, and three on 9/26, 10/6 and 10/8.
+The rule fires for exactly one stretch, 10/11 04:00Z–12:00Z. It would have
+paged at about 04:20Z, two hours before the third person. One stranded org
+alone never fires, because people do sign up and leave.
+
+The body carries counts only (`strandedOrgs`, `orgsInWindow`) and the rule
+(`windowHours`, `graceMinutes`, `maxStranded`), never an org id or slug.
 
 ### The blocking function's decisions are DATA now
 

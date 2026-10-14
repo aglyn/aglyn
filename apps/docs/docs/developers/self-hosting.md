@@ -583,6 +583,31 @@ If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's `/api/errors`,
 set `NEXT_PUBLIC_DOCS_ORIGIN` on that **console** to your docs origin as well —
 the collector's CORS allowlist reads it.
 
+## Maintenance scripts {#maintenance-scripts}
+
+### Dataset filter terms {#dataset-filter-terms}
+
+Dataset [filters and search](../content-and-data/datasets/overview.md) need no database
+index, so there is nothing to deploy for them. Records keep their filter terms in two fields
+every write keeps current: `filterValues`, one value per filterable field, and `filterKeys`,
+the words a *contains* or a search looks for. Records written before a field existed are
+found by the filters that read it only once those fields are stamped onto them. Stamp them
+once per project:
+
+```bash
+# Dry run: counts what would change and writes nothing.
+GOOGLE_CLOUD_PROJECT=<project-id> node tools/scripts/backfill-dataset-filter-keys.mjs
+
+# Write.
+GOOGLE_CLOUD_PROJECT=<project-id> node tools/scripts/backfill-dataset-filter-keys.mjs --apply
+```
+
+It uses Application Default Credentials (`gcloud auth application-default login`), is
+safe to re-run, and `--org=<orgId>` limits it to one organization. Run it again after a
+site changes a field's type or options in the schema dialog: a schema change does not
+rewrite records, so until a record is edited or re-stamped its filter terms follow the old
+model.
+
 ## Honest limits
 
 | Area | Self-hosted behavior |

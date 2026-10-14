@@ -20,6 +20,7 @@ import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/pl
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerEventsRecordRoutes } from './model/events-record-routes'
 import {
   EVENTS_TRANSFER_LABEL,
   EVENTS_TRANSFER_RESOURCE,
@@ -76,6 +77,9 @@ export function registerEventsCalendarConsole(): void {
     ],
     dashboardCards: [{ cardId: 'events-upcoming', title: 'Upcoming events' }],
   })
+  // Where an event opens, for a surface that names one — the AI plugin's job
+  // drawer opening an event a build drafted (AGL-3743).
+  registerEventsRecordRoutes()
   // The client half of the `events` import and export; the server half is
   // registered from `declarations.console-server.ts`.
   registerPluginTransferResourceUi(

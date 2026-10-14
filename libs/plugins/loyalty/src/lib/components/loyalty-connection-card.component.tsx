@@ -125,6 +125,7 @@ export function LoyaltyConnectionCard(props: {
 
   const connection = answer.connection
   const help = pluginDocsHelp('loyaltyConnectors', {
+    anchor: '#connect-your-account',
     excerpt:
       'Keep your members’ points in your own Smile.io or Yotpo Loyalty account.',
   })

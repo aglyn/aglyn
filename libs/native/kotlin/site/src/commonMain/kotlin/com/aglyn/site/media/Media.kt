@@ -174,6 +174,7 @@ data class MediaItem(
 fun mediaKindIcon(kind: String): String = when (kind) {
   "image" -> "image"
   "video" -> "video_library"
+  "audio" -> "audiotrack"
   "pdf" -> "picture_as_pdf"
   else -> "draft"
 }

@@ -87,8 +87,12 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
   'libs/plugins/ai/src/lib/jobs/ai-job-edit-step.ts':
     'creates a version under a page or layout that exists and updates its fields (AGL-3616)',
+  'libs/plugins/ai/src/lib/jobs/ai-job-navigation-step.ts':
+    'creates a version under a layout that exists; only reads screens to know what a menu may link (AGL-3728)',
   'libs/plugins/ai/src/lib/jobs/ai-site-publish.ts':
     'merge-sets the publish fields of screens the job wrote, and trashes the starter home; creates a layout version (AGL-3596)',
+  'libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts':
+    'writes redirect rules; reads the host’s screens to refuse redirecting a published page (AGL-3745)',
   'libs/plugins/forms/src/lib/server/form-submit.ts':
     'writes submissions and counters; reads the page’s screen for the campaigns it is filed under (AGL-3461)',
   'libs/plugins/data/src/lib/record-pages/record-pages-route.ts':

@@ -28,7 +28,16 @@ import type {
   UsageQuotaCheck,
   UsageQuotaContext,
 } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
-import { AI_ASSIST_SPEND_LINE_ID } from '../usage-axes'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  ASSIST_RETURNED_USD_FIELD,
+  assistSpendAfterReturnsUsd,
+} from './assist-credit-returns'
+import {
+  aiFreeCreditsResetLabel,
+  aiFreeCreditsResetOn,
+} from '../model/ai-site-job'
 
 /** The guard key the credits band is warned under. */
 export const AI_CREDITS_QUOTA_KEY = 'assistCredits'
@@ -38,9 +47,14 @@ export const AI_CREDITS_QUOTA_KEY = 'assistCredits'
  * check the usage-alerts sweep runs beside its own.
  *
  * Measured in CREDITS — the unit the customer was sold and the meter shows —
- * from this plugin's line of the month's spend (the billed `estCostUsd`)
- * through the one conversion, so this alert and the Billing meter cannot
- * disagree about how far into the band the org is. A plan with no band
+ * from the workspace's month (`orgs/{orgId}/assistUsage/{month}`) NET OF
+ * CREDITS GIVEN BACK (`assistSpendAfterReturnsUsd`, AGL-3595), through the one
+ * conversion, so this alert, the Billing meter, the Assist usage strip and
+ * the reservation cannot disagree about how far into the band the org is.
+ * The month's spend line is gross — `estCostUsd` alone — and read off it, a
+ * Free workspace whose test resets and refunded failures had handed 252 of
+ * 442 credits back was told it had used "442 — more than the 300 your plan
+ * includes". A plan with no band
  * resolves `null` and reads as a limit of 0, which the sweep skips the way it
  * skips Free's zero-quota dimensions.
  *
@@ -53,11 +67,60 @@ export const AI_CREDITS_QUOTA_KEY = 'assistCredits'
 export async function aiQuotaChecks(
   context: UsageQuotaContext,
 ): Promise<readonly UsageQuotaCheck[]> {
+  const monthDoc = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('orgs')
+    .doc(context.orgId)
+    .collection('assistUsage')
+    .doc(context.month)
+    .get()
+  // Net of credits given back (AGL-3595) — the figure the gate admits on.
+  const spentUsd = assistSpendAfterReturnsUsd(
+    monthDoc.get('estCostUsd'),
+    monthDoc.get(ASSIST_RETURNED_USD_FIELD),
+  )
+  return aiQuotaChecksFrom(context, spentUsd)
+}
+
+/**
+ * The checks, given the workspace's month spend in billed USD, already net
+ * of give-backs.
+ */
+export function aiQuotaChecksFrom(
+  context: Pick<UsageQuotaContext, 'org' | 'month'>,
+  spentUsd: number,
+): readonly UsageQuotaCheck[] {
   const org = context.org as never
   const bandCredits = resolveAssistCreditBudget(org)
-  const spentUsd =
-    context.spend.lines.find((line) => line.id === AI_ASSIST_SPEND_LINE_ID)
-      ?.usd ?? 0
+  const used = assistCreditsFromUsd(spentUsd)
+  // FREE IS AN ALLOWANCE, NOT A BAND SOLD PAST. Nothing past it is ever
+  // billed, so the notice says the credits are used for the month, when they
+  // renew, and that an upgrade adds more — never "more than your plan
+  // includes", which reads like the start of a charge.
+  if (resolveEffectivePlan(org) === 'free') {
+    const renews = aiFreeCreditsResetLabel(
+      aiFreeCreditsResetOn(new Date(`${context.month}-01T00:00:00.000Z`)),
+    )
+    return [
+      {
+        key: AI_CREDITS_QUOTA_KEY,
+        label: 'free AI credits',
+        noun: 'free AI credits',
+        used,
+        limit: bandCredits ?? 0,
+        cadence: 'monthly',
+        outcome: 'stops',
+        reachedTitle: "You've used your free AI credits for this month",
+        reachedLead: 'has used its free AI credits for this month.',
+        reached: `They renew on ${renews}. Upgrade for more.`,
+        reachedLinksUpgrade: true,
+        approach:
+          'Nothing is ever charged on Free. When they are used, AI assist ' +
+          `pauses until your credits renew on ${renews}, or upgrade for more.`,
+      },
+    ]
+  }
   // Whether crossing the band produces an invoice line or a stop. The same
   // predicate the reservation refuses on, so the words and the behavior
   // cannot drift: a band that refuses — the org's own switch, or a plan with
@@ -75,7 +138,7 @@ export async function aiQuotaChecks(
       key: AI_CREDITS_QUOTA_KEY,
       label: 'AI assist credits',
       noun: 'AI assist credits',
-      used: assistCreditsFromUsd(spentUsd),
+      used,
       limit: bandCredits ?? 0,
       cadence: 'monthly',
       outcome: bandIsWall ? 'stops' : 'bills',

@@ -26,6 +26,7 @@ import {
   DRAWER_COMMAND_EVENT,
   ELEMENT_HIDDEN_CLASS,
   ELEMENT_HIDDEN_STYLE_ID,
+  ELEMENT_VISIBILITY_EVENT,
   ensureElementHiddenStyle,
   expandLeafSelector,
   leafIdFromSelector,
@@ -36,6 +37,7 @@ import {
   runPlayVideoStep,
   runScrollToStep,
   subscribeDrawerCommands,
+  subscribeElementVisibility,
   subscribeMenuCommands,
   subscribeVideoCommands,
   VIDEO_COMMAND_EVENT,
@@ -689,5 +691,53 @@ describe('video commands (AGL-2867)', () => {
     film.dispatchEvent(new CustomEvent(VIDEO_COMMAND_EVENT, {}))
     unsubscribe()
     expect(heard).toHaveLength(0)
+  })
+})
+
+describe('element visibility event (AGL-3717)', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('tells each element a visibility step reached whether it is hidden now', () => {
+    document.body.innerHTML =
+      '<div id="a" class="box"></div><div id="b" class="box"></div>'
+    const heard: Array<[string, boolean]> = []
+    const stops = ['a', 'b'].map((id) =>
+      subscribeElementVisibility(
+        document.getElementById(id) as HTMLElement,
+        (detail) => heard.push([id, detail.hidden]),
+      ),
+    )
+    applyElementVisibility('hide', '.box')
+    applyElementVisibility('toggle', '#a')
+    expect(heard).toEqual([
+      ['a', true],
+      ['b', true],
+      ['a', false],
+    ])
+    stops.forEach((stop) => stop())
+    applyElementVisibility('show', '.box')
+    expect(heard).toHaveLength(3)
+  })
+
+  it('still moves the hidden class, so a toggle after it reads the right state', () => {
+    document.body.innerHTML = '<div id="a"></div>'
+    const element = document.getElementById('a') as HTMLElement
+    element.classList.add(ELEMENT_HIDDEN_CLASS)
+    const heard: boolean[] = []
+    subscribeElementVisibility(element, (detail) => heard.push(detail.hidden))
+    applyElementVisibility('show', '#a')
+    expect(element.classList.contains(ELEMENT_HIDDEN_CLASS)).toBe(false)
+    applyElementVisibility('toggle', '#a')
+    expect(heard).toEqual([false, true])
+  })
+
+  it('ignores an event with no verdict', () => {
+    const element = document.createElement('div')
+    const heard: boolean[] = []
+    subscribeElementVisibility(element, (detail) => heard.push(detail.hidden))
+    element.dispatchEvent(new CustomEvent(ELEMENT_VISIBILITY_EVENT, {}))
+    expect(heard).toEqual([])
   })
 })

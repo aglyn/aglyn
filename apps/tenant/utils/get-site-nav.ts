@@ -18,6 +18,7 @@
 import type { AglynHost } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -33,7 +34,7 @@ import {
  * top-level pages, resolved in `[host]/[scheme]/layout.tsx` so the error boundaries can
  * offer somewhere to go.
  *
- * ## Why it is cached, and why 5 minutes
+ * ## Why it is cached, and why an hour
  *
  * The layout runs on EVERY tenant render, and this is a collection sweep. Left
  * uncached it would add one read per screen document to every page of every
@@ -42,7 +43,11 @@ import {
  * host per TTL no matter how many paths render, and carries
  * `tenantDataTag(hostId)`, so a publish busts it the moment `/api/revalidate`
  * fires and a renamed or newly published page shows up in the nav immediately.
- * The 300s TTL is the same backstop `/api/sitemap` uses for the same sweep.
+ * The TTL is only the backstop for writes that never announce themselves —
+ * `PUBLISHED_SITE_DATA_TTL_SECONDS`, the one every publish-busted read uses.
+ * At five minutes it was not a backstop but a schedule: every expiry re-read
+ * the whole screen list on each instance that missed, which on a site of a
+ * hundred pages was most of the platform's Firestore reads.
  *
  * ## Why it can never throw
  *
@@ -52,10 +57,10 @@ import {
  * read and the cache wrapper are caught, and every failure path degrades to an
  * empty nav — which renders as today's screen, one home button, rather than as
  * anything broken. A DEGRADED sweep is also never stored: a partial answer
- * served once is fine, replayed for five minutes it is a nav with pages
- * missing from it.
+ * served once is fine, replayed for an hour it is a nav with pages missing
+ * from it.
  */
-const SITE_NAV_TTL_SECONDS = 300
+const SITE_NAV_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Screen documents read per sweep. Above this the nav is drawn from the first

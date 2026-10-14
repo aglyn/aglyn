@@ -62,6 +62,7 @@ import {
 import { usePathname } from 'next/navigation'
 import {
   Fragment,
+  memo,
   useCallback,
   useEffect,
   useRef,
@@ -103,7 +104,8 @@ import { aiJobsActivity, aiJobsLauncherLabel } from '../model/ai-job-activity'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
 import { useAiModelChoice } from './use-ai-model-choice'
-import { usePublishAiUsageMeter } from './use-ai-usage-meter'
+import { followAiJobsForUsageMeter, refreshAiUsageMeterFree } from './ai-usage-meter-refresh'
+import { readAiUsageMeter, usePublishAiUsageMeter } from './use-ai-usage-meter'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 
@@ -539,6 +541,101 @@ function ProposalCard({
   )
 }
 
+/**
+ * The chat box and its Send button (AGL-3616).
+ *
+ * What is typed lives in the text field itself, not in state: a keystroke
+ * commits nothing but the moment the box goes from empty to not, which is
+ * the one thing the Send button draws. It used to be the panel's state, so
+ * every keystroke committed the whole panel — the thread, the AI jobs list,
+ * the usage strip — and React 19 counts each commit that leaves an update
+ * pending as a nested one. On a busy page the browser delivers queued
+ * keystrokes back to back, the 51st `setState` threw "Maximum update depth
+ * exceeded" (#185), and the keystrokes it carried were lost. Memoized, so
+ * nothing the panel redraws for redraws the box either.
+ *
+ * Focused when the panel opens, so the first keystroke lands in it.
+ */
+const AssistComposer = memo(function AssistComposer({
+  busy,
+  loaded,
+  allowed,
+  onSend,
+}: {
+  busy: boolean
+  /** The reader's AI permissions have answered. */
+  loaded: boolean
+  /** The reader may ask the assistant. */
+  allowed: boolean
+  onSend: (question: string) => unknown
+}) {
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [hasText, setHasText] = useState(false)
+  const disabled = busy || !loaded || !allowed
+  const noteText = (value: string) => {
+    const next = value.trim().length > 0
+    if (next !== hasText) setHasText(next)
+  }
+  const submit = () => {
+    const node = inputRef.current
+    const question = node?.value.trim() ?? ''
+    if (!node || !question || disabled) return
+    node.value = ''
+    setHasText(false)
+    void onSend(question)
+  }
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-end' }}>
+      <TextField
+        fullWidth
+        multiline
+        maxRows={4}
+        size="small"
+        placeholder="How do I…"
+        autoFocus
+        inputRef={inputRef}
+        disabled={disabled}
+        onChange={(event) => noteText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            submit()
+          }
+        }}
+      />
+      <Tooltip
+        title={
+          busy
+            ? 'Waiting for an answer…'
+            : !loaded
+              ? 'Checking your permissions…'
+              : !allowed
+                ? 'Your role does not include the assistant'
+                : 'Send message'
+        }
+      >
+        <span>
+          <IconButton
+            color="primary"
+            aria-label="Send message"
+            disabled={disabled || !hasText}
+            onClick={submit}
+          >
+            {busy ? (
+              <CircularProgress size={20} />
+            ) : (
+              // 20px to match the CircularProgress it swaps with on the
+              // line above — at the inherited 14px the button visibly grew
+              // its contents while busy.
+              <MdiIcon path={mdiSend.path} sx={{ fontSize: 20 }} />
+            )}
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Stack>
+  )
+})
+
 /** The reader's AI verdict, on their own membership axis (AGL-2927). */
 export interface AssistAiPermissions {
   /** True only once every read the answer depends on has answered. */
@@ -604,7 +701,6 @@ export function AssistPanelComponent(props: AssistDockProps) {
   const { enqueueSnackbar } = useSnackbar()
 
   const [open, setOpen] = useState(false)
-  const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState<AssistMessage[]>([])
   const [quota, setQuota] = useState<AssistQuotaInfo | null>(null)
@@ -661,6 +757,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
   // plan's `aiGenerative` and their own `ai.generate`, as the drawer's gate.
   const jobsVisible = Boolean(scopedOrgId) && editRungHint
   const inFlight = useAiJobsInFlight(user, scopedOrgId, jobsVisible)
+  // The same read tells the usage strip what a Free workspace has left, so
+  // jobs that spend between chat messages move it (AGL-3722).
+  useEffect(() => followAiJobsForUsageMeter(), [])
   const jobsActivity = aiJobsActivity(inFlight)
   // Any surface asking to open AI jobs — an "Open AI jobs" button, the
   // indicator, a notification's link — opens the panel on its drawer.
@@ -691,11 +790,10 @@ export function AssistPanelComponent(props: AssistDockProps) {
     if (jobId) openAiJobs({ jobId })
   }, [jobsVisible, pathname])
 
-  const send = useCallback(async (asked?: string) => {
-    const question = (asked ?? input).trim()
+  const send = useCallback(async (asked: string) => {
+    const question = asked.trim()
     if (!question || busy || !scopedOrgId || !ai.use) return
     setBusy(true)
-    if (asked === undefined) setInput('')
     // The drafts this thread's builds made (AGL-3616): the chat sees refs and
     // labels; the addresses stay here, for the card a follow-up raises.
     const draftLinks = hostId ? assistThreadDraftLinks(messages, orgSlug) : []
@@ -879,6 +977,17 @@ export function AssistPanelComponent(props: AssistDockProps) {
       // through the job door, and plans inline; its card shows the plan.
       if (proposedBuild) {
         const decision = await startAssistBuildRequest(user, scopedOrgId, proposedBuild)
+        // The plan the door ran inline has just spent (AGL-3722), so the strip
+        // moves with it, to the figure the plan card quotes. Left to the jobs
+        // list's next read it said what was left BEFORE the plan, under a card
+        // that had it right: "117 free AI credits left" over "You have 71
+        // left", 2026-10-10. The card's figure is read after the plan's spend
+        // is counted once, so the strip takes it as it is.
+        publishMeter(decision.meter)
+        const uid = user?.uid
+        if (uid && scopedOrgId) {
+          refreshAiUsageMeterFree(uid, scopedOrgId, decision.job?.review?.freeCredits, readAiUsageMeter(uid, scopedOrgId))
+        }
         patchAnswer((message) => ({ ...message, buildJob: decision.job, buildNotice: decision.error }))
       }
     } catch (error) {
@@ -893,7 +1002,6 @@ export function AssistPanelComponent(props: AssistDockProps) {
     editRungHint,
     entitled,
     hostId,
-    input,
     messages,
     modelChoice.model,
     publishMeter,
@@ -1293,6 +1401,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
                       staff={isStaff}
                       onJob={(job) => patchBuild(index, { buildJob: job })}
                       onNotice={(notice) => patchBuild(index, { buildNotice: notice })}
+                      orgSlug={orgSlug}
                     />
                   )}
                   {message.role === 'assistant' &&
@@ -1410,57 +1519,12 @@ export function AssistPanelComponent(props: AssistDockProps) {
                 />
               </Stack>
             ) : null}
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'flex-end' }}
-            >
-              <TextField
-                fullWidth
-                multiline
-                maxRows={4}
-                size="small"
-                placeholder="How do I…"
-                value={input}
-                disabled={busy || !ai.loaded || !ai.use}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    void send()
-                  }
-                }}
-              />
-              <Tooltip
-                title={
-                  busy
-                    ? 'Waiting for an answer…'
-                    : !ai.loaded
-                      ? 'Checking your permissions…'
-                      : !ai.use
-                        ? 'Your role does not include the assistant'
-                        : 'Send message'
-                }
-              >
-                <span>
-                  <IconButton
-                    color="primary"
-                    aria-label="Send message"
-                    disabled={busy || !input.trim() || !ai.loaded || !ai.use}
-                    onClick={() => void send()}
-                  >
-                    {busy ? (
-                      <CircularProgress size={20} />
-                    ) : (
-                      // 20px to match the CircularProgress it swaps with
-                      // on the line above — at the inherited 14px the
-                      // button visibly grew its contents while busy.
-                      <MdiIcon path={mdiSend.path} sx={{ fontSize: 20 }} />
-                    )}
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Stack>
+            <AssistComposer
+              busy={busy}
+              loaded={ai.loaded}
+              allowed={ai.use}
+              onSend={send}
+            />
           </Stack>
         </Stack>
       </Drawer>

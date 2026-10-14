@@ -31,6 +31,9 @@ import type { AiJobItemOutcome, AiJobStepOutcome } from './ai-job-text-step'
  * Shared by both steps, and importing neither, so neither imports the other.
  */
 
+/** The resource the data plugin writes a dataset under (AGL-3616). */
+export const AI_DATASET_DRAFT_RESOURCE = 'dataset'
+
 /** What a unit says when it finished without reporting anything. */
 export const AI_BUILD_UNIT_EMPTY_COPY = 'It could not be built this time.'
 
@@ -103,15 +106,26 @@ export function aiUnitErrorRetryable(error: unknown): boolean {
 export function aiBuildBuiltRefs(
   units: readonly AiBuildUnit[],
   ledger: readonly AiJobItemLedger[],
-  outputs: readonly Pick<AiJobOutput, 'id' | 'label'>[],
+  outputs: readonly (Pick<AiJobOutput, 'id' | 'label'> & Partial<Pick<AiJobOutput, 'draftResource'>>)[],
 ): Map<string, AiSiteBuiltRef> {
   const rows = new Map(ledger.map((row) => [row.slot, row]))
   const built = new Map<string, AiSiteBuiltRef>()
   for (const unit of units) {
     const creation = unit.creation
     const row = rows.get(unit.slot)
-    if (!creation || !row || !aiBuildItemDelivered(row) || !row.outputs.length) continue
-    if (creation.kind !== 'layout' && creation.kind !== 'form' && creation.kind !== 'component') continue
+    if (!row || !aiBuildItemDelivered(row) || !row.outputs.length) continue
+    // A build's dataset item (AGL-3616), which the data plugin wrote: a page
+    // lists it, or is its record template, by the name the plan gave it.
+    if (unit.item) {
+      const output = outputs.find((entry) => entry.id === row.outputs[0])
+      if (output?.draftResource === AI_DATASET_DRAFT_RESOURCE) {
+        built.set(unit.item.name.toLowerCase(), { id: output.id, label: output.label || unit.item.name, kind: 'dataset' })
+      }
+      continue
+    }
+    if (!creation) continue
+    // A dataset a site start created (AGL-3616) is a record a page names too.
+    if (creation.kind !== 'layout' && creation.kind !== 'form' && creation.kind !== 'component' && creation.kind !== 'dataset') continue
     const id = row.outputs[0]
     const label = outputs.find((output) => output.id === id)?.label || creation.name
     built.set(creation.name.toLowerCase(), { id, label, kind: creation.kind })

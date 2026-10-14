@@ -27,6 +27,7 @@
 const mockChrome = jest.fn()
 const mockStore: Record<string, unknown> = {}
 const mockProducts: Array<{ id: string; data: () => Record<string, unknown> }> = []
+const mockOrg: { org: Record<string, unknown> | null } = { org: null }
 
 jest.mock('@aglyn/tenant-runtime/compose-screen-nodes', () => ({
   __esModule: true,
@@ -44,6 +45,7 @@ jest.mock('./reviews', () => ({
   readProductReviews: async () => ({ reviews: [], aggregate: { count: 0, average: 0 } }),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  getOrgForHost: async () => ({ org: mockOrg.org }),
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -60,7 +62,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-import { buildProductPageNodes, commerceSitePageResolver, productPriceText } from './site-page-resolver'
+import {
+  buildProductPageNodes,
+  commerceSitePageResolver,
+  productPriceText,
+  productReturnWindow,
+} from './site-page-resolver'
 
 const HOST = { $id: 'host-1', subdomain: 'ember-wick' }
 const resolve = (path: string) =>
@@ -82,6 +89,7 @@ const candle = (patch: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   jest.clearAllMocks()
   for (const key of Object.keys(mockStore)) delete mockStore[key]
+  mockOrg.org = null
   mockProducts.splice(0, mockProducts.length, candle())
   mockChrome.mockImplementation(async () => ({ root: {} }))
 })
@@ -112,8 +120,52 @@ describe('a store with no product template', () => {
   it('draws the product block for the routed slug, then the related products', () => {
     const nodes = buildProductPageNodes('signature-soy-candle')
     const detail = Object.values(nodes).find((node) => node.componentId === 'product-detail')
-    expect(detail?.props).toEqual({ slug: 'signature-soy-candle' })
+    expect(detail?.props).toMatchObject({ slug: 'signature-soy-candle' })
     expect(Object.values(nodes).some((node) => node.componentId === 'related-products')).toBe(true)
+  })
+})
+
+describe('the built-in product page looks like a storefront’s', () => {
+  it('opens the Details and Shipping & returns folds under the description', () => {
+    const nodes = buildProductPageNodes('signature-soy-candle')
+    const detail = Object.values(nodes).find((node) => node.componentId === 'product-detail')
+    expect(detail?.props).toEqual({ slug: 'signature-soy-candle', showDetails: true, showShipping: true })
+  })
+
+  it('draws the related products as a grid of photo cards', () => {
+    const nodes = buildProductPageNodes('signature-soy-candle')
+    const related = Object.values(nodes).find((node) => node.componentId === 'related-products')
+    expect(related?.props).toMatchObject({ heading: 'You may also like', layout: 'grid' })
+  })
+
+  it('places the reviews only where the store’s plan collects them, before the related products', async () => {
+    expect(Object.values(buildProductPageNodes('x')).some((node) => node.componentId === 'product-reviews')).toBe(false)
+    const withReviews = buildProductPageNodes('x', { reviews: true })
+    const container = withReviews['pdp__container'] as { nodes: string[] }
+    expect(container.nodes).toEqual(['pdp__detail', 'pdp__reviews', 'pdp__related'])
+
+    await resolve('/products/signature-soy-candle')
+    expect(mockChrome.mock.calls[0][0].screenNodes['pdp__reviews']).toBeUndefined()
+    mockOrg.org = { entitlements: { features: { productReviews: true } } }
+    await resolve('/products/signature-soy-candle')
+    expect(mockChrome.mock.calls[1][0].screenNodes['pdp__reviews']).toMatchObject({ componentId: 'product-reviews' })
+  })
+
+  it('seeds the store’s own return window, and none where it takes no returns of the kind', async () => {
+    mockStore['returns'] = { enabled: true, windowDays: 14, eligibleTypes: ['physical'] }
+    const page = await resolve('/products/signature-soy-candle')
+    expect(page.props.pageData.commerce.returns).toEqual({ windowDays: 14 })
+
+    mockStore['returns'] = { enabled: false, windowDays: 14 }
+    const closed = await resolve('/products/signature-soy-candle')
+    expect(closed.props.pageData.commerce.returns).toBeUndefined()
+  })
+
+  it('reads the return window from the settings the return form enforces', () => {
+    expect(productReturnWindow({ type: 'physical' }, undefined)).toEqual({ windowDays: 30 })
+    expect(productReturnWindow({ type: 'digital' }, undefined)).toBeUndefined()
+    expect(productReturnWindow({ type: 'physical' }, { enabled: false })).toBeUndefined()
+    expect(productReturnWindow({ type: 'physical' }, { windowDays: 0 })).toBeUndefined()
   })
 })
 

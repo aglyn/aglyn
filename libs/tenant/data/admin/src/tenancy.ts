@@ -172,6 +172,9 @@ export * from './lib/server/crm-records'
 // confirms one (AGL-2975).
 export * from './lib/server/member-email-aliases'
 export * from './lib/server/user-profiles'
+// One answer to an account's name and photo, and the SSO sign-in fill of a
+// blank Auth record (AGL-3721).
+export * from './lib/server/account-identity'
 // The one "New account" staff notice per account, keyed on the auth
 // record's creation (AGL-3225).
 export * from './lib/server/new-account-announcement'

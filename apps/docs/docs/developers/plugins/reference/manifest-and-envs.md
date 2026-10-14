@@ -182,6 +182,67 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
   `trust: 'realm'`, letting that version load into the app realm. The
   `revocations/{listingId}` kill switch beats everything.
 
+The rest of this section is the reviewer's side of that lifecycle — the staff review
+queue and a submission's review page — so a publisher can see what their submission is
+checked against.
+
+### The review queue {#review-queue}
+
+**Awaiting review** lists the plugin submissions waiting on a staff verdict; open one
+to read its listing, manifest and verifier findings, then act on it. Search finds a
+plugin by the start of a word of its name, and the status menu narrows the queue.
+
+### Verification requests {#verification-requests}
+
+**Verification requested** lists publishers who asked to be
+[verified](../publishing/publisher-handbook.md#asking-to-be-verified) — a claim about
+who they are, separate from reviewing any one version. Their plugins stay listed and
+installable while the request waits.
+
+### Listed plugins {#listed-plugins}
+
+**Listed plugins** lists the plugin listings that are already installable, the step
+that makes a version reachable from Browse. It is also where staff grant or revoke
+realm trust for a listed version.
+
+### A submission's status {#submission-status}
+
+**Status** says where the version under review stands — submitted, listed, verified or
+rejected — and, when the listing was taken down or unpublished by its publisher, says
+so with the reason on file.
+
+### The listing under review {#review-overview}
+
+**Overview** shows the listing as a customer will see it — name, description, media and
+links, all supplied by the publisher — and flags what is missing, such as no license or
+no README.
+
+### The review checklist {#review-checklist}
+
+The **Review checklist** is what a reviewer works through for one version, and it is
+re-earned per version: a new release starts with none of it ticked. It sits under the
+publisher's own attestation for those bytes, and approval waits on every required item.
+
+### Review verdict {#review-verdict}
+
+**Review verdict** moves a submission through the lifecycle: approve the version, or
+reject it with a reason the publisher is sent. Approving makes these bytes the version
+new installs receive; existing installs are pinned and do not move.
+
+### Versions under review {#review-versions}
+
+**Versions** lists every version the publisher has submitted, because review lives on
+the version and each one is judged on its own. Each row shows its state — **Latest**,
+**Stopped**, or **Rejected but still running** — with **Stop this version** and, for
+super-staff, granting or revoking realm trust.
+
+### Taking a listing down {#take-down}
+
+**Take down**, in the review page's danger zone, de-lists a plugin and writes the kill
+switch: every workspace that installed it stops loading it on the next render, and new
+installs are refused. Rejecting a version is not that — it stops new installs and
+leaves existing ones running. **Restore listing** clears both.
+
 ## Environment variables
 
 | Variable | Runtime | Purpose |

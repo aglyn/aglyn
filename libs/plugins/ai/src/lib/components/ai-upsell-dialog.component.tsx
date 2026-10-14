@@ -21,7 +21,8 @@ import { aiAddonName } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { ConsoleWidgetUpgrade } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Button,
   Dialog,
@@ -127,8 +128,8 @@ export const AI_UPSELL_COPY: Readonly<Record<AiUpsellKind, AiUpsellCopy>> = {
     title: 'Create products with AI',
     does:
       'Describe what the store sells and AI proposes up to twelve products. You review them ' +
-      'before any is created, and each is created as a draft that is not on your storefront ' +
-      'until you price it and activate it.',
+      'before any is created, and each is created as a draft at a suggested price that is not on ' +
+      'your storefront until you review it and activate it.',
   },
   logic: {
     title: 'Create a function or variable with AI',
@@ -182,6 +183,13 @@ export interface AiUpsellDialogProps {
   upgrade: ConsoleWidgetUpgrade
 }
 
+/** The add-on's own section of the Create with AI guide (AGL-3660). */
+const aiUpsellHelp = () =>
+  pluginDocsHelp('aiCreate', {
+    anchor: '#without-the-add-on',
+    excerpt: `Create with AI needs the ${aiAddonName()} add-on on a paid plan. An owner or admin adds it from Billing; on Free, the monthly AI credits cover it.`,
+  })
+
 export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogProps) {
   const copy = AI_UPSELL_COPY[kind]
   const { canManageBilling, billingHref } = upgrade
@@ -193,7 +201,10 @@ export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogP
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{copy.title}</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {copy.title}
+        <HelpTip {...aiUpsellHelp()} />
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
           <Typography variant="body2">{copy.does}</Typography>

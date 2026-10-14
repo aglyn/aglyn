@@ -56,6 +56,33 @@ export interface PublicCatalogItem {
    * Absent for every product with a price.
    */
   priceComingSoon?: true
+  /** How many variants the product sells as: one adds straight to a cart. */
+  variantCount: number
+  /**
+   * The one variant a card's quick add puts in the cart — present only for
+   * a product with exactly one variant; several need the product page.
+   */
+  defaultVariantId?: string
+}
+
+/**
+ * The photo a product's card shows: the first non-blank of its media, its
+ * legacy single image, then the first variant photo. Reading only the first
+ * media entry passed a blank one through as the card's image — and a blank
+ * resolves to no `src`, so a product WITH a photo drew an empty tile.
+ */
+export function productCardImage(
+  product: Pick<CommerceModel.HostProduct, 'mediaUrls' | 'imageUrl' | 'variants'>,
+): string | undefined {
+  const candidates = [
+    ...(product.mediaUrls ?? []),
+    product.imageUrl,
+    ...(product.variants ?? []).map((variant) => variant.imageUrl),
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return undefined
 }
 
 /** Host category surfaced to grids for filter chips (AGL-561). */
@@ -339,9 +366,7 @@ function toItem(row: CatalogRow): PublicCatalogItem {
     ...(primary?.compareAtPriceUsd
       ? { compareAtPriceUsd: primary.compareAtPriceUsd }
       : {}),
-    ...(product.mediaUrls?.[0] || product.imageUrl
-      ? { imageUrl: product.mediaUrls?.[0] ?? product.imageUrl }
-      : {}),
+    ...(productCardImage(product) ? { imageUrl: productCardImage(product) } : {}),
     // The same verdict the In stock chip queries (`soldOut`), from the one
     // function every stock writer stores it through.
     soldOut: CommerceModel.productStockFields(product).soldOut,
@@ -349,6 +374,8 @@ function toItem(row: CatalogRow): PublicCatalogItem {
     ...(product.variants.some((variant) => CommerceModel.variantHasPrice(variant))
       ? {}
       : { priceComingSoon: true as const }),
+    variantCount: product.variants.length,
+    ...(product.variants.length === 1 && primary?.id ? { defaultVariantId: primary.id } : {}),
   }
 }
 

@@ -34,7 +34,12 @@ import {
   within,
 } from '@testing-library/react'
 
-import { PEOPLE_CSV, createPeopleClient } from '../fixtures/people'
+import {
+  PEOPLE_CSV,
+  PEOPLE_NOW,
+  createPeopleClient,
+  peopleNow,
+} from '../fixtures/people'
 import type { MemoryTransferClient } from './memory-transfer-client'
 import { TransferImportWizard } from './transfer-import-wizard.component'
 import type { TransferImportWizardProps } from './transfer-import-wizard.component'
@@ -66,6 +71,9 @@ function renderWizard(
       resource="people"
       storage={storage}
       onJobChange={onJobChange}
+      // The client stamps jobs with the fixture clock; the wizard judges the
+      // undo window, so it reads the same clock, never the wall clock.
+      now={peopleNow}
       {...props}
     />,
   )
@@ -183,6 +191,7 @@ describe('TransferImportWizard', () => {
           client={client}
           resource="people"
           storage={storage}
+          now={peopleNow}
           importMappingZone={{
             collection: 'people',
             hostId: null,
@@ -294,7 +303,9 @@ describe('TransferImportWizard', () => {
   it('promises nothing is replaced unasked only where the resource starts there', async () => {
     await toConflicts()
     expect(
-      screen.getByText('Nothing is replaced or cleared unless you choose it here.'),
+      screen.getByText(
+        'Nothing is replaced or cleared unless you choose it here.',
+      ),
     ).toBeTruthy()
     expect(
       screen.getByRole('combobox', { name: /Every field, unless set below/ })
@@ -343,6 +354,22 @@ describe('TransferImportWizard', () => {
     await screen.findByText('This import was undone')
     expect(client.records.size).toBe(4)
     expect(client.records.get('rec-2')?.values['team']).toBe('Ops')
+  })
+
+  it('closes undo once seven days have passed since the import, whatever today is', async () => {
+    const eightDays = 8 * 24 * 60 * 60 * 1000
+    await toReview(undefined, { now: () => PEOPLE_NOW + eightDays })
+    acknowledgeAll()
+    fireEvent.click(screen.getByRole('button', { name: 'Import 3 rows' }))
+    await screen.findByText('Import finished')
+    expect(
+      screen
+        .getByRole('button', { name: 'Undo import' })
+        .hasAttribute('disabled'),
+    ).toBe(true)
+    expect(
+      screen.getByText('The undo window for this import has closed.'),
+    ).toBeTruthy()
   })
 
   it('pauses after the chunk in flight, resumes from the cursor, and lists failed rows as they arrive', async () => {
@@ -403,6 +430,7 @@ describe('TransferImportWizard', () => {
         resource="people"
         storage={storage}
         jobId={job.id}
+        now={peopleNow}
       />,
     )
     await screen.findByRole('table', {

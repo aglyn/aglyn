@@ -16,6 +16,7 @@ struct RouteView: View {
     case .screen(let id, let params): PluginScreenView(screenID: id, params: params)
     case .besigner(let path): BesignerScreen(path: path)
     case .unavailable(let path): NotInAppView(path: path)
+    case .settings: SettingsView()
     case .notificationSettings: NotificationSettingsView()
     case .analytics: AnalyticsView()
     }
@@ -32,7 +33,12 @@ struct PluginScreenView: View {
 
   var body: some View {
     if let screen = model.registry.screen(screenID), let context = model.context(for: navigation) {
-      if screen.requiresSite && context.hostID == nil {
+      if !screen.admits(context.staff) {
+        AglynEmptyState(
+          "Not available", systemImage: "lock",
+          message: "This page is for Aglyn staff whose role includes it.")
+        .navigationTitle(screen.title)
+      } else if screen.requiresSite && context.hostID == nil {
         AglynEmptyState(
           "Pick a site", systemImage: "globe",
           message: "\(screen.title) shows one site at a time."
@@ -47,7 +53,7 @@ struct PluginScreenView: View {
     } else {
       AglynEmptyState(
         "This page is not in the app", systemImage: "questionmark.square.dashed",
-        message: "Update \(model.brandName) to open it here.")
+        message: "Update \(model.appName) to open it here.")
     }
   }
 }
@@ -61,7 +67,7 @@ struct NotInAppView: View {
   var body: some View {
     AglynEmptyState(
       "This page is not in the app yet", systemImage: "questionmark.square.dashed",
-      message: "\(model.brandName) opens it here once its screen is built.")
+      message: "\(model.appName) opens it here once its screen is built.")
     .navigationTitle("Not in the app")
     .accessibilityIdentifier("not-in-app")
   }

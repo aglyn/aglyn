@@ -58,11 +58,27 @@ Beyond server events (form submissions, page views, sign-ins, leads, bookings), 
 can fire on **visitor behavior in the page**:
 
 - **Scroll depth** — the visitor scrolls past a percentage.
-- **Scroll to / element visible** — a CSS-selected element enters the viewport.
-- **Element click** — a CSS-selected element is clicked.
+- **Scroll to / element visible** — an element you pick enters the viewport.
+- **Element click** — an element you pick is clicked.
 - **Exit intent** — the pointer leaves toward the top of the window.
 - **Time on page** — a dwell-time threshold passes.
 - **Page visit** — the page loads.
+
+### Pointing at an element {#pick-element}
+
+A trigger or step that works on one element — element visible, element click, show or
+hide, a class, an attribute, scroll to, play a video, sticky nav — has a **Pick element**
+button. It opens your site's page in a window. Choose the **Page**, move over the page
+until the element you want is outlined, and click it. The chip beside the button then
+names what you picked, and **×** on the chip clears it. When the trigger is limited to
+one page, the picker opens that page first.
+
+The picker opens the published site, so publish a new element before you pick it. An
+element in your header or footer is the same element on every page, so you can pick it
+on any of them.
+
+For an advanced case, such as every element carrying a class your theme adds, **Use a
+custom selector** takes a CSS selector instead. It replaces the picked element.
 
 Page triggers can be limited to certain paths (`/pricing`, `/blog/*`), and a
 **Frequency** setting controls re-fires: every matching pageview, **once per session**,
@@ -142,11 +158,11 @@ satisfy, writes a `Skipped` row with the same reason on every event it would hav
 A filter that is merely false — `subscribe` on a submission that left the box empty —
 records nothing, so prefer a condition when you want every skip on the record.
 
-**Example — grow an email list from a signup form:** add the **Marketing consent** field
-to your form — a **Checkboxes** field named `marketingConsent`, labeled `Marketing emails`,
-with a single option `Email me news and offers` — and pick it as the
-**Marketing consent field** on the form's own page. If you reword the option, keep it free
-of commas: the Options setting starts a new box at every comma. Then create an action on **formSubmission** with the condition
+**Example — grow an email list from a signup form:** add the **Marketing consent** preset
+to your form — a Choice Label reading `Email me news and offers` holding one **Checkbox**
+named `marketingConsent` — and pick it as the **Marketing consent field** on the form's own
+page. Reword the Choice Label's Text as you like, and keep it the only Checkbox with that
+Field name. Then create an action on **formSubmission** with the condition
 *"A field is not empty" → `marketingConsent`* and one step: **Enroll in a list**, picking
 your audience. Visitors who tick the box join the list; everyone else just submits the form.
 

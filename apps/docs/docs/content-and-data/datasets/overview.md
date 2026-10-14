@@ -31,6 +31,13 @@ flowchart LR
 and record caps, and extra-dataset add-ons are available.
 :::
 
+## Where you manage datasets {#organization-data-page}
+
+The organization **Data** page manages every dataset in the workspace in one place —
+create a dataset, edit its schema, add and import records — and sets where new datasets
+start shared. A site's own **Data** page edits the same datasets, limited to the ones
+shared with that site.
+
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,
@@ -92,24 +99,11 @@ filters together may ask for at most 30 combinations.
 On a dataset created before field reference IDs were checked, a field whose ID contains a
 character such as `.` or `/` offers only *contains*.
 
-This needs no database index — nothing to deploy on a self-hosted project. Records keep
-their filter terms in two fields every write keeps current: `filterValues`, one value per
-filterable field, and `filterKeys`, the words a *contains* or a search looks for. **Records
-written before a field existed** are found by the filters that read it only once it is
-stamped onto them, which the operator does once per project:
-
-```bash
-# Dry run: counts what would change and writes nothing.
-GOOGLE_CLOUD_PROJECT=<project-id> node tools/scripts/backfill-dataset-filter-keys.mjs
-
-# Write.
-GOOGLE_CLOUD_PROJECT=<project-id> node tools/scripts/backfill-dataset-filter-keys.mjs --apply
-```
-
-It uses Application Default Credentials (`gcloud auth application-default login`), is
-safe to re-run, and `--org=<orgId>` limits it to one organization. Run it again after
-changing a field's type or options in the schema dialog: a schema change does not rewrite
-records, so until a record is edited or re-stamped its filter terms follow the old model.
+**Records written before a field existed** are found by the filters that read it once
+they carry that field's filter terms. Saving a record brings it up to date. A schema change — a field's type or options in the
+schema dialog — does not rewrite records, so until a record is edited its filters follow the
+old field. On a self-hosted install, the operator can bring every record up to date at once:
+see [Self-hosting → Dataset filter terms](../../developers/self-hosting.md#dataset-filter-terms).
 
 ## Relations
 
@@ -183,6 +177,12 @@ Where a new dataset starts depends on where you create it and on your workspace'
   setting says, because there is no site to limit it to.
 - **Installed from the Marketplace, or created through the REST API** — it starts on
   **All sites** too. Both act for the whole organization, not for one site.
+
+### Default sharing for new datasets {#default-dataset-sharing}
+
+**Default sharing for new datasets**, at the top of the organization **Data** page,
+decides what a dataset created on a site's Data page starts shared with: **All sites**,
+or only that site. Only workspace owners and admins can change it.
 
 The setting only decides where a new dataset starts. It changes nothing that already
 exists, and you can widen or narrow any dataset afterwards.

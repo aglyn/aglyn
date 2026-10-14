@@ -87,6 +87,13 @@ Installs pin `{version, sha256}`, so:
 - **Don't reach for realm trust to dodge the CSP.** Realm trust is granted by Aglyn
   staff for a specific reviewed version, not on request.
 
+## What a reviewer checks {#what-a-reviewer-checks}
+
+A reviewer's **Security** panel sets what a bundle asked for — its declared network
+origins and capabilities — against what the sandbox enforces regardless of what it asked
+for, beside the static verifier's findings for that version. Declare only the origins
+you call, and the verifier's findings stay clean.
+
 ## Related
 
 - [Manifest & environments](manifest-and-envs.md) — the `capabilities` block.

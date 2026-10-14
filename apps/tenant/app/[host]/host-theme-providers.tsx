@@ -63,6 +63,7 @@ export function HostThemeProviders({
   hostKey,
   siteTitle,
   titleSeparator,
+  language,
   children,
 }: {
   hostTheme?: HostTheme
@@ -98,6 +99,8 @@ export function HostThemeProviders({
   hostKey?: string
   siteTitle?: string
   titleSeparator?: string
+  /** The site's language, which the status pages' own words are written in (AGL-3771). */
+  language?: string
   children: ReactNode
 }) {
   // A site that authored no palette of its own resolves the tenant default —
@@ -137,6 +140,7 @@ export function HostThemeProviders({
         hostKey={hostKey}
         siteTitle={siteTitle}
         titleSeparator={titleSeparator}
+        language={language}
       >
         <HostLoadingLayout brandName={brandName}>{children}</HostLoadingLayout>
       </HostBrandProvider>

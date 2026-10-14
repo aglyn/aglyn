@@ -116,7 +116,17 @@ describe('the zone entry', () => {
       widgetId: 'ai-media-create',
       featureFlag: 'aiGenerative',
       permission: 'ai.generate',
+      releaseFlag: 'release_ai_generative',
     })
+  })
+
+  /**
+   * Without `showWhenNotEntitled` the shell never mounts the entry for a
+   * plan without the add-on, so the upsell below could never be seen
+   * (AGL-3601: the sparkle button is on every AI-creatable list).
+   */
+  it('is mounted without the AI add-on too, so its upsell can show', () => {
+    expect(widget()).toMatchObject({ showWhenNotEntitled: true })
   })
 
   it('draws at once and asks no server anything until someone creates', async () => {

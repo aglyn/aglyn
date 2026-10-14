@@ -355,6 +355,22 @@ describe('split tender', () => {
   })
 })
 
+describe('the register context (what the apps draw the till from)', () => {
+  it('names the register rules beside the tip and receipt settings', async () => {
+    const result = await act({ action: 'context' })
+    expect(result.status).toBe(200)
+    expect(result.body.settings).toMatchObject({ tippingEnabled: true, tipPercentages: [15, 20, 25] })
+    // Nothing configured: a shift is not required, the register never locks.
+    expect(result.body.ops).toEqual({
+      requireOpenShift: false,
+      refundLimitCents: expect.any(Number),
+      autoLockMinutes: 0,
+      receiptAddress: '',
+      returnPolicy: '',
+    })
+  })
+})
+
 describe('gift cards at the register (the AGL-2449 race guard)', () => {
   it('cannot spend dollars an online checkout is holding', async () => {
     fakeDocs.set('hosts/host-1/giftCards/GIFTCARD02', {

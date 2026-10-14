@@ -29,6 +29,7 @@ import {
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
+  COMMERCE_DEFAULT_PRICE_USD,
   COMMERCE_MAX_OPTION_VALUES,
   COMMERCE_MAX_OPTIONS,
   COMMERCE_MAX_PRICE_USD,
@@ -63,9 +64,10 @@ import {
  *    is then `active` and the storefront says "Price coming soon" where the
  *    price would be — still sold by no door until every variant is priced —
  *    and may hand it photos already in the site's media library.
- *  - THE PRICE is left empty unless the content states one. An unpriced
- *    product is marked for the merchant to price: the editor will not save it
- *    and the card will not activate it until every variant has a price.
+ *  - THE PRICE is the one the content states, else the default price
+ *    (`COMMERCE_DEFAULT_PRICE_USD`, AGL-3676) for the owner to change. Only
+ *    a caller that says `priceUsd: null` gets a product with none, which the
+ *    storefront lists as "Price coming soon" and no door sells.
  *  - THE ROOM is the `productsPerHost` allowance, counted the way the
  *    resources route and the importer count it, inside the transaction that
  *    creates. THE PLAN is the `commerce` feature, and THE ROLE a member who
@@ -120,8 +122,11 @@ export interface ProductDraftContent {
   options?: Array<{ name: string; values: string[] }>
   seoTitle?: string
   seoDescription?: string
-  /** One price for every variant, in dollars; absent leaves them unpriced. */
-  priceUsd?: number
+  /**
+   * One price for every variant, in dollars. Absent is the default price
+   * (AGL-3676); `null` leaves them unpriced on purpose.
+   */
+  priceUsd?: number | null
   /** Ids of the site's product categories; one the site lacks is dropped. */
   categoryIds?: string[]
   /**
@@ -169,7 +174,7 @@ function strings(label: string, value: unknown, problems: string[]): string[] {
 /** A draft as the writer will store it, before its slug and keys are settled. */
 export interface ProductDraftRead {
   proposal: ProposedProduct
-  /** The price stated for every variant, or `null` for the merchant to set. */
+  /** The price for every variant (stated, else the default), or `null` for the merchant to set. */
   priceUsd: number | null
   categoryIds: string[]
   /** Listed before it has a price (`ProductDraftContent.comingSoon`). */
@@ -252,9 +257,9 @@ export function readProductDraftContent(
     }
   }
 
-  // No price unless one is stated: the merchant sets it otherwise.
+  // The stated price, else the default (AGL-3676); `null` asks for none.
   const rawPrice = content['priceUsd']
-  let priceUsd: number | null = null
+  let priceUsd: number | null = rawPrice === null ? null : COMMERCE_DEFAULT_PRICE_USD
   if (rawPrice !== undefined && rawPrice !== null) {
     if (
       typeof rawPrice !== 'number' ||

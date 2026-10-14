@@ -17,225 +17,411 @@
 'use client'
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
-import { generateSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn'
+import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import type {
+  ConsoleCreatedSite,
+  ConsolePendingSite,
+} from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
+  Box,
   Button,
-  Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  InputAdornment,
-  Stack,
-  TextField,
   Typography,
 } from '@mui/material'
-import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
+import useCurrentOrg from '../hooks/use-current-org'
+import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgScope } from '../hooks/use-org-scope'
-import { SITE_START_PARAM, SITE_START_VALUE } from './host-first-run-gate.component'
+import { firstTouchField } from '../utils/account-acquisition'
+import { currentConsoleLandingHref } from '../utils/console-landing'
+import hardNavigate from '../utils/hard-navigate'
+import { requestStarterSite } from '../utils/host-first-run'
+import {
+  SITE_START_LIVE_VALUE,
+  SITE_START_PARAM,
+  SITE_START_VALUE,
+} from './host-first-run-gate.component'
+import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
+import { useSiteAddress } from './site-address-fields.component'
+
+/** The zone "Create site" draws its start through (AGL-3761). */
+const START_ZONE = 'hostFirstRun'
+
+/**
+ * How long a start widget may take to say whether it draws anything before
+ * the plain dialog is shown instead. The widget asks one route; this only
+ * bounds an answer that never comes.
+ */
+export const SITE_START_VERDICT_TIMEOUT_MS = 10_000
+
+/**
+ * The query a sites page opens "Create site" from (AGL-3761):
+ * `/{org}/hosts?create=site`. The empty console sends a first site here once
+ * its workspace exists, so the start is asked inside that workspace.
+ */
+export const SITE_CREATE_PARAM = 'create'
+export const SITE_CREATE_VALUE = 'site'
+
+/**
+ * Opens "Create site" when the page was reached with `?create=site`, and
+ * drops the parameter, so a reload or Back does not open it again. Rendered
+ * under a `Suspense`, as anything reading the search parameters is.
+ */
+export function CreateSiteFromUrl({ onOpen }: { onOpen: () => void }) {
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
+  const asked = searchParams?.get(SITE_CREATE_PARAM) === SITE_CREATE_VALUE
+  useEffect(() => {
+    if (!asked) return
+    onOpen()
+    if (pathname) router.replace(pathname)
+  }, [asked, onOpen, pathname, router])
+  return null
+}
 
 export interface CreateHostDialogProps {
   open: boolean
   onClose: () => void
-  /**
-   * Where to land once the site exists, given the workspace slug the server
-   * reserved. Defaults to the new site's Setup page.
-   *
-   * This dialog is the zero-org onboarding path: it provisions the workspace
-   * as a side effect of the first site, so the visitor who arrives from a
-   * marketing plan CTA with no workspace at all reaches billing through here
-   * and nowhere else (AGL-1117). The jump page passes a builder that carries
-   * that intent. The dialog does not read the intent itself: the page that
-   * owns the intent owns the destination, and the in-workspace callers — the
-   * sites list and the host switcher, which have no intent — keep the default.
-   */
-  destination?: (orgSlug: string) => string
 }
 
+/** What a create attempt came to. */
+type CreateOutcome =
+  | { site: ConsoleCreatedSite; guidedStart: boolean }
+  | { error: string; address?: boolean }
+
 /**
- * Create-a-host dialog (user request 2026-07-07): posts to /api/hosts/create
- * (server enforces subdomain uniqueness + the hostLimit quota) and lands on
- * the new host's Setup page.
+ * "Create site" (user request 2026-07-07), opened straight on how the site
+ * should start (AGL-3761).
+ *
+ * Nothing is created while the person decides. The site's name and address
+ * are asked inside the start itself, and the site is created by
+ * `POST /api/hosts/create` only when a choice needs it:
+ *
+ * - the starter site, or Skip: created with the starter, in one request, and
+ *   the person lands on it with "Your site is live";
+ * - a start the `hostFirstRun` zone's widget begins (the guided AI start's
+ *   Plan my site): created empty, and the widget starts its job on it.
+ *
+ * Closing, cancelling, Back and leaving the page create nothing. That used to
+ * be the other way round: the dialog created the site from its name and only
+ * then opened the start, so every start closed unanswered left an empty site
+ * behind.
+ *
+ * A workspace with no start to offer — no widget on the zone, or one that
+ * answers it draws nothing — gets the plain name-and-address dialog, which
+ * creates the site with the starter as it always has.
+ *
+ * What the create would refuse for reasons the console already knows — a role
+ * without `hosts.create`, a plan with no site left — is said before anything
+ * is asked. The server still decides; it refuses with the same reasons.
  */
 export function CreateHostDialog(props: CreateHostDialogProps) {
-  const { open, onClose, destination } = props
+  // Mounted only while open: the start zone loads its plugin when it mounts,
+  // and a closed dialog on every sites page has no reason to.
+  if (!props.open) return null
+  return <CreateSiteFlow onClose={props.onClose} />
+}
+CreateHostDialog.displayName = 'CreateHostDialog'
+
+function CreateSiteFlow({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const { data: user } = useUser()
+  const userRef = useRef(user)
+  userRef.current = user
   const { currentOrg } = useOrgScope()
+  const { org, ready: orgReady } = useCurrentOrg()
+  const { can, loaded: permissionsLoaded } = useOrgPermissions()
   const { enqueueSnackbar } = useSnackbar()
-  const [name, setName] = useState('')
-  const [subdomain, setSubdomain] = useState('')
-  // Once the user edits the subdomain by hand, stop deriving it from the
-  // site name (AGL-147).
-  const [subdomainTouched, setSubdomainTouched] = useState(false)
-  const [suggestions, setSuggestions] = useState<string[]>([])
+  const { widgets, ready: widgetsReady } = useSlotWidgets([START_ZONE])
+  const [verdict, setVerdict] = useState<boolean | null>(null)
+  const [created, setCreated] = useState<ConsoleCreatedSite | null>(null)
   const [busy, setBusy] = useState(false)
-  const validSubdomain = SUBDOMAIN_PATTERN.test(subdomain)
+  // One create at a time: a second click while one is in flight answers the
+  // same request rather than racing it for the same address.
+  const inFlight = useRef<Promise<CreateOutcome> | null>(null)
+  const address = useSiteAddress({ autoFocus: true })
+  const orgSlug = currentOrg?.slug ?? null
 
-  const handleCreate = useCallback(async () => {
-    if (!name.trim() || !validSubdomain || busy) return
+  // What the create would refuse anyway, said first.
+  const usedSites = useMemo(() => {
+    const directory = (org as { hosts?: unknown } | null | undefined)?.hosts
+    return directory && typeof directory === 'object'
+      ? Object.values(directory as Record<string, unknown>).filter(Boolean).length
+      : 0
+  }, [org])
+  const quota = orgReady && org ? checkQuota(org as never, 'hostLimit', usedSites) : null
+  const blocked: 'role' | 'limit' | null =
+    permissionsLoaded && !can('hosts.create')
+      ? 'role'
+      : quota && !quota.allowed
+        ? 'limit'
+        : null
+
+  // An answer that never comes — the start's widget, or a read the gates
+  // hold on — is the plain dialog, not a spinner forever. The server still
+  // refuses what it must.
+  const [timedOut, setTimedOut] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setTimedOut(true), SITE_START_VERDICT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const resolving = (!widgetsReady || !permissionsLoaded || !orgReady) && !timedOut
+  const offersStart =
+    !blocked && widgets.length > 0 && verdict !== false && !(timedOut && verdict === null)
+  const mode: 'blocked' | 'resolving' | 'start' | 'form' = blocked
+    ? 'blocked'
+    : resolving
+      ? 'resolving'
+      : !offersStart
+        ? 'form'
+        : verdict === true
+          ? 'start'
+          : 'resolving'
+
+  const land = useCallback(
+    (target: string) => {
+      // A site made on the auth host lands on the console host: `auth.`
+      // refuses console paths with a 404 (AGL-3090, AGL-3742).
+      const landing = currentConsoleLandingHref(target)
+      if (landing !== target) hardNavigate(landing)
+      else void router.push(target)
+    },
+    [router],
+  )
+
+  const dashboardOf = useCallback(
+    (site: ConsoleCreatedSite) =>
+      buildRoute(Route.HOST_DASHBOARD, { orgSlug: site.orgSlug, host: site.host }),
+    [],
+  )
+
+  const requestCreate = useCallback(
+    (start?: 'starter'): Promise<CreateOutcome> => {
+      if (inFlight.current) return inFlight.current
+      const request = (async (): Promise<CreateOutcome> => {
+        try {
+          const response = await authorizedFetch(userRef.current, '/api/hosts/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              displayName: address.name,
+              subdomain: address.subdomain,
+              // Create into the selected workspace (AGL-236).
+              ...(currentOrg ? { orgId: currentOrg.$id } : {}),
+              // The starter, chosen before the site exists (AGL-3761).
+              ...(start ? { start } : {}),
+              // A first site can provision the workspace too, which records
+              // where a brand-new account came from (AGL-3706).
+              ...firstTouchField(),
+            }),
+          })
+          const payload = await response.json().catch(() => null)
+          if (!response.ok || !payload?.hostId) {
+            const error = String(payload?.error ?? 'Site creation failed')
+            if (response.status === 409) {
+              address.refuse(
+                error,
+                Array.isArray(payload?.suggestions) ? payload.suggestions : [],
+              )
+              return { error, address: true }
+            }
+            return { error }
+          }
+          // The workspace this request had to create on its way to the site
+          // (AGL-2587), reported before the site itself so the two land in the
+          // order they happened. `orgCreated` is true only when the server
+          // actually provisioned one, so a site made in an existing workspace
+          // counts nothing.
+          if (payload.orgCreated === true) trackEvent('org_created', {})
+          // Activation (AGL-1561) — the step between signing up and
+          // publishing. After the `payload.hostId` guard, so a rejected
+          // subdomain is not counted as a site, and here, where the site is
+          // actually created: never when the start merely opened (AGL-3761).
+          trackEvent('host_created', {})
+          enqueueSnackbar(`Created "${address.name}"`, { variant: 'success', persist: false })
+          const site: ConsoleCreatedSite = {
+            hostId: String(payload.hostId),
+            host: String(payload.subdomain ?? address.subdomain),
+            // The workspace may have just been created for a first-time user,
+            // so the response's slug outranks the (possibly null) current one.
+            orgSlug: String(payload.orgSlug ?? orgSlug ?? ''),
+          }
+          return { site, guidedStart: payload.guidedStart === true }
+        } catch (error) {
+          console.error(error)
+          return { error: 'An error has occurred' }
+        }
+      })()
+      inFlight.current = request
+      void request.finally(() => {
+        inFlight.current = null
+      })
+      return request
+    },
+    [address, currentOrg, enqueueSnackbar, orgSlug],
+  )
+
+  // ── The plain dialog ──────────────────────────────────────────────────────
+  const submitForm = useCallback(async () => {
+    if (busy || !address.check()) return
     setBusy(true)
     try {
-      const response = await authorizedFetch(user, '/api/hosts/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          displayName: name.trim(),
-          subdomain,
-          // Create into the selected workspace (AGL-236); the server
-          // falls back to the user's first org when absent.
-          ...(currentOrg ? { orgId: currentOrg.$id } : {}),
-        }),
-      })
-      const payload = await response.json()
-      if (!response.ok || !payload?.hostId) {
-        if (Array.isArray(payload?.suggestions)) {
-          setSuggestions(payload.suggestions)
-        }
-        return void enqueueSnackbar(payload?.error ?? 'Host creation failed', {
-          variant: response.status === 409 ? 'warning' : 'error',
+      const outcome = await requestCreate()
+      if ('error' in outcome) {
+        return void enqueueSnackbar(outcome.error, {
+          variant: outcome.address ? 'warning' : 'error',
           allowDuplicate: true,
         })
       }
-      // The workspace this request had to create on its way to the site
-      // (AGL-2587), reported before the site itself so the two land in the
-      // order they happened. `orgCreated` is true only when the server
-      // actually provisioned one, so a site made in an existing workspace
-      // counts nothing.
-      if (payload.orgCreated === true) trackEvent('org_created', {})
-      // Activation (AGL-1561) — the step between signing up and publishing.
-      // After the `payload.hostId` guard, so a rejected subdomain is not
-      // counted as a site.
-      trackEvent('host_created', {})
-      enqueueSnackbar(`Created "${name.trim()}"`, {
-        variant: 'success',
-        persist: false,
-      })
       // The site exists: the dialog closes now rather than standing, with
       // Create clickable again, until the dashboard has loaded behind it.
       onClose()
-      // The workspace may have just been auto-created for a first-time user,
-      // so trust the response's orgSlug over the (possibly null) current org.
-      const orgSlug = payload.orgSlug ?? currentOrg?.slug
-      if (orgSlug) {
-        // The site's dashboard, keyed by the subdomain (AGL-622), not the doc
-        // id. A site born for the guided start lands with `?start=site`, which
-        // the host layout answers with the start choice (AGL-3596) — never
-        // Setup, where nobody does anything on a new site.
-        const dashboard = buildRoute(Route.HOST_DASHBOARD, {
-          orgSlug,
-          host: payload.subdomain ?? subdomain,
-        })
-        void router.push(
-          destination?.(orgSlug) ??
-            (payload.guidedStart === true
-              ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_VALUE}`
-              : dashboard),
-        )
-      }
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+      if (!outcome.site.orgSlug) return
+      // A site born for the guided start without this dialog having offered
+      // it lands with `?start=site`, which the host layout answers with the
+      // start (AGL-3596). Every other site lands on its dashboard.
+      const dashboard = dashboardOf(outcome.site)
+      land(outcome.guidedStart ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_VALUE}` : dashboard)
     } finally {
       setBusy(false)
     }
-  }, [
-    name,
-    subdomain,
-    validSubdomain,
-    busy,
-    user,
-    currentOrg,
-    router,
-    destination,
-    enqueueSnackbar,
-    onClose,
-  ])
+  }, [address, busy, dashboardOf, enqueueSnackbar, land, onClose, requestCreate])
+
+  // ── The start, before the site exists ─────────────────────────────────────
+  const createdRef = useRef(created)
+  createdRef.current = created
+  const pendingSite = useMemo<ConsolePendingSite>(
+    () => ({
+      fields: address.fields,
+      check: address.check,
+      dirty: address.dirty,
+      created,
+      ready: (shown: boolean) => setVerdict(shown),
+      create: async () => {
+        if (createdRef.current) return createdRef.current
+        if (!address.check()) {
+          return { error: 'Name your site and choose its address first.', address: true }
+        }
+        const outcome = await requestCreate()
+        if ('error' in outcome) return outcome
+        setCreated(outcome.site)
+        return outcome.site
+      },
+    }),
+    [address, created, requestCreate],
+  )
+
+  // The starter site, or Skip. Before the site exists this creates it WITH
+  // the starter, in the one request; after a start created it and then could
+  // not begin, it gives that site the starter, so no site is left empty.
+  const startBlank = useCallback(async (): Promise<boolean> => {
+    const existing = createdRef.current
+    if (existing) {
+      const provisioned = await requestStarterSite(userRef.current, existing.hostId)
+      onClose()
+      const dashboard = dashboardOf(existing)
+      land(provisioned ? `${dashboard}?${SITE_START_PARAM}=${SITE_START_LIVE_VALUE}` : dashboard)
+      return true
+    }
+    if (!address.check()) return false
+    const outcome = await requestCreate('starter')
+    if ('error' in outcome) {
+      enqueueSnackbar(outcome.error, {
+        variant: outcome.address ? 'warning' : 'error',
+        allowDuplicate: true,
+      })
+      return false
+    }
+    // The starter Home is published with the site: its first live page, as
+    // choosing the starter on a created site always reported.
+    trackEvent('site_published', { first_publish: true })
+    onClose()
+    if (outcome.site.orgSlug) {
+      land(`${dashboardOf(outcome.site)}?${SITE_START_PARAM}=${SITE_START_LIVE_VALUE}`)
+    }
+    return true
+  }, [address, dashboardOf, enqueueSnackbar, land, onClose, requestCreate])
+
+  const startZone = offersStart && currentOrg && orgSlug ? (
+    <PluginWidgetSlot
+      slot={START_ZONE}
+      hostId={null}
+      orgId={currentOrg.$id}
+      orgSlug={orgSlug}
+      host={created?.host ?? null}
+      startBlank={startBlank}
+      // A dismissal before the site exists, or the close after a start
+      // began: either way there is nothing for the shell to write.
+      leave={onClose}
+      pendingSite={pendingSite}
+    />
+  ) : null
+
+  if (mode === 'start') return startZone
+
+  if (mode === 'resolving') {
+    return (
+      <>
+        {startZone}
+        <Dialog open onClose={onClose} maxWidth="xs" fullWidth aria-label="Create a new site">
+          <DialogContent>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress aria-label="Getting your site ready to start…" />
+            </Box>
+          </DialogContent>
+        </Dialog>
+      </>
+    )
+  }
+
+  if (mode === 'blocked') {
+    return (
+      <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>{'Create a new site'}</DialogTitle>
+        <DialogContent>
+          <Alert severity={blocked === 'limit' ? 'info' : 'warning'}>
+            {blocked === 'limit'
+              ? `Your plan includes ${quota?.limit === 1 ? 'one site' : `${quota?.limit} sites`}, and ` +
+                'this workspace is using all of them. Upgrade or add extra sites from Billing.'
+              : 'Your role in this workspace does not allow creating sites. Ask a workspace ' +
+                'owner or admin to create it, or to change your role.'}
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>{'Close'}</Button>
+          {blocked === 'limit' && orgSlug ? (
+            <Button variant="contained" href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}>
+              {'Go to Billing'}
+            </Button>
+          ) : null}
+        </DialogActions>
+      </Dialog>
+    )
+  }
 
   return (
-    <Dialog
-      open={open}
-      onClose={() => (busy ? null : onClose())}
-      maxWidth="xs"
-      fullWidth
-    >
+    <Dialog open onClose={() => (busy ? null : onClose())} maxWidth="xs" fullWidth>
       <DialogTitle>{'Create a new site'}</DialogTitle>
-      <DialogContent
-        sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-      >
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="body2" color="text.secondary">
           {`Your site goes live on its ${TENANT_APEX} subdomain ` +
             'immediately; connect a custom domain any time from Setup.'}
         </Typography>
-        <TextField
-          label="Site name"
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value)
-            if (!subdomainTouched) {
-              setSubdomain(generateSubdomain(event.target.value))
-              setSuggestions([])
-            }
-          }}
-          size="small"
-          autoFocus
-        />
-        <TextField
-          label="Subdomain"
-          value={subdomain}
-          onChange={(event) => {
-            setSubdomainTouched(true)
-            setSuggestions([])
-            setSubdomain(event.target.value.toLowerCase())
-          }}
-          error={Boolean(subdomain) && !validSubdomain}
-          helperText={
-            Boolean(subdomain) && !validSubdomain
-              ? '3–30 chars: lowercase letters, digits, dashes'
-              : ' '
-          }
-          slotProps={{
-            input: {
-              endAdornment: (
-                <InputAdornment position="end">{`.${TENANT_APEX}`}</InputAdornment>
-              ),
-            },
-          }}
-          size="small"
-        />
-        {suggestions.length ? (
-          <Stack
-            useFlexGap
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              {'Available:'}
-            </Typography>
-            {suggestions.map((candidate) => (
-              <Chip
-                key={candidate}
-                size="small"
-                label={candidate}
-                onClick={() => {
-                  setSubdomainTouched(true)
-                  setSubdomain(candidate)
-                  setSuggestions([])
-                }}
-              />
-            ))}
-          </Stack>
-        ) : null}
+        {/* The dialog is narrow, so its fields stack. */}
+        {address.stackedFields}
       </DialogContent>
       <DialogActions>
         <Button disabled={busy} onClick={onClose}>
@@ -244,8 +430,8 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         <Button
           variant="contained"
           color="primary"
-          disabled={!name.trim() || !validSubdomain || busy}
-          onClick={handleCreate}
+          disabled={!address.usable || busy}
+          onClick={() => void submitForm()}
         >
           {busy ? 'Creating…' : 'Create site'}
         </Button>
@@ -253,6 +439,5 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
     </Dialog>
   )
 }
-CreateHostDialog.displayName = 'CreateHostDialog'
 
 export default CreateHostDialog

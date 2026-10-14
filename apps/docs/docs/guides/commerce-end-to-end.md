@@ -31,11 +31,21 @@ Storefront **subscriptions** (including the subscribe side of
 
 ## 1. Connect payments
 
-Aglyn sells from **your own Stripe account** via Stripe Connect. On the
-**Products** hub, the payments card walks you through Express onboarding;
-checkout stays disabled ("This site has not enabled payments yet") until
-Stripe reports charges enabled. Aglyn adds its per-sale platform fee
-automatically per your plan.
+The **Payments** card, in the store's settings, connects your own Stripe
+account so buyers pay you directly; checkout stays off until Stripe reports
+charges enabled.
+
+You need a paid plan, and only the workspace owner can connect the account.
+
+1. On the **Payments** card, select **Set up payments**.
+2. Finish Stripe's Express onboarding: your business details, identity and the
+   bank account your payouts go to.
+3. Back in Aglyn, the card's **Stripe account** line reads **Charges enabled**.
+   **Refresh status** checks again if it does not yet.
+
+Until then checkout says "This site has not enabled payments yet". Aglyn adds
+its per-sale platform fee automatically per your plan, and the card shows the
+fee your plan carries.
 
 ## 2. Create products
 
@@ -148,8 +158,8 @@ Two ways to give every category a browsable page:
 
 Individual product URLs (`/products/{slug}`) render through a **template
 page**: design a page containing a **Product detail** block, then set it
-as the **Product page template** in the Products hub's **Settings** tab (store
-settings). The server composes that page per product — `{{product.name}}`,
+as the **Product page template** on the **Store settings** card in the store's
+settings. The server composes that page per product — `{{product.name}}`,
 `{{product.price}}`, and friends resolve, and product SEO/structured data is
 injected. Without a template, product URLs 404. A sibling **Collection page
 template** does the same for `/collections/{slug}`.
@@ -293,6 +303,22 @@ Portal.
 An active subscription is also what
 [members-only content](../workspace-and-billing/teams-and-roles/members-only.md)
 can check for paid gating.
+
+### Member updates {#member-updates}
+
+The **Member updates** card, in the products hub's catalog, posts updates only
+your subscribers can see, and can email each one to them. Business plan and
+above.
+
+1. Select **New update** and enter a **Title** and **Body**.
+2. Choose the **Audience**: **All live subscribers**, or the subscribers of one
+   subscription product.
+3. Leave **Email subscribers** ticked to email the update to that audience as
+   well, or clear it to post without emailing.
+4. Select **Publish**. Aglyn tells you how many subscribers it emailed.
+
+Subscribers read updates in a **Member feed** block: add one to a members-only
+page of your site. **Delete** on a row removes an update.
 
 ## Related
 

@@ -116,7 +116,7 @@ export default function SettingsSectionsLayout({
       ]}
       help={{
         topic: 'consoleTour',
-        anchor: '#workspace-settings--notifications',
+        anchor: '#organization-settings',
       }}
       header={{
         children: 'Organization Settings',

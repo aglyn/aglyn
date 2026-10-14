@@ -19,6 +19,7 @@
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { resolvePageLocale } from '@aglyn/aglyn/app-utils/seo-locale'
 import { searchEngineVerificationMeta } from '@aglyn/aglyn/app-utils/search-engine-verification'
 import {
   siteBaseFonts,
@@ -337,6 +338,8 @@ export default async function HostLayout({
       // `generateMetadata` reads on the server, so both halves agree.
       siteTitle={titleParts.siteTitle}
       titleSeparator={titleParts.separator}
+      // The language the status pages' own words are in (AGL-3771), as `<html lang>` names it.
+      language={resolvePageLocale({ host: hostRes.host })}
     >
       {/* Per-host manifest (AGL-1252). A relative href on purpose: the
           browser resolves it against the site's own origin, so one link tag

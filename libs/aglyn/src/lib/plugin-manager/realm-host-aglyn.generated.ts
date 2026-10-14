@@ -73,6 +73,7 @@ export const AGLYN_HOST_SURFACE: Readonly<Record<string, unknown>> = Object.free
   formatVariableValue: m7.formatVariableValue,
   functionGlobals: m7.functionGlobals,
   hasBindings: m7.hasBindings,
+  isVariableName: m7.isVariableName,
   resolveBindings: m7.resolveBindings,
   resolveNodesBindings: m7.resolveNodesBindings,
   COMPONENT_CATEGORY_ORDER: m8.COMPONENT_CATEGORY_ORDER,

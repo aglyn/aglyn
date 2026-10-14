@@ -65,10 +65,12 @@ import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import {
   AI_CATALOG_DESCRIPTION_MAX_CHARS,
   AI_CATALOG_PHOTO_MAX_CHARS,
+  AI_CATALOG_PRICE_USD,
   AI_CATALOG_TAGS_MAX,
   AI_PRODUCT_DESCRIPTION_MAX_CHARS,
   AI_PRODUCT_TAGS_MAX,
   AI_PRODUCTS_BULK_MAX,
+  aiCatalogPrice,
   aiProductsJobInputs,
   aiProductsProposalOf,
   type AiCatalogProposal,
@@ -87,6 +89,7 @@ import {
   AI_PRODUCT_COPY_MAX_TOKENS,
 } from '../runtime/ai-products-generation'
 import {
+  AI_CATALOG_TOOL,
   AI_CATALOG_TOOL_NAME,
   AI_CATEGORIES_TOOL_NAME,
   AI_PRODUCT_COPY_TOOL_NAME,
@@ -470,9 +473,10 @@ describe('a store’s first products, and its categories and discounts, from a b
     seoTitle: 'Wild mint soy candle',
     seoDescription: 'A hand-poured soy candle scented with wild mint.',
     photo: 'The candle lit on a wooden table.',
+    price: 24,
   }
 
-  it('proposes products with no price and no picture', async () => {
+  it('proposes products with a suggested price and no picture', async () => {
     mockRunAiRequest.mockResolvedValue(answering(AI_CATALOG_TOOL_NAME, { products: [PRODUCT] }))
     const outcome = await run(
       job(aiProductsJobInputs({ target: 'catalog' }), { brief: 'A candle studio: wild mint soy candles in 8 oz and 16 oz jars.' }),
@@ -489,6 +493,51 @@ describe('a store’s first products, and its categories and discounts, from a b
       products: [PRODUCT],
       notes: [],
     } satisfies AiCatalogProposal)
+  })
+
+  it('asks for a price by what each product is, in its own field, and keeps it in range in code without a re-ask (Zach, 2026-10-12)', async () => {
+    const instructions = AI_CATALOG_INSTRUCTIONS[0].text
+    expect(instructions).toContain('the price goes only in its own field')
+    expect(instructions).toMatch(/bar of handmade soap about 8 to 12.*gift set 30 to 45/)
+    expect(instructions).not.toContain('Never write a price, a discount, a shipping promise or a stock level: the store owner sets those.')
+    const item = (AI_CATALOG_TOOL.inputSchema['properties'] as Record<string, { items: { required: string[]; properties: Record<string, unknown> } }>)['products'].items
+    expect(item.required).toContain('price')
+    expect(item.properties['price']).toMatchObject({ type: 'number' })
+    // A replayed answer: two prices by kind, then none, $0, a negative, an absurd one and text.
+    const answer = {
+      products: [
+        { ...PRODUCT, name: 'Lavender soap bar', price: 9.5 },
+        { ...PRODUCT, name: 'Bath gift set', price: 38 },
+        { ...PRODUCT, name: 'Shea body lotion', price: 0 },
+        { ...PRODUCT, name: 'Ceramic mug', price: -24 },
+        { ...PRODUCT, name: 'Beeswax candle', price: 1_000_000 },
+        { ...PRODUCT, name: 'Linen towel', price: '$18.95' },
+        { ...PRODUCT, name: 'Bath salts', price: 'call us' },
+      ],
+    }
+    mockRunAiRequest.mockResolvedValue(answering(AI_CATALOG_TOOL_NAME, answer))
+    const outcome = await run(job(aiProductsJobInputs({ target: 'catalog' })))
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    const proposal = aiProductsProposalOf((outcome.outputs as AiJobOutput[])[0]) as AiCatalogProposal
+    expect(proposal.products.map((product) => [product.name, product.price])).toEqual([
+      ['Lavender soap bar', 9.5],
+      ['Bath gift set', 38],
+      ['Shea body lotion', null],
+      ['Ceramic mug', null],
+      ['Beeswax candle', null],
+      ['Linen towel', 18.95],
+      ['Bath salts', null],
+    ])
+  })
+
+  it('reads a suggested price as code keeps it: whole cents, $1 to $5,000, else none', () => {
+    expect(AI_CATALOG_PRICE_USD).toEqual({ min: 1, max: 5_000 })
+    expect([12, 12.5, 12.95, 12.345, 1, 5_000, '$8', 'US$ 22.50', '30 USD'].map(aiCatalogPrice)).toEqual([
+      12, 12.5, 12.95, 12.35, 1, 5_000, 8, 22.5, 30,
+    ])
+    expect([undefined, null, 0, 0.5, -3, 5_000.01, Infinity, Number.NaN, '', 'free', '12-18', {}].map(aiCatalogPrice)).toEqual(
+      Array(12).fill(null),
+    )
   })
 
   it('holds a catalog to a price nobody gave, and types a decline as a refusal', async () => {

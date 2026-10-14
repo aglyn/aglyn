@@ -129,7 +129,7 @@ const filtersOf = (url: URL) => JSON.parse(url.searchParams.get('filters') ?? '[
 describe('the org feed and the AI rows (AGL-2929)', () => {
   it('renders every AI code by its label, and never the dotted code', async () => {
     const { findByText, container } = render(<OrgActivityCard orgId="org-1" />)
-    expect(await findByText('AI generated — Home')).toBeTruthy()
+    expect(await findByText('Created page Home with Aglyn AI')).toBeTruthy()
     expect(await findByText('AI overage ceiling — $25')).toBeTruthy()
     expect(await findByText('Removed the AI add-on — Acme AI')).toBeTruthy()
     expect(container.textContent).not.toContain('ai.job.output')
@@ -174,7 +174,7 @@ describe('the org feed and the AI rows (AGL-2929)', () => {
 describe('the org-wide log’s toolbar (AGL-3321)', () => {
   it('filters through the grid’s own panel and searches the whole log', async () => {
     render(<OrgActivityCard orgId="org-1" orgWide />)
-    await screen.findByText('AI generated — Home')
+    await screen.findByText('Created page Home with Aglyn AI')
     expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ada' } })
     await waitFor(() => expect(lastUrl().searchParams.get('search')).toBe('ada'))
@@ -185,7 +185,7 @@ describe('the org-wide log’s toolbar (AGL-3321)', () => {
 
   it('asks for the Who and Where choices once, with the first page', async () => {
     render(<OrgActivityCard orgId="org-1" orgWide />)
-    await screen.findByText('AI generated — Home')
+    await screen.findByText('Created page Home with Aglyn AI')
     expect(urls[0].searchParams.get('facets')).toBe('1')
     fireEvent.click(screen.getByRole('button', { name: 'AI' }))
     await waitFor(() => expect(urls.length).toBeGreaterThan(1))
@@ -195,7 +195,7 @@ describe('the org-wide log’s toolbar (AGL-3321)', () => {
   it('a filter change starts the walk again at page one, with no cursor', async () => {
     response = { entries: AI_ROWS, nextCursor: 'after-d' }
     render(<OrgActivityCard orgId="org-1" orgWide />)
-    await screen.findByText('AI generated — Home')
+    await screen.findByText('Created page Home with Aglyn AI')
     fireEvent.click(screen.getByLabelText(/go to next page/i))
     await waitFor(() => expect(lastUrl().searchParams.get('cursor')).toBe('after-d'))
     fireEvent.click(screen.getByRole('button', { name: 'AI' }))
@@ -212,7 +212,7 @@ describe('the org-wide log’s toolbar (AGL-3321)', () => {
 
   it('the organization-level feed searches too, on its route’s query (AGL-3321)', async () => {
     render(<OrgActivityCard orgId="org-1" />)
-    await screen.findByText('AI generated — Home')
+    await screen.findByText('Created page Home with Aglyn AI')
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'home' } })
     await waitFor(() => expect(lastUrl().searchParams.get('search')).toBe('home'))
     expect(lastUrl().searchParams.get('scope')).toBeNull()

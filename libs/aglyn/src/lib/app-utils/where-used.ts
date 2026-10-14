@@ -16,6 +16,7 @@
  */
 
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import type { WhereUsedResult } from './where-used-summary'
 
 /**
  * The client of the console's where-used scan (`/api/hosts/where-used`).
@@ -31,38 +32,11 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
  * asks does not carry it.
  */
 
-export interface WhereUsedDependent {
-  /**
-   * `screen` or `layout` for a published page; otherwise the kind of record
-   * the plugin that answered names (`variable`, `workflow`).
-   */
-  type: string
-  id: string
-  name: string
-  via: Array<'id' | 'name'>
-  /** Published version scanned (screens/layouts) — deep-link target. */
-  versionId?: string
-}
-
-export interface WhereUsedResult {
-  dependents: WhereUsedDependent[]
-  total: number
-  /** Dependents holding legacy name tokens — a rename breaks these. */
-  legacyCount: number
-}
-
-/** One-line summary for confirm dialogs: `2 pages, 1 workflow`. */
-export function summarizeDependents(result: WhereUsedResult): string {
-  const counts = new Map<string, number>()
-  for (const dependent of result.dependents) {
-    // A `screen` is called a page wherever a person reads it.
-    const label = dependent.type === 'screen' ? 'page' : dependent.type
-    counts.set(label, (counts.get(label) ?? 0) + 1)
-  }
-  return [...counts.entries()]
-    .map(([label, count]) => `${count} ${label}${count === 1 ? '' : 's'}`)
-    .join(', ')
-}
+export {
+  summarizeDependents,
+  type WhereUsedDependent,
+  type WhereUsedResult,
+} from './where-used-summary'
 
 /**
  * Calls the AGL-187 where-used scan for a variable/function/workflow.

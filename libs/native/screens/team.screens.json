@@ -295,6 +295,26 @@
           "when": "org.manager",
           "cursor": "nextCursor",
           "items": "entries"
+        },
+        "password": {
+          "url": "/api/orgs/members/password?orgId={org.id}&uid={params.uid}",
+          "when": "org.manager",
+          "optional": true
+        },
+        "hosts": {
+          "query": {
+            "collection": "hosts",
+            "where": [
+              [
+                "orgId",
+                "==",
+                "{org.id}"
+              ]
+            ],
+            "limit": 100
+          },
+          "when": "org.manager",
+          "optional": true
         }
       },
       "blocks": [
@@ -402,10 +422,71 @@
               "role": "{form.role|item.role}",
               "roleId": "{form.roleId}",
               "title": "{form.title}",
-              "allHosts": "{form.allHosts}"
+              "allHosts": "{form.allHosts}",
+              "hostAccess": "{item.hostAccess}"
             },
             "success": "Saved"
           }
+        },
+        {
+          "type": "list",
+          "title": "Sites this person can open",
+          "when": "org.manager && data.list.members[$id=params.uid].role == editor,viewer && !data.list.members[$id=params.uid].allHosts",
+          "footer": "Editors and viewers see only the sites they are given. Admins and anyone with All sites on see every site.",
+          "items": "data.hosts.items",
+          "primary": "{item.displayName|item.$id}",
+          "secondary": "{data.list.members[$id=params.uid].hostAccess[@item.$id]|'No access':title}",
+          "icon": "globe|language",
+          "count": false,
+          "actions": [
+            {
+              "id": "access",
+              "label": "Set access",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "access",
+                  "label": "Access to this site",
+                  "kind": "select",
+                  "initial": "{data.list.members[$id=params.uid].hostAccess[@item.$id]}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "No access"
+                    },
+                    {
+                      "value": "viewer",
+                      "label": "Viewer"
+                    },
+                    {
+                      "value": "editor",
+                      "label": "Editor"
+                    }
+                  ]
+                }
+              ],
+              "url": "/api/orgs/members",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "upsert",
+                "uid": "{params.uid}",
+                "role": "{data.list.members[$id=params.uid].role}",
+                "roleId": "{data.list.members[$id=params.uid].roleId}",
+                "title": "{data.list.members[$id=params.uid].title}",
+                "allHosts": false,
+                "hostAccess": {
+                  "$put": {
+                    "map": "{data.list.members[$id=params.uid].hostAccess}",
+                    "key": "{item.$id}",
+                    "value": "{form.access}"
+                  }
+                }
+              },
+              "success": "Access updated",
+              "reload": true
+            }
+          ],
+          "empty": "No sites."
         },
         {
           "type": "actions",
@@ -439,6 +520,57 @@
           "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
           "tertiary": "{item.createdAt:datetime}",
           "empty": "Nothing yet."
+        },
+        {
+          "type": "actions",
+          "title": "Password",
+          "when": "org.manager && data.password",
+          "footer": "For a teammate who cannot get into their account. Accounts are personal and can span several workspaces, so a reset email is the normal route.",
+          "items": [
+            {
+              "id": "sendReset",
+              "label": "Email a password reset",
+              "icon": "envelope|mail",
+              "confirm": "Send {data.password.email} a link to choose a new password? Their current password keeps working until they use it.",
+              "url": "/api/orgs/members/password",
+              "body": {
+                "orgId": "{org.id}",
+                "uid": "{params.uid}",
+                "action": "sendPasswordReset"
+              },
+              "success": "Reset email sent"
+            },
+            {
+              "id": "setPassword",
+              "label": "Set a password",
+              "icon": "key|password",
+              "destructive": true,
+              "when": "data.password.canSetPassword",
+              "prompt": [
+                {
+                  "key": "password",
+                  "label": "New password (12 or more characters)",
+                  "kind": "password",
+                  "required": true
+                }
+              ],
+              "confirm": "Set this password? They are signed out everywhere and emailed that an admin changed it. Pass it to them over a channel you trust.",
+              "url": "/api/orgs/members/password",
+              "body": {
+                "orgId": "{org.id}",
+                "uid": "{params.uid}",
+                "action": "setPassword",
+                "password": "{form.password}"
+              },
+              "success": "Password set"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "org.manager && data.password && !data.password.canSetPassword",
+          "text": "{data.password.blockedReason|'A password cannot be set for this person.'}"
         },
         {
           "type": "zone",

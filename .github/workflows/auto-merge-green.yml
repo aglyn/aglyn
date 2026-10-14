@@ -47,6 +47,7 @@ on:
       - NX CI
       - Emulator guards
       - Tools guards
+      - Native tests
     types:
       - completed
   # Backstop: GitHub drops scheduled runs often, and a PR can turn green
@@ -74,7 +75,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
       # Kept equal to `production`'s branch protection (and so `main`'s).
-      REQUIRED: '["ci","guards","*.emulator.spec.ts","Firestore + RTDB rules matrix"]'
+      REQUIRED: '["ci","guards","*.emulator.spec.ts","Firestore + RTDB rules matrix","native kotlin","native swift"]'
     steps:
       - name: Production PRs never auto-merge (except a hotfix, merged below)
         run: |

@@ -175,6 +175,7 @@ Build jobs need the **Generate with AI** permission. See
 
 ## Related
 
+- [AI jobs and activity](ai-jobs-and-activity.md)
 - [AI Assist](overview.md)
 - [AI Generate Section](generate-section.md)
 - [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai)

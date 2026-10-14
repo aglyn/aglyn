@@ -19,6 +19,7 @@ import {
   pluginAiCapabilityArgsProblems,
   type PluginAiCapability,
 } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import type { PluginDraftRecord } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
   AI_PLAN_NEW_REF_PREFIX,
   isAiPlanNewRef,
@@ -29,7 +30,32 @@ import {
   type AiBuildPlanScreen,
 } from './ai-build-plan'
 import type { AiJobItemLedger, AiJobItemStatus } from './ai-jobs.types'
-import { AI_SITE_MAX_SECTIONS, AI_SITE_PASS_CREDITS, aiJobPlanCreditEstimate } from './ai-site-job'
+import {
+  AI_BUILD_STORE_OP,
+  AI_BUILD_STORE_PAGES_LABEL,
+  AI_BUILD_STORE_SLOT,
+  aiBuildMakesStore,
+  aiBuildStorePagesAdded,
+} from './ai-build-store-pages'
+import {
+  AI_SITE_HOME_FIRST_LABEL,
+  AI_SITE_MAX_SECTIONS,
+  AI_SITE_PASS_CREDITS,
+  aiCreationMeasuredCredits,
+  aiJobPlanCreditEstimate,
+  aiJobPlanCreditRange,
+  aiSitePlanIsHome,
+  aiStandaloneScreenCreditRange,
+} from './ai-site-job'
+import {
+  AI_CREDIT_RANGE_ZERO,
+  AI_MEASURED_PASS_CREDITS,
+  aiCreditRangeAdd,
+  aiCreditRangeOf,
+  aiCreditRangeOrdered,
+  type AiCreditRange,
+  type AiCreditsSmaller,
+} from './ai-credit-estimate'
 
 /**
  * What a `build` job is (AGL-3616): one request — "a few pages, a contact
@@ -59,6 +85,19 @@ export const AI_BUILD_LIMITS = {
   freePages: 2,
 } as const
 
+/**
+ * What a Free build's plan card says when it holds as many pages as a Free
+ * build makes (AGL-3722): the plan is told the cap and plans the first pages
+ * a request asks for, so a request for three — "About us, Custom cakes and
+ * Catering", 2026-10-10 — came back as two with nothing saying why. `null`
+ * when the plan holds fewer, or on a paid workspace.
+ */
+export function aiBuildFreePageCapNote(plan: Pick<AiBuildPlan, 'screens'>, freeTaste: boolean): string | null {
+  const cap = AI_BUILD_LIMITS.freePages
+  if (!freeTaste || plan.screens.length < cap) return null
+  return `A Free workspace’s build makes up to ${cap} pages at a time. If you asked for more, ask Assist for the rest once this build is done.`
+}
+
 /** What a build creates through its `create` list; everything else beyond pages is an item. */
 export const AI_BUILD_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = ['layout', 'form', 'component', 'email']
 
@@ -67,6 +106,18 @@ export const AI_BUILD_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = ['layout'
  * `items`: an item naming one is a plan that put it in the wrong list.
  */
 export const AI_BUILD_STRUCTURAL_OPS: readonly string[] = ['page', ...AI_BUILD_CREATE_KINDS]
+
+/**
+ * What a build hands an item it made before it (AGL-3728): its pages, by the
+ * title the plan gave each and the id it was written under, and its layouts,
+ * by name. An item's `new:<title>` destinations are read against it.
+ */
+export const AI_BUILD_MADE_INPUT = 'buildMade'
+
+export interface AiBuildMade {
+  pages: Array<{ title: string; id: string }>
+  layouts: Array<{ name: string; id: string }>
+}
 
 /** The job input a build's Assist proposal sets when the brief asked to publish. */
 export const AI_BUILD_PUBLISH_INPUT = 'publish'
@@ -104,6 +155,28 @@ export function aiBuildRefName(ref: string): string {
   return ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
 }
 
+/**
+ * The `new:<name>` references an item's arguments make (AGL-3728): an
+ * argument that is one, or the destination after `=>` in an entry such as a
+ * menu item's `About => new:About`. Read from the arguments, never from the
+ * model's `dependsOn`, so what an item links is always built before it.
+ */
+export function aiBuildItemArgRefs(args: Readonly<Record<string, unknown>> | null | undefined): string[] {
+  const refs: string[] = []
+  const take = (value: unknown) => {
+    if (typeof value !== 'string') return
+    for (const part of [value, value.split('=>').slice(-1)[0] ?? '']) {
+      const ref = part.trim()
+      if (isAiPlanNewRef(ref) && !refs.includes(ref)) refs.push(ref)
+    }
+  }
+  for (const value of Object.values(args ?? {})) {
+    if (Array.isArray(value)) value.forEach(take)
+    else take(value)
+  }
+  return refs
+}
+
 /** Every reference a page makes: its layout, template, starting page and what its sections place. */
 export function aiBuildScreenRefs(screen: AiBuildPlanScreen): string[] {
   return [
@@ -122,11 +195,18 @@ export function aiBuildScreenRefs(screen: AiBuildPlanScreen): string[] {
  */
 export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
   const slots = namedSlots(plan)
-  const depsOf = (refs: readonly (string | null)[], self: string): string[] => {
+  // A page, by the title the plan gave it: what an item's arguments may link
+  // as `new:<title>` (a menu item, AGL-3728), built before the item.
+  const pageSlots = new Map<string, string>()
+  plan.screens.forEach((screen, index) => {
+    const title = screen.title.trim().toLowerCase()
+    if (title && !pageSlots.has(title)) pageSlots.set(title, `p${index}`)
+  })
+  const depsOf = (refs: readonly (string | null)[], self: string, pages = false): string[] => {
     const deps: string[] = []
     for (const ref of refs) {
       if (!isAiPlanNewRef(ref)) continue
-      const slot = slots.get(aiBuildRefName(ref))
+      const slot = slots.get(aiBuildRefName(ref)) ?? (pages ? pageSlots.get(aiBuildRefName(ref)) : undefined)
       if (slot && slot !== self && !deps.includes(slot)) deps.push(slot)
     }
     return deps
@@ -135,16 +215,40 @@ export function aiBuildUnits(plan: AiBuildPlan): AiBuildUnit[] {
   plan.create.forEach((creation, index) => {
     if (!AI_BUILD_CREATE_KINDS.includes(creation.kind)) return
     const slot = `c${index}`
-    units.push({ slot, op: creationOp(creation), label: creation.name, creation, deps: depsOf([creation.duplicateOf], slot) })
+    // A form is built after the dataset it writes to (AGL-3616).
+    units.push({
+      slot,
+      op: creationOp(creation),
+      label: creation.name,
+      creation,
+      deps: depsOf([creation.duplicateOf, creation.kind === 'form' ? (creation.writesTo ?? null) : null], slot),
+    })
   })
   for (const item of plan.items ?? []) {
-    units.push({ slot: item.slot, op: item.op, label: item.name, item, deps: depsOf(item.dependsOn, item.slot) })
+    units.push({
+      slot: item.slot,
+      op: item.op,
+      label: item.name,
+      item,
+      // What it depends on, and what its arguments link as `new:` (AGL-3728).
+      deps: depsOf([...item.dependsOn, ...aiBuildItemArgRefs(item.args)], item.slot, true),
+    })
   }
   plan.screens.forEach((screen, index) => {
     const slot = `p${index}`
     units.push({ slot, op: 'page', label: screen.title, screen, deps: depsOf(aiBuildScreenRefs(screen), slot) })
   })
+  // A store's own pages (AGL-3676), added by the platform: last, so every
+  // planned page keeps the first claim on the site's pages allowance.
+  if (aiBuildStorePagesAdded(plan).length) {
+    units.push({ slot: AI_BUILD_STORE_SLOT, op: AI_BUILD_STORE_OP, label: AI_BUILD_STORE_PAGES_LABEL, deps: [] })
+  }
   return units
+}
+
+/** Whether a unit is one the platform adds rather than the plan (AGL-3676): a store's own pages. */
+export function aiBuildUnitIsPlatform(unit: Pick<AiBuildUnit, 'op'>): boolean {
+  return unit.op === AI_BUILD_STORE_OP
 }
 
 /**
@@ -209,7 +313,8 @@ export function aiBuildPlanShapeRefusal(
   plan: AiBuildPlan,
   options: { freeTaste?: boolean; ops?: AiBuildOps } = {},
 ): string | null {
-  const units = aiBuildUnits(plan)
+  // What the platform adds beside the plan (a store's own pages) is no part of its size.
+  const units = aiBuildUnits(plan).filter((unit) => !aiBuildUnitIsPlatform(unit))
   if (!units.length) return 'This plan builds nothing. Describe what to build again.'
   if (units.length > AI_BUILD_LIMITS.units) {
     return `This plan builds ${units.length} things, and one build holds ${AI_BUILD_LIMITS.units}. Ask for the rest in a second request.`
@@ -266,6 +371,25 @@ export function aiBuildPlanShapeRefusal(
   return null
 }
 
+/**
+ * What the person must still say before this plan can be built, as the
+ * questions its operations ask (`missingInput`), or `null` when nothing is
+ * missing: an item the planner kept with nothing it may build from — a
+ * tracking change naming no id, AGL-3751 — is asked about, never built
+ * empty or from a value the planner made up. Not a plan rule: a re-ask
+ * cannot supply what only the person knows, so the plan is not kept and
+ * the build answers with the question.
+ */
+export function aiBuildPlanMissingInput(plan: AiBuildPlan, ops: AiBuildOps | null | undefined): string | null {
+  if (!ops) return null
+  const questions: string[] = []
+  for (const item of plan.items ?? []) {
+    const question = ops.get(item.op)?.missingInput?.({ name: item.name, why: item.why, args: item.args })
+    if (question && !questions.includes(question)) questions.push(question)
+  }
+  return questions.length ? questions.join(' ') : null
+}
+
 /** "a booking service", "an email design". */
 export function aiArticle(noun: string): string {
   return `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`
@@ -284,6 +408,8 @@ function unitPasses(unit: AiBuildUnit): number {
  * kept.
  */
 export function aiBuildUnitCreditEstimate(unit: AiBuildUnit, ops?: AiBuildOps): number {
+  // A store's own pages are written by code, with no model: no credits (AGL-3676).
+  if (aiBuildUnitIsPlatform(unit)) return 0
   if (unit.item) {
     if (typeof unit.item.credits === 'number') return unit.item.credits
     const capability = ops?.get(unit.item.op)
@@ -313,6 +439,93 @@ export function aiBuildCreditEstimate(
  */
 export function aiJobCreditEstimate(kind: string, plan: AiBuildPlan): number {
   return kind === 'build' ? aiBuildCreditEstimate(plan) : aiJobPlanCreditEstimate(kind, plan)
+}
+
+/**
+ * What one unit is likely to cost, its p90 and its ceiling (AGL-3722): a page
+ * as a page written on its own measured (a fixed cost and one per section), a creation at what its kind
+ * measured, an item at the measured pass times the passes its capability
+ * estimates (none for a draft another plugin writes, which asks no model).
+ * The ceiling is `aiBuildUnitCreditEstimate`, unchanged.
+ */
+export function aiBuildUnitCreditRange(unit: AiBuildUnit, ops?: AiBuildOps): AiCreditRange {
+  const ceiling = aiBuildUnitCreditEstimate(unit, ops)
+  // A build writes each page on its own, never in a site start's warm run (AGL-3722).
+  if (unit.screen) return aiStandaloneScreenCreditRange(unit.screen.sections.length)
+  if (unit.creation) return aiCreditRangeOf(aiCreationMeasuredCredits(unit.creation.kind, { standalone: true }), ceiling)
+  const passes = Math.ceil(ceiling / AI_SITE_PASS_CREDITS)
+  return aiCreditRangeOf(
+    { median: passes * AI_MEASURED_PASS_CREDITS.median, p90: passes * AI_MEASURED_PASS_CREDITS.p90 },
+    ceiling,
+  )
+}
+
+/**
+ * What a build is likely to cost, its p90 and its ceiling (AGL-3722): every
+ * unit's range, or only the units named in `slots` — what Try again runs.
+ * The plan card, Try again and the Free admission all read this; the meter
+ * charges what actually runs.
+ */
+export function aiBuildCreditRange(
+  plan: AiBuildPlan,
+  options: { ops?: AiBuildOps; slots?: ReadonlySet<string> } = {},
+): AiCreditRange {
+  return aiCreditRangeOrdered(
+    aiBuildUnits(plan)
+      .filter((unit) => !options.slots || options.slots.has(unit.slot))
+      .reduce((total, unit) => aiCreditRangeAdd(total, aiBuildUnitCreditRange(unit, options.ops)), AI_CREDIT_RANGE_ZERO),
+  )
+}
+
+/** `aiJobCreditEstimate` as a range (AGL-3722). */
+export function aiJobCreditRange(kind: string, plan: AiBuildPlan): AiCreditRange {
+  return kind === 'build' ? aiBuildCreditRange(plan) : aiJobPlanCreditRange(kind, plan)
+}
+
+/**
+ * A smaller first build (AGL-3722): the plan's home page — its first page
+ * where it has no home — and only what that page needs, transitively: the
+ * layout it is drawn in, the form and anything else its sections place.
+ * Every other page, and what only they needed, waits for a later request.
+ * `null` when the plan has no page, or when the smaller plan is the whole one.
+ */
+export function aiBuildFirstPagePlan<T extends AiBuildPlan>(plan: T): T | null {
+  if (!plan.screens.length) return null
+  const index = Math.max(0, plan.screens.findIndex(aiSitePlanIsHome))
+  const units = aiBuildUnits(plan).filter((unit) => !aiBuildUnitIsPlatform(unit))
+  const bySlot = new Map(units.map((unit) => [unit.slot, unit]))
+  const keep = new Set<string>()
+  const queue = [`p${index}`]
+  while (queue.length) {
+    const slot = queue.shift() as string
+    if (keep.has(slot)) continue
+    keep.add(slot)
+    for (const dep of bySlot.get(slot)?.deps ?? []) queue.push(dep)
+  }
+  if (keep.size === units.length) return null
+  const screen = plan.screens[index]
+  const create = plan.create.filter((creation, at) => !AI_BUILD_CREATE_KINDS.includes(creation.kind) || keep.has(`c${at}`))
+  const items = (plan.items ?? []).filter((item) => keep.has(item.slot))
+  const kept = new Set([screen.slug, ...create.map((entry) => `${AI_PLAN_NEW_REF_PREFIX}${entry.name}`)])
+  const smaller: T = {
+    ...plan,
+    create,
+    screens: [screen],
+    ...(plan.items ? { items } : {}),
+    ...(plan.embeds ? { embeds: plan.embeds.filter((embed) => kept.has(embed.where)) } : {}),
+  }
+  // The store's own pages stay only while the smaller build still makes a store (AGL-3676).
+  if (smaller.storePages && !aiBuildMakesStore(smaller)) delete smaller.storePages
+  return smaller
+}
+
+/** The smaller first build a build that does not fit is offered (AGL-3722), with its range; `null` when there is none. */
+export function aiBuildSmaller(plan: AiBuildPlan, ops?: AiBuildOps): AiCreditsSmaller | null {
+  const smaller = aiBuildFirstPagePlan(plan)
+  if (!smaller) return null
+  const screen = smaller.screens[0]
+  const label = aiSitePlanIsHome(screen) ? AI_SITE_HOME_FIRST_LABEL : `Build the ${screen.title} page first`
+  return { label, ...aiBuildCreditRange(smaller, { ops }) }
 }
 
 /** A fresh ledger: one pending row per unit, first attempt. */
@@ -403,6 +616,13 @@ export function aiBuildDegradation(
       : (context.ops?.get(dep.op)?.noun ?? dep.op)
     const capability = dep.item ? context.ops?.get(dep.op) : undefined
     const degrade = dep.item?.degrade ?? capability?.degrade ?? (dep.creation?.kind === 'layout' ? 'fallback' : 'omit')
+    // A form whose dataset could not be made is built without it (AGL-3616):
+    // its submissions reach the Inbox, as any form's do.
+    if (aiBuildUnitWritesTo(unit) === dep.label.toLowerCase()) {
+      result.degradedBy.push(slot)
+      result.notes.push(`Its submissions arrive in the Inbox only: the dataset “${dep.label}” could not be created.`)
+      continue
+    }
     if (!unit.screen && degrade === 'omit') {
       result.skip = `Not built: the ${noun} “${dep.label}” it needs could not be created.`
       result.degradedBy.push(slot)
@@ -418,6 +638,19 @@ export function aiBuildDegradation(
       const section = unit.screen.sections.find((one) =>
         one.uses.some((ref) => isAiPlanNewRef(ref) && aiBuildRefName(ref) === dep.label.toLowerCase()),
       )
+      // Another item this section places with the same block was built (one
+      // of several events, AGL-3743): the block stays, and only this item is
+      // missing from what it shows.
+      const blockStays = Boolean(
+        section &&
+          capability?.pageBlocks?.length &&
+          aiBuildSectionDeliveredBlocks(section, { ...context, rows, except: slot }).has(aiBuildBlocksKey(capability.pageBlocks)),
+      )
+      if (blockStays) {
+        result.notes.push(`Built without the ${noun} “${dep.label}”: it could not be created.`)
+        result.briefLines.push(`Leave the ${noun} “${dep.label}” out of the “${section?.name}” section: it could not be created.`)
+        continue
+      }
       const blocks = capability?.pageBlocks?.length ? ` the ${capability.pageBlocks.join(' or ')} block` : ''
       result.notes.push(
         `Built without${blocks || ` the ${noun}`}: the ${noun} “${dep.label}” could not be created.`,
@@ -432,6 +665,12 @@ export function aiBuildDegradation(
   return result
 }
 
+/** The dataset a form unit writes to, by its `new:` name lowercased; `null` for any other unit (AGL-3616). */
+export function aiBuildUnitWritesTo(unit: Pick<AiBuildUnit, 'creation'>): string | null {
+  const ref = unit.creation?.kind === 'form' ? unit.creation.writesTo : null
+  return isAiPlanNewRef(ref) ? aiBuildRefName(ref) : null
+}
+
 /** What each creation is called in a note. */
 export function aiBuildCreationNoun(kind: AiBuildPlanCreateKind): string {
   return kind === 'email' ? 'email design' : kind === 'theme-change' ? 'theme change' : kind
@@ -443,27 +682,74 @@ export function aiBuildCreationNoun(kind: AiBuildPlanCreateKind): string {
  */
 export function aiBuildPlacedItemLines(
   unit: AiBuildUnit,
-  context: { units: readonly AiBuildUnit[]; ledger: readonly AiJobItemLedger[]; ops?: AiBuildOps },
+  context: {
+    units: readonly AiBuildUnit[]
+    ledger: readonly AiJobItemLedger[]
+    ops?: AiBuildOps
+    /** Operations whose items the platform places itself (a listing), so the page is told nothing of them. */
+    placedByCode?: readonly string[]
+  },
 ): string[] {
   if (!unit.screen) return []
   const rows = new Map(context.ledger.map((row) => [row.slot, row]))
   const lines: string[] = []
   for (const section of unit.screen.sections) {
-    for (const ref of section.uses) {
-      if (!isAiPlanNewRef(ref)) continue
-      const dep = context.units.find((one) => one.item && one.item.name.toLowerCase() === aiBuildRefName(ref))
-      if (!dep?.item) continue
+    // One line per block a section places, naming every built item it shows:
+    // a section listing four events places the Event List once (AGL-3743).
+    const placed = new Map<string, { blocks: readonly string[]; noun: string; labels: string[] }>()
+    for (const { dep, capability } of aiBuildSectionItems(section, context.units, context.ops)) {
       const row = rows.get(dep.slot)
       if (!row || !aiBuildItemDelivered(row)) continue
-      const capability = context.ops?.get(dep.op)
+      if (context.placedByCode?.includes(dep.op)) continue
       const blocks = capability?.pageBlocks ?? []
       if (!blocks.length) continue
-      lines.push(
-        `In the “${section.name}” section, place the ${blocks.join(' or ')} block for the ${capability?.noun ?? dep.op} “${dep.label}”.`,
-      )
+      const key = aiBuildBlocksKey(blocks)
+      const entry = placed.get(key) ?? { blocks, noun: capability?.noun ?? dep.op, labels: [] }
+      entry.labels.push(`“${dep.label}”`)
+      placed.set(key, entry)
+    }
+    for (const { blocks, noun, labels } of placed.values()) {
+      const named =
+        labels.length === 1
+          ? `the ${noun} ${labels[0]}`
+          : `the ${noun}s ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+      lines.push(`In the “${section.name}” section, place the ${blocks.join(' or ')} block for ${named}.`)
     }
   }
   return lines
+}
+
+/** The items a page section places, each with its capability, in the order its uses name them. */
+function aiBuildSectionItems(
+  section: { uses: readonly string[] },
+  units: readonly AiBuildUnit[],
+  ops: AiBuildOps | undefined,
+): Array<{ dep: AiBuildUnit; capability: PluginAiCapability | undefined }> {
+  const found: Array<{ dep: AiBuildUnit; capability: PluginAiCapability | undefined }> = []
+  for (const ref of section.uses) {
+    if (!isAiPlanNewRef(ref)) continue
+    const dep = units.find((one) => one.item && one.item.name.toLowerCase() === aiBuildRefName(ref))
+    if (dep?.item) found.push({ dep, capability: ops?.get(dep.op) })
+  }
+  return found
+}
+
+/** The blocks a section's built items place, each set as one key; `except` leaves one item out. */
+function aiBuildSectionDeliveredBlocks(
+  section: { uses: readonly string[] },
+  context: { units: readonly AiBuildUnit[]; rows: ReadonlyMap<string, AiJobItemLedger>; ops?: AiBuildOps; except: string },
+): Set<string> {
+  const keys = new Set<string>()
+  for (const { dep, capability } of aiBuildSectionItems(section, context.units, context.ops)) {
+    if (dep.slot === context.except || !capability?.pageBlocks?.length) continue
+    const row = context.rows.get(dep.slot)
+    if (row && aiBuildItemDelivered(row)) keys.add(aiBuildBlocksKey(capability.pageBlocks))
+  }
+  return keys
+}
+
+function aiBuildBlocksKey(blocks: readonly string[]): string {
+  return [...blocks].sort().join('|')
 }
 
 /** What a build came to: whether anything was delivered, and whether anything is left. */
@@ -550,4 +836,21 @@ export function aiLedgerUnits(ledger: readonly AiJobItemLedger[]): AiBuildUnit[]
     label: row.label,
     deps: row.op === 'page' ? creations : [],
   }))
+}
+
+/**
+ * What the job drawer says under an item another plugin's writer made: a
+ * draft, or, for setup its writer saves live (`live`, a CRM pipeline or
+ * field, AGL-3746), that it was saved. A writer that went live only when the
+ * member may (an event the publishing role publishes, AGL-3755) reports
+ * `live: false` for one it kept as a draft, with its `notice` saying why.
+ */
+export function aiBuildItemOutputNote(
+  capability: Pick<PluginAiCapability, 'where' | 'live'>,
+  written?: Pick<PluginDraftRecord, 'live' | 'notice'>,
+): string {
+  const live = written?.live ?? capability.live
+  const said = live ? `Live now, in ${capability.where}.` : `A draft, in ${capability.where}.`
+  const notice = written?.notice?.trim()
+  return notice ? `${said} ${notice}` : said
 }

@@ -19,6 +19,8 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { crmRoutes, type CrmRoutes } from './crm-routes'
+import { CRM_PICKLIST_VALUES_SETUP_RESOURCE } from './crm-picklist-setup-content'
+import { CRM_FIELD_SETUP_RESOURCE, CRM_PIPELINE_SETUP_RESOURCE } from './crm-setup-content'
 
 /**
  * Where the CRM's records are read, published for every other surface.
@@ -86,6 +88,22 @@ export function registerCrmRecordRoutes(): void {
   registerPluginRecordRoute('deal', {
     list: (context) => hub(context).section('deals'),
     record: (context, id) => hub(context).deal(id),
+  }, owner)
+  // The setup an AI build saves (AGL-3746): a pipeline is edited from the
+  // Deals section's Pipelines, and a custom field is a row in Fields, so
+  // each record answers its section.
+  registerPluginRecordRoute(CRM_PIPELINE_SETUP_RESOURCE, {
+    list: (context) => hub(context).section('deals'),
+    record: (context) => hub(context).section('deals'),
+  }, owner)
+  registerPluginRecordRoute(CRM_FIELD_SETUP_RESOURCE, {
+    list: (context) => hub(context).section('fields'),
+    record: (context) => hub(context).section('fields'),
+  }, owner)
+  // A picklist's values and a Choice field's choices are kept on Fields (AGL-3756).
+  registerPluginRecordRoute(CRM_PICKLIST_VALUES_SETUP_RESOURCE, {
+    list: (context) => hub(context).section('fields'),
+    record: (context) => hub(context).section('fields'),
   }, owner)
   // A task has no page of its own: it is a row in the Tasks list, at both
   // levels, so a task's record answers the list.

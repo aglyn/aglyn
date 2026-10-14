@@ -112,8 +112,9 @@ const CatchAllClient = dynamic(
  */
 export interface SiteNotFoundProps {
   code: string
-  title: string
-  message: string
+  /** The heading and the line under it; the site's own words for a missing page where absent (AGL-3771). */
+  title?: string
+  message?: string
 }
 
 export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {

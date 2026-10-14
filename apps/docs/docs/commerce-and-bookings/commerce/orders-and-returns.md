@@ -20,6 +20,12 @@ later. Digital and service lines have nothing to ship and never hold an order op
 - **Carrier** and **Tracking number** make the tracking link for USPS, UPS, FedEx, DHL,
   Canada Post, Royal Mail and Australia Post. For any other carrier, choose **Other**,
   type its name, and paste the **Tracking link** yourself.
+- **Shipping cost** is optional: what sending this shipment cost you, in your store's
+  currency. Enter `0` for free shipping; leave it empty when you don't know. Each
+  shipment keeps its own cost, so a partial shipment and the rest can differ. It is
+  asked only for a shipment you enter by hand; a label you buy in Aglyn keeps what the
+  label cost. A Faire order sends it to Faire as the shipping you paid
+  ([Marketplaces](marketplaces.md)).
 - **Notify customer** emails the buyer the shipment with its tracking link. Leave it
   off to record a shipment quietly.
 - The order reads **Partially fulfilled** until every unit that ships is out, then
@@ -132,59 +138,14 @@ event** posts a `webhook.test` event now.
 | `return.received` | The returned items arrived. |
 | `return.refunded` | A return was refunded. |
 
-### What your endpoint receives
+### When an endpoint is down
 
-A `POST` with a JSON body:
+An endpoint has 8 seconds to answer each event. One that doesn't is sent the event
+again, on a schedule that lasts about a day, and the site's managers are told if the
+last try fails.
 
-```json
-{
-  "id": "evt_…",
-  "type": "order.fulfilled",
-  "createdAt": "2026-10-07T15:04:05.000Z",
-  "siteId": "…",
-  "data": {
-    "order": { "id": "…", "object": "order", "number": 1042, "status": "partially_fulfilled", "…": "…" },
-    "fulfillment": { "id": "…", "lines": [{ "lineItemId": 0, "quantity": 1 }], "carrier": "UPS", "trackingNumber": "1Z…", "trackingUrl": "https://…" }
-  }
-}
-```
-
-`data.order` is the order in the same shape the API returns for
-`GET /v1/sites/{siteId}/orders/{orderId}`. Money is in whole cents. Three headers come
-with it:
-
-| Header | What it holds |
-| --- | --- |
-| `Aglyn-Event` | The event, e.g. `order.paid`. |
-| `Aglyn-Event-Id` | The event's id. It is the same on every retry, so store it and ignore an id you have already handled. |
-| `Aglyn-Signature` | `t=<timestamp>,v1=<signature>`. |
-
-### Check the signature
-
-The signature is the HMAC-SHA256, in hex, of the timestamp, a period, and the raw
-request body, keyed with your signing secret. Check it against the raw body before
-parsing it, and refuse a timestamp more than five minutes old:
-
-```js
-import { createHmac, timingSafeEqual } from 'node:crypto'
-
-function verify(rawBody, header, secret) {
-  const parts = Object.fromEntries(header.split(',').map((part) => part.split('=')))
-  const expected = createHmac('sha256', secret).update(`${parts.t}.${rawBody}`).digest('hex')
-  const fresh = Math.abs(Date.now() / 1000 - Number(parts.t)) < 300
-  return fresh && timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1 ?? ''))
-}
-```
-
-### Answer quickly, and retries
-
-Answer with any `2xx` status within 8 seconds. Anything else — another status, a
-redirect, a timeout — is a failed attempt, and the event is sent again after 30
-seconds, 2 minutes, 10 minutes, 30 minutes, 1 hour, 6 hours and 12 hours: eight
-attempts over about a day. If the last one fails, the site's managers are told.
-An event can arrive more than once, and events about one order can arrive out of
-order, so use `Aglyn-Event-Id` to skip repeats and the order's `status` rather than
-the arrival order.
+Whoever builds your endpoint needs [Order webhooks for developers](../../developers/order-webhooks.md):
+what each event carries and how to check that it came from your store.
 
 **Deliveries** on an endpoint lists what was sent in the last 30 days, newest first,
 with each attempt's status. Filter it by **Delivered**, **Retrying** or **Failed**, open

@@ -31,6 +31,7 @@
 import { AI_JOB_STEP_RESERVE_CREDITS } from '../jobs/ai-jobs'
 import type { AiBuildPlan, AiBuildPlanScreen } from './ai-build-plan'
 import {
+  AI_SITE_DATASETS_MAX,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_NOMINAL_SECTIONS,
   AI_SITE_PAGES,
@@ -38,10 +39,14 @@ import {
   aiFreeCreditsResetLabel,
   aiFreeCreditsResetOn,
   aiFreeSiteCreditEstimate,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
+  aiFreeCreditsNoneLeftText,
+  aiFreeSiteCreditRange,
+  aiFreeSitePrompt,
+  aiJobPlanCreditRange,
+  aiSiteCreditRange,
   aiJobPlanCreditEstimate,
   aiPlanCreditEstimate,
+  aiPlanCreditRange,
   aiPlanPasses,
   aiSiteCreditEstimate,
   aiSitePlanPrerequisites,
@@ -308,8 +313,8 @@ describe('the plans a scaffold can build', () => {
           fields: [],
         },
         {
-          kind: 'dataset',
-          name: 'Menu',
+          kind: 'email',
+          name: 'Welcome',
           why: 'entries',
           duplicateOf: null,
           fields: [],
@@ -325,7 +330,7 @@ describe('the plans a scaffold can build', () => {
     })
     const refusal = aiSitePlanRefusal(several) ?? ''
     expect(refusal).toContain(
-      'the component “Card” on the Components page and the dataset “Menu” on the Datasets page',
+      'the component “Card” on the Components page and the email design “Welcome” in Emails → Templates',
     )
     expect(refusal.match(/Card/g)).toHaveLength(1)
   })
@@ -349,6 +354,29 @@ describe('what a page job is estimated to cost (AGL-3031)', () => {
     // A scaffold builds its layout and form, and no component.
     expect(aiJobPlanCreditEstimate('site', page)).toBe(aiPlanCreditEstimate(page))
     expect(aiPlanCreditEstimate(page)).toBe((2 + 1 + 2) * AI_SITE_PASS_CREDITS)
+  })
+})
+
+describe('what a scaffold’s datasets cost and how many it makes (AGL-3616)', () => {
+  const dataset = (name: string) => ({ kind: 'dataset' as const, name, why: 'a list of like things', duplicateOf: null, fields: ['Name'] })
+  const menu: AiBuildPlan = {
+    reuse: [],
+    create: [dataset('Menu')],
+    screens: [screen({ nav: true, sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'menu', uses: ['new:Menu'], items: 12 }] })],
+  }
+
+  it('counts each dataset as one pass, at what a single-answer creation measures', () => {
+    expect(aiPlanCreditEstimate(menu)).toBe((2 + 1 + 1) * AI_SITE_PASS_CREDITS)
+    expect(aiPlanCreditRange(menu).ceiling).toBe(aiPlanCreditEstimate(menu))
+    expect(aiPlanCreditRange(menu).likely).toBeGreaterThan(aiPlanCreditRange({ ...menu, create: [] }).likely)
+  })
+
+  it('builds a plan’s datasets itself, at most a start’s few', () => {
+    expect(aiSitePlanPrerequisites(menu)).toEqual([])
+    const pages = Array.from({ length: AI_SITE_PAGES.min }, (_, index) => screen({ title: `Page ${index}`, slug: `page-${index}` }))
+    const many = { ...menu, screens: pages, create: Array.from({ length: AI_SITE_DATASETS_MAX + 1 }, (_, index) => dataset(`List ${index}`)) }
+    expect(aiSitePlanShapeRefusal({ ...many, create: many.create.slice(1) })).toBeNull()
+    expect(aiSitePlanShapeRefusal(many)).toContain(`creates at most ${AI_SITE_DATASETS_MAX}`)
   })
 })
 
@@ -445,23 +473,64 @@ describe('a Free site start against what is left of the month (AGL-3660)', () =>
     expect(aiFreeCreditsResetLabel('2026-11-01')).toBe('November 1')
   })
 
-  it('is short when what is left is under the figure the dialog quotes, and never when nothing is known', () => {
-    const needed = aiFreeSiteCreditEstimate(2)
-    expect(aiFreeSiteShortfall({ left: needed - 1 }, 2)).toEqual({ needed, left: needed - 1 })
-    expect(aiFreeSiteShortfall({ left: needed }, 2)).toBeNull()
-    expect(aiFreeSiteShortfall(null, 2)).toBeNull()
-    // The prod case: a person with 70 left was quoted 216 of 300 — 218 since
-    // the wall prices the guided start's form at what it metered (AGL-3660).
-    expect(aiFreeSiteShortfall({ left: 70 }, 2)).toEqual({ needed: 218, left: 70 })
+  it('quotes a start at its measured figures and its worst case: about 137 (p90 213, up to 283) for two pages (AGL-3722)', () => {
+    expect(aiFreeSiteCreditRange(2)).toEqual({ likely: 137, p90: 213, ceiling: aiFreeSiteCreditEstimate(2) })
+    expect(aiFreeSiteCreditEstimate(2)).toBe(283)
+    expect(aiFreeSiteCreditRange(1)).toEqual({ likely: 107, p90: 173, ceiling: aiFreeSiteCreditEstimate(1) })
   })
 
-  it('says how many are left, when they reset, that they are shared, and the way on', () => {
-    const text = aiFreeSiteShortfallText({ needed: 216, left: 70 }, '2026-11-01')
-    expect(text).toBe(
-      'Building this site can take up to about 216 AI credits, and only 70 are left of your free AI credits ' +
-        'this month. They are shared by all your Free workspaces and reset on November 1. Upgrade this ' +
-        'workspace to build your site now, or start from the starter site and try AI again after the reset.',
+  it('asks before a start whose p90 is more than what is left — never when it fits, or when nothing is known (AGL-3722)', () => {
+    const { p90 } = aiFreeSiteCreditRange(2)
+    // Fits: no prompt. The worst-case hold of beta.235 (282) is gone: 218 left starts at once.
+    expect(aiFreeSitePrompt({ left: p90, resetsOn: '2026-11-01' }, 2)).toBeNull()
+    expect(aiFreeSitePrompt({ left: 218, resetsOn: '2026-11-01' }, 2)).toBeNull()
+    expect(aiFreeSitePrompt(null, 2)).toBeNull()
+    // Past it: the prompt, with what is left and the home page first.
+    const prompt = aiFreeSitePrompt({ left: p90 - 1, resetsOn: '2026-11-01' }, 2)
+    expect(prompt).toEqual({
+      ...aiFreeSiteCreditRange(2),
+      left: p90 - 1,
+      resetsOn: '2026-11-01',
+      smaller: { label: 'Build the home page first', ...aiFreeSiteCreditRange(1) },
+    })
+    // One page has no smaller first build.
+    expect(aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 1)?.smaller).toBeNull()
+  })
+
+  it('refuses outright only when nothing at all is left, with when the credits renew and the way on', () => {
+    expect(aiFreeCreditsNoneLeftText('2026-11-01')).toBe(
+      'You have no free AI credits left this month. They are shared by all your Free workspaces and renew on ' +
+        'November 1. Upgrade this workspace to build with AI now.',
     )
-    expect(aiFreeSiteShortfallText({ needed: 216, left: 1 }, '2026-11-01')).toMatch(/only 1 is left/)
+  })
+
+  it('quotes a paid start and a kept plan as ranges whose ceiling is the old figure (AGL-3722)', () => {
+    expect(aiSiteCreditRange(6).ceiling).toBe(aiSiteCreditEstimate(6))
+    // A paid start at what paid starts measured: plan, look, layout, form, pages.
+    expect(aiSiteCreditRange(6).likely).toBe(81 + 4 + 29 + 32 + 6 * 29)
+    const kept = plan({ screens: [screen(), screen({ slug: '/about' })] })
+    expect(aiJobPlanCreditRange('site', kept).ceiling).toBe(aiJobPlanCreditEstimate('site', kept))
+    expect(aiJobPlanCreditRange('site', kept).likely).toBeLessThan(aiJobPlanCreditEstimate('site', kept))
+  })
+
+  /*
+   * A paid 5-page store with its welcome email (Brinewood Soap Co,
+   * d0ME89B7tB, 2026-10-12) was quoted about 277 and came to 423: its plan
+   * counted at a Free start's 21 where it ran 84 on the paid routing, and its
+   * first products (66) not counted at all. The other paid stores of the
+   * window came to 413 and 448.
+   */
+  it('quotes a paid store its first products and a paid plan, near what such stores came to', () => {
+    const store = aiSiteCreditRange(5, { welcomeEmail: true, siteKind: 'store' })
+    expect(store.likely).toBe(81 + 4 + 29 + 32 + 5 * 29 + 49 + 64)
+    expect(store.likely).toBeGreaterThan(400)
+    expect(store.p90).toBeGreaterThanOrEqual(423)
+    expect(store.ceiling).toBe(aiSiteCreditEstimate(5, { welcomeEmail: true }) + AI_SITE_PASS_CREDITS)
+    // A blog's three first posts at the stand-in pass, each a pass of the ceiling.
+    const blog = aiSiteCreditRange(5, { siteKind: 'blog' })
+    expect(blog.likely).toBe(aiSiteCreditRange(5).likely + 50)
+    expect(blog.ceiling).toBe(aiSiteCreditEstimate(5) + 3 * AI_SITE_PASS_CREDITS)
+    // Any other kind writes no first content.
+    expect(aiSiteCreditRange(5, { siteKind: 'restaurant' })).toEqual(aiSiteCreditRange(5))
   })
 })

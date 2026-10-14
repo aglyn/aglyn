@@ -933,6 +933,104 @@ export function signupDroughtHealth(
 }
 
 /**
+ * Sign-ups that got a workspace and never reached a site (AGL-3725).
+ *
+ * Every check above asks about the workspace. AGL-3724 created every
+ * workspace it was asked for and then sent the person to a 404 before the
+ * site list, so for nine hours each of them read healthy: volume normal,
+ * nothing refused, no drought, and the canary graded "a workspace exists"
+ * and passed. The thing nobody measured was the OUTCOME a sign-up is for.
+ *
+ * So this reads it directly: orgs old enough that their owner has had time
+ * to make a site, young enough to be this incident and not last month's,
+ * and how many of them have none. It does not care why. A dead landing, a
+ * broken create dialog, a create route that 500s and a starter that never
+ * provisions all end the same way, with an org and no host.
+ *
+ * ## The numbers are from a backtest, not a guess
+ *
+ * Production, 2026-09-11 → 2026-10-11: 44 orgs created, 6 never got a site.
+ * Three were this incident; the other three fell on 9/26, 10/6 and 10/8,
+ * days apart. "Two or more inside twelve hours,
+ * each at least thirty minutes old" fires for exactly one stretch of that
+ * month, 10/11 04:00Z–12:00Z, which is AGL-3724, and it would have paged
+ * at about 04:20Z, two hours before the third person was lost.
+ *
+ * One stranded org is never enough on its own. People do sign up and leave,
+ * and at a handful of sign-ups a day a single one carries no signal.
+ *
+ * Pure, like its siblings: the route reads, this decides. The body carries
+ * counts only, never an org id or slug, because the endpoint is public.
+ */
+export interface SignupLandingCheck extends HealthCheck {
+  /** Orgs in the window that have no site. Null when the read failed. */
+  strandedOrgs: number | null
+  /** Every org in the window, the context for the count above. */
+  orgsInWindow: number | null
+  /** How far back the window reaches. */
+  windowHours: number
+  /** How old an org must be before having no site counts against it. */
+  graceMinutes: number
+  /** Stranded orgs at which this goes red. */
+  maxStranded: number
+}
+
+/** See {@link SignupLandingCheck}: twelve hours of orgs. */
+export const SIGNUP_LANDING_WINDOW_HOURS = 12
+
+/**
+ * Thirty minutes before an org with no site counts. Sign-ups that do make
+ * a site make it within minutes of the workspace (38 in the backtest month:
+ * median under a minute, slowest 8.2), so thirty never counts a person still
+ * typing a site name.
+ */
+export const SIGNUP_LANDING_GRACE_MINUTES = 30
+
+/** Red at two stranded orgs in the window. See {@link SignupLandingCheck}. */
+export const MAX_STRANDED_SIGNUPS = 2
+
+/** One org as the landing check reads it: only whether it has any site. */
+export interface SignupLandingOrg {
+  hostCount: number
+}
+
+export function signupLandingHealth(
+  orgs: SignupLandingOrg[] | null,
+  ms: number,
+  maxStranded: number = MAX_STRANDED_SIGNUPS,
+  windowHours: number = SIGNUP_LANDING_WINDOW_HOURS,
+  graceMinutes: number = SIGNUP_LANDING_GRACE_MINUTES,
+): SignupLandingCheck {
+  const shape = { windowHours, graceMinutes, maxStranded }
+  // An unreadable window is degraded, never calm, the rule every sibling
+  // follows: a check that cannot see the thing it watches has no opinion.
+  if (orgs === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'orgs-unavailable',
+      strandedOrgs: null,
+      orgsInWindow: null,
+      ...shape,
+    }
+  }
+  // `!(n > 0)` rather than `n === 0`, so a corrupt count (NaN, a string)
+  // reads as "no site" and cannot hide a stranded org.
+  const strandedOrgs = orgs.filter(
+    (landing) => !(Number(landing.hostCount) > 0),
+  ).length
+  const stranded = strandedOrgs >= maxStranded
+  return {
+    ok: !stranded,
+    ms,
+    ...(stranded ? { code: 'signups-stranded' } : {}),
+    strandedOrgs,
+    orgsInWindow: orgs.length,
+    ...shape,
+  }
+}
+
+/**
  * Rate-limiter degradation, reduced to a health verdict (AGL-1693).
  *
  * `consumeRateLimit` fails SOFT: when the Firestore counter is unreachable it
@@ -2921,11 +3019,44 @@ export interface CronBeatStore {
   }
 }
 
+/**
+ * How often one instance re-marks an every-minute job.
+ *
+ * A job that runs every minute and is graded against a thirty-minute grace
+ * does not need sixty marks an hour: each mark is two writes, and the two
+ * every-minute beats alone were 5,760 writes a day. One mark per instance per
+ * five minutes leaves a silent job silent for at most five minutes plus the
+ * grace before it reads `job-silent` — still inside the budget the grace
+ * describes, and an instance that stops running stops marking either way.
+ */
+export const CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS = 5 * 60_000
+
+/** The jobs whose marks {@link CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS} spaces out. */
+const EVERY_MINUTE_CRON_JOBS = new Set(
+  SCHEDULED_JOBS.filter((job) => job.cron === '* * * * *').map((job) => job.id),
+)
+
+/** When this instance last marked each every-minute job. */
+const lastEveryMinuteBeat = new Map<string, number>()
+
+/** Test seam. */
+export function resetCronBeatThrottleForTests(): void {
+  lastEveryMinuteBeat.clear()
+}
+
 export async function writeCronBeat(
   store: CronBeatStore,
   jobId: string,
   now: number = Date.now(),
 ): Promise<boolean> {
+  const throttled = EVERY_MINUTE_CRON_JOBS.has(jobId)
+  if (throttled) {
+    const last = lastEveryMinuteBeat.get(jobId)
+    // `>= 0` so a clock that steps backwards marks rather than going quiet.
+    if (last !== undefined && now - last >= 0 && now - last < CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS) {
+      return true
+    }
+  }
   try {
     const beats = store.collection(CRON_BEAT_COLLECTION)
     await beats
@@ -2938,6 +3069,7 @@ export async function writeCronBeat(
     } catch {
       // The reader confirms a stale summary entry against the mark above.
     }
+    if (throttled) lastEveryMinuteBeat.set(jobId, now)
     return true
   } catch {
     return false

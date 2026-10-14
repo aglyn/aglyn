@@ -18,6 +18,13 @@ writes anything, and you can undo it afterwards.
 
 Open **Admin → Backup & template** on the site.
 
+## The Backup & restore card {#backup-and-restore-card}
+
+The **Backup & restore** card is where you take a copy of a site and bring one back:
+**Download backup** saves the whole site as one package, **Export items** saves only the
+items you pick, **Import package** loads a package into this site, and **Undo import**
+reverses the last import. Download a backup before any large change.
+
 ## What a package carries
 
 | Item | What travels |

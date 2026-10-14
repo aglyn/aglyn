@@ -35,12 +35,7 @@ export function OrgPluginsCard() {
   return (
 <CardDisplay
   header={'Plugins'}
-  help={docsHelp('installYourFirstPlugin', {
-    anchor: '#step-7-off',
-    excerpt:
-      'Turning plugins on and off moved to its own ' +
-      'Plugins section. This card points you there.',
-  })}
+  help={docsHelp('installYourFirstPlugin', { anchor: '#find-plugins' })}
   contentGutterX
   contentGutterY
 >

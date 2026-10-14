@@ -49,6 +49,8 @@ export function datasetIndexedRecord(
         id: fieldId,
         name: text(model.fields[fieldId]?.name) || fieldId,
         type: String(model.fields[fieldId]?.type ?? 'text'),
+        // A named type riding the storage one: a record's photo is `image` (AGL-3616).
+        ...(model.fields[fieldId]?.customType ? { customType: String(model.fields[fieldId]?.customType) } : {}),
       })),
       visibleTo: Array.isArray(data['visibleTo']) ? (data['visibleTo'] as string[]) : [],
       installedFrom: installedFrom(data['source']),

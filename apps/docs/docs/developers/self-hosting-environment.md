@@ -425,7 +425,7 @@ your dashboard stays green, and the state it drives simply never moves — a
 refund that never revokes an entitlement looks exactly like a healthy
 integration.
 
-Subscribe your platform endpoint to **all nineteen**:
+Subscribe your platform endpoint to **all twenty**:
 
 ```
 customer.subscription.created
@@ -445,12 +445,14 @@ payment_method.attached
 payment_method.detached
 radar.early_fraud_warning.created
 review.opened
+charge.failed
 terminal.reader.action_succeeded
 terminal.reader.action_failed
 ```
 
 `radar.early_fraud_warning.created` and `review.opened` raise fraud signals to
-staff. The two `terminal.reader` events complete a card-reader payment at the
+staff. `charge.failed` lets a workspace's own failed subscription payment place
+an automatic security hold when Stripe flags it as fraud. The two `terminal.reader` events complete a card-reader payment at the
 point-of-sale register; without them a reader payment still completes while the
 register screen is open, because the register checks the reader itself.
 
@@ -616,6 +618,10 @@ did not choose because a name was misspelled.
                "tags": [{ "name": "context", "value": "invite" }],
                "replyTo": "support@example.com" } }
 ```
+
+`bcc`, a list of addresses, is present only when a message carries blind
+copies, such as a review platform's invitation address on an order email.
+Deliver it as blind copies: never add those addresses to the message's own headers.
 
 Answer `2xx` once the message is accepted, with `{ "id": "…" }` if your relay
 has an id for it. Answer `429`, with `Retry-After` in seconds, to ask for a
@@ -878,6 +884,35 @@ orders and refunds.
 | --- | --- | --- | --- |
 | `TAX_ENGINES_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored AvaTax license key and TaxJar API token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one the next time its store is taxed. **Losing the key loses every connection**: each merchant connects their account again, and until they do their store taxes at its own rates. |
 
+### Review platforms: Trustpilot and Yotpo {#review-platforms}
+
+A merchant can invite customers to review their store on Trustpilot or Yotpo
+Reviews with their **own** account. Trustpilot's invitation address needs
+nothing of the deployment: it is a blind copy on the buyer's order email. The
+Trustpilot API and Yotpo use the merchant's own keys, and the deployment holds
+only the key those are sealed under. Leave it unset and the Trustpilot card
+offers the invitation address alone, no Yotpo card appears, and no key is sent
+to either service. Set it on the console **and** the tenant runtime, since
+orders are fulfilled and their events handled in both.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `REVIEW_PLATFORMS_TOKEN_KEY` | Feature | Runtime | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored Trustpilot API key and secret and Yotpo secret key with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens. **Losing the key loses every API connection**: each merchant pastes their keys again. |
+
+### Ad conversions: Meta, TikTok and Pinterest {#ad-conversions}
+
+A site can send its purchases and leads to the merchant's **own** Meta,
+TikTok and Pinterest ad accounts from the server, beside the browser tags set
+on its Tracking tab. Each merchant connects with their own access token, so
+the deployment needs no vendor account: only the key those tokens are sealed
+under. Leave it unset and no Ad conversions card appears and no server-side
+event is sent; the browser tags work either way. Set it on the **console
+only**: delivery runs there, and the tenant runtime never opens a token.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `AD_CONVERSIONS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored access token with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again. |
+
 ### Email platforms: Mailchimp, Klaviyo, Omnisend and Attentive {#marketing-platforms}
 
 A site can keep its contacts and their unsubscribes in step with the merchant's
@@ -953,6 +988,25 @@ webhooks are set up by each merchant in their ShipMonk account, at the
 address and with the signing secret the card shows once, and are answered at
 `https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
 verified by its HMAC-SHA512 `X-Sm-Signature`.
+
+### Couriers: DoorDash Drive {#couriers}
+
+A store can send a DoorDash courier for its own local deliveries from the
+merchant's **own** DoorDash Drive developer account. The deployment registers
+nothing and holds no DoorDash account: each merchant pastes their own keys,
+and DoorDash bills each courier to that merchant's account. The deployment
+holds only the key those keys are sealed under. Leave it unset and no Couriers
+card or **Send a courier** appears, and nothing is sent to DoorDash. Set it on
+the **console only**: the routes, DoorDash's webhook and the job that follows
+open deliveries run there.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `COURIERS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored DoorDash Drive signing secret with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a secret opened under an old key is sealed again under the new one the next time it is used. **Losing the key loses every connection**: each merchant connects again. |
+
+Each merchant registers the webhook in their own DoorDash developer portal, at
+`https://<console>/api/couriers/webhooks/doordash?site=<siteId>` with the token
+their Couriers card shows; the card gives them both.
 
 ### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
 
@@ -1288,6 +1342,7 @@ Three separate mechanisms, and missing any of them is quiet rather than loud.
 | `CRON_SECRET` | Feature | Runtime | Shared secret every scheduled route checks, accepted as `Authorization: Bearer <secret>` or `x-cron-secret: <secret>`. Unset, every one of those routes refuses. `openssl rand -hex 32`. |
 | `AGLYN_JOB_RUNNER_URL` | Feature *(cloud functions)* | Runtime | The tenant origin the every-minute beat POSTs: `https://sites.example.com/api/plugins/run-jobs`. **No default, deliberately.** |
 | `AGLYN_CONSOLE_URL` | Feature *(cloud functions)* | Runtime | The origin that **serves** your console — never one that redirects to it, because a redirect drops the POST body and the `x-cron-secret` header. It drives the fifteen-minute console sweeps and the every-minute AI jobs beat. **No default, deliberately.** |
+| `AGLYN_ALLOW_UNCONFIGURED_FUNCTIONS` | Optional | Deploy | Set to `1` to let `firebase deploy --only functions` proceed when no dotenv in `cloud/functions` sets `AGLYN_CONSOLE_URL` and `AGLYN_JOB_RUNNER_URL`. Unset — the default — the predeploy check refuses, because a deploy without them replaces each function's env and its scheduled jobs then skip every run. Set it only for a deploy that intentionally carries no scheduled jobs. |
 | `CRM_DIGEST_TIME_ZONE` | Optional | Runtime | The zone `/api/crm/daily-digest` reads "today" in when it counts overdue and due-today tasks. Default `America/Chicago`, which is why the schedule below fires at 13:00 UTC; an IANA name (`Europe/London`). A value the runtime does not know falls back to the default with a warning. Schedule the route for 08:00 in whatever zone you set. |
 
 What `CRON_SECRET` being unset silently switches off:

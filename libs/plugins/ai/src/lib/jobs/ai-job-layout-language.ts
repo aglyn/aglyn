@@ -19,6 +19,12 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiLayoutDesignChoices, type AiLayoutDesign } from '../layout-language/ai-layout-design'
 import { aiCompileLayoutFrame } from '../layout-language/ai-layout-frame'
 import {
+  aiLayoutFrameHollows,
+  aiLayoutFrameHollowsSaid,
+  aiLayoutFrameIsHollow,
+  aiLayoutRepairFrameHollows,
+} from '../layout-language/ai-layout-frame-hollows'
+import {
   AI_LAYOUT_FRAME_TOOL,
   AI_LAYOUT_LANGUAGE_TEXT,
   aiReadLayoutFrame,
@@ -30,7 +36,8 @@ import type {
 import { aiLayoutCopyCheck } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
-import type { AiJob } from '../model/ai-jobs.types'
+import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
+import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import {
   aiHomeScreenIds,
   type AiSiteInventory,
@@ -38,11 +45,15 @@ import {
 import { AI_STEP_TIERS } from '../providers/catalog'
 import type { AiGenerationCheck, AiValidatedTree } from '../runtime/ai-doctrine'
 import {
+  aiSettleMechanicalRules,
+  aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
+  type AiDoctrineNode,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { aiSiteKindDesignLines } from '../model/ai-site-kinds'
+import type { AiStoreFrameLinks } from '../model/ai-site-store-pages'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine } from './ai-job-generation'
@@ -107,12 +118,14 @@ export function aiLayoutSiteName(job: Pick<AiJob, 'inputs'>): string {
 
 /** The pages a frame's navigation links: the planned pages, else the site's own, in order. */
 export function aiLayoutNavPages(
-  job: Pick<AiJob, 'inputs'>,
+  job: Pick<AiJob, 'inputs'> & { plan?: Pick<AiJobPlan, 'language'> | null },
   inventory: AiSiteInventory | null,
 ): AiLayoutPage[] {
   // The header and the footer link the pages the job was told (AGL-3660),
   // else the site's own, the home page always and first, labelled Home. The
-  // model draws neither list, so it cannot drop a page.
+  // model draws neither list, so it cannot drop a page. A site in another
+  // language keeps its home page's own title: a Spanish start's "Inicio" was
+  // linked as "Home" (AGL-3760).
   const planned = aiLayoutSitePages(job.inputs)
   const own = (inventory?.screens ?? [])
     .filter((row) => !row.template)
@@ -123,7 +136,7 @@ export function aiLayoutNavPages(
   const pages = [...siteHome, ...(planned.length ? planned : own)].filter((page) => page.label.trim())
   const home = pages.find((page) => aiLayoutIsHomeSlug(page.slug))
   return [
-    ...(home ? [{ ...home, label: 'Home' }] : []),
+    ...(home ? [aiLayoutSpeaksOtherThanEnglish(job.plan?.language) ? home : { ...home, label: 'Home' }] : []),
     ...pages.filter((page) => page !== home && !aiLayoutIsHomeSlug(page.slug)),
   ].slice(0, AI_LAYOUT_SITE_PAGES_MAX)
 }
@@ -155,8 +168,20 @@ export function aiLayoutFramePrompt(input: {
     targets.forms.length || targets.formPageId
       ? 'A call to action that asks a visitor to get in touch goes to form.'
       : 'The site has no form yet.',
+    // A storefront's header (AGL-3676): its cart, and an announcement line.
+    ...(aiLayoutShopPageId(targets)
+      ? [
+          "This is an online store: give the header no button, since the platform puts the cart beside the navigation. Give the header one note instead: a short announcement for the bar above it, under 60 characters, about the shop from the brief (a promise it makes, such as its shipping, or what is new); never invent an offer, a discount, a price or a shipping threshold the brief does not give.",
+        ]
+      : []),
     `Design seed: ${job.$id.slice(-6)}.`,
   ].join('\n')
+}
+
+/** A store's Shop page, by its id: the page its catalog's whole list is placed on (AGL-3676). */
+export function aiLayoutShopPageId(targets: Pick<AiLayoutTargets, 'listings'>): string | null {
+  const products = (targets.listings ?? []).find((listing) => listing.kind === 'products')
+  return products?.placements.find((placement) => placement.role === 'index')?.screenId ?? null
 }
 
 /** A validated language layout. */
@@ -179,6 +204,10 @@ export function aiLayoutFrameCheck(input: {
   extend: (tree: AiValidatedTree) => AiDoctrineViolation[]
   /** The site's design (`aiLayoutDesignOf`), whose pages' closing band the footer sits under. */
   design?: AiLayoutDesign | null
+  /** A store's own pages, which the header and footer link by path (AGL-3676). */
+  storeLinks?: AiStoreFrameLinks | null
+  /** The site's language, which the frame's own words are written in (AGL-3760). */
+  language?: string
 }): AiGenerationCheck<AiLayoutFrameBuilt> {
   let answers = 0
   return (answer) => {
@@ -195,7 +224,12 @@ export function aiLayoutFrameCheck(input: {
         navPages: input.pages,
         closesDark: input.design ? aiLayoutDesignChoices(input.design).coverClose : false,
         // A site that sells carries its cart in the header (AGL-3676).
-        cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products'),
+        cart: (input.targets.listings ?? []).some((listing) => listing.kind === 'products' && listing.cart !== false),
+        // And a store's header is a storefront's: no button repeating its navigation, an announcement bar (AGL-3676).
+        shopId: aiLayoutShopPageId(input.targets),
+        // And its account and policies, written after it (AGL-3676).
+        storeLinks: input.storeLinks ?? null,
+        ...(input.language ? { language: input.language } : {}),
       },
       input.targets,
     )
@@ -209,6 +243,13 @@ export function aiLayoutFrameCheck(input: {
       ],
       formIds: input.targets.forms.map((form) => form.id),
       homeScreenIds: input.targets.homeIds,
+      // A link home under the home page's own title says home, in any language (AGL-3760).
+      homeLabels: [
+        ...input.pages.filter((page) => aiLayoutIsHomeSlug(page.slug)),
+        ...input.targets.pages.filter((page) => input.targets.homeIds.includes(page.id)),
+      ].map((page) => page.label),
+      // A footer's "Get in touch" goes to the form, wherever it is placed (AGL-3729).
+      ...(input.targets.formPageId ? { formScreenIds: [input.targets.formPageId] } : {}),
       codeBuilt: true,
     }
     const stored = aiLayoutStoredTree(compiled.tree, 'layout', context)
@@ -239,7 +280,20 @@ export function aiLayoutFrameCheck(input: {
       },
       last,
     )
-    const { nodes, dropped } = copy
+    const { dropped } = copy
+    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660).
+    const nodes = aiSettleUnrelatedScreenLinks(
+      aiSettleMechanicalRules(
+        { rootId: stored.rootId, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+        'layout',
+      ),
+      'layout',
+      context,
+    ).nodes as unknown as typeof copy.nodes
+    // The copy check can take words out of the footer: no heading or column
+    // is left with nothing under it (AGL-3735), and none may remain.
+    aiLayoutRepairFrameHollows(nodes as unknown as Record<string, unknown>)
+    const hollow = aiLayoutFrameHollows(nodes as unknown as Record<string, unknown>)
     const report = validateAiDoctrineTree(
       { rootId: stored.rootId, nodes },
       'layout',
@@ -247,6 +301,16 @@ export function aiLayoutFrameCheck(input: {
     )
     const violations = [
       ...report.violations,
+      ...(aiLayoutFrameIsHollow(hollow)
+        ? [
+            {
+              rule: null,
+              code: 'layout-frame-hollow',
+              message: 'Every footer heading needs something under it, and every footer column more than a heading.',
+              detail: aiLayoutFrameHollowsSaid(hollow).join('; '),
+            },
+          ]
+        : []),
       ...copy.violations,
       ...input.extend({
         rootId: stored.rootId,

@@ -123,8 +123,8 @@ export default function BillingAssistOverageCard(props: BillingAssistOverageCard
           'monthly invoice. Stop at the band, or stop once the overage ' +
           'reaches an amount you choose.'
         }
-        help={pluginDocsHelp('billing', {
-          anchor: '#assist-overage',
+        help={pluginDocsHelp('aiCredits', {
+          anchor: '#past-the-band',
           excerpt:
             'On a paid plan the assistant keeps answering past your ' +
             'included credits and the extra is billed at your plan\'s ' +

@@ -82,6 +82,58 @@ describe('parseClientErrorEvents (AGL-1538)', () => {
     })
     expect(event.url).toBeUndefined()
   })
+
+  it("keeps a hydration report's translator and language labels", () => {
+    const [event] = parseClientErrorEvents({
+      events: [
+        {
+          kind: 'hydration',
+          message: 'Minified React error #418',
+          translated: 'lang:tr',
+          language: 'tr-TR',
+        },
+      ],
+    })
+    expect(event).toMatchObject({ translated: 'lang:tr', language: 'tr-TR' })
+  })
+
+  it('refuses a label that is not one the beacon writes', () => {
+    const [event] = parseClientErrorEvents({
+      events: [
+        {
+          message: 'boom',
+          translated: 'chrome <script>',
+          language: { value: 'en' },
+        },
+      ],
+    })
+    expect(event.translated).toBeUndefined()
+    expect(event.language).toBeUndefined()
+  })
+
+  it('keeps the browser family the beacon writes (AGL-3732)', () => {
+    const [event] = parseClientErrorEvents({
+      events: [{ kind: 'hydration', message: 'Minified React error #418', browser: 'webview' }],
+    })
+    expect(event.browser).toBe('webview')
+  })
+
+  it('refuses a browser value outside the seven families — a raw UA never lands', () => {
+    const events = parseClientErrorEvents({
+      events: [
+        {
+          message: 'a',
+          browser:
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+        },
+        { message: 'b', browser: 'Chrome' },
+        { message: 'c', browser: 'chrome 129' },
+        { message: 'd', browser: ['safari'] },
+      ],
+    })
+    expect(events).toHaveLength(4)
+    for (const event of events) expect(event.browser).toBeUndefined()
+  })
 })
 
 /**
@@ -680,6 +732,57 @@ describe('reportClientErrors (AGL-1925) — a laptop is not a deployment', () =>
     expect(payload.serviceContext.kind).toBeUndefined()
     // The stack still drives grouping.
     expect(payload.message).toContain('at rJ')
+  })
+
+  it('carries `browser` as a TOP-LEVEL field beside `kind` (AGL-3732)', async () => {
+    process.env['VERCEL'] = '1'
+    const fetchMock = okFetch()
+    const mod = await load()
+    await mod.reportClientErrors(
+      [
+        {
+          kind: 'hydration',
+          message: 'Minified React error #418',
+          stack: 'Error: x\n  at rJ (https://aglyn.com/_next/static/chunks/a.js:1:2)',
+          browser: 'safari',
+        },
+        { kind: 'error', message: 'no family' },
+      ],
+      { service: 'tenant-web' },
+    )
+    const entries = JSON.parse(fetchMock.mock.calls[0][1].body).entries
+    expect(entries[0].jsonPayload.browser).toBe('safari')
+    expect(entries[0].jsonPayload.serviceContext.browser).toBeUndefined()
+    expect(entries[1].jsonPayload).not.toHaveProperty('browser')
+  })
+
+  it('heads a Safari or Firefox stack with its message, which those engines leave out', async () => {
+    process.env['VERCEL'] = '1'
+    const fetchMock = okFetch()
+    const mod = await load()
+    await mod.reportClientErrors(
+      [
+        {
+          kind: 'host-activity-write',
+          message: 'Missing or insufficient permissions.',
+          stack: 'z@https://app.aglyn.com/_next/static/a.js:1:6044\ntv@https://app.aglyn.com/_next/static/a.js:1:91833',
+        },
+        {
+          kind: 'error',
+          message: 'boom',
+          stack: 'Error: boom\n  at fn (https://app.aglyn.com/_next/static/a.js:1:2)',
+        },
+      ],
+      { service: 'console-web' },
+    )
+    const entries = JSON.parse(fetchMock.mock.calls[0][1].body).entries
+    expect(entries[0].jsonPayload.message).toBe(
+      'Error: Missing or insufficient permissions.\nz@https://app.aglyn.com/_next/static/a.js:1:6044\ntv@https://app.aglyn.com/_next/static/a.js:1:91833',
+    )
+    // A V8 stack already opens with it, and is left alone.
+    expect(entries[1].jsonPayload.message).toBe(
+      'Error: boom\n  at fn (https://app.aglyn.com/_next/static/a.js:1:2)',
+    )
   })
 
   it('defaults a missing kind rather than writing an unfilterable entry', async () => {

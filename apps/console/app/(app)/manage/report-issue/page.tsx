@@ -66,12 +66,12 @@ const ReportIssuePage: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Report an issue',
         icon: { path: mdiBugOutline.path },
       }}
-      help={{ topic: 'reportAnIssue' }}
+      help={{ topic: 'reportAnIssue', anchor: '#direct-link' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay
           header={'Something broken, or missing?'}
-          help={docsHelp('reportAnIssue')}
+          help={docsHelp('reportAnIssue', { anchor: '#is-it-us-or-your-site' })}
         >
           {/* The page behind the dialog is not a placeholder: closing the
               dialog has to leave something that explains where you are and

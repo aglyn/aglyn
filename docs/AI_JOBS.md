@@ -216,14 +216,47 @@ credits is refused in the meter's words and the job stays paused. A month
 that rolls over or a staff credit return re-opens the meter, and Resume (or
 the beat) carries on.
 
-**A Free guided start is refused before it spends when what is left cannot
-pay for it (AGL-3660).** What a Free workspace has left is the less of its own
-band and its owner's allowance across every Free workspace they hold
-(`readFreeAiCreditsLeft`), net of give-backs. The jobs list returns it as
-`freeCredits`, the dialog quotes it beside the start's estimate
-(`aiFreeSiteCreditEstimate`) and disables the start below it, and the site
-kind's admission refuses the create with a 429 on the same figure, so a stale
-dialog cannot start a job that would pause between its form and its first page.
+**A job is quoted at what it measured, beside its ceiling (AGL-3722).** Every
+surface that quotes a job's cost — the plan card, the guided start, Try again
+and the Free prompt — reads `model/ai-credit-estimate.ts`: a range of `likely`
+(the sum of the measured medians of what it builds), `p90` (the sum of the
+measured p90s) and `ceiling` (every pass at `AI_SITE_PASS_CREDITS`, the figure
+quoted before), shown as "About 106 credits (up to 650)". The table is
+`AI_MEASURED_UNIT_CREDITS` — done jobs in production since 2026-10-01, read
+2026-10-09: page 30/40 for about five sections (scaled about 6/8 a section by
+`aiMeasuredPageCredits`), form 29/31, layout 23/24, theme 4/8, plan 21/70; the
+module says how to re-measure. A paid site start (`aiSiteCreditRange`) reads
+`AI_MEASURED_PAID_SITE_CREDITS` instead, measured on paid starts only (read
+2026-10-12): its plan runs on the paid routing at 81/86 rather than a Free
+start's 20/42, and a store's first products (64/66) or a blog's first posts
+are counted, by the kind picked. Kinds with no measurement of their own
+(components, email designs, items) use a form's figures per pass as a declared
+stand-in. The meter still charges actual use and each pass still reserves 50:
+only the quote and the Free admission moved.
+
+**A Free job is admitted on its p90; past what is left it asks first
+(AGL-3722, reversing the worst-case hold of AGL-3660).** What a Free workspace
+has left is the less of its own band and its owner's allowance across every
+Free workspace they hold (`readFreeAiCreditsLeft`), net of give-backs. A Free
+site start (`createAiSiteJobAdmission`, on `aiFreeSiteCreditRange`: 137 / 213
+/ 283 for two pages) and a Free build's confirm and Try again
+(`aiBuildFreeCreditsRefusal`, on `aiBuildCreditRange`) are admitted with no
+prompt when the p90 fits. When it does not, the door answers 409 with
+`code: 'credits-confirm'` and `credits` (the range, what is left, the reset
+day and `smaller`, the home page first), and nothing starts. The dialog, the
+plan card (told what is left through `review.freeCredits`, read when a build's
+plan is kept) and Try again show the sentence and three choices: **Build what
+fits** re-sends with `creditsConfirmed: true`, which admits it and records
+`creditsConfirmed` on the job (who, when, what was left, the range shown);
+**Build the home page first** re-sends with `reduce: 'first-page'` too, and
+the resume door confirms `aiBuildFirstPagePlan` — the home page and what it
+needs transitively, the rest left for a later request — in place of the
+proposed plan (a guided start asks for one page); **Upgrade** opens Billing.
+Nothing left at all is a 429 (`aiFreeCreditsNoneLeftText`). A confirmed job
+that runs out mid-build parks `needs_input` like any meter refusal — between
+items, never inside one, so nothing is half-written — and Resume (or the beat)
+carries on from the next pending item; delivered items are never re-run or
+re-charged. The Free per-pass wall (`ai-job-free-page.spec.ts`) is unchanged.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
@@ -743,6 +776,32 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   rule (`plan-over-free-wall`), and its re-ask gives the count to plan within and how to
   get there: a list's repeated items in one section, and no section the brief does not
   ask for. It only lowers what a plan may ask for, and no prompt line or figure changes.
+  A plan at most `AI_FREE_WALL_SETTLE_MAX_OVER` (2) sections past the wall is trimmed to
+  fit in code instead (`aiSettlePlanFreeWall`, AGL-3737), before the rules read it: the
+  live candle-shop start of 2026-10-12 planned 7 + 2 against a wall of 8 on all three
+  answers. One section goes at a time, the last of its page, from the page furthest past
+  its share (the home at / past its fewest, any other page past two), never a page's
+  opening, a section that places something, one that collects answers or says how to
+  reach the owner, or a storefront's listing parts. A plan further over, past its page
+  cap, or with a list split into sections is still re-asked.
+- **A page's header, navigation or footer comes off the page (AGL-3750).** Rule 2's
+  `plan-layout-region-section` has one answer, "take the section off the page", so
+  `aiSettlePlanLayoutRegionSections` takes it, before the rules and the Free wall read
+  the plan: the live Free bakery start of 2026-10-12 planned a Header and a Footer on
+  its pages on all three answers and stopped. A section is taken off only where its name
+  is one the rule reads as a region and it places nothing, or only a layout. One that
+  places a form or a component, and a page whose every section is a region, are
+  re-asked as before; a home left under its fewest sections is the thin-home check's.
+- **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
+  `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
+  `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
+  name `aiSiteSectionShowsWork` reads, never a framing one like "Portfolio Hero")
+  planned with fewer than `AI_SITE_GALLERY_MIN_ITEMS` (3) to exactly 3, before the rules
+  read the plan. The job opts in through the `galleryMinItems` capability, which only
+  `aiSitePlanCapabilities` sets for a `site` job. A section's items move no section cap,
+  Free wall or credit figure, which count sections and pages, and a site start keeps no
+  components, so rule 1 asks none for the raised count. One item of a list split into
+  sections is left for rule 1's re-ask to join; the gallery check stays as the backstop.
 - **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
   inline sentence's old words, "draw a repeated item in its own section", as a section an
   item, and planned "the four areas we practice" as four sections of one item: none was
@@ -1394,6 +1453,25 @@ nothing itself.
   and it is why a page places the scaffold's own form by id rather than planning
   one of its own. SEO travels with each page: the page step writes its search
   listing on its own last pass.
+- **The site's language** (AGL-3750). A site plan's tool carries one more
+  field, `language`: the code of the language the brief is written in, which
+  the site's copy is written in too, or null (`withPlanLanguage`,
+  `model/ai-build-plan.ts`). Only a `site` job's plan is offered it, one
+  schema for every brief, so the request still caches across briefs
+  (`site-plan` in `runtime/ai-prompt-cache.spec.ts`, 54 tokens over the plain
+  plan); every other kind's tool is the same bytes as before. The reader keeps
+  a code the Languages card would accept (`siteLanguageCode`, `@aglyn/aglyn/app-utils/seo-locale`: `es`, `pt-BR`,
+  `zh-Hant`, in BCP 47 casing) and drops anything else as a repair, never a
+  refusal. A guided start's publish then writes `locales: [code]` and
+  `defaultLocale: code`, as the Languages card saves one language
+  (`aiSiteLanguageUpdates`, `jobs/ai-site-publish.ts`), in the publish's own
+  batch, with the announce asking for the whole site because every page's
+  `<html lang>` reads it. Nothing is written where the code is the language
+  the site already publishes in (English for a new site, so an English brief
+  changes nothing), and nothing on a site with more than one language, whose
+  languages are its owner's. Nothing is translated: the pages were written in
+  the brief's language, and the host now says so. Before this, a Spanish site
+  served `<html lang="en">`, which invited a browser translator (AGL-3738).
 - **A blog's first posts and a store's first products** (AGL-3676,
   `ai-job-site-content.ts`). A site whose kind is Blog & writing gets the row
   "Writing your first posts": a content collection "Blog" (the platform's own
@@ -1406,12 +1484,14 @@ nothing itself.
   its pages (publish role and byline, as the entry editor's Publish requires) and
   drops the blog's cached addresses. A site whose kind is Online store gets
   "Adding your first products": the `products` step's catalog asked for 3 to 6,
-  each written by the commerce plugin's `product` draft writer with NO price,
-  since no price is ever invented — and, since the 2026-10-08 Ember & Wick
-  start showed no product at all, LISTED before it has one (`comingSoon`):
-  `active`, shown on the storefront as "Price coming soon" with no Add to
-  cart, sold by no door (`variantHasPrice`) and in no feed until the owner
-  prices it; the row and the Products card say "Set prices to start selling".
+  each written by the commerce plugin's `product` draft writer at the
+  store's default price (`COMMERCE_DEFAULT_PRICE_USD`, $25 — the catalog
+  proposes none; Zach 2026-10-08, AGL-3676), for the owner to change — and,
+  since the 2026-10-08 Ember & Wick start showed no product at all, LISTED at
+  once (`comingSoon`: `active`); the row says the price is a starting one. An
+  owner who clears a price keeps the product: the storefront shows "Price
+  coming soon" with no Add to cart, sold by no door (`variantHasPrice`) and
+  in no feed until it is priced again.
   Each gets a photo in its slot: a stock photo of its own words where the
   deployment has a library, else a starter, for the owner to replace. The
   pages then LIST the real records (`layout-language/ai-layout-listings.ts`):
@@ -1421,6 +1501,133 @@ nothing itself.
   a blog's home features its posts through Collection Entries (cover, date,
   byline, title, excerpt, each linking its post), any group the model drew
   for them left out; and a selling site's header carries the Cart button.
+  A STORE's Shop page is its storefront whatever its first products came to
+  (live Hearth & Wick, 2026-10-09: the products step failed and /shop was six
+  cards naming kinds of candle): a `siteKind: 'store'` start always lists the
+  catalog on its Shop page (sort and category chips) and its home, and with
+  nothing in it the grid opens as "New pieces are on the way" with a Get in
+  touch button to the contact page — never placeholder products. Its plan is
+  told to plan /shop with a "Product grid" section and is re-asked once for a
+  missing Shop page (`plan-store-shop-page`); a store whose products were
+  skipped or failed carries no cart until it sells.
+  A store is a STOREFRONT, the way a designer shop theme is (second round,
+  2026-10-09: the beta.237 Willow Wick start was a lifestyle hero, one row of
+  products and four text-only bands, its /shop grid below the fold;
+  `layout-language/ai-layout-storefront.ts`). Not a band library — the model
+  still names, orders and designs every section — but:
+  - **The plan.** The store kind tells the plan a storefront's parts and
+    order (hero that sells, "Bestsellers", "Shop by collection", story, why
+    buy here with icons, "Customer reviews", "Newsletter sign-up"), and a
+    store plan is SETTLED before it is kept and priced
+    (`aiSiteStorefrontPlan`): on a paid start the home gains any part it left
+    out — bestsellers, collections, sign-up, then reviews — while it has room
+    (eight sections, nothing removed); on any start the Shop page's grid
+    section moves to second, straight under its title.
+  - **The pages.** A storefront home's hero gets "Shop all" as its first
+    button where it had no button to the shop; the bestsellers list through
+    the Product grid with quick add (`quickAdd`); collection groups draw as
+    picture tiles linking the Shop page; every other group draws as icon
+    columns (`icons`: the item's icon, else one its words suggest — shipping
+    a truck, returns the arrows — never the same twice), on paid plans too
+    (the doctrine's rule 1 spares the compiler's icon cards as it spares its
+    picture cards); a store's steps draw as pictures; a storefront keeps one
+    dark band. A section named for reviews places the commerce Product
+    reviews in its store-wide scope (`scope: 'store'`): the store's APPROVED
+    reviews with their stars, carrying the heading itself and showing
+    NOTHING on a published page until a shopper has written one — no review
+    is ever written for a store (the FTC fake-review rule). A section named
+    for the newsletter places the commerce Newsletter signup beside its
+    words. Both only on a store that sells. The Shop page opens on a title
+    bar (no photo, no button) with the browsing grid under it.
+  - **The header.** A store's header carries no button repeating its
+    navigation, and a selling store's none at all — the cart is there — with
+    an announcement bar above it: the design's own short line (the frame is
+    told to give a true one from the brief, never an invented offer) and
+    "Shop now", else "Shop the full collection", linking the Shop page.
+  - **The products.** Each product's photo is searched for by its name, then
+    by what its catalog said the photo shows, with the shop's category
+    ("candle gift box"), then the category alone, and every hit must NAME the
+    category (`aiStockProductSearches`): no laptop under a wick trimmer, no
+    tea set under a gift set. The business type is read up to what it does
+    ("a candle shop selling … online" is a candle shop, never "online").
+    Every product gets a photo (a starter where nothing named the category),
+    and an option of one value is no choice and is left out
+    (`aiSiteProductChoices`). The store's built-in product page shows a
+    select only for a real choice, a Details and a Shipping & returns
+    accordion from what the product and the store's return settings hold,
+    the store's reviews, and related products as photo cards.
+  - **The store's own pages** (third round, Zach 2026-10-10: "make sure all
+    they would have to do is setup the payment info and update products";
+    `model/ai-site-store-pages.ts`, `jobs/ai-job-site-store-pages.ts`). A paid
+    store owes one more unit, `store` ("Adding your account, cart and policy
+    pages"), after its planned pages and before the welcome email, written by
+    CODE in one pass: no model, no credits. It writes, through the same page
+    draft writer and pages allowance as every page: **Your account** at
+    `/account` (the commerce Customer account — sign in, create an account,
+    profile, addresses, order history with status and tracking — and Saved
+    items, the Wishlist the product page's Save fills), **Your cart** at
+    `/cart` (the inline Cart with its checkout, and Continue shopping) — both
+    written UNLISTED (`screen.visibility`, the page Access setting), so the
+    tenant serves them `noindex` and the sitemap leaves them out — and
+    **Shipping & returns** (`/shipping-returns`), **Privacy policy**
+    (`/privacy`) and **Terms of sale** (`/terms`) as Markdown drafts whose
+    every merchant-only fact is a `[bracketed placeholder]` — no window,
+    price, threshold or date is ever invented. A planned page that holds one
+    of those addresses, or a planned shipping page by its words ("Shipping &
+    care"), stands for that store page instead: nothing is written for it and
+    the links go to it. These are STORE PAGES, outside the plan's four to
+    eight: the plan is told the platform adds them and to spend no page on
+    them (`AI_SITE_STORE_PAGES_SENTENCE`), so they never crowd out content.
+    The layout, built first, is told their paths while the ledger owes them
+    (`storeLinks`): the header carries Account beside the cart (and in the
+    phone menu), the footer the account and the policies; a skipped or
+    failed unit's links come out at publish (`unwrittenHrefs`). The pass
+    turns on the site's user accounts (`accounts`, default-off per site)
+    unless the owner switched them off. An order's own page stays the
+    built-in `/order-status` its emails link. Gated like the products: the
+    `commerce` feature (Starter and up), Commerce running on the site, and
+    the editor role; Free gets none. The done page then shows **Finish your
+    store**: connect payments, review products and prices, set shipping and
+    tax (each the commerce plugin's `store-settings` or `product` record
+    route), and fill in the policies (Pages).
+    **An Assist `build` that makes the site a store gets the same pages**
+    (`model/ai-build-store-pages.ts`): a build has no site kind, so the plan
+    step decides by code, as it keeps a `build` plan, whether the plan makes
+    a store (a `product` item, a product page template, or a Shop / Store /
+    Products page) and whether the site can sell (its ops include commerce's
+    `product`, which means the `commerce` feature and Commerce on for the site).
+    It then stores `plan.storePages`: the store pages that neither the plan nor
+    the site's own pages hold, by address or by name ("Privacy Policy" at
+    /privacy-policy). The plan card lists them as added automatically, at no
+    credits. The build gets one more unit, `store`, which runs last, after
+    every planned unit, and is no part of the 16-unit size or the estimate.
+    It runs the site start's own runner behind the site start's gate
+    (`aiSiteStorePagesRefusal`). It reads the site's pages again first, so a
+    page made since the plan is not made twice. Its own pages from an earlier
+    pass are found by their ids and are not counted against it. A layout the
+    build makes is told `storeLinks`. A confirmed publish puts the store pages
+    live with the planned pages and drops the links of any that were not
+    written. The done card shows **Finish your store**, where the products step
+    says the products are drafts to price. It leaves out the policies step when
+    the build wrote no policy page. Where the build makes no layout for them,
+    the store pages render inside the layout of the plan's Shop page, else the
+    home page's layout, else the layout most of the site's pages use. Code adds
+    the links to that layout (`model/ai-layout-store-links.ts`,
+    `jobs/ai-job-store-links-layout.ts`) as a NEW DRAFT VERSION beside the
+    live one. Account goes into each list of links in the header (the bar's and
+    the phone menu's), or into a Toolbar that holds a link. Cart is added too
+    where the layout has no `cart` element. The account and the policies go
+    into the footer's longest list of links. Each new link is a copy of its
+    neighbour, and a link already there, by href or by the page at that
+    address, is skipped. The version that is live is never touched. A build's
+    publish makes the draft the live version while the live one is still the
+    version it was made from (`aiStoreLinksSourceVersionId`). Otherwise it
+    adds the same links to the version that is live then. A layout with no
+    header or footer list is left as it is: the first store page's output
+    carries `storeLinks: missing`, and the finish card asks the owner to "Add
+    Account and policy links to your header and footer". A draft the build did
+    not publish adds "Publish your header and footer links". The build plan
+    prompt is unchanged.
   Each part asks before its first pass whether the member
   and the plan may have it (the role; for products the `commerce` feature,
   Commerce on, and `productsPerHost`), and a refusal is a skipped row that spent
@@ -2213,8 +2420,11 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   draws from the wide photos, an about picture leads with the owner, and the
   gallery from the rest. The hero's and the gallery's pools are rotated by the
   job's seed (its origin job id and the page), so sites do not all open with
-  the same photo, and no photo repeats on a page while one is unused. The hero
-  loads eagerly; the others lazily. These are the platform's own files on the
+  the same photo, and no photo repeats on a page while one is unused. The page's
+  first picture loads eagerly when it is the hero's; every other leaves
+  `loading` unset, which the renderer loads when reached (rule 16). A hero of
+  several photos once loaded them all eagerly, and a live Portfolio page was
+  refused at its last pass for it (AGL-3660). These are the platform's own files on the
   site's own origin, so the tenant image-sink inventory needs no new entry.
 - **A source of found photos.** `aiResolveLayoutPictures` takes an optional
   source that answers a photo, or nothing, per slot; a slot it leaves empty, or
@@ -2420,6 +2630,40 @@ the same way, in a Grid with a row direction and no container.
   the model wrote it (`aiSettleWrittenGridItems`), so a layout, a template or a component
   is held to them alike. `ai-job-page-sections-live.spec.ts` builds guided starts' Home pages through the
   section pass with the real model (`AGLYN_LIVE_AI=1`).
+- **Mechanical rules settled in code (AGL-3660).** A finding whose fix is one attribute,
+  level or key is applied before the check reads the tree (`aiSettleMechanicalRules`,
+  and `aiSettleWrittenMechanicalRules` on an answer as written), never re-asked and never
+  a reason to refuse: only the first image loads eagerly (`eager-image`); a film's
+  `autoPlay` and `preload: auto` come off (`autoplay-video`; a film with no poster is
+  still re-asked); an `sx` font family comes off outside an email (`extra-font`); every
+  h1 after a page's first renders as an h2, and a later heading that skips a level
+  renders one below the heading before it, by `component` only, so the look is kept
+  (`multiple-h1`, `skipped-heading`; a heading before the h1 and a page with no h1 are
+  still re-asked); a `main` landmark after the first, or in a fragment, is unset
+  (`multiple-main`, `landmark-in-fragment`); a Grid container's `sx` gap becomes its
+  `spacing` (`grid-gap`); and a link drawn in its band's own family takes the band's
+  contrast text (`link-color-on-band`). The tree check, the page section check (on the
+  page with the section added, since the first image and the one h1 are the page's),
+  the layout language's page and layout checks, and the page's last pass all settle;
+  the last pass also stores what it settled, since it asks no model and a page it
+  refused for one of these would be refused the same way on every Try again (a live
+  Free Portfolio page, 2026-10-10, `eager-image`). The eval controls whose only fault
+  was one of these (two h1s on a card and on a template, the bakery footer's link on its
+  band, the Free About page's gapped container) were retired with their device-audit
+  records.
+- **A link sent home for nothing is repaired in code (AGL-3729).** The layout language
+  sends a call to action that asks a visitor to get in touch (`aiAsksToGetInTouch`:
+  contact, book, quote, request, order, pre-order, enquire…) to the page that places
+  the site's form, and when that page is Home, `link-unrelated-screen` refused it on
+  every answer: a live Free café's Menu page (beta.243, 2026-10-12) was refused whole for
+  "Request weekend pickup", sent to the pre-order form on Home. The page's form page now
+  travels in the tree context (`formScreenIds`), and such a link to it does what it
+  says. Before the check reads the tree, `aiSettleUnrelatedScreenLinks` repairs every
+  link the rule would still refuse: repointed to the form's page when its words ask to
+  get in touch and that page is another, otherwise left out with everything under it.
+  The platform reaches no section of another page by anchor (AGL-2867), so the link
+  names the page. The layout language's page and layout checks and the page's last pass
+  (which stores it) all repair.
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -2428,12 +2672,13 @@ the same way, in a Grid with a row direction and no container.
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
   refusal: the goldens' old shape and the live page's shape (`grid-not-container`), a
-  container spaced by an sx gap (`grid-gap`), a heading and its lead grouped in a Grid and
+  heading and its lead grouped in a Grid and
   an intro stacked in a Grid with a column direction (`grid-as-stack`) and items wrapped in
   a Box inside their container (`grid-item-outside-container`). `ai-eval.spec.ts` holds
   each Grid control to its own finding. Its controls for items sized `"4"` at every width
   and a container written as the text `"True"` were retired when both came to be settled
-  rather than refused (AGL-3596).
+  rather than refused (AGL-3596), and its control for a container spaced by an sx gap
+  when that was (AGL-3660).
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:
@@ -2678,7 +2923,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,055 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,058 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
@@ -2694,7 +2939,16 @@ needs, and the machine does not start it with less.
   Free plan's request carries none of it. The App Bar's two scroll switches
   (AGL-3587, AGL-3588) put 6 more back, 4,620, and left two. A form being a saved one on
   every plan (AGL-3596) took the inline-form sentences out of the doctrine and the page
-  instructions, 4,596, and left five. A two-person introduction drawn
+  instructions, 4,596, and left five. The Image's and the Image List's
+  lightbox switch (AGL-3717) put 4 back, 4,600, and left three: the catalog
+  line names the switch and none of the lightbox's dozen look settings, and
+  the Image's `loading` left the line to pay for it. The all-in-one Form
+  Field leaving the Add Element picker for MUI's separate form elements took
+  its two preset names off its catalog line, 4,587, and left eight. The Music player
+  (AGL-3716) costs a page pass nothing: its elements and its Music playlist
+  block stay off the catalog (Assist's edit protocol names them, and a music
+  site's player is placed by the compiler), so its 65 tokens never reach the
+  page's cached prefix. A two-person introduction drawn
   roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
   real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,
@@ -2839,7 +3093,8 @@ the element budget its request asks for.
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
   the second paying for the prefix as plain input: a Free site's plan comes to at most
-  35 credits, its answer and its re-ask together. The site's look (AGL-3660) is one
+  36 credits, its answer and its re-ask together (35 until its tool asked for the photo
+  words in English, AGL-3760). The site's look (AGL-3660) is one
   fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
   The build is priced as the layout language builds it (re-derived in AGL-3660; the
   per-section passes it replaced no longer run on a site): a guided start creates its
@@ -2855,13 +3110,15 @@ the element budget its request asks for.
   ceilings; every answer at its full ceiling would come to more than the 300 for the
   layout, the form and two pages alone, which no section count changes. A Free site
   plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
-  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 282 credits
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 283 credits
   of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
   figures it derives, and the Free wall holds a Free site's plan to that section count
   and to its page cap. That leaves 18 credits, and one post at its worst on the fast
   tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
-  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 84 credits
-  for five pages, where the routing table's ceiling with thinking spent 227.
+  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 86 credits
+  for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
+  create datasets: the record-template plan tool and the dataset sentence, AGL-3616; 85 before a form could
+  write to one: the plan tool's `writesTo` and the form-dataset sentence.)
 - **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
   the only section figure a site plan was told was the Free wall's ceiling, so a local
   Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn

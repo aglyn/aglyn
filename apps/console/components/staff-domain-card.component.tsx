@@ -170,8 +170,8 @@ export function StaffDomainCard(props: StaffDomainCardProps) {
   return (
     <CardDisplay
       header={'Custom domain'}
-      help={docsHelp('connectADomain', {
-        anchor: '#steps',
+      help={docsHelp('troubleshooting', {
+        anchor: '#checklist',
         excerpt:
           "The live verdict for this site's custom domain, read from the " +
           'hosting platform on every load — the same words the customer sees ' +

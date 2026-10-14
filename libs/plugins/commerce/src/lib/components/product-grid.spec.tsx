@@ -233,3 +233,43 @@ describe('product grid cards', () => {
     expect(screen.getByAltText('Soy Candle').closest('a')?.getAttribute('href')).toBe('/products/soy-candle')
   })
 })
+
+/*
+ * A store that opens before its first products (AGL-3676): the live Hearth &
+ * Wick start's products step failed, and its Shop page must still read as a
+ * storefront — a headline, a line and one way to hear more, never sample
+ * products and never a sort select over nothing.
+ */
+describe('product grid with nothing listed yet', () => {
+  beforeEach(() => {
+    fetchMock.mockReset()
+    fetchMock.mockImplementation(async () => ({ ok: true, json: async () => ({ items: [], categories: [] }) }))
+    ;(global as any).fetch = fetchMock
+  })
+
+  it('opens as the empty panel, with its action, and no controls', async () => {
+    render(
+      <ProductGrid
+        cardStyle="photo"
+        showSort
+        showCategories
+        pageSize={12}
+        emptyTitle="New pieces are on the way"
+        emptyText="Our first pieces are being finished now."
+        emptyActionLabel="Get in touch"
+        emptyActionHref="/contact"
+      />,
+    )
+    expect(await screen.findByRole('heading', { name: 'New pieces are on the way' })).toBeTruthy()
+    expect(screen.getByText('Our first pieces are being finished now.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Get in touch' }).getAttribute('href')).toBe('/contact')
+    expect(screen.queryByLabelText('Sort products')).toBeNull()
+    expect(screen.queryByText('Sample product')).toBeNull()
+  })
+
+  it('keeps the plain line where no headline is set', async () => {
+    render(<ProductGrid emptyText="Nothing yet." />)
+    expect(await screen.findByText('Nothing yet.')).toBeTruthy()
+    expect(screen.queryByRole('heading')).toBeNull()
+  })
+})

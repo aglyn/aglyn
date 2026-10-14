@@ -445,7 +445,9 @@ export async function claimHostForOrg(
     return { allowed: false, limit: claim.limit }
   }
   // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
-  await registerOrgHost(orgId, hostId, subdomain)
+  // The site EXISTS from here on, so a failure past this line must say so:
+  // see `registerClaimedHost`.
+  await registerClaimedHost(orgId, hostId, subdomain)
 
   /*
    * NO SENDING DOMAIN IS CLAIMED HERE, AND THE SITE CAN SEND ANYWAY.
@@ -465,4 +467,141 @@ export async function claimHostForOrg(
    */
 
   return { allowed: true, hostId }
+}
+
+/**
+ * A create whose claim committed and whose registration did not (AGL-3734).
+ *
+ * The claim transaction writes the host doc and takes the subdomain. The
+ * registration after it (`registerOrgHost`: org directory, `hostIndex` mirror,
+ * memberRoles projection) is separate writes, so it can fail on its own. When
+ * it did on 2026-10-08 (an emoji name's lone-surrogate search token, AGL-3689),
+ * the caller got a bare 500 for a site that existed. Their retry hit 409 on
+ * their OWN subdomain, and the next name hit the Free site limit, which that
+ * half-made site was already using. This error carries the `hostId` so the
+ * route can report which site and tell the caller that trying again finishes
+ * it (see {@link resumeUnfinishedCreate}).
+ */
+export class HostRegistrationIncompleteError extends Error {
+  readonly hostId: string
+  override readonly cause: unknown
+
+  constructor(hostId: string, cause: unknown) {
+    super(
+      `site ${hostId} was claimed but not registered: ` +
+        (cause instanceof Error ? cause.message : String(cause)),
+    )
+    this.name = 'HostRegistrationIncompleteError'
+    this.hostId = hostId
+    this.cause = cause
+    if (cause instanceof Error && cause.stack) {
+      this.stack = `${this.name}: ${this.message}\n${cause.stack}`
+    }
+  }
+}
+
+/**
+ * Firestore failures that a second attempt can succeed past: contention
+ * (`ABORTED`, which the admin SDK has already retried inside a transaction),
+ * an unreachable backend, a deadline, or a quota burst. The admin SDK reports
+ * gRPC codes as numbers. The string forms are kept for anything that
+ * normalises them.
+ */
+const TRANSIENT_FIRESTORE_CODES = new Set<unknown>([
+  4, // DEADLINE_EXCEEDED
+  8, // RESOURCE_EXHAUSTED
+  10, // ABORTED
+  14, // UNAVAILABLE
+  'deadline-exceeded',
+  'resource-exhausted',
+  'aborted',
+  'unavailable',
+])
+
+export function isTransientFirestoreError(error: unknown): boolean {
+  try {
+    return TRANSIENT_FIRESTORE_CODES.has((error as { code?: unknown } | null)?.code)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * `registerOrgHost` for a site whose claim has committed. Retried once on a
+ * transient failure; every write in it is idempotent (merge sets and
+ * projection syncs). Anything still failing becomes a
+ * {@link HostRegistrationIncompleteError}, so it is never mistaken for a
+ * create that made nothing.
+ */
+async function registerClaimedHost(
+  orgId: string,
+  hostId: string,
+  subdomain: string,
+): Promise<void> {
+  try {
+    await registerOrgHost(orgId, hostId, subdomain)
+    return
+  } catch (first) {
+    if (!isTransientFirestoreError(first)) {
+      throw new HostRegistrationIncompleteError(hostId, first)
+    }
+  }
+  try {
+    await registerOrgHost(orgId, hostId, subdomain)
+  } catch (second) {
+    throw new HostRegistrationIncompleteError(hostId, second)
+  }
+}
+
+/** How long a half-made site stays resumable by a retry of its create. */
+export const UNFINISHED_CREATE_WINDOW_MS = 60 * 60 * 1000
+
+/**
+ * Finish a create that claimed its subdomain and never registered (AGL-3734).
+ *
+ * Called by `POST /api/hosts/create` when the subdomain is taken. It answers
+ * with the site only when ALL of these hold, and otherwise with `null`, which
+ * leaves the ordinary 409:
+ *
+ * - the site holding the subdomain belongs to the caller's org, which the
+ *   route has already proven the caller may create sites in;
+ * - it has no `hostIndex` row, which `registerOrgHost` writes and every
+ *   finished site has;
+ * - it was created within {@link UNFINISHED_CREATE_WINDOW_MS}, so an old site
+ *   is never handed back as though this request had made it.
+ *
+ * The registration is the same idempotent `registerOrgHost` the create would
+ * have run, so a retry finishes exactly the work that was left undone.
+ */
+export async function resumeUnfinishedCreate(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  subdomain: string,
+  now: number = Date.now(),
+): Promise<{ hostId: string; displayName: string; guidedStart: boolean } | null> {
+  const taken = await firestore
+    .collection('hosts')
+    .where('subdomain', '==', subdomain)
+    .limit(1)
+    .get()
+  const host = taken.docs[0]
+  if (!host || host.get('orgId') !== orgId) return null
+  const createdAt = host.get('createdAt') as
+    | { toMillis?: () => number }
+    | undefined
+  const createdMs = createdAt?.toMillis?.()
+  if (typeof createdMs !== 'number' || now - createdMs > UNFINISHED_CREATE_WINDOW_MS) {
+    return null
+  }
+  const index = await firestore.collection('hostIndex').doc(host.id).get()
+  if (index.exists) return null
+  await registerClaimedHost(orgId, host.id, subdomain)
+  const screens = host.get('screens') as Record<string, unknown> | undefined
+  return {
+    hostId: host.id,
+    displayName: String(host.get('displayName') ?? ''),
+    // Born without the starter means it was born for the guided start
+    // (AGL-3594): an empty route map is exactly that.
+    guidedStart: !screens || Object.keys(screens).length === 0,
+  }
 }

@@ -503,19 +503,23 @@ describe('the staff user detail page balances its narrow run (AGL-2486)', () => 
     expect(source).not.toMatch(/^\s*masonry\s*$/m)
   })
 
-  it('carries every one of the five cards into the balanced flow', () => {
+  it('carries every one of the narrow cards into the balanced flow', () => {
     // A key with no sibling `size` is what says a card is in the multicol
     // flow rather than a grid band. Named individually so dropping one on the
     // floor during a future edit is a red, not a quietly shorter page.
-    for (const key of [
-      'identity',
-      'organizations',
-      'password',
-      'device-sessions',
-      'erase',
-    ]) {
+    for (const key of ['identity', 'organizations', 'password', 'erase']) {
       expect(source).toContain(`key: '${key}'`)
     }
+  })
+
+  it('gives sign-in history the full width it outgrew its column for (AGL-3660)', () => {
+    // In the balanced columns the device-sessions table was the card that
+    // outgrew its column's share and left the other one ending early, so it
+    // now sits below the columns at full width.
+    expect(source).not.toContain("key: 'device-sessions'")
+    expect(source).toMatch(
+      /size:\s*\{\s*xs:\s*12\s*\},[\s\S]{0,1200}<StaffUserDeviceSessionsCard/,
+    )
   })
 
   it('leaves the two wide cards in the grid, at full width', () => {

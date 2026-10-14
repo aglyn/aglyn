@@ -101,6 +101,20 @@ and from the *by @handle* link on every browse card. Buyers who like one of your
 plugins use it to find the rest, so the handle, display name, and bio you set are worth
 the same care as a listing.
 
+### The profile card {#profile-card}
+
+The card at the top of a publisher's page shows their logo, display name, handle and
+bio — what a buyer reads before deciding to trust a listing. You set all of it, and
+your support and social links, under
+[Public profile](publishing/publisher-handbook.md#public-profile) on
+**Marketplace → Profile**.
+
+### The Publisher card on a listing {#listing-publisher-card}
+
+The **Publisher** card on every listing names who published it, with their logo, and
+links to their publisher page, so a buyer can see what else they ship. It is drawn from
+your public profile, so keep that profile filled in.
+
 ## Tips
 
 - Bump versions intentionally — installers stay on their pinned version until they upgrade.

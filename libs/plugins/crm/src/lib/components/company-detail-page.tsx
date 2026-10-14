@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, type CrmCompany, pluginDocsHelp } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, type CrmCompany } from '@aglyn/aglyn'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
@@ -32,7 +32,7 @@ import { CrmRecordHeader } from './crm-record-header'
 import { RecordActivityCard } from './record-activity-card'
 import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
-import CompanyPropertiesCard from './company-properties-card'
+import CompanyPropertiesCard, { COMPANY_PAGE_HELP } from './company-properties-card'
 import { RecordSharingCard } from './record-sharing-card'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 
@@ -88,7 +88,7 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
       <CrmRecordHeader
         kind="Company"
         title={undefined}
-        help={pluginDocsHelp('companies', { anchor: '#a-companys-page' })}
+        help={COMPANY_PAGE_HELP}
         backHref={routes.section('companies')}
         backLabel="Back to companies"
         loading={!settled}

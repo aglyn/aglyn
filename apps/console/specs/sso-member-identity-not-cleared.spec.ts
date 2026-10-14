@@ -57,6 +57,8 @@ const mockResolveMemberAiPermissionsOnOrg = jest.fn()
  * handler turns each one into the org feed's coded row.
  */
 const mockPermissionEvents = jest.fn()
+/** `users/{uid}` profile documents, by uid (AGL-3721). */
+const mockProfiles: Record<string, Record<string, unknown>> = {}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -103,6 +105,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockResolveMemberAiPermissionsOnOrg(...a),
   resolveOrgMembership: (...a: unknown[]) => mockResolveOrgMembership(...a),
   upsertOrgMember: (...a: unknown[]) => mockUpsertOrgMember(...a),
+  // The account-identity resolver (AGL-3721), real precedence over the
+  // profile documents this spec hands it.
+  readAccountProfiles: async (uids: string[]) =>
+    new Map(uids.filter((uid) => mockProfiles[uid]).map((uid) => [uid, mockProfiles[uid]])),
+  resolveUserRecordIdentity: (record: any, profile: any) =>
+    jest
+      .requireActual('@aglyn/shared-util-tools/account-identity')
+      .resolveAccountIdentity({ auth: record, profile, email: record.email }),
+  normalizeMemberPhotoUrl: (value: string) =>
+    value
+      ? { ok: true, photoURL: value, clearing: false }
+      : { ok: true, photoURL: '', clearing: true },
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -212,6 +226,27 @@ describe('POST /api/orgs/members upsert — SSO roster identity (AGL-1961)', () 
       displayName: 'Zach Gover',
       photoURL: 'https://cdn.example/zach.png',
     })
+  })
+
+  it('mirrors the profile identity a blank SSO record lacks (AGL-3721)', async () => {
+    mockProfiles[SSO_AUTH_RECORD.uid] = {
+      firstName: 'Zach',
+      lastName: 'Gover',
+      photoUrl: 'https://cdn.example/profile.png',
+    }
+    try {
+      const response = await post({
+        action: 'upsert',
+        uid: SSO_AUTH_RECORD.uid,
+        role: 'editor',
+      })
+      expect(response.status).toBe(200)
+      const options = mockUpsertOrgMember.mock.calls[0][0]
+      expect(options.displayName).toBe('Zach Gover')
+      expect(options.photoURL).toBe('https://cdn.example/profile.png')
+    } finally {
+      delete mockProfiles[SSO_AUTH_RECORD.uid]
+    }
   })
 
   it('CONTROL — a record that HAS a name and photo still mirrors them', async () => {

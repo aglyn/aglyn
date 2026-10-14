@@ -47,6 +47,15 @@ struct NotificationSettingsView: View {
         )
         .font(AglynFont.subheadline)
         .foregroundStyle(.secondary)
+        if model.push.authorization == .denied {
+          Label("Notifications are turned off for \(model.appName) in this device's settings.", systemImage: "bell.slash")
+            .foregroundStyle(AglynColor.warning)
+          #if os(iOS)
+            Button("Open Settings") {
+              if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+            }
+          #endif
+        }
         if saveFailed {
           Label("That change did not save. Try again.", systemImage: "exclamationmark.circle")
             .foregroundStyle(AglynColor.error)
