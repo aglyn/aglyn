@@ -16,21 +16,23 @@
  * limitations under the License.
  */
 
-// Decides whether the native Kotlin and Swift tests run (AGL-3704).
+// Decides whether the native Kotlin and Swift tests run (AGL-3704), each on
+// its own (AGL-3783): a Kotlin-only change never needs a macOS runner.
 //
 //   node tools/scripts/native-ci-changed.mjs --base <sha> [--head <sha>]
 //
-// Prints the native-relevant changed paths and writes `run=true|false` and
-// `reason=…` to $GITHUB_OUTPUT when it is set. An unknown or unreachable base
-// runs everything: "what changed is unknown" is answered by running, never by
+// Prints the native-relevant changed paths and writes `kotlin=true|false`,
+// `swift=true|false`, `run=true|false` (either) and `reason=…` to
+// $GITHUB_OUTPUT when it is set. An unknown or unreachable base runs
+// everything: "what changed is unknown" is answered by running, never by
 // skipping. Exits 0 either way; only bad arguments exit non-zero.
 
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { appendFileSync, readFileSync, readlinkSync } from 'node:fs'
+import { dirname, join, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { listedModules, nativeRelevantPaths, usableBase } from './lib/native-ci-changed.mjs'
+import { listedModules, nativePathsByPlatform, usableBase } from './lib/native-ci-changed.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -62,29 +64,59 @@ const readJson = (file) => {
   }
 }
 
+/** Every tracked symlink in the head tree, with its repo-relative target. */
+function trackedLinks() {
+  const links = []
+  for (const line of git('ls-files', '-s', '-z').split('\0')) {
+    if (!line.startsWith('120000 ')) continue
+    const path = line.slice(line.indexOf('\t') + 1)
+    try {
+      const target = posix.normalize(posix.join(posix.dirname(path), readlinkSync(join(repoRoot, path))))
+      if (!target.startsWith('../') && !target.startsWith('/')) links.push({ path, target })
+    } catch {
+      // Not checked out as a link (core.symlinks off): nothing to follow.
+    }
+  }
+  return links
+}
+
+const ALL = { kotlin: true, swift: true }
+
 function decide() {
-  if (!usableBase(base)) return { run: true, reason: `no usable base (${base || 'none'}): running everything` }
+  if (!usableBase(base)) return { ...ALL, reason: `no usable base (${base || 'none'}): running everything` }
   let mergeBase
   try {
     mergeBase = git('merge-base', base, head)
   } catch {
-    return { run: true, reason: `base ${base} is not in this checkout: running everything` }
+    return { ...ALL, reason: `base ${base} is not in this checkout: running everything` }
   }
   const changed = git('diff', '--name-only', '--no-renames', mergeBase, head).split('\n').filter(Boolean)
   const modules = listedModules({
     contracts: readJson('tools/scripts/native-contracts.json'),
     pureModules: readJson('tools/scripts/mobile-pure-modules.json'),
   })
-  const relevant = nativeRelevantPaths(changed, modules)
-  for (const path of relevant.slice(0, 50)) console.log(`  ${path}`)
+  const sides = nativePathsByPlatform(changed, modules, trackedLinks())
+  const relevant = [...new Set([...sides.kotlin, ...sides.swift])]
+  for (const path of relevant.slice(0, 50)) {
+    const tag = sides.kotlin.includes(path) ? (sides.swift.includes(path) ? 'both  ' : 'kotlin') : 'swift '
+    console.log(`  ${tag} ${path}`)
+  }
   if (relevant.length > 50) console.log(`  … and ${relevant.length - 50} more`)
-  return relevant.length > 0
-    ? { run: true, reason: `${relevant.length} of ${changed.length} changed paths are native-relevant` }
-    : { run: false, reason: `none of ${changed.length} changed paths is native-relevant: fast pass` }
+  const kotlin = sides.kotlin.length > 0
+  const swift = sides.swift.length > 0
+  return {
+    kotlin,
+    swift,
+    reason:
+      relevant.length > 0
+        ? `${relevant.length} of ${changed.length} changed paths are native-relevant (kotlin ${sides.kotlin.length}, swift ${sides.swift.length})`
+        : `none of ${changed.length} changed paths is native-relevant: fast pass`,
+  }
 }
 
-const { run, reason } = decide()
-console.log(`run=${run}: ${reason}`)
+const { kotlin, swift, reason } = decide()
+const run = kotlin || swift
+console.log(`kotlin=${kotlin} swift=${swift}: ${reason}`)
 if (process.env.GITHUB_OUTPUT) {
-  appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\nreason=${reason}\n`)
+  appendFileSync(process.env.GITHUB_OUTPUT, `kotlin=${kotlin}\nswift=${swift}\nrun=${run}\nreason=${reason}\n`)
 }

@@ -13,6 +13,14 @@ name: Labeler
 on:
   - pull_request
 
+# One run per PR: a re-push supersedes the queued or running one (AGL-3783).
+# The labels follow the PR's files as they are at the newest head, so an older
+# run has nothing to add; under a saturated runner pool, 19 of them sat queued
+# for an hour on 2026-10-14.
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   label:
     runs-on: ubuntu-latest
