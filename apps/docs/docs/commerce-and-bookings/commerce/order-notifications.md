@@ -44,8 +44,8 @@ email shows the carrier and tracking number without a link.
 
 ### Turning emails off
 
-All five emails are **on** for every store. To turn one off, open **Commerce →
-Settings → Customer notifications** and switch it off. Switching the receipt
+All five emails are **on** for every store. To turn one off, open the store's
+settings, find the **Customer notifications** card and switch it off. Switching the receipt
 off stops automatic receipts only; you can still [resend one](#resend-receipt).
 
 ### Changing the wording and colors

@@ -26,6 +26,7 @@ import {
   type PluginApiHandler,
   type PluginRevocation,
 } from '@aglyn/aglyn/server'
+import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
@@ -98,6 +99,34 @@ async function syncEnabledPlugins(
     enabledPlugins: firebaseAdmin.firestore.FieldValue.arrayRemove(listingId),
   })
 }
+/**
+ * Tells the live sites a pin changed (AGL-3741).
+ *
+ * The tenant caches each site's resolved plugins under its
+ * `tenant-data:{hostId}` tag, and an install or uninstall used to reach live
+ * pages only when that entry expired — which is why it expired every minute,
+ * re-reading the install pins, listings, versions and revocations of every
+ * site sixty times an hour. An org-tier pin applies to every site in the org,
+ * so it is those sites that are told. Best effort and never throws, like the
+ * revocation fan-out it shares: the pin itself is already written.
+ */
+async function announcePinChange(
+  firestore: FirebaseFirestore.Firestore,
+  options: { scope: 'org' | 'host'; hostId: string; orgId: string | null; reason: string },
+): Promise<void> {
+  try {
+    const hostIds =
+      options.scope === 'org' && options.orgId
+        ? (
+            await firestore.collection('hosts').where('orgId', '==', options.orgId).get()
+          ).docs.map((doc) => doc.id)
+        : [options.hostId]
+    await dropPluginSiteCache({ hostIds, reason: options.reason })
+  } catch (error) {
+    console.error('[marketplace] the sites running a changed pin were not told', error)
+  }
+}
+
 export const installPluginHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -161,6 +190,14 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       // tally has to decrement, and it is gone the moment the pin is.
       const pinnedVersion = pinExisted ? pinSnapshot?.get('version') : null
       if (pinRef) await pinRef.delete()
+      if (pinExisted) {
+        await announcePinChange(firestore, {
+          scope: req.body?.scope === 'org' ? 'org' : 'host',
+          hostId,
+          orgId,
+          reason: `marketplace listing ${listingId} uninstalled`,
+        })
+      }
       if (pinExisted) {
         const listingRef = firestore
           .collection('marketplaceListings')
@@ -378,8 +415,10 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // host in the org; host-only plugins stay pinned to the host.
     const scope = req.body?.scope === 'org' ? 'org' : 'host'
     let installRef = hostRef.collection('installs').doc(listingId)
+    let pinOrgId: string | null = null
     if (scope === 'org') {
       const orgId = await resolveOrgIdForHost(hostId)
+      pinOrgId = orgId ?? null
       if (!orgId) {
         return res.status(409).json({ error: 'This site has no organization yet' })
       }
@@ -416,6 +455,12 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    await announcePinChange(firestore, {
+      scope,
+      hostId,
+      orgId: pinOrgId,
+      reason: `marketplace listing ${listingId} installed at ${version}`,
+    })
     if (!existing.exists) {
       await listingRef
         .update({

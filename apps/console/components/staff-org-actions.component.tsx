@@ -40,6 +40,15 @@ import {
 } from '@aglyn/aglyn'
 import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import { pluginPlanQuotas } from '@aglyn/aglyn/plugin-manager/plugin-plan-entitlements'
+import {
+  mdiDeleteForeverOutline,
+  mdiDeleteRestore,
+  mdiPauseCircleOutline,
+  mdiPlayCircleOutline,
+  mdiRobotOffOutline,
+  mdiRobotOutline,
+  mdiTune,
+} from '@aglyn/shared-data-mdi'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -959,6 +968,9 @@ const StaffOrgActions = ({
   return (
     <>
       {rowActions ? (
+        // Row-menu labels name what happens to the organization, and a "…"
+        // marks the ones that open a dialog or confirm first (Zach,
+        // 2026-10-09). The detail page's buttons below keep their short names.
         <ListRowActions
           label={rowActions.label}
           quick={rowActions.quick}
@@ -966,14 +978,20 @@ const StaffOrgActions = ({
             ...(rowActions.items ?? []),
             {
               key: 'override',
-              label: 'Override',
+              label: 'Override plan and limits…',
+              icon: { path: mdiTune.path },
               onClick: handleOverrideOpen,
               disabled: !org || overrideGate.blocked,
               disabledReason: overrideGate.reason,
             },
             {
               key: 'suspend',
-              label: org?.suspendedAt ? 'Unsuspend' : 'Suspend',
+              label: org?.suspendedAt ? 'Lift suspension…' : 'Suspend organization…',
+              icon: {
+                path: org?.suspendedAt
+                  ? mdiPlayCircleOutline.path
+                  : mdiPauseCircleOutline.path,
+              },
               destructive: !org?.suspendedAt,
               onClick: openSuspender,
               disabled: !org || suspendGate.blocked,
@@ -981,7 +999,14 @@ const StaffOrgActions = ({
             },
             {
               key: 'erasure',
-              label: org?.erasureRequestedAt ? 'Cancel erasure' : 'Erasure',
+              icon: {
+                path: org?.erasureRequestedAt
+                  ? mdiDeleteRestore.path
+                  : mdiDeleteForeverOutline.path,
+              },
+              label: org?.erasureRequestedAt
+                ? 'Cancel data erasure request…'
+                : 'Request data erasure…',
               destructive: !org?.erasureRequestedAt,
               onClick: () => void handleToggleErasure(),
               disabled: !org,
@@ -990,7 +1015,12 @@ const StaffOrgActions = ({
               ? [
                   {
                     key: 'ai-pause',
-                    label: aiPaused ? 'Resume AI' : 'Pause AI',
+                    label: aiPaused ? 'Resume AI…' : 'Pause AI…',
+                    icon: {
+                      path: aiPaused
+                        ? mdiRobotOutline.path
+                        : mdiRobotOffOutline.path,
+                    },
                     destructive: !aiPaused,
                     onClick: openAiPauser,
                     disabled: !org || suspendGate.blocked,

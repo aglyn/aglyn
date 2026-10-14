@@ -42,11 +42,13 @@ describe('a dataset record write announces to the live pages', () => {
     expect(route).toContain(
       "import { announceDatasetRecords as announceDatasetChange } from './announce-dataset-records'",
     )
-    // Four: the create, the import's single post-loop call, the leg the
-    // browser's own client-direct edits reach, and the page-address fill's
-    // single post-loop call (AGL-3475). A fifth would mean a chunk loop had
-    // grown a per-chunk announce, which is the burst this bounds.
-    expect(route.match(/announceDatasetChange\(/g)).toHaveLength(4)
+    // Six: the create, the import's single post-loop call, the leg the
+    // browser's own client-direct edits reach, the page-address fill's
+    // single post-loop call (AGL-3475), the native record edit and the native
+    // record delete's one call per changed dataset (AGL-3668). A seventh would
+    // mean a chunk loop had grown a per-chunk announce, which is the burst
+    // this bounds.
+    expect(route.match(/announceDatasetChange\(/g)).toHaveLength(6)
     // The address fill writes in chunks too, and announces once after them.
     const fillAt = route.indexOf("action === 'add-address-field'")
     const fillAnnounceAt = route.indexOf(

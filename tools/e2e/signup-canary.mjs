@@ -179,6 +179,14 @@ const VERCEL_TEAM = process.env['VERCEL_TEAM_ID'] || TEAM_SCOPE
 const MIN_WALK_INTERVAL_MS = 45 * 60 * 1000
 
 /**
+ * How long the reap waits before its second pass — long enough for the
+ * signup's own trailing writes (the creation activity row, the device record)
+ * to land so the second `recursiveDelete` takes them. Anything slower is
+ * caught by the next run's `pendingReap`.
+ */
+const REAP_SETTLE_MS = 8_000
+
+/**
  * The firewall bypass every probe in this repo already rides.
  *
  * Bot protection is `challenge`, and it refuses a datacenter IP outright: a
@@ -340,22 +348,52 @@ async function releaseUploadOrigins(domains) {
  * `recursiveDelete` is what handles the subcollections — deleting an org
  * document alone orphans them, and an orphaned subcollection is residue that
  * no listing would ever show.
+ *
+ * ## Writes that land AFTER the reap
+ *
+ * The walk reaps seconds after the workspace appears, and the signup it just
+ * drove is still writing: `createOrganization` commits the org, awaits the
+ * Vercel domain attach, and only then logs "Created the workspace"; the
+ * verification mail meters `counters/emailSends`; the session route records
+ * `users/{uid}/devices`; the profile save writes `users/{uid}`. Each one that
+ * lands after `recursiveDelete` re-creates a subtree under a parent that no
+ * longer exists. Checking only the parent documents read every one of those
+ * as a clean reap: 64 phantom orgs and 20 orphaned user trees built up that
+ * way between 2026-09-09 and 2026-10-09.
+ *
+ * So the reap checks the SUBTREES, not just the parents, and makes a second
+ * pass after {@link REAP_SETTLE_MS}. What still lands later than that is
+ * carried to the next run in the marker's `pendingReap` and reaped again
+ * there (see {@link sweepOrphans}), when the signup has long finished.
  */
-async function reap(db, auth, { uid, orgId, slug }) {
+async function reap(db, auth, { uid, orgId, slug }, { settle = true } = {}) {
   const missed = []
+  const orgRef = orgId ? db.collection('orgs').doc(orgId) : null
+  const userRef = uid ? db.collection('users').doc(uid) : null
+  const deleteTrees = async () => {
+    if (orgRef) await db.recursiveDelete(orgRef)
+    if (userRef) await db.recursiveDelete(userRef)
+  }
   try {
-    if (orgId) await db.recursiveDelete(db.collection('orgs').doc(orgId))
+    await deleteTrees()
     if (slug) await db.collection('orgSlugs').doc(slug).delete()
-    if (uid) await db.recursiveDelete(db.collection('users').doc(uid))
     if (uid) await auth.deleteUser(uid).catch(() => undefined)
+    if (settle) {
+      await new Promise((resolve) => setTimeout(resolve, REAP_SETTLE_MS))
+      await deleteTrees()
+    }
   } catch (error) {
     missed.push(`delete threw: ${String(error).slice(0, 80)}`)
   }
   // Verified, not assumed. A delete that silently no-ops leaves residue that
-  // reads as a clean run.
-  if (orgId && (await db.collection('orgs').doc(orgId).get()).exists) {
-    missed.push(`orgs/${orgId}`)
+  // reads as a clean run — and so does a parent that is gone while its
+  // subcollections are not, which `get().exists` alone cannot see.
+  if (orgRef && (await orgRef.get()).exists) missed.push(`orgs/${orgId}`)
+  for (const ref of [orgRef, userRef]) {
+    if (!ref) continue
+    for (const sub of await ref.listCollections()) missed.push(sub.path)
   }
+  if (userRef && (await userRef.get()).exists) missed.push(`users/${uid}`)
   if (slug && (await db.collection('orgSlugs').doc(slug).get()).exists) {
     missed.push(`orgSlugs/${slug}`)
   }
@@ -380,9 +418,23 @@ async function reap(db, auth, { uid, orgId, slug }) {
  * nothing else on the platform will ever collect, and the next run would add
  * to it rather than notice it. Bounded to canary-shaped names so it can never
  * touch a customer's workspace.
+ *
+ * `pending` is the previous run's own ids, from the marker it wrote. They are
+ * reaped again first because a late write re-creates a subtree under an org
+ * document that is already gone, and the slug query below — which reads `orgs`
+ * documents — can never find one of those. Only ids a canary minted reach the
+ * marker, and each is still required to carry the canary prefix here.
  */
-async function sweepOrphans(db, auth) {
+async function sweepOrphans(db, auth, pending = []) {
   const swept = []
+  for (const ids of pending) {
+    if (!ids || typeof ids.slug !== 'string' || !ids.slug.startsWith(CANARY_SLUG_PREFIX)) {
+      continue
+    }
+    const missed = await reap(db, auth, ids, { settle: false })
+    if (missed.length) swept.push(`STILL ${missed.join(', ')}`)
+    else swept.push(`${ids.orgId ?? ids.slug} (re-reaped)`)
+  }
   // A PREFIX range: the upper bound must be the prefix's successor. `>= p`
   // AND `< p` is the empty set — a sweeper written that way matches nothing
   // and looks exactly like a sweeper with nothing to do, while residue
@@ -738,6 +790,22 @@ async function walk(page, db, auth, identity, created) {
   }
   const url = page.url()
   if (!orgs || orgs.size === 0) {
+    // Whether the held name was claimed (null) or never touched (still set)
+    // separates "the claim never ran" from "the create lost it" (AGL-3690).
+    const held = await db
+      .collection('users')
+      .doc(created.uid)
+      .get()
+      .then((snap) =>
+        snap.exists
+          ? JSON.stringify(snap.get('pendingSignUpWorkspace') ?? null).slice(0, 120)
+          : 'no user doc',
+      )
+      .catch((error) => `unreadable: ${String(error).slice(0, 60)}`)
+    console.log(`\n    held name at failure: ${held}`)
+    for (const line of (page.walkTrace ?? []).slice(-40)) {
+      console.log(`    trace: ${line}`)
+    }
     const title = await page.title().catch(() => '(unreadable)')
     const seen = (await page.innerText('body').catch(() => ''))
       .replace(/\s+/g, ' ')
@@ -748,6 +816,21 @@ async function walk(page, db, auth, identity, created) {
     throw new Error(
       `verified, and no workspace 90s later — title ${JSON.stringify(title)}, ` +
         `screen: ${seen}${/\/signin/.test(url) ? ' (signed out)' : ''} — at ${where.origin}${where.pathname}`,
+    )
+  }
+  /**
+   * THE LANDING IS GRADED TOO (AGL-3725).
+   *
+   * A workspace is not the end of a sign-up: the person has to reach the site
+   * list to make a site. The console navigates there the moment the workspace
+   * exists, so a short settle lets that navigation answer. This FAILS only on
+   * a 404 the page actually received, never on a navigation that has not
+   * happened yet, so a slow redirect cannot red it.
+   */
+  await new Promise((r) => setTimeout(r, 10_000))
+  if ((page.documentNotFound ?? []).length > 0) {
+    throw new Error(
+      `workspace made, then the landing answered 404 at ${page.documentNotFound.join(', ')}`,
     )
   }
   const outcome = 'workspace'
@@ -836,10 +919,13 @@ async function main() {
    * throttle that silently swallowed every run would starve the marker and
    * page for staleness, which is the exact outage it is here to avoid.
    */
+  // The previous run's ids, re-reaped by `sweepOrphans` (see `reap`).
+  let pendingReap = []
   try {
     const prior = (
       await db.collection('rateLimits').doc('signupCanary_production').get()
     ).data()
+    if (Array.isArray(prior?.pendingReap)) pendingReap = prior.pendingReap
     const priorAgeMs =
       typeof prior?.walkedAtMs === 'number' ? Date.now() - prior.walkedAtMs : null
     if (prior?.ok === true && priorAgeMs !== null && priorAgeMs < MIN_WALK_INTERVAL_MS) {
@@ -905,7 +991,7 @@ async function main() {
 
   try {
     begin('sweep-orphans')
-    const swept = await sweepOrphans(db, auth)
+    const swept = await sweepOrphans(db, auth, pendingReap)
     done(swept.length ? `cleared ${swept.length} from a previous run` : '')
 
     /**
@@ -1029,6 +1115,47 @@ async function main() {
         self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
       }, debugToken)
       const page = await context.newPage()
+      /**
+       * What the page did, kept for the no-workspace failure (AGL-3690): the
+       * workspace create's answer, and the console's own errors. A failed
+       * walk that says only "0 workspaces" cannot tell a claim that never ran
+       * from a create that was refused.
+       */
+      page.walkTrace = []
+      page.on('console', (message) => {
+        if (message.type() === 'error' || message.type() === 'warning') {
+          page.walkTrace.push(`console.${message.type()}: ${message.text().slice(0, 160)}`)
+        }
+      })
+      /**
+       * Every page the walk was SENT to that answered 404 (AGL-3725). A
+       * document navigation that 404s is a fact, not a timing question, so
+       * this needs no wait on the address bar. AGL-3724 made every workspace
+       * and then landed the person on one of these, and a canary that graded
+       * only the workspace passed straight through it.
+       */
+      page.documentNotFound = []
+      page.on('response', (response) => {
+        const u = new URL(response.url())
+        const request = response.request()
+        if (
+          response.status() === 404 &&
+          request.isNavigationRequest() &&
+          request.frame() === page.mainFrame()
+        ) {
+          page.documentNotFound.push(`${u.host}${u.pathname}`)
+          page.walkTrace.push(`404 ${u.host}${u.pathname}`)
+        }
+        if (u.pathname === '/api/orgs/create' || u.pathname.startsWith('/api/edit-hint/')) {
+          page.walkTrace.push(`${response.request().method()} ${u.host}${u.pathname} → ${response.status()}`)
+        }
+      })
+      page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame()) {
+          const u = new URL(frame.url())
+          page.walkTrace.push(`nav ${u.host}${u.pathname}`)
+        }
+      })
       done()
 
       outcome = await walk(page, db, auth, identity, created)
@@ -1051,6 +1178,7 @@ async function main() {
       reapedCleanly: legReapedCleanly,
       workspaceOutcome: outcome,
       elapsedMs: Date.now() - legStartedAt,
+      reaped: { uid: created.uid, orgId: created.orgId, slug: created.slug ?? identity.slug },
     })
   }
   await browser.close().catch(() => undefined)
@@ -1081,6 +1209,9 @@ async function main() {
       // Which walk failed, and each leg's own result (AGL-3690).
       failedLeg: failedLeg?.leg ?? null,
       legs: results,
+      // Reaped again by the next run, for the writes that land after this
+      // one's reap (see `reap`).
+      pendingReap: results.map((r) => r.reaped).filter((ids) => ids.slug),
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     })
 

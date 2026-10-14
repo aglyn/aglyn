@@ -104,9 +104,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     tenantsIncluded: true,
     tenantTruncated: [],
   }),
+  // The plain listing reads the whole directory to sort it newest first
+  // (AGL-3660); it is the same records, through the same collapse.
+  scanUsersAcrossPools: async () => ({
+    users: mockListed,
+    truncated: false,
+    tenantTruncated: [],
+  }),
   // Recorded rather than reimplemented. A double that re-derives the merge
   // would prove only that the double works — the algorithm has its own specs
   // against the real function, and what is unproven here is the WIRING.
+  // The account-identity resolver (AGL-3721), over the Auth record alone:
+  // these rows carry no profile, so the answer is the record's own fields.
+  resolveUserRecordIdentities: async (rows: any[]) => {
+    const { resolveAccountIdentity } = jest.requireActual(
+      '@aglyn/shared-util-tools/account-identity',
+    )
+    return new Map(
+      rows.map((row) => [
+        row.record.uid,
+        resolveAccountIdentity({ auth: row.record, email: row.record.email }),
+      ]),
+    )
+  },
   collapseCrossPoolUidRows: (rows: any[]) => {
     mockCollapseInput = rows
     return mockCollapseOutput

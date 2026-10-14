@@ -121,6 +121,15 @@ and the unsubscribe links in mail already delivered are untouched. The toggle ab
 campaigns list switches it between **Campaigns** and **Single sends** (the emails filed
 under no campaign); both show in the same table, newest first, a page at a time.
 
+#### A campaign's page {#campaign-page}
+
+Open a campaign from **Marketing → Campaigns** to see its dates, its lists and every
+email inside it, with their figures added up; **Edit campaign** and **Delete campaign**
+are in the card's menu (⋮).
+
+Each email inside keeps its own report, and the figures here are the sum across them.
+A campaign with no lists of its own says so: its emails each pick their own audience.
+
 ### Filter the campaigns and emails lists {#filter-the-lists}
 
 The campaigns list, the Emails list and a campaign's own emails each filter
@@ -406,11 +415,23 @@ the shared address, where campaigns are held to the tighter complaint and bounce
 
 Adding a domain and choosing what a site sends as need the organization admin role.
 
+#### A domain on your organization's Emails page {#org-sending-domain}
+
+Opened from your organization's **Emails → Sending**, a domain's page shows the same
+records to publish and the same **Request records** and **Check DNS**, and lists the
+sites sending as it, each with **Stop sending as this domain**. Once the domain is
+verified, an owner or admin picks another site and chooses **Send as this domain** to
+move it onto the domain.
+
+The records come back only for an organization owner or admin. Anyone else still sees
+the domain's state and the sites sending as it, and is told why the records are not
+shown. **Remove domain** is in the card's menu (⋮).
+
 #### The addresses this site may send as {#senders}
 
-Under the domain, the same page lists this site's **senders**. Each one is a mailbox on
-the site's sending domain with a display name and a reply address stored beside it, and
-every email you compose goes out as one of them.
+Under the domain, the same page lists this site's **senders**: the addresses it may
+send as, each a mailbox on the site's sending domain with a display name and a reply
+address. Every email you compose goes out as one of them.
 
 | Column | What it is |
 | --- | --- |
@@ -422,6 +443,12 @@ One sender is the **default** — what an email that names no other goes out as.
 default** on any row moves it. The default cannot be removed until another one has taken
 over, because every site sends as something and picking the replacement for you would
 decide what your mail looks like from an ordering you never saw. A site can hold up to 25.
+
+#### Add or edit a sender {#add-a-sender}
+
+**Add sender** on the Sending page, or a sender's row, opens a drawer with the three
+fields: the **Mailbox** before the `@`, the **Sender name** and the **Reply address**.
+On a site that sends on the shared address the mailbox is fixed — see below.
 
 **Send as a person**, at the top of the add drawer, fills all three fields from somebody
 who works on this site — anyone on the workspace team who can reach it, and anyone
@@ -903,6 +930,53 @@ With the Resend webhook configured, campaign history shows **opens and clicks** 
 campaign, and clicks on A/B sends count as that variant's **conversions** — so the
 experiment results table fills in by itself.
 
+### The Last campaign card {#last-campaign-card}
+
+The **Last campaign** card on a site's dashboard shows how many emails your most recent
+sent campaign sent, and how many opens and clicks it has had; **Campaigns** in its
+header opens the full history.
+
+### The Messages list {#messages-list}
+
+**Emails → Messages** lists every email this site has sent, scheduled or is still
+writing, newest first, a page at a time, and each row opens that email's own page. On
+your organization's Emails page it lists every site's, with a **Site** column, and
+writing a new one there first asks which site it is sent as.
+
+### One email's page {#email-page}
+
+Open any email from **Messages** to see what it did on its own: where it went and its
+state, its delivery and engagement figures with every rate over the population it is
+measured against, the links followed, and who it was allowed to reach.
+
+The header carries what can still be done with it — **Send now**, **Stop sending** or
+**Send to more recipients** while those apply, **Write this email** while it is unsent,
+and **Open template** for a designed one — beside **All messages**. The
+[Recipients](#email-recipients) table and the [Preview](#email-preview) come under it.
+
+#### Preview {#email-preview}
+
+The **Preview** card at the foot of an email's page draws the email as an inbox
+receives it, with the same renderer the send uses; merge tokens are left standing,
+because a real send fills them from each recipient.
+
+The HTML that was mailed is not stored — it is rendered for each recipient at send
+time — so the preview draws the template as it is now, and says so when the email
+went out before the template was last edited.
+
+#### Who an email reached {#email-recipients}
+
+An email's **Recipients** table lists everyone it was sent to; to see only the people
+who opened it, or only those who clicked something, choose **Engagement** in the
+table's **Filters** panel. A designed email's template page carries the same table for
+every email sent from it.
+
+That filter is answered by the query across the whole delivery log, one page at a
+time, and a new choice replaces the last. Filtered by engagement, the table lists the
+people who opened (or clicked) most first, then the newest; unfiltered, it lists the
+newest first. The table has no search box, because the delivery log can only be
+narrowed by engagement. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
 ### The campaign report
 
 **Report**, beside any campaign that has been sent, opens the full picture for
@@ -959,14 +1033,8 @@ Only campaigns from your own sites appear on a person's timeline. Another
 business in your workspace mailing the same person sees its own campaigns and
 never yours, and account mail — receipts, confirmations — is not listed at all.
 
-An email's **Recipients** table lists everyone it was sent to. To see only
-the people who opened it, or only those who clicked something, choose
-**Engagement** in the table's **Filters** panel. That filter is answered by
-the query across the whole delivery log, one page at a time, and a new choice
-replaces the last. Filtered by engagement, the table lists the people who
-opened (or clicked) most first, then the newest; unfiltered, it lists the
-newest first. The table has no search box, because the delivery log can only
-be narrowed by engagement. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+What one email reached is on its own page — see
+[Who an email reached](#email-recipients).
 
 ### Which links were clicked
 
@@ -1465,6 +1533,13 @@ was skipped starts getting mail. A copied entry keeps its reason and date and is
 An unsubscribe now records **which campaign** the link was in, so the campaign
 report can show an unsubscribe rate for that send. Links in mail sent before
 this keep working exactly as they did; they simply carry no campaign.
+
+#### Every site's suppressions {#org-suppressions}
+
+Your organization's **Emails → Suppressions** counts each site's list by reason, one row
+per site; open a site's row to see who is on its list, or to add or remove an address.
+Every site keeps its own list, so there is no one list to edit for the whole
+organization. The sites are read a page at a time, with the pager under the table.
 
 #### Add an address yourself {#add-a-suppression}
 

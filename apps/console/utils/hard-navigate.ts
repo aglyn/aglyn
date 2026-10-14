@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { currentConsoleLandingHref } from './console-landing'
+
 /**
  * A full-page navigation (`window.location.assign`) behind a module seam.
  *
@@ -26,9 +28,14 @@
  *
  * A hard navigation aborts every in-flight fetch on the page. If the page has
  * an outstanding request whose completion matters, await it first.
+ *
+ * A console path asked for from the auth host goes to the console host
+ * instead ({@link consoleLandingHref}, AGL-3724).
  */
 export function hardNavigate(url: string): void {
-  if (typeof window !== 'undefined') window.location.assign(url)
+  if (typeof window !== 'undefined') {
+    window.location.assign(currentConsoleLandingHref(url))
+  }
 }
 
 export default hardNavigate

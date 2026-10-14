@@ -203,7 +203,9 @@ function AdminEmails() {
             <StaffEmailSuppressionsCard />
             <CardDisplay
               header={'System emails'}
-              help={docsHelp('staffConsole')}
+              help={docsHelp('staffConsole', {
+                anchor: '#edit-a-system-email',
+              })}
               subheader={
                 'The mail Aglyn itself sends. Design a template to replace ' +
                 'the built-in copy — the default is used until you do.'

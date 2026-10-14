@@ -549,12 +549,38 @@ function paginationNodes(
 }
 
 /**
+ * How wide a card's cover renders, per band, as a share of the page
+ * (AGL-3676): one column on a phone, two from `sm`, three from `md` — the
+ * grid below. Handed to the Image element as its `renderedWidths`, so its
+ * `sizes` asks for a third of the screen on a desktop, not all of it.
+ */
+export const COLLECTION_LIST_COVER_WIDTHS: Aglyn.RenderedWidths = {
+  xs: 100,
+  sm: 50,
+  md: 33.3,
+}
+
+/**
+ * The cover's shape on every card (AGL-3676): one ratio for the whole grid,
+ * so a row of posts lines up whatever each photo's own shape, and a post with
+ * no cover keeps the same tile, tinted, rather than collapsing its card.
+ */
+export const COLLECTION_LIST_COVER_RATIO = '3 / 2'
+
+/**
  * Built-in entry list as canvas nodes (AGL-551): a heading plus a
- * Collection entries block whose template (title, date, excerpt, Read
- * more) the compose pipeline expands over the published entries — the same
- * block designers drop onto their own list-template screens. With
- * `pagination` (AGL-620) the block renders one page and prev/next nav links
- * to `/{slug}/page/{n}`.
+ * Collection entries block whose template the compose pipeline expands over
+ * the published entries — the same block designers drop onto their own
+ * list-template screens. With `pagination` (AGL-620) the block renders one
+ * page and prev/next nav links to `/{slug}/page/{n}`.
+ *
+ * Each entry is a card (AGL-3676, Zach 2026-10-08: "the /blog index should
+ * show cover images"): its cover on top, at one ratio across the grid,
+ * lazy-loaded, sized to its column and linking the post, then the date, the
+ * title, the excerpt and Read more. The cover is the entry's own — a guided
+ * start's posts carry the photo the job picked — and its alt text is the
+ * post's title. An entry with no cover keeps the tile, tinted: the Image
+ * element renders its box with no `<img>` when the source is empty.
  */
 export function buildCollectionListFallbackNodes(
   collection: FallbackCollection,
@@ -636,7 +662,19 @@ export function buildCollectionListFallbackNodes(
       pluginId: 'mui',
       parentId: id('stack'),
       props: {
-        spacing: 4,
+        // The grid's own gap; a Stack's spacing would add margins between
+        // the cells on top of it.
+        spacing: 0,
+        sx: {
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            md: 'repeat(3, minmax(0, 1fr))',
+          },
+          columnGap: 4,
+          rowGap: 6,
+        },
         ...(pagination
           ? { perPage: pagination.perPage, page: pagination.page }
           : {}),
@@ -649,13 +687,38 @@ export function buildCollectionListFallbackNodes(
       componentId: 'muiStack',
       pluginId: 'mui',
       parentId: id('entries'),
-      props: { spacing: 0.5 },
+      props: { spacing: 1, sx: { minWidth: 0 } },
       nodes: [
-        id('item-title'),
+        id('item-cover'),
         id('item-date'),
+        id('item-title'),
         id('item-excerpt'),
         id('item-link'),
       ],
+    },
+    [id('item-cover')]: {
+      $id: id('item-cover'),
+      // The Image element (`media-asset-facts.ts` IMAGE_COMPONENT_ID): its
+      // srcset, `sizes` and intrinsic pair, and a bare box for no source.
+      componentId: 'image',
+      pluginId: 'mui',
+      parentId: id('item'),
+      props: {
+        src: '{{entry.coverImage}}',
+        alt: '{{entry.title}}',
+        href: '{{entry.url}}',
+        objectFit: 'cover',
+        width: '100%',
+        loading: 'lazy',
+        renderedWidths: COLLECTION_LIST_COVER_WIDTHS,
+        sx: {
+          display: 'block',
+          aspectRatio: COLLECTION_LIST_COVER_RATIO,
+          borderRadius: 2,
+          backgroundColor: 'action.hover',
+          marginBottom: 1,
+        },
+      },
     },
     [id('item-title')]: item('item-title', {
       variant: 'h5',

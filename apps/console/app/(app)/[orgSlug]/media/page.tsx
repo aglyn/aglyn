@@ -70,12 +70,7 @@ const OrgMedia: NextPageWithLayout<Record<string, never>> = () => {
               media page (AGL-368). */}
           <CardDisplay
             header={'Library'}
-            help={docsHelp('media', {
-              excerpt:
-                "The organization's shared media library — folders, " +
-                'uploads, editing, and a quota meter, available to every ' +
-                'site in the workspace.',
-            })}
+            help={docsHelp('media', { anchor: '#organization-library' })}
             contentGutterX
             contentGutterY
             contentBordered="all"

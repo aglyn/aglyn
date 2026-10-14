@@ -44,6 +44,8 @@ import {
   STOREFRONT_CATALOG_OPTIONS,
 } from '../constants/storefront-catalog-query'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { addToCart } from '../utils/add-to-cart'
+import { ProductImagePlaceholder } from './product-image-placeholder'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-grid'
@@ -83,12 +85,30 @@ export interface ProductGridProps {
   /** Empty-state copy when nothing matches. */
   emptyText?: string
   /**
+   * The empty state's headline (AGL-3676). Set, a catalog with nothing in it
+   * yet opens as a full panel — the headline, `emptyText` and one action —
+   * the way a designer store template opens before its first products; the
+   * sort and filter controls wait for products to sort.
+   */
+  emptyTitle?: string
+  /** The empty panel's one action: its label… */
+  emptyActionLabel?: string
+  /** …and where it goes, a path on the site ("/contact"). */
+  emptyActionHref?: string
+  /**
    * How each product is drawn (AGL-3676): `outlined`, the default, a card
    * with a short photo strip; `photo`, the photo first and tall, with the
    * name and price under it and no card around it — the way a storefront
    * leads with what it sells.
    */
   cardStyle?: 'outlined' | 'photo'
+  /**
+   * A compact button under each card: "Add to cart" for a product that sells
+   * as one priced variant in stock, "Choose options" (to its page) for one
+   * with several variants, and nothing for a product with no price yet or
+   * sold out. Off by default.
+   */
+  quickAdd?: boolean
 }
 
 interface CatalogItem {
@@ -103,6 +123,33 @@ interface CatalogItem {
   tags?: string[]
   /** Listed before it has a price (AGL-3676): no price to print yet. */
   priceComingSoon?: boolean
+  /** How many variants it sells as (absent from an older payload). */
+  variantCount?: number
+  /** The one variant a quick add puts in the cart. */
+  defaultVariantId?: string
+}
+
+/** What a card's quick add offers for one product. */
+export function quickAddAction(
+  item: Pick<CatalogItem, 'priceComingSoon' | 'soldOut' | 'variantCount' | 'defaultVariantId'>,
+): 'add' | 'options' | null {
+  if (item.priceComingSoon || item.soldOut) return null
+  if (item.defaultVariantId) return 'add'
+  if ((item.variantCount ?? 0) > 1) return 'options'
+  return null
+}
+
+/**
+ * The chip and tag a browsing grid opens on, from the page's address:
+ * `?category=<slug>` and `?tag=<tag>`. Read after hydration only — the
+ * server renders the unfiltered first page and has no address to read.
+ */
+export function browseParamsFromSearch(search: string): { categorySlug: string; tag: string } {
+  const params = new URLSearchParams(search)
+  return {
+    categorySlug: (params.get('category') ?? '').trim(),
+    tag: (params.get('tag') ?? '').trim(),
+  }
 }
 
 /** What a card says where a product listed before it has a price would show one (AGL-3676). */
@@ -216,6 +263,9 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       columns,
       maxItems,
       emptyText,
+      emptyTitle,
+      emptyActionLabel,
+      emptyActionHref,
       showFilters,
       showSearch,
       showCategories,
@@ -224,13 +274,18 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       showPriceFilter,
       pageSize,
       cardStyle,
+      quickAdd,
       ...rest
     } = props
     const photoCards = cardStyle === 'photo'
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
+    const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
+    // Quick add (AGL-3676 follow-up): which card is adding, which just did.
+    const [quickAdding, setQuickAdding] = useState('')
+    const [quickAdded, setQuickAdded] = useState('')
     // Server-rendered first page (AGL-659). The site-page enricher ran this
     // grid's own query on the server and keyed the result by node id — two
     // grids on a page have different queries, so an unkeyed seed would put
@@ -285,6 +340,25 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const pageLimit =
       pageSize && Number(pageSize) > 0 ? Math.floor(Number(pageSize)) : 0
     const pinnedCategoryId = source === 'category' ? categoryId ?? '' : ''
+
+    // A browsing grid opens on the address's `?category=` / `?tag=`: a shop
+    // page linked as /shop?category=candles shows that chip picked. Read in
+    // an effect, so the server and the first client render agree.
+    const [urlCategorySlug, setUrlCategorySlug] = useState('')
+    useEffect(() => {
+      if (!hostId || typeof window === 'undefined') return
+      const asked = browseParamsFromSearch(window.location.search)
+      if (showCategories && asked.categorySlug) setUrlCategorySlug(asked.categorySlug)
+      if (showFilters && asked.tag) setActiveTag(asked.tag)
+      // Once, on arrival: later chip picks are the visitor's.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hostId])
+    useEffect(() => {
+      if (!urlCategorySlug || !categories.length) return
+      const match = categories.find((category) => category.slug === urlCategorySlug)
+      if (match) setActiveCategoryId(match.id)
+      setUrlCategorySlug('')
+    }, [urlCategorySlug, categories])
 
     // Debounce keystrokes so large catalogs aren't fetched per letter.
     useEffect(() => {
@@ -413,9 +487,9 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       gridTemplateColumns: {
         // Photo cards pair up on a phone, as a shop's catalog does; an
         // outlined card with its photo strip takes the row.
-        xs: photoCards ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)',
-        sm: 'repeat(2, 1fr)',
-        md: `repeat(${desktopColumns}, 1fr)`,
+        xs: photoCards ? 'repeat(2, minmax(0, 1fr))' : 'repeat(1, minmax(0, 1fr))',
+        sm: 'repeat(2, minmax(0, 1fr))',
+        md: `repeat(${desktopColumns}, minmax(0, 1fr))`,
       },
     }
     // The rows the query returned, as returned (AGL-3321).
@@ -641,11 +715,55 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       </Box>
     ) : null
 
-    if (visible && visible.length === 0 && !hasCatalogControls) {
-      return (
+    const filtering = Boolean(
+      query ||
+        activeType ||
+        selectedCategoryId ||
+        activeTag ||
+        inStockOnly ||
+        priceFilter,
+    )
+    const emptyCopy = emptyText || 'No products here yet — check back soon.'
+    // A store with nothing listed yet (AGL-3676): a headline, a line and one
+    // way to hear more — never sample products, never a sort over nothing.
+    const emptyPanel = emptyTitle ? (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 3,
+          py: { xs: 6, md: 10 },
+          textAlign: 'center',
+          borderRadius: 2,
+          bgcolor: 'action.hover',
+        }}
+      >
+        <Typography variant="h5" component="h3">
+          {emptyTitle}
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 480 }}>
+          {emptyCopy}
+        </Typography>
+        {emptyActionLabel && emptyActionHref ? (
+          <Button variant="outlined" href={emptyActionHref} sx={{ mt: 1 }}>
+            {emptyActionLabel}
+          </Button>
+        ) : null}
+      </Box>
+    ) : null
+    // An empty catalog with nothing asked of it shows its empty state alone:
+    // controls are for narrowing products, and there are none to narrow.
+    if (visible && visible.length === 0 && (!hasCatalogControls || !filtering)) {
+      return emptyPanel ? (
+        <Box ref={ref} {...rest} sx={nodeSx}>
+          {emptyPanel}
+        </Box>
+      ) : (
         <Box ref={ref} {...rest} sx={[{ p: 3, textAlign: 'center' }, ...nodeSx]}>
           <Typography variant="body2" color="text.secondary">
-            {emptyText || 'No products here yet — check back soon.'}
+            {emptyCopy}
           </Typography>
         </Box>
       )
@@ -655,14 +773,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const emptyState = (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {query ||
-          activeType ||
-          selectedCategoryId ||
-          activeTag ||
-          inStockOnly ||
-          priceFilter
-            ? 'No products match — try clearing a filter.'
-            : emptyText || 'No products here yet — check back soon.'}
+          {filtering ? 'No products match — try clearing a filter.' : emptyCopy}
         </Typography>
       </Box>
     )
@@ -696,7 +807,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
             key={item.id}
             variant={photoCards ? 'elevation' : 'outlined'}
             elevation={0}
-            sx={photoCards ? { bgcolor: 'transparent', overflow: 'visible' } : undefined}
+            sx={photoCards ? { bgcolor: 'transparent', overflow: 'visible', minWidth: 0 } : { minWidth: 0 }}
           >
             <CardActionArea
               href={hostId ? `/products/${item.slug}` : undefined}
@@ -710,7 +821,15 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   alt={item.name}
                   sx={
                     photoCards
-                      ? { aspectRatio: '4 / 5', objectFit: 'cover', borderRadius: 2 }
+                      ? {
+                          width: '100%',
+                          aspectRatio: '4 / 5',
+                          objectFit: 'cover',
+                          borderRadius: 2,
+                          // A storefront's photo answers the pointer (AGL-3676).
+                          transition: 'opacity 200ms ease',
+                          '.MuiCardActionArea-root:hover &': { opacity: 0.88 },
+                        }
                       : { height: 160, objectFit: 'cover' }
                   }
                   // Deferred (AGL-2486), and this is the worst offender of
@@ -721,11 +840,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                 />
               ) : (
-                <Box
+                // Never a blank tile (AGL-3676 follow-up).
+                <ProductImagePlaceholder
+                  name={item.name}
                   sx={
                     photoCards
-                      ? { aspectRatio: '4 / 5', bgcolor: 'action.hover', borderRadius: 2 }
-                      : { height: 160, bgcolor: 'action.hover' }
+                      ? { aspectRatio: '4 / 5', borderRadius: 2 }
+                      : { height: 160 }
                   }
                 />
               )}
@@ -752,6 +873,34 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                 </Box>
               </CardContent>
             </CardActionArea>
+            {quickAdd ? (
+              <QuickAddButton
+                item={item}
+                inert={!hostId}
+                busy={quickAdding === item.id}
+                added={quickAdded === item.id}
+                photoCards={photoCards}
+                onAdd={async () => {
+                  if (!hostId || !item.defaultVariantId || quickAdding) return
+                  setQuickAdding(item.id)
+                  const ok = await addToCart({
+                    hostId,
+                    siteFetch,
+                    productId: item.id,
+                    variantId: item.defaultVariantId,
+                    quantity: 1,
+                    item: {
+                      item_id: item.id,
+                      item_name: item.name,
+                      price: item.priceUsd,
+                      quantity: 1,
+                    },
+                  })
+                  setQuickAdding('')
+                  if (ok) setQuickAdded(item.id)
+                }}
+              />
+            ) : null}
           </Card>
           )
         })}
@@ -852,6 +1001,63 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     )
   },
 )
+/**
+ * A card's quick add: outside the card's link, so a click never follows it.
+ * Sample cards on the canvas show the button inert.
+ */
+function QuickAddButton({
+  item,
+  inert,
+  busy,
+  added,
+  photoCards,
+  onAdd,
+}: {
+  item: CatalogItem
+  inert: boolean
+  busy: boolean
+  added: boolean
+  photoCards: boolean
+  onAdd: () => void
+}) {
+  const action = inert ? 'add' : quickAddAction(item)
+  if (!action) return null
+  const sx = photoCards ? { mt: 0.5, mx: 0.5, mb: 1 } : { mx: 2, mb: 2 }
+  if (action === 'options') {
+    return (
+      <Box sx={sx}>
+        <Button
+          size="small"
+          variant="outlined"
+          fullWidth
+          href={`/products/${item.slug}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {'Choose options'}
+        </Button>
+      </Box>
+    )
+  }
+  return (
+    <Box sx={sx}>
+      <Button
+        size="small"
+        variant="outlined"
+        fullWidth
+        disabled={inert || busy}
+        aria-label={`Add ${item.name} to cart`}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onAdd()
+        }}
+      >
+        {added ? 'Added ✓' : busy ? 'Adding…' : 'Add to cart'}
+      </Button>
+    </Box>
+  )
+}
+
 ProductGrid.displayName = 'AglynProductGrid'
 
 export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
@@ -943,6 +1149,26 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
+      name: 'emptyTitle',
+      label: 'Empty headline',
+      description:
+        'Headline while the store lists nothing yet; set, the empty state ' +
+        'is a full panel with the empty text and one button.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'emptyActionLabel',
+      label: 'Empty button label',
+      description: 'The empty panel’s button, e.g. “Get in touch”.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'emptyActionHref',
+      label: 'Empty button link',
+      description: 'Where the empty panel’s button goes, e.g. /contact.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
       name: 'showFilters',
       label: 'Show filters',
       description: 'Tag chips, in-stock toggle, and price sort above the grid.',
@@ -1001,6 +1227,15 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
         { label: 'Outlined', value: 'outlined' },
         { label: 'Photo', value: 'photo' },
       ],
+    },
+    {
+      // Off by default, so no existing grid changes shape on deploy.
+      name: 'quickAdd',
+      label: 'Quick add to cart',
+      description:
+        'An Add to cart button on each card for a product with one variant; ' +
+        '"Choose options" for one with several.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
     },
   ],
 }

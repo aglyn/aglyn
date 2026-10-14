@@ -30,8 +30,17 @@ import {
  * subcollection; without something re-running the rule, "dynamic" means
  * "evaluated once at creation". This is that something: it rides the existing
  * fifteen-minute Cloud Scheduler fast-cron beside the scheduled-campaign
- * processor, so a dynamic list is never more than about fifteen minutes stale
- * and no new scheduler job is provisioned.
+ * processor, so no new scheduler job is provisioned.
+ *
+ * ## A list is re-evaluated hourly, not every tick
+ *
+ * Every evaluation scans the WHOLE of the rule's silos on the list's site —
+ * every form submission, contact, lead and member — whether or not anything
+ * changed, so a fifteen-minute cadence costs four full scans an hour per
+ * list. A list evaluated within {@link REEVALUATE_AFTER_MS} is skipped unless
+ * it is mid-scan (`evaluationCursor`) or was edited since it was evaluated:
+ * the sweep's own write stamps `lastEvaluatedAt` with the server time, so a
+ * document `updateTime` past it is somebody else's write — a changed rule.
  *
  * ## It chunks, because `sweepConsoleCron` will follow a cursor
  *
@@ -53,6 +62,35 @@ import {
 
 /** Dynamic lists evaluated per invocation. */
 const LISTS_PER_CHUNK = 20
+
+/** How long an evaluated, unedited list is left alone. */
+export const REEVALUATE_AFTER_MS = 60 * 60 * 1000
+
+/**
+ * The slack between the sweep's `lastEvaluatedAt` server timestamp and the
+ * `updateTime` of the same write, which Firestore commits together.
+ */
+const OWN_WRITE_SLACK_MS = 2_000
+
+/** Whether one list document is due for evaluation at `nowMs`. */
+export function dynamicListIsDue(
+  listDoc: {
+    get(field: string): unknown
+    updateTime?: { toMillis(): number } | null
+  },
+  nowMs: number,
+): boolean {
+  if (listDoc.get('evaluationCursor')) return true
+  const evaluated = listDoc.get('lastEvaluatedAt') as
+    | { toMillis?: () => number }
+    | null
+    | undefined
+  const evaluatedMs = evaluated?.toMillis?.()
+  if (typeof evaluatedMs !== 'number') return true
+  if (nowMs - evaluatedMs >= REEVALUATE_AFTER_MS) return true
+  const updatedMs = listDoc.updateTime?.toMillis()
+  return typeof updatedMs === 'number' && updatedMs - evaluatedMs > OWN_WRITE_SLACK_MS
+}
 
 export const listsMaterializeHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -95,8 +133,14 @@ export const listsMaterializeHandler: PluginApiHandler = async (req, res) => {
   const lists = await query.get()
   const results: Array<Record<string, unknown>> = []
   let lastPath = ''
+  let skipped = 0
+  const nowMs = Date.now()
   for (const listDoc of lists.docs) {
     lastPath = listDoc.ref.path
+    if (!dynamicListIsDue(listDoc, nowMs)) {
+      skipped += 1
+      continue
+    }
     const hostId = String(listDoc.get('hostId') ?? '')
     if (!hostId) {
       // A dynamic list with no host has no silos to draw from. Reported
@@ -123,6 +167,7 @@ export const listsMaterializeHandler: PluginApiHandler = async (req, res) => {
   return res.status(200).json({
     ok: true,
     evaluated: results.length,
+    skipped,
     results,
     done,
     // The caller refuses to loop on `done:false` with no cursor, which is the

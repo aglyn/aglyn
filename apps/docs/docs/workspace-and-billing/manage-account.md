@@ -15,7 +15,12 @@ belong to. Workspace-level things — the team roster, roles, billing — live u
 [Organization → Team](teams-and-roles/overview.md) and
 [Billing](billing-and-plans/overview.md) instead.
 
-The page is five tabs.
+## The tabs {#account-tabs}
+
+Manage Account has a tab for each part of your account — **Account**, **Email
+addresses**, **Profile image**, **Basic info**, **Security** and **Close account** — and
+each one saves on its own. **Security** is left out for an account that signs in only
+through a company identity provider, which owns that account's credentials.
 
 ## Account
 
@@ -132,6 +137,15 @@ through**. Confirming a mailbox proves mail reaches you; it does not put you ins
 that organization's identity provider, and promoting the address would leave the
 account unable to sign in at all.
 
+### Product updates {#product-updates}
+
+The **Product updates** card under the addresses is the switch for whether we may email
+you about product updates; turn it on or off at any time, and receipts, invites and
+security alerts keep arriving either way. Your answer is stored with the date and the
+wording you agreed to, and if you unsubscribed from an email the card says so. See
+[Product updates](signing-in-and-sessions.md#product-updates) for the other places the
+same choice can be made, and what turning it back on needs.
+
 ## Profile image
 
 Your avatar, shown in the account menu, on the workspace team roster, and beside
@@ -196,11 +210,14 @@ checkout and belongs to the organization rather than to you.
 
 ## Security
 
-Change your password.
+The **Security** tab is where you change your password, manage your
+[passkeys](signing-in-and-sessions.md#passkeys) and check
+[recent sign-ins](signing-in-and-sessions.md#recent-sign-ins). To change your password,
+type your current one, then the new one twice, and save.
 
-This tab appears **only if your account has a password**. A Google-only account has
-no password to change — connect **Email & password** from the Account tab first, and
-the Security tab appears.
+The password card appears **only if your account has a password**. A Google-only account
+has no password to change — connect **Email & password** from the Account tab first, and
+the card appears.
 
 ## Related
 

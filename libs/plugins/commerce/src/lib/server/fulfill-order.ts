@@ -62,6 +62,16 @@ export interface RecordShipmentRequest {
   labelRef?: string
   /** What that label cost, in integer cents of the order's currency (AGL-3693). */
   labelCostCents?: number
+  /**
+   * What the merchant says this shipment cost to send, typed by hand in the
+   * fulfill dialog (AGL-3705): integer cents of the store's currency, 0 for
+   * free shipping. Stored in the SAME field a label's cost is
+   * (`labelCostCents`), so it rides `order.fulfilled` to a marketplace that
+   * pays shipping back. A label's own cost wins when both are given. Absent
+   * means not known — nothing is stored. The caller validates
+   * (`shippingCostCentsProblem`); an invalid value here is dropped.
+   */
+  shippingCostCents?: number
   /** Whether the buyer is to be told; recorded on the fulfillment. Default on. */
   notify?: boolean
   /**
@@ -302,7 +312,10 @@ export async function recordOrderShipment(
         ...(request.labelRef ? { labelRef: String(request.labelRef).slice(0, 80) } : {}),
         ...(Number.isSafeInteger(request.labelCostCents) && Number(request.labelCostCents) > 0
           ? { labelCostCents: Number(request.labelCostCents) }
-          : {}),
+          : request.shippingCostCents !== undefined &&
+              CommerceModel.shippingCostCentsProblem(request.shippingCostCents) === null
+            ? { labelCostCents: request.shippingCostCents }
+            : {}),
         status: 'active',
         notify: request.notify !== false,
         atMs,
@@ -582,6 +595,11 @@ export const fulfillOrderHandler: PluginApiHandler = async (req, res) => {
       }))
     : undefined
   const idempotencyKey = String(req.headers['idempotency-key'] ?? body.idempotencyKey ?? '').slice(0, 200)
+  // A hand-entered shipping cost (AGL-3705): whole cents, or absent. Refused
+  // before anything is read, so a typo never half-records a shipment.
+  const shippingCostCents = action || to !== 'fulfilled' ? undefined : body.shippingCostCents
+  const shippingCostProblem = CommerceModel.shippingCostCentsProblem(shippingCostCents)
+  if (shippingCostProblem) return res.status(400).json({ error: shippingCostProblem })
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
@@ -651,6 +669,7 @@ export const fulfillOrderHandler: PluginApiHandler = async (req, res) => {
       ...(body.trackingUrl ? { trackingUrl: String(body.trackingUrl) } : {}),
       ...(body.labelUrl ? { labelUrl: String(body.labelUrl) } : {}),
       ...(body.notify === false ? { notify: false } : {}),
+      ...(typeof shippingCostCents === 'number' ? { shippingCostCents } : {}),
       ...(idempotencyKey ? { idempotencyKey } : {}),
     })
     if (outcome.outcome === 'no_such_order') {

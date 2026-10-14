@@ -127,7 +127,7 @@ export function AiExplainAutomation({ hostId, orgId, target }: ConsoleAutomation
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
             {asked ? copy.saved : copy.intro}{' '}
-            <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+            <Link href={help.href} target="_blank" rel="noopener" title={help.excerptText}>
               {'How it works'}
             </Link>
           </Typography>

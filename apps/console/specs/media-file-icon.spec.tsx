@@ -83,7 +83,7 @@ describe('MediaAssetCard file-type icons (AGL-1463)', () => {
     ],
     ['text/plain', 'DescriptionIcon', 'TXT'],
     ['application/json', 'DataObjectIcon', 'JSON'],
-    ['audio/mpeg', 'AudiotrackIcon', 'MPEG'],
+    ['audio/mpeg', 'AudiotrackIcon', 'MP3'],
   ])('renders %s as %s', (contentType, expectedIcon, expectedLabel) => {
     const { container, getByText } = renderCard({ contentType })
     expect(iconName(container)).toBe(expectedIcon)

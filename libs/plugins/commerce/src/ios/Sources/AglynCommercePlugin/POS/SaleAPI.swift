@@ -52,6 +52,8 @@ struct PosContext: Equatable {
   /// The site's smart (internet) readers, driven through the server.
   let readers: [PosSmartReader]
   let smsReceipts: Bool
+  /// The site's register rules: shifts, the idle lock, the refund limit.
+  var ops = PosOpsSettings()
 }
 
 struct PosSalePayment: Equatable, Identifiable {
@@ -160,7 +162,8 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
         id: id, label: reader["label"].text ?? "Card reader", registerID: reader["registerId"].text,
         status: reader["status"].text ?? "offline", livemode: reader["livemode"].flag)
     },
-    smsReceipts: record["smsReceipts"].flag)
+    smsReceipts: record["smsReceipts"].flag,
+    ops: readPosOpsSettings(record["ops"]))
 }
 
 func readSalePayment(_ element: JSONValue) -> PosSalePayment? {
@@ -287,10 +290,22 @@ extension PosSaleAPI {
   }
 }
 
+/// The cashier a PIN switched in, readable from the routes' `Sendable` calls.
+final class CashierAssertionBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value: String?
+  var assertion: String? {
+    get { lock.withLock { value } }
+    set { lock.withLock { value = newValue } }
+  }
+}
+
 /// The register's calls over the console API, as the signed-in member.
 struct ConsolePosSaleAPI: PosSaleAPI {
   let api: ConsoleAPIClient
   let hostID: String
+  /// The cashier a PIN switched in, if any; the sale and each payment it starts name them.
+  var cashier = CashierAssertionBox()
 
   func context() async throws -> PosContext {
     readPosContext(try await api.request(posPaymentRoute, query: [("hostId", hostID), ("action", "context")]))
@@ -303,15 +318,20 @@ struct ConsolePosSaleAPI: PosSaleAPI {
     if let locationID { body["locationId"] = .string(locationID) }
     if cart.discountPct > 0 { body["discountPct"] = .number(Double(cart.discountPct)) }
     if !cart.customerEmail.isEmpty { body["customerEmail"] = .string(cart.customerEmail) }
+    if let assertion = cashier.assertion { body["cashierAssertion"] = .string(assertion) }
     return readOpenedSale(
       try await api.request(posOrderRoute, method: .post, body: .object(body), idempotencyKey: attemptKey))
   }
 
   func payment(orderID: String, step: SaleStep, attemptKey: String?) async throws -> PosPaymentAnswer {
     precondition(!step.startsPayment || attemptKey?.isEmpty == false, "A payment needs its attempt key.")
+    var body = step.body(hostID: hostID, orderID: orderID)
+    if step.startsPayment, let assertion = cashier.assertion, case .object(var record) = body {
+      record["cashierAssertion"] = .string(assertion)
+      body = .object(record)
+    }
     return readPaymentAnswer(
-      try await api.request(
-        posPaymentRoute, method: .post, body: step.body(hostID: hostID, orderID: orderID), idempotencyKey: attemptKey))
+      try await api.request(posPaymentRoute, method: .post, body: body, idempotencyKey: attemptKey))
   }
 
   func giftCardBalance(code: String) async throws -> GiftCardBalance {

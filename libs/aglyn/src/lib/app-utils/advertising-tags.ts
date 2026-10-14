@@ -59,12 +59,15 @@
  *
  * ## The six conditions, all independent, all required
  *
- * 1. **{@link isPlatformMarketingHost}** — Aglyn's own marketing site, never a
- *    customer's. This is the DPA §3.2 boundary: Aglyn promises customers it
- *    does not "sell"/"share" Customer Personal Data, and an ad pixel on a
- *    customer's published site — or in the console — would breach that. Note
- *    the console needs no condition of its own: it does not render the tenant
- *    runtime's analytics component at all, so there is no mount point to gate.
+ * 1. **Whose tags.** On Aglyn's own marketing site
+ *    ({@link isPlatformMarketingHost}), ours; on a customer's site, only the
+ *    tags that site's owner configured with their own account ids
+ *    (AGL-3694) — see "A site owner's OWN tags" below. Never OUR tag on a
+ *    customer's site: that is the DPA §3.2 boundary, Aglyn not "selling" or
+ *    "sharing" Customer Personal Data for its own advertising, and the
+ *    platform's ids are on no host but ours. Note the console needs no
+ *    condition of its own: it does not render the tenant runtime's analytics
+ *    component at all, so there is no mount point to gate.
  * 2. **{@link analyticsMayEmit}** — a real production deployment. AGL-2067's
  *    finding was that `next dev` and Vercel PREVIEW builds resolve
  *    `aglyn.com`'s host document exactly as production does; without this a
@@ -107,28 +110,39 @@
  *    this the hatch reopens precisely the hole condition 2 closes, which is why
  *    `INTERNAL_TRAFFIC_FORCED_SNIPPET` exists on the GA side.
  *
- * ## What is NOT wired, and why that is the point
+ * ## A site owner's OWN tags (AGL-3694)
  *
- * No host document carries an `analytics.adTags` entry. The Meta descriptor
- * below is a description of how that vendor would be loaded and — more
- * importantly — how it would be torn down; it is inert until someone writes a
- * pixel id onto the `aglyn-marketing` host. That makes deployment a DATA
- * change reviewed on its own merits, exactly as configuring GA is, rather than
- * something that rides along with this mechanism.
- *
- * ## Why customer sites are excluded outright rather than offered this
- *
- * A customer-facing "run your own ad pixel" feature is a different product
+ * Condition 1 above is about OUR tags. A customer's site may mount the tags its
+ * owner configured — their own Meta pixel, TikTok pixel, Pinterest tag, Google
+ * Ads id or LinkedIn partner id, written on Site → Setup → Tracking — and
+ * nothing else: the account ids come from that site's own host document, so
+ * every hit lands in the owner's own ad account, under the owner's
+ * instruction, exactly as the site's own GA4 measurement id does. That is the
+ * product decision the comment here used to leave open ("a different product
  * decision with its own consent copy, its own cookie-policy rows and its own
- * DPA implications. Nothing here forecloses it. What this module must not do
- * is arrive as that feature by accident.
+ * DPA implications"), taken with those rows: the cookie inventory names every
+ * vendor below, the docs say what loads and when, and the consent conditions
+ * 2–6 apply to a customer's site unchanged. A customer's tag is marked
+ * {@link ADVERTISING_EVENTS_ATTRIBUTE} as well, which is what lets the site's
+ * conversion events reach it (`advertising-events.ts`) and keeps them away
+ * from ours.
+ *
+ * What still never happens is OUR tag on a customer's site: the platform's
+ * account ids live only on the `aglyn-marketing` host, which only
+ * `isPlatformMarketingHost` matches.
  */
 
 import {
   GOOGLE_ADS_ID_PATTERN,
   LINKEDIN_PARTNER_ID_PATTERN,
   META_PIXEL_ID_PATTERN,
+  PINTEREST_TAG_ID_PATTERN,
+  TIKTOK_PIXEL_ID_PATTERN,
 } from './visitor-consent'
+import {
+  ADVERTISING_EVENTS_ATTRIBUTE,
+  ADVERTISING_TAG_ATTRIBUTE,
+} from './advertising-events'
 import {
   analyticsEnvironmentForcesInternal,
   analyticsMayEmit,
@@ -154,8 +168,11 @@ import {
  * their own site's Custom HTML is never touched by our withdrawal path — we
  * did not load it, we do not know what basis it runs on, and silently killing
  * it would be us configuring a customer's site. Its value is the vendor id.
+ *
+ * Declared in `advertising-events.ts` (AGL-3694), which finds a mounted tag by
+ * it without importing this module.
  */
-export const ADVERTISING_TAG_ATTRIBUTE = 'data-aglyn-ad-tag'
+export { ADVERTISING_EVENTS_ATTRIBUTE, ADVERTISING_TAG_ATTRIBUTE }
 
 /**
  * One advertising vendor, described completely enough to LOAD it and — the
@@ -513,6 +530,99 @@ export const LINKEDIN_INSIGHT_VENDOR: AdvertisingVendor = {
 }
 
 /**
+ * TikTok Pixel (AGL-3694) — a site owner's own, from their TikTok Ads Manager.
+ *
+ * TikTok's published base code is a loader that inserts `events.js` itself.
+ * Here the QUEUE half of it runs as the boot snippet and the library is the
+ * marked `<script>` the mount renders, so the teardown can find it — the same
+ * split every vendor in this registry has. `ttq.load` is reduced accordingly
+ * to the registration it does (`_i`, `_t`, `_o` for the pixel code), without
+ * the insertion; `events.js` reads that registration when it arrives.
+ *
+ * `grantConsent`/`revokeConsent` are TikTok's documented consent controls,
+ * and are the `fbq('consent', …)` analogue for the AGL-1608 order: told
+ * first, then removed, then swept.
+ *
+ * Cookies: `_ttp` (the browser id), `_tt_enable_cookie` (the cookie probe) and
+ * `ttcsid` / `ttcsid_<pixel>` (the session), all first-party at the
+ * registrable domain, which the ladder sweep reaches.
+ */
+export const TIKTOK_PIXEL_VENDOR: AdvertisingVendor = {
+  id: 'tiktok',
+  label: 'TikTok Pixel',
+  accountIdPattern: TIKTOK_PIXEL_ID_PATTERN,
+  scriptSrc: 'https://analytics.tiktok.com/i18n/pixel/events.js',
+  scriptSrcFor: (accountId: string) =>
+    `https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=${accountId}&lib=ttq`,
+  scriptMatch: 'analytics.tiktok.com',
+  cookiePrefixes: ['_ttp', '_tt_enable_cookie', 'ttcsid'],
+  bootSnippet: (accountId: string) =>
+    "!function(w,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];" +
+    'ttq.methods=["page","track","identify","instances","debug","on","off",' +
+    '"once","ready","alias","group","enableCookie","disableCookie",' +
+    '"holdConsent","revokeConsent","grantConsent"];' +
+    'ttq.setAndDefer=function(t,e){t[e]=function(){' +
+    't.push([e].concat(Array.prototype.slice.call(arguments,0)))}};' +
+    'for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);' +
+    'ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)' +
+    'ttq.setAndDefer(e,ttq.methods[n]);return e};' +
+    'ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";' +
+    'ttq._i=ttq._i||{};ttq._i[e]=[];ttq._i[e]._u=r;ttq._t=ttq._t||{};' +
+    'ttq._t[e]=+new Date;ttq._o=ttq._o||{};ttq._o[e]=n||{}}}' +
+    "(window,'ttq');" +
+    `ttq.load('${accountId}');` +
+    'ttq.grantConsent();' +
+    'ttq.page();',
+  setConsent: (scope: Record<string, unknown>, granted: boolean) => {
+    try {
+      const ttq = scope.ttq as Record<string, unknown> | undefined
+      const call = ttq?.[granted ? 'grantConsent' : 'revokeConsent']
+      if (typeof call === 'function') (call as () => void).call(ttq)
+    } catch {
+      // The element removal and the cookie sweep still stand.
+    }
+  },
+}
+
+/**
+ * Pinterest Tag (AGL-3694) — a site owner's own, from Pinterest Ads.
+ *
+ * The published base code is a queue shim plus an inserted `core.js`; as with
+ * TikTok the shim is the boot and the library is our marked element.
+ *
+ * Pinterest publishes no consent call for the tag. On withdrawal the queue
+ * function is replaced with one that drops every call, so a late or cached
+ * `core.js` finds nothing to report; the element removal and the sweep are
+ * the substance, as they are for LinkedIn.
+ *
+ * Cookies: `_pin_unauth` (the browser id), `_pinterest_ct_ua` /
+ * `_pinterest_ct_rt` (conversion tracking) and `_epik` / `_derived_epik` (the
+ * click id) — first-party; `_pinterest_sess` lives on pinterest.com and only
+ * Pinterest can clear it.
+ */
+export const PINTEREST_TAG_VENDOR: AdvertisingVendor = {
+  id: 'pinterest',
+  label: 'Pinterest Tag',
+  accountIdPattern: PINTEREST_TAG_ID_PATTERN,
+  scriptSrc: 'https://s.pinimg.com/ct/core.js',
+  scriptMatch: 's.pinimg.com',
+  cookiePrefixes: ['_pin_unauth', '_pinterest_ct', '_epik', '_derived_epik'],
+  bootSnippet: (accountId: string) =>
+    '!function(){if(!window.pintrk){window.pintrk=function(){' +
+    'window.pintrk.queue.push(Array.prototype.slice.call(arguments))};' +
+    'var n=window.pintrk;n.queue=[];n.version="3.0"}}();' +
+    `pintrk('load','${accountId}');` +
+    "pintrk('page');",
+  setConsent: (scope: Record<string, unknown>, granted: boolean) => {
+    try {
+      if (!granted) scope.pintrk = function pintrkWithdrawn() {}
+    } catch {
+      // Same standing as the others: the teardown does not depend on this.
+    }
+  },
+}
+
+/**
  * Every vendor this gate knows how to tear down — which is a SUPERSET of the
  * vendors it knows how to load, now that a sweep-only member exists.
  */
@@ -520,14 +630,15 @@ export const ADVERTISING_VENDORS: readonly AdvertisingVendor[] = [
   META_PIXEL_VENDOR,
   GOOGLE_ADS_VENDOR,
   LINKEDIN_INSIGHT_VENDOR,
+  TIKTOK_PIXEL_VENDOR,
+  PINTEREST_TAG_VENDOR,
 ]
 
 /**
  * The host fields this module reads, on top of the consent ones.
  *
- * `adTags` maps a vendor id to that vendor's account id. NO host document
- * carries it today; see the module comment on why deployment is a separate,
- * reviewable data change rather than a consequence of merging this.
+ * `adTags` maps a vendor id to that vendor's account id: on our marketing
+ * host, our own; on a customer's site, the owner's own (AGL-3694).
  */
 export interface AdvertisingTagHost extends VisitorConsentHost {
   analytics?: {
@@ -541,6 +652,12 @@ export interface AdvertisingTagHost extends VisitorConsentHost {
 export interface ResolvedAdvertisingTag {
   readonly vendor: AdvertisingVendor
   readonly accountId: string
+  /**
+   * The tag is a site owner's own, on their own site (AGL-3694): it is marked
+   * {@link ADVERTISING_EVENTS_ATTRIBUTE} and takes the site's conversion
+   * events. Absent on our own surfaces' tags.
+   */
+  readonly siteOwned?: true
 }
 
 /**
@@ -566,7 +683,10 @@ export function resolveAdvertisingTags(
   env: AnalyticsEnvironment = readAnalyticsEnvironment(),
   internal: boolean = readInternalTrafficOverride(),
 ): ResolvedAdvertisingTag[] {
-  if (isPlatformMarketingHost(host) === false) return []
+  // Condition 1, as of AGL-3694: OUR surface, or a customer's site mounting
+  // the tags ITS OWNER configured. Either way the account ids come from this
+  // host's own document, so nothing here can put one site's tag on another.
+  const siteOwned = isPlatformMarketingHost(host) === false
   if (analyticsMayEmit(env) === false) return []
   if (hostConsentRequired(host) === false) return []
   if (advertisingGrantedByRecord(host, stored) === false) return []
@@ -592,7 +712,7 @@ export function resolveAdvertisingTags(
     if (vendor.sweepOnly || !vendor.accountIdPattern) continue
     const accountId = String(configured[vendor.id] ?? '')
     if (vendor.accountIdPattern.test(accountId)) {
-      tags.push({ vendor, accountId })
+      tags.push(siteOwned ? { vendor, accountId, siteOwned: true } : { vendor, accountId })
     }
   }
   return tags
@@ -654,10 +774,11 @@ export function residentAdvertisingVendors(): AdvertisingVendor[] {
  * 3. **Sweep the cookies.** Last, because steps 1 and 2 are what stop them
  *    coming straight back (AGL-1608).
  *
- * Acts only on tags carrying {@link ADVERTISING_TAG_ATTRIBUTE}. On a customer
- * site — where this module never loaded anything — it is a no-op that touches
- * no cookie, which is the only correct behaviour: their pixel, if any, runs on
- * a basis that is not ours to withdraw.
+ * Acts only on tags carrying {@link ADVERTISING_TAG_ATTRIBUTE}: the tags this
+ * module mounted, which on a customer's site are the ones its owner configured
+ * on Setup → Tracking (AGL-3694). A pixel pasted into Custom HTML carries no
+ * mark and is never touched — it runs on a basis that is not ours to
+ * withdraw.
  */
 export function revokeAdvertisingTags(hostname?: string | null): string[] {
   if (typeof window === 'undefined') return []

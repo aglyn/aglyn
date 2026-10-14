@@ -24,7 +24,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
-import { aiLayoutListingAt, aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
+import { aiLayoutListingAt, aiLayoutListingsOf, aiLayoutRecordHref, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
   AI_LAYOUT_PAGE_TOOL,
@@ -36,7 +36,7 @@ import type {
   AiLayoutPage,
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
-import { aiLayoutCopyCheck } from '../layout-language/ai-layout-gaps'
+import { aiLayoutCopyCheck, aiLayoutWithoutSections } from '../layout-language/ai-layout-gaps'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
@@ -48,6 +48,8 @@ import {
 } from '../runtime/ai-doctrine'
 import type { AiUsage } from '../providers/contract'
 import {
+  aiSettleMechanicalRules,
+  aiSettleUnrelatedScreenLinks,
   validateAiDoctrineTree,
   type AiDoctrineNode,
   type AiDoctrineTreeContext,
@@ -231,26 +233,81 @@ export function aiLayoutPageTargets(input: {
       props: component.props,
     })),
     facts: aiLayoutFacts(job),
-    // The site's catalog and blog, and the sections that list them (AGL-3676).
-    listings: aiLayoutListingsOf(job.inputs),
+    // The site's catalog and blog, and the sections that list them (AGL-3676),
+    // and its datasets (AGL-3616).
+    listings: aiLayoutListingsWithDatasets(aiLayoutListingsOf(job.inputs), inventory),
   }
+}
+
+/**
+ * A page's listings with each dataset's held to the site's inventory
+ * (AGL-3616): a records listing is kept only where the site has the dataset —
+ * the tree check admits a repeat over no other, and a card left repeating
+ * over nothing would show its `{{item.*}}` — and one that names no fields
+ * takes the inventory's, in the dataset's order. Its cards link the record
+ * pages the plan makes, else those the site already serves (AGL-3747).
+ */
+export function aiLayoutListingsWithDatasets(
+  listings: readonly AiLayoutListing[],
+  inventory: Pick<AiSiteInventory, 'datasets'> | null,
+): AiLayoutListing[] {
+  return listings.flatMap((listing) => {
+    if (listing.kind !== 'records') return [listing]
+    const row = inventory?.datasets.find((dataset) => dataset.id === listing.datasetId)
+    if (!row) return []
+    // The photo field is the card's picture, never its words (AGL-3616).
+    const imageField = listing.imageField ?? row.imageField
+    // The address is the card's link to its record's page, never its words (AGL-3727).
+    const addressField = listing.addressField ?? row.addressField
+    // A record page the site already serves for the dataset (AGL-3747), where
+    // the plan makes none of its own.
+    const recordBase = listing.recordBase ?? row.recordBase
+    const fields = (
+      listing.fields?.length
+        ? listing.fields
+        : row.fields.map((name, index) => ({ id: row.fieldIds?.[index] || name, name, type: 'text' }))
+    ).filter((field) => field.id !== imageField && field.id !== addressField)
+    return fields.length
+      ? [
+          {
+            ...listing,
+            fields,
+            ...(imageField ? { imageField } : {}),
+            ...(recordBase && addressField ? { recordBase, addressField } : {}),
+          },
+        ]
+      : []
+  })
 }
 
 /**
  * The page check's context with what a section listing the blog's posts
  * binds (AGL-3676): each post's card links its post and shows its cover by
  * the tokens the page fills per post, which a page's store admits whole only
- * where a listing places them.
+ * where a listing places them. A dataset's card shows its record's photo
+ * the same way (AGL-3616), by `{{item.<photo field>}}`. And the page that
+ * places the site's form, which a call to action asking a visitor to get in
+ * touch links even when it is home (AGL-3729).
  */
 export function aiLayoutListingContext(
   context: AiDoctrineTreeContext,
   targets: AiLayoutTargets,
 ): AiDoctrineTreeContext {
-  const listsPosts = (targets.listings ?? []).some(
-    (listing) => listing.kind === 'posts' && listing.placements.some((placement) => placement.screenId === targets.pageId),
+  if (targets.formPageId) context = { ...context, formScreenIds: [targets.formPageId] }
+  const here = (targets.listings ?? []).filter((listing) =>
+    listing.placements.some((placement) => placement.screenId === targets.pageId),
   )
-  if (!listsPosts) return context
-  return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...AI_LAYOUT_POST_ADDRESS_TOKENS])] }
+  const tokens = [
+    ...(here.some((listing) => listing.kind === 'posts') ? AI_LAYOUT_POST_ADDRESS_TOKENS : []),
+    ...here.flatMap((listing) => (listing.kind === 'records' && listing.imageField ? [`{{item.${listing.imageField}}}`] : [])),
+    // Each card's link to its record's own page (AGL-3727), admitted whole.
+    ...here.flatMap((listing) => {
+      const href = aiLayoutRecordHref(listing)
+      return href ? [href] : []
+    }),
+  ]
+  if (!tokens.length) return context
+  return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...tokens])] }
 }
 
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */
@@ -271,6 +328,28 @@ export function aiLayoutPagePrompt(input: {
     // A section the site's records fill (AGL-3676): the platform places them,
     // so the design writes the words around them and no group for them.
     const listed = aiLayoutListingAt(targets.listings ?? [], targets.pageId, index)
+    if (listed?.listing.kind === 'tracks') {
+      // A music site's player (AGL-3716): placed empty, for the owner's own uploads.
+      return `${index + 1}. "${section.name}"${places}; the platform places a music player here for the artist's own tracks, which they add themselves: write only its heading and a line inviting visitors to listen, and no cards, list, images or links for songs`
+    }
+    if (listed?.listing.kind === 'events') {
+      // The site's own dated events (AGL-3755), listed by the platform with their dates.
+      const names = listed.listing.records.length ? ` (${listed.listing.records.map((name) => `"${name}"`).join(', ')})` : ''
+      return `${index + 1}. "${section.name}"${places}; the platform lists the site's upcoming events here${names} with their dates, places and photos: write only its heading and a line inviting visitors to come, and no cards, dates, list or links for events`
+    }
+    if (listed?.listing.kind === 'reviews') {
+      // A store's own reviews (AGL-3676): shoppers write them; none is ever written here.
+      return `${index + 1}. "${section.name}"${places}; the platform shows the store's real customer reviews here with their star ratings, once shoppers leave them: write only its heading, and no quotes, names, ratings or cards`
+    }
+    if (listed?.listing.kind === 'signup') {
+      // A store's newsletter field (AGL-3676), placed by the platform.
+      return `${index + 1}. "${section.name}"${places}; the platform places the newsletter sign-up field here: write its heading and one line on what subscribers hear about, from the brief, and no form, button or offer the brief does not make`
+    }
+    if (listed?.listing.kind === 'records') {
+      // One of the site's datasets (AGL-3616), repeated by the platform over its records.
+      const names = listed.listing.records.length ? ` (${listed.listing.records.slice(0, 6).map((name) => `“${name}”`).join(', ')})` : ''
+      return `${index + 1}. "${section.name}"${places}; the platform lists the records of the dataset “${listed.listing.name}”${names} here itself, one card each: write only its heading and a line about them, and no cards, list or images for them`
+    }
     if (listed) {
       return `${index + 1}. "${section.name}"${places}; the platform lists ${listed.listing.name}'s ${listed.listing.kind} here itself, with their photos and links: write only its heading and a line about them, and no cards, list or images for them`
     }
@@ -348,6 +427,8 @@ export interface AiLayoutPageCheckInput {
   only?: readonly number[]
   /** The site the page is drawn for (`aiLayoutDesignOf`); absent, the compiler's first design. */
   design?: AiLayoutDesign | null
+  /** The site's language, which the compiler's own words are written in (AGL-3760); absent, English. */
+  language?: string
 }
 
 /**
@@ -395,6 +476,39 @@ export function aiLayoutShownItems(
   return itemIds.map((ids) => ids.filter((id) => storedIds[id] !== undefined && storedIds[id] in nodes).length)
 }
 
+/** The plan indices of the sections that show fewer of their planned items than they must (AGL-3660). */
+export function aiLayoutShortItemSections(
+  screen: Pick<AiBuildPlanScreen, 'sections'>,
+  items: readonly number[],
+  quotesOnly: readonly number[] = [],
+): number[] {
+  return screen.sections.flatMap((section, index) => {
+    if (quotesOnly.includes(index)) return []
+    const least = leastItems(section.items)
+    return least && (items[index] ?? 0) < least ? [index] : []
+  })
+}
+
+/**
+ * What a page built in the layout language says about the planned sections
+ * it was published without (AGL-3771): each one the last answer could not
+ * fill, or left with only its heading once its gaps were taken out, rather
+ * than the page refused. `null` when every section is shown.
+ */
+export function aiLayoutLeftOutNote(
+  screen: Pick<AiBuildPlanScreen, 'sections'>,
+  sectionIds: readonly string[],
+  nodes: Readonly<Record<string, unknown>>,
+): string | null {
+  const names = screen.sections.flatMap((section, index) =>
+    index > 0 && sectionIds[index] && !(sectionIds[index] in nodes) ? [`“${section.name}”`] : [],
+  )
+  if (!names.length) return null
+  return names.length === 1
+    ? `Left out: the section ${names[0]}, which could not be built well enough to publish. Add it in the Besigner when you are ready.`
+    : `Left out: the sections ${names.join(', ')}, which could not be built well enough to publish. Add them in the Besigner when you are ready.`
+}
+
 /**
  * The sections a page planned with repeated items — cards, steps, a list —
  * that show none, or too few, once the page is built (AGL-3660). A heading
@@ -406,13 +520,13 @@ export function aiLayoutEmptyItemSections(
   items: readonly number[],
   /** Sections whose only items were customer quotes, which no answer may give (AGL-3676). */
   quotesOnly: readonly number[] = [],
+  /** Sections the page no longer shows (AGL-3771), which ask for nothing. */
+  emptied: readonly number[] = [],
 ): AiDoctrineViolation[] {
+  const short = aiLayoutShortItemSections(screen, items, quotesOnly)
   return screen.sections.flatMap((section, index): AiDoctrineViolation[] => {
-    if (quotesOnly.includes(index)) return []
-    const least = leastItems(section.items)
-    if (!least) return []
+    if (!short.includes(index) || emptied.includes(index)) return []
     const shown = items[index] ?? 0
-    if (shown >= least) return []
     return [
       {
         rule: null,
@@ -476,6 +590,7 @@ export function aiLayoutPageCheck(
         reusableComponents: input.reusableComponents,
         sectionIds: input.sectionIds,
         ...(input.design ? { design: input.design } : {}),
+        ...(input.language ? { language: input.language } : {}),
       },
     )
     const stored = aiLayoutStoredTree(
@@ -518,7 +633,40 @@ export function aiLayoutPageCheck(
       },
       last,
     )
-    const { nodes, dropped } = copy
+    const dropped = [...copy.dropped]
+    // An attribute a rule has one answer for is settled, not asked of the model again (AGL-3660),
+    // and a link sent home for nothing is sent to the form or left out (AGL-3729).
+    let nodes = aiSettleUnrelatedScreenLinks(
+      aiSettleMechanicalRules(
+        { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: copy.nodes as unknown as Record<string, AiDoctrineNode> },
+        'page',
+      ),
+      'page',
+      { ...context, ownScreenIds: input.targets.pageId ? [input.targets.pageId] : [] },
+    ).nodes as unknown as typeof copy.nodes
+    // Each section's items as they are stored, after anything the gaps took out.
+    const items = aiLayoutShownItems(compiled.itemIds, stored.storedIds, nodes as unknown as Record<string, unknown>)
+    // The last answer's sections that still show none of their planned items
+    // are taken out rather than the whole page refused (AGL-3771): a site
+    // start's home refused for one such section published a site with
+    // nothing at its address. The page's first section heads it, and is
+    // never taken out.
+    const emptied = last
+      ? aiLayoutShortItemSections(input.screen, items, compiled.quotesOnly).filter((index) => index > 0 && !!input.sectionIds[index])
+      : []
+    if (emptied.length) {
+      const without = aiLayoutWithoutSections(
+        nodes,
+        CANVAS_ROOT_ELEMENT_ID,
+        emptied.map((index) => ({
+          id: input.sectionIds[index],
+          name: input.screen.sections[index].name,
+          why: `planned with ${input.screen.sections[index].items} items and showing ${items[index] || 'none'}`,
+        })),
+      )
+      nodes = without.nodes as typeof nodes
+      dropped.push(...without.dropped)
+    }
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
@@ -529,15 +677,13 @@ export function aiLayoutPageCheck(
         repeatsCompiled: true,
       },
     )
-    // Each section's items as they are stored, after anything the gaps took out.
-    const items = aiLayoutShownItems(compiled.itemIds, stored.storedIds, nodes as unknown as Record<string, unknown>)
     // A street address or opening hours the job was never given is invented
     // (rule 14, AGL-3596), the same check a layout is held to; a phone number
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
       ...report.violations,
       ...copy.violations,
-      ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly),
+      ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly, emptied),
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
@@ -628,6 +774,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           kept,
           design: aiLayoutDesignOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
+          ...(input.plan.language ? { language: input.plan.language } : {}),
         }),
       ),
       ...(input.signal ? { signal: input.signal } : {}),

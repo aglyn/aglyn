@@ -27,7 +27,9 @@
  * - fixed to the top, not the bottom, and pushes the page down by its own
  *   height (html margin + scroll-padding), restored when it leaves;
  * - a site header that is itself fixed at `top: 0` is nudged down the same
- *   amount, and restored;
+ *   amount, and restored — as is a header `absolute` against the page top
+ *   (the AI site's header over a photo hero), which the html margin never
+ *   moves; the live height rides `--aglyn-admin-bar-height` (AGL-3660);
  * - content, left to right: site name linking to the host dashboard, screen
  *   name, draft indicator (only when the server says TRUE), Edit this page,
  *   plugin-gated quick links (Orders absent when its URL is null),
@@ -151,6 +153,62 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(staticHeader.style.top).toBe('')
     unmount()
     expect(siteHeader.style.top).toBe('0px')
+  })
+
+  it('publishes its height as --aglyn-admin-bar-height while up, and clears it (AGL-3660)', async () => {
+    // Spied rather than read back: the jsdom this suite runs on drops custom
+    // properties from inline styles, which every real browser keeps.
+    const html = document.documentElement
+    const setProperty = jest.spyOn(html.style, 'setProperty')
+    const removeProperty = jest.spyOn(html.style, 'removeProperty')
+    try {
+      const { unmount } = await renderReadyBar()
+      expect(setProperty).toHaveBeenCalledWith('--aglyn-admin-bar-height', '40px')
+      expect(removeProperty).not.toHaveBeenCalledWith('--aglyn-admin-bar-height')
+      unmount()
+      expect(removeProperty).toHaveBeenCalledWith('--aglyn-admin-bar-height')
+    } finally {
+      setProperty.mockRestore()
+      removeProperty.mockRestore()
+    }
+  })
+
+  it('nudges an overlay header absolute to the page top (a photo hero), not one inside a positioned band (AGL-3660)', async () => {
+    // The AI site's header over a full-bleed hero: `position: absolute;
+    // top: 0` against the initial containing block, which the <html> margin
+    // does not move — so the bar covered it.
+    const overlayHeader = document.createElement('header')
+    overlayHeader.style.position = 'absolute'
+    overlayHeader.style.top = '0px'
+    const column = document.createElement('div')
+    column.appendChild(overlayHeader)
+    document.body.appendChild(column)
+    // A header absolute inside a positioned band moves with the page already.
+    const band = document.createElement('section')
+    band.style.position = 'relative'
+    const bandHeader = document.createElement('header')
+    bandHeader.style.position = 'absolute'
+    bandHeader.style.top = '0px'
+    band.appendChild(bandHeader)
+    document.body.appendChild(band)
+
+    const { unmount } = await renderReadyBar()
+    expect(overlayHeader.style.top).toBe('40px')
+    expect(bandHeader.style.top).toBe('0px')
+    unmount()
+    expect(overlayHeader.style.top).toBe('0px')
+  })
+
+  it('leaves the page untouched when the visitor is not an editor', async () => {
+    const overlayHeader = document.createElement('header')
+    overlayHeader.style.position = 'absolute'
+    overlayHeader.style.top = '0px'
+    document.body.appendChild(overlayHeader)
+    global.fetch = jest.fn() as unknown as typeof fetch
+    render(<AdminBar hostId={HOST} consoleOrigin={CONSOLE_ORIGIN} autoConnect />)
+    await act(async () => undefined)
+    expect(document.documentElement.style.marginTop).toBe('')
+    expect(overlayHeader.style.top).toBe('0px')
   })
 
   it('nudges a pinned header that mounts after the bar is up, as a soft navigation does', async () => {

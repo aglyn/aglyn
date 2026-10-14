@@ -184,9 +184,10 @@ describe('every record write path carries the index', () => {
   it.each([
     // The editor save and the FKey strip; imports moved to the server.
     [CARD, 2],
-    // create-record, one chunk of import-records, and add-address-field's
-    // fill of every record's page address (AGL-3475).
-    [CONSOLE_ROUTE, 3],
+    // create-record, one chunk of import-records, add-address-field's
+    // fill of every record's page address (AGL-3475), and the native apps'
+    // update-record and delete-record's FKey strip (AGL-3668).
+    [CONSOLE_ROUTE, 5],
     // POST and PATCH on /v1/datasets/{id}/records.
     [REST_API, 2],
     // A bound form appends a record.

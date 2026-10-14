@@ -192,7 +192,7 @@ describe('HostActivityTable reads a plugin’s code as its label (AGL-3065)', ()
     ]
     const { container } = render(<HostActivityTable hostId="host-1" />)
     const grid = await screen.findByRole('grid')
-    expect(await within(grid).findByText('AI generated')).toBeTruthy()
+    expect(await within(grid).findByText('Created component Hero 1 with Aglyn AI')).toBeTruthy()
     expect(within(grid).getByText('Saved the screen')).toBeTruthy()
     expect(container.textContent).not.toContain('ai.job.output')
   })

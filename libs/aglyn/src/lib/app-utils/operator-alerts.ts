@@ -209,6 +209,24 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     notificationType: 'system.abuseReportUrgent',
   },
   {
+    type: 'security.paymentFraudHold',
+    label: 'Automatic security hold for payment fraud',
+    description:
+      'Stripe flagged a workspace\'s own subscription payment as fraud — a Radar block at highest risk, a Stripe fraud report, three or more cards failing within 30 minutes, an early fraud warning or a Radar review. A new workspace that never paid is locked as security (takedown) with its subscriptions canceled; an older or paying one is not locked and needs a decision. Confirm it on Staff → Abuse reports, then re-place it as abuse on Staff → Lockdown, or lift it there.',
+    tier: 'must',
+    category: 'security',
+    title: '{{action}}: {{orgName}}',
+    body:
+      '{{trigger}} on {{orgName}} ({{orgId}}). Charges: {{charges}}; cards: {{cards}}, issued in {{cardCountries}}. Locked: {{locks}}. The abuse row is {{reference}}. Lift it, or re-place it as abuse, on Staff → Lockdown (/admin/lockdown).',
+    link: '/admin/abuse-reports?report={{reviewId}}',
+    delivery: 'immediate',
+    // One per workspace per window: every further card in the burst is the
+    // same event, and the abuse row carries all of them.
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+    notificationType: 'system.abuseReportUrgent',
+  },
+  {
     type: 'system.disputeUnattributed',
     label: 'Card dispute with no owner',
     description:

@@ -148,6 +148,8 @@ async function handler(request: Request): Promise<Response> {
         $id: docSnap.id,
         name: data['name'] ?? null,
         slug: data['slug'] ?? null,
+        // The Owner UID column, which Manage columns can show.
+        ownerUid: data['ownerUid'] ?? null,
         plan: data['plan'] ?? null,
         // Carries the staff plan comp (AGL-3034), which the row resolves.
         entitlements: data['entitlements'] ?? null,
@@ -166,6 +168,8 @@ async function handler(request: Request): Promise<Response> {
             }
           : null,
         createdAt: ts(data['createdAt']),
+        // When any member last used the console in this org (`utils/org-list-query.ts`).
+        lastActivityAt: ts(data['lastActivityAt']),
         // In force NOW — the chip and the Suspended filter give one answer.
         suspended: suspensionInForce(data['suspendedAt'], data['suspendedUntilMs']),
         suspendedAt: ts(data['suspendedAt']),

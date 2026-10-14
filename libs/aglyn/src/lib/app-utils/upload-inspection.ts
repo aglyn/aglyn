@@ -265,6 +265,29 @@ const TYPE_SIGNATURES: Readonly<Record<string, readonly Signature[]>> = {
   'video/quicktime': [ISO_BMFF],
   'video/webm': [{ magic: [0x1a, 0x45, 0xdf, 0xa3], label: 'Matroska/WebM' }],
 
+  // Audio for the Music player (AGL-3716). An MP3 opens with an ID3 tag or
+  // straight on an MPEG audio frame (sync bits, then the layer III and
+  // MPEG-2/2.5 headers encoders actually write); an AAC file is ADTS frames
+  // or the same ID3 tag; M4A is ISO media like MP4; OGG and WAV name their
+  // containers.
+  'audio/mpeg': [
+    { magic: ascii('ID3'), label: 'MP3' },
+    { magic: [0xff, 0xfb], label: 'MP3' },
+    { magic: [0xff, 0xfa], label: 'MP3' },
+    { magic: [0xff, 0xf3], label: 'MP3' },
+    { magic: [0xff, 0xf2], label: 'MP3' },
+    { magic: [0xff, 0xe3], label: 'MP3' },
+    { magic: [0xff, 0xe2], label: 'MP3' },
+  ],
+  'audio/aac': [
+    { magic: [0xff, 0xf1], label: 'AAC' },
+    { magic: [0xff, 0xf9], label: 'AAC' },
+    { magic: ascii('ID3'), label: 'AAC' },
+  ],
+  'audio/mp4': [ISO_BMFF],
+  'audio/ogg': [{ magic: ascii('OggS'), label: 'OGG' }],
+  'audio/wav': [{ magic: ascii('RIFF'), label: 'WAV' }],
+
   // A web font (AGL-3656): the theme's font installer stores WOFF2 only.
   'font/woff2': [{ magic: ascii('wOF2'), label: 'WOFF2' }],
 }

@@ -84,8 +84,8 @@ export function MemberAiAllotmentCard(props: MemberAiAllotmentCardProps) {
   return (
     <CardDisplay
       header={'AI allotment'}
-      help={pluginDocsHelp('billing', {
-        anchor: '#ai-allotments',
+      help={pluginDocsHelp('aiAllotments', {
+        anchor: '#a-members-allotment',
         excerpt: 'The share of the workspace’s AI credits this member may draw each month.',
       })}
       contentGutterX

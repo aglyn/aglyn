@@ -630,6 +630,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           quick={{
             icon: mdiEyeOutline.path,
             label: 'Preview',
+            newTab: true,
             // A component with no version has never been opened in the
             // besigner, so there is no snapshot to render. Disabled and
             // saying so, rather than a link to an empty preview.

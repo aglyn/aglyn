@@ -20,7 +20,13 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { NextRequest } from 'next/server'
 import { SENDING_TRACKING_SUBDOMAIN, TRACKING_HOST_PROBE_PATH } from '@aglyn/shared-util-email'
+import {
+  onboardingDestination,
+  parseOnboardingPlanIntent,
+} from '@aglyn/aglyn/app-utils/onboarding-deep-link'
 import { config, middleware } from './middleware'
+import { buildRoute, Route } from './constants/route-links'
+import { consoleLandingHref } from './utils/console-landing'
 
 /**
  * The host gate had no test at all, which is most of why it shipped disabled
@@ -1382,5 +1388,45 @@ describe('click-tracking host (AGL-3306)', () => {
     for (const entry of hosted) {
       expect(entry.has).toEqual([{ type: 'host', value: `${SENDING_TRACKING_SUBDOMAIN}\\..+` }])
     }
+  })
+})
+
+describe('a sign-up that finishes on the auth host never lands on its 404 (AGL-3724, AGL-3725)', () => {
+  /*
+   * The auth host refuses every path outside its own family (AGL-3090, above).
+   * The sign-up and home pages can run THERE for a Google sign-up, and both
+   * navigate into the new workspace the moment it exists. AGL-3724 was those
+   * navigations staying relative, so they asked the auth host for the
+   * workspace and got the 404, and three people stopped before making a site.
+   *
+   * This ties the two halves together: every landing those pages build, sent
+   * through the same `consoleLandingHref` they use, must reach a host whose
+   * middleware serves it. If the auth family and the landing rule ever drift
+   * apart, this fails here rather than on someone's first minute.
+   */
+  const pro = parseOnboardingPlanIntent(new URLSearchParams('plan=pro&interval=year'))
+  const enterprise = parseOnboardingPlanIntent(new URLSearchParams('plan=enterprise'))
+  const landings = [
+    ['the site list', buildRoute(Route.HOST_LIST, { orgSlug: 'zgover' })],
+    ['the plain workspace landing', onboardingDestination('zgover', null)],
+    ['a plan CTA landing', onboardingDestination('zgover', pro)],
+    ['the enterprise landing', onboardingDestination('zgover', enterprise)],
+  ] as const
+
+  it.each(landings)('%s is served wherever the auth host sends it', async (_name, path) => {
+    expect(path.startsWith('/zgover')).toBe(true)
+    const href = consoleLandingHref(path, 'auth.aglyn.com')
+    const target = new URL(href, 'https://auth.aglyn.com')
+    expect(target.hostname).toBe('app.aglyn.com')
+    const response = await middleware(
+      request(target.hostname, `${target.pathname}${target.search}`),
+    )
+    expect(response.status).not.toBe(404)
+  })
+
+  it('and the relative path it replaced is exactly what the auth host refuses', async () => {
+    // The control: without the landing rule, this is the 404 people got.
+    const path = buildRoute(Route.HOST_LIST, { orgSlug: 'zgover' })
+    expect((await middleware(request('auth.aglyn.com', path))).status).toBe(404)
   })
 })

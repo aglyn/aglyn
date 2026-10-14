@@ -1,0 +1,30 @@
+{
+  "name": "plugins-ad-conversions",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/ad-conversions/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/ad-conversions",
+        "main": "libs/plugins/ad-conversions/src/index.ts",
+        "tsConfig": "libs/plugins/ad-conversions/tsconfig.lib.json",
+        "assets": ["libs/plugins/ad-conversions/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/ad-conversions"],
+      "options": {
+        "jestConfig": "libs/plugins/ad-conversions/jest.config.ts"
+      }
+    }
+  }
+}

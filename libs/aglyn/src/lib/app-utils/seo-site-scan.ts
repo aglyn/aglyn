@@ -276,6 +276,18 @@ async function inChunks<T>(items: readonly T[], run: (item: T) => Promise<void>)
   }
 }
 
+/** How many shown by name before the rest are counted. */
+const UNLISTED_NAMES_SHOWN = 5
+
+/** The note naming published pages a visibility setting keeps out of search. */
+function unlistedNote(names: readonly string[]): string {
+  const shown = names.slice(0, UNLISTED_NAMES_SHOWN).join(', ')
+  const more = names.length > UNLISTED_NAMES_SHOWN ? ` and ${names.length - UNLISTED_NAMES_SHOWN} more` : ''
+  return names.length === 1
+    ? `1 published page is kept out of search and was not checked: ${shown}. Set its Visibility to Public to list it.`
+    : `${names.length} published pages are kept out of search and were not checked: ${shown}${more}. Set a page’s Visibility to Public to list it.`
+}
+
 /**
  * Read `hostId`'s published pages for the check.
  *
@@ -303,12 +315,17 @@ export async function scanSeoSite(
   ])
   const screens = new Map(screenDocs.docs.map((doc) => [doc.id, (doc.data() ?? {}) as SeoScreenDocument]))
   const excluded = new Set<string>([...statusPageScreenIds(host), ...(options.templateScreenIds ?? [])])
-  const published = Object.entries(routing)
-    .filter(([screenId]) => !excluded.has(screenId))
-    .filter(([screenId]) => {
-      const screen = screens.get(screenId)
-      return Boolean(screen) && !screen?.deletedAt && isScreenIndexable(screen as SearchIndexingScreen)
-    })
+  const routed = Object.entries(routing).filter(([screenId]) => {
+    const screen = screens.get(screenId)
+    return !excluded.has(screenId) && Boolean(screen) && !screen?.deletedAt
+  })
+  // Published but kept out of search: what a launch checks it did not leave on.
+  const unlisted = routed
+    .filter(([screenId]) => !isScreenIndexable(screens.get(screenId) as SearchIndexingScreen))
+    .map(([screenId, route]) => str(screens.get(screenId)?.displayName) || screenRoutePathToUrl(String(route)))
+    .sort()
+  const published = routed
+    .filter(([screenId]) => isScreenIndexable(screens.get(screenId) as SearchIndexingScreen))
     .map(([screenId, route]) => ({ screenId, path: screenRoutePathToUrl(String(route)) }))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
   const checked = published.slice(0, SEO_AUDIT_MAX_PAGES)
@@ -355,7 +372,7 @@ export async function scanSeoSite(
       ),
     ...(rowsUnread
       ? ['Lists that repeat over your datasets were checked without their rows, which could not be read just now.']
-      : []),
+      : []),    ...(unlisted.length ? [unlistedNote(unlisted)] : []),
   ]
 
   const siteName = str(host.seo?.title) || str(host.displayName)

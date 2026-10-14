@@ -134,7 +134,7 @@ export function OutreachSequencePreview(props: OutreachSequencePreviewProps) {
     <CardDisplay
       header="Preview"
       subheader={`As ${OUTREACH_SAMPLE_PERSON.name} of ${OUTREACH_SAMPLE_PERSON.companyName} would get it`}
-      help={pluginDocsHelp('sequences', { anchor: '#build-a-sequence' })}
+      help={pluginDocsHelp('sequences', { anchor: '#send-a-test' })}
       contentGutterX
       contentGutterY
     >

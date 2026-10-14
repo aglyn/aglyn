@@ -54,7 +54,13 @@ describe('every console record write loads custom field types first', () => {
     // A path that stopped validating would pass the loop below vacuously.
     expect(validations.length).toBeGreaterThan(0)
     for (const at of validations) {
-      const modelAt = source.lastIndexOf('effectiveDatasetModel(', at)
+      // The model of the dataset being written. The record delete's loop over
+      // OTHER datasets (`other.data()`, AGL-3668) reads models only to plan
+      // reference fixups and validates nothing, so it is not the model here.
+      const modelAt = [...source.slice(0, at).matchAll(/effectiveDatasetModel\((?!other\.)/g)].reduce(
+        (last, match) => match.index ?? last,
+        -1,
+      )
       expect(modelAt).toBeGreaterThan(-1)
       // The plugin's loader, or the platform's own repair step a route the
       // dispatcher serves runs: either registers the types before the check.

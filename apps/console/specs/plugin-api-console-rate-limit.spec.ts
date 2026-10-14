@@ -386,6 +386,49 @@ describe('console plugin API dispatcher — write rate limit', () => {
     expect(rateLimitDocs.size).toBe(0)
   })
 
+  describe('a scheduled route that is not on the machine list', () => {
+    const previousSecret = process.env['CRON_SECRET']
+    beforeEach(() => {
+      process.env['CRON_SECRET'] = 'the-cron-secret'
+      mockPath = 'admin/ai-insights-digest'
+    })
+    afterAll(() => {
+      if (previousSecret === undefined) delete process.env['CRON_SECRET']
+      else process.env['CRON_SECRET'] = previousSecret
+    })
+
+    const digestParams = Promise.resolve({ pluginApi: ['admin', 'ai-insights-digest'] })
+    const cronPost = (secret: string) =>
+      new Request('https://app.aglyn.com/api/admin/ai-insights-digest', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-cron-secret': secret,
+          'x-forwarded-for': '5.5.5.5',
+        },
+        body: '{}',
+      })
+
+    it('never refuses the verified cron secret', async () => {
+      // 2026-10-09 14:00Z: the digest's POST carried no Firebase token, so it
+      // was counted by address in a bucket the other tokenless callers had
+      // already spent, and answered 429.
+      for (let i = 0; i < CONSOLE_API_RATE_LIMIT + 10; i += 1) {
+        const response = await POST(cronPost('the-cron-secret'), { params: digestParams })
+        expect(response.status).toBe(200)
+      }
+      expect(rateLimitDocs.size).toBe(0)
+    })
+
+    it('still counts a wrong secret, so the header alone exempts nothing', async () => {
+      const statuses: number[] = []
+      for (let i = 0; i < CONSOLE_API_RATE_LIMIT + 2; i += 1) {
+        statuses.push((await POST(cronPost('a-guess'), { params: digestParams })).status)
+      }
+      expect(statuses.filter((s) => s === 429)).toHaveLength(2)
+    })
+  })
+
   it('spends no transaction on a path that does not resolve to a handler', async () => {
     const { resolvePluginApiMatch } = jest.requireMock('@aglyn/aglyn/server')
     resolvePluginApiMatch.mockReturnValueOnce(undefined)

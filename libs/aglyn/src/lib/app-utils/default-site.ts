@@ -22,6 +22,7 @@ import {
   buildStarterNodes as buildNodes,
   starterSection as container,
   starterText as text,
+  starterTextField as textField,
   type StarterNodeSpec as NodeSpec,
   type StarterTemplateScreen,
 } from './starter-template-nodes'
@@ -325,25 +326,13 @@ const contactForm = (): NodeSpec => ({
     submitLabel: 'Send message',
     successMessage: 'Thanks — your message is on its way. We will be in touch soon.',
   },
+  // Each field is MUI's separate form elements (Form Control › Form Label +
+  // Input), so an owner styles the label and the box on their own. The field
+  // ids are the ones the all-in-one Form Field had.
   children: [
-    {
-      id: 'dh_fName',
-      componentId: 'formField',
-      pluginId: 'forms',
-      props: { fieldName: 'name', label: 'Name', required: true },
-    },
-    {
-      id: 'dh_fEmail',
-      componentId: 'formField',
-      pluginId: 'forms',
-      props: { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
-    },
-    {
-      id: 'dh_fMessage',
-      componentId: 'formField',
-      pluginId: 'forms',
-      props: { fieldName: 'message', label: 'Message', fieldType: 'textarea', required: true },
-    },
+    textField('dh_fName', { name: 'name', label: 'Name', required: true }),
+    textField('dh_fEmail', { name: 'email', label: 'Email', type: 'email', required: true }),
+    textField('dh_fMessage', { name: 'message', label: 'Message', multiline: true, required: true }),
   ],
 })
 

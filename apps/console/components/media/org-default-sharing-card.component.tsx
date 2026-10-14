@@ -42,7 +42,7 @@ const SHARING_KINDS = {
     action: 'set-default-media-scope',
     field: 'defaultMediaScope',
     help: docsHelp('media', {
-      anchor: '#who-an-asset-is-shared-with',
+      anchor: '#default-media-sharing',
       excerpt:
         'Sets what a NEW upload or folder is shared with. Existing ' +
         'ones keep the sharing they already have.',
@@ -58,7 +58,7 @@ const SHARING_KINDS = {
     action: 'set-default-resource-scope',
     field: 'defaultResourceScope',
     help: docsHelp('datasets', {
-      anchor: '#who-a-dataset-is-shared-with',
+      anchor: '#default-dataset-sharing',
       excerpt:
         'Sets what a NEW dataset is shared with. Existing ones keep the ' +
         'sharing they already have.',

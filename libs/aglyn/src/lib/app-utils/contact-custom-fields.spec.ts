@@ -31,7 +31,16 @@ import {
   carryContactFieldMappings,
   coerceContactCustomValue,
   collectMappedContactCustom,
+  CONTACT_FIELD_DEFAULT_CURRENCY,
+  CONTACT_FIELD_TYPE_LABELS,
+  CONTACT_FIELD_TYPES,
   CONTACT_FIELDS_MAX_PER_ORG,
+  customFieldCurrency,
+  currencyFractionDigits,
+  currencyMinorToMajor,
+  formatCurrencyFieldValue,
+  isCustomFieldCurrency,
+  parseCurrencyInput,
   fieldDefinitionsForObject,
   readContactCustomInput,
   readCrmCustomInput,
@@ -335,5 +344,62 @@ describe('custom fields on every object (AGL-2661)', () => {
     expect(readContactCustomInput({ nope: 'x' }, [])).toEqual({
       errors: { 'custom.nope': 'No such contact field' },
     })
+  })
+})
+
+describe('currency fields (AGL-3756)', () => {
+  const budget = definition({ key: 'budget', type: 'currency', currency: 'usd' })
+  const yen = definition({ key: 'budget_jpy', type: 'currency', currency: 'jpy' })
+
+  it('is a type the picker lists, labelled Currency', () => {
+    expect(CONTACT_FIELD_TYPES).toContain('currency')
+    expect(CONTACT_FIELD_TYPE_LABELS.currency).toBe('Currency')
+  })
+
+  it('reads a field’s code lowercase, and USD when it names none or a bad one', () => {
+    expect(customFieldCurrency({ currency: 'EUR' })).toBe('eur')
+    expect(customFieldCurrency({})).toBe(CONTACT_FIELD_DEFAULT_CURRENCY)
+    expect(customFieldCurrency({ currency: 'dollars' })).toBe('usd')
+    expect(isCustomFieldCurrency('eur')).toBe(true)
+    expect(isCustomFieldCurrency('zz')).toBe(false)
+  })
+
+  it('knows each currency’s minor unit from Intl', () => {
+    expect(currencyFractionDigits('usd')).toBe(2)
+    expect(currencyFractionDigits('jpy')).toBe(0)
+    expect(currencyMinorToMajor(125050, 'usd')).toBe(1250.5)
+    expect(currencyMinorToMajor(1250, 'jpy')).toBe(1250)
+  })
+
+  it('parses what a person types as minor units', () => {
+    expect(parseCurrencyInput('$1,250.50', 'usd')).toBe(125050)
+    expect(parseCurrencyInput('19.995', 'usd')).toBe(2000)
+    expect(parseCurrencyInput('-40', 'usd')).toBe(-4000)
+    expect(parseCurrencyInput('¥1,250', 'jpy')).toBe(1250)
+    expect(parseCurrencyInput('', 'usd')).toBeNull()
+    expect(parseCurrencyInput('abc', 'usd')).toBeNull()
+    expect(parseCurrencyInput('1-2', 'usd')).toBeNull()
+  })
+
+  it('formats a stored amount as money', () => {
+    expect(formatCurrencyFieldValue(125050, 'usd', 'en-US')).toBe('$1,250.50')
+    expect(formatCurrencyFieldValue(1250, 'jpy', 'en-US')).toBe('¥1,250')
+  })
+
+  it('stores a number as minor units and text as major units', () => {
+    expect(coerceContactCustomValue(budget, 125050)).toBe(125050)
+    expect(coerceContactCustomValue(budget, 99.6)).toBe(100)
+    expect(coerceContactCustomValue(budget, '1,250.50')).toBe(125050)
+    expect(coerceContactCustomValue(yen, '1250')).toBe(1250)
+    expect(coerceContactCustomValue(budget, 'lots')).toBeUndefined()
+    expect(coerceContactCustomValue(budget, true)).toBeUndefined()
+    expect(coerceContactCustomValue(budget, Number.NaN)).toBeUndefined()
+  })
+
+  it('refuses an API value it cannot read, naming the unit', () => {
+    expect(readContactCustomInput({ budget: 'lots' }, [budget])).toEqual({
+      errors: { 'custom.budget': 'Must be a whole number of USD minor units, or an amount as text' },
+    })
+    expect(readContactCustomInput({ budget: 5000 }, [budget])).toEqual({ values: { budget: 5000 } })
   })
 })

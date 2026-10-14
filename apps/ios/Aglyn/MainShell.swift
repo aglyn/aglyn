@@ -76,12 +76,23 @@ struct MainShell: View {
 
   // MARK: iPhone
 
+  /// The plugin tabs that get a tab of their own on iPhone. A tab bar holds
+  /// five items before iOS folds the rest into its own "More" list, so Home,
+  /// Notifications and the app's More take three and the plugins share the
+  /// other two; every other plugin screen, and Settings, sits in More.
+  static let phonePluginTabLimit = 2
+
+  @MainActor
+  static func phonePluginTabs(_ model: AppModel) -> [NativeTab] {
+    Array(model.registry.tabs(for: .aglyn).prefix(phonePluginTabLimit))
+  }
+
   private var tabLayout: some View {
     TabView(selection: $navigation.section) {
       stack(.home)
         .tabItem { Label("Home", systemImage: "house") }
         .tag(ShellSection.home)
-      ForEach(model.registry.tabs(for: .aglyn)) { tab in
+      ForEach(Self.phonePluginTabs(model)) { tab in
         stack(.plugin(tab.screen))
           .tabItem { Label(tab.title, systemImage: tab.icon) }
           .tag(ShellSection.plugin(tab.screen))
@@ -89,12 +100,21 @@ struct MainShell: View {
       stack(.notifications)
         .tabItem { Label("Notifications", systemImage: "bell") }
         .tag(ShellSection.notifications)
-      stack(.settings)
-        .tabItem { Label("Settings", systemImage: "gearshape") }
-        .tag(ShellSection.settings)
       stack(.more)
         .tabItem { Label("More", systemImage: "ellipsis.circle") }
         .tag(ShellSection.more)
+    }
+    .onChange(of: navigation.section, initial: true) { _, section in
+      // Settings, or a plugin tab past the limit, has no tab here: open it in More.
+      switch section {
+      case .settings:
+        navigation.section = .more
+        navigation.push(.settings)
+      case .plugin(let screen) where !Self.phonePluginTabs(model).contains(where: { $0.screen == screen }):
+        navigation.section = .more
+        navigation.push(.screen(screen, [:]))
+      default: break
+      }
     }
   }
 
@@ -190,7 +210,7 @@ struct MoreView: View {
   @Environment(ShellNavigation.self) private var navigation
 
   var body: some View {
-    let tabs = Set(model.registry.tabs(for: .aglyn).map(\.screen))
+    let tabs = Set(MainShell.phonePluginTabs(model).map(\.screen))
     let screens = SidebarScreen.all(model).filter { !tabs.contains($0.screen) }
     List {
       if model.workspace?.site != nil || !screens.isEmpty {
@@ -227,7 +247,7 @@ struct MoreView: View {
         }
         .buttonStyle(.plain)
         Button {
-          navigation.select(.settings)
+          navigation.push(.settings)
         } label: {
           AglynRow("Settings", systemImage: "gearshape")
         }

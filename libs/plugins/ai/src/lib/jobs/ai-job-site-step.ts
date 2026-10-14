@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
+import { aiJobCancelAsked } from './ai-job-cancel'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   isAiPlanNewRef,
+  type AiBuildItem,
   type AiBuildPlanCreate,
   type AiBuildPlanCreateKind,
   type AiBuildPlanScreen,
@@ -44,8 +46,8 @@ import {
   AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
-  aiFreeSiteShortfall,
-  aiFreeSiteShortfallText,
+  aiFreeCreditsNoneLeftText,
+  aiFreeSitePrompt,
   aiSiteNameSentence,
   aiSitePagesRefusal,
   aiSitePlanRefusal,
@@ -58,6 +60,7 @@ import {
   aiSitePlanWithoutBlogStandIns,
 } from '../model/ai-site-job'
 import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
+import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -66,6 +69,7 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
+import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -74,9 +78,10 @@ import {
   aiLayoutSitePagesOfPlan,
 } from './ai-job-layout-site-pages'
 import { aiPageSectionNodeId } from './ai-job-page-sections'
-import { AI_LAYOUT_LISTINGS_INPUT } from '../layout-language/ai-layout-listings'
-import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiLayoutFormPageOfPlan } from './ai-job-page-language'
-import { aiJobPublishesSite, aiPublishGuidedSite } from './ai-site-publish'
+import { AI_LAYOUT_LISTINGS_INPUT, aiLayoutIsShopPage } from '../layout-language/ai-layout-listings'
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiJobUsesLayoutLanguage, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import { aiJobPublishesSite, aiMergeSitePublish, aiPublishGuidedSite, aiRestoreGuidedBlogEntry } from './ai-site-publish'
 import {
   AI_SITE_CONTENT_INPUT,
   AI_SITE_POST_BUDGET,
@@ -95,7 +100,45 @@ import {
   type AiSitePostsInput,
 } from './ai-job-site-content'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import {
+  AI_SITE_DATASET_BUDGET,
+  AI_SITE_DATASET_INPUT,
+  AI_SITE_DATASETS_MAX,
+  aiSiteDatasetBriefLines,
+  aiSiteDatasetInputOf,
+  aiSiteDatasetListings,
+  aiSiteDatasetPlacedPhotos,
+  aiSiteDatasetRefusal,
+  aiSitePlanDatasets,
+  aiSiteReusedDatasetListings,
+  aiSiteRecordTemplateOf,
+  runAiSiteDatasetUnit,
+} from './ai-job-site-datasets'
+import {
+  AI_SITE_EVENT_INPUT,
+  AI_SITE_EVENT_LABEL,
+  AI_SITE_EVENT_MINIMUM_MS,
+  AI_SITE_EVENTS_MAX,
+  aiSiteEventListings,
+  aiSiteEventRefusal,
+  aiSitePlanEvents,
+  runAiSiteEventUnit,
+} from './ai-job-site-events'
 import { AI_SITE_LOOK_BUDGET, aiRunSiteLook } from './ai-job-site-look'
+import {
+  AI_SITE_STORE_PAGES_INPUT,
+  aiSiteStorePagesRefusal,
+  runAiSiteStorePagesUnit,
+  type AiSiteStorePagesInput,
+} from './ai-job-site-store-pages'
+import {
+  AI_SITE_STORE_LINKS_INPUT,
+  AI_SITE_STORE_PAGES_LABEL,
+  AI_SITE_STORE_PAGES_NOTE,
+  aiStoreFrameLinks,
+  aiStorePagesOfPlan,
+} from '../model/ai-site-store-pages'
+import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -168,11 +211,25 @@ import {
 
 /**
  * What a scaffold's units are, in the order it builds them; a component is a
- * page job's. A blog's first posts and a store's first products (AGL-3676)
- * are built after the layout and the form and before the pages, which are
- * told what they are.
+ * page job's. The site's datasets (AGL-3616) are built after the layout and
+ * before the form, which may write its submissions to one; a blog's first
+ * posts and a store's first products (AGL-3676) after the form; all of them
+ * before the pages, which are told what they are. A paid store's account,
+ * cart and policy pages (`store`, AGL-3676) come after its planned pages,
+ * which keep the first claim on the site's pages allowance.
  */
-export type AiSiteUnitKind = 'theme' | 'layout' | 'form' | 'component' | 'posts' | 'products' | 'page' | 'email'
+export type AiSiteUnitKind =
+  | 'theme'
+  | 'layout'
+  | 'form'
+  | 'component'
+  | 'dataset'
+  | 'event'
+  | 'posts'
+  | 'products'
+  | 'page'
+  | 'store'
+  | 'email'
 
 export interface AiSiteUnit {
   kind: AiSiteUnitKind
@@ -186,6 +243,8 @@ export interface AiSiteUnit {
   screen?: AiBuildPlanScreen
   /** The creation a theme, layout or form unit builds. */
   creation?: AiBuildPlanCreate
+  /** The event an event unit drafts (AGL-3755). */
+  item?: AiBuildItem
   /** What the unit is, for the derived job's brief. */
   label: string
 }
@@ -206,6 +265,14 @@ const UNIT_KINDS: Record<
   // products' the step that proposes the catalog they are written from.
   posts: { jobKind: 'text', resource: 'entry' },
   products: { jobKind: 'products', resource: 'product' },
+  // The scaffold's own runner designs it (`ai-job-site-datasets.ts`), and the
+  // data plugin's writer keeps it: a draft of another plugin's (AGL-3616).
+  dataset: { jobKind: 'text', resource: 'draft' },
+  // An event-led start's first events (AGL-3755): the events-calendar
+  // plugin's writer keeps each, run by the scaffold's own pass.
+  event: { jobKind: 'text', resource: 'draft' },
+  // The scaffold's own runner writes them, by code (`ai-job-site-store-pages.ts`).
+  store: { jobKind: 'text', resource: 'screen' },
 }
 
 /** The unit kind a creation is built as, where a unit builds it. */
@@ -258,17 +325,24 @@ export const AI_SITE_UNIT_EMPTY_COPY =
  * is not.
  */
 export const AI_SITE_MAX_PASSES =
-  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) + CREATION_UNITS.length + AI_SITE_POSTS + 1
+  AI_SITE_PAGES.max * (AI_SITE_MAX_SECTIONS + 1) +
+  CREATION_UNITS.length +
+  AI_SITE_DATASETS_MAX +
+  AI_SITE_EVENTS_MAX +
+  AI_SITE_POSTS +
+  2
 
 /**
  * The units a plan implies, in build order: the palette first, because a
  * member reads it while the pages are still building; then the layout every
- * page renders inside and the form they place, because a page binds both by
- * id and so needs them to exist; then the pages; then the welcome email,
- * which is about the site rather than part of it.
+ * page renders inside, the site's datasets, and the form they place —
+ * because a page binds the layout and the form by id, and a form binds the
+ * dataset it writes to (AGL-3616), so each needs what it binds to exist;
+ * then the pages; then the welcome email, which is about the site rather
+ * than part of it.
  */
 export function aiSiteJobUnits(
-  plan: Pick<AiJobPlan, 'create' | 'screens'>,
+  plan: Pick<AiJobPlan, 'create' | 'screens'> & Partial<Pick<AiJobPlan, 'items'>>,
   options: { welcomeEmail?: boolean; content?: 'posts' | 'products' | null } = {},
 ): AiSiteUnit[] {
   // The site's look is designed first, on every scaffold (AGL-3660): the
@@ -279,6 +353,13 @@ export function aiSiteJobUnits(
   ]
   for (const { unit, create } of CREATION_UNITS) {
     if (unit === 'theme') continue
+    // The site's datasets (AGL-3616), before anything that lists them and
+    // before the form, which may write its submissions to one of them.
+    if (unit === 'form') {
+      aiSitePlanDatasets(plan).forEach((creation, index) => {
+        units.push({ kind: 'dataset', ...UNIT_KINDS.dataset, slot: `d${index}`, creation, label: creation.name })
+      })
+    }
     const creation = plan.create.find((entry) => entry.kind === create)
     if (!creation) continue
     units.push({
@@ -295,6 +376,10 @@ export function aiSiteJobUnits(
   } else if (options.content === 'products') {
     units.push({ kind: 'products', ...UNIT_KINDS.products, slot: 'products', label: AI_SITE_PRODUCTS_LABEL })
   }
+  // An event-led start's first events (AGL-3755), before the pages that list them.
+  aiSitePlanEvents(plan).forEach((item, index) => {
+    units.push({ kind: 'event', ...UNIT_KINDS.event, slot: `v${index}`, item, label: item.name || AI_SITE_EVENT_LABEL })
+  })
   plan.screens.forEach((screen, index) => {
     units.push({
       kind: 'page',
@@ -304,6 +389,10 @@ export function aiSiteJobUnits(
       label: screen.title,
     })
   })
+  // A paid store's own pages (AGL-3676): outside the plan's pages, after them.
+  if (options.content === 'products') {
+    units.push({ kind: 'store', ...UNIT_KINDS.store, slot: 'store', label: AI_SITE_STORE_PAGES_LABEL })
+  }
   if (options.welcomeEmail) {
     units.push({
       kind: 'email',
@@ -370,7 +459,7 @@ export interface AiSiteBuiltRef {
   id: string
   label: string
   /** Only what becomes a record a page can name; a palette change is not one. */
-  kind: 'layout' | 'form' | 'component'
+  kind: 'layout' | 'form' | 'component' | 'dataset'
 }
 
 /**
@@ -398,11 +487,12 @@ export function aiSiteBuiltRefs(
     const row = rows?.shift()
     if (!row || !unit.creation) continue
     // A theme change is a proposal with no record to reference; a layout, a
-    // form and a component become ids a page can name.
+    // form, a component and a dataset (AGL-3616) become ids a page can name.
     if (
       unit.creation.kind !== 'layout' &&
       unit.creation.kind !== 'form' &&
-      unit.creation.kind !== 'component'
+      unit.creation.kind !== 'component' &&
+      unit.creation.kind !== 'dataset'
     ) {
       continue
     }
@@ -506,7 +596,10 @@ export function aiSiteEmailBriefLines(
  */
 export function aiSiteUnitJobId(job: Pick<AiJob, '$id' | 'steps'>, unit: AiSiteUnit): string {
   const recorded =
-    unit.creation?.id ?? unit.screen?.id ?? (unit.kind === 'email' ? aiRecordedJobDraftId(job, 'email') : null)
+    unit.creation?.id ??
+    unit.screen?.id ??
+    unit.item?.id ??
+    (unit.kind === 'email' ? aiRecordedJobDraftId(job, 'email') : null)
   return recorded || `${job.$id}-${unit.slot}`
 }
 
@@ -555,6 +648,9 @@ export function aiSiteUnitJob(
       {
         ...unit.creation,
         duplicateOf: aiSiteResolvedRef(unit.creation.duplicateOf, built),
+        // The dataset a form writes to, once built (AGL-3616); one that
+        // failed leaves the form as it always was.
+        ...(unit.creation.writesTo ? { writesTo: aiSiteResolvedRef(unit.creation.writesTo, built) } : {}),
       },
     ]
     brief.push(
@@ -604,8 +700,11 @@ export function aiSiteUnitJob(
     brief.push(
       `Build the page “${screen.title}” of this site, at ${screen.slug}.`,
     )
-    // What the blog's posts or the store's products are, once built (AGL-3676).
-    if (job.kind === 'site') brief.push(...aiSiteContentBriefLines(job.outputs ?? []))
+    // What the blog's posts or the store's products are, once built (AGL-3676),
+    // and what the site's datasets hold (AGL-3616).
+    if (job.kind === 'site') {
+      brief.push(...aiSiteContentBriefLines(job.outputs ?? []), ...aiSiteDatasetBriefLines(job.outputs ?? []))
+    }
   }
   if (unit.kind === 'products') brief.push(aiSiteProductsBriefLine())
   if (unit.kind === 'email') {
@@ -614,6 +713,17 @@ export function aiSiteUnitJob(
   // The job the member started travels with every unit, so what the unit
   // writes names it (AGL-3596).
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
+  // A page is told the pages built before it, whose photos it does not place
+  // again (AGL-3660): the maker's portrait in About is never a vase in Work.
+  if (unit.screen) {
+    const pages = (job.outputs ?? [])
+      .filter((output) => output.resource === 'screen' && output.hostId === job.hostId && output.id)
+      .map((output) => output.id)
+    if (pages.length) unitInputs[AI_STOCK_PHOTO_PAGES_INPUT] = pages
+    // Nor a photo the site's datasets' records already show (AGL-3616).
+    const records = aiSiteDatasetPlacedPhotos(job.outputs ?? [])
+    if (records.length) unitInputs[AI_STOCK_PHOTO_AVOID_INPUT] = records
+  }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
   // A page is told them too, so its buttons may go to a page built after it.
@@ -646,9 +756,31 @@ export function aiSiteUnitJob(
       outputs: job.outputs ?? [],
       screens: merged.screens,
       sells: aiSiteSellsProducts(job),
+      // A store lists its catalog on its Shop page even when its first
+      // products could not be written, or on the Free taste (AGL-3676).
+      store: aiSiteKindOfInputs(job.inputs)?.id === 'store',
+      // A music site places an empty player for the artist's own tracks (AGL-3716).
+      music: aiSiteKindOfInputs(job.inputs)?.id === 'music',
     })
+    // The site's datasets, each repeated in the sections that name it (AGL-3616).
+    const delivered = new Map([...built.entries()].filter(([, entry]) => entry.kind === 'dataset').map(([name, entry]) => [name, entry.id]))
+    listings.push(
+      ...aiSiteDatasetListings({ outputs: job.outputs ?? [], datasets: aiSitePlanDatasets(plan), screens: merged.screens, delivered }),
+      // The events this start drafted, in the section that names them (AGL-3755).
+      ...aiSiteEventListings({ outputs: job.outputs ?? [], items: aiSitePlanEvents(plan), screens: merged.screens }),
+    )
+    // And the workspace's own datasets the plan reuses, in the sections that name them (AGL-3771).
+    listings.push(...aiSiteReusedDatasetListings({ plan, screens: merged.screens, listed: listings }))
     if (listings.length) unitInputs[AI_LAYOUT_LISTINGS_INPUT] = listings
+    // A paid store's header links its account beside the cart, and its footer
+    // its account and policies (AGL-3676), by path: they are written after.
+    if (unit.kind === 'layout' && aiSiteAddsStorePages(job)) {
+      unitInputs[AI_SITE_STORE_LINKS_INPUT] = aiStoreFrameLinks(aiStorePagesOfPlan(merged.screens))
+    }
   }
+  // The store's own pages (AGL-3676): which to write, what their words link,
+  // and the layout they render inside.
+  if (unit.kind === 'store') unitInputs[AI_SITE_STORE_PAGES_INPUT] = aiSiteStorePagesInputOf(plan, built)
   // A site's pages and its layout are designed in the layout language and
   // compiled (AGL-3660), and a page is told which page places the site's form.
   if (unit.kind === 'layout' || unit.kind === 'page') {
@@ -677,6 +809,16 @@ export function aiSiteUnitJob(
     unitInputs[AI_SITE_CONTENT_INPUT] = posts
   }
   if (unit.kind === 'products') unitInputs['target'] = 'catalog'
+  // The event an event unit drafts (AGL-3755).
+  if (unit.kind === 'event' && unit.item) unitInputs[AI_SITE_EVENT_INPUT] = unit.item
+  // Where the plan lists a dataset, which its design reads, and the form
+  // that writes to it (AGL-3616).
+  if (unit.kind === 'dataset' && unit.creation) {
+    unitInputs[AI_SITE_DATASET_INPUT] = aiSiteDatasetInputOf(unit.creation, plan.screens, plan.create)
+  }
+  // A form's dataset this start made, which the form may bind (AGL-3616).
+  const writesTo = unit.kind === 'form' ? unitPlan.create[0]?.writesTo : null
+  if (writesTo && isAiPlanNewRef(unit.creation?.writesTo)) unitInputs[AI_FORM_DATASET_MADE_INPUT] = writesTo
   return {
     ...job,
     $id: aiSiteUnitJobId(job, unit),
@@ -696,6 +838,32 @@ export function aiSiteUnitJob(
           : unitInputs,
     brief: brief.join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }
+}
+
+/** What a store pages unit writes (AGL-3676): the plan's store pages, their words' links, and the layout. */
+export function aiSiteStorePagesInputOf(plan: Pick<AiJobPlan, 'screens'>, built: BuiltRefs): AiSiteStorePagesInput {
+  const pages = aiStorePagesOfPlan(plan.screens)
+  const path = (screen: AiBuildPlanScreen | undefined) =>
+    screen ? `/${screen.slug.trim().replace(/^\/+/, '').split('/')[0].toLowerCase()}` : null
+  const others = plan.screens.filter((screen) => !screen.record && !aiLayoutIsHomeSlug(screen.slug))
+  return {
+    pages,
+    facts: {
+      contactPath: path(others.find((screen) => /\b(contact|get in touch|visit us)\b/i.test(`${screen.slug.replace(/-/g, ' ')} ${screen.title}`))),
+      shopPath: path(others.find((screen) => aiLayoutIsShopPage(screen))) ?? '/shop',
+      shippingPath: pages.find((page) => page.key === 'shipping')?.href ?? '/shipping-returns',
+    },
+    layoutId: aiSiteBuiltLayoutId(built),
+  }
+}
+
+/**
+ * Whether this site start adds a store's own pages (AGL-3676): its ledger
+ * owes them and has not given up on them. The ledger is written before the
+ * layout is built, so the header links the account before the page exists.
+ */
+export function aiSiteAddsStorePages(job: Pick<AiJob, 'items'>): boolean {
+  return (job.items ?? []).some((row) => row.slot === 'store' && row.status !== 'skipped' && row.status !== 'failed')
 }
 
 /**
@@ -737,15 +905,24 @@ export function createAiSiteJobAdmission(
     const freeTaste = aiSiteFreeTaste(context.org)
     const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
     if (pages) return { status: 400, error: pages }
-    // A Free start that what is left of the month's Free credits cannot pay for
-    // is refused before it spends (AGL-3660), on the figure the dialog quotes —
-    // the dialog asks the same, and this is what a stale dialog meets. Only at
-    // creation: a resume is the same job carrying on from where it paused.
+    // A Free start is admitted on its measured p90 (AGL-3722), not its worst
+    // case: one that fits what is left of the month starts with no prompt;
+    // one that does not is answered with the prompt — what it is likely to
+    // cost, what is left, and its choices — until the person chooses to build
+    // what fits, which then pauses with Resume where the credits run out.
+    // Nothing left at all is refused outright. Only at creation: a resume is
+    // the same job carrying on from where it paused.
     if (freeTaste && !context.plan) {
       const credits = await freeCreditsLeft(context.firestore, { orgId: context.orgId, org: context.org, now: now() })
-      const shortfall = aiFreeSiteShortfall(credits, inputs.pages)
-      if (credits && shortfall) {
-        return { status: 429, error: aiFreeSiteShortfallText(shortfall, credits.resetsOn) }
+      if (credits && credits.left <= 0) {
+        return { status: 429, error: aiFreeCreditsNoneLeftText(credits.resetsOn) }
+      }
+      const prompt = aiFreeSitePrompt(credits, inputs.pages)
+      if (prompt) {
+        if (!context.creditsConfirmed) {
+          return { status: 409, error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
+        }
+        context.onCreditsConfirmed?.(prompt)
       }
     }
     if (context.plan) {
@@ -846,9 +1023,20 @@ export interface AiJobSiteStepDeps {
   products?: AiJobStepRunner
   /** Whether a part may be built for this member, before its first pass. */
   contentRefusal?: typeof aiSiteContentRefusal
+  /** The store's own pages' pass and whether they may be added here (AGL-3676); specs hand in fakes. */
+  storePages?: AiJobStepRunner
+  storePagesRefusal?: typeof aiSiteStorePagesRefusal
+  /** A dataset's pass and whether one may be made here (AGL-3616); specs hand in fakes. */
+  dataset?: AiJobStepRunner
+  datasetRefusal?: typeof aiSiteDatasetRefusal
+  /** An event's pass and whether one may be drafted here (AGL-3755); specs hand in fakes. */
+  event?: AiJobStepRunner
+  eventRefusal?: typeof aiSiteEventRefusal
   /** The posts' publish once the pages are live, and the cache drop after it. */
   publishPosts?: typeof aiPublishSitePosts
   dropCache?: typeof dropPluginSiteCache
+  /** The blog's header entry put back once Try again's posts are live (AGL-3747); specs hand in a fake. */
+  restoreBlogEntry?: typeof aiRestoreGuidedBlogEntry
 }
 
 /** A page the scaffold reported built that holds none of its plan's sections. */
@@ -856,21 +1044,35 @@ export const AI_SITE_PAGE_NOT_WRITTEN_COPY =
   'A page of this site was not written from its plan. Try the site brief again.'
 
 /**
- * Whether a page unit's draft holds every section its plan named, under the
- * ids the page step writes them by (AGL-3596). A page counts as written only
+ * Whether a page unit's draft holds the sections its plan named, under the
+ * ids the page step writes them by (AGL-3596): every one, or for a page in
+ * the layout language its first (AGL-3771). A page counts as written only
  * then: a run that reported a page and wrote none of its sections — a copy of
  * a page the site already had, byte for byte — is not a page the job built,
  * and is never reported done.
  */
 export async function aiSitePageWritten(
   firestore: FirebaseFirestore.Firestore,
-  input: { hostId: string; unitJobId: string; screen: AiBuildPlanScreen; draftId: string },
+  input: {
+    hostId: string
+    unitJobId: string
+    screen: AiBuildPlanScreen
+    draftId: string
+    /** The page was designed in the layout language (`aiJobUsesLayoutLanguage`). */
+    layoutLanguage?: boolean
+  },
   readNodes: typeof readAiDraftNodes = readAiDraftNodes,
 ): Promise<boolean> {
   if (!input.screen.sections.length) return false
   const stored = await readNodes(firestore, { kind: 'screen', hostId: input.hostId, id: input.draftId })
   if (!stored) return false
-  return input.screen.sections.every((_, index) => aiPageSectionNodeId(input.unitJobId, index) in stored.nodes)
+  const present = (index: number) => aiPageSectionNodeId(input.unitJobId, index) in stored.nodes
+  // A page in the layout language is written whole, its first section
+  // heading it (AGL-3660); a later section its last answer could not fill
+  // was taken out, and the page says so (AGL-3771). A record template is
+  // built section by section, and is written once every section is.
+  if (input.layoutLanguage && !input.screen.record) return present(0)
+  return input.screen.sections.every((_, index) => present(index))
 }
 
 /**
@@ -881,13 +1083,38 @@ export async function aiSitePageWritten(
  */
 export function aiSiteLedgerUnits(units: readonly AiSiteUnit[]): AiBuildUnit[] {
   const creations = units.filter((unit) => unit.kind === 'layout' || unit.kind === 'form').map((unit) => unit.slot)
+  const datasets = units.filter((unit) => unit.kind === 'dataset' && unit.creation)
+  /** The dataset a form writes to (AGL-3616): built before it, and it without the binding if it fails. */
+  const writtenTo = (creation: AiBuildPlanCreate | undefined) =>
+    datasets
+      .filter((unit) => !!creation?.writesTo && creation.writesTo.trim().toLowerCase() === `new:${unit.creation?.name ?? ''}`.trim().toLowerCase())
+      .map((unit) => unit.slot)
+  /** The datasets a page lists or is the record template of (AGL-3616): built before it, and it without them if they fail. */
+  const listed = (screen: AiBuildPlanScreen | undefined) =>
+    datasets
+      .filter((unit) => {
+        const named = `new:${unit.creation?.name ?? ''}`.trim().toLowerCase()
+        return (
+          screen?.record?.dataset.trim().toLowerCase() === named ||
+          (screen?.sections ?? []).some((section) => section.uses.some((ref) => ref.trim().toLowerCase() === named))
+        )
+      })
+      .map((unit) => unit.slot)
   return units.map((unit) => ({
     slot: unit.slot,
-    op: unit.kind === 'theme' || unit.kind === 'posts' || unit.kind === 'products' ? unit.kind : unit.jobKind,
+    op:
+      unit.kind === 'theme' ||
+      unit.kind === 'posts' ||
+      unit.kind === 'products' ||
+      unit.kind === 'dataset' ||
+      unit.kind === 'event' ||
+      unit.kind === 'store'
+        ? unit.kind
+        : unit.jobKind,
     label: unit.label,
     ...(unit.creation ? { creation: unit.creation } : {}),
     ...(unit.screen ? { screen: unit.screen } : {}),
-    deps: unit.kind === 'page' ? creations : [],
+    deps: unit.kind === 'page' ? [...creations, ...listed(unit.screen)] : unit.kind === 'form' ? writtenTo(unit.creation) : [],
   }))
 }
 
@@ -919,10 +1146,21 @@ function aiSiteOwedUnits(
   freeTaste: boolean,
   runnerFor: typeof aiJobStepRunnerFor,
 ): AiSiteUnit[] {
+  // A start whose ledger was written before the store pages existed (AGL-3676)
+  // is not owed them: its ledger has no row for them to settle.
+  const ledgered = !job.items?.length || job.items.some((row) => row.slot === 'store')
   return aiSiteJobUnits(plan, {
     welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
     content: aiSiteContentPart(job.inputs, freeTaste),
-  }).filter((unit) => unit.kind === 'theme' || unit.kind === 'posts' || runnerFor(unit.jobKind))
+  }).filter(
+    (unit) =>
+      (unit.kind === 'store' && ledgered) ||
+      unit.kind === 'theme' ||
+      unit.kind === 'posts' ||
+      unit.kind === 'dataset' ||
+      unit.kind === 'event' ||
+      (unit.kind !== 'store' && runnerFor(unit.jobKind)),
+  )
 }
 
 export function createAiJobSiteStep(
@@ -933,8 +1171,12 @@ export function createAiJobSiteStep(
   const publish = deps.publish ?? aiPublishGuidedSite
   const look = deps.look ?? aiRunSiteLook
   const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
+  const datasetRefusal = deps.datasetRefusal ?? aiSiteDatasetRefusal
+  const eventRefusal = deps.eventRefusal ?? aiSiteEventRefusal
+  const storePagesRefusal = deps.storePagesRefusal ?? aiSiteStorePagesRefusal
   const publishPosts = deps.publishPosts ?? aiPublishSitePosts
   const dropCache = deps.dropCache ?? dropPluginSiteCache
+  const restoreBlogEntry = deps.restoreBlogEntry ?? aiRestoreGuidedBlogEntry
   return async (context): Promise<AiJobStepOutcome> => {
     const { job } = context
     // The scaffold asks no model of its own. What it names where it spends
@@ -965,44 +1207,124 @@ export function createAiJobSiteStep(
     const rows = new Map(ledger.map((row) => [row.slot, row]))
     const next = aiBuildNextUnit(ledgerUnits, ledger)
 
-    /** A guided start's last pass puts what it built on the site, once (AGL-3596): only its pages that were built. */
+    /**
+     * A guided start's last pass puts what it built on the site (AGL-3596):
+     * only its pages that were built. Once it has, Try again's last pass puts
+     * only the pages the retry built live (AGL-3730), never the home address
+     * or the announce again, merged into the record of the first.
+     */
     const finish = async (outcome: AiJobStepOutcome, pages: readonly AiJobOutput[]): Promise<AiJobStepOutcome> => {
-      if (!aiJobPublishesSite(job) || job.sitePublish || !job.hostId || !pages.length) return outcome
+      if (!aiJobPublishesSite(job) || !job.hostId) return outcome
+      const previous = job.sitePublish ?? null
+      const wasLive = Boolean(previous?.published.length)
+      const live = new Set((previous?.published ?? []).map((page) => page.id))
+      const fresh = pages.filter((page) => !live.has(page.id))
+      // Posts Try again wrote for a site already live go live too, pages or not (AGL-3739).
+      const postsRetried = wasLive && postsRebuilt()
+      if (!fresh.length && !postsRetried) return outcome
+      // A canceled start never puts the site live (AGL-3616): its pages stay drafts.
+      if (await aiJobCancelAsked(context.firestore, job, context.signal)) return outcome
+      if (!fresh.length) {
+        if (await finishPosts()) await finishBlogEntry(previous?.published ?? [])
+        return outcome
+      }
       // A blog the header links by path before its posts exist (AGL-3660):
       // owed and not delivered, its links come out of what is published.
       const postsRow = rows.get('posts')
       const sitePublish = await publish(context.firestore, {
         job,
-        outputs: pages,
+        outputs: fresh,
         now: context.now,
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
+        // The store's pages the header and footer link and the start did not write (AGL-3676).
+        ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
+        ...(wasLive ? { retry: true } : {}),
+        // The site publishes in the language its brief was written in (AGL-3750).
+        ...(plan.language ? { language: plan.language } : {}),
       }).catch((error: unknown) => {
         // The site is built either way; the pages stay drafts and say so.
         console.error('ai site publish threw', { orgId: job.orgId, jobId: job.$id, error })
         return null
       })
-      if (sitePublish?.published.length) await finishPosts()
-      return sitePublish ? { ...outcome, sitePublish } : outcome
+      // The blog's posts go live with the first publish that puts a page
+      // live, and on a site already live, when Try again wrote them; then
+      // the header links the blog again, which the first publish took out.
+      if (wasLive ? postsRetried : sitePublish?.published.length) {
+        const posted = await finishPosts()
+        if (posted && wasLive) await finishBlogEntry([...(previous?.published ?? []), ...(sitePublish?.published ?? [])])
+      }
+      if (!sitePublish) return outcome
+      return { ...outcome, sitePublish: previous ? aiMergeSitePublish(previous, sitePublish) : sitePublish }
     }
-    /** The blog's posts go live with its pages (AGL-3676), as a person's Publish would put them. */
-    const finishPosts = async () => {
+    /**
+     * Whether the blog's posts part was written by Try again: delivered on a
+     * later attempt than its first. Publishing them again on a later retry
+     * leaves a post already published as it is.
+     */
+    const postsRebuilt = (): boolean => {
       const row = rows.get('posts')
-      if (!row || !aiBuildItemDelivered(row) || !job.hostId) return
+      return Boolean(row && row.attempt > 1 && aiBuildItemDelivered(row) && row.outputs?.length)
+    }
+    /**
+     * The blog's posts go live with its pages (AGL-3676), as a person's
+     * Publish would put them. Whether any did.
+     */
+    const finishPosts = async (): Promise<boolean> => {
+      const row = rows.get('posts')
+      if (!row || !aiBuildItemDelivered(row) || !job.hostId) return false
       const ids = new Set(row.outputs)
       const posts = (job.outputs ?? []).filter((output) => output.resource === 'entry' && ids.has(output.id))
       const published = await publishPosts(context.firestore, { job, outputs: posts, now: context.now })
-      if (!published?.paths.length) return
+      if (!published?.paths.length) return false
       await dropCache({
         hostIds: [job.hostId],
         reason: 'guided AI site start published its posts',
         paths: { [job.hostId]: published.paths },
       }).catch((error: unknown) => console.warn('ai site posts: cache not dropped', { jobId: job.$id, error }))
+      return true
     }
-    /** The pages built so far, as the job reported them. */
+    /**
+     * A blog whose posts Try again put live on a site already live (AGL-3747):
+     * the first publish took every link to it out (AGL-3660), so its header
+     * entry goes back, after the home page's, where no link opens it yet. The
+     * site is live either way; a layout it cannot change is logged.
+     */
+    const finishBlogEntry = async (published: ReadonlyArray<{ id: string; path: string }>) => {
+      const blog = aiSiteBlogNavPage(aiSitePlanWithoutBlogStandIns(plan.screens).screens)
+      await restoreBlogEntry(context.firestore, {
+        job,
+        pageIds: published.map((page) => page.id),
+        homeId: published.find((page) => page.path === '/')?.id ?? null,
+        blog: { label: blog.label, href: blog.href },
+        now: context.now,
+      }).catch((error: unknown) => {
+        console.error('ai site blog entry not restored', { orgId: job.orgId, jobId: job.$id, error })
+        return false
+      })
+    }
+    /**
+     * The pages built so far, as the job reported them. A dataset's record
+     * template is not among them (AGL-3616): it renders once per record only
+     * once the member saves its binding, so it is never published at its own
+     * address, where its `{{item.*}}` would show.
+     */
+    const templates = new Set(units.filter((unit) => unit.kind === 'page' && unit.screen?.record).map((unit) => unit.slot))
+    /** The paths of the store's pages the frame links that are not among the pages going live (AGL-3676). */
+    const unwrittenStoreHrefs = (pages: readonly AiJobOutput[]) => {
+      const live = new Set(pages.map((page) => page.proposal?.['storePage']).filter(Boolean))
+      return aiStorePagesOfPlan(plan.screens)
+        .filter((page) => !page.planned && !live.has(page.key))
+        .map((page) => page.href)
+    }
     const builtPages = (extra: readonly AiJobOutput[] = []) => {
       const ids = new Set(
         units
-          .filter((unit) => unit.kind === 'page' && aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }))
+          .filter(
+            (unit) =>
+              (unit.kind === 'page' || unit.kind === 'store') &&
+              !templates.has(unit.slot) &&
+              aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' }),
+          )
           .flatMap((unit) => rows.get(unit.slot)?.outputs ?? []),
       )
       return [...(job.outputs ?? []).filter((output) => output.resource === 'screen' && ids.has(output.id)), ...extra]
@@ -1019,7 +1341,13 @@ export function createAiJobSiteStep(
           ? (deps.posts ?? runAiSitePostsUnit)
           : unit.kind === 'products'
             ? (deps.products ?? (catalog ? createAiSiteProductsRunner({ catalog }) : undefined))
-            : runnerFor(unit.jobKind)
+            : unit.kind === 'dataset'
+              ? (deps.dataset ?? runAiSiteDatasetUnit)
+              : unit.kind === 'event'
+                ? (deps.event ?? runAiSiteEventUnit)
+                : unit.kind === 'store'
+                ? (deps.storePages ?? runAiSiteStorePagesUnit)
+                : runnerFor(unit.jobKind)
     if (!runner) return { ...aiUnspentOutcome(model), ...init }
     const othersOpen = ledgerUnits.some(
       (one) => one.slot !== unit.slot && aiBuildItemOpen(rows.get(one.slot) ?? { status: 'pending' }),
@@ -1060,6 +1388,51 @@ export function createAiJobSiteStep(
       })
       if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
     }
+    // A dataset asks the same before its first pass (AGL-3616): the data
+    // plugin runs here, and its writer admits this member now.
+    if (unit.kind === 'dataset' && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await datasetRefusal({ ...context, job }).catch((error: unknown) => {
+        console.error('ai site dataset admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // An event asks the same (AGL-3755): the events plugin runs here, and its
+    // writer admits this member now.
+    if (unit.kind === 'event' && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await eventRefusal({ ...context, job }).catch((error: unknown) => {
+        console.error('ai site event admission failed', { orgId: job.orgId, jobId: job.$id, slot: unit.slot, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // The store's own pages ask the same (AGL-3676): a plan with a store, the
+    // commerce plugin here, and a member who may edit the site's pages.
+    if (unit.kind === 'store' && rows.get(unit.slot)?.status !== 'running') {
+      const refusal = await storePagesRefusal({ ...context, job }).catch((error: unknown) => {
+        console.error('ai site store pages admission failed', { orgId: job.orgId, jobId: job.$id, error })
+        return AI_SITE_UNIT_EMPTY_COPY
+      })
+      if (refusal) return closing(settle({ slot: unit.slot, status: 'skipped', note: `Not built: ${refusal}` }))
+    }
+    // A record template whose dataset was not made has nothing to show
+    // (AGL-3616): it is not built, and the pages that list the dataset are
+    // built without it.
+    const templateOf = unit.kind === 'page' && unit.screen ? aiSiteRecordTemplateOf(unit.screen) : null
+    if (templateOf) {
+      const dataset = units.find((one) => one.kind === 'dataset' && one.creation?.name.trim().toLowerCase() === templateOf.toLowerCase())
+      const row = dataset ? rows.get(dataset.slot) : undefined
+      if (!row || !aiBuildItemDelivered(row) || !row.outputs.length) {
+        return closing(
+          settle({
+            slot: unit.slot,
+            status: 'skipped',
+            note: `Not built: the dataset “${templateOf}” it shows a page of each record of could not be created.`,
+            ...(dataset ? { degradedBy: [dataset.slot] } : {}),
+          }),
+        )
+      }
+    }
 
     // A page whose layout or form failed is built without it, and says so.
     const degradation = aiBuildDegradation(next, { units: ledgerUnits, ledger })
@@ -1099,7 +1472,13 @@ export function createAiJobSiteStep(
         page !== undefined &&
         (await aiSitePageWritten(
           context.firestore,
-          { hostId: job.hostId, unitJobId: aiSiteUnitJobId(job, unit), screen: unit.screen, draftId: page.id },
+          {
+            hostId: job.hostId,
+            unitJobId: aiSiteUnitJobId(job, unit),
+            screen: unit.screen,
+            draftId: page.id,
+            layoutLanguage: aiJobUsesLayoutLanguage(handed),
+          },
           readNodes,
         ))
       if (!written) {
@@ -1118,18 +1497,33 @@ export function createAiJobSiteStep(
         outputs: outcome.outputs.map((output) => output.id),
         // A store's products are listed before they are priced (AGL-3676):
         // the row says what is left before the store sells.
-        note: unit.kind === 'products' && outcome.outputs.length ? AI_SITE_PRODUCTS_PRICE_NOTE : note,
+        note:
+          unit.kind === 'products' && outcome.outputs.length
+            ? AI_SITE_PRODUCTS_PRICE_NOTE
+            : unit.kind === 'store' && outcome.outputs.length
+              ? AI_SITE_STORE_PAGES_NOTE
+              : note,
         ...(degraded ? { degradedBy: degradation.degradedBy } : {}),
       },
       spent,
     )
     if (done.continue) return done
     rows.set(unit.slot, { ...(rows.get(unit.slot) as AiJobItemLedger), status: degraded ? 'degraded' : 'succeeded' })
-    return finish(done, builtPages(unit.kind === 'page' ? outcome.outputs.filter((output) => output.resource === 'screen') : []))
+    return finish(
+      done,
+      builtPages(
+        (unit.kind === 'page' && !templates.has(unit.slot)) || unit.kind === 'store'
+          ? outcome.outputs.filter((output) => output.resource === 'screen')
+          : [],
+      ),
+    )
   }
 }
 
 export const runAiJobSiteStep = createAiJobSiteStep()
+
+/** ASSUMED: what the store pages' pass needs — five draft transactions and their search listings, no model. */
+export const AI_SITE_STORE_PAGES_MINIMUM_MS = 15_000
 
 /**
  * The least time a scaffold's next pass needs (AGL-3035). The scaffold asks no
@@ -1151,7 +1545,12 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
     content: aiSiteContentPart(job.inputs, false),
   }).filter(
     (unit) =>
-      (unit.kind === 'theme' || unit.kind === 'posts' || aiJobStepRunnerFor(unit.jobKind)) &&
+      (unit.kind === 'theme' ||
+        unit.kind === 'posts' ||
+        unit.kind === 'dataset' ||
+        unit.kind === 'event' ||
+        unit.kind === 'store' ||
+        aiJobStepRunnerFor(unit.jobKind)) &&
       (!owed.size || owed.has(unit.slot)),
   )
   const outputs = job.outputs ?? []
@@ -1161,6 +1560,10 @@ export function aiSiteJobRunMinimumMs(job: AiJob): number {
   if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
   if (unit.kind === 'theme') return AI_SITE_LOOK_BUDGET.minimumMs
   if (unit.kind === 'posts') return AI_SITE_POST_BUDGET.minimumMs
+  if (unit.kind === 'dataset') return AI_SITE_DATASET_BUDGET.minimumMs
+  if (unit.kind === 'event') return AI_SITE_EVENT_MINIMUM_MS
+  // The store's pages ask no model: five draft writes (AGL-3676).
+  if (unit.kind === 'store') return AI_SITE_STORE_PAGES_MINIMUM_MS
   return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiBuildBuiltRefs(aiSiteLedgerUnits(units), ledger, outputs)))
 }
 

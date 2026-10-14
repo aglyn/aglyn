@@ -1538,6 +1538,7 @@ export type ContactFieldType =
   | 'select'
   | 'checkbox'
   | 'url'
+  | 'currency'
 
 /**
  * `orgs/{orgId}/contactFields/{fieldId}` — a custom field a holder defined.
@@ -1555,6 +1556,12 @@ export interface ContactFieldDefinition extends CrmScoped {
   type: ContactFieldType
   /** The choices, for `select`. */
   options?: string[]
+  /**
+   * For `currency` (AGL-3756): the ISO 4217 code its amounts are in,
+   * lowercase as a deal's `currency` is. Fixed once the field exists,
+   * because a value is a count of this currency's minor unit.
+   */
+  currency?: string
   required?: boolean
   /** Position in the form and the export, ascending. */
   order: number

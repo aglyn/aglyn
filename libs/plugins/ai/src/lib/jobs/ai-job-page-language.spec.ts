@@ -20,7 +20,7 @@
  * limitations under the License.
  */
 
-import { aiLayoutPageCheck } from './ai-job-page-language'
+import { aiLayoutLeftOutNote, aiLayoutPageCheck } from './ai-job-page-language'
 
 const block = (kind: string, text: string) => ({ kind, col: -1, text, to: '', icon: '', style: 'none', items: [] })
 
@@ -153,6 +153,47 @@ describe('a section planned with items shows them (AGL-3660)', () => {
     expect(result.value?.items).toEqual([3, 0, 3])
   })
 
+  /*
+   * The Panaderia El Trigal start (AGL-3771, beta.249): its home's "Del menú"
+   * section was planned with six items and both answers showed none, so the
+   * whole home was refused and the published site had nothing at its
+   * address. The last answer's empty section is taken out instead, and the
+   * rest of the page kept.
+   */
+  it('takes an empty section out of the last answer rather than refusing the page', () => {
+    const check = page()
+    const empty = {
+      sections: [hero, { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'What the inspection covers'), block('lede', 'Every part of the roof.')] }],
+    }
+    expect(check(empty).violations.map((violation) => violation.code)).toEqual(['layout-section-no-items'])
+    const last = check(empty)
+    expect(last.violations).toEqual([])
+    expect(last.value?.dropped).toEqual(['the section "What the inspection covers", planned with 3 items and showing none'])
+    const nodes = last.value?.nodes as unknown as Record<string, unknown>
+    expect(nodes['sec-1']).toBeUndefined()
+    expect(JSON.stringify(nodes)).not.toContain('Every part of the roof.')
+    expect(JSON.stringify(nodes)).toContain('Storm damage, checked')
+    expect(aiLayoutLeftOutNote(screen, ['sec-0', 'sec-1'], nodes)).toBe(
+      'Left out: the section “What the inspection covers”, which could not be built well enough to publish. Add it in the Besigner when you are ready.',
+    )
+  })
+
+  it('never takes out the section that heads the page', () => {
+    const headed = { ...screen, sections: [{ name: 'Services', uses: [], items: 3 }, screen.sections[0]] }
+    const check = aiLayoutPageCheck({
+      screen: headed as never,
+      sectionIds: ['sec-0', 'sec-1'],
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'A roofer.' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, scrollTargetIds: ['sec-0', 'sec-1'], reusableComponents: false },
+      reusableComponents: false,
+    })
+    const answer = { sections: [hero, { band: 'soft', align: 'start', cols: [], blocks: [block('heading', 'Call us'), block('lede', 'We answer.')] }] }
+    check(answer)
+    const last = check(answer)
+    expect(last.value).toBeNull()
+    expect(last.violations.map((violation) => violation.code)).toEqual(['layout-section-no-items'])
+  })
+
   it('admits the section with its cards', () => {
     const cards = {
       ...block('cards', ''),
@@ -212,5 +253,79 @@ describe('a section the plan named with a note, or planned as customer words', (
   it('asks no items of a section whose only items were customer quotes', () => {
     const result = run()(page([block('heading', 'Kind words'), block('lede', 'Readers write in.'), { ...block('quotes', ''), items: [item('A reader'), item('Another')] }]))
     expect(result.violations.map((violation) => violation.code)).not.toContain('layout-section-no-items')
+  })
+})
+
+/*
+ * A Free guided start's café (beta.243, 2026-10-12, job 4ctq-dfbUP): Home
+ * placed the "Contact & pre-order" section with the site's form, and the
+ * Menu page's "Request weekend pickup" — sent to that form, so to Home — was
+ * refused on every answer for rule 10. It goes to the page that places the
+ * form, and the page is built (AGL-3729).
+ */
+describe('a call to action on another page goes to the form Home places (AGL-3729)', () => {
+  const screen = {
+    title: 'Menu',
+    slug: '/menu',
+    template: null,
+    sections: [
+      { name: 'Menu hero', uses: [], items: 0 },
+      { name: 'Weekend pre-orders', uses: [], items: 0 },
+    ],
+  }
+  const ids = ['sec-0', 'sec-1']
+  const targets = {
+    pageId: 'p-menu',
+    pages: [{ id: 'p-home', label: 'Home', slug: '/' }],
+    homeIds: ['p-home'],
+    forms: [],
+    formPageId: 'p-home',
+    components: [],
+    facts: 'A café and bakery that takes weekend pre-orders.',
+  }
+  const menu = (to: string) => ({
+    sections: [
+      { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Our menu'), block('lede', 'Baked fresh every morning.')] },
+      {
+        band: 'soft',
+        align: 'start',
+        cols: [],
+        blocks: [block('heading', 'Weekend pre-orders'), block('text', 'Order by Thursday for Saturday pickup.'), { ...block('button', 'Request weekend pickup'), to }],
+      },
+    ],
+  })
+  const check = () =>
+    aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds: ids,
+      targets: targets as never,
+      context: { screenIds: ['p-home'], formIds: [], componentIds: [], codeBuilt: true, homeScreenIds: ['p-home'], reusableComponents: false },
+      reusableComponents: false,
+    })
+  const buttons = (nodes: unknown) =>
+    Object.values(nodes as Record<string, { componentId: string; props?: Record<string, unknown> }>).filter(
+      (node) => node.componentId === 'muiButton',
+    )
+
+  for (const to of ['form', 'page:Home', '']) {
+    it(`builds the Menu page with "Request weekend pickup" linking Home's form (to: "${to}")`, () => {
+      const result = check()(menu(to))
+      expect(result.violations).toEqual([])
+      expect(buttons(result.value?.nodes).map((node) => [node.props?.['children'], node.props?.['screenId']])).toEqual([
+        ['Request weekend pickup', 'p-home'],
+      ])
+    })
+  }
+
+  it('still refuses nothing when the site has no form page: the link is left out', () => {
+    const result = aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds: ids,
+      targets: { ...targets, formPageId: null } as never,
+      context: { screenIds: ['p-home'], formIds: [], componentIds: [], codeBuilt: true, homeScreenIds: ['p-home'], reusableComponents: false },
+      reusableComponents: false,
+    })(menu('form'))
+    expect(result.violations).toEqual([])
+    expect(buttons(result.value?.nodes)).toEqual([])
   })
 })

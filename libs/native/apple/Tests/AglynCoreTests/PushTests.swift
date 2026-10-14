@@ -7,7 +7,7 @@ import XCTest
 @testable import AglynCore
 
 /// The console's own answers, recorded by `generate-native-contracts.mjs`.
-private func functionCases(_ name: String) throws -> [(args: [Any], result: Any)] {
+func functionCases(_ name: String) throws -> [(args: [Any], result: Any)] {
   let url = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .deletingLastPathComponent().appendingPathComponent("contracts/function-cases.generated.json")

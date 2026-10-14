@@ -13,55 +13,253 @@
               "submitLabel": "Request my quote",
               "successMessage": "Thanks. We have your details and will be in touch about your quote."
             },
-            "nodes": ["fullName", "email", "phone", "address", "roofType", "service", "damage"]
+            "nodes": [
+              "fullName",
+              "email",
+              "phone",
+              "address",
+              "roofType",
+              "service",
+              "damage"
+            ]
           },
           "fullName": {
-            "componentId": "formField",
-            "props": { "fieldName": "fullName", "label": "Full name", "required": true }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true,
+              "required": true
+            },
+            "nodes": ["fullNameLabel", "fullNameInput"]
           },
           "email": {
-            "componentId": "formField",
-            "props": { "fieldName": "email", "label": "Email", "fieldType": "email", "required": true }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true,
+              "required": true
+            },
+            "nodes": ["emailLabel", "emailInput"]
           },
           "phone": {
-            "componentId": "formField",
-            "props": { "fieldName": "phone", "label": "Phone", "required": true }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true,
+              "required": true
+            },
+            "nodes": ["phoneLabel", "phoneInput"]
           },
           "address": {
-            "componentId": "formField",
-            "props": { "fieldName": "propertyAddress", "label": "Property address", "required": true }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true,
+              "required": true
+            },
+            "nodes": ["addressLabel", "addressInput"]
           },
           "roofType": {
-            "componentId": "formField",
+            "componentId": "muiFormControl",
             "props": {
-              "fieldName": "roofType",
-              "label": "Roof type",
-              "fieldType": "select",
-              "options": "Asphalt shingle\nMetal\nTile\nFlat or low slope\nNot sure"
-            }
+              "fullWidth": true
+            },
+            "nodes": ["roofTypeLabel", "roofTypeInput"]
           },
           "service": {
-            "componentId": "formField",
+            "componentId": "muiFormControl",
             "props": {
-              "fieldName": "service",
-              "label": "What do you need?",
-              "fieldType": "radio",
-              "options": "Repair\nFull replacement\nInspection",
+              "fullWidth": true,
+              "required": true
+            },
+            "nodes": ["serviceLabel", "serviceInput"]
+          },
+          "damage": {
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true
+            },
+            "nodes": ["damageLabel", "damageInput"]
+          },
+          "fullNameLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Full name"
+            }
+          },
+          "fullNameInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "fullName",
+              "required": true,
+              "fullWidth": true
+            }
+          },
+          "emailLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Email"
+            }
+          },
+          "emailInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "email",
+              "type": "email",
+              "required": true,
+              "fullWidth": true
+            }
+          },
+          "phoneLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Phone"
+            }
+          },
+          "phoneInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "phone",
+              "required": true,
+              "fullWidth": true
+            }
+          },
+          "addressLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Property address"
+            }
+          },
+          "addressInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "propertyAddress",
+              "required": true,
+              "fullWidth": true
+            }
+          },
+          "roofTypeLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Roof type"
+            }
+          },
+          "roofTypeOption1": {
+            "componentId": "muiSelectOption",
+            "props": {
+              "children": "Asphalt shingle"
+            }
+          },
+          "roofTypeOption2": {
+            "componentId": "muiSelectOption",
+            "props": {
+              "children": "Metal"
+            }
+          },
+          "roofTypeOption3": {
+            "componentId": "muiSelectOption",
+            "props": {
+              "children": "Tile"
+            }
+          },
+          "roofTypeOption4": {
+            "componentId": "muiSelectOption",
+            "props": {
+              "children": "Flat or low slope"
+            }
+          },
+          "roofTypeOption5": {
+            "componentId": "muiSelectOption",
+            "props": {
+              "children": "Not sure"
+            }
+          },
+          "roofTypeInput": {
+            "componentId": "muiSelect",
+            "props": {
+              "name": "roofType",
+              "fullWidth": true
+            },
+            "nodes": [
+              "roofTypeOption1",
+              "roofTypeOption2",
+              "roofTypeOption3",
+              "roofTypeOption4",
+              "roofTypeOption5"
+            ]
+          },
+          "serviceLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "What do you need?"
+            }
+          },
+          "serviceChoice1Radio": {
+            "componentId": "muiRadio",
+            "props": {
+              "value": "Repair",
               "required": true
             }
           },
-          "damage": {
-            "componentId": "formField",
+          "serviceChoice1": {
+            "componentId": "muiFormControlLabel",
             "props": {
-              "fieldName": "damageDescription",
-              "label": "Describe the damage",
-              "fieldType": "textarea",
-              "placeholder": "Where is the leak or damage, and when did you first notice it?"
+              "label": "Repair"
+            },
+            "nodes": ["serviceChoice1Radio"]
+          },
+          "serviceChoice2Radio": {
+            "componentId": "muiRadio",
+            "props": {
+              "value": "Full replacement",
+              "required": true
+            }
+          },
+          "serviceChoice2": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Full replacement"
+            },
+            "nodes": ["serviceChoice2Radio"]
+          },
+          "serviceChoice3Radio": {
+            "componentId": "muiRadio",
+            "props": {
+              "value": "Inspection",
+              "required": true
+            }
+          },
+          "serviceChoice3": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Inspection"
+            },
+            "nodes": ["serviceChoice3Radio"]
+          },
+          "serviceInput": {
+            "componentId": "muiRadioGroup",
+            "props": {
+              "name": "service"
+            },
+            "nodes": ["serviceChoice1", "serviceChoice2", "serviceChoice3"]
+          },
+          "damageLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Describe the damage"
+            }
+          },
+          "damageInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "damageDescription",
+              "multiline": true,
+              "placeholder": "Where is the leak or damage, and when did you first notice it?",
+              "fullWidth": true
             }
           }
         }
       },
-      "routing": { "kind": "lead", "list": null },
+      "routing": {
+        "kind": "lead",
+        "list": null
+      },
       "cannotCollect": ["photo upload"]
     }
   },
@@ -82,25 +280,95 @@
             "nodes": ["firstName", "email", "subscribe"]
           },
           "firstName": {
-            "componentId": "formField",
-            "props": { "fieldName": "firstName", "label": "First name" }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true
+            },
+            "nodes": ["firstNameLabel", "firstNameInput"]
           },
           "email": {
-            "componentId": "formField",
-            "props": { "fieldName": "email", "label": "Email", "fieldType": "email", "required": true }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true,
+              "required": true
+            },
+            "nodes": ["emailLabel", "emailInput"]
           },
           "subscribe": {
-            "componentId": "formField",
+            "componentId": "muiFormControl",
             "props": {
-              "fieldName": "subscribe",
-              "label": "Newsletter",
-              "fieldType": "checkbox",
-              "options": "Yes, keep me posted"
+              "fullWidth": true
+            },
+            "nodes": ["subscribeLabel", "subscribeChoice1", "subscribeChoice2"]
+          },
+          "firstNameLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "First name"
             }
+          },
+          "firstNameInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "firstName",
+              "fullWidth": true
+            }
+          },
+          "emailLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Email"
+            }
+          },
+          "emailInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "email",
+              "type": "email",
+              "required": true,
+              "fullWidth": true
+            }
+          },
+          "subscribeLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Newsletter"
+            }
+          },
+          "subscribeChoice1Checkbox": {
+            "componentId": "muiCheckbox",
+            "props": {
+              "name": "subscribe",
+              "value": "Yes"
+            }
+          },
+          "subscribeChoice1": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Yes"
+            },
+            "nodes": ["subscribeChoice1Checkbox"]
+          },
+          "subscribeChoice2Checkbox": {
+            "componentId": "muiCheckbox",
+            "props": {
+              "name": "subscribe",
+              "value": "keep me posted"
+            }
+          },
+          "subscribeChoice2": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "keep me posted"
+            },
+            "nodes": ["subscribeChoice2Checkbox"]
           }
         }
       },
-      "routing": { "kind": "list", "list": "Monthly Roundup" },
+      "routing": {
+        "kind": "list",
+        "list": "Monthly Roundup"
+      },
       "cannotCollect": []
     }
   },
@@ -121,39 +389,190 @@
             "nodes": ["satisfaction", "frequency", "improve", "comments"]
           },
           "satisfaction": {
-            "componentId": "formField",
+            "componentId": "muiFormControl",
             "props": {
-              "fieldName": "satisfaction",
-              "label": "How satisfied were you with your visit?",
-              "fieldType": "rating",
+              "fullWidth": true,
               "required": true
-            }
+            },
+            "nodes": ["satisfactionLabel", "satisfactionInput"]
           },
           "frequency": {
-            "componentId": "formField",
+            "componentId": "muiFormControl",
             "props": {
-              "fieldName": "visitFrequency",
-              "label": "How often do you visit us?",
-              "fieldType": "radio",
-              "options": "First visit\nEvery six months\nMore often"
-            }
+              "fullWidth": true
+            },
+            "nodes": ["frequencyLabel", "frequencyInput"]
           },
           "improve": {
-            "componentId": "formField",
+            "componentId": "muiFormControl",
             "props": {
-              "fieldName": "improvements",
-              "label": "What could we do better?",
-              "fieldType": "checkbox",
-              "options": "Wait times\nBooking\nComfort\nExplaining treatment"
-            }
+              "fullWidth": true
+            },
+            "nodes": [
+              "improveLabel",
+              "improveChoice1",
+              "improveChoice2",
+              "improveChoice3",
+              "improveChoice4"
+            ]
           },
           "comments": {
-            "componentId": "formField",
-            "props": { "fieldName": "comments", "label": "Anything else?", "fieldType": "textarea" }
+            "componentId": "muiFormControl",
+            "props": {
+              "fullWidth": true
+            },
+            "nodes": ["commentsLabel", "commentsInput"]
+          },
+          "satisfactionLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "How satisfied were you with your visit?"
+            }
+          },
+          "satisfactionInput": {
+            "componentId": "muiRating",
+            "props": {
+              "name": "satisfaction"
+            }
+          },
+          "frequencyLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "How often do you visit us?"
+            }
+          },
+          "frequencyChoice1Radio": {
+            "componentId": "muiRadio",
+            "props": {
+              "value": "First visit"
+            }
+          },
+          "frequencyChoice1": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "First visit"
+            },
+            "nodes": ["frequencyChoice1Radio"]
+          },
+          "frequencyChoice2Radio": {
+            "componentId": "muiRadio",
+            "props": {
+              "value": "Every six months"
+            }
+          },
+          "frequencyChoice2": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Every six months"
+            },
+            "nodes": ["frequencyChoice2Radio"]
+          },
+          "frequencyChoice3Radio": {
+            "componentId": "muiRadio",
+            "props": {
+              "value": "More often"
+            }
+          },
+          "frequencyChoice3": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "More often"
+            },
+            "nodes": ["frequencyChoice3Radio"]
+          },
+          "frequencyInput": {
+            "componentId": "muiRadioGroup",
+            "props": {
+              "name": "visitFrequency"
+            },
+            "nodes": [
+              "frequencyChoice1",
+              "frequencyChoice2",
+              "frequencyChoice3"
+            ]
+          },
+          "improveLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "What could we do better?"
+            }
+          },
+          "improveChoice1Checkbox": {
+            "componentId": "muiCheckbox",
+            "props": {
+              "name": "improvements",
+              "value": "Wait times"
+            }
+          },
+          "improveChoice1": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Wait times"
+            },
+            "nodes": ["improveChoice1Checkbox"]
+          },
+          "improveChoice2Checkbox": {
+            "componentId": "muiCheckbox",
+            "props": {
+              "name": "improvements",
+              "value": "Booking"
+            }
+          },
+          "improveChoice2": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Booking"
+            },
+            "nodes": ["improveChoice2Checkbox"]
+          },
+          "improveChoice3Checkbox": {
+            "componentId": "muiCheckbox",
+            "props": {
+              "name": "improvements",
+              "value": "Comfort"
+            }
+          },
+          "improveChoice3": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Comfort"
+            },
+            "nodes": ["improveChoice3Checkbox"]
+          },
+          "improveChoice4Checkbox": {
+            "componentId": "muiCheckbox",
+            "props": {
+              "name": "improvements",
+              "value": "Explaining treatment"
+            }
+          },
+          "improveChoice4": {
+            "componentId": "muiFormControlLabel",
+            "props": {
+              "label": "Explaining treatment"
+            },
+            "nodes": ["improveChoice4Checkbox"]
+          },
+          "commentsLabel": {
+            "componentId": "muiFormLabel",
+            "props": {
+              "children": "Anything else?"
+            }
+          },
+          "commentsInput": {
+            "componentId": "muiInput",
+            "props": {
+              "name": "comments",
+              "multiline": true,
+              "fullWidth": true
+            }
           }
         }
       },
-      "routing": { "kind": "inbox", "list": null },
+      "routing": {
+        "kind": "inbox",
+        "list": null
+      },
       "cannotCollect": []
     }
   }

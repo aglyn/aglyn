@@ -80,7 +80,23 @@ export interface PickedMedia {
  * two cannot disagree about what counts as a video. `image` and `video` are
  * whole families; `pdf` is PDF alone, as the filter offers it.
  */
-export type MediaPickerKind = 'image' | 'video' | 'pdf'
+export type MediaPickerKind = 'image' | 'video' | 'pdf' | 'audio'
+
+/** Every kind a picker can be narrowed to (`audio` since AGL-3716). */
+export const MEDIA_PICKER_KINDS: readonly MediaPickerKind[] = [
+  'image',
+  'video',
+  'pdf',
+  'audio',
+]
+
+/** Whether a value names a picker kind — for a schema's `mediaKind`. */
+export function isMediaPickerKind(value: unknown): value is MediaPickerKind {
+  return (
+    typeof value === 'string' &&
+    (MEDIA_PICKER_KINDS as readonly string[]).includes(value)
+  )
+}
 
 /** How a caller wants the picker to behave. */
 export interface PickMediaOptions {

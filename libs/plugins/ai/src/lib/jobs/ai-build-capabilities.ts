@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { DUPLICABLE_HOST_RESOURCE_KINDS, DUPLICATE_NAME_MAX } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { isHostPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
@@ -34,6 +35,9 @@ import { AI_EDIT_TARGET_KINDS } from '../model/ai-edit-job'
 import { AI_CAMPAIGN_RESOURCE } from './ai-job-campaign-step'
 import { aiPluginDraftOwner, type AiPluginDraftOwnerLookup } from './ai-job-plugin-drafts'
 import { aiJobStepRunnerFor } from './ai-jobs'
+import { AI_SETTINGS_ARGS_SCHEMA, AI_SETTINGS_WHERE } from './ai-job-settings-step'
+import { AI_MEDIA_ARGS_SCHEMA, AI_MEDIA_LIMITS, AI_MEDIA_WHERE } from './ai-job-media-step'
+import { AI_TRACKING_ARGS_SCHEMA, AI_TRACKING_WHERE, aiTrackingMissingInput } from './ai-job-tracking-step'
 
 /**
  * What THIS plugin lets a build make (AGL-3616), registered on the core's
@@ -47,7 +51,12 @@ import { aiJobStepRunnerFor } from './ai-jobs'
  * and workflows plugins, through the writers their runners already call, and
  * a site function by the logic plugin's `function` writer, which the `logic`
  * runner calls when its job is a build's unit. A change to a page or layout
- * the site already has is the `edit` runner's.
+ * the site already has is the `edit` runner's, and a change to its header or
+ * footer menu the `navigation` runner's (AGL-3728), a copy of something
+ * it has the `duplicate` runner's (AGL-3740), a change to its settings
+ * the `settings` runner's (AGL-3748), organizing its media library the
+ * `media` runner's (AGL-3752), and a change to its analytics and
+ * advertising tags the `tracking` runner's (AGL-3751).
  */
 
 /** This plugin's id, as its registrations name their owner. */
@@ -228,6 +237,190 @@ export const AI_OWNED_CAPABILITIES: readonly PluginAiCapability[] = [
     freeAllowed: false,
     runnerKind: 'edit',
     estimateCredits: passes(1),
+    degrade: 'omit',
+  },
+  {
+    // The site's header and footer menus (AGL-3728): the Besigner's own Page
+    // Links and Dropdown Menus in the site's layout, changed by code from the
+    // words the planner wrote, saved as a version beside the live one. No
+    // model, so no credits. Not on the Free taste, as `edit`: a layout is
+    // always served, so without version history there is nowhere to land.
+    op: 'navigation',
+    noun: 'menu change',
+    where: 'the layout’s versions',
+    intents: [
+      'changing the site’s header or footer menu — add, remove, rename, reorder or relink its items, or put items under a dropdown — saved as a layout version visitors do not see until it is published',
+    ],
+    argsSchema: {
+      type: 'object',
+      properties: {
+        menu: {
+          type: 'string',
+          description: 'Which menu: header (the default), footer, or both.',
+          enum: ['header', 'footer', 'both'],
+        },
+        layout: {
+          type: 'string',
+          description: 'The layout id from the site inventory, or new:<name> of a layout this plan makes; leave it out for the layout the site’s pages use.',
+          maxLength: 64,
+        },
+        add: {
+          type: 'array',
+          description:
+            'Items to add, each "Label => destination", or "Parent > Label => destination" to put it under the dropdown Parent. A destination is a page id from the site inventory, new:<page title> of a page this plan makes, a path such as /contact, or an https:// address.',
+          items: { type: 'string', maxLength: 160 },
+          maxItems: 12,
+        },
+        remove: {
+          type: 'array',
+          description: 'Labels of items to take out, as "Label" or "Parent > Label".',
+          items: { type: 'string', maxLength: 100 },
+          maxItems: 12,
+        },
+        rename: {
+          type: 'array',
+          description: 'Items to rename, each "Old label => New label".',
+          items: { type: 'string', maxLength: 100 },
+          maxItems: 12,
+        },
+        relink: {
+          type: 'array',
+          description: 'Items to point somewhere else, each "Label => destination", destinations as in add.',
+          items: { type: 'string', maxLength: 160 },
+          maxItems: 12,
+        },
+        order: {
+          type: 'array',
+          description: 'Top-level labels in the order wanted; items not named keep their order after them.',
+          items: { type: 'string', maxLength: 60 },
+          maxItems: 12,
+        },
+      },
+      additionalProperties: false,
+    },
+    maxPerPlan: 1,
+    freeAllowed: false,
+    // Offered only where the change has somewhere to land: a plan with version history.
+    feature: 'versioning',
+    runnerKind: 'navigation',
+    // Written by code from the plan's words: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // A copy of something the site already has (AGL-3740), made by core's
+    // `duplicateResource` — the console's own Duplicate… — so "another page
+    // like Services" is copied rather than generated again. No model, so no
+    // credits; the copy meets the plan's own counters as a create does,
+    // which is why the Free taste may ask for one.
+    op: 'duplicate',
+    noun: 'copy',
+    where: 'the list the original is on',
+    intents: [
+      'a copy of a page, component, layout, template, form, email design or workflow the site already has, as an unpublished draft to change — rather than making it again',
+    ],
+    argsSchema: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          description: 'What to copy: screen (a page), component, layout, template, form, emailDesign or workflow.',
+          enum: DUPLICABLE_HOST_RESOURCE_KINDS,
+        },
+        source: {
+          type: 'string',
+          description: 'The id of the thing to copy from the site inventory, or its exact name where the inventory does not list it.',
+          maxLength: 64,
+        },
+        name: {
+          type: 'string',
+          description: 'What the copy is called; leave it out for "Copy of" the original’s name.',
+          maxLength: DUPLICATE_NAME_MAX,
+        },
+      },
+      required: ['kind', 'source'],
+      additionalProperties: false,
+    },
+    maxPerPlan: 3,
+    freeAllowed: true,
+    runnerKind: 'duplicate',
+    // Copied by code: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // The site's settings (AGL-3748): the fields the console's settings
+    // cards write — name, search defaults, favicon, logo and social image
+    // from the media library, language, time zone, contact details and the
+    // cookie banner's mode — held to the same limits and saved live when the
+    // plan is confirmed, as a settings save is. No model, so no credits; every
+    // plan may change its own settings, so the Free taste may too. Domains,
+    // members, billing, plugins, indexing and anything with a credential are
+    // not arguments, so they cannot be asked for.
+    op: 'settings',
+    noun: 'settings change',
+    where: AI_SETTINGS_WHERE,
+    intents: [
+      'changing the site’s settings — its name, search title and description, title pattern, favicon, logo or social image (from images already in the media library), language, time zone, business name, description (tagline), phone, contact email or address, or the cookie banner’s mode — saved to the live site when the plan is confirmed',
+    ],
+    argsSchema: AI_SETTINGS_ARGS_SCHEMA,
+    maxPerPlan: 1,
+    freeAllowed: true,
+    runnerKind: 'settings',
+    // A setting has no draft state: saved, it is what the live site renders.
+    live: true,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // Organizing files already in the site's own media library (AGL-3752):
+    // the folder each is filed in, its tags, its alt text and its name, as
+    // the library's Details drawer and bulk actions write them, saved live
+    // when the plan is confirmed. Never an upload, a copy, a replacement or a
+    // deletion, and never the organization's shared library. No model, so no
+    // credits; every plan has a media library, so the Free taste may too.
+    op: 'media',
+    noun: 'media library change',
+    where: AI_MEDIA_WHERE,
+    intents: [
+      `organizing files already in the site’s media library — filing them in a folder (made if missing), adding or removing tags, renaming one, or writing alt text for an image the request describes or from the caption the library already holds — up to ${AI_MEDIA_LIMITS.files} files a change, saved live when the plan is confirmed; never uploading, copying or deleting a file`,
+    ],
+    argsSchema: AI_MEDIA_ARGS_SCHEMA,
+    maxPerPlan: 4,
+    freeAllowed: true,
+    runnerKind: 'media',
+    // A library file's details have no draft state: saved, they are what the library shows.
+    live: true,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
+    degrade: 'omit',
+  },
+  {
+    // The site's analytics and advertising tags (AGL-3751): the ids the
+    // console's Setup → Tracking card sets — Google Analytics, Tag Manager,
+    // and the Meta, Google Ads, LinkedIn, TikTok and Pinterest tags — each
+    // held to the card's own pattern, set or removed, saved live on confirm.
+    // Only public ids the person states: never a credential (Ad conversions'
+    // tokens, Zapier, webhook secrets), and never the consent banner, which
+    // still decides where every tag loads. No model, so no credits; the card
+    // is on every plan, so the Free taste may ask too.
+    op: 'tracking',
+    noun: 'tracking change',
+    where: AI_TRACKING_WHERE,
+    intents: [
+      'connecting or removing the site’s Google Analytics, Google Tag Manager, Meta pixel, Google Ads, LinkedIn Insight, TikTok pixel or Pinterest tag by the ID the person gives (never one it makes up; ask for the ID when the request has none) — saved to the live site when the plan is confirmed, loading only where a visitor’s cookie consent allows',
+    ],
+    argsSchema: AI_TRACKING_ARGS_SCHEMA,
+    maxPerPlan: 1,
+    freeAllowed: true,
+    runnerKind: 'tracking',
+    // A tag has no draft state: saved, it is on every live page.
+    live: true,
+    // An item with no usable id asks for it instead of being built (AGL-3751).
+    missingInput: aiTrackingMissingInput,
+    // Written by code from the plan's values: no model pass.
+    estimateCredits: () => 0,
     degrade: 'omit',
   },
 ]

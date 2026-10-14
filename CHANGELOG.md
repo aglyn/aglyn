@@ -9,6 +9,327 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.249 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.248...v1.0.0-beta.249)
+
+### Added
+
+- **logic:** a function parameter's choices as rows, not "value: Label" text ([AGL-3768](https://linear.app/aglyn/issue/AGL-3768))
+
+### Fixed
+
+- **theme:** a recolored accent's tint follows its new main (AGL-3764) (#1455) ([AGL-3764](https://linear.app/aglyn/issue/AGL-3764))
+- **ai:** a site's photo words are read subject first, so its hero is of its business ([AGL-3769](https://linear.app/aglyn/issue/AGL-3769), [AGL-3760](https://linear.app/aglyn/issue/AGL-3760))
+
+### Documentation
+
+- **legal:** describe Cloud Logging error reports by category, not by field ([AGL-3732](https://linear.app/aglyn/issue/AGL-3732))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **env-isolation:** exempt live Stripe in console/tenant dev+preview by owner decision ([AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+
+</details>
+
+## v1.0.0-beta.248 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.247...v1.0.0-beta.248)
+
+### Fixed
+
+- **billing:** a voided invoice no longer also raises "delivery changed nothing"
+- **billing:** a voided never-paid sign-up invoice is a named skip, not an inert delivery
+- **email:** a sending subdomain of the operator domain is not a health blocker
+
+## v1.0.0-beta.247 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.246...v1.0.0-beta.247)
+
+### Added
+
+- **ai:** the form job builds fields from mui's separate form elements
+- **email:** name a separate mui form element by the label beside it
+- **forms:** seeds, templates and presets build fields from mui's form elements
+- **tools:** backfill every saved form field to mui's separate form elements
+- **aglyn:** rebuild an all-in-one form field from mui's separate form elements
+- **mui,forms:** every piece of a form field is its own Besigner element
+
+### Fixed
+
+- **mui:** an input's outline is on its own box, so Border and Corner fields reach it
+
+### Changed
+
+- **forms:** keep the form field converter in the forms plugin, not core
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **ai:** regenerate the palette now the form field has no presets
+
+</details>
+
+## v1.0.0-beta.246 — 2026-10-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.245...v1.0.0-beta.246)
+
+### Added
+
+- **ai:** the guided site start sets the site language from the brief ([AGL-3750](https://linear.app/aglyn/issue/AGL-3750))
+- **commerce,ai:** builds and Assist set up store shipping, pickup, delivery and tax ([AGL-3749](https://linear.app/aglyn/issue/AGL-3749))
+- **ai:** site settings op for builds and Assist ([AGL-3748](https://linear.app/aglyn/issue/AGL-3748))
+- **crm,ai:** builds and Assist set up CRM pipelines, stages and custom fields ([AGL-3746](https://linear.app/aglyn/issue/AGL-3746), [AGL-3743](https://linear.app/aglyn/issue/AGL-3743))
+- **redirects,ai:** builds and Assist create, change and remove redirects ([AGL-3745](https://linear.app/aglyn/issue/AGL-3745))
+- **events-calendar,ai:** builds and Assist draft events and place the Event List ([AGL-3743](https://linear.app/aglyn/issue/AGL-3743))
+
+### Fixed
+
+- **ai:** a plan's header, navigation or footer section comes off the page ([AGL-3750](https://linear.app/aglyn/issue/AGL-3750))
+- **commerce:** the store-setup role refusal names no brand ([AGL-3749](https://linear.app/aglyn/issue/AGL-3749))
+- **commerce,ai:** only an admin or editor may change store setup through AI ([AGL-3749](https://linear.app/aglyn/issue/AGL-3749))
+- **ai:** the settings step's cache-drop reason names no brand ([AGL-3748](https://linear.app/aglyn/issue/AGL-3748))
+- **ai:** a guided blog's header link comes back when Try again posts it ([AGL-3747](https://linear.app/aglyn/issue/AGL-3747), [AGL-3660](https://linear.app/aglyn/issue/AGL-3660), [AGL-3739](https://linear.app/aglyn/issue/AGL-3739))
+- **ai:** list cards link record pages the site already serves ([AGL-3747](https://linear.app/aglyn/issue/AGL-3747), [AGL-3727](https://linear.app/aglyn/issue/AGL-3727))
+- **erase:** reap a deleted site's late beacon counters daily ([AGL-3744](https://linear.app/aglyn/issue/AGL-3744))
+
+### Changed
+
+- **ai:** a site start's header entries go in through the navigation op ([AGL-3747](https://linear.app/aglyn/issue/AGL-3747), [AGL-3728](https://linear.app/aglyn/issue/AGL-3728))
+
+### Documentation
+
+- **crm,ai:** document CRM setup by Assist builds and in the capability map ([AGL-3746](https://linear.app/aglyn/issue/AGL-3746))
+- **env-isolation:** the Stripe publishable key must be stored plain to be readable (AGL-2401) (#1415) ([AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **redirects:** the screen-create sweep names the AI redirect writer as not a door ([AGL-3745](https://linear.app/aglyn/issue/AGL-3745))
+- **erase:** the staff erasure spec mocks the host remnant reap ([AGL-3744](https://linear.app/aglyn/issue/AGL-3744))
+
+</details>
+
+## v1.0.0-beta.245 — 2026-10-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.244...v1.0.0-beta.245)
+
+### Added
+
+- **ai:** re-land the navigation menu op ([AGL-3728](https://linear.app/aglyn/issue/AGL-3728), [AGL-3737](https://linear.app/aglyn/issue/AGL-3737))
+- **ai:** navigation menu op for builds and Assist (AGL-3728) (#1398) ([AGL-3728](https://linear.app/aglyn/issue/AGL-3728))
+- **beacon:** a client error report names its coarse browser family (AGL-3732) (#1399) ([AGL-3732](https://linear.app/aglyn/issue/AGL-3732))
+- **ai:** a store's AI-built products are priced by what they are ([AGL-3733](https://linear.app/aglyn/issue/AGL-3733))
+- **ai:** dataset list cards link each record's page ([AGL-3727](https://linear.app/aglyn/issue/AGL-3727), [AGL-3475](https://linear.app/aglyn/issue/AGL-3475))
+
+### Fixed
+
+- **ai:** a paid site start's estimate counts its paid plan and first products ([AGL-3739](https://linear.app/aglyn/issue/AGL-3739))
+- **ai:** a guided blog's retried posts are published ([AGL-3739](https://linear.app/aglyn/issue/AGL-3739))
+- **ai:** a build's Try again publishes the pages it rebuilt ([AGL-3739](https://linear.app/aglyn/issue/AGL-3739), [AGL-3730](https://linear.app/aglyn/issue/AGL-3730))
+- **beacon:** a mismatch on a translated page is dropped, read when marked ([AGL-3738](https://linear.app/aglyn/issue/AGL-3738))
+- **ai:** settle a Free plan's small wall overrun instead of re-asking ([AGL-3737](https://linear.app/aglyn/issue/AGL-3737))
+- **ai:** a heading-only footer column heads the heading-less links after it ([AGL-3735](https://linear.app/aglyn/issue/AGL-3735))
+- **ai:** no hollow footer heading or column; store links under the store heading ([AGL-3735](https://linear.app/aglyn/issue/AGL-3735))
+- **sites:** the busy answer reads no hardcoded brand name ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734))
+- **sites:** a create that claimed its site is finished on retry, never a dead end ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734), [AGL-3689](https://linear.app/aglyn/issue/AGL-3689))
+- **beacon:** a cancelled request is not an unhandled failure ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734))
+
+### Reverted
+
+- **ai:** navigation menu op (AGL-3728) until its live plan eval passes ([AGL-3728](https://linear.app/aglyn/issue/AGL-3728))
+
+### Documentation
+
+- **guides:** build a newsletter sign-up band from a saved form, a live audience and a component (+ US spelling) (#1401)
+- **firewall:** the Shipping connector bypass is live, not just declared (AGL-3633) (#1403) ([AGL-3633](https://linear.app/aglyn/issue/AGL-3633))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **activity:** a replayed create's ALREADY_EXISTS is the entry, not a drop ([AGL-3734](https://linear.app/aglyn/issue/AGL-3734))
+- **ai:** the catalog card spec expects suggested prices ([AGL-3733](https://linear.app/aglyn/issue/AGL-3733))
+
+</details>
+
+## v1.0.0-beta.244 — 2026-10-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.243...v1.0.0-beta.244)
+
+### Added
+
+- **health:** a sign-up that gets a workspace and no site goes red (AGL-3725) (#1392) ([AGL-3725](https://linear.app/aglyn/issue/AGL-3725), [AGL-3724](https://linear.app/aglyn/issue/AGL-3724))
+
+### Fixed
+
+- **ai:** usage notice counts AI credits net of returns; Free copy never reads as billing ([AGL-3726](https://linear.app/aglyn/issue/AGL-3726))
+
+## v1.0.0-beta.243 — 2026-10-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.242...v1.0.0-beta.243)
+
+### Fixed
+
+- **ai:** weak product photos borrow their category's; no saunas, colognes or dispensers ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+## v1.0.0-beta.242 — 2026-10-11
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.241...v1.0.0-beta.242)
+
+### Fixed
+
+- **ai:** store product and hero photos fall back to the shop's own craft ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **console:** reCAPTCHA never renders into a container that's gone ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **ai:** baseline the Saltmarsh recordings' Pixabay tags "spelt" and "mould" ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+</details>
+
+## v1.0.0-beta.241 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.240...v1.0.0-beta.241)
+
+### Added
+
+- **ai:** a store build adds Account and policy links to the site's own layout as a draft ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** an Assist build that makes a store adds its account, cart and policy pages ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** a store's account and cart pages are unlisted, so search engines skip them ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** dataset records the AI seeds carry photos, so lists stay image-led (AGL-3616) (#1375) ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** stores built by AI get account, cart, order and policy pages ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+### Fixed
+
+- **admin:** erasing a site removes every holder's hostMemberships row
+- **console:** a deleted site's pages say it's gone instead of loading forever
+- **ai:** bare "body" is not nudity, so body lotion photos still fill ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** stock photos skip hands, sensitive imagery and unnamed products ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **commerce:** the product grid keeps equal columns on a phone ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+<details>
+<summary>Also in this release: 4 chore, 1 ci</summary>
+
+- **deps-dev:** Bump the linters group across 1 directory with 4 updates
+- **deps-dev:** Bump @types/node
+- **deps:** Bump the mui-emotion group with 2 updates
+- **deps:** Bump actions/cache from 4 to 6 in the actions group
+- **deps-dev:** Bump eslint-config-next
+
+</details>
+
+## v1.0.0-beta.240 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.239...v1.0.0-beta.240)
+
+### Fixed
+
+- **ai:** the Assist usage strip moves with the build plan's spend ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **beacon:** a hydration report names the translator that rewrote the page
+- **console:** the all sites page shows the list instead of jumping to the last site
+- **ai:** an eagerly loading image below the first is fixed in code, never refuses a page ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **staff:** row menus use the Besigner menu items, icons on the left
+
+## v1.0.0-beta.239 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.238...v1.0.0-beta.239)
+
+### Added
+
+- **ai:** the forms Aglyn AI builds write to its datasets ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** site starts create and use datasets for structured content ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **data:** a dataset draft writer and build operation for Aglyn AI ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Fixed
+
+- **ai:** a form's dataset copy uses American spellings ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** the Assist usage strip stays current while jobs spend ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **ai:** a site plan past its datasets is settled in code, never re-asked ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** another plugin's draft opens where its owner lists it ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **data:** datasets open via the record-route registry; seeded records take minted ids ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+### Documentation
+
+- **ai:** the capability map says how datasets are routed and what is left ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **ai:** map every documented capability against what Aglyn AI can do ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **ai:** 230 of 300 is below the warn line ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+
+</details>
+
+## v1.0.0-beta.238 — 2026-10-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.237...v1.0.0-beta.238)
+
+### Added
+
+- **ai:** cancel an AI job from its page, the jobs list and Assist ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **forms:** a sign-up form's submission is its opt-in (+ AI draft field list) (#1353)
+- **ai:** store sites built by AI are real storefronts ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **commerce:** a store's product page, grid and reviews read as a designer storefront ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+### Fixed
+
+- **console:** typing in Assist no longer loops renders ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616), [AGL-3423](https://linear.app/aglyn/issue/AGL-3423))
+- **ai:** the Free usage strip's lines stay inside the plugin's load budget ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **staff:** drop the duplicate live-site icon from the sites row
+- **ai:** the Assist usage strip reads the Free allowance the prompt quotes ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **ai:** estimates and the credits prompt state the real numbers ([AGL-3722](https://linear.app/aglyn/issue/AGL-3722))
+- **console:** the guided start picks Music & bands for a band's site ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** storefront icon code clears the image-sink and community sweeps ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **ai:** stock photos match what they illustrate ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a section collecting answers gets its form placed instead of failing the build ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+### Documentation
+
+- **ai:** explain canceling an AI job ([AGL-3616](https://linear.app/aglyn/issue/AGL-3616))
+- **commerce:** couriers, ShipMonk fulfillment and ad conversions are live in What's new ([AGL-3695](https://linear.app/aglyn/issue/AGL-3695))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- **linear:** the fallback ceiling is AGL-3723, read off Linear ([AGL-3723](https://linear.app/aglyn/issue/AGL-3723))
+- **spellings:** stock-photo filler words accept both cosy and favourite ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** the live site-plan eval plans the Willow Wick store and reports its storefront ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+
+</details>
+
+## v1.0.0-beta.237 — 2026-10-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.236...v1.0.0-beta.237)
+
+### Fixed
+
+- **ai:** stock photos match their captions and never repeat in a job ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+- **ai:** a store's Shop page is its storefront, with or without products ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** store products keep library photos as CDN paths, our refusals refunded ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **console:** the activity cards each open their own docs section ([AGL-3707](https://linear.app/aglyn/issue/AGL-3707))
+
+### Performance
+
+- **console:** a new visible tab takes the Firestore lease from a hidden one ([AGL-3660](https://linear.app/aglyn/issue/AGL-3660))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **remote-config:** align the template file with production
+
+</details>
+
+## v1.0.0-beta.236 — 2026-10-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/99362d865...v1.0.0-beta.236)
+
+### Fixed
+
+- **auth:** no workspace claim starts while the console is leaving ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+- **canary:** a missing workspace reports the held name and the page trace ([AGL-3690](https://linear.app/aglyn/issue/AGL-3690))
+
 ## v1.0.0-beta.235 — 2026-10-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.234...v1.0.0-beta.235)

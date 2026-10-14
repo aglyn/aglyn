@@ -16,6 +16,13 @@
  */
 'use client'
 
+import {
+  mdiAccountCancelOutline,
+  mdiAccountCheckOutline,
+  mdiAccountOutline,
+  mdiShieldAccountOutline,
+  mdiShieldOffOutline,
+} from '@aglyn/shared-data-mdi'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink,
@@ -37,7 +44,6 @@ import {
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GridColDef } from '@mui/x-data-grid'
-import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import {
   ListRowActions,
   ListTable,
@@ -47,6 +53,7 @@ import { TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import AccountAvatar from '../../../../components/account-avatar.component'
 import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
@@ -82,21 +89,29 @@ import {
   STAFF_ROLES,
   USER_LIST_COLUMN_SORTS,
   USER_LIST_FILTER_FIELDS,
+  USER_LIST_DEFAULT_SORT,
   USER_LIST_FILTER_HEADERS,
   USER_LIST_FILTER_OPTIONS,
 } from '../../../../utils/list-filters'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
-import { formatStaffTimestamp } from '../../../../utils/staff-timestamps'
+import {
+  formatStaffActivity,
+  formatStaffTimestamp,
+} from '../../../../utils/staff-timestamps'
 
 interface AdminUser {
   uid: string
   email: string | null
   displayName: string | null
+  /** The profile photo, when the account has one (AGL-3660). */
+  photoUrl?: string | null
   disabled: boolean
   staff: boolean
   staffRole: string | null
   createdAt: string | null
   lastSignInAt: string | null
+  /** The later of the last sign-in and the last session refresh. */
+  lastActiveAt?: string | null
   providers: string[]
   /**
    * GCIP tenant id when the account lives in an enterprise SSO pool, else
@@ -133,7 +148,7 @@ const poolLabel = (tenantId: string | null) =>
  * The filterable fields that get a column. The rest of
  * `USER_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
  */
-const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt']
+const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt', 'lastActiveAt']
 /** The account fields the panel shows as selects over their choices. */
 const USER_SELECT_FIELDS = Object.keys(USER_LIST_FILTER_OPTIONS)
 
@@ -202,7 +217,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   }>({
     search: '',
     clauses: [],
-    sort: null,
+    // Newest account first until a header says otherwise (AGL-3660).
+    sort: USER_LIST_DEFAULT_SORT,
   })
   /** What the route could not answer, and why; none of it is applied. */
   const [refused, setRefused] = useState<ListQueryRefusal[]>([])
@@ -343,7 +359,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * the complete read it already makes for a filter, and pages that. A new
    * order is a new query, restarted at page one like a new filter.
    */
-  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(null)
+  const [askedSort, setAskedSort] = useState<ListQuerySort | null>(USER_LIST_DEFAULT_SORT)
   const onSortChange = useCallback(
     (next: ListQuerySort | null) => {
       setAskedSort(next)
@@ -404,6 +420,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   )
   const columnSort = useListColumnSort<AdminUser>({
     sorts: USER_LIST_COLUMN_SORTS,
+    // Created, newest first, is the route's order when none is asked
+    // (AGL-3660), so its header has nowhere to clear to.
+    defaultSort: USER_LIST_DEFAULT_SORT,
     sort: askedSort,
     onSortChange,
     rows: window.shown,
@@ -467,7 +486,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       const confirmed = await confirm({
         title: `${description}?`,
         description: `${record.email ?? record.uid} — this is audited.`,
-        confirmationText: 'Confirm',
+        // The button names the action, not a bare "Confirm".
+        confirmationText: description,
       })
         .then(() => true)
         .catch(() => false)
@@ -541,6 +561,13 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             useFlexGap
             sx={{ flexWrap: 'wrap', alignItems: 'center', height: '100%' }}
           >
+            {/* The profile photo, or initials (AGL-3660). */}
+            <AccountAvatar
+              photoUrl={row.photoUrl}
+              name={row.displayName}
+              email={row.email}
+              size={24}
+            />
             {/* Detail page (AGL-244); ids stay off the email line — copy
                 them from the chip (AGL-360). A real anchor, so it can be
                 middle-clicked or copied; the row's own click opens the same
@@ -682,22 +709,65 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           </Typography>
         ),
       },
+      {
+        /*
+         * Last activity: the later of the last sign-in and the last time the
+         * session renewed its token (about hourly while the console is open)
+         * — `accountLastActiveAt`. Sorted by the route over the whole
+         * directory, like every other column here.
+         */
+        field: 'lastActiveAt',
+        headerName: 'Last activity',
+        description:
+          'The later of the last sign-in and the last session refresh (about hourly while the console is open).',
+        flex: 1,
+        minWidth: 200,
+        type: 'date',
+        valueGetter: (_value, row: any) =>
+          row.lastActiveAt ? new Date(row.lastActiveAt) : null,
+        renderCell: ({ row }: any) => (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            title={formatStaffTimestamp(row.lastActiveAt)}
+          >
+            {formatStaffActivity(row.lastActiveAt)}
+          </Typography>
+        ),
+      },
       listActionsColumn((row: any) => (
+        /*
+         * No quick icon (Zach, 2026-10-09: "confusing menu items and
+         * duplicate icon"). Clicking the row already opens the account in
+         * this tab, and a quick action is restated as the menu's first entry
+         * by `ListRowActions` — so the old `↗ View` sat beside the menu AND
+         * inside it, with the new-tab glyph on both sides of the label. The
+         * menu now carries the one new-tab entry, marked once, and every
+         * other entry says what it does to the account; each confirms first.
+         */
         <ListRowActions
           label={row.email ?? row.uid}
-          quick={{
-            icon: mdiOpenInNew.path,
-            label: 'View',
-            to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
-          }}
           items={[
             {
+              key: 'details',
+              label: 'User details',
+              icon: { path: mdiAccountOutline.path },
+              href: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
+              external: true,
+            },
+            {
               key: 'staff',
-              label: row.staff ? 'Revoke staff' : 'Grant staff',
+              label: row.staff ? 'Revoke staff access' : 'Grant staff access',
+              icon: {
+                path: row.staff
+                  ? mdiShieldOffOutline.path
+                  : mdiShieldAccountOutline.path,
+              },
+              destructive: Boolean(row.staff),
               onClick: handleAction(
                 row,
                 row.staff ? 'revokeStaff' : 'grantStaff',
-                row.staff ? 'Revoke staff' : 'Grant staff',
+                row.staff ? 'Revoke staff access' : 'Grant staff access',
               ),
               disabled: busy || notSuper,
               disabledReason: notSuper
@@ -706,7 +776,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             },
             {
               key: 'disable',
-              label: row.disabled ? 'Enable' : 'Disable',
+              label: row.disabled ? 'Enable account' : 'Disable account',
+              icon: {
+                path: row.disabled
+                  ? mdiAccountCheckOutline.path
+                  : mdiAccountCancelOutline.path,
+              },
               destructive: !row.disabled,
               onClick: handleAction(
                 row,
@@ -743,9 +818,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Accounts'}
             help={docsHelp('staffConsole', {
-              anchor: '#whats-there',
-              excerpt:
-                'Grant or revoke staff roles and disable accounts — audited, with search and column filters that reach every pool, not just the loaded page.',
+              anchor: '#users-accounts',
             })}
             contentGutterX
             contentGutterY

@@ -129,11 +129,7 @@ export function ProfileImageCard() {
   return (
     <CardDisplay
       header={'Profile image'}
-      help={docsHelp('account', {
-        excerpt:
-          'Your personal avatar across the console — the app bar, ' +
-          'comments, and team lists.',
-      })}
+      help={docsHelp('manageAccount', { anchor: '#profile-image' })}
       contentGutterX
       contentGutterY
     >

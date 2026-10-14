@@ -71,6 +71,7 @@ import {
   sendEmailReplyIneligibility,
 } from '../model/host-actions'
 import { draftPlaceholderIn } from '@aglyn/aglyn/app-utils/draft-placeholders'
+import { ElementSelectorField } from './element-selector-field.component'
 
 /** A task's priorities, by meaning, as the create-task step offers them (AGL-3517). */
 const TASK_PRIORITY_OPTIONS: ReadonlyArray<{ value: CrmTaskPriority; label: string }> = [
@@ -342,6 +343,11 @@ export interface AutomationStepFieldsProps {
    * can be a transactional reply. Absent, the email step shows no switch.
    */
   replyContext?: { event: string | null | undefined; afterWait: boolean }
+  /**
+   * The site an element step's "Pick element" opens (AGL-3758). Absent, an
+   * element step takes a custom selector only.
+   */
+  siteHostId?: string
 }
 
 /**
@@ -367,6 +373,7 @@ export function AutomationStepFields({
   onSteps,
   fields,
   replyContext,
+  siteHostId,
 }: AutomationStepFieldsProps) {
   const {
     workflowOptions,
@@ -633,41 +640,40 @@ export function AutomationStepFields({
               ))}
             </TextField>
           ) : step.type === 'stickyNav' ? (
-            <TextField
-              label="Selector (default: header/nav)"
+            <ElementSelectorField
+              label="Bar"
+              emptyLabel="Header or nav"
+              hostId={siteHostId}
               value={(step as any).selector ?? ''}
-              onChange={(event) =>
+              onChange={(selector) =>
                 patch((previous) => ({
                   ...previous,
                   steps: previous.steps.map((s, index2) =>
                     index2 === index
-                      ? { ...s, selector: event.target.value }
+                      ? { ...s, selector }
                       : s,
                   ),
                 }))
               }
-              size="small"
-              sx={{ flex: 1 }}
             />
           ) : step.type === 'addClass' ||
             step.type === 'removeClass' ||
             step.type === 'toggleClass' ? (
             <>
-              <TextField
-                label="CSS selector"
+              <ElementSelectorField
+                label="Element"
+                hostId={siteHostId}
                 value={(step as any).selector ?? ''}
-                onChange={(event) =>
+                onChange={(selector) =>
                   patch((previous) => ({
                     ...previous,
                     steps: previous.steps.map((s, index2) =>
                       index2 === index
-                        ? { ...s, selector: event.target.value }
+                        ? { ...s, selector }
                         : s,
                     ),
                   }))
                 }
-                size="small"
-                sx={{ flex: 1 }}
               />
               <TextField
                 label="Class name"
@@ -691,46 +697,42 @@ export function AutomationStepFields({
             step.type === 'toggleElement' ||
             step.type === 'playVideo' ? (
             // Element choreography (AGL-562) and Play a video
-            // (AGL-2867). The besigner's builder offers an element
-            // picker; here the CSS selector is the escape hatch (node
-            // targets use [data-aglyn="leaf:…"]).
-            <TextField
-              label="CSS selector"
+            // (AGL-2867), picked on the live page (AGL-3758).
+            <ElementSelectorField
+              label="Element"
+              hostId={siteHostId}
               placeholder='[data-aglyn="leaf:…"] or .my-class'
               value={(step as any).selector ?? ''}
-              onChange={(event) =>
+              onChange={(selector) =>
                 patch((previous) => ({
                   ...previous,
                   steps: previous.steps.map((s, index2) =>
                     index2 === index
-                      ? { ...s, selector: event.target.value }
+                      ? { ...s, selector }
                       : s,
                   ),
                 }))
               }
-              size="small"
-              sx={{ flex: 1 }}
             />
           ) : step.type === 'scrollTo' ? (
             // Scroll to element (AGL-2867): the target, how the page
             // moves, and the room left above it for a sticky header.
             <>
-              <TextField
-                label="CSS selector"
+              <ElementSelectorField
+                label="Element"
+                hostId={siteHostId}
                 placeholder='[data-aglyn="leaf:…"] or .my-class'
                 value={step.selector ?? ''}
-                onChange={(event) =>
+                onChange={(selector) =>
                   patch((previous) => ({
                     ...previous,
                     steps: previous.steps.map((s, index2) =>
                       index2 === index
-                        ? { ...s, selector: event.target.value }
+                        ? { ...s, selector }
                         : s,
                     ),
                   }))
                 }
-                size="small"
-                sx={{ flex: 1 }}
               />
               <TextField
                 select
@@ -788,22 +790,21 @@ export function AutomationStepFields({
             // `aria-*` and `data-*` names, so the field says so while
             // it holds any other, as the interaction builder's does.
             <>
-              <TextField
-                label="CSS selector"
+              <ElementSelectorField
+                label="Element"
+                hostId={siteHostId}
                 placeholder='[data-aglyn="leaf:…"] or .my-class'
                 value={step.selector ?? ''}
-                onChange={(event) =>
+                onChange={(selector) =>
                   patch((previous) => ({
                     ...previous,
                     steps: previous.steps.map((s, index2) =>
                       index2 === index
-                        ? { ...s, selector: event.target.value }
+                        ? { ...s, selector }
                         : s,
                     ),
                   }))
                 }
-                size="small"
-                sx={{ flex: 1 }}
               />
               <TextField
                 label="Attribute"

@@ -21,7 +21,10 @@ import {
   fulfillmentLineQuantities,
   orderFulfillmentsEditable,
   remainingFulfillmentLines,
+  parseShippingCostInput,
   resolveFulfillmentLines,
+  shippingCostCentsProblem,
+  SHIPPING_COST_MAX_CENTS,
   statusFromFulfillments,
 } from './order-fulfillment'
 
@@ -151,4 +154,38 @@ it('keeps fulfillments open to edits only while the order is open', () => {
   expect(orderFulfillmentsEditable({ status: 'fulfilled' })).toBe(true)
   expect(orderFulfillmentsEditable({ status: 'delivered' })).toBe(false)
   expect(orderFulfillmentsEditable({ status: 'refunded' })).toBe(false)
+})
+
+describe('a hand-entered shipping cost (AGL-3705)', () => {
+  it('reads an amount in the store currency as whole minor units', () => {
+    expect(parseShippingCostInput('8.45', 'USD')).toEqual({ cents: 845 })
+    expect(parseShippingCostInput('$12.5', 'usd')).toEqual({ cents: 1250 })
+    expect(parseShippingCostInput('1,250.00', 'EUR')).toEqual({ cents: 125000 })
+    expect(parseShippingCostInput('12', 'USD')).toEqual({ cents: 1200 })
+    expect(parseShippingCostInput('.5', 'USD')).toEqual({ cents: 50 })
+    // A zero-decimal currency has no minor unit to multiply in.
+    expect(parseShippingCostInput('850', 'JPY')).toEqual({ cents: 850 })
+    expect(parseShippingCostInput('850.5', 'JPY')).toEqual({ error: 'Enter a whole amount, like 850' })
+  })
+
+  it('reads an empty field as not known, and zero as free', () => {
+    expect(parseShippingCostInput('', 'USD')).toEqual({ cents: null })
+    expect(parseShippingCostInput('   ', 'USD')).toEqual({ cents: null })
+    expect(parseShippingCostInput('0', 'USD')).toEqual({ cents: 0 })
+  })
+
+  it('refuses a negative, a word, too many decimals and an absurd amount', () => {
+    expect(parseShippingCostInput('-3', 'USD')).toEqual({ error: 'Shipping cost cannot be negative' })
+    expect(parseShippingCostInput('abc', 'USD')).toEqual({ error: 'Enter an amount like 8.45' })
+    expect(parseShippingCostInput('8.456', 'USD')).toEqual({ error: 'Enter an amount like 8.45' })
+    expect(parseShippingCostInput('10000.01', 'USD')).toEqual({ error: 'Shipping cost is too large' })
+  })
+
+  it('the server bound: absent is fine, a present cost is whole, non-negative cents', () => {
+    for (const ok of [undefined, null, '', 0, 845, SHIPPING_COST_MAX_CENTS]) expect(shippingCostCentsProblem(ok)).toBeNull()
+    expect(shippingCostCentsProblem(8.45)).toBe('Shipping cost must be a whole number of cents')
+    expect(shippingCostCentsProblem('845')).toBe('Shipping cost must be a whole number of cents')
+    expect(shippingCostCentsProblem(-1)).toBe('Shipping cost cannot be negative')
+    expect(shippingCostCentsProblem(SHIPPING_COST_MAX_CENTS + 1)).toBe('Shipping cost is too large')
+  })
 })

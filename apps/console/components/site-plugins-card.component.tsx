@@ -203,13 +203,7 @@ export default function SitePluginsCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header="Site plugins"
-      help={docsHelp('plugins', {
-        anchor: '#how-plugins-run',
-        excerpt:
-          'Narrow which of the workspace-enabled plugins run on this site ' +
-          '— a disabled plugin disappears from its navigation, editor, ' +
-          'published pages, and API.',
-      })}
+      help={docsHelp('installYourFirstPlugin', { anchor: '#site-plugins' })}
       contentGutterX
       contentGutterY
     >

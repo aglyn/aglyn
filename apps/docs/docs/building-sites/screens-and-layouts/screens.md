@@ -48,6 +48,50 @@ publish.
   so you can unpublish them one by one if that's what you meant. A scheduled
   unpublish works the same way.
 
+### Slug {#slug}
+
+A page's **Slug** is the path it is served at — `/` for the home page, `about` for
+`/about` — up to 60 characters. Publishing registers it in the routing map, and a nested
+page puts its parent's path in front of its own. Leave it empty to keep the page
+unpublished.
+
+## The Pages list {#the-pages-list}
+
+A site's **Pages** list shows every page in its hierarchy, with when each was published,
+and is where you add, arrange and open them. Drag a page to reorder or nest it, and use
+a row's **⋮** menu to **View details**, **Edit in besigner**, **Open live page**, add
+**Translations…**, **Save as template**, **Unpublish** or **Delete** it. The plan readout
+opposite the heading shows how many pages your plan allows — see
+[what counts](#what-counts-against-your-screen-allowance).
+
+## A page's detail view {#page-detail}
+
+**View details** opens one page's settings without opening its design: its basic
+details, publishing, who can see it, what links to it, its SEO, versions, traffic and
+recent activity. **Open Besigner** at the top of the page is where you change how it
+looks.
+
+### Basic Details {#basic-details-card}
+
+The **Basic Details** card is the page's record: its **Page ID**, **Display name** and
+**Description**, and when it was **created**, **published** and **last updated**. The
+published date stays empty until the page goes live. To change the display name or
+description, use **Edit** at the top of the detail view.
+
+### Used by {#used-by}
+
+The **Used by** card finds everything that links to this page before you move, unpublish
+or delete it: press **Find where this is used** to scan the published version of every
+page and layout, every component, the pages nested under this one, and the collections
+that render their pages through it. Links typed as a plain address rather than picked as
+a page are not found, because nothing records which page they meant.
+
+### Raw JSON {#raw-json}
+
+The **Raw JSON** card shows the page document exactly as it is stored — a read-only view
+for developers checking what a page holds. It is closed by default; press the chevron
+to open it.
+
 ## Page groups {#page-groups}
 
 A **group** is a folder in the pages list. It holds pages and is not one: it has no

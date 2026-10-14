@@ -27,13 +27,15 @@
  * the URL** — or, for the negative cases, that it is absent.
  */
 
-import { pageVideoObjects } from '@aglyn/aglyn/server'
+import { expandCollectionEntries, pageVideoObjects } from '@aglyn/aglyn/server'
 import { createTheme } from '@mui/material/styles'
 import { unstable_styleFunctionSx as styleFunctionSx } from '@mui/system'
 
 import {
   buildCollectionEntryFallbackNodes,
   buildCollectionFallbackNodes,
+  COLLECTION_LIST_COVER_RATIO,
+  COLLECTION_LIST_COVER_WIDTHS,
 } from './collection-fallback-nodes'
 
 const COVER_ID = 'cfb__cover'
@@ -277,7 +279,7 @@ describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
     // itself too would leave a hole under the pager that no authored page has.
     const nodes = list({ pagination: paged })
     expect(nodes[PAGER_ID].props.sx.paddingBottom).toBeUndefined()
-    expect(nodes['cfb__entries'].props.sx).toBeUndefined()
+    expect(css(nodes['cfb__entries'].props.sx).paddingBottom).toBeUndefined()
   })
 
   it('does NOT let the pager offset itself on top of the gap', () => {
@@ -477,5 +479,93 @@ describe('the built-in entry page plays a featured video (AGL-2956)', () => {
     for (const coverVideo of ['', '   ', 'media:not a ref']) {
       expect(article({ ...film, coverVideo })).toEqual(cover)
     }
+  })
+})
+
+/**
+ * The /blog index shows each post's cover (AGL-3676, Zach 2026-10-08).
+ *
+ * The built-in listing is the page a blog with no list template answers at
+ * `/{collection}` — every guided start's blog. Its cards were a title, a date
+ * and an excerpt; they now lead with the post's cover, at one ratio across a
+ * grid, lazy-loaded and sized to a column, and a post with no cover keeps the
+ * tile rather than collapsing its card.
+ */
+describe('the built-in listing leads each card with its cover (AGL-3676)', () => {
+  const theme = createTheme()
+  const css = (sx: unknown): Record<string, unknown> =>
+    styleFunctionSx({ theme, sx } as any) as Record<string, unknown>
+
+  const list = () =>
+    buildCollectionFallbackNodes({
+      collection,
+      entries: [{ title: 'Post', slug: 'post' }],
+      entry: null,
+    }) as Record<string, any>
+
+  it('puts the cover first in the card, an Image bound to the post', () => {
+    const nodes = list()
+    expect(nodes['cfb__item'].nodes[0]).toBe('cfb__item-cover')
+    expect(nodes['cfb__item'].nodes).toEqual([
+      'cfb__item-cover',
+      'cfb__item-date',
+      'cfb__item-title',
+      'cfb__item-excerpt',
+      'cfb__item-link',
+    ])
+    const cover = nodes['cfb__item-cover']
+    expect(cover).toMatchObject({ componentId: 'image', pluginId: 'mui', parentId: 'cfb__item' })
+    expect(cover.props).toMatchObject({
+      src: '{{entry.coverImage}}',
+      // Alt text from the post: its title.
+      alt: '{{entry.title}}',
+      href: '{{entry.url}}',
+      objectFit: 'cover',
+      width: '100%',
+      loading: 'lazy',
+    })
+  })
+
+  it('gives every cover one ratio and a tint, so a post without one keeps its tile', () => {
+    const sx = css(list()['cfb__item-cover'].props.sx)
+    expect(sx['aspectRatio']).toBe(COLLECTION_LIST_COVER_RATIO)
+    expect(sx['backgroundColor']).toBe(theme.palette.action.hover)
+  })
+
+  it('sizes the cover to its column: a phone’s width, half from sm, a third from md', () => {
+    expect(list()['cfb__item-cover'].props.renderedWidths).toEqual(COLLECTION_LIST_COVER_WIDTHS)
+    expect(COLLECTION_LIST_COVER_WIDTHS).toEqual({ xs: 100, sm: 50, md: 33.3 })
+  })
+
+  it('lays the cards in a grid of one, two and three columns, with no Stack margins between them', () => {
+    const entries = list()['cfb__entries']
+    expect(entries.props.spacing).toBe(0)
+    expect(entries.props.sx).toMatchObject({
+      display: 'grid',
+      gridTemplateColumns: {
+        xs: '1fr',
+        sm: 'repeat(2, minmax(0, 1fr))',
+        md: 'repeat(3, minmax(0, 1fr))',
+      },
+    })
+  })
+
+  it('fills each card with its own post’s cover, and an empty source where a post has none', () => {
+    const expanded = expandCollectionEntries(list() as never, {
+      blog: {
+        slug: 'blog',
+        entries: [
+          { title: 'With a cover', slug: 'with', coverImage: 'media:host-1/cover-a' },
+          { title: 'Without', slug: 'without' },
+        ] as never,
+      },
+    }, 'blog') as Record<string, any>
+    const covers = Object.values(expanded)
+      .filter((node: any) => node?.componentId === 'image' && node.$id !== 'cfb__item-cover')
+      .map((node: any) => [node.props.src, node.props.alt, node.props.href])
+    expect(covers).toEqual([
+      ['media:host-1/cover-a', 'With a cover', '/blog/with'],
+      ['', 'Without', '/blog/without'],
+    ])
   })
 })

@@ -33,6 +33,7 @@ import {
 import { classifyOrgRevenueState } from '../../../../utils/server/revenue-report'
 import {
   emailUnverifiedResponse,
+  countUsersAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
@@ -80,7 +81,7 @@ async function handler(request: Request): Promise<Response> {
     // The marketplace's purchases and its refund-reversal recovery queue are
     // the marketplace's own collection, drawn by its widget in the page's
     // `staffOverview` zone from its own staff route (AGL-3080).
-    const [orgsSnapshot, hostsCount] = await Promise.all([
+    const [orgsSnapshot, hostsCount, usersCount] = await Promise.all([
       firestore
         .collection('orgs')
         .orderBy('createdAt', 'desc')
@@ -89,6 +90,12 @@ async function handler(request: Request): Promise<Response> {
         // Orgs created before createdAt existed still count.
         .catch(() => firestore.collection('orgs').limit(500).get()),
       firestore.collection('hosts').count().get(),
+      // The Users list's own directory (Firebase Auth, every pool). A failed
+      // read must not blank the other cards, so it reads as unknown.
+      countUsersAcrossPools().catch((error) => {
+        console.error('counting users failed', error)
+        return null
+      }),
     ])
     // Org usage rollups live at orgs/{orgId}/usage/{month} (AGL-238) —
     // direct doc gets per fetched org, no collection-group index needed.
@@ -172,12 +179,9 @@ async function handler(request: Request): Promise<Response> {
           // plan plus a custom price / comped marker — listing it as "agency"
           // is how the staff table kept contradicting the org's own Billing
           // page.
-          plan:
-            (isEnterpriseOrg(billing)
-              ? 'enterprise'
-              : plan || effectivePlan !== 'free'
-                ? effectivePlan
-                : '') || null,
+          // An org that never stored a plan resolves to Free (it gets the Free
+          // entitlements), so it reads `free` rather than "no plan".
+          plan: isEnterpriseOrg(billing) ? 'enterprise' : effectivePlan,
           createdAt: createdMs,
         })
       }
@@ -276,6 +280,8 @@ async function handler(request: Request): Promise<Response> {
         orgs: orgsSnapshot.size,
         signups30d,
         hosts: hostsCount.data().count,
+        users: usersCount?.count ?? null,
+        usersTruncated: usersCount?.truncated ?? false,
         mrrUsd: Math.round(mrrUsd * 100) / 100,
         payingOrgs,
         compedOrgs,

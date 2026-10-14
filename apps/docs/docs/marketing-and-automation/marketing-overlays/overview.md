@@ -144,22 +144,30 @@ Your organization has its own **Marketing** page beside CRM, with the same secti
 site's — Overview, Campaigns, Conversions, Overlays and A/B testing — each answering for
 every site at once. It opens on **Overview**.
 
-- **Overview** leads with the email figures for every site's sends, then lists your sites
-  one per row with their overlay views and clicks and their running and decided A/B tests,
-  totaled underneath. A site's name opens its own Overview, which also counts the overlays
-  live right now. The table covers your first 25 sites; a site past that has its figures on
-  its own page.
-- **Overlays** lists every site's bars and popups, grouped by site in the order each site
-  shows them, with whether that site's default bar and popup are on. Switch an overlay on
-  or off right from the list. Creating and editing happen on the site — **New overlay**
-  asks which site, and **Edit** opens that site's Overlays section — because an overlay is
-  written against one site's pages, variables and order. Ten sites show at a time, with up
-  to ten overlays each; a site with more says so and links to its own list.
-
 These figures and lists are read when you open the section rather than kept live, so open
 it again to see a change made somewhere else. Without the `marketingOverlays` entitlement
 the organization's **Overlays** section is locked, and the Overview leaves the overlay
 columns out.
+
+### Every site at a glance {#org-marketing-overview}
+
+The organization's **Overview** leads with the email figures for every site's sends, then
+lists your sites one per row with their overlay views and clicks and their running and
+decided A/B tests, totaled underneath.
+
+A site's name opens its own Overview, which also counts the overlays live right now. The
+table covers your first 25 sites; a site past that has its figures on its own page.
+
+### Every site's overlays {#org-overlays}
+
+The organization's **Overlays** section lists every site's bars and popups, grouped by
+site, and switches any of them on or off right from the list. Each site's overlays are in
+the order that site shows them, with whether its default bar and popup are on.
+
+Creating and editing happen on the site — **New overlay** asks which site, and **Edit**
+opens that site's Overlays section — because an overlay is written against one site's
+pages, variables and order. Ten sites show at a time, with up to ten overlays each; a
+site with more says so and links to its own list.
 
 ## Related
 

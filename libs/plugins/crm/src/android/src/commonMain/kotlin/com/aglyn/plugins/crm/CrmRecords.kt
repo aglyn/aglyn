@@ -259,6 +259,8 @@ fun customFields(kind: CrmKind, definitions: List<CustomFieldDefinition>): List<
       def.label,
       when (def.type) {
         "number" -> FieldKind.NUMBER
+        // An amount in minor units, as a deal's (AGL-3756).
+        "currency" -> FieldKind.MONEY
         "date" -> FieldKind.DATE
         "select" -> FieldKind.SELECT
         "checkbox" -> FieldKind.TOGGLE
@@ -273,6 +275,7 @@ fun customFields(kind: CrmKind, definitions: List<CustomFieldDefinition>): List<
       "custom.${def.key}",
       when (def.type) {
         "number" -> Stored.NUMBER
+        "currency" -> Stored.CENTS
         "date" -> Stored.DAY
         "checkbox" -> Stored.BOOL
         else -> Stored.TEXT

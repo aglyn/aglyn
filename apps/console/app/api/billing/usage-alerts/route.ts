@@ -267,6 +267,11 @@ interface QuotaAlertCheck {
   approach: string
   /** Replaces the generic 100% title (AGL-2898). */
   reachedTitle?: string
+  /**
+   * At 100%, the notice links the plans page and the email says "Upgrade
+   * for more" — a band only an upgrade adds to, such as Free's AI credits.
+   */
+  reachedLinksUpgrade?: boolean
 }
 
 /**
@@ -852,6 +857,13 @@ async function handler(request: Request): Promise<Response> {
             orgSlug: org.get('slug') as string,
           })
         : '/org/billing'
+      // The PLAN section — where an upgrade is made — for a notice whose only
+      // way forward is one.
+      const plansLink = (org.get('slug') as string | undefined)
+        ? buildRoute(Route.MANAGE_BILLING, {
+            orgSlug: org.get('slug') as string,
+          })
+        : '/org/billing'
 
       // `guards` and `guardUpdates` are declared at the TOP of this loop body
       // (AGL-2420) — the seed decision needs the guard map before any check
@@ -899,7 +911,13 @@ async function handler(request: Request): Promise<Response> {
         cadence: check.cadence,
         outcome: check.outcome,
         lead: () =>
-          `${workspace.subject} has ${check.cadence === 'monthly' ? 'used ' : ''}` +
+          // At the band, a plugin may replace the figures: on a band nothing
+          // is sold past, "442 — more than the 300 your plan includes" reads
+          // like a charge that cannot happen.
+          check.reachedLead &&
+          usageAlertThreshold(check.used, check.limit) >= 100
+            ? `${workspace.subject} ${check.reachedLead}`
+            : `${workspace.subject} has ${check.cadence === 'monthly' ? 'used ' : ''}` +
           usagePhrase({
             used: check.used,
             limit: check.limit,
@@ -912,6 +930,7 @@ async function handler(request: Request): Promise<Response> {
         reached: check.reached,
         approach: check.approach,
         ...(check.reachedTitle ? { reachedTitle: check.reachedTitle } : {}),
+        ...(check.reachedLinksUpgrade ? { reachedLinksUpgrade: true } : {}),
       })
       const checks: QuotaAlertCheck[] = [
         {
@@ -1349,6 +1368,10 @@ async function handler(request: Request): Promise<Response> {
         const alertBody =
           `${await check.lead()} ` +
           (threshold >= 100 ? check.reached : check.approach)
+        // An allowance only an upgrade adds to links the plans page at the
+        // band, so "Upgrade for more" is one click from the notice.
+        const linksUpgrade = threshold >= 100 && check.reachedLinksUpgrade === true
+        const alertLink = linksUpgrade ? plansLink : billingLink
         // `skipEmail` (AGL-3431): the email below IS this notice's email. An
         // admin who switched billing email on was otherwise mailed twice for
         // one crossing — once by the notification channel, once here.
@@ -1363,7 +1386,7 @@ async function handler(request: Request): Promise<Response> {
             // Billing is org-scoped now (AGL-621/644); links are frozen at
             // write time, so emit canonical and let the reader repair the
             // legacy ones.
-            link: billingLink,
+            link: alertLink,
           },
           { skipEmail: true },
         )
@@ -1379,8 +1402,9 @@ async function handler(request: Request): Promise<Response> {
           orgId: org.id,
           subject: alertTitle,
           text:
-            `${alertBody}\n\nSee your usage and billing: ` +
-            `${consoleOrigin()}${billingLink}`,
+            `${alertBody}\n\n` +
+            (linksUpgrade ? 'Upgrade for more: ' : 'See your usage and billing: ') +
+            `${consoleOrigin()}${alertLink}`,
           context: 'usage-alert',
         })
         alerted.push({

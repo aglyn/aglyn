@@ -149,11 +149,11 @@ function BillingEntry() {
   return (
     <DashboardLayout
       disableDefaultBreadcrumb
-      // `#payments` and not the bare topic (which the org-scoped billing page
-      // already owns): the reader who lands here followed a payment problem,
-      // so the heading about payment methods and failed payments is the one
-      // they are standing in front of.
-      help={{ topic: 'billing', anchor: '#payments' }}
+      // Its own heading (AGL-3707): the reader who lands here followed a
+      // billing link that names no workspace, and the section about that
+      // link — one workspace goes straight through, several are a choice —
+      // is the one they are standing in front of.
+      help={{ topic: 'billing', anchor: '#billing-link' }}
       breadcrumbItems={[{ children: 'Billing' }]}
       header={{
         children: 'Billing',

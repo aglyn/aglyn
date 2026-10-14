@@ -71,7 +71,7 @@ describe('expandRepeatables reference hops (AGL-180)', () => {
     expect((result[label] as any).props.children).toBe('Hello by Ada')
   })
 
-  it('resolves multi-reference arrays and leaves unknown hops as tokens', () => {
+  it('resolves multi-reference arrays and prints nothing for an unknown hop', () => {
     const nodes = baseNodes()
     nodes['label'].props.children = '{{item.tags.name}} / {{item.ghost.name}}'
     const posts = {
@@ -88,7 +88,7 @@ describe('expandRepeatables reference hops (AGL-180)', () => {
     const list = result['list'] as any
     const label = (result[list.nodes[0]] as any).nodes[0]
     expect((result[label] as any).props.children).toBe(
-      'red, blue / {{item.ghost.name}}',
+      'red, blue / ',
     )
   })
 })
@@ -110,7 +110,7 @@ describe('expandRepeatables', () => {
     expect((result[first] as any).props.direction).toBe('row')
   })
 
-  it('honors repeatLimit and keeps unknown item fields literal', () => {
+  it('honors repeatLimit and prints nothing for a field the record lacks (AGL-3616)', () => {
     const nodes = baseNodes()
     nodes.list.props.repeatLimit = 1
     nodes.label.props.children = '{{item.name}} ({{item.missing}})'
@@ -118,7 +118,64 @@ describe('expandRepeatables', () => {
     const list = result['list'] as any
     expect(list.nodes).toHaveLength(1)
     const label = (result[(result[list.nodes[0]] as any).nodes[0]] as any)
-    expect(label.props.children).toBe('Ada ({{item.missing}})')
+    expect(label.props.children).toBe('Ada ()')
+  })
+
+  /**
+   * AGL-3616: low-tide-hollow.aglyn.app's tour dates drew `{{ITEM.VENUE}}`
+   * as each card's eyebrow — its records name no venue yet. An element that
+   * is only a binding its record leaves empty is left out of that copy; a
+   * record that fills the field still draws it.
+   */
+  it('leaves out an element whose whole text is a binding the record leaves empty', () => {
+    const nodes = baseNodes()
+    nodes.row.nodes = ['kicker', 'label']
+    nodes.kicker = {
+      $id: 'kicker',
+      componentId: 'muiTypography',
+      parentId: 'row',
+      props: { children: ' {{item.venue}} ', variant: 'overline' },
+    }
+    nodes.label.props.children = '{{item.name}}'
+    const shows = {
+      records: [
+        { name: 'Asheville show', venue: '' },
+        { name: 'Durham show' },
+        { name: 'Boone show', venue: 'The Hollow' },
+      ],
+    }
+    const result = expandRepeatables(nodes, { Team: shows }) as any
+    const rows = result.list.nodes.map((id: string) => result[id])
+    const texts = rows.map((row: any) =>
+      row.nodes.map((id: string) => result[id].props.children),
+    )
+    expect(texts).toEqual([
+      // An empty string is a value the record holds: printed as nothing, and
+      // the element left out all the same.
+      ['Asheville show'],
+      ['Durham show'],
+      [' The Hollow ', 'Boone show'],
+    ])
+    expect(JSON.stringify(rows.map((row: any) => row.nodes.map((id: string) => result[id])))).not.toContain('{{')
+    expect(result['rep__list__0__kicker']).toBeUndefined()
+    expect(result['rep__list__2__kicker'].parentId).toBe('rep__list__2__row')
+  })
+
+  it('leaves out a self-scoped copy whose whole text is an empty binding', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['tag'] },
+      tag: {
+        $id: 'tag',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { repeatDataset: 'Team', children: '{{item.role}}' },
+      },
+    } as any
+    const result = expandRepeatables(nodes, {
+      Team: { records: [{ name: 'Ada' }, { name: 'Grace', role: 'Admiral' }] },
+    }) as any
+    expect(result.root.nodes).toEqual(['rep__tag__1__tag'])
+    expect(result['rep__tag__1__tag'].props.children).toBe('Admiral')
   })
 
   /**

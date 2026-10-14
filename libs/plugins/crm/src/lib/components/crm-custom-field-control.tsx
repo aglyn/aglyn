@@ -16,8 +16,16 @@
  */
 'use client'
 
-import type { ContactFieldDefinition, CrmCustomValue } from '@aglyn/aglyn'
-import { Checkbox, FormControlLabel, MenuItem, TextField } from '@mui/material'
+import {
+  type ContactFieldDefinition,
+  type CrmCustomValue,
+  customFieldCurrency,
+  currencyFractionDigits,
+  currencyMinorToMajor,
+  parseCurrencyInput,
+} from '@aglyn/aglyn'
+import { Checkbox, FormControlLabel, InputAdornment, MenuItem, TextField } from '@mui/material'
+import { useEffect, useState } from 'react'
 
 /** An ISO stamp as the `<input type="date">` value it corresponds to. */
 export const isoToDateInput = (value: CrmCustomValue | undefined): string => {
@@ -30,7 +38,7 @@ export const isoToDateInput = (value: CrmCustomValue | undefined): string => {
 const TEXT_MAX = 2000
 
 export interface CrmCustomFieldControlProps {
-  definition: Pick<ContactFieldDefinition, 'key' | 'label' | 'type' | 'options' | 'required'>
+  definition: Pick<ContactFieldDefinition, 'key' | 'label' | 'type' | 'options' | 'required' | 'currency'>
   /** The value as shown — the draft's where touched, else the stored one. */
   value: CrmCustomValue | undefined
   /** `null` is the explicit "cleared" every surface writes for an emptied control. */
@@ -106,6 +114,8 @@ export function CrmCustomFieldControl(props: CrmCustomFieldControlProps) {
           fullWidth
         />
       )
+    case 'currency':
+      return <CurrencyFieldControl {...props} label={label} />
     case 'date':
       return (
         <TextField
@@ -141,5 +151,46 @@ export function CrmCustomFieldControl(props: CrmCustomFieldControlProps) {
   }
 }
 CrmCustomFieldControl.displayName = 'CrmCustomFieldControl'
+
+/** A stored amount as the text its box shows: major units, the currency's decimals. */
+export function currencyInputText(value: CrmCustomValue | undefined, code: string): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  return currencyMinorToMajor(value, code).toFixed(currencyFractionDigits(code))
+}
+
+/**
+ * A currency field's box (AGL-3756): typed in major units with the code
+ * beside it, stored as minor units. The text is kept as typed while the box
+ * is being edited, so "12." is not rewritten to "12.00" under the cursor.
+ */
+function CurrencyFieldControl(props: CrmCustomFieldControlProps & { label: string }) {
+  const { definition, value, onChange, disabled, label } = props
+  const code = customFieldCurrency(definition)
+  const [text, setText] = useState(() => currencyInputText(value, code))
+  useEffect(() => {
+    setText((typed) => (parseCurrencyInput(typed, code) === (typeof value === 'number' ? value : null) ? typed : currencyInputText(value, code)))
+  }, [value, code])
+  return (
+    <TextField
+      size="small"
+      label={label}
+      required={definition.required === true}
+      disabled={disabled}
+      value={text}
+      onChange={(event) => {
+        const typed = event.target.value
+        setText(typed)
+        if (!typed.trim()) return onChange(null)
+        const minor = parseCurrencyInput(typed, code)
+        if (minor !== null) onChange(minor)
+      }}
+      slotProps={{
+        htmlInput: { inputMode: 'decimal' },
+        input: { endAdornment: <InputAdornment position="end">{code.toUpperCase()}</InputAdornment> },
+      }}
+      fullWidth
+    />
+  )
+}
 
 export default CrmCustomFieldControl

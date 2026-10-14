@@ -27,7 +27,7 @@ import {
   type ListQueryPlan,
   planListQuery,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
-import { DATASET_FILTER_PREFIX_MAX, type DatasetModel, datasetFilterTextKey, datasetFilterToken, datasetFilterValuePath, datasetFilterWords, datasetSearchToken } from '../model/dataset-models'
+import { DATASET_FILTER_PREFIX_MAX, type DatasetModel, datasetFilterTextKey, datasetFilterToken, datasetFilterValuePath, datasetFilterWords, datasetSearchToken } from '../model/dataset-model-core'
 
 /*
  * THE RECORDS TABLE IS ONE QUERY (AGL-3321).
@@ -263,4 +263,19 @@ export function planRecordQuery(
     oneWord(`${filter.headers[clause.field] ?? clause.field} contains`, clause.value)
   }
   return { plan, refused, notices }
+}
+
+/**
+ * The records query for a model, as the records table plans it: the model's
+ * filter ({@link datasetRecordFilter}) and {@link planRecordQuery} in one
+ * call. The native apps' records list asks this (AGL-3668), and replay its
+ * answers, so a filter or a search reads the same records in the app.
+ */
+export function planDatasetRecordQuery(
+  model: DatasetModel,
+  clauses: readonly ListFilterClause[],
+  searchWords: readonly string[],
+): DatasetRecordPlan & { filter: DatasetRecordFilter } {
+  const filter = datasetRecordFilter(model)
+  return { ...planRecordQuery(model, filter, clauses, searchWords), filter }
 }

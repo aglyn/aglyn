@@ -418,7 +418,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     reason:
       'Cloud Logging `entries:write`, the sink for client-side error reports and beacons from customer sites.',
     dataReceived:
-      "The error message and stack, the URL it happened on, the host and build identifiers, and the reporting browser's user-agent.",
+      'Technical diagnostic information about errors in the Services, such as error details, the page and code where an error occurred, the application version, and general characteristics of the browser and device.',
   },
   'recaptchaenterprise.googleapis.com': {
     disposition: 'subprocessor',
@@ -549,6 +549,23 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'The Meta Pixel loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted on a tenant page by the tenant runtime, on the console by `apps/console/components/advertising-tags.component.tsx`, and on the docs site by its standalone copy in `apps/docs/src/advertising-tags.ts`. Disclosed by CAPABILITY rather than by rollout, which is the standing rule — the code can load it, so the document says so.',
     dataReceived:
       'Page views and conversion events from a visitor whose recorded consent grants advertising on a surface that asks about it, with the identifiers the pixel sets. On the console that visitor may be signed in, so the pageviews describe an identified account holder moving through a product rather than an anonymous reader of a marketing page.',
+  },
+
+  // MARK – TikTok and Pinterest (a site owner's own tags, AGL-3694)
+
+  'analytics.tiktok.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Customer-chosen destination. The TikTok Pixel loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted by the tenant runtime only on a customer site whose owner configured their OWN TikTok pixel id on Setup → Tracking and enabled the advertising question, with that owner's id. The platform runs no TikTok pixel of its own on any surface.",
+    dataReceived:
+      "Page views and conversion events (product views, add-to-carts, checkouts, purchases, form submissions — no field values) from a visitor whose recorded consent grants advertising on that site, with the identifiers the pixel sets, sent to the site owner's TikTok account. Nothing from the platform's own records.",
+  },
+  's.pinimg.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Customer-chosen destination. The Pinterest Tag loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted by the tenant runtime only on a customer site whose owner configured their OWN Pinterest tag id on Setup → Tracking and enabled the advertising question, with that owner's id; its beacons go to `ct.pinterest.com`. The platform runs no Pinterest tag of its own on any surface.",
+    dataReceived:
+      "Page views and conversion events (add-to-carts, purchases, form submissions — no field values) from a visitor whose recorded consent grants advertising on that site, with the identifiers the tag sets, sent to the site owner's Pinterest account. Nothing from the platform's own records.",
   },
 
   // MARK – LinkedIn

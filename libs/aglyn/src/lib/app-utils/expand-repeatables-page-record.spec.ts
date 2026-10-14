@@ -107,10 +107,10 @@ describe('a page rendered for one record', () => {
     expect(copies).toEqual(['Kitchens'])
   })
 
-  it('keeps a token naming a field the record lacks, as a repeat does', () => {
+  it('prints nothing for a field the record lacks, as a repeat does (AGL-3616)', () => {
     const nodes = page()
     nodes.title.props.children = '{{item.missing}}'
-    expect(compose(nodes, { services }, scope).title.props.children).toBe('{{item.missing}}')
+    expect(compose(nodes, { services }, scope).title.props.children).toBe('')
   })
 
   it('is the expansion unchanged when there is no record', () => {

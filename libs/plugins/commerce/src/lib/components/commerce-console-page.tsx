@@ -46,6 +46,7 @@ import ReservationsCard from './console/reservations-card.component'
 import ReturnSettingsCard from './console/return-settings-card.component'
 import ReturnsCard from './console/returns-card.component'
 import ReviewsModerationCard from './console/reviews-moderation-card.component'
+import ReviewSettingsCard from './console/review-settings-card.component'
 import ShippingSettingsCard from './console/shipping-settings-card.component'
 import ShipStationCard from './console/shipstation-card.component'
 import ShippingEasyCard from './console/shippingeasy-card.component'
@@ -194,6 +195,11 @@ function sectionBody(
             {
               size: { xs: 12 },
               children: <CustomerNotificationsCard hostId={hostId} />,
+            },
+            // Who may review, and the review-request email (AGL-3736).
+            {
+              size: { xs: 12 },
+              children: <ReviewSettingsCard hostId={hostId} />,
             },
             { size: { xs: 12 }, children: <TaxSettingsCard hostId={hostId} /> },
             { size: { xs: 12 }, children: <LocationsCard hostId={hostId} /> },

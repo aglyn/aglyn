@@ -468,10 +468,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
               children: (
         <CardDisplay header={'Versions'}
           help={docsHelp('versionsAndPublishing', {
-            anchor: '#publish--roll-back',
-            excerpt:
-              'Publishing a layout version changes every page bound to it. ' +
-              'Saving does not — a save is not a publish.',
+            anchor: '#layout-versions',
           })} contentGutterX contentGutterY>
           {versions.length === 0 ? (
             <Typography variant="body2" color="text.secondary">

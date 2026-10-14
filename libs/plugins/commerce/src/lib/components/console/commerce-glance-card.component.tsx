@@ -209,7 +209,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     return (
       <CardDisplay
         header={'Commerce'}
-        help={pluginDocsHelp('commerce')}
+        help={pluginDocsHelp('commerce', { anchor: '#commerce-glance' })}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: openStoreAction }}
@@ -225,7 +225,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     return (
       <CardDisplay
         header={'Commerce'}
-        help={pluginDocsHelp('commerce')}
+        help={pluginDocsHelp('commerce', { anchor: '#commerce-glance' })}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: openStoreAction }}
@@ -256,7 +256,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Commerce'}
-      help={pluginDocsHelp('commerce')}
+      help={pluginDocsHelp('commerce', { anchor: '#commerce-glance' })}
       contentGutterX
       contentGutterY
       HeaderProps={{ action: openStoreAction }}

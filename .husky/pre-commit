@@ -5,8 +5,11 @@
 # pattern is deliberately BROADER than the guard's own trigger list —
 # matching too much costs a few hundred milliseconds, matching too little
 # would silently skip the guard. The authoritative list lives in the script.
+# A help call's `anchor: '#…'` feeds the help registry too (AGL-3707).
 if git diff --cached --name-only --diff-filter=ACMRD |
-  grep -qE '^apps/docs/|^tools/scripts/generate-|\.generated\.ts$'; then
+  grep -qE '^apps/docs/|^tools/scripts/generate-|\.generated\.ts$' ||
+  git diff --cached -U0 -- 'apps/console/*.ts*' 'libs/*.ts*' |
+  grep -qE "^[-+].*['\"\`]#[a-z0-9]"; then
   node tools/scripts/check-staged-docs-registries.mjs || exit 1
 fi
 

@@ -165,9 +165,14 @@ jest.mock('firebase-admin/firestore', () => ({
 
 // Everything `erase.ts` imports for the ORG path, which none of these cases
 // walks. Named explicitly because a jest factory is a closed world.
+const mockProjectionForAll = jest.fn(async (..._args: unknown[]) => undefined)
+const mockProjectionForUids = jest.fn(async (..._args: unknown[]) => undefined)
 jest.mock('./host-memberships', () => ({
   __esModule: true,
-  deleteHostProjectionForAllMembers: async () => undefined,
+  deleteHostProjectionForAllMembers: (...args: unknown[]) =>
+    mockProjectionForAll(...args),
+  deleteHostProjectionForUids: (...args: unknown[]) =>
+    mockProjectionForUids(...args),
 }))
 jest.mock('./workspace-domains', () => ({
   __esModule: true,
@@ -268,6 +273,8 @@ function seedProvisionedSite(options: {
 }
 
 beforeEach(() => {
+  mockProjectionForAll.mockClear()
+  mockProjectionForUids.mockClear()
   store.clear()
   deleteFiles.mockClear()
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -362,6 +369,44 @@ describe('erasing a site releases its sending domain', () => {
 
     expect(result.sendingDomain).toBe('none')
     expect(tearDown).not.toHaveBeenCalled()
+  })
+})
+
+describe('erasing a site removes every holder’s hostMemberships row', () => {
+  it('clears the site’s own members too, before and after the document tree goes', async () => {
+    seedProvisionedSite()
+    store.set(`hosts/${HOST}`, {
+      ...(store.get(`hosts/${HOST}`) as object),
+      memberRoles: { owner1: 'admin', collab2: 'editor' },
+    })
+
+    await eraseHost(HOST, { tearDownSendingDomain: async () => ({ outcome: 'removed' as const, detail: null }) })
+
+    // The org pass is handed the host's own holders, so a collaborator who
+    // is not an org member keeps no row in the switcher.
+    expect(mockProjectionForAll).toHaveBeenCalledWith(ORG, HOST, [
+      'owner1',
+      'collab2',
+    ])
+    // And a final sweep after the delete, against a sync writing one back.
+    expect(mockProjectionForUids).toHaveBeenCalledWith(HOST, [
+      'owner1',
+      'collab2',
+    ])
+  })
+
+  it('still sweeps when the org pass fails', async () => {
+    seedProvisionedSite()
+    store.set(`hosts/${HOST}`, {
+      ...(store.get(`hosts/${HOST}`) as object),
+      memberRoles: { owner1: 'admin' },
+    })
+    mockProjectionForAll.mockRejectedValueOnce(new Error('boom'))
+
+    await eraseHost(HOST, { tearDownSendingDomain: async () => ({ outcome: 'removed' as const, detail: null }) })
+
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+    expect(mockProjectionForUids).toHaveBeenCalledWith(HOST, ['owner1'])
   })
 })
 

@@ -47,10 +47,20 @@ import {
   MEDIA_TAKEDOWN_BROWSER_STABLE_MS,
   MEDIA_TAKEDOWN_EDGE_IMAGE_MS,
   MEDIA_TAKEDOWN_ORIGIN_MS,
+  MEDIA_LOCKDOWN_ORIGIN_MS,
   MEDIA_TAKEDOWN_REACH,
   mediaTakedownReachLines,
   mediaTakedownUnreachableLine,
 } from './media-takedown-reach'
+
+const quarantineSource = () =>
+  readFileSync(
+    join(
+      process.cwd(),
+      'libs/tenant/data/admin/src/lib/server/media-quarantine.ts',
+    ),
+    'utf8',
+  )
 
 const cdnSource = () =>
   readFileSync(
@@ -97,11 +107,16 @@ describe('the windows are the ones the CDN actually sends', () => {
     )
   })
 
-  it('the origin lag matches the deny list and lock TTLs, which agree', () => {
-    const source = cdnSource()
-    const lock = source.match(/MEDIA_CDN_LOCK_TTL_MS = (\d+)_?(\d*)/)
+  it('the origin lag is the deny list TTL, and a lockdown verdict is never quicker', () => {
+    // A file's takedown is the quarantine deny list; a workspace or site
+    // lockdown is the scope verdict, held longer since AGL-3741.
+    const deny = quarantineSource().match(/MEDIA_QUARANTINE_TTL_MS = (\d+)_?(\d*)/)
+    const lock = cdnSource().match(/MEDIA_CDN_LOCK_TTL_MS = (\d+)_?(\d*)/)
+    expect(deny).toBeTruthy()
     expect(lock).toBeTruthy()
-    expect(MEDIA_TAKEDOWN_ORIGIN_MS).toBe(Number(`${lock?.[1]}${lock?.[2]}`))
+    expect(MEDIA_TAKEDOWN_ORIGIN_MS).toBe(Number(`${deny?.[1]}${deny?.[2]}`))
+    expect(MEDIA_LOCKDOWN_ORIGIN_MS).toBe(Number(`${lock?.[1]}${lock?.[2]}`))
+    expect(MEDIA_LOCKDOWN_ORIGIN_MS).toBeGreaterThanOrEqual(MEDIA_TAKEDOWN_ORIGIN_MS)
   })
 })
 

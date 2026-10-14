@@ -15,6 +15,14 @@ public enum POSPlacement: String, Sendable {
   case register, tender, peripheral, menu
 }
 
+/// The staff console's card zones a plugin may fill (the web's
+/// CONSOLE_STAFF_WIDGET_SLOTS that hold cards). A staff widget gets its
+/// zone's subject as params: staffSite `hostId` and `orgId`, staffOrg and
+/// adminOrgDetail `orgId`, staffUser `uid`; staffOverview none.
+public enum StaffZone: String, Sendable, CaseIterable {
+  case staffOverview, adminOrgDetail, staffOrg, staffUser, staffSite
+}
+
 public enum WidgetSize: String, Sendable {
   /// Pairs two widgets on a row in a wide window; narrow windows stack everything.
   case half
@@ -49,6 +57,9 @@ public struct NativePluginContext {
   /// Writes the console makes straight to Firestore (no route), made the
   /// same way under the same security rules, as the signed-in person.
   public let writer: FirestoreWriter
+  /// The signed-in person's Aglyn staff standing; nil for everyone else.
+  /// For what to show only: the `/api/admin` routes decide.
+  public let staff: StaffStanding?
   /// The person's role on the picked site (`admin`, `editor`, `author` or
   /// `viewer`), as their membership row names it; nil without a site. A
   /// screen reads it only to grey out what the rules would refuse.
@@ -63,6 +74,7 @@ public struct NativePluginContext {
   public init(
     uid: String, orgID: String?, hostID: String?, orgSlug: String?, hostSlug: String?,
     firestore: FirestoreReader, api: ConsoleAPIClient, writer: FirestoreWriter = NoFirestoreWrites(),
+    staff: StaffStanding? = nil,
     navigate: @escaping @MainActor (String, NativeParams) -> Void,
     openBesigner: @escaping @MainActor (String) -> Void,
     siteRole: String? = nil, orgRole: String? = nil,
@@ -77,6 +89,7 @@ public struct NativePluginContext {
     self.firestore = firestore
     self.api = api
     self.writer = writer
+    self.staff = staff
     self.navigateAction = navigate
     self.openBesignerAction = openBesigner
     self.siteRole = siteRole
@@ -126,6 +139,7 @@ public struct NativePluginContext {
 
 public typealias ScreenBuilder = @MainActor (NativePluginContext, NativeParams) -> AnyView
 public typealias WidgetBuilder = @MainActor (NativePluginContext) -> AnyView
+public typealias StaffWidgetBuilder = @MainActor (NativePluginContext, NativeParams) -> AnyView
 
 public struct NativeScreen: Identifiable {
   public let pluginID: String
@@ -135,7 +149,17 @@ public struct NativeScreen: Identifiable {
   public let apps: Set<AglynAppKind>
   public let icon: String?
   public let placement: POSPlacement?
+  /// Non-nil: a staff screen, listed only in the shell's Staff section and
+  /// shown only to staff whose role this admits (empty admits every role).
+  public var staffRoles: [String]? = nil
   public let make: ScreenBuilder
+
+  /// Whether `staff` may open this screen.
+  public func admits(_ staff: StaffStanding?) -> Bool {
+    guard let roles = staffRoles else { return true }
+    guard let staff else { return false }
+    return roles.isEmpty || staff.gate(roles).admitted
+  }
 }
 
 public struct NativeTab: Identifiable {
@@ -160,10 +184,23 @@ public struct NativeWidget: Identifiable {
   public let size: WidgetSize
   public let requiresSite: Bool
   public let apps: Set<AglynAppKind>
+  /// Non-nil: a staff card in that zone, never on Home.
+  public var staffZone: StaffZone? = nil
+  /// The staff roles that see the card; nil is every staff role.
+  public var staffRoles: [String]? = nil
   /// A core page's slot it renders in instead of Home, the native twin of
   /// the console's `PluginWidgetSlot` (`hostAnalytics` is the Analytics page's).
   public var slot: String? = nil
   public let make: WidgetBuilder
+  public var makeStaff: StaffWidgetBuilder? = nil
+
+  /// Whether `staff` sees this staff card.
+  public func admits(_ staff: StaffStanding?) -> Bool {
+    guard staffZone != nil else { return true }
+    guard let staff else { return false }
+    guard let roles = staffRoles, !roles.isEmpty else { return true }
+    return staff.gate(roles).admitted
+  }
 }
 
 public struct NativeQuickAction: Identifiable {

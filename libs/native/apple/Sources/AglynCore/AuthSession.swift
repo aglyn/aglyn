@@ -40,6 +40,22 @@ public enum AuthTransport: String, Sendable {
   }
 }
 
+/// The Keychain service a REST session is kept under: per build, since the
+/// REST path is the Mac build without a team signature, whose every rebuild
+/// is a new ad-hoc signature that another build's item would prompt for.
+func restAuthKeychainService(bundleID: String, buildHash: String?) -> String {
+  guard let buildHash, !buildHash.isEmpty else { return "\(bundleID).rest-auth" }
+  return "\(bundleID).rest-auth.\(buildHash.prefix(16))"
+}
+
+private func restBuildHash() -> String? {
+  #if os(macOS)
+    return CodeSignature.currentUniqueHash()
+  #else
+    return nil
+  #endif
+}
+
 #if os(macOS)
   enum CodeSignature {
     /// The team that signed this process, or nil for an ad-hoc or unsigned build.
@@ -56,6 +72,21 @@ public enum AuthTransport: String, Sendable {
       else { return nil }
       let team = values[kSecCodeInfoTeamIdentifier as String] as? String
       return team?.isEmpty == false ? team : nil
+    }
+
+    /// This build's code directory hash in hex, or nil when it cannot be read.
+    static func currentUniqueHash() -> String? {
+      var code: SecCode?
+      guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+      var staticCode: SecStaticCode?
+      guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+      var info: CFDictionary?
+      guard
+        SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
+          == errSecSuccess,
+        let values = info as? [String: Any], let unique = values[kSecCodeInfoUnique as String] as? Data
+      else { return nil }
+      return unique.map { String(format: "%02x", $0) }.joined()
     }
   }
 #endif
@@ -104,6 +135,9 @@ public func signInErrorMessage(_ error: Error) -> String {
 @Observable
 public final class AuthSession {
   public private(set) var user: AglynUser?
+  /// The signed-in person's Aglyn staff standing (`staff` and `staffRole`
+  /// claims), nil for everyone else. For display only; the routes decide.
+  public private(set) var staff: StaffStanding?
   /// False until it is known whether someone is signed in.
   public private(set) var ready = false
   public let transport: AuthTransport
@@ -120,6 +154,7 @@ public final class AuthSession {
       Task { @MainActor in
         self.user = await rest.restore()
         self.ready = true
+        await self.refreshStanding()
       }
       return
     }
@@ -129,6 +164,7 @@ public final class AuthSession {
           AglynUser(uid: $0.uid, email: $0.email, displayName: $0.displayName)
         }
         self?.ready = true
+        Task { await self?.refreshStanding() }
       }
     }
   }
@@ -141,7 +177,8 @@ public final class AuthSession {
         apiKey: config.firebase.apiKey,
         emulatorHost: config.authEmulatorHost,
         store: KeychainCredentialStore(
-          service: "\(Bundle.main.bundleIdentifier ?? "com.aglyn.app").rest-auth",
+          service: restAuthKeychainService(
+            bundleID: Bundle.main.bundleIdentifier ?? "com.aglyn.app", buildHash: restBuildHash()),
           account: config.firebase.projectID)))
   }
 
@@ -149,6 +186,7 @@ public final class AuthSession {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
     if let rest {
       user = try await rest.signIn(email: trimmed, password: password)
+      await refreshStanding()
       return
     }
     _ = try await Auth.auth().signIn(withEmail: trimmed, password: password)
@@ -171,12 +209,22 @@ public final class AuthSession {
 
   public func signOut() async {
     for task in beforeSignOut { await task() }
+    staff = nil
     if let rest {
       await rest.signOut()
       user = nil
       return
     }
     try? Auth.auth().signOut()
+  }
+
+  /// Reads the staff standing from the current ID token's claims.
+  public func refreshStanding() async {
+    guard user != nil, let token = try? await idToken(forceRefresh: false) else {
+      staff = nil
+      return
+    }
+    staff = idTokenClaims(token).flatMap(StaffStanding.from(claims:))
   }
 
   /// The current ID token; nil when signed out.

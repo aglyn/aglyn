@@ -161,25 +161,45 @@ const GOLDEN: Record<AiSurface, () => Tree> = {
         },
         children: [
           {
-            componentId: 'formField',
-            props: { fieldName: 'name', label: 'Name', fieldType: 'text' },
+            componentId: 'muiFormControl',
+            props: { fullWidth: true },
+            children: [
+              { componentId: 'muiFormLabel', props: { children: 'Name' } },
+              { componentId: 'muiInput', props: { name: 'name', fullWidth: true } },
+            ],
           },
           {
-            componentId: 'formField',
-            props: {
-              fieldName: 'email',
-              label: 'Email',
-              fieldType: 'email',
-              required: true,
-            },
+            componentId: 'muiFormControl',
+            props: { fullWidth: true, required: true },
+            children: [
+              { componentId: 'muiFormLabel', props: { children: 'Email' } },
+              {
+                componentId: 'muiInput',
+                props: { name: 'email', type: 'email', required: true, fullWidth: true },
+              },
+            ],
           },
           {
-            componentId: 'formField',
-            props: {
-              fieldName: 'message',
-              label: 'Message',
-              fieldType: 'textarea',
-            },
+            componentId: 'muiFormControl',
+            props: { fullWidth: true },
+            children: [
+              { componentId: 'muiFormLabel', props: { children: 'Message' } },
+              {
+                componentId: 'muiInput',
+                props: { name: 'message', multiline: true, fullWidth: true },
+              },
+            ],
+          },
+          {
+            componentId: 'muiFormControlLabel',
+            props: { label: 'Email me news and offers' },
+            children: [
+              { componentId: 'muiCheckbox', props: { name: 'marketingConsent', value: 'Yes' } },
+            ],
+          },
+          {
+            componentId: 'muiButton',
+            props: { type: 'submit', variant: 'contained', children: 'Send' },
           },
         ],
       },
@@ -910,8 +930,8 @@ const MUTATIONS: Mutation[] = [
       const container = anyContainer(input)
       const filler = AI_SURFACES.email.allow.includes(container.componentId)
         ? 'emailText'
-        : container.componentId === 'form'
-          ? 'formField'
+        : container.componentId === 'form' || container.componentId === 'muiFormControl'
+          ? 'muiFormHelperText'
           : 'muiTypography'
       const count = Math.ceil(NODE_MAP_MAX_BYTES / 60)
       for (let index = 0; index < count; index += 1) {
@@ -1004,7 +1024,7 @@ describe('validateAiNodeTree fuzz (AGL-2905)', () => {
     })
 
     const wrongRoot = GOLDEN.form()
-    wrongRoot.nodes[wrongRoot.rootId].componentId = 'formField'
+    wrongRoot.nodes[wrongRoot.rootId].componentId = 'muiFormControl'
     expect(validateAiNodeTree(wrongRoot, 'form')).toMatchObject({
       ok: false,
       code: 'root',

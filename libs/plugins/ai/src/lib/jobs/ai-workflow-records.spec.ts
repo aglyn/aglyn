@@ -94,8 +94,8 @@ const firestore = { collection: (name: string) => collectionRef(name) } as unkno
 
 const readOf = (path: string) => mockReads.find((read) => read.path === path)
 
-/** The collections the workflows and data plugins keep, read here only through their indexes. */
-const INDEXED = ['hosts/host-1/workflows', 'hosts/host-1/webhooks', 'hosts/host-1/actions', 'orgs/org-1/datasets']
+/** The collections the workflows and data plugins keep (a site's record templates among them, AGL-3747), read here only through their indexes. */
+const INDEXED = ['hosts/host-1/workflows', 'hosts/host-1/webhooks', 'hosts/host-1/actions', 'orgs/org-1/datasets', 'hosts/host-1/recordPages']
 
 beforeEach(() => {
   mockReads.length = 0

@@ -24,6 +24,7 @@ import {
   productSearchFields,
   productStockFields,
   type SmartCollectionRules,
+  variantHasPrice,
 } from './commerce'
 
 /*
@@ -73,7 +74,11 @@ export function productSaveFields(current: EditedProduct, nowMs: number) {
       variants: current.variants,
     }),
     slug: current.slug || commerceSlug(current.name),
-    priceUsd: primaryVariant?.priceUsd ?? 0,
+    // The legacy flat price, only where there is one (AGL-3676): an owner
+    // may save a product before pricing it, and an unpriced product is not
+    // a free one. `null` rather than absent, so an edit's full replace and
+    // the native save write the same field.
+    priceUsd: variantHasPrice(primaryVariant) ? primaryVariant.priceUsd : null,
     ...productStockFields({
       variants: current.variants,
       oversellPolicy: current.oversellPolicy,

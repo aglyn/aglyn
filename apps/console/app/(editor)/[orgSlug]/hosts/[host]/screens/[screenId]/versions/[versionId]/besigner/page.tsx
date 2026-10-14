@@ -112,6 +112,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useHost } from '../../../../../../../../../../hooks/use-host'
+import useDiscardChangesMenuItem from '../../../../../../../../../../hooks/use-discard-changes-menu-item'
 import {
   Alert,
   Button,
@@ -568,6 +569,8 @@ function BesignerPage(props) {
   const clearCanvas = useClearCanvasCallback('page')
   const repairDocument = useRepairDocumentCallback('page')
   const {
+    discardChanges,
+    canDiscard,
     saveAvailable,
     remoteChanged,
     draft,
@@ -1948,6 +1951,18 @@ function BesignerPage(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
+  // File ▸ Discard changes… (AGL-3723): back to the stored document, drafts dropped.
+  const discardMenuItem = useDiscardChangesMenuItem({
+    noun: 'page',
+    live: editingLiveVersion,
+    canDiscard: canDiscard || draftPending,
+    discardChanges,
+    onDiscarded: useCallback(() => {
+      clearMirrorRef.current?.()
+      setDraftPending(false)
+    }, []),
+  })
+
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
       <ScreenLinkContext.Provider value={screenLinks}>
@@ -2080,6 +2095,7 @@ function BesignerPage(props) {
                               ? handleSaveAndPublish
                               : handleSave,
                           },
+                          discardMenuItem,
                           {
                             id: 'center-nav-file-close',
                             children: 'Close',

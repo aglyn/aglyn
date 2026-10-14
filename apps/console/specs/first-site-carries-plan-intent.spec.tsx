@@ -21,15 +21,11 @@
  *
  * A visitor who clicks a plan CTA on /pricing and has no workspace at all is
  * the likeliest buyer on the page, and the narrowest path: there is no picker
- * to choose from and no create-workspace dialog in the way, because the first
- * SITE provisions the workspace. `CreateHostDialog` then navigates itself, to
- * the new site's Setup page — so the plan rode the URL right up to the one
- * click that was always going to drop it, and the buyer landed in Setup with
- * billing left to find.
- *
- * The picker's fix and this one are the same fix: the page that owns the
- * intent hands the dialog a `destination`, and every path is built by
- * `onboardingDestination` so enterprise still routes to support and an
+ * to choose from and no create-workspace dialog in the way. "Create site"
+ * there makes the workspace (AGL-3761: the site is created later, once its
+ * start is answered), and a visit carrying a plan then lands on billing with
+ * it, where the workspace is what the plan is bought for. Every path is built
+ * by `onboardingDestination`, so enterprise still routes to support and an
  * unstated interval stays unstated.
  */
 
@@ -38,13 +34,17 @@ import React from 'react'
 
 const mockPush = jest.fn()
 const mockReplace = jest.fn()
-const mockEnqueueSnackbar = jest.fn()
+const mockHardNavigate = jest.fn()
 let mockStoredUserDoc: Record<string, unknown> = {}
 let mockSearchParams = new URLSearchParams()
 
-/** The `destination` builder the jump page hands the create-site dialog. */
-let capturedDestination: ((orgSlug: string) => string) | undefined
-
+// The reader's workspace pins (AGL-3762) are a read of their own account
+// document; none of these assertions is about them.
+jest.mock('../hooks/use-pinned-orgs', () => ({
+  __esModule: true,
+  usePinnedOrgs: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+  default: () => ({ pinned: [], ready: true, toggle: () => undefined }),
+}))
 jest.mock('next/navigation', () => {
   // Stable identity: the jump effect depends on `router`, so a fresh object
   // per render would re-fire it.
@@ -101,47 +101,31 @@ jest.mock('../components/org-invites-banner.component', () => ({
   __esModule: true,
   default: () => null,
 }))
-// The page's copy of the dialog is a probe for the destination it is handed;
-// the real component is exercised directly further down.
 jest.mock('../components/create-host-dialog.component', () => ({
   __esModule: true,
-  default: (props: { destination?: (orgSlug: string) => string }) => {
-    capturedDestination = props.destination
-    return null
-  },
+  SITE_CREATE_PARAM: 'create',
+  SITE_CREATE_VALUE: 'site',
+  default: () => null,
+}))
+jest.mock('../utils/hard-navigate', () => ({
+  __esModule: true,
+  default: (url: string) => mockHardNavigate(url),
+}))
+jest.mock('../utils/console-landing', () => ({
+  currentConsoleLandingHref: (url: string) => url,
+}))
+jest.mock('../utils/first-site-workspace', () => ({
+  createFirstSiteWorkspace: async () => ({ slug: 'smoke-test-0831' }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
+  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
-jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
-  authorizedFetch: async () => ({
-    ok: true,
-    status: 200,
-    // The workspace the server auto-provisioned on the way to the site.
-    json: async () => ({
-      hostId: 'host-1',
-      subdomain: 'smoke-site-0831',
-      orgId: 'org-new',
-      orgSlug: 'smoke-test-0831',
-      guidedStart: mockGuidedStart,
-    }),
-  }),
-}))
-let mockGuidedStart = false
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: jest.fn(),
-  // Emitting `org_created` before a navigation needs the awaitable spelling
-  // (AGL-2587); a mock that lacks it makes the call a TypeError inside the
-  // create handler, which reads here as the create having failed.
   trackEventBeforeNavigation: jest.fn(async () => undefined),
 }))
 
 const OrgJump = require('../app/(app)/(home)/page').default
-// The real dialog, not the probe above — the navigation after a successful
-// create is the half that used to drop the intent.
-const CreateHostDialog = jest.requireActual(
-  '../components/create-host-dialog.component',
-).default
 
 /** Let the account's remembered-intent read settle before asserting. */
 const flush = async () => {
@@ -152,22 +136,19 @@ const flush = async () => {
   })
 }
 
-/** Fill the dialog and submit it. */
-const createSite = async () => {
-  fireEvent.change(screen.getByLabelText('Site name'), {
-    target: { value: 'Smoke Site 0831' },
-  })
+/** Render the empty console and choose its "Create site". */
+const createFirstSite = async (button = 'Create site') => {
+  render(<OrgJump />)
+  await flush()
   await act(async () => {
-    fireEvent.click(screen.getByText('Create site'))
-    await Promise.resolve()
-    await Promise.resolve()
+    fireEvent.click(screen.getByText(button))
     await Promise.resolve()
   })
+  await flush()
 }
 
 beforeEach(() => {
   jest.clearAllMocks()
-  capturedDestination = undefined
   mockStoredUserDoc = {}
   mockSearchParams = new URLSearchParams()
   mockScope = { orgs: [], loading: false, confirmed: true, currentOrg: null }
@@ -175,108 +156,55 @@ beforeEach(() => {
 })
 
 describe('AGL-1117 · the zero-org first site keeps the plan intent', () => {
-  it('hands the dialog a destination built from the URL intent', async () => {
+  it('lands the new workspace on billing with the URL intent', async () => {
     mockSearchParams = new URLSearchParams('plan=starter&interval=month')
-    render(<OrgJump />)
-    await flush()
-    // Red before the fix: no destination was passed at all, and the dialog
-    // navigated to the new site's Setup page with the plan gone.
-    expect(capturedDestination?.('smoke-test-0831')).toBe(
+    await createFirstSite()
+    expect(mockHardNavigate).toHaveBeenCalledWith(
       '/smoke-test-0831/billing?plan=starter&interval=month',
     )
   })
 
   it('carries the intent the ACCOUNT remembered, with nothing on the URL', async () => {
     // The post-verification arrival: `/verify-email` hands back a bare `/`,
-    // and this page's single consume already resolved it — the zero-org
-    // branch reads that same resolved value rather than asking again
-    // (AGL-1535).
+    // and this page's single consume already resolved it (AGL-1535).
     mockStoredUserDoc = {
       onboardingPlanIntent: {
         query: 'plan=pro&interval=year',
         createdAtMs: Date.now(),
       },
     }
-    render(<OrgJump />)
-    await flush()
-    expect(capturedDestination?.('smoke-test-0831')).toBe(
+    await createFirstSite()
+    expect(mockHardNavigate).toHaveBeenCalledWith(
       '/smoke-test-0831/billing?plan=pro&interval=year',
     )
   })
 
   it('does not restate an interval the CTA never stated', async () => {
     mockSearchParams = new URLSearchParams('plan=scale')
-    render(<OrgJump />)
-    await flush()
-    expect(capturedDestination?.('smoke-test-0831')).toBe(
-      '/smoke-test-0831/billing?plan=scale',
-    )
+    await createFirstSite()
+    expect(mockHardNavigate).toHaveBeenCalledWith('/smoke-test-0831/billing?plan=scale')
   })
 
   it('sends an enterprise CTA to support rather than a checkout', async () => {
     mockSearchParams = new URLSearchParams('plan=enterprise')
-    render(<OrgJump />)
-    await flush()
-    expect(capturedDestination?.('smoke-test-0831')).toBe(
-      '/smoke-test-0831/support?topic=enterprise',
-    )
+    await createFirstSite()
+    expect(mockHardNavigate).toHaveBeenCalledWith('/smoke-test-0831/support?topic=enterprise')
   })
 
-  it('passes no destination at all when there is no intent', async () => {
-    render(<OrgJump />)
-    await flush()
-    // An ordinary first site is not a purchase — the dialog keeps its own
-    // Setup landing rather than being redirected to a site list.
-    expect(capturedDestination).toBeUndefined()
+  it('opens Create site in the new workspace when there is no intent (AGL-3761)', async () => {
+    await createFirstSite()
+    // An ordinary first site is not a purchase: its start is asked next.
+    expect(mockHardNavigate).toHaveBeenCalledWith('/smoke-test-0831/hosts?create=site')
   })
 
   it('carries the intent for an invitee who starts their own site instead', async () => {
     // A pending invite leads the zero-org state (AGL-851), and "Create my own
-    // site instead" is the same provisioning path under a different button.
+    // site instead" is the same path under a different button.
     mockInvites = { invites: [{ $id: 'inv-1' }], loading: false }
     mockSearchParams = new URLSearchParams('plan=business&interval=year')
-    render(<OrgJump />)
-    await flush()
-    expect(capturedDestination?.('smoke-test-0831')).toBe(
+    await createFirstSite('Create my own site instead')
+    expect(mockHardNavigate).toHaveBeenCalledWith(
       '/smoke-test-0831/billing?plan=business&interval=year',
     )
-  })
-})
-
-describe('AGL-1117 · the create-site dialog obeys the destination', () => {
-  it('navigates the new workspace to the destination it was given', async () => {
-    render(
-      <CreateHostDialog
-        open
-        onClose={() => undefined}
-        destination={(orgSlug: string) =>
-          `/${orgSlug}/billing?plan=starter&interval=month`
-        }
-      />,
-    )
-    await createSite()
-    // Red before the fix: the create landed on the new site's Setup page and
-    // the plan was gone for good.
-    expect(mockPush).toHaveBeenCalledWith(
-      '/smoke-test-0831/billing?plan=starter&interval=month',
-    )
-  })
-
-  it('lands on the new site, never Setup, with no destination given (AGL-3596)', async () => {
-    // The sites list and the host switcher pass none and must be unaffected.
-    mockGuidedStart = false
-    render(<CreateHostDialog open onClose={() => undefined} />)
-    await createSite()
-    expect(mockPush).toHaveBeenCalledWith('/smoke-test-0831/hosts/smoke-site-0831')
-  })
-
-  it('asks a site born for the guided start to offer it, once, where it lands', async () => {
-    mockGuidedStart = true
-    render(<CreateHostDialog open onClose={() => undefined} />)
-    await createSite()
-    expect(mockPush).toHaveBeenCalledWith(
-      '/smoke-test-0831/hosts/smoke-site-0831?start=site',
-    )
-    mockGuidedStart = false
   })
 })

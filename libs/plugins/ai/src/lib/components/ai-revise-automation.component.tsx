@@ -107,7 +107,7 @@ export function AiReviseAutomation({ hostId, orgId, target, openAction }: Consol
       <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
           {copy.intro}{' '}
-          <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+          <Link href={help.href} target="_blank" rel="noopener" title={help.excerptText}>
             {'How it works'}
           </Link>
         </Typography>

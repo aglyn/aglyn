@@ -42,6 +42,7 @@ import {
 } from './ai-layout-language'
 import {
   aiLayoutDesignChoices,
+  aiLayoutFamily,
   aiLayoutGroupVariant,
   type AiLayoutDesign,
   type AiLayoutDesignChoices,
@@ -51,9 +52,12 @@ import {
   AI_LAYOUT_FEATURED_RECORDS,
   AI_LAYOUT_LISTING_ELEMENTS,
   aiLayoutListingAt,
+  aiLayoutRecordHref,
   type AiLayoutListing,
   type AiLayoutListingRole,
 } from './ai-layout-listings'
+import { aiStorefrontItemIcons } from './ai-layout-storefront'
+import { AI_LAYOUT_LABELS_EN, aiLayoutLabel } from './ai-layout-labels'
 import {
   aiLayoutRenamedLabel,
   aiLayoutResolveLink,
@@ -62,6 +66,7 @@ import {
   type AiLayoutTargets,
 } from './ai-layout-links'
 import {
+  aiLayoutSpans,
   AI_LAYOUT_FRAMES,
   AiLayoutTreeBuilder,
   type AiLayoutRawTree,
@@ -134,6 +139,12 @@ export interface AiLayoutCompileOptions {
    * uneven grid of pictures. Absent, the compiler's first design.
    */
   design?: AiLayoutDesign
+  /**
+   * The site's language (AGL-3760), a code such as `es`: the words the
+   * compiler writes itself — "See all", a post's link — are in it where it is
+   * one `ai-layout-labels.ts` lists. Absent, English.
+   */
+  language?: string
 }
 
 /**
@@ -371,6 +382,9 @@ function compileSection(
   if (raw.blocks.some((block) => block.kind === 'quotes') && !blocks.some((block) => AI_LAYOUT_GROUP_KINDS.has(block.kind) || block.kind === 'component')) {
     page.quotesOnly.push(index)
   }
+  // A store's Shop page opens on its grid (AGL-3676): its first section is a
+  // short title bar, never a hero, so the products start above the fold.
+  if (index === 0 && shopGridAt(page) > 0) return shopTitle(scope, blocks)
   // A section the site's records fill — its catalog, its blog — shows them
   // through the element that keeps them, around the words the design gave it (AGL-3676).
   const listed = aiLayoutListingAt(page.targets.listings ?? [], page.targets.pageId, index)
@@ -584,7 +598,11 @@ function settleBand(
   at: string,
 ): AiLayoutBand {
   if (band !== 'brand' && band !== 'dark') return band
-  if (page.strong[band] >= AI_LAYOUT_MAX_STRONG_BANDS) {
+  // A storefront keeps one dark band at most (AGL-3676): the beta.237 Willow
+  // Wick home ran its text bands dark, and read as big empty dark slabs
+  // between the products.
+  const most = band === 'dark' && page.design && aiLayoutFamily(page.design.input.kind) === 'retail' ? 1 : AI_LAYOUT_MAX_STRONG_BANDS
+  if (page.strong[band] >= most) {
     page.settled.push({
       at: `${at}.band`,
       what: `a third ${band} band drawn soft`,
@@ -785,29 +803,14 @@ function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
 
 // ── A row of columns ──────────────────────────────────────────────────────
 
-/** Spans out of twelve for relative widths: each at least three, summing to twelve. */
-export function aiLayoutSpans(weights: readonly number[]): number[] {
-  const total = weights.reduce((sum, weight) => sum + weight, 0)
-  const spans = weights.map((weight) =>
-    Math.max(3, Math.round((weight / total) * 12)),
-  )
-  let over = spans.reduce((sum, span) => sum + span, 0) - 12
-  while (over !== 0) {
-    // Take from (or give to) the widest column that can spare it.
-    const order = spans
-      .map((span, position) => ({ span, position }))
-      .sort((a, b) => (over > 0 ? b.span - a.span : a.span - b.span))
-    const pick = order.find((entry) => (over > 0 ? entry.span > 3 : true))
-    if (!pick) break
-    spans[pick.position] += over > 0 ? -1 : 1
-    over += over > 0 ? -1 : 1
-  }
-  return spans
-}
+// Spans out of twelve live with the tree, so a frame's repair reads them without the compiler (AGL-3735).
+export { aiLayoutSpans }
 
 export function compileRow(
   scope: SectionScope,
   columns: Array<{ column: AiLayoutBlock[]; weight: number }>,
+  /** How the columns sit against each other: centered on a page, top-aligned in a footer (AGL-3735). */
+  alignItems: 'center' | 'flex-start' = 'center',
 ): string {
   const tree = scope.page.tree
   const spans = aiLayoutSpans(columns.map((entry) => entry.weight))
@@ -825,7 +828,7 @@ export function compileRow(
   return tree.add(
     'muiGrid',
     { container: true, spacing: columns.length >= 3 ? '4' : '6' },
-    { alignItems: 'center' },
+    { alignItems },
     items,
     'row',
   )
@@ -1121,6 +1124,40 @@ export function destinationProps(
  * `ai-layout-pictures.ts` fills the slot with a photo the site serves itself
  * once the page is checked.
  */
+/**
+ * The site kinds whose galleries open in a lightbox by default (AGL-3717): a
+ * portfolio's or a photographer's work is looked at, not skimmed, and a
+ * visitor who presses a picture expects to see it large and step through the
+ * rest. Every other kind opens a picture only where the design says so.
+ */
+export const AI_LIGHTBOX_GALLERY_KINDS: ReadonlySet<string> = new Set([
+  'portfolio',
+  'photography',
+])
+
+/** The `to` that opens an image block's picture in a lightbox (AGL-3717). */
+export const AI_LAYOUT_LIGHTBOX_TO = 'lightbox'
+
+/** Whether this page's galleries open in a lightbox by default. */
+export function aiOpensGalleriesInLightbox(page: { design: PageScope['design'] }): boolean {
+  const kind = page.design?.input.kind
+  return Boolean(kind && AI_LIGHTBOX_GALLERY_KINDS.has(kind))
+}
+
+/**
+ * The Image props that make a picture open in a lightbox: as one gallery
+ * with the section's other pictures, named for the section, and with the
+ * item's title as its caption. The Image element reads exactly these.
+ */
+function lightboxProps(scope: SectionScope, caption?: string): Record<string, unknown> {
+  const name =
+    aiLayoutFitText(scope.heading, 'alt') ||
+    aiLayoutFitText(scope.page.plan.sections[scope.index]?.name, 'alt') ||
+    `Gallery ${scope.index + 1}`
+  const words = aiLayoutFitText(caption, 'alt')
+  return { lightbox: true, lightboxGallery: name, ...(words ? { lightboxCaption: words } : {}) }
+}
+
 function image(
   scope: SectionScope,
   block: AiLayoutBlock,
@@ -1146,9 +1183,12 @@ function image(
     null,
     'imageIcon',
   )
+  // `to: lightbox` opens the picture large (AGL-3717); one picture is its
+  // own gallery, so it opens alone unless the section has more.
+  const opensLarge = block.to?.trim().toLowerCase() === AI_LAYOUT_LIGHTBOX_TO
   const picture = tree.add(
     'image',
-    { alt, objectFit: 'cover' },
+    { alt, objectFit: 'cover', ...(opensLarge ? lightboxProps(scope) : {}) },
     { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
     null,
     'image',
@@ -1403,10 +1443,20 @@ function group(
   const placed = componentOf(scope.page.targets, block.to)
   if (placed) return instances(scope, placed, items, perRow)
   const design = scope.page.design
+  const retail = !!design && aiLayoutFamily(design.input.kind) === 'retail'
+  // A store's making, shown: its steps as pictures over their words (AGL-3676),
+  // where the page has the pictures for them.
+  if (retail && block.kind === 'steps' && room === 'full' && items.length >= 2 && items.length <= 4 && picturesLeft(scope.page) >= items.length) {
+    const drawn = designedGroup(scope, 'articles', items, room)
+    if (drawn) return drawn
+  }
   if (rule1(scope)) {
     // Picture cards the design draws are the compiler's, not a block typed out
-    // by hand (`repeatsCompiled`, AGL-3660); every other repeat stays compact.
+    // by hand (`repeatsCompiled`, AGL-3660), and so are a storefront's icon
+    // columns (AGL-3676): the beta.237 Willow Wick home, on a paid plan, drew
+    // every other group compact — four bands of a title and a sentence.
     const variant = design && block.kind === 'cards' && block.style !== 'quiet' ? aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '') : null
+    if (variant === 'icons') return iconColumns(scope, items, room)
     const pictured = (variant === 'pictures' || variant === 'articles') && room === 'full' && picturesLeft(scope.page) >= items.length
     return (pictured && designedGroup(scope, variant, items, room)) || compactGroup(scope, block, items, perRow)
   }
@@ -2027,6 +2077,7 @@ function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readon
     const lead = flow.findIndex((block) => speaksHeading(scope, block))
     const { style: _style, ...title } = flow[lead]
     flow[lead] = design.choices.hero === 'split' ? title : { ...title, style: 'large' }
+    sellingHero(scope, flow)
     const given = images[0] ? aiLayoutFitText(images[0].text, 'alt') : ''
     return hero(
       scope,
@@ -2322,6 +2373,7 @@ function designedGroup(
       ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts), variant: type }, muted(scope), null, 'text')
       : null
   if (variant === 'cards') return null
+  if (variant === 'icons') return iconColumns(scope, items, room)
   const pictured = variant === 'pictures' || variant === 'articles'
   if (variant === 'ruled' || (pictured && (room !== 'full' || picturesLeft(page) < items.length))) {
     const perRow = across(items.length, room, 'cards')
@@ -2371,7 +2423,17 @@ function designedGroup(
     const span = !mosaic ? 12 / perRow : lone ? 12 : wide ? 7 : 5
     const aspect = !mosaic ? (variant === 'articles' ? '3 / 2' : portrait ? '4 / 5' : '4 / 3') : lone ? '21 / 9' : wide ? '4 / 3' : '4 / 5'
     // The picture is its own frame: its shape its one style, so a grid of them repeats no inline style.
-    const photo = designImage(scope, { alt: standInAlt(scope, item.title || item.text), given: false }, { width: '100%' }, { aspectRatio: { xs: '4 / 3', md: aspect } })
+    // A portfolio's or a photographer's gallery opens in a lightbox, its
+    // pictures one gallery with the item's title as each caption (AGL-3717).
+    const opens = variant === 'pictures' && aiOpensGalleriesInLightbox(page)
+    // A store's collection tiles open its Shop page (AGL-3676).
+    const shop = variant === 'pictures' && !opens && aiLayoutFamily(design.input.kind) === 'retail' ? shopPageOf(page) : null
+    const photo = designImage(
+      scope,
+      { alt: standInAlt(scope, item.title || item.text), given: false },
+      { width: '100%', ...(opens ? lightboxProps(scope, item.title) : {}), ...(shop ? { screenId: shop } : {}) },
+      { aspectRatio: { xs: '4 / 3', md: aspect } },
+    )
     const id = tree.add(
       'muiStack',
       { spacing: '1.5' },
@@ -2428,9 +2490,16 @@ export const AI_LAYOUT_POST_ADDRESS_TOKENS: readonly string[] = ['{{entry.url}}'
 
 /** The button under a featured band that opens the whole list, where the site has one and the design gave none. */
 function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBlock | null {
-  if (listing.kind === 'posts') return listing.href ? { kind: 'button', text: 'All posts', to: listing.href, style: 'secondary' } : null
+  const language = page.options.language
+  if (listing.kind === 'posts')
+    return listing.href ? { kind: 'button', text: aiLayoutLabel('allPosts', language), to: listing.href, style: 'secondary' } : null
   const index = listing.placements.find((placement) => placement.role === 'index' && placement.screenId !== page.targets.pageId)
-  return index ? { kind: 'button', text: 'Shop all', to: `page:${index.screenId}`, style: 'secondary' } : null
+  if (!index) return null
+  const text = aiLayoutLabel(
+    listing.kind === 'tracks' ? 'allMusic' : listing.kind === 'events' ? 'allEvents' : listing.kind === 'records' ? 'seeAll' : 'shopAll',
+    language,
+  )
+  return { kind: 'button', text, to: `page:${index.screenId}`, style: 'secondary' }
 }
 
 function listingSection(
@@ -2440,6 +2509,11 @@ function listingSection(
 ): string {
   const { page, index, at } = scope
   const { listing, role } = placed
+  if (listing.kind === 'reviews') return reviewsSection(scope, blocks)
+  if (listing.kind === 'signup') return signupSection(scope, blocks)
+  // The grid straight under a Shop page's title bar opens on the products:
+  // the title bar already heads the page (AGL-3676).
+  const underTitle = listing.kind === 'products' && role === 'index' && index === 1 && shopGridAt(page) === 1
   const left = blocks.filter((block) => LISTING_REPLACES.has(block.kind))
   if (left.length) {
     page.settled.push({
@@ -2447,14 +2521,14 @@ function listingSection(
       what: `${left.map((block) => block.kind).join(', ')} left out: the section lists the site's own ${listing.kind}`,
     })
   }
-  const kept = blocks.filter((block) => !LISTING_REPLACES.has(block.kind)).map(({ col: _col, ...block }) => block)
+  const kept = underTitle ? [] : blocks.filter((block) => !LISTING_REPLACES.has(block.kind)).map(({ col: _col, ...block }) => block)
   const words = kept.filter((block) => block.kind !== 'button' && block.kind !== 'form')
   let actions = kept.filter((block) => block.kind === 'button')
   if (!actions.length && role === 'featured') {
     const all = listingAllButton(page, listing)
     if (all) actions = [all]
   }
-  if (!words.some((block) => speaksHeading(scope, block))) {
+  if (!underTitle && !words.some((block) => speaksHeading(scope, block))) {
     // Every band of records is headed: the plan's name for it, or on a first section the page's title.
     words.unshift({ kind: 'heading', text: index === 0 ? page.plan.title : page.plan.sections[index]?.name || page.plan.title })
   }
@@ -2486,7 +2560,9 @@ function listingSection(
   const container = tree.add(
     'muiContainer',
     { maxWidth: 'lg' },
-    { py: index === 0 ? { ...HERO_PADDING } : { ...SECTION_PADDING } },
+    underTitle
+      ? { pt: { xs: 2, md: 3 }, pb: { ...SECTION_PADDING } }
+      : { py: index === 0 ? { ...HERO_PADDING } : { ...SECTION_PADDING } },
     [content],
     'container',
   )
@@ -2498,11 +2574,194 @@ function listingSection(
       ariaLabel: sectionLabel(name, index),
       ...(scope.band === 'dark' ? { colorScheme: 'dark' } : {}),
     },
-    bandSx(scope.band),
+    underTitle ? null : bandSx(scope.band),
     [container],
     'section',
     page.options.sectionIds?.[index] ?? sectionIdOf(index),
   )
+}
+
+/** What a store's reviews are headed with where neither the design nor the plan says. */
+export const AI_LAYOUT_REVIEWS_HEADING = AI_LAYOUT_LABELS_EN.reviewsHeading
+
+/**
+ * A store's own customer reviews (AGL-3676): the commerce plugin's Product
+ * reviews in its store-wide scope, carrying the section's heading itself.
+ * It lists approved reviews with their star ratings, and on a published page
+ * with none — every store that just opened — it shows nothing, heading and
+ * all, so the band takes no room until a shopper has written one. No review
+ * is ever written here: the design's quotes, if it gave any, were left out.
+ */
+function reviewsSection(scope: SectionScope, blocks: readonly AiLayoutBlock[]): string {
+  const { page, index, at } = scope
+  const tree = page.tree
+  const given = blocks.find((block) => speaksHeading(scope, block))
+  const heading =
+    aiLayoutWords(given?.text, 'heading', page.targets.facts) ||
+    aiLayoutFitText(page.plan.sections[index]?.name, 'heading') ||
+    aiLayoutLabel('reviewsHeading', page.options.language)
+  page.settled.push({ at, what: "the store's own reviews placed: shown once shoppers leave them, never written for them" })
+  const id = tree.add(
+    AI_LAYOUT_LISTING_ELEMENTS.reviews,
+    { scope: 'store', heading, maxItems: String(AI_LAYOUT_FEATURED_RECORDS.reviews) },
+    // The padding is the element's, so a store with no reviews yet keeps no empty band.
+    { py: { ...SECTION_PADDING } },
+    null,
+    'reviews',
+  )
+  // The reviews are what the section shows: its shoppers' to write.
+  noted(scope, [id, id])
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, null, [id], 'container')
+  return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
+}
+
+/** What a store's sign-up is headed with where neither the design nor the plan says. */
+export const AI_LAYOUT_SIGNUP_HEADING = AI_LAYOUT_LABELS_EN.signupHeading
+
+/**
+ * A store's newsletter sign-up (AGL-3676): the design's heading and words
+ * beside the commerce plugin's Newsletter signup field, or over it on a
+ * centered band. Any form or button the design drew for it is the field's.
+ */
+function signupSection(scope: SectionScope, blocks: readonly AiLayoutBlock[]): string {
+  const { page, index, at } = scope
+  const tree = page.tree
+  const flow = blocks
+    .filter((block) => WORD_KINDS.has(block.kind) && block.kind !== 'button')
+    .map(({ col: _col, ...block }) => block)
+  if (!flow.some((block) => speaksHeading(scope, block))) {
+    flow.unshift({ kind: 'heading', text: page.plan.sections[index]?.name || aiLayoutLabel('signupHeading', page.options.language) })
+  }
+  page.settled.push({ at, what: "the store's newsletter sign-up placed" })
+  const field = tree.add(AI_LAYOUT_LISTING_ELEMENTS.signup, { buttonLabel: aiLayoutLabel('subscribe', page.options.language) }, null, null, 'signup')
+  noted(scope, [field, field])
+  const words = compileFlow(scope, flow, scope.centered ? 'full' : 'half')
+  const body = scope.centered
+    ? tree.add(
+        'muiStack',
+        { spacing: '4', alignItems: 'center' },
+        null,
+        [words, tree.add('muiContainer', { maxWidth: 'sm', disableGutters: true }, null, [field], 'measure')],
+        'content',
+      )
+    : designRow(
+        scope,
+        [...(words ? [{ id: words, size: 'xs:12 md:6' }] : []), { id: field, size: 'xs:12 md:6' }],
+        '6',
+      )
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { ...SECTION_PADDING } }, [body], 'container')
+  return designedRoot(scope, [container], bandSx(scope.band), scope.band === 'dark')
+}
+
+/** A store's Shop page's grid section on this page, by plan index; -1 where this page is not its Shop page. */
+function shopGridAt(page: PageScope): number {
+  const products = (page.targets.listings ?? []).find((listing) => listing.kind === 'products')
+  return (
+    products?.placements.find((placement) => placement.role === 'index' && placement.screenId === page.targets.pageId)?.section ??
+    -1
+  )
+}
+
+/** A store's Shop page, by its id, where this page is another page of the store; `null` otherwise. */
+function shopPageOf(page: PageScope): string | null {
+  const products = (page.targets.listings ?? []).find((listing) => listing.kind === 'products')
+  const shop = products?.placements.find((placement) => placement.role === 'index')?.screenId
+  return shop && shop !== page.targets.pageId && page.targets.pages.some((entry) => entry.id === shop) ? shop : null
+}
+
+/**
+ * A Shop page's opening, as a storefront's collection page opens (AGL-3676):
+ * the page's title and one line under it, on the page's own ground, with
+ * little room around them — no photo and no buttons — so the grid that
+ * follows starts above the fold. The beta.237 Willow Wick /shop opened on a
+ * tall candle photo and its words, the products below the fold.
+ */
+function shopTitle(scope: SectionScope, blocks: readonly AiLayoutBlock[]): string {
+  const { page, at } = scope
+  const left = blocks.filter((block) => !['eyebrow', 'heading', 'lede', 'text'].includes(block.kind))
+  if (left.length) {
+    page.settled.push({ at, what: `${left.map((block) => block.kind).join(', ')} left out: a Shop page opens on its title and its grid` })
+  }
+  const heading = blocks.find((block) => speaksHeading(scope, block))
+  const line = blocks.find((block) => block.kind === 'lede' || block.kind === 'text')
+  const eyebrow = blocks.find((block) => block.kind === 'eyebrow')
+  const flow: AiLayoutBlock[] = [
+    ...(eyebrow ? [eyebrow] : []),
+    { kind: 'heading', text: heading?.text ?? page.plan.title },
+    ...(line ? [{ kind: 'lede' as const, text: line.text }] : []),
+  ]
+  scope.band = 'plain'
+  scope.centered = false
+  page.settled.push({ at, what: "drawn as the Shop page's title bar, the grid under it" })
+  const words = compileFlow(scope, flow, 'half') as string
+  const container = page.tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 5, md: 7 }, pb: { xs: 1, md: 2 } }, [words], 'container')
+  return designedRoot(scope, [container], null, false)
+}
+
+/**
+ * A storefront's home hero sells (AGL-3676): it opens the shop. Where the
+ * design gave it no button to the Shop page, "Shop all" leads its buttons,
+ * and any other primary button steps back to secondary beside it.
+ */
+function sellingHero(scope: SectionScope, flow: AiLayoutBlock[]): void {
+  const design = scope.page.design
+  if (!design?.input.home || aiLayoutFamily(design.input.kind) !== 'retail') return
+  const shop = shopPageOf(scope.page)
+  if (!shop || flow.some((block) => block.kind === 'button' && block.to === `page:${shop}`)) return
+  const firstButton = flow.findIndex((block) => block.kind === 'button')
+  for (const [at, block] of flow.entries()) {
+    if (block.kind === 'button' && (block.style ?? 'primary') === 'primary') flow[at] = { ...block, style: 'secondary' }
+  }
+  const text = aiLayoutLabel('shopAll', scope.page.options.language)
+  const shopAll: AiLayoutBlock = { kind: 'button', text, to: `page:${shop}`, style: 'primary' }
+  if (firstButton === -1) flow.push(shopAll)
+  else flow.splice(firstButton, 0, shopAll)
+  scope.page.settled.push({ at: scope.at, what: `the hero opens the shop: "${text}" leads its buttons` })
+}
+
+/** The button a storefront's hero opens its shop with. */
+export const AI_LAYOUT_SHOP_ALL = AI_LAYOUT_LABELS_EN.shopAll
+
+/**
+ * A storefront's reasons to buy as open columns, each led by an icon over its
+ * title and words (AGL-3676): the icon the design named for it, else one its
+ * words suggest (shipping a truck, returns the arrows, small batch the hand),
+ * never the same twice in a row. One style key an element, so a row repeats
+ * no multi-key inline style (rule 16).
+ */
+function iconColumns(scope: SectionScope, items: readonly AiLayoutItem[], room: Room): string {
+  const { page } = scope
+  const tree = page.tree
+  const facts = page.targets.facts
+  const iconWords = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word))
+  const perRow = across(items.length, room, 'cards')
+  const textAlign = scope.centered ? { align: 'center' } : {}
+  page.settled.push({ at: scope.at, what: `${items.length} items drawn as icon columns` })
+  const ids = items.map((item, position) => {
+    const icon = aiIconOfWord(iconWords[position]) ?? AI_ICON_LIBRARY.star
+    return tree.add(
+      'muiStack',
+      { spacing: '1.5', ...(scope.centered ? { alignItems: 'center' } : {}) },
+      null,
+      [
+        tree.add(AI_ICON_COMPONENT_ID, { iconId: icon.id, size: '32' }, accent(scope), null, 'icon'),
+        item.title.trim()
+          ? tree.add(
+              'muiTypography',
+              { children: aiLayoutWords(item.title, 'itemTitle', facts), variant: 'h6', component: itemElement(scope), ...textAlign },
+              null,
+              null,
+              'title',
+            )
+          : null,
+        item.text.trim()
+          ? tree.add('muiTypography', { children: aiLayoutWords(item.text, 'itemText', facts), variant: 'body2', ...textAlign }, muted(scope), null, 'text')
+          : null,
+      ],
+      'iconItem',
+    )
+  })
+  return layOut(scope, noted(scope, ids), perRow, '5', 'icons')
 }
 
 /**
@@ -2517,6 +2776,24 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
   const shown = featured ? AI_LAYOUT_FEATURED_RECORDS[listing.kind] : 12
   const element = AI_LAYOUT_LISTING_ELEMENTS[listing.kind]
   let id: string
+  if (listing.kind === 'tracks') {
+    // An empty player (AGL-3716): its "add your tracks" state, which the owner
+    // fills from their own media library. No source, ever — the section's
+    // heading and words are the model's, the recordings the owner's.
+    id = tree.add(element, null, null, null, 'player')
+    page.settled.push({ at: scope.at, what: 'an empty music player placed for the owner’s own tracks' })
+    // The player is what the section shows: its tracks are the owner's to add.
+    noted(scope, [id, id])
+    return id
+  }
+  if (listing.kind === 'events') {
+    // The site's published events (AGL-3755), each with its date, place and
+    // cover: the section's heading is the model's, so the list adds none.
+    id = tree.add(element, featured ? { maxItems: String(shown) } : null, null, null, 'events')
+    page.settled.push({ at: scope.at, what: 'the site’s events listed by the Event List' })
+    noted(scope, [id, id])
+    return id
+  }
   if (listing.kind === 'products') {
     id = tree.add(
       element,
@@ -2524,14 +2801,33 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
         source: 'all',
         sort: 'newest',
         columns: String(featured ? Math.min(AI_LAYOUT_FEATURED_RECORDS.products, Math.max(3, listing.records.length)) : 3),
-        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown) }),
+        // The shop's own page browses: a sort and the store's categories as
+        // filter chips (shown once it has any), never categories drawn as cards.
+        ...(featured ? { maxItems: String(shown) } : { pageSize: String(shown), showSort: true, showCategories: true }),
         cardStyle: 'photo',
-        emptyText: 'New products are on their way.',
+        // A storefront's cards sell from the grid (AGL-3676): Add to cart on a
+        // product with one variant, Choose options on one with several.
+        quickAdd: true,
+        // A store that opens before its first products are in says so, with a
+        // way to hear when they land (AGL-3676): never placeholder products.
+        emptyTitle: aiLayoutLabel('storeEmptyTitle', page.options.language),
+        emptyText: aiLayoutLabel(listing.emptyAction ? 'storeEmptyText' : 'storeEmptyTextAlone', page.options.language),
+        ...(listing.emptyAction
+          ? {
+              emptyActionLabel:
+                listing.emptyAction.label === AI_LAYOUT_LABELS_EN.getInTouch
+                  ? aiLayoutLabel('getInTouch', page.options.language)
+                  : listing.emptyAction.label,
+              emptyActionHref: listing.emptyAction.href,
+            }
+          : {}),
       },
       null,
       null,
       'products',
     )
+  } else if (listing.kind === 'records') {
+    id = recordsElement(scope, listing, featured ? shown : null)
   } else {
     id = postsElement(scope, listing, featured ? shown : COLLECTION_INDEX_POSTS)
   }
@@ -2540,6 +2836,14 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
   noted(scope, Array.from({ length: Math.max(2, Math.min(shown, listing.records.length)) }, () => id))
   return id
 }
+
+/** What a store's Product grid says while the store lists nothing yet (AGL-3676). */
+export const AI_LAYOUT_STORE_EMPTY = {
+  title: AI_LAYOUT_LABELS_EN.storeEmptyTitle,
+  text: AI_LAYOUT_LABELS_EN.storeEmptyText,
+  /** Said where the site has no page to get in touch on. */
+  textAlone: AI_LAYOUT_LABELS_EN.storeEmptyTextAlone,
+} as const
 
 /** The most posts a page of the site lists where it is the writing's own page. */
 const COLLECTION_INDEX_POSTS = 9
@@ -2563,7 +2867,7 @@ function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: numb
   const excerpt = tree.add('muiTypography', { children: '{{entry.excerpt}}', variant: 'body2' }, muted(scope), null, 'postExcerpt')
   const more = tree.add(
     'muiScreenLink',
-    { children: 'Read the post', href: '{{entry.url}}', renderAs: 'link', color: 'inherit' },
+    { children: aiLayoutLabel('readPost', page.options.language), href: '{{entry.url}}', renderAs: 'link', color: 'inherit' },
     { alignSelf: 'flex-start' },
     null,
     'postLink',
@@ -2595,6 +2899,127 @@ function postsElement(scope: SectionScope, listing: AiLayoutListing, limit: numb
     ruled ? null : { display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 5 },
     [card],
     'posts',
+  )
+}
+
+// ── A dataset's records (AGL-3616) ───────────────────────────────────────
+
+/** The words of the link under each record's card to its own page (AGL-3727). */
+export const AI_LAYOUT_RECORD_LINK_LABEL = AI_LAYOUT_LABELS_EN.viewDetails
+
+/** A field whose name says it is a record's kicker: its category, role, time or place. */
+const RECORD_KICKER = /\b(category|categories|type|kind|role|title|position|section|course|date|dates|time|times|when|day|days|location|place|where|venue|city|duration|level|tag|tags)\b/i
+/** A field whose name says it is a record's words: its description, bio or answer. */
+const RECORD_BODY = /\b(description|summary|details?|about|bio|biography|answer|text|notes?|body|blurb|overview|excerpt|ingredients|includes)\b/i
+/** A dataset of questions and answers, listed as a ruled list rather than cards. */
+const RECORD_QUESTIONS = /\b(faqs?|questions?|q ?& ?a)\b/i
+/** A dataset of people, whose photos are portraits. */
+const RECORD_PEOPLE = /\b(team|staff|people|crew|instructors?|teachers?|stylists?|therapists?|coaches?|trainers?|chefs?|doctors?|dentists?|artists?|founders?|members?)\b/i
+
+/** The fields a record's card shows: its name, a kicker line and its words, each by id. */
+export function aiLayoutRecordCardFields(
+  fields: readonly { id: string; name: string; type: string }[],
+): { title: string | null; kicker: string | null; body: string | null } {
+  const texts = fields.filter((field) => field.type === 'text' || field.type === 'sorted')
+  const title = texts.find((field) => field.type === 'text')?.id ?? null
+  const rest = texts.filter((field) => field.id !== title)
+  const body = rest.find((field) => field.type === 'text' && RECORD_BODY.test(field.name))?.id ?? null
+  const kicker = rest.find((field) => field.id !== body && RECORD_KICKER.test(field.name))?.id ?? null
+  // Failing a named one, the next text field is the record's words.
+  const words = body ?? rest.find((field) => field.type === 'text' && field.id !== kicker)?.id ?? null
+  return { title, kicker, body: words }
+}
+
+/**
+ * A dataset's records, as the site's design lists them: a Box that repeats
+ * its one card over the dataset — the platform's own repeat, which the page
+ * renders once per record — or, for questions and answers, a ruled list.
+ * The card binds the record's fields as `{{item.<field>}}`: its name as the
+ * item's title, a kicker over it (its category, role or time), and its words.
+ * A dataset whose records carry a photo (AGL-3616) leads each card with it,
+ * an Image bound to the record's photo field — a portfolio's or a
+ * photographer's opening in a lightbox, as one gallery captioned with each
+ * record's name, as the design's own picture cards do (AGL-3717) — so a list
+ * of pieces stays the image-led gallery it was before it was a dataset.
+ * A featured band shows the first few; a page of its own, every record.
+ */
+function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: number | null): string {
+  const { page } = scope
+  const tree = page.tree
+  const fields = aiLayoutRecordCardFields(listing.fields ?? [])
+  const questions = RECORD_QUESTIONS.test(listing.name)
+  const textAlign = scope.centered && !questions ? { align: 'center' } : {}
+  const kicker = fields.kicker
+    ? tree.add('muiTypography', { children: `{{item.${fields.kicker}}}`, variant: 'overline', component: 'p', ...textAlign }, accent(scope), null, 'recordKicker')
+    : null
+  const title = fields.title
+    ? tree.add(
+        'muiTypography',
+        { children: `{{item.${fields.title}}}`, variant: questions ? 'h6' : 'h5', component: itemElement(scope), ...textAlign },
+        null,
+        null,
+        'recordTitle',
+      )
+    : null
+  const body = fields.body
+    ? tree.add('muiTypography', { children: `{{item.${fields.body}}}`, variant: 'body2', ...textAlign }, muted(scope), null, 'recordBody')
+    : null
+  const photoField = !questions && listing.imageField ? listing.imageField : null
+  const opens = Boolean(photoField) && aiOpensGalleriesInLightbox(page)
+  // Each card opens its record's own page where the dataset has one (AGL-3727):
+  // `/{base}/{{item.<address>}}`, filled per record as the card repeats.
+  const recordHref = aiLayoutRecordHref(listing)
+  const portrait = page.design?.input.kind === 'photography' || RECORD_PEOPLE.test(listing.name)
+  const picture = photoField
+    ? tree.add(
+        'image',
+        {
+          src: `{{item.${photoField}}}`,
+          alt: fields.title ? `{{item.${fields.title}}}` : aiLayoutFitText(listing.name, 'alt') || 'A photo',
+          objectFit: 'cover',
+          width: '100%',
+          loading: 'lazy',
+          ...(opens ? { ...lightboxProps(scope), ...(fields.title ? { lightboxCaption: `{{item.${fields.title}}}` } : {}) } : {}),
+          // A photo that does not open in a lightbox opens the record's page.
+          ...(recordHref && !opens ? { href: recordHref } : {}),
+        },
+        { aspectRatio: portrait ? '4 / 5' : '4 / 3', borderRadius: 2 },
+        null,
+        'recordImage',
+      )
+    : null
+  const more = recordHref
+    ? tree.add(
+        'muiScreenLink',
+        { children: aiLayoutLabel('viewDetails', page.options.language), href: recordHref, renderAs: 'link', color: 'inherit' },
+        { alignSelf: scope.centered && !questions ? 'center' : 'flex-start' },
+        null,
+        'recordLink',
+      )
+    : null
+  page.settled.push({
+    at: scope.at,
+    what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : picture ? ' as picture cards' : ' as cards'}${
+      recordHref ? `, each linking its page under /${listing.recordBase}` : ''
+    }`,
+  })
+  const card = questions
+    ? tree.add('muiStack', { spacing: '1' }, { borderTop: 1, pt: 3 }, [title, body, more], 'record')
+    : tree.add(
+        'muiStack',
+        { spacing: picture ? '1.5' : '1', ...(scope.centered ? { alignItems: 'center' } : {}) },
+        null,
+        [picture, kicker, title, body, more],
+        'record',
+      )
+  return tree.add(
+    AI_LAYOUT_LISTING_ELEMENTS.records,
+    { repeatDataset: listing.datasetId, ...(limit ? { repeatLimit: String(limit) } : {}) },
+    questions
+      ? { display: 'grid', gap: 3 }
+      : { display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 5 },
+    [card],
+    'records',
   )
 }
 

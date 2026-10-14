@@ -70,9 +70,12 @@ export type AiLayoutHeroVariant = 'cover' | 'split' | 'editorial'
  *  - `pictures`: a picture over each item's title and caption, in an uneven
  *    grid (work, products);
  *  - `articles`: a picture over each title and summary, in even columns (writing);
- *  - `menu`: two columns of lines under rules (dishes, prices left out).
+ *  - `menu`: two columns of lines under rules (dishes, prices left out);
+ *  - `icons`: open columns, each led by an icon in a soft disc over its title
+ *    and words — a storefront's reasons to buy (shipping, small batch,
+ *    returns), never a block of text (AGL-3676).
  */
-export type AiLayoutGroupVariant = 'cards' | 'ruled' | 'pictures' | 'articles' | 'menu'
+export type AiLayoutGroupVariant = 'cards' | 'ruled' | 'pictures' | 'articles' | 'menu' | 'icons'
 
 /** How a numbered group is drawn: a row of numbers, or a ruled list beside its heading. */
 export type AiLayoutStepsVariant = 'numbers' | 'timeline'
@@ -81,7 +84,7 @@ export type AiLayoutStepsVariant = 'numbers' | 'timeline'
 export interface AiLayoutDesignChoices {
   hero: AiLayoutHeroVariant
   /** The group style of a section that names no subject the kind draws its own way. */
-  group: 'cards' | 'ruled'
+  group: 'cards' | 'ruled' | 'icons'
   steps: AiLayoutStepsVariant
   /** Whether a section of words takes a photo beside it. */
   features: boolean
@@ -170,9 +173,11 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
   return {
     hero,
     // A store's reasons to buy — the making, the shipping, the care — read
-    // as open ruled columns beside its product photos, never as a SaaS
-    // page's feature cards (AGL-3676).
-    group: family === 'retail' ? 'ruled' : group,
+    // as open columns each led by an icon, the way a storefront theme draws
+    // them: never a SaaS page's feature cards, and never the plain columns
+    // of a title and a sentence the beta.237 Willow Wick home showed four
+    // bands of (AGL-3676).
+    group: family === 'retail' ? 'icons' : group,
     steps: pick(next, ['timeline', 'numbers', 'timeline'] as const),
     features: true,
     featureLeft: next() < 0.5,
