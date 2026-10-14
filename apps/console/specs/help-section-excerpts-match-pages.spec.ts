@@ -106,4 +106,12 @@ describe('anchored help tooltips quote their own section (AGL-3778)', () => {
       ),
     ).toEqual([])
   })
+
+  /** And the example the bug report names. */
+  it('opens the Discounts card tooltip on its own first sentence', () => {
+    expect(
+      (PLUGIN_DOCS_SECTION_EXCERPTS as Record<string, Record<string, string>>)
+        .discountsAndCoupons['#add-a-discount'],
+    ).toMatch(/^The Discounts card takes money off/)
+  })
 })

@@ -9,23 +9,27 @@ description: Create discount codes and automatic promotions with a minimum spend
 Discounts take money off an order: either a **code** a shopper types at
 checkout, or an **automatic promotion** that applies to every cart that
 qualifies, with nothing to type. You set them up on your site's **Products**
-page, under **Promotions**.
+page, in its **Promotions** section.
 
 Anyone who can edit the site can add, change and delete discounts. Shoppers pay
 through your own Stripe account, so [connect Stripe](overview.md) before you
 promote a sale.
 
-The **Promotions** tab holds two cards for money off:
+The **Promotions** section holds two cards for money off:
 
 | Card | What it makes |
 | -- | -- |
 | **Discounts** | Codes and automatic promotions: percent off, a fixed amount off, or free shipping, with a minimum subtotal, a use limit and dates. Use this one for anything new. |
 | **Coupons** | Simple percent-off codes with a use limit and an expiry date. Codes you made here before Discounts existed keep working. |
 
-Gift cards and store credit sit on the same tab; see
+Gift cards and store credit sit in the same section; see
 [Gift cards & store credit](overview.md#gift-cards).
 
 ## Add a discount {#add-a-discount}
+
+The **Discounts** card takes money off with a code or automatically: select
+**Add discount**, choose a percent off, an amount off or free shipping, and
+select **Save**.
 
 1. Open your site's **Products** page and choose **Promotions**.
 2. On the **Discounts** card, select **Add discount**.
@@ -50,8 +54,9 @@ Gift cards and store credit sit on the same tab; see
 Each discount on the card reads as one line: its code or name, what it takes
 off, whether it is **store-wide** or limited to some products, any minimum, and
 how many times it has been used. A switched-off discount ends in
-**· disabled**. **Edit** opens the same dialog and **Delete** removes the
-discount straight away.
+**· disabled**. **Disable** stops a discount without deleting it, and
+**Enable** switches it back on. **Edit** opens the same dialog and **Delete**
+removes the discount straight away.
 
 ### Discount types {#discount-types}
 
@@ -126,7 +131,9 @@ register discount (%)** setting; your promotions are not. See
 
 ## Coupons {#coupons}
 
-The **Coupons** card makes simple percent-off codes for your online checkout.
+The **Coupons** card makes simple percent-off codes for online checkout:
+select **Add coupon**, enter the code and the percent off, and select
+**Create**. For anything more, use a [discount](#add-a-discount).
 
 1. On the **Coupons** card, select **Add coupon**.
 2. Enter the **Code** (letters and numbers; it is saved in capital letters),
@@ -144,12 +151,13 @@ When a code matches both a discount and a coupon, the discount wins.
 
 The **Discounts** and **Coupons** cards each have **Import** and **Export** in
 their header. A discount or coupon you import starts switched off, unless the
-file has an **Active** column that says otherwise. How many times one has been
+file has an **Active** column that says otherwise. Switch it on with
+**Enable** on its row. How many times one has been
 used is exported but never imported. See
 [Import and export store data](store-import-and-export.md#discounts-and-coupons).
 
 Aglyn AI can also propose discounts for your store. They are created switched
-off. See [Products with AI](../../ai/products-with-ai.md).
+off, so nothing changes at checkout until you select **Enable**. See [Products with AI](../../ai/products-with-ai.md).
 
 ## Show the code field to shoppers {#show-the-code-field}
 
@@ -184,7 +192,7 @@ checkout stops before payment and the shopper sees one of these messages:
 | What happens | What to do |
 | -- | -- |
 | A shopper can't find where to type the code | Turn on the code field on your cart or product page. See [Show the code field to shoppers](#show-the-code-field). |
-| A discount ends in **· disabled** | It was imported or proposed by Aglyn AI, which start switched off, or turned off in a file. Import it again with **Active** set to yes. |
+| A discount ends in **· disabled** | It was imported or proposed by Aglyn AI, which start switched off, or someone selected **Disable**. Select **Enable** on its row. |
 | A capped discount says it is used up but you have fewer orders | Some uses are held by shoppers on the payment page. They come back when those checkouts expire. |
 | A code works online but not at the register | Codes aren't entered at the register. Make it an automatic promotion, or use the cashier's **Discount %**. |
 | A free shipping promotion didn't apply at the register | Register sales don't ship, so free shipping has nothing to take off there. |

@@ -218,9 +218,6 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',
     '#commerce-glance': 'The Commerce card on your site\'s overview and Analytics pages shows the last 30 days of sales at a glance: revenue, orders, average order value, and how many products are low on stock.',
-    '#coupons': 'The Coupons card makes simple percent-off codes buyers enter at checkout, with an optional limit on uses and an expiry date.',
-    '#discounts': 'The Discounts card makes codes buyers type at checkout, or automatic promotions that apply on their own, for a percent off, an amount off or free shipping.',
-    '#dropshipping': 'Assign a supplier to a product and paid orders route automatically — by email and/or HMAC-signed webhook — with a token link the supplier uses to post tracking back, which fulfills the order.',
     '#gift-cards': 'Gift cards lists every card your store has issued, what is left on each one, and what that adds up to.',
     '#inventory-locations': 'The Inventory locations card, in the store\'s settings, splits your stock across warehouses or storefronts: add a location for each place you keep stock, then set each variant\'s count per location.',
     '#orders-screen': 'Open your site\'s Products hub and choose the Orders tab. Before your first sale the tab is an invitation rather than a table: it explains where orders come from and offers Draft order, so you can invoice a customer…',
@@ -352,6 +349,13 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#template-page': 'Open a template from the list to see it on its own page: rename it under Name (the name the campaign composer\'s design picker shows), and open it in the besigner with Edit in besigner to change the design.',
     '#template-preview': 'The Preview card draws the template as an inbox receives it, with the same renderer the send uses; merge tokens are left standing, because a real send fills them from each recipient.',
     '#template-report': 'The Sent from this template card lists every email sent from the template and adds up what they did, each rate over the population it was measured against.',
+  },
+  discountsAndCoupons: {
+    '#add-a-discount': 'The Discounts card takes money off with a code or automatically: select Add discount, choose a percent off, an amount off or free shipping, and select Save.',
+    '#coupons': 'The Coupons card makes simple percent-off codes for online checkout: select Add coupon, enter the code and the percent off, and select Create.',
+  },
+  dropshipSuppliers: {
+    '#add-a-supplier': 'The Dropship suppliers card, in the store\'s settings, lists the partners that ship orders for you: select Add supplier, enter its name and how it hears about orders, and select Save.',
   },
   emailCampaigns: {
     '#a-domain-we-set-up-is-a-request': 'This is the part worth reading before you plan around it. Nothing is provisioned automatically.',

@@ -309,6 +309,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/besigner/drag-drop-hierarchy',
     title: 'Drag-and-drop hierarchy',
   },
+  dropshipSuppliers: {
+    path: '/commerce-and-bookings/commerce/dropship-suppliers',
+    title: 'Dropship suppliers',
+  },
   editFromTheLiveSite: {
     path: '/building-sites/besigner/edit-from-the-live-site',
     title: 'Edit from the live site',
@@ -616,10 +620,6 @@ export const DOCS_HELP_TOPICS = {
   posOperations: {
     path: '/commerce-and-bookings/commerce/pos-operations',
     title: 'Running the register',
-  },
-  productReviews: {
-    path: '/commerce-and-bookings/commerce/product-reviews',
-    title: 'Product reviews',
   },
   productsWithAi: {
     path: '/ai/products-with-ai',
@@ -940,7 +940,7 @@ export const DOCS_HELP_ANCHORS = {
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#routed-sections-agl-2501', '#which-registration-owns-a-path', '#gating-a-section', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
-  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
+  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
@@ -974,6 +974,7 @@ export const DOCS_HELP_ANCHORS = {
   domainProviders: ['#choosing', '#limits', '#contract', '#wildcard', '#wildcard-dns', '#wildcard-certificates', '#wildcard-proxy', '#wildcard-env', '#wildcard-verify', '#wildcard-honesty', '#webhook', '#webhook-request', '#webhook-replies', '#webhook-bad-answers', '#webhook-rules', '#webhook-traefik', '#unconfigured', '#status-states', '#completer', '#migrating', '#migrating-webhook', '#migrating-down', '#migrating-vercel', '#related'],
   downgradingAndCanceling: ['#when-changes-take-effect', '#downgrading-to-a-lower-plan', '#pending-downgrade', '#keep-my-current-plan', '#what-changes-on-a-downgrade', '#canceling-your-subscription', '#the-cancel-dialog', '#deleting-a-single-site', '#deleting-your-organization', '#confirm-deletion', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
+  dropshipSuppliers: ['#add-a-supplier', '#assign-products', '#when-an-order-is-paid', '#supplier-email', '#record-the-shipment', '#webhook-orders', '#signed-webhooks', '#webhook-retries', '#troubleshooting', '#related'],
   editFromTheLiveSite: ['#who-sees-it', '#on-your-aglynapp-address', '#on-your-own-domain', '#the-bar', '#hide-it', '#what-it-never-does', '#good-to-know', '#related'],
   editYourTheme: ['#open-the-editor', '#choose-a-theme', '#what-you-have-changed', '#set-colors-and-fonts', '#color-scheme', '#shape-and-spacing', '#fonts', '#download-size', '#pairings', '#upload-your-own-font', '#style-components', '#it-follows-you-into-the-besigner', '#change-it-with-ai', '#tips', '#related'],
   elementCatalog: ['#finding-an-element', '#element-search', '#element-detail', '#layout', '#the-pages-main-landmark', '#every-container-can-be-a-semantic-element', '#light-or-dark-whatever-the-visitor-picked', '#which-link-groups-want-to-be-a-nav', '#header-and-footer-for-your-site-chrome', '#grid', '#surface', '#accordion', '#navigation', '#where-a-link-opens', '#linking-to-a-collection-listing', '#link-container', '#tabs', '#tabs-that-go-to-another-screen', '#pagination', '#text', '#data-display', '#media', '#image', '#image-list', '#forms', '#commerce', '#members', '#input', '#related'],
@@ -1049,7 +1050,6 @@ export const DOCS_HELP_ANCHORS = {
   pos: ['#registers', '#the-register', '#modifiers', '#selling-past-the-count', '#taking-payment', '#platform-fees-at-the-register', '#when-something-disconnects', '#tips', '#receipts', '#card-readers', '#customer-display', '#self-service-kiosk', '#reservations', '#related'],
   posHardware: ['#recommended-kit', '#card-readers', '#receipt-printers', '#add-a-printer', '#what-prints', '#your-logo-on-the-receipt', '#status', '#cash-drawer', '#barcode-scanning', '#label-printers', '#product-labels', '#shipping-labels', '#customer-display-tablet', '#related'],
   posOperations: ['#shifts-and-the-cash-drawer', '#what-the-reports-show', '#shift-history', '#requiring-a-shift', '#who-rang-it', '#staff-pins', '#customers-at-the-register', '#returns-and-exchanges', '#refund-limits-and-manager-approval', '#printed-receipts', '#selling-while-offline', '#what-the-sync-checks', '#before-you-go-offline', '#related'],
-  productReviews: ['#add-the-reviews-block', '#write-a-review', '#verified-buyers', '#review-moderation', '#reply', '#troubleshooting', '#related'],
   productsWithAi: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#profile-card', '#listing-publisher-card', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#public-profile', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#bundle-and-manifest', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#edit-listing', '#your-listings', '#listing-links', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#listing-changelog', '#version-history', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#install-card', '#installed-from-the-marketplace', '#licenses', '#workspace-licenses', '#licenses-you-bought', '#getting-paid', '#set-up-payouts', '#purchases-and-fees', '#refund-reversals', '#low-prices-and-processing'],
@@ -1284,9 +1284,6 @@ export const DOCS_HELP_SECTION_TITLES: {
   commerce: {
     '#commerce-analytics': 'Commerce analytics',
     '#commerce-glance': 'Commerce at a glance',
-    '#coupons': 'Coupons',
-    '#discounts': 'Discounts',
-    '#dropshipping': 'Dropshipping',
     '#gift-cards': 'Gift cards & store credit',
     '#inventory-locations': 'Inventory locations',
     '#orders-screen': 'The Orders page',
@@ -1377,6 +1374,10 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#template-preview': 'Preview',
     '#template-report': 'Sent from this template',
   },
+  discountsAndCoupons: {
+    '#add-a-discount': 'Add a discount',
+    '#coupons': 'Coupons',
+  },
   downgradingAndCanceling: {
     '#canceling-your-subscription': 'Canceling your subscription',
     '#confirm-deletion': 'Confirming the deletion',
@@ -1386,6 +1387,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   dragDropHierarchy: {
     '#drop-zones-edges-vs-center': 'Drop zones: edges vs. center',
+  },
+  dropshipSuppliers: {
+    '#add-a-supplier': 'Add a supplier',
   },
   editYourTheme: {
     '#choose-a-theme': 'Choose a theme',
@@ -1631,9 +1635,6 @@ export const DOCS_HELP_SECTION_TITLES: {
   posOperations: {
     '#shifts-and-the-cash-drawer': 'Shifts and the cash drawer',
     '#staff-pins': 'Staff PINs',
-  },
-  productReviews: {
-    '#review-moderation': 'Moderate reviews',
   },
   publishAPlugin: {
     '#listing-publisher-card': 'The Publisher card on a listing',

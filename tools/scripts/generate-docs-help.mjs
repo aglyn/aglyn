@@ -275,6 +275,10 @@ const PLUGIN_TOPICS = {
   // which draw nothing until the deployment holds a carrier provider
   // (AGL-3777); the guide is unlisted until then.
   carrierAccounts: '/commerce-and-bookings/commerce/carrier-accounts-and-labels',
+  // The Discounts and Coupons cards under Promotions (AGL-3714).
+  discountsAndCoupons: '/commerce-and-bookings/commerce/discounts-and-coupons',
+  // The Dropship suppliers card under the store's Settings (AGL-3714).
+  dropshipSuppliers: '/commerce-and-bookings/commerce/dropship-suppliers',
   // The Trustpilot and Yotpo Reviews cards under the store's Settings and
   // the order dialog's Review invitations section (AGL-3699).
   reviewPlatforms: '/commerce-and-bookings/commerce/review-platforms',

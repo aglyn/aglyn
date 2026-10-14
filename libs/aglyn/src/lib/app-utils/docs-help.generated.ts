@@ -332,6 +332,16 @@ export const PLUGIN_DOCS = {
     title: 'Designed emails',
     excerpt: 'Build campaign emails in the besigner with email-safe blocks and merge tokens — no separate editor.',
   },
+  discountsAndCoupons: {
+    path: '/commerce-and-bookings/commerce/discounts-and-coupons',
+    title: 'Discounts and coupons',
+    excerpt: 'Create discount codes and automatic promotions with a minimum spend, a use limit and start and end dates, add percent-off coupons, and show the code field on your cart and product pages.',
+  },
+  dropshipSuppliers: {
+    path: '/commerce-and-bookings/commerce/dropship-suppliers',
+    title: 'Dropship suppliers',
+    excerpt: 'Send each paid order to the supplier that ships it, by email or a signed webhook, and let the supplier record the tracking number without an Aglyn account.',
+  },
   emailCampaigns: {
     path: '/marketing-and-automation/email-campaigns/overview',
     title: 'Email Campaigns',
@@ -573,7 +583,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   bookings: ['#set-up-bookings', '#draft-services', '#price-labels', '#phone-and-address', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#export-bookings', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
   carrierAccounts: ['#carrier-accounts', '#shipping-labels', '#related'],
-  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
+  catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   commerce: ['#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
@@ -597,6 +607,8 @@ export const PLUGIN_DOCS_ANCHORS = {
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#import-from-csv', '#creating-a-deal', '#type-and-lead-source', '#contact-roles', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#deal-properties', '#deals-on-a-record', '#files', '#related'],
   deliveryApps: ['#connect-a-store', '#the-menu', '#match-items', '#taking-orders'],
   designedEmails: ['#create-a-template', '#find-a-template', '#duplicate-a-template', '#template-page', '#template-report', '#template-preview', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version', '#start-from-a-brief-instead'],
+  discountsAndCoupons: ['#add-a-discount', '#discount-types', '#product-discounts', '#automatic-promotions', '#discount-codes', '#use-limits', '#where-discounts-apply', '#coupons', '#import-and-export', '#show-the-code-field', '#what-shoppers-see', '#troubleshooting', '#related'],
+  dropshipSuppliers: ['#add-a-supplier', '#assign-products', '#when-an-order-is-paid', '#supplier-email', '#record-the-shipment', '#webhook-orders', '#signed-webhooks', '#webhook-retries', '#troubleshooting', '#related'],
   emailCampaigns: ['#send-a-campaign', '#campaigns-belong-to-the-organization', '#organization-emails-page', '#campaigns-group-emails', '#campaign-page', '#filter-the-lists', '#what-belongs-to-a-campaign', '#who-the-email-comes-from', '#sending-domains', '#account-email-always-sends', '#marketing-needs-a-domain', '#two-ways-to-get-a-domain', '#a-domain-we-set-up-is-a-request', '#domain-states', '#org-sending-domain', '#senders', '#add-a-sender', '#send-a-test', '#preview-the-email', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#held-for-review', '#duplicate-an-email', '#email-lists', '#manual-lists', '#list-members', '#add-to-a-list', '#import-a-list', '#export-a-list', '#remove-from-a-list', '#lists-built-from-a-rule', '#experiments', '#experiments-across-sites', '#opens--clicks', '#last-campaign-card', '#messages-list', '#email-page', '#email-preview', '#email-recipients', '#the-campaign-report', '#per-contact-engagement', '#which-links-were-clicked', '#revenue-from-a-campaign', '#how-a-visit-is-credited', '#utm-labels', '#who-it-reached', '#conversions', '#compliance', '#list-unsubscribe', '#topics', '#preference-page', '#consent-groups', '#consent-group-create', '#consent-group-join', '#consent-group-leave', '#consent-group-rename', '#consent-group-progress', '#frequency-opt-down', '#double-opt-in', '#consent-group-confirmation', '#marketing-mail', '#frequency-cap', '#suppressions', '#org-suppressions', '#add-a-suppression', '#import-export-suppressions', '#platform-suppressions', '#related'],
   emailPlatforms: ['#connect', '#who-is-sent', '#unsubscribes-from-the-platform', '#settings', '#sync-log', '#disconnect', '#one-off-imports'],
   events: ['#manage-events', '#import-and-export-events', '#columns', '#how-a-row-finds-an-existing-event', '#conflicts-the-dry-run-and-undo', '#files-from-other-calendars', '#show-events-on-a-screen', '#ask-aglyn-ai', '#search-engines', '#related'],
@@ -834,9 +846,6 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   commerce: {
     '#commerce-analytics': 'Commerce analytics',
     '#commerce-glance': 'Commerce at a glance',
-    '#coupons': 'Coupons',
-    '#discounts': 'Discounts',
-    '#dropshipping': 'Dropshipping',
     '#gift-cards': 'Gift cards & store credit',
     '#inventory-locations': 'Inventory locations',
     '#orders-screen': 'The Orders page',
@@ -968,6 +977,13 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#template-page': 'A template\'s page',
     '#template-preview': 'Preview',
     '#template-report': 'Sent from this template',
+  },
+  discountsAndCoupons: {
+    '#add-a-discount': 'Add a discount',
+    '#coupons': 'Coupons',
+  },
+  dropshipSuppliers: {
+    '#add-a-supplier': 'Add a supplier',
   },
   emailCampaigns: {
     '#a-domain-we-set-up-is-a-request': 'A domain we set up is asked for, not included',

@@ -104,6 +104,7 @@ export const DOCS_HELP_EXCERPTS = {
   domainProviders: 'Make hostnames actually resolve on a self-hosted install — choose a domain driver, run the wildcard path end to end, or implement the webhook contract against your own proxy.',
   downgradingAndCanceling: 'What happens when you downgrade, cancel, or delete — when each takes effect, what the cancel dialog offers you, and how to export first.',
   dragDropHierarchy: 'Everything drag-and-drop in the Besigner — where you can drag, how drop zones and placement markers work, containers vs. leaf elements, placement rules, and multi-drag.',
+  dropshipSuppliers: 'Send each paid order to the supplier that ships it, by email or a signed webhook, and let the supplier record the tracking number without an Aglyn account.',
   editFromTheLiveSite: 'The admin bar on your published site — who sees it, how it appears on your Aglyn subdomain and on your own domain, what it links to, and how to hide it.',
   editYourTheme: 'Set colors, fonts, and light/dark schemes with a live preview.',
   elementCatalog: 'Every built-in element you can drop on the canvas, grouped by the categories in the ELEMENTS drawer.',
@@ -181,7 +182,6 @@ export const DOCS_HELP_EXCERPTS = {
   pos: 'Sell in person from the console register and take date-range reservations with deposits.',
   posHardware: 'Card readers, a customer display tablet, driverless receipt and kitchen printers, a cash drawer that opens on cash sales, camera and USB barcode scanning, and product and shipping labels.',
   posOperations: 'Shifts and the cash drawer with X and Z reports, staff PINs, customers at the register, returns and exchanges, printed thermal receipts, and selling cash while the register is offline.',
-  productReviews: 'Let customers rate and review your products, mark reviews from real buyers as verified, approve or reject each one before it is published, and reply in public.',
   productsWithAi: 'An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review.',
   publishAPlugin: 'Ship your own plugin to the marketplace with version pinning.',
   publisherHandbook: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
@@ -416,9 +416,6 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',
     '#commerce-glance': 'The Commerce card on your site\'s overview and Analytics pages shows the last 30 days of sales at a glance: revenue, orders, average order value, and how many products are low on stock.',
-    '#coupons': 'The Coupons card makes simple percent-off codes buyers enter at checkout, with an optional limit on uses and an expiry date.',
-    '#discounts': 'The Discounts card makes codes buyers type at checkout, or automatic promotions that apply on their own, for a percent off, an amount off or free shipping.',
-    '#dropshipping': 'Assign a supplier to a product and paid orders route automatically — by email and/or HMAC-signed webhook — with a token link the supplier uses to post tracking back, which fulfills the order.',
     '#gift-cards': 'Gift cards lists every card your store has issued, what is left on each one, and what that adds up to.',
     '#inventory-locations': 'The Inventory locations card, in the store\'s settings, splits your stock across warehouses or storefronts: add a location for each place you keep stock, then set each variant\'s count per location.',
     '#orders-screen': 'Open your site\'s Products hub and choose the Orders tab. Before your first sale the tab is an invitation rather than a table: it explains where orders come from and offers Draft order, so you can invoice a customer…',
@@ -509,6 +506,10 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#template-preview': 'The Preview card draws the template as an inbox receives it, with the same renderer the send uses; merge tokens are left standing, because a real send fills them from each recipient.',
     '#template-report': 'The Sent from this template card lists every email sent from the template and adds up what they did, each rate over the population it was measured against.',
   },
+  discountsAndCoupons: {
+    '#add-a-discount': 'The Discounts card takes money off with a code or automatically: select Add discount, choose a percent off, an amount off or free shipping, and select Save.',
+    '#coupons': 'The Coupons card makes simple percent-off codes for online checkout: select Add coupon, enter the code and the percent off, and select Create.',
+  },
   downgradingAndCanceling: {
     '#canceling-your-subscription': 'Canceling keeps your plan until the end of the period you have already paid for, then moves the organization to the Free plan — nothing is deleted, and you can resume any time before the period ends.',
     '#confirm-deletion': 'The last step of Delete organization starts the deletion of the organization and everything in it; nothing is erased yet, and you can cancel the request at any time during the hold period that follows.',
@@ -518,6 +519,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   dragDropHierarchy: {
     '#drop-zones-edges-vs-center': 'As you drag over an element, the Besigner splits it into drop zones and shows a placement marker for the zone you\'re pointing at.',
+  },
+  dropshipSuppliers: {
+    '#add-a-supplier': 'The Dropship suppliers card, in the store\'s settings, lists the partners that ship orders for you: select Add supplier, enter its name and how it hears about orders, and select Save.',
   },
   editYourTheme: {
     '#choose-a-theme': 'The Theme card at the top of the page picks the theme your site runs: Built-in — the platform\'s default theme, what every site runs until it picks another (MUI\'s colors in the platform\'s own type and component…',
@@ -763,9 +767,6 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   posOperations: {
     '#shifts-and-the-cash-drawer': 'A shift is one stretch of trading on one register, counted against one cash drawer.',
     '#staff-pins': 'A shared tablet stays signed in; each person switches in with their own PIN instead of signing out.',
-  },
-  productReviews: {
-    '#review-moderation': 'Open your site\'s Products page and choose Promotions. You can change your mind later: an approved review can be rejected and a rejected one approved.',
   },
   publishAPlugin: {
     '#listing-publisher-card': 'The Publisher card on every listing names who published it, with their logo, and links to their publisher page, so a buyer can see what else they ship.',

@@ -256,7 +256,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
       HeaderProps={{
         action: <TransferHeaderActions resource={COMMERCE_DISCOUNTS_TRANSFER} hostId={hostId} />,
       }}
-      help={pluginDocsHelp('commerce', { anchor: '#discounts' })}
+      help={pluginDocsHelp('discountsAndCoupons', { anchor: '#add-a-discount' })}
       contentGutterX
       contentGutterY
     >
