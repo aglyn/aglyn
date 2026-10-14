@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.MediaSort
+import com.aglyn.contracts.mediaOriginalSrc
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
@@ -78,7 +80,11 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.CountedTextField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.FieldEditor
+import com.aglyn.ui.FieldKind
+import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.ListHeader
+import com.aglyn.ui.LocalImageLoader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LocalMediaPicker
 import com.aglyn.ui.MenuAction
@@ -298,7 +304,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
 
   MediaDialogs(dialog, api, runner, foldersById, onChanged = { model.refresh() }) { dialog = null }
   if (filtersOpen) {
-    MediaFiltersDialog(model.filters, scoped = scopeTokens != null, onApply = { model.filter(it); filtersOpen = false }, onDismiss = { filtersOpen = false })
+    MediaFiltersDialog(context, model.filters, scoped = scopeTokens != null, onApply = { model.filter(it); filtersOpen = false }, onDismiss = { filtersOpen = false })
   }
   audioBatch?.let { files ->
     AudioRightsDialog(files) { confirmed ->
@@ -348,8 +354,9 @@ private fun FiltersButton(count: Int, onClick: () -> Unit) {
  * scope holds the query's one array clause) and a size range in megabytes.
  */
 @Composable
-private fun MediaFiltersDialog(filters: MediaFilters, scoped: Boolean, onApply: (MediaFilters) -> Unit, onDismiss: () -> Unit) {
+private fun MediaFiltersDialog(context: NativePluginContext, filters: MediaFilters, scoped: Boolean, onApply: (MediaFilters) -> Unit, onDismiss: () -> Unit) {
   var draft by remember { mutableStateOf(filters) }
+  val uploaders by produceState(emptyList<UploaderOption>(), context.orgId) { value = context.orgId?.let { uploaderOptions(context.api, it) }.orEmpty() }
   ActionDialog(
     title = "Filters",
     icon = "filter_list",
@@ -386,6 +393,11 @@ private fun MediaFiltersDialog(filters: MediaFilters, scoped: Boolean, onApply: 
       CountedTextField("At least (MB)", draft.minMegabytes, { draft = draft.copy(minMegabytes = megabytesInput(it)) }, keyboardType = KeyboardType.Decimal, modifier = Modifier.weight(1f).testTag("media-filter-min"))
       CountedTextField("At most (MB)", draft.maxMegabytes, { draft = draft.copy(maxMegabytes = megabytesInput(it)) }, keyboardType = KeyboardType.Decimal, modifier = Modifier.weight(1f).testTag("media-filter-max"))
     }
+    FieldEditor(FieldSpec("uploadedAfter", "Uploaded on or after", FieldKind.DATE), draft.uploadedAfter, { draft = draft.copy(uploadedAfter = it) })
+    FieldEditor(FieldSpec("uploadedBefore", "Uploaded on or before", FieldKind.DATE), draft.uploadedBefore, { draft = draft.copy(uploadedBefore = it) })
+    // Anyone who uploaded something, from the workspace's members; a key's uploads and a former member's are kept as they were asked.
+    val choices = (uploaders.map { SelectOption(it.uid, it.label) } + listOfNotNull(draft.uploadedBy?.takeIf { id -> uploaders.none { it.uid == id } }?.let { SelectOption(it, if (it.startsWith("api:")) "API key" else it) }))
+    SelectField(Contracts.mediaFilterHeaders["uploadedBy"] ?: "Uploaded by", choices, draft.uploadedBy, { draft = draft.copy(uploadedBy = it) }, noneLabel = "Anyone")
     TextButton(onClick = { draft = MediaFilters() }, enabled = draft.count > 0) { Text("Clear all") }
   }
 }
@@ -588,7 +600,9 @@ private fun MediaDetailBody(
   val clipboard = LocalClipboardManager.current
   val uri = LocalUriHandler.current
   val picker = LocalMediaPicker.current
+  val imageLoader = LocalImageLoader.current
   val coroutines = rememberCoroutineScope()
+  var editingImage by remember(item.id) { mutableStateOf(false) }
   var fileName by remember(item.id, item.fileName) { mutableStateOf(item.fileName) }
   var alt by remember(item.id, item.alt) { mutableStateOf(item.alt) }
   var description by remember(item.id, item.description) { mutableStateOf(item.description) }
@@ -664,6 +678,13 @@ private fun MediaDetailBody(
             modifier = Modifier.testTag("media-replace"),
           ) { Text("Replace file") }
         }
+        // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
+        if (item.contentType.startsWith("image/")) {
+          OutlinedButton(onClick = { runner.clear(); editingImage = true }, enabled = canEdit && !runner.busy, modifier = Modifier.testTag("media-edit-image")) {
+            Icon(AglynIcons.named("edit"), contentDescription = null)
+            Text("Edit image", Modifier.padding(start = space(1f)))
+          }
+        }
       }
       if (orgWideEditor) {
         SwitchRow(
@@ -675,6 +696,26 @@ private fun MediaDetailBody(
           modifier = Modifier.testTag("media-private"),
         )
       }
+    }
+    if (editingImage) {
+      ImageEditorDialog(
+        fileName = item.fileName,
+        // The file itself, not the display copy the library shows: "Replace original" must not save a shrunken copy over it.
+        loadOriginal = {
+          val url = if (item.private && scope is MediaScope.Org) api.signedLink(item.id) else item.src(origin)?.let(::mediaOriginalSrc)
+          url?.let { imageLoader?.load(it) }
+        },
+        busy = runner.busy,
+        error = runner.error,
+        onDismiss = { editingImage = false },
+        onSave = { file, asCopy ->
+          if (asCopy) {
+            runner.run("Saved an edited copy.", onDone = { editingImage = false; onChanged() }) { api.upload(file, item.folderId) }
+          } else {
+            runner.run("Image replaced. Everywhere it is used now shows the edited image.", onDone = { editingImage = false; onChanged() }) { api.replace(item, file) }
+          }
+        },
+      )
     }
     audioReplacement?.let { file ->
       AudioRightsDialog(listOf(file)) { confirmed ->

@@ -202,6 +202,12 @@ class SiteTest {
     // A blank box asks nothing, and a megabyte box takes digits and one point.
     assertEquals(emptyList(), MediaFilters(tag = "  ", minMegabytes = " ").clauses(scoped = false))
     assertEquals("12.57", megabytesInput("1a2.5.7"))
+    // The day a file was uploaded and who uploaded it: a range on the creation time, and an equality.
+    val dated = mediaQuery(MediaScope.Site("h"), FolderPick.All, null, null, MediaSort.NEWEST, "", filters = MediaFilters(uploadedAfter = "2026-03-14", uploadedBefore = "2026-03-15", uploadedBy = "u1"))
+    assertEquals(3, MediaFilters(uploadedAfter = "2026-03-14", uploadedBefore = "2026-03-15", uploadedBy = "u1").count)
+    assertTrue(FirestoreFilter("uploadedBy", FilterOp.EQ, "u1") in dated.filters)
+    assertTrue(dated.filters.any { it.field == "createdAt" && it.op == FilterOp.GTE })
+    assertTrue(dated.filters.any { it.field == "createdAt" && it.op == FilterOp.LT })
     // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
     val notices = mediaPlanNotices(mediaPlan(FolderPick.All, null, null, MediaSort.NEWEST, "hero", MediaFilters(tag = "sunset")))
     assertTrue(notices.isNotEmpty(), notices.toString())
@@ -222,6 +228,9 @@ class SiteTest {
     // A film's measured length, in whole seconds.
     assertEquals(63L, file("m6", "video" to mapOf("durationMs" to 63_400L, "width" to 1920L, "height" to 1080L)).videoSeconds)
     assertNull(file("m7").videoSeconds)
+    // A film's captured poster frame is recorded on its document; without one, its poster address is no picture.
+    assertTrue(file("m8", "poster" to mapOf("width" to 640L)).hasPoster)
+    assertEquals(false, file("m9").hasPoster)
   }
 
   @Test

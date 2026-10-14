@@ -154,6 +154,8 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
     )
   }
   BusinessFacts(context, resolved)
+  // The `hostBusinessProfile` zone: what a plugin adds to the profile (what Aglyn AI learned from the site's edits).
+  SlotCards(context, "hostBusinessProfile")
 }
 
 /**

@@ -84,4 +84,15 @@ final class MediaRefTests: XCTestCase {
       XCTAssertEqual(libraryVideoSeconds(first["assetVideo"]), expected?.intValue, "\(item.args)")
     }
   }
+
+  func testAFilmsPosterIsAskedForOnlyFromThePlatformsOwnCDN() {
+    let all = cases("mediaPosterSrc")
+    XCTAssertGreaterThanOrEqual(all.count, 10)
+    for item in all {
+      let options = item.args.count > 1 ? item.args[1] as? [String: Any] : nil
+      XCTAssertEqual(
+        mediaPosterSrc(text(item.args[0]), hostID: text(options?["hostId"]), width: (options?["width"] as? NSNumber)?.doubleValue),
+        text(item.result), "\(item.args)")
+    }
+  }
 }

@@ -131,6 +131,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let visibleTo: [String]
   /// A film's measured length in whole seconds (`videoMediaProps`); nil for anything else or a film that records none.
   public let videoSeconds: Int?
+  /// Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404).
+  public let hasPoster: Bool
 
   /// Nil for a deleted file.
   public init?(_ doc: FirestoreDocument) {
@@ -156,6 +158,7 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     uploadedBy = doc.string("uploadedBy")
     visibleTo = (doc.data["visibleTo"] as? [Any])?.compactMap { $0 as? String } ?? []
     videoSeconds = libraryVideoSeconds(doc.data["video"])
+    hasPoster = doc.data["poster"] is [String: Any]
   }
 
   private static func trimmedOrigin(_ origin: String) -> String {
@@ -222,22 +225,32 @@ public struct MediaFilters: Equatable, Sendable {
   public var tag: String
   public var minMegabytes: String
   public var maxMegabytes: String
+  /// The day a file was uploaded on or after, and on or before (`yyyy-MM-dd`, the site's day), or blank.
+  public var uploadedAfter: String
+  public var uploadedBefore: String
+  /// The member who uploaded it (a user id, or `api:…` for a key), or nil for anyone.
+  public var uploadedBy: String?
 
   public init(
     orientation: String? = nil, alt: String? = nil, tag: String = "", minMegabytes: String = "",
-    maxMegabytes: String = ""
+    maxMegabytes: String = "", uploadedAfter: String = "", uploadedBefore: String = "", uploadedBy: String? = nil
   ) {
     self.orientation = orientation
     self.alt = alt
     self.tag = tag
     self.minMegabytes = minMegabytes
     self.maxMegabytes = maxMegabytes
+    self.uploadedAfter = uploadedAfter
+    self.uploadedBefore = uploadedBefore
+    self.uploadedBy = uploadedBy
   }
 
   /// How many are set, for the Filters button.
   public var count: Int {
-    [orientation != nil, alt != nil, !tag.trimmed.isEmpty, !minMegabytes.trimmed.isEmpty, !maxMegabytes.trimmed.isEmpty]
-      .filter { $0 }.count
+    [
+      orientation != nil, alt != nil, !tag.trimmed.isEmpty, !minMegabytes.trimmed.isEmpty, !maxMegabytes.trimmed.isEmpty,
+      !uploadedAfter.trimmed.isEmpty, !uploadedBefore.trimmed.isEmpty, uploadedBy != nil,
+    ].filter { $0 }.count
   }
 
   /// The clauses the query plan reads. A reader limited to some sites has no
@@ -256,6 +269,13 @@ public struct MediaFilters: Equatable, Sendable {
     if !maxMegabytes.trimmed.isEmpty {
       clauses.append(mediaQueryRequest(ListFilterRequest(field: "sizeMb", op: "<=", value: maxMegabytes.trimmed)))
     }
+    if !uploadedAfter.trimmed.isEmpty {
+      clauses.append(ListFilterRequest(field: "uploaded", op: "onOrAfter", value: uploadedAfter.trimmed))
+    }
+    if !uploadedBefore.trimmed.isEmpty {
+      clauses.append(ListFilterRequest(field: "uploaded", op: "onOrBefore", value: uploadedBefore.trimmed))
+    }
+    if let uploadedBy { clauses.append(ListFilterRequest(field: "uploadedBy", op: "equals", value: uploadedBy)) }
     return clauses
   }
 }
@@ -272,6 +292,23 @@ public func megabytesInput(_ text: String) -> String {
       }
       return false
     }.prefix(8))
+}
+
+/// A member of the workspace, for the Uploaded by filter: their id, and the name or email they are shown as.
+public struct UploaderOption: Hashable, Sendable {
+  public let uid: String
+  public let label: String
+}
+
+/// The workspace's members (`GET /api/orgs/members`), as the Uploaded by filter lists them; none when the route answers no.
+public func uploaderOptions(_ api: ConsoleAPIClient, orgID: String) async -> [UploaderOption] {
+  guard let answer = try? await api.request("/api/orgs/members", query: [("orgId", orgID)]) else { return [] }
+  return (answer["members"]?.arrayValue ?? []).compactMap { member -> UploaderOption? in
+    guard let uid = member["$id"]?.stringValue ?? member["uid"]?.stringValue else { return nil }
+    let email = member["email"]?.stringValue
+    let name = member["displayName"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+    return UploaderOption(uid: uid, label: name ?? email ?? uid)
+  }.sorted { $0.label.lowercased() < $1.label.lowercased() }
 }
 
 /// The library's request for one view, as `mediaQuery` builds it: the folder

@@ -31,6 +31,15 @@ import {
   Typography,
 } from '@mui/material'
 import {
+  IMAGE_EDIT_ASPECTS,
+  IMAGE_EDIT_JPEG_QUALITY,
+  imageEditContentType,
+  imageEditCropFromDrag,
+  imageEditOutput,
+  imageEditPreviewScale,
+  imageEditWorkedSize,
+} from '@aglyn/aglyn/app-utils/image-edit'
+import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -55,15 +64,7 @@ export interface ImageEditorDialogProps {
   onSave: (result: ImageEditorResult) => void
 }
 
-const ASPECT_PRESETS: Array<{ label: string; ratio: number | null }> = [
-  { label: 'Free', ratio: null },
-  { label: '1:1', ratio: 1 },
-  { label: '4:3', ratio: 4 / 3 },
-  { label: '3:2', ratio: 3 / 2 },
-  { label: '16:9', ratio: 16 / 9 },
-]
-
-const PREVIEW_MAX = 480
+const ASPECT_PRESETS = IMAGE_EDIT_ASPECTS
 
 /**
  * Client-side image editor (AGL-184): rotate 90°, flip, aspect-locked crop
@@ -107,20 +108,19 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
   }, [open, src])
 
   // The working image dimensions after rotation (before crop).
-  const worked = useMemo(() => {
-    if (!image) return { w: 0, h: 0 }
-    const swapped = rotation === 90 || rotation === 270
-    return {
-      w: swapped ? image.naturalHeight : image.naturalWidth,
-      h: swapped ? image.naturalWidth : image.naturalHeight,
-    }
-  }, [image, rotation])
+  const worked = useMemo(
+    () =>
+      image
+        ? imageEditWorkedSize(image.naturalWidth, image.naturalHeight, rotation)
+        : { w: 0, h: 0 },
+    [image, rotation],
+  )
 
   // Preview scale so the longest side fits PREVIEW_MAX.
-  const scale = useMemo(() => {
-    if (!worked.w || !worked.h) return 1
-    return Math.min(1, PREVIEW_MAX / Math.max(worked.w, worked.h))
-  }, [worked])
+  const scale = useMemo(
+    () => imageEditPreviewScale(worked.w, worked.h),
+    [worked],
+  )
   const previewW = Math.round(worked.w * scale)
   const previewH = Math.round(worked.h * scale)
 
@@ -171,19 +171,15 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
   }
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!dragStart.current) return
-    const start = dragStart.current
-    const now = pointerPos(event)
-    const w = Math.abs(now.x - start.x)
-    // Aspect lock is width-led; free crop uses the dragged height.
-    const h = aspect ? w / aspect : Math.abs(now.y - start.y)
-    const x = Math.min(start.x, now.x)
-    const y = Math.min(start.y, now.y)
-    setCrop({
-      x,
-      y,
-      w: Math.min(w, previewW - x),
-      h: Math.min(h, previewH - y),
-    })
+    setCrop(
+      imageEditCropFromDrag(
+        dragStart.current,
+        pointerPos(event),
+        aspect,
+        previewW,
+        previewH,
+      ),
+    )
   }
   const handlePointerUp = () => {
     dragStart.current = null
@@ -212,26 +208,18 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
       wctx.drawImage(image, -dW / 2, -dH / 2, dW, dH)
       wctx.restore()
 
-      // 2) Map the preview crop back to natural coords.
-      const invScale = scale ? 1 / scale : 1
-      const cropNat = crop
-        ? {
-            x: Math.round(crop.x * invScale),
-            y: Math.round(crop.y * invScale),
-            w: Math.round(crop.w * invScale),
-            h: Math.round(crop.h * invScale),
-          }
-        : { x: 0, y: 0, w: worked.w, h: worked.h }
-
-      // 3) Optional downscale to max width.
-      const maxW = Number(maxWidth)
-      const targetW =
-        Number.isFinite(maxW) && maxW > 0 && maxW < cropNat.w ? maxW : cropNat.w
-      const targetH = Math.round((cropNat.h * targetW) / cropNat.w)
+      // 2) Map the preview crop back to natural coords, and 3) apply the
+      // optional downscale to a max width.
+      const { crop: cropNat, width, height } = imageEditOutput(
+        worked,
+        crop,
+        scale,
+        Number(maxWidth),
+      )
 
       const out = document.createElement('canvas')
-      out.width = Math.max(1, targetW)
-      out.height = Math.max(1, targetH)
+      out.width = width
+      out.height = height
       const octx = out.getContext('2d')
       if (!octx) return
       octx.drawImage(
@@ -247,9 +235,8 @@ export function ImageEditorDialog(props: ImageEditorDialogProps) {
       )
 
       // Preserve PNG for lossless sources; JPEG otherwise.
-      const isPng = /\.png$/i.test(fileName)
-      const contentType = isPng ? 'image/png' : 'image/jpeg'
-      const dataUrl = out.toDataURL(contentType, 0.9)
+      const contentType = imageEditContentType(fileName)
+      const dataUrl = out.toDataURL(contentType, IMAGE_EDIT_JPEG_QUALITY)
       onSave({
         data: dataUrl.slice(dataUrl.indexOf(',') + 1),
         contentType,
