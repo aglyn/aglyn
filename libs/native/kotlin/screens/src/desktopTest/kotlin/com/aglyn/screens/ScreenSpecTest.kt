@@ -175,6 +175,8 @@ class ScreenSpecTest {
       assertEquals("2026-10", now.str("month"))
       assertEquals("2026-10-07", now.str("day"))
       assertEquals("2026-09", now.str("prevMonth"))
+      assertEquals("2026-Q4", now.str("quarter"))
+      assertEquals(1_791_385_440_000.0, ((now as JsonObject)["ms"] as JsonPrimitive).content.toDouble())
       val context = Json.parseToJsonElement("""{"now":$now,"data":{"counter":{"2026-10":4,"2026-09":9}}}""")
       assertEquals("4", ScreenValues.render("{data.counter[@now.month]}", context))
     } finally {

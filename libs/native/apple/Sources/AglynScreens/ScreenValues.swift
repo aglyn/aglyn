@@ -426,7 +426,7 @@ public enum ScreenValues {
   /// The clock `now` reads; tests pin it.
   nonisolated(unsafe) public static var clock: () -> Date = { Date() }
 
-  /// `now.year`, `now.month` (`2026-10`), `now.prevMonth` and `now.day` (`2026-10-13`) in UTC, the keys the
+  /// `now.year`, `now.month` (`2026-10`), `now.prevMonth`, `now.quarter`, `now.ms` and `now.day` (`2026-10-13`) in UTC, the keys the
   /// console's monthly counters and daily documents are named by.
   public static func nowObject() -> JSONValue {
     var calendar = Calendar(identifier: .gregorian)
@@ -438,7 +438,8 @@ public enum ScreenValues {
     let previous = String(format: "%04d-%02d", earlier.year ?? 1970, earlier.month ?? 1)
     return [
       "year": .string(year), "month": .string("\(year)-\(month)"), "day": .string("\(year)-\(month)-\(day)"),
-      "prevMonth": .string(previous),
+      "prevMonth": .string(previous), "quarter": .string("\(year)-Q\(((parts.month ?? 1) - 1) / 3 + 1)"),
+      "ms": .number((clock().timeIntervalSince1970 * 1000).rounded()),
     ]
   }
 

@@ -140,6 +140,8 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(now["month"], "2026-10")
     XCTAssertEqual(now["day"], "2026-10-07")
     XCTAssertEqual(now["prevMonth"], "2026-09")
+    XCTAssertEqual(now["quarter"], "2026-Q4")
+    XCTAssertEqual(now["ms"], .number(1_791_385_440_000))
     let context: JSONValue = ["now": now, "data": ["counter": ["2026-10": 4, "2026-09": 9]]]
     XCTAssertEqual(ScreenValues.render("{data.counter[@now.month]}", in: context), "4")
   }

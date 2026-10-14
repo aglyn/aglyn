@@ -24,7 +24,7 @@ object ScreenValues {
   /** The clock `now` reads, in epoch milliseconds; tests pin it. */
   var clock: () -> Long = { nowMillis() }
 
-  /** `now.year`, `now.month` (`2026-10`), `now.prevMonth` and `now.day` (`2026-10-13`) in UTC, the keys the console's monthly counters and daily documents are named by. */
+  /** `now.year`, `now.month` (`2026-10`), `now.prevMonth`, `now.quarter`, `now.ms` and `now.day` (`2026-10-13`) in UTC, the keys the console's monthly counters and daily documents are named by. */
   fun nowObject(): JsonElement {
     val (year, month, day) = localParts(clock(), "UTC")
     val y = year.toString().padStart(4, '0')
@@ -35,7 +35,8 @@ object ScreenValues {
     return JsonObject(
       mapOf(
         "year" to JsonPrimitive(y), "month" to JsonPrimitive("$y-$m"), "day" to JsonPrimitive("$y-$m-$d"),
-        "prevMonth" to JsonPrimitive(prior),
+        "prevMonth" to JsonPrimitive(prior), "quarter" to JsonPrimitive("$year-Q${(month - 1) / 3 + 1}"),
+        "ms" to JsonPrimitive(clock().toDouble()),
       ),
     )
   }
