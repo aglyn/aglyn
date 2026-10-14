@@ -96,7 +96,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "marketplace",
-            contributes = mapOf("screens" to listOf("marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"), "quickActions" to listOf("marketplace.open"), "deepLinks" to listOf("marketplace.listing-page", "marketplace.page")),
+            contributes = mapOf("screens" to listOf("marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.publishTemplate", "marketplace.publisherAgreement"), "quickActions" to listOf("marketplace.open"), "deepLinks" to listOf("marketplace.listing-page", "marketplace.page")),
             register = ::registerMarketplaceNative,
         ),
         NativePluginManifestEntry(

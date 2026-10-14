@@ -886,7 +886,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `group`, `order` | where the shell lists it: `workspace`, `site`, `account`, `staff` |
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
-| `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
+| `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `siteTemplate` (Backup & restore: a plugin that can publish the site as a template), `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
 | `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |

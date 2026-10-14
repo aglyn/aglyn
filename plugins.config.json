@@ -1068,11 +1068,11 @@
         "planEntitlements": "marketplacePlanEntitlements"
       },
       "mobile": {
-        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app: browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app (and, from AGL-3671, publishing the site as a template with the Publisher Agreement it needs, as spec screens in src/android/screens/marketplace.screens.json): browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
         "ios": { "module": "AglynMarketplacePlugin", "register": "registerMarketplaceNative" },
         "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
         "contributes": {
-          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"],
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.publishTemplate", "marketplace.publisherAgreement"],
           "quickActions": ["marketplace.open"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }
