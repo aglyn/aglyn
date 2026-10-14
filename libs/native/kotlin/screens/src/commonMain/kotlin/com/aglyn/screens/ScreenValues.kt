@@ -25,7 +25,14 @@ object ScreenValues {
     val trimmed = path.trim()
     if (trimmed.isEmpty()) return context
     var current: JsonElement? = context
-    for (raw in segments(trimmed)) {
+    val parts = segments(trimmed)
+    for ((position, raw) in parts.withIndex()) {
+      if (raw == "*") {
+        // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+        val rest = parts.drop(position + 1).joinToString(".")
+        val items = current as? JsonArray ?: return null
+        return JsonArray(items.mapNotNull { row -> if (rest.isEmpty()) row else lookup(rest, row)?.takeIf { it != JsonNull } })
+      }
       val open = raw.indexOf('[')
       if (raw.endsWith("]") && open >= 0) {
         val segment = raw.substring(0, open)
@@ -275,7 +282,8 @@ object ScreenValues {
         val left = text(lookup(clause.substring(0, at), context))
         var right = clause.substring(at + 2).trim()
         if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
-        val options = right.split(',').map { it.trim() }
+        // `path == @other.path`: compared with the text at another path instead of a literal.
+        val options = if (right.startsWith("@")) listOf(text(lookup(right.substring(1), context))) else right.split(',').map { it.trim() }
         return if (op == "==") left in options else left !in options
       }
     }

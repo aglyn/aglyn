@@ -1,0 +1,992 @@
+{
+  "$comment": "The Sales channels plugin's native screens: the product feeds a site publishes to Google, Meta, TikTok, Pinterest, Snapchat and Microsoft (each switch, its address, the steps to point the channel at it), the store's defaults for a product that leaves a field blank, the catalog check, and the Google and Meta API connections on a deployment that configured them. Routes: GET /api/sales-channels/state and diagnostics, POST channel, rotate, legacy, settings, connect/start, connect/select, connect/disconnect and sync. Signing in opens the channel's consent page in the secure browser; the server finishes the connection when the channel sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "sales-channels.service",
+      "title": "Sales channels",
+      "label": "Sales channels",
+      "subtitle": "Google, Meta, TikTok, Pinterest, Snapchat and Microsoft product feeds",
+      "icon": "cart.badge.plus|storefront",
+      "scope": "site",
+      "order": 70,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "state": "/api/sales-channels/state?hostId={site.id}"
+      },
+      "constants": {
+        "channels": [
+          {
+            "id": "google",
+            "label": "Google",
+            "reach": "Google Shopping, free listings, Search, Images and YouTube",
+            "format": "XML feed",
+            "steps": [
+              "Sign in to Google Merchant Center and verify your store’s website there.",
+              "Under Products, add products from a file and choose to enter a link to your file.",
+              "Paste the feed URL below and set it to fetch daily.",
+              "To show products on YouTube, link your YouTube channel to Merchant Center in its settings."
+            ],
+            "setupUrl": "https://merchants.google.com/",
+            "specUrl": "https://support.google.com/merchants/answer/7052112",
+            "service": "Google Merchant Center",
+            "target": "Merchant Center account"
+          },
+          {
+            "id": "meta",
+            "label": "Meta",
+            "reach": "Facebook and Instagram shops and ads",
+            "format": "XML feed",
+            "steps": [
+              "Open Commerce Manager and create a catalog for products, or open the one you have.",
+              "Under Catalog, Data sources, add items with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, choose your store’s currency and an hourly or daily schedule."
+            ],
+            "setupUrl": "https://business.facebook.com/commerce/",
+            "specUrl": "https://developers.facebook.com/docs/marketing-api/catalog/reference",
+            "service": "Meta Commerce Manager",
+            "target": "Catalog"
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok",
+            "reach": "TikTok shopping ads and video shopping",
+            "format": "CSV feed",
+            "steps": [
+              "In TikTok Ads Manager, open Assets, Catalogs and create a catalog, or open yours.",
+              "Add products with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, set an hourly or daily schedule and choose Replace as the update method."
+            ],
+            "setupUrl": "https://ads.tiktok.com/",
+            "specUrl": "https://ads.tiktok.com/help/article/catalog-product-parameters"
+          },
+          {
+            "id": "pinterest",
+            "label": "Pinterest",
+            "reach": "Pinterest product Pins and shopping ads",
+            "format": "Tab-separated feed",
+            "steps": [
+              "Convert to a Pinterest business account and claim your website.",
+              "Under Ads, Catalogs, create a data source.",
+              "Paste the feed URL below, choose TSV, your store’s currency and a daily schedule."
+            ],
+            "setupUrl": "https://www.pinterest.com/business/catalogs/",
+            "specUrl": "https://help.pinterest.com/en/business/article/before-you-get-started-with-catalogs"
+          },
+          {
+            "id": "snapchat",
+            "label": "Snapchat",
+            "reach": "Snapchat dynamic product ads",
+            "format": "CSV feed",
+            "steps": [
+              "In Snapchat Ads Manager, open Catalogs and create a product catalog.",
+              "Choose to add products from a feed URL.",
+              "Paste the feed URL below and set a daily schedule."
+            ],
+            "setupUrl": "https://ads.snapchat.com/",
+            "specUrl": "https://developers.snap.com/marketing-api/Ads-API/dynamic-product-ads"
+          },
+          {
+            "id": "microsoft",
+            "label": "Microsoft",
+            "reach": "Microsoft Shopping on Bing, Copilot and the Microsoft Audience Network",
+            "format": "Tab-separated feed",
+            "steps": [
+              "In Microsoft Advertising, open Merchant Center, create a store and verify your website.",
+              "Under Catalog, Feeds, create a feed with a scheduled download.",
+              "Paste the feed URL below and set it to download daily."
+            ],
+            "setupUrl": "https://ads.microsoft.com/",
+            "specUrl": "https://help.ads.microsoft.com/apex/index/3/en/51105"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "notSelling",
+          "tone": "info",
+          "when": "!data.state.sells",
+          "text": "Turn on Commerce for this site to publish product feeds."
+        },
+        {
+          "type": "notice",
+          "id": "noAddress",
+          "tone": "warning",
+          "when": "data.state.store && !data.state.store.origin",
+          "text": "This site has no web address yet. Publish it to a subdomain or a custom domain to get its feed addresses."
+        },
+        {
+          "type": "notice",
+          "id": "noPages",
+          "tone": "warning",
+          "when": "data.state.store.origin && !data.state.store.productPagesServed",
+          "text": "Product pages are not served yet, so channels would refuse every product. Choose a product page template in the store settings."
+        },
+        {
+          "type": "links",
+          "id": "check",
+          "items": [
+            {
+              "title": "Check products",
+              "subtitle": "What each feed lists and leaves out",
+              "icon": "checklist|task",
+              "screen": "sales-channels.diagnostics",
+              "when": "data.state.sells"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "defaults",
+          "title": "Defaults for every feed",
+          "footer": "Used for a product that leaves a field blank. Set a product’s own brand, barcode and category in the product editor.",
+          "fields": [
+            {
+              "key": "defaultBrand",
+              "label": "Brand",
+              "kind": "text",
+              "initial": "{data.state.settings.defaultBrand}",
+              "placeholder": "{data.state.store.name}",
+              "help": "Blank sends the store’s name."
+            },
+            {
+              "key": "defaultCondition",
+              "label": "Condition",
+              "kind": "select",
+              "initial": "{data.state.settings.defaultCondition|'new'}",
+              "options": [
+                {
+                  "value": "new",
+                  "label": "New"
+                },
+                {
+                  "value": "refurbished",
+                  "label": "Refurbished"
+                },
+                {
+                  "value": "used",
+                  "label": "Used"
+                }
+              ]
+            },
+            {
+              "key": "defaultGoogleCategory",
+              "label": "Google product category",
+              "kind": "text",
+              "initial": "{data.state.settings.defaultGoogleCategory}",
+              "help": "An id like 2271 or a path like Apparel & Accessories > Clothing."
+            }
+          ],
+          "submit": {
+            "label": "Save defaults",
+            "url": "/api/sales-channels/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "settings": {
+                "defaultBrand": "{form.defaultBrand}",
+                "defaultCondition": "{form.defaultCondition}",
+                "defaultGoogleCategory": "{form.defaultGoogleCategory}"
+              }
+            },
+            "success": "Defaults saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "channels",
+          "title": "Channels",
+          "items": "const.channels",
+          "primary": "{item.label}",
+          "secondary": "{item.reach}",
+          "icon": "cart|shopping_basket",
+          "badges": [
+            {
+              "text": "On",
+              "tone": "success",
+              "when": "data.state.channels[id=item.id].enabled"
+            },
+            {
+              "text": "Off",
+              "tone": "neutral",
+              "when": "!data.state.channels[id=item.id].enabled"
+            },
+            {
+              "text": "Not read yet",
+              "tone": "warning",
+              "when": "data.state.channels[id=item.id].enabled && !data.state.channels[id=item.id].lastFetchAtMs"
+            }
+          ],
+          "toggle": {
+            "value": "{data.state.channels[id=item.id].enabled}",
+            "disabled": "!data.state.sells && !data.state.channels[id=item.id].enabled",
+            "label": "{item.label} feed",
+            "on": {
+              "label": "Turn on",
+              "url": "/api/sales-channels/channel",
+              "body": {
+                "hostId": "{site.id}",
+                "channel": "{item.id}",
+                "enabled": true
+              },
+              "success": "{item.label} feed is on"
+            },
+            "off": {
+              "label": "Turn off",
+              "url": "/api/sales-channels/channel",
+              "body": {
+                "hostId": "{site.id}",
+                "channel": "{item.id}",
+                "enabled": false
+              },
+              "success": "{item.label} feed is off"
+            }
+          },
+          "open": {
+            "screen": "sales-channels.channel",
+            "params": {
+              "channel": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sales-channels.channel",
+      "title": "{const.channels[id=params.channel].label|'Sales channel'}",
+      "label": "Sales channel",
+      "icon": "cart|shopping_basket",
+      "scope": "site",
+      "load": {
+        "state": "/api/sales-channels/state?hostId={site.id}"
+      },
+      "constants": {
+        "channels": [
+          {
+            "id": "google",
+            "label": "Google",
+            "reach": "Google Shopping, free listings, Search, Images and YouTube",
+            "format": "XML feed",
+            "steps": [
+              "Sign in to Google Merchant Center and verify your store’s website there.",
+              "Under Products, add products from a file and choose to enter a link to your file.",
+              "Paste the feed URL below and set it to fetch daily.",
+              "To show products on YouTube, link your YouTube channel to Merchant Center in its settings."
+            ],
+            "setupUrl": "https://merchants.google.com/",
+            "specUrl": "https://support.google.com/merchants/answer/7052112",
+            "service": "Google Merchant Center",
+            "target": "Merchant Center account"
+          },
+          {
+            "id": "meta",
+            "label": "Meta",
+            "reach": "Facebook and Instagram shops and ads",
+            "format": "XML feed",
+            "steps": [
+              "Open Commerce Manager and create a catalog for products, or open the one you have.",
+              "Under Catalog, Data sources, add items with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, choose your store’s currency and an hourly or daily schedule."
+            ],
+            "setupUrl": "https://business.facebook.com/commerce/",
+            "specUrl": "https://developers.facebook.com/docs/marketing-api/catalog/reference",
+            "service": "Meta Commerce Manager",
+            "target": "Catalog"
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok",
+            "reach": "TikTok shopping ads and video shopping",
+            "format": "CSV feed",
+            "steps": [
+              "In TikTok Ads Manager, open Assets, Catalogs and create a catalog, or open yours.",
+              "Add products with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, set an hourly or daily schedule and choose Replace as the update method."
+            ],
+            "setupUrl": "https://ads.tiktok.com/",
+            "specUrl": "https://ads.tiktok.com/help/article/catalog-product-parameters"
+          },
+          {
+            "id": "pinterest",
+            "label": "Pinterest",
+            "reach": "Pinterest product Pins and shopping ads",
+            "format": "Tab-separated feed",
+            "steps": [
+              "Convert to a Pinterest business account and claim your website.",
+              "Under Ads, Catalogs, create a data source.",
+              "Paste the feed URL below, choose TSV, your store’s currency and a daily schedule."
+            ],
+            "setupUrl": "https://www.pinterest.com/business/catalogs/",
+            "specUrl": "https://help.pinterest.com/en/business/article/before-you-get-started-with-catalogs"
+          },
+          {
+            "id": "snapchat",
+            "label": "Snapchat",
+            "reach": "Snapchat dynamic product ads",
+            "format": "CSV feed",
+            "steps": [
+              "In Snapchat Ads Manager, open Catalogs and create a product catalog.",
+              "Choose to add products from a feed URL.",
+              "Paste the feed URL below and set a daily schedule."
+            ],
+            "setupUrl": "https://ads.snapchat.com/",
+            "specUrl": "https://developers.snap.com/marketing-api/Ads-API/dynamic-product-ads"
+          },
+          {
+            "id": "microsoft",
+            "label": "Microsoft",
+            "reach": "Microsoft Shopping on Bing, Copilot and the Microsoft Audience Network",
+            "format": "Tab-separated feed",
+            "steps": [
+              "In Microsoft Advertising, open Merchant Center, create a store and verify your website.",
+              "Under Catalog, Feeds, create a feed with a scheduled download.",
+              "Paste the feed URL below and set it to download daily."
+            ],
+            "setupUrl": "https://ads.microsoft.com/",
+            "specUrl": "https://help.ads.microsoft.com/apex/index/3/en/51105"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "reach",
+          "tone": "info",
+          "text": "{const.channels[id=params.channel].reach}"
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Feed",
+          "rows": [
+            {
+              "label": "Feed",
+              "value": "On",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral"
+              },
+              "when": "data.state.channels[id=params.channel].enabled"
+            },
+            {
+              "label": "Feed",
+              "value": "Off",
+              "chip": true,
+              "tones": {
+                "On": "success",
+                "Off": "neutral"
+              },
+              "when": "!data.state.channels[id=params.channel].enabled"
+            },
+            {
+              "label": "Format",
+              "value": "{const.channels[id=params.channel].format}"
+            },
+            {
+              "label": "Last read",
+              "value": "{data.state.channels[id=params.channel].lastFetchAtMs:datetime}",
+              "when": "data.state.channels[id=params.channel].enabled && data.state.channels[id=params.channel].lastFetchAtMs"
+            },
+            {
+              "label": "Last read by",
+              "value": "{data.state.channels[id=params.channel].lastFetchAgent}",
+              "when": "data.state.channels[id=params.channel].lastFetchAgent"
+            },
+            {
+              "label": "Feed address",
+              "value": "{data.state.channels[id=params.channel].url}",
+              "when": "data.state.channels[id=params.channel].enabled && data.state.channels[id=params.channel].url"
+            },
+            {
+              "label": "Feed address",
+              "value": "Appears once the site has a web address.",
+              "when": "data.state.channels[id=params.channel].enabled && !data.state.channels[id=params.channel].url"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Feed",
+          "items": [
+            {
+              "id": "on",
+              "label": "Turn feed on",
+              "icon": "power|power_settings_new",
+              "when": "!data.state.channels[id=params.channel].enabled && data.state.sells",
+              "url": "/api/sales-channels/channel",
+              "body": {
+                "hostId": "{site.id}",
+                "channel": "{params.channel}",
+                "enabled": true
+              },
+              "success": "Feed is on"
+            },
+            {
+              "id": "copy",
+              "label": "Copy feed address",
+              "icon": "doc.on.doc|content_copy",
+              "when": "data.state.channels[id=params.channel].enabled && data.state.channels[id=params.channel].url",
+              "copy": "{data.state.channels[id=params.channel].url}",
+              "success": "Feed address copied"
+            },
+            {
+              "id": "rotate",
+              "label": "Replace address",
+              "icon": "arrow.triangle.2.circlepath|autorenew",
+              "when": "data.state.channels[id=params.channel].enabled && data.state.channels[id=params.channel].url",
+              "confirm": "The current address stops working at once, and {const.channels[id=params.channel].label} stops receiving updates until you paste the new one.",
+              "url": "/api/sales-channels/rotate",
+              "body": {
+                "hostId": "{site.id}",
+                "channel": "{params.channel}"
+              },
+              "success": "New feed address ready. Paste it into {const.channels[id=params.channel].label}."
+            },
+            {
+              "id": "off",
+              "label": "Turn feed off",
+              "icon": "power|power_off",
+              "destructive": true,
+              "when": "data.state.channels[id=params.channel].enabled",
+              "url": "/api/sales-channels/channel",
+              "body": {
+                "hostId": "{site.id}",
+                "channel": "{params.channel}",
+                "enabled": false
+              },
+              "success": "Feed is off"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "diagnose",
+          "items": [
+            {
+              "title": "Check this feed",
+              "subtitle": "What it lists and leaves out",
+              "icon": "checklist|task",
+              "screen": "sales-channels.diagnosticsChannel",
+              "params": {
+                "channel": "{params.channel}"
+              },
+              "when": "data.state.channels[id=params.channel].enabled"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "legacy",
+          "tone": "info",
+          "when": "params.channel == google && data.state.legacy.active",
+          "text": "Your earlier Merchant Center address still works: {data.state.legacy.url}. Turn it off once Merchant Center reads the new address."
+        },
+        {
+          "type": "actions",
+          "id": "legacyOff",
+          "when": "params.channel == google && data.state.legacy.active",
+          "items": [
+            {
+              "id": "retire",
+              "label": "Turn off the earlier address",
+              "icon": "xmark.circle|link_off",
+              "confirm": "Merchant Center stops receiving updates from the earlier address at once. Do this after it reads the new address.",
+              "url": "/api/sales-channels/legacy",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "Earlier address turned off"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "steps",
+          "title": "Set up {const.channels[id=params.channel].label}",
+          "items": "const.channels[id=params.channel].steps",
+          "primary": "{item}",
+          "count": false,
+          "icon": "list.number|task"
+        },
+        {
+          "type": "actions",
+          "id": "help",
+          "title": "Open {const.channels[id=params.channel].label}",
+          "items": [
+            {
+              "id": "open",
+              "label": "Open {const.channels[id=params.channel].label}",
+              "icon": "arrow.up.right.square|open_in_new",
+              "link": "{const.channels[id=params.channel].setupUrl}"
+            },
+            {
+              "id": "spec",
+              "label": "Product data rules",
+              "icon": "doc.text|description",
+              "link": "{const.channels[id=params.channel].specUrl}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "connection",
+          "title": "Product sync with {const.channels[id=params.channel].service}",
+          "when": "data.state.connect.providers[provider=params.channel]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "success"
+              },
+              "when": "data.state.connect.providers[provider=params.channel].connection"
+            },
+            {
+              "label": "Status",
+              "value": "Not connected",
+              "chip": true,
+              "tones": {
+                "Not connected": "neutral"
+              },
+              "when": "!data.state.connect.providers[provider=params.channel].connection"
+            },
+            {
+              "label": "{const.channels[id=params.channel].target}",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.targetName}",
+              "when": "data.state.connect.providers[provider=params.channel].connection"
+            },
+            {
+              "label": "Connected",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.connectedAtMs:datetime}",
+              "when": "data.state.connect.providers[provider=params.channel].connection"
+            },
+            {
+              "label": "Last sync",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.lastSyncAtMs:datetime}",
+              "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncAtMs"
+            },
+            {
+              "label": "Sent",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.lastSyncResult.sent:number}",
+              "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncResult"
+            },
+            {
+              "label": "Refused",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.lastSyncResult.failed:number}",
+              "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncResult"
+            },
+            {
+              "label": "Removed",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.lastSyncResult.deleted:number}",
+              "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncResult.deleted"
+            },
+            {
+              "label": "Details",
+              "value": "{data.state.connect.providers[provider=params.channel].connection.lastSyncResult.errors}",
+              "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncResult.errors"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "partial",
+          "tone": "info",
+          "when": "data.state.connect.providers[provider=params.channel].connection.lastSyncResult.partial",
+          "text": "Only the first part of a larger catalog was read in the last sync."
+        },
+        {
+          "type": "notice",
+          "id": "noTargets",
+          "tone": "warning",
+          "when": "data.state.connect.providers[provider=params.channel].connection && !data.state.connect.providers[provider=params.channel].connection.targets",
+          "text": "The account you connected reaches no {const.channels[id=params.channel].target}s. Create one in {const.channels[id=params.channel].service}, then connect again."
+        },
+        {
+          "type": "actions",
+          "id": "sync",
+          "when": "data.state.connect.providers[provider=params.channel]",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect {const.channels[id=params.channel].service}",
+              "icon": "link|link",
+              "when": "!data.state.connect.providers[provider=params.channel].connection",
+              "url": "/api/sales-channels/connect/start",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.channel}",
+                "returnTo": "/"
+              },
+              "open": "authorizeUrl",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "target",
+              "label": "Choose {const.channels[id=params.channel].target}",
+              "icon": "building.2|account_balance",
+              "when": "data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.targets",
+              "url": "/api/sales-channels/connect/select",
+              "prompt": [
+                {
+                  "key": "targetId",
+                  "label": "{const.channels[id=params.channel].target}",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.state.connect.providers[provider=params.channel].connection.targetId}",
+                  "optionsFrom": {
+                    "items": "data.state.connect.providers[provider=params.channel].connection.targets",
+                    "value": "{item.id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.channel}",
+                "targetId": "{form.targetId}"
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "syncNow",
+              "label": "Sync now",
+              "icon": "arrow.triangle.2.circlepath|sync",
+              "when": "data.state.connect.providers[provider=params.channel].connection && data.state.connect.providers[provider=params.channel].connection.targetId",
+              "url": "/api/sales-channels/sync",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.channel}"
+              },
+              "success": "Sent {response.result.sent} products. {response.result.failed} refused."
+            },
+            {
+              "id": "reconnect",
+              "label": "Connect again",
+              "icon": "link|link",
+              "when": "data.state.connect.providers[provider=params.channel].connection",
+              "url": "/api/sales-channels/connect/start",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.channel}",
+                "returnTo": "/"
+              },
+              "open": "authorizeUrl",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.state.connect.providers[provider=params.channel].connection",
+              "confirm": "Disconnect {const.channels[id=params.channel].service}? Products already sent stay there until you remove them. The feed address keeps working.",
+              "url": "/api/sales-channels/connect/disconnect",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.channel}"
+              },
+              "success": "Disconnected"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sales-channels.diagnostics",
+      "title": "Check products",
+      "label": "Check products",
+      "icon": "checklist|task",
+      "scope": "site",
+      "load": {
+        "diag": "/api/sales-channels/diagnostics?hostId={site.id}"
+      },
+      "constants": {
+        "channels": [
+          {
+            "id": "google",
+            "label": "Google",
+            "reach": "Google Shopping, free listings, Search, Images and YouTube",
+            "format": "XML feed",
+            "steps": [
+              "Sign in to Google Merchant Center and verify your store’s website there.",
+              "Under Products, add products from a file and choose to enter a link to your file.",
+              "Paste the feed URL below and set it to fetch daily.",
+              "To show products on YouTube, link your YouTube channel to Merchant Center in its settings."
+            ],
+            "setupUrl": "https://merchants.google.com/",
+            "specUrl": "https://support.google.com/merchants/answer/7052112",
+            "service": "Google Merchant Center",
+            "target": "Merchant Center account"
+          },
+          {
+            "id": "meta",
+            "label": "Meta",
+            "reach": "Facebook and Instagram shops and ads",
+            "format": "XML feed",
+            "steps": [
+              "Open Commerce Manager and create a catalog for products, or open the one you have.",
+              "Under Catalog, Data sources, add items with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, choose your store’s currency and an hourly or daily schedule."
+            ],
+            "setupUrl": "https://business.facebook.com/commerce/",
+            "specUrl": "https://developers.facebook.com/docs/marketing-api/catalog/reference",
+            "service": "Meta Commerce Manager",
+            "target": "Catalog"
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok",
+            "reach": "TikTok shopping ads and video shopping",
+            "format": "CSV feed",
+            "steps": [
+              "In TikTok Ads Manager, open Assets, Catalogs and create a catalog, or open yours.",
+              "Add products with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, set an hourly or daily schedule and choose Replace as the update method."
+            ],
+            "setupUrl": "https://ads.tiktok.com/",
+            "specUrl": "https://ads.tiktok.com/help/article/catalog-product-parameters"
+          },
+          {
+            "id": "pinterest",
+            "label": "Pinterest",
+            "reach": "Pinterest product Pins and shopping ads",
+            "format": "Tab-separated feed",
+            "steps": [
+              "Convert to a Pinterest business account and claim your website.",
+              "Under Ads, Catalogs, create a data source.",
+              "Paste the feed URL below, choose TSV, your store’s currency and a daily schedule."
+            ],
+            "setupUrl": "https://www.pinterest.com/business/catalogs/",
+            "specUrl": "https://help.pinterest.com/en/business/article/before-you-get-started-with-catalogs"
+          },
+          {
+            "id": "snapchat",
+            "label": "Snapchat",
+            "reach": "Snapchat dynamic product ads",
+            "format": "CSV feed",
+            "steps": [
+              "In Snapchat Ads Manager, open Catalogs and create a product catalog.",
+              "Choose to add products from a feed URL.",
+              "Paste the feed URL below and set a daily schedule."
+            ],
+            "setupUrl": "https://ads.snapchat.com/",
+            "specUrl": "https://developers.snap.com/marketing-api/Ads-API/dynamic-product-ads"
+          },
+          {
+            "id": "microsoft",
+            "label": "Microsoft",
+            "reach": "Microsoft Shopping on Bing, Copilot and the Microsoft Audience Network",
+            "format": "Tab-separated feed",
+            "steps": [
+              "In Microsoft Advertising, open Merchant Center, create a store and verify your website.",
+              "Under Catalog, Feeds, create a feed with a scheduled download.",
+              "Paste the feed URL below and set it to download daily."
+            ],
+            "setupUrl": "https://ads.microsoft.com/",
+            "specUrl": "https://help.ads.microsoft.com/apex/index/3/en/51105"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "summary",
+          "title": "Catalog",
+          "rows": [
+            {
+              "label": "Product listings checked",
+              "value": "{data.diag.offers:number}"
+            },
+            {
+              "label": "Larger catalog",
+              "value": "Only the first part was checked",
+              "when": "data.diag.partial"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "store",
+          "title": "Store",
+          "items": "data.diag.store",
+          "primary": "{item}",
+          "icon": "exclamationmark.triangle|warning",
+          "count": false,
+          "when": "data.diag.store"
+        },
+        {
+          "type": "list",
+          "id": "channels",
+          "title": "Channels",
+          "items": "data.diag.channels",
+          "primary": "{const.channels[id=item.channel].label}",
+          "secondary": "{item.listed:number} listed · {item.excluded:number} left out · {item.warned:number} with suggestions",
+          "icon": "cart|shopping_basket",
+          "badges": [
+            {
+              "text": "{item.excluded:number} left out",
+              "tone": "error",
+              "when": "item.excluded"
+            }
+          ],
+          "open": {
+            "screen": "sales-channels.diagnosticsChannel",
+            "params": {
+              "channel": "{item.channel}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sales-channels.diagnosticsChannel",
+      "title": "{const.channels[id=params.channel].label|'Channel'}",
+      "label": "Check a feed",
+      "icon": "checklist|task",
+      "scope": "site",
+      "load": {
+        "diag": "/api/sales-channels/diagnostics?hostId={site.id}"
+      },
+      "constants": {
+        "channels": [
+          {
+            "id": "google",
+            "label": "Google",
+            "reach": "Google Shopping, free listings, Search, Images and YouTube",
+            "format": "XML feed",
+            "steps": [
+              "Sign in to Google Merchant Center and verify your store’s website there.",
+              "Under Products, add products from a file and choose to enter a link to your file.",
+              "Paste the feed URL below and set it to fetch daily.",
+              "To show products on YouTube, link your YouTube channel to Merchant Center in its settings."
+            ],
+            "setupUrl": "https://merchants.google.com/",
+            "specUrl": "https://support.google.com/merchants/answer/7052112",
+            "service": "Google Merchant Center",
+            "target": "Merchant Center account"
+          },
+          {
+            "id": "meta",
+            "label": "Meta",
+            "reach": "Facebook and Instagram shops and ads",
+            "format": "XML feed",
+            "steps": [
+              "Open Commerce Manager and create a catalog for products, or open the one you have.",
+              "Under Catalog, Data sources, add items with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, choose your store’s currency and an hourly or daily schedule."
+            ],
+            "setupUrl": "https://business.facebook.com/commerce/",
+            "specUrl": "https://developers.facebook.com/docs/marketing-api/catalog/reference",
+            "service": "Meta Commerce Manager",
+            "target": "Catalog"
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok",
+            "reach": "TikTok shopping ads and video shopping",
+            "format": "CSV feed",
+            "steps": [
+              "In TikTok Ads Manager, open Assets, Catalogs and create a catalog, or open yours.",
+              "Add products with a data feed and choose a scheduled feed URL.",
+              "Paste the feed URL below, set an hourly or daily schedule and choose Replace as the update method."
+            ],
+            "setupUrl": "https://ads.tiktok.com/",
+            "specUrl": "https://ads.tiktok.com/help/article/catalog-product-parameters"
+          },
+          {
+            "id": "pinterest",
+            "label": "Pinterest",
+            "reach": "Pinterest product Pins and shopping ads",
+            "format": "Tab-separated feed",
+            "steps": [
+              "Convert to a Pinterest business account and claim your website.",
+              "Under Ads, Catalogs, create a data source.",
+              "Paste the feed URL below, choose TSV, your store’s currency and a daily schedule."
+            ],
+            "setupUrl": "https://www.pinterest.com/business/catalogs/",
+            "specUrl": "https://help.pinterest.com/en/business/article/before-you-get-started-with-catalogs"
+          },
+          {
+            "id": "snapchat",
+            "label": "Snapchat",
+            "reach": "Snapchat dynamic product ads",
+            "format": "CSV feed",
+            "steps": [
+              "In Snapchat Ads Manager, open Catalogs and create a product catalog.",
+              "Choose to add products from a feed URL.",
+              "Paste the feed URL below and set a daily schedule."
+            ],
+            "setupUrl": "https://ads.snapchat.com/",
+            "specUrl": "https://developers.snap.com/marketing-api/Ads-API/dynamic-product-ads"
+          },
+          {
+            "id": "microsoft",
+            "label": "Microsoft",
+            "reach": "Microsoft Shopping on Bing, Copilot and the Microsoft Audience Network",
+            "format": "Tab-separated feed",
+            "steps": [
+              "In Microsoft Advertising, open Merchant Center, create a store and verify your website.",
+              "Under Catalog, Feeds, create a feed with a scheduled download.",
+              "Paste the feed URL below and set it to download daily."
+            ],
+            "setupUrl": "https://ads.microsoft.com/",
+            "specUrl": "https://help.ads.microsoft.com/apex/index/3/en/51105"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "summary",
+          "title": "Feed",
+          "rows": [
+            {
+              "label": "Listed",
+              "value": "{data.diag.channels[channel=params.channel].listed:number}"
+            },
+            {
+              "label": "Left out",
+              "value": "{data.diag.channels[channel=params.channel].excluded:number}"
+            },
+            {
+              "label": "Sent with suggestions",
+              "value": "{data.diag.channels[channel=params.channel].warned:number}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "products",
+          "title": "Products with suggestions",
+          "items": "data.diag.channels[channel=params.channel].products",
+          "primary": "{item.productName}",
+          "secondary": "{item.issues.*.message}",
+          "badges": [
+            {
+              "text": "Left out",
+              "tone": "error",
+              "when": "item.excludedOffers"
+            },
+            {
+              "text": "Listed",
+              "tone": "success",
+              "when": "!item.excludedOffers"
+            }
+          ],
+          "empty": "Every product is listed as it is."
+        },
+        {
+          "type": "notice",
+          "id": "truncated",
+          "tone": "info",
+          "when": "data.diag.channels[channel=params.channel].truncated",
+          "text": "More products have suggestions than are listed here."
+        }
+      ]
+    }
+  ]
+}

@@ -19,10 +19,14 @@ import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.logic.registerLogicNative
 import com.aglyn.plugins.marketing.registerMarketingNative
+import com.aglyn.plugins.marketingplatforms.registerMarketingPlatformsNative
 import com.aglyn.plugins.marketplace.registerMarketplaceNative
+import com.aglyn.plugins.marketplaces.registerMarketplacesNative
 import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.postpurchase.registerPostPurchaseNative
+import com.aglyn.plugins.printondemand.registerPrintOnDemandNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
+import com.aglyn.plugins.saleschannels.registerSalesChannelsNative
 import com.aglyn.plugins.sms.registerSmsNative
 import com.aglyn.plugins.taxengines.registerTaxEnginesNative
 import com.aglyn.plugins.workflows.registerWorkflowsNative
@@ -95,9 +99,19 @@ object NativePluginManifest {
             register = ::registerMarketingNative,
         ),
         NativePluginManifestEntry(
+            id = "marketing-platforms",
+            contributes = mapOf("screens" to listOf("marketing-platforms.platform", "marketing-platforms.service")),
+            register = ::registerMarketingPlatformsNative,
+        ),
+        NativePluginManifestEntry(
             id = "marketplace",
             contributes = mapOf("screens" to listOf("marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"), "quickActions" to listOf("marketplace.open"), "deepLinks" to listOf("marketplace.listing-page", "marketplace.page")),
             register = ::registerMarketplaceNative,
+        ),
+        NativePluginManifestEntry(
+            id = "marketplaces",
+            contributes = mapOf("screens" to listOf("marketplaces.marketplace", "marketplaces.service")),
+            register = ::registerMarketplacesNative,
         ),
         NativePluginManifestEntry(
             id = "outreach",
@@ -110,9 +124,19 @@ object NativePluginManifest {
             register = ::registerPostPurchaseNative,
         ),
         NativePluginManifestEntry(
+            id = "print-on-demand",
+            contributes = mapOf("screens" to listOf("print-on-demand.catalog", "print-on-demand.connection", "print-on-demand.imported", "print-on-demand.orders", "print-on-demand.service")),
+            register = ::registerPrintOnDemandNative,
+        ),
+        NativePluginManifestEntry(
             id = "redirects",
             contributes = mapOf("screens" to listOf("redirects.list"), "widgets" to listOf("redirects.summary"), "quickActions" to listOf("redirects.open"), "deepLinks" to listOf("redirects.page")),
             register = ::registerRedirectsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "sales-channels",
+            contributes = mapOf("screens" to listOf("sales-channels.channel", "sales-channels.diagnostics", "sales-channels.diagnosticsChannel", "sales-channels.service")),
+            register = ::registerSalesChannelsNative,
         ),
         NativePluginManifestEntry(
             id = "sms",

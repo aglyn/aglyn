@@ -15,9 +15,13 @@ import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
 import AglynInboxPlugin
 import AglynMarketingPlugin
+import AglynMarketingPlatformsPlugin
+import AglynMarketplacesPlugin
 import AglynOutreachPlugin
 import AglynPostPurchasePlugin
+import AglynPrintOnDemandPlugin
 import AglynRedirectsPlugin
+import AglynSalesChannelsPlugin
 import AglynSmsPlugin
 import AglynTaxEnginesPlugin
 import AglynWorkflowsPlugin
@@ -80,6 +84,16 @@ public enum NativePluginManifest {
       register: AglynMarketingPlugin.registerMarketingNative
     ),
     NativePluginManifestEntry(
+      id: "marketing-platforms",
+      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"]],
+      register: AglynMarketingPlatformsPlugin.registerMarketingPlatformsNative
+    ),
+    NativePluginManifestEntry(
+      id: "marketplaces",
+      contributes: ["screens": ["marketplaces.marketplace", "marketplaces.service"]],
+      register: AglynMarketplacesPlugin.registerMarketplacesNative
+    ),
+    NativePluginManifestEntry(
       id: "outreach",
       contributes: ["screens": ["outreach.compliance", "outreach.mailboxes", "outreach.sequences"], "widgets": ["outreach.glance"], "deepLinks": ["outreach.compliance-page", "outreach.mailboxes-page", "outreach.page", "outreach.sequence-page", "outreach.sequences-page"]],
       register: AglynOutreachPlugin.registerOutreachNative
@@ -90,9 +104,19 @@ public enum NativePluginManifest {
       register: AglynPostPurchasePlugin.registerPostPurchaseNative
     ),
     NativePluginManifestEntry(
+      id: "print-on-demand",
+      contributes: ["screens": ["print-on-demand.catalog", "print-on-demand.connection", "print-on-demand.imported", "print-on-demand.orders", "print-on-demand.service"]],
+      register: AglynPrintOnDemandPlugin.registerPrintOnDemandNative
+    ),
+    NativePluginManifestEntry(
       id: "redirects",
       contributes: ["screens": ["redirects.list"], "widgets": ["redirects.summary"], "quickActions": ["redirects.open"], "deepLinks": ["redirects.page"]],
       register: AglynRedirectsPlugin.registerRedirectsNative
+    ),
+    NativePluginManifestEntry(
+      id: "sales-channels",
+      contributes: ["screens": ["sales-channels.channel", "sales-channels.diagnostics", "sales-channels.diagnosticsChannel", "sales-channels.service"]],
+      register: AglynSalesChannelsPlugin.registerSalesChannelsNative
     ),
     NativePluginManifestEntry(
       id: "sms",

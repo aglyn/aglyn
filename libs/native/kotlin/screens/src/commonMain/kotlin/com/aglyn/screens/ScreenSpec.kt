@@ -152,8 +152,9 @@ class FieldSpec private constructor(
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
     val rows = (ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()
-    return options + rows.map { row ->
-      val scope = ScreenContext.withItem(context, row)
+    // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
+    val keep = from.str("where")
+    return options + rows.map { ScreenContext.withItem(context, it) }.filter { ScreenValues.condition(keep, it) }.map { scope ->
       ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope)
     }
   }

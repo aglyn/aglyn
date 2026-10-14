@@ -3173,6 +3173,23 @@
     },
     {
       "id": "marketing-platforms",
+      "mobile": {
+        "$comment": "AGL-3652: the Email platforms cards natively (Mailchimp, Klaviyo, Omnisend, Attentive), from the spec in src/android/screens/marketing-platforms.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynMarketingPlatformsPlugin",
+          "register": "registerMarketingPlatformsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.marketingplatforms",
+          "register": "registerMarketingPlatformsNative"
+        },
+        "contributes": {
+          "screens": [
+            "marketing-platforms.service",
+            "marketing-platforms.platform"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-marketing-platforms",
       "register": {
         "console": "registerMarketingPlatformsConsole",
@@ -3412,6 +3429,23 @@
     },
     {
       "id": "marketplaces",
+      "mobile": {
+        "$comment": "AGL-3652: the Marketplaces cards natively (Amazon, eBay, Etsy, TikTok Shop, Walmart, Faire), from the spec in src/android/screens/marketplaces.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynMarketplacesPlugin",
+          "register": "registerMarketplacesNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.marketplaces",
+          "register": "registerMarketplacesNative"
+        },
+        "contributes": {
+          "screens": [
+            "marketplaces.service",
+            "marketplaces.marketplace"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-marketplaces",
       "register": {
         "console": "registerMarketplacesConsole",
@@ -3458,6 +3492,26 @@
     },
     {
       "id": "print-on-demand",
+      "mobile": {
+        "$comment": "AGL-3652: print on demand natively (Printful and Printify with the merchant's own token): connections and settings, importing products from the service's catalog, imported products and the orders sent, from the spec in src/android/screens/print-on-demand.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynPrintOnDemandPlugin",
+          "register": "registerPrintOnDemandNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.printondemand",
+          "register": "registerPrintOnDemandNative"
+        },
+        "contributes": {
+          "screens": [
+            "print-on-demand.service",
+            "print-on-demand.connection",
+            "print-on-demand.catalog",
+            "print-on-demand.imported",
+            "print-on-demand.orders"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-print-on-demand",
       "register": {
         "console": "registerPrintOnDemandConsole",
@@ -3606,6 +3660,25 @@
     },
     {
       "id": "sales-channels",
+      "mobile": {
+        "$comment": "AGL-3652: sales channels natively: each shopping channel's feed (switch, address, setup steps), the store defaults, the catalog check, and the Google and Meta API connections, from the spec in src/android/screens/sales-channels.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynSalesChannelsPlugin",
+          "register": "registerSalesChannelsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.saleschannels",
+          "register": "registerSalesChannelsNative"
+        },
+        "contributes": {
+          "screens": [
+            "sales-channels.service",
+            "sales-channels.channel",
+            "sales-channels.diagnostics",
+            "sales-channels.diagnosticsChannel"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-sales-channels",
       "register": {
         "console": "registerSalesChannelsConsole",

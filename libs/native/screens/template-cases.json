@@ -152,6 +152,14 @@
     {
       "template": "{data.access[@data.hostKey]}",
       "expect": "viewer"
+    },
+    {
+      "template": "{data.members.*.email}",
+      "expect": "a@acme.test, b@acme.test"
+    },
+    {
+      "template": "{data.members.*.joined}",
+      "expect": "1791331200"
     }
   ],
   "url": [
@@ -380,6 +388,18 @@
     {
       "when": "data.flag",
       "expect": false
+    },
+    {
+      "when": "data.hostKey == @params.uid",
+      "expect": false
+    },
+    {
+      "when": "data.hostKey != @params.uid",
+      "expect": true
+    },
+    {
+      "when": "params.uid == @params.uid",
+      "expect": true
     }
   ]
 }

@@ -16,7 +16,18 @@ public enum ScreenValues {
     let trimmed = path.trimmingCharacters(in: .whitespaces)
     if trimmed.isEmpty { return context }
     var current: JSONValue? = context
-    for raw in segments(trimmed) {
+    let parts = segments(trimmed)
+    for (position, raw) in parts.enumerated() {
+      if raw == "*" {
+        // `rows.*.field`: that field of every row, as a list (rows without it are left out).
+        let rest = parts.dropFirst(position + 1).joined(separator: ".")
+        guard case .array(let items)? = current else { return nil }
+        return .array(items.compactMap { row in
+          if rest.isEmpty { return row }
+          guard let found = lookup(rest, in: row), found != .null else { return nil }
+          return found
+        })
+      }
       // `rows[field=other.path]`: the first row whose field reads as the text at other.path.
       var segment = raw
       var selector: (field: String, path: String)?
@@ -303,7 +314,10 @@ public enum ScreenValues {
         let left = text(lookup(String(clause[..<range.lowerBound]), in: context))
         var right = clause[range.upperBound...].trimmingCharacters(in: .whitespaces)
         if right.count >= 2, right.hasPrefix("'"), right.hasSuffix("'") { right = String(right.dropFirst().dropLast()) }
-        let options = right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        // `path == @other.path`: compared with the text at another path instead of a literal.
+        let options = right.hasPrefix("@")
+          ? [text(lookup(String(right.dropFirst()), in: context))]
+          : right.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         return op == "==" ? options.contains(left) : !options.contains(left)
       }
     }

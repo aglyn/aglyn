@@ -1,0 +1,546 @@
+{
+  "$comment": "The Marketplaces plugin's native screens: the Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire connections a store can hold (sign in on the marketplace), each one's status, order and tracking switches, listing mode, stock buffer, prices, the listings to look at and recent activity. Routes: GET /api/marketplaces/connections and activity, POST connect and sync-now, PATCH and DELETE connection. Signing in opens the marketplace's consent page in the secure browser; the server finishes the connection when the marketplace sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "marketplaces.service",
+      "title": "Marketplaces",
+      "label": "Marketplaces",
+      "subtitle": "Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire",
+      "icon": "bag|shopping_basket",
+      "scope": "site",
+      "order": 65,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "conn": "/api/marketplaces/connections?hostId={site.id}"
+      },
+      "constants": {
+        "marketplaces": [
+          {
+            "id": "amazon",
+            "label": "Amazon",
+            "account": "Seller Central account",
+            "canPublish": true,
+            "canSyncPrices": true
+          },
+          {
+            "id": "ebay",
+            "label": "eBay",
+            "account": "eBay seller account",
+            "canPublish": true,
+            "canSyncPrices": true
+          },
+          {
+            "id": "etsy",
+            "label": "Etsy",
+            "account": "Etsy shop",
+            "canPublish": false,
+            "canSyncPrices": true
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok Shop",
+            "account": "TikTok Shop seller account",
+            "canPublish": false,
+            "canSyncPrices": true
+          },
+          {
+            "id": "walmart",
+            "label": "Walmart",
+            "account": "Walmart Marketplace account",
+            "canPublish": false,
+            "canSyncPrices": true
+          },
+          {
+            "id": "faire",
+            "label": "Faire",
+            "account": "Faire brand account",
+            "canPublish": false,
+            "canSyncPrices": false
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "marketplaces",
+          "title": "Marketplaces",
+          "items": "const.marketplaces",
+          "filter": "data.conn.offered[id=item.id] || data.conn.connections[marketplace=item.id]",
+          "primary": "{item.label}",
+          "secondary": "Listings follow your stock, and {item.label} orders come in as your orders.",
+          "icon": "bag|shopping_basket",
+          "badges": [
+            {
+              "text": "{data.conn.connections[marketplace=item.id].status:title}",
+              "when": "data.conn.connections[marketplace=item.id]",
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Sandbox",
+              "tone": "info",
+              "when": "data.conn.connections[marketplace=item.id].sandbox"
+            },
+            {
+              "text": "Not connected",
+              "tone": "neutral",
+              "when": "!data.conn.connections[marketplace=item.id]"
+            }
+          ],
+          "empty": "No marketplace is available for this site yet.",
+          "open": {
+            "screen": "marketplaces.marketplace",
+            "params": {
+              "marketplace": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "marketplaces.marketplace",
+      "title": "{const.marketplaces[id=params.marketplace].label|'Marketplace'}",
+      "label": "Marketplace",
+      "icon": "bag|shopping_basket",
+      "scope": "site",
+      "load": {
+        "conn": "/api/marketplaces/connections?hostId={site.id}",
+        "activity": {
+          "url": "/api/marketplaces/activity?hostId={site.id}&marketplace={params.marketplace}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "marketplaces": [
+          {
+            "id": "amazon",
+            "label": "Amazon",
+            "account": "Seller Central account",
+            "canPublish": true,
+            "canSyncPrices": true
+          },
+          {
+            "id": "ebay",
+            "label": "eBay",
+            "account": "eBay seller account",
+            "canPublish": true,
+            "canSyncPrices": true
+          },
+          {
+            "id": "etsy",
+            "label": "Etsy",
+            "account": "Etsy shop",
+            "canPublish": false,
+            "canSyncPrices": true
+          },
+          {
+            "id": "tiktok",
+            "label": "TikTok Shop",
+            "account": "TikTok Shop seller account",
+            "canPublish": false,
+            "canSyncPrices": true
+          },
+          {
+            "id": "walmart",
+            "label": "Walmart",
+            "account": "Walmart Marketplace account",
+            "canPublish": false,
+            "canSyncPrices": true
+          },
+          {
+            "id": "faire",
+            "label": "Faire",
+            "account": "Faire brand account",
+            "canPublish": false,
+            "canSyncPrices": false
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "!data.conn.connections[marketplace=params.marketplace]",
+          "text": "Not connected. Sign in to your own {const.marketplaces[id=params.marketplace].account} to connect it; Aglyn never sees your password."
+        },
+        {
+          "type": "notice",
+          "id": "sandbox",
+          "tone": "info",
+          "when": "!data.conn.connections[marketplace=params.marketplace] && data.conn.offered[id=params.marketplace].sandbox",
+          "text": "This deployment connects to the {const.marketplaces[id=params.marketplace].label} sandbox, where nothing real sells."
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.conn.connections[marketplace=params.marketplace].lastError && data.conn.connections[marketplace=params.marketplace].status == reconnect",
+          "text": "{data.conn.connections[marketplace=params.marketplace].lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "warning",
+          "tone": "warning",
+          "when": "data.conn.connections[marketplace=params.marketplace].lastError && data.conn.connections[marketplace=params.marketplace].status != reconnect",
+          "text": "{data.conn.connections[marketplace=params.marketplace].lastError}"
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Connection",
+          "when": "data.conn.connections[marketplace=params.marketplace]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{data.conn.connections[marketplace=params.marketplace].status:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Sandbox",
+              "value": "Yes",
+              "when": "data.conn.connections[marketplace=params.marketplace].sandbox"
+            },
+            {
+              "label": "Account",
+              "value": "{data.conn.connections[marketplace=params.marketplace].accountName}",
+              "when": "data.conn.connections[marketplace=params.marketplace].accountName"
+            },
+            {
+              "label": "Orders imported",
+              "value": "{data.conn.connections[marketplace=params.marketplace].orders.imported:number}"
+            },
+            {
+              "label": "Shipments confirmed",
+              "value": "{data.conn.connections[marketplace=params.marketplace].shipments.confirmed:number}"
+            },
+            {
+              "label": "Not confirmed",
+              "value": "{data.conn.connections[marketplace=params.marketplace].shipments.failed:number}",
+              "when": "data.conn.connections[marketplace=params.marketplace].shipments.failed"
+            },
+            {
+              "label": "Listings checked",
+              "value": "{data.conn.connections[marketplace=params.marketplace].listings.offers:number} products · {data.conn.connections[marketplace=params.marketplace].listings.updated:number} updated · {data.conn.connections[marketplace=params.marketplace].listings.unchanged:number} already right",
+              "when": "data.conn.connections[marketplace=params.marketplace].listings.syncedAtMs && data.conn.connections[marketplace=params.marketplace].settings.listingMode != off"
+            },
+            {
+              "label": "Published",
+              "value": "{data.conn.connections[marketplace=params.marketplace].listings.created:number}",
+              "when": "data.conn.connections[marketplace=params.marketplace].listings.created"
+            },
+            {
+              "label": "With no listing",
+              "value": "{data.conn.connections[marketplace=params.marketplace].listings.notListed:number}",
+              "when": "data.conn.connections[marketplace=params.marketplace].listings.notListed"
+            },
+            {
+              "label": "Refused",
+              "value": "{data.conn.connections[marketplace=params.marketplace].listings.failed:number}",
+              "when": "data.conn.connections[marketplace=params.marketplace].listings.failed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "when": "data.conn.offered[id=params.marketplace] || data.conn.connections[marketplace=params.marketplace]",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect {const.marketplaces[id=params.marketplace].label}",
+              "icon": "link|link",
+              "when": "!data.conn.connections[marketplace=params.marketplace]",
+              "url": "/api/marketplaces/connect",
+              "body": {
+                "hostId": "{site.id}",
+                "marketplace": "{params.marketplace}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "reconnect",
+              "label": "Connect again",
+              "icon": "link|link",
+              "when": "data.conn.connections[marketplace=params.marketplace].status == reconnect",
+              "url": "/api/marketplaces/connect",
+              "body": {
+                "hostId": "{site.id}",
+                "marketplace": "{params.marketplace}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "sync",
+              "label": "Sync now",
+              "icon": "arrow.triangle.2.circlepath|sync",
+              "when": "data.conn.connections[marketplace=params.marketplace].status == active",
+              "url": "/api/marketplaces/sync-now",
+              "body": {
+                "hostId": "{site.id}",
+                "marketplace": "{params.marketplace}"
+              },
+              "success": "Synced."
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "icon": "pause.circle|pause_circle",
+              "when": "data.conn.connections[marketplace=params.marketplace].status == active",
+              "method": "PATCH",
+              "url": "/api/marketplaces/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "marketplace": "{params.marketplace}",
+                "paused": true
+              },
+              "success": "Paused."
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play.circle|play_circle",
+              "when": "data.conn.connections[marketplace=params.marketplace].status == paused",
+              "method": "PATCH",
+              "url": "/api/marketplaces/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "marketplace": "{params.marketplace}",
+                "paused": false
+              },
+              "success": "Resumed."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.conn.connections[marketplace=params.marketplace]",
+              "confirm": "Disconnect {const.marketplaces[id=params.marketplace].label}? Orders stop coming in, listings stop following your stock, and the stored access is deleted. Orders already imported stay in your store. Your listings stay on {const.marketplaces[id=params.marketplace].label} with the stock they last showed, so end or update them there.",
+              "method": "DELETE",
+              "url": "/api/marketplaces/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "marketplace": "{params.marketplace}"
+              },
+              "back": true,
+              "success": "Disconnected."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Settings",
+          "when": "data.conn.connections[marketplace=params.marketplace] && data.conn.connections[marketplace=params.marketplace].status != reconnect",
+          "fields": [
+            {
+              "key": "marketplaceId",
+              "label": "Marketplace",
+              "kind": "select",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.marketplaceId}",
+              "when": "params.marketplace == amazon",
+              "help": "Listings and orders are for this marketplace.",
+              "optionsFrom": {
+                "items": "data.conn.connections[marketplace=params.marketplace].sites",
+                "value": "{item.id}",
+                "label": "{item.name} ({item.currency})"
+              }
+            },
+            {
+              "key": "importOrders",
+              "label": "Bring {const.marketplaces[id=params.marketplace].label} orders into the store",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.importOrders}"
+            },
+            {
+              "key": "confirmShipments",
+              "label": "Send tracking when you ship one",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.confirmShipments}"
+            },
+            {
+              "key": "listingMode",
+              "label": "Listings",
+              "kind": "select",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.listingMode}",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Leave listings alone"
+                },
+                {
+                  "value": "link",
+                  "label": "Keep matching listings in step"
+                },
+                {
+                  "value": "publish",
+                  "label": "Keep in step and publish the rest"
+                }
+              ],
+              "when": "const.marketplaces[id=params.marketplace].canPublish"
+            },
+            {
+              "key": "listingModeBasic",
+              "label": "Listings",
+              "kind": "select",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.listingMode}",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Leave listings alone"
+                },
+                {
+                  "value": "link",
+                  "label": "Keep matching listings in step"
+                }
+              ],
+              "when": "!const.marketplaces[id=params.marketplace].canPublish"
+            },
+            {
+              "key": "stockBuffer",
+              "label": "Units kept back",
+              "kind": "number",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.stockBuffer}",
+              "when": "data.conn.connections[marketplace=params.marketplace].settings.listingMode != off",
+              "help": "Held back from {const.marketplaces[id=params.marketplace].label} on every product (0 to 1000)."
+            },
+            {
+              "key": "untrackedQuantity",
+              "label": "Untracked products show",
+              "kind": "number",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.untrackedQuantity}",
+              "when": "data.conn.connections[marketplace=params.marketplace].settings.listingMode != off",
+              "help": "For products that do not count stock (0 to 1000)."
+            },
+            {
+              "key": "syncPrices",
+              "label": "Send prices too",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.syncPrices}",
+              "when": "data.conn.connections[marketplace=params.marketplace].settings.listingMode != off && const.marketplaces[id=params.marketplace].canSyncPrices"
+            },
+            {
+              "key": "priceAdjustPercent",
+              "label": "Price adjustment (%)",
+              "kind": "number",
+              "initial": "{data.conn.connections[marketplace=params.marketplace].settings.priceAdjustPercent}",
+              "when": "data.conn.connections[marketplace=params.marketplace].settings.listingMode != off && data.conn.connections[marketplace=params.marketplace].settings.syncPrices && const.marketplaces[id=params.marketplace].canSyncPrices",
+              "help": "Added to your price on {const.marketplaces[id=params.marketplace].label}, for its fees (-50 to 200)."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "method": "PATCH",
+            "url": "/api/marketplaces/connection",
+            "body": {
+              "hostId": "{site.id}",
+              "marketplace": "{params.marketplace}",
+              "marketplaceId": "{form.marketplaceId}",
+              "importOrders": "{form.importOrders}",
+              "confirmShipments": "{form.confirmShipments}",
+              "listingMode": "{form.listingMode|form.listingModeBasic}",
+              "stockBuffer": "{form.stockBuffer}",
+              "untrackedQuantity": "{form.untrackedQuantity}",
+              "syncPrices": "{form.syncPrices}",
+              "priceAdjustPercent": "{form.priceAdjustPercent}"
+            },
+            "success": "Saved."
+          }
+        },
+        {
+          "type": "notice",
+          "id": "faire",
+          "tone": "info",
+          "when": "data.conn.connections[marketplace=params.marketplace] && !const.marketplaces[id=params.marketplace].canSyncPrices && data.conn.connections[marketplace=params.marketplace].settings.listingMode != off",
+          "text": "{const.marketplaces[id=params.marketplace].label} prices are wholesale and set on {const.marketplaces[id=params.marketplace].label}; only stock is sent."
+        },
+        {
+          "type": "list",
+          "id": "problems",
+          "title": "{const.marketplaces[id=params.marketplace].label} listings to look at",
+          "when": "data.conn.connections[marketplace=params.marketplace] && data.activity.problems",
+          "items": "data.activity.problems",
+          "primary": "{item.title}",
+          "secondary": "SKU {item.sku}: {item.message|'no listing has this SKU'}",
+          "badges": [
+            {
+              "text": "Refused",
+              "tone": "error",
+              "when": "item.outcome == failed"
+            },
+            {
+              "text": "No listing",
+              "tone": "neutral",
+              "when": "item.outcome != failed"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "activity",
+          "title": "Activity",
+          "when": "data.conn.connections[marketplace=params.marketplace]",
+          "items": "data.activity.entries",
+          "primary": "{item.message}",
+          "secondary": "{item.atMs:datetime}",
+          "badges": [
+            {
+              "text": "Connected",
+              "tone": "info",
+              "when": "item.kind == connected"
+            },
+            {
+              "text": "Listings",
+              "tone": "info",
+              "when": "item.kind == listings"
+            },
+            {
+              "text": "Order",
+              "tone": "success",
+              "when": "item.kind == order_imported"
+            },
+            {
+              "text": "Not imported",
+              "tone": "neutral",
+              "when": "item.kind == order_skipped"
+            },
+            {
+              "text": "Canceled",
+              "tone": "neutral",
+              "when": "item.kind == order_canceled"
+            },
+            {
+              "text": "Tracking sent",
+              "tone": "success",
+              "when": "item.kind == shipment_confirmed"
+            },
+            {
+              "text": "Error",
+              "tone": "error",
+              "when": "item.kind == error"
+            }
+          ],
+          "empty": "Nothing has happened yet."
+        }
+      ]
+    }
+  ]
+}

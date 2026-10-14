@@ -280,9 +280,10 @@ public struct FieldSpec: Sendable, Identifiable {
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
     let rows = ScreenValues.lookup(path, in: context).array
-    return options + rows.map { row in
-      let scope = ScreenContext.with(context, item: row)
-      return (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
+    // `where`: a condition on the row (`item.classification == bank`) that keeps only the choices it holds for.
+    let keep = from["where"]?.stringValue
+    return options + rows.map { ScreenContext.with(context, item: $0) }.filter { ScreenValues.condition(keep, in: $0) }.map { scope in
+      (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
     }
   }
 }
