@@ -38,7 +38,11 @@ const classKeys = generateComponentClassKeys('CardDisplay', [
   'headerCentered',
   'headerBordered',
   'actionsBordered',
+  'fullHeight',
 ])
+
+/** The header's action slot, which the compact-action rule reads. */
+const HEADER_ACTION = 'MuiCardHeader-action'
 
 const Card = styled(MuiCard)(({ theme }) => {
   const tv = (theme as any).vars || theme
@@ -62,12 +66,42 @@ const Card = styled(MuiCard)(({ theme }) => {
       fontWeight: theme.typography.fontWeightBold,
       flexWrap: 'wrap',
       rowGap: theme.spacing(1),
+      /*
+       * A lone icon button or status chip (a pin, a menu, "Live") is narrow
+       * enough to share the title's row on any card, so it stays top right
+       * and the title gives way beside it instead of the action dropping
+       * under the title.
+       */
+      [`&:has(> .${HEADER_ACTION} > :is(.MuiIconButton-root, .MuiChip-root):only-child)`]:
+        {
+          flexWrap: 'nowrap',
+          '.MuiCardHeader-content': {
+            flexBasis: 0,
+          },
+        },
     },
     '.MuiCardHeader-content': {
       flex: `1 1 ${theme.spacing(24)}`,
+      // A long title shortens inside the header (its ellipsis or its wrap)
+      // rather than shoving the avatar onto a row of its own or running past
+      // the card's edge.
+      minWidth: 0,
     },
-    '.MuiCardHeader-action': {
+    [`.${HEADER_ACTION}`]: {
       maxWidth: '100%',
+    },
+    /*
+     * Every card in a row as tall as the row (a grid of tiles): the content
+     * takes the spare height, so each card's actions line up along the
+     * bottom.
+     */
+    [`&.${classKeys.fullHeight}`]: {
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      '.MuiCardContent-root': {
+        flexGrow: 1,
+      },
     },
     [`&.${classKeys.contentGutterX}`]: {
       '.MuiCardContent-root': {
@@ -109,6 +143,11 @@ export interface CardDisplayProps extends CardProps {
   contentGutterY?: boolean
   contentBordered?: 'all' | 'top' | 'bottom' | undefined
   headerCentered?: boolean
+  /**
+   * Fill the grid cell: as tall as the tallest card in its row, with the
+   * actions along the bottom. For a row of tiles (`GridItems masonry={false}`).
+   */
+  fullHeight?: boolean
   header?: JSX.Children
   subheader?: JSX.Children
   actions?: JSX.Children
@@ -137,6 +176,7 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
     contentGutterY,
     headerCentered,
     contentBordered,
+    fullHeight,
     ...rest
   } = props
 
@@ -144,13 +184,26 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
     help && header != null ? (
       <Box
         component="span"
-        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          // Never wider than the title's line, so a long title is what gives
+          // way (its ellipsis, under a `noWrap` title) and the help stays.
+          maxWidth: '100%',
+          verticalAlign: 'top',
+        }}
       >
-        {header}
+        <Box
+          component="span"
+          sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {header}
+        </Box>
         <HelpTip
           {...help}
           title={help.title ?? (typeof header === 'string' ? header : undefined)}
-          sx={{ fontSize: '0.8em', my: -0.5 }}
+          sx={{ fontSize: '0.8em', my: -0.5, flexShrink: 0 }}
         />
       </Box>
     ) : (
@@ -168,6 +221,7 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
       [classKeys.headerBordered]: Boolean(allBordered || headerBordered),
       [classKeys.actionsBordered]: Boolean(allBordered || actionsBordered),
       [classKeys.headerCentered]: Boolean(headerCentered),
+      [classKeys.fullHeight]: Boolean(fullHeight),
     },
     className,
   )

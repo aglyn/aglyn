@@ -84,6 +84,46 @@ export interface NotifyUsersOptions {
    * the fan-out reaches is mailed as their preferences say.
    */
   skipEmailFor?: readonly string[]
+  /**
+   * Particulars the email carries and the notification does not: a form
+   * submission's answers, so the person reading the email has the inquiry
+   * without opening the console.
+   *
+   * Email only, never written to the notification document or pushed. The
+   * document is copied once per recipient and outlives the record it points
+   * at, and a push lands on a lock screen; the record itself stays the one
+   * place the visitor's answers are kept.
+   */
+  emailDetails?: readonly NotificationEmailDetail[]
+}
+
+/** One labeled line of a notification email's details. */
+export interface NotificationEmailDetail {
+  label: string
+  value: string
+}
+
+/**
+ * At most this many characters of details per email. A submission is capped
+ * at 2,000 characters a field, so a long form would otherwise be a long email.
+ */
+const NOTIFY_EMAIL_MAX_DETAILS_CHARS = 10_000
+
+/**
+ * The details as the email prints them: `Label: value`, one per line, a
+ * value's own line breaks kept and blank values left out.
+ */
+export function formatNotificationEmailDetails(
+  details: readonly NotificationEmailDetail[] | undefined,
+): string {
+  const text = (details ?? [])
+    .map(({ label, value }) => ({ label: label.trim(), value: value.trim() }))
+    .filter(({ value }) => value)
+    .map(({ label, value }) => (label ? `${label}: ${value}` : value))
+    .join('\n')
+  return text.length > NOTIFY_EMAIL_MAX_DETAILS_CHARS
+    ? `${text.slice(0, NOTIFY_EMAIL_MAX_DETAILS_CHARS).trimEnd()}…`
+    : text
 }
 
 /** The console's absolute origin for an email link, or `''` when unset. */
@@ -132,15 +172,18 @@ async function emailNotification(
   payload: NotificationPayload,
   known: Readonly<Record<string, string | null | undefined>>,
   audience: NotifyUsersOptions['audience'],
+  emailDetails: NotifyUsersOptions['emailDetails'],
 ): Promise<void> {
   const origin = consoleOrigin()
   const settingsUrl = `${origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   const context = await notificationEmailContext(payload, audience)
   const url = notificationEmailUrl(payload, context, origin)
+  const details = formatNotificationEmailDetails(emailDetails)
   const loaded = await loadSystemEmail('notification').catch(() => null)
   const fallbackText = [
     payload.title,
     payload.body ?? '',
+    details,
     url,
     origin ? `Change what you are emailed about: ${settingsUrl}` : '',
   ]
@@ -167,6 +210,7 @@ async function emailNotification(
             ...context.brand.merge,
             'notification.title': payload.title,
             'notification.body': payload.body ?? '',
+            'notification.details': details,
             'notification.url': url,
             settingsUrl: origin ? settingsUrl : '',
           },
@@ -374,6 +418,7 @@ export async function notifyUsers(
         payload,
         options.emails ?? {},
         options.audience,
+        options.emailDetails,
       )
     }
   } catch (error) {
@@ -543,6 +588,8 @@ export async function notifyHostManagers(
      * the caller sends them their own email about the same event.
      */
     skipOwnerEmail?: boolean
+    /** What the email alone carries; see {@link NotifyUsersOptions.emailDetails}. */
+    emailDetails?: readonly NotificationEmailDetail[]
   } = {},
 ): Promise<void> {
   try {
@@ -571,7 +618,10 @@ export async function notifyHostManagers(
         hostId,
         ...(orgId ? { orgId } : {}),
       },
-      ownerUid ? { skipEmailFor: [ownerUid] } : {},
+      {
+        ...(ownerUid ? { skipEmailFor: [ownerUid] } : {}),
+        ...(options.emailDetails ? { emailDetails: options.emailDetails } : {}),
+      },
     )
   } catch (error) {
     console.error('host manager notification failed', error)
