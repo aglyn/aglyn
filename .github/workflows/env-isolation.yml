@@ -45,16 +45,30 @@ name: Env isolation
 # on `env ls` reports this repo clean. The checker reads both scopes and treats
 # a failure to read the shared scope as exit 2, never as a pass.
 #
-# ## ⚠️ THIS JOB IS RED TODAY, AND THAT IS THE DELIVERABLE
+# ## ⚑ REPORT ONLY — ISOLATION IS NOT ENFORCED, BY OWNER DECISION (AGL-2401)
 #
-# As of 2026-10-13 it reports 18 sharing findings (CRON_SECRET,
-# FIREBASE_PRIVATE_KEY, TOKEN_SIGNING_SECRET, VERCEL_TOKEN, …) and no mode
-# findings — the Stripe ones are exempted by decision, see below. Turning it
-# green is remediation work in the Vercel dashboard (AGL-2403 / AGL-2401 / AGL-2402) — the runbook is
-# `docs/SECRET_ROTATION.md`. Do NOT add `continue-on-error`, and do NOT move a
-# finding into the checker's ACCEPTED table to quiet it: an ACCEPTED entry
-# needs a name and a reason and is still printed on every run. A guard that
-# cannot be red is not a guard.
+# Owner decision 2026-10-13: environments are not isolated for now.
+# Production and development/preview share secrets and live data on purpose,
+# so the checker runs with ENV_ISOLATION_ENFORCED = false in
+# tools/deploy/verify-env-isolation.mjs. Every probe still runs on schedule
+# and every finding is still printed — under a "REPORT ONLY — not enforced"
+# heading, plus a run annotation with the count — but findings exit 0. As of
+# 2026-10-13 that is 18 sharing findings (CRON_SECRET, FIREBASE_PRIVATE_KEY,
+# TOKEN_SIGNING_SECRET, VERCEL_TOKEN, …) and no mode findings.
+#
+# A red run therefore means the check could NOT run (exit 2: no token, an API
+# error, a failed negative control) — a broken probe, never a finding.
+#
+# TO ENFORCE AGAIN: set ENV_ISOLATION_ENFORCED = true in the checker. That
+# restores the pre-decision behavior exactly (any finding exits 1; the
+# live-Stripe exemption below still applies), and this job goes red until the
+# remediation in `docs/SECRET_ROTATION.md` is done (AGL-2403 / AGL-2401 /
+# AGL-2402).
+#
+# The script decides the verdict, never this file: do NOT add
+# `continue-on-error`, and do NOT move a finding into the checker's ACCEPTED
+# table to quiet it — an ACCEPTED entry needs a name and a reason and is still
+# printed on every run.
 #
 # ## Live Stripe outside production is a decision, not a finding
 #
@@ -74,28 +88,33 @@ name: Env isolation
 #   the same secret firewall-drift.yml reads (created 2026-08-23). A token
 #   WITHOUT team scope reports HTTP 403 and exits 2, not 0.
 #
-# Exit codes: 0 every secret is environment-isolated; 1 at least one spans;
-# 2 could not check.
+# Exit codes: 0 passed (report-only: every probe ran, findings listed; enforced:
+# every secret is environment-isolated); 1 enforced and at least one spans;
+# 2 could not check, in either mode.
 
 on:
   schedule:
     # WEEKLY, Mondays 08:47 UTC — not daily, and the reason is about attention
     # rather than cost (decided).
     #
-    # This check is red today and will stay red until the 25 shared secrets in
-    # docs/SECRET_ROTATION.md are split. A workflow that fails every morning
-    # for a known reason stops being read, and then the FIRST REAL failure
-    # arrives on a board everyone has learned to ignore — which is the exact
-    # failure mode that let /api/health/crons sit at 503 for 51 hours while
-    # the uptime probe stayed green.
+    # Kept on a schedule while isolation is report-only (owner decision
+    # 2026-10-13, AGL-2401), for visibility: the findings stay on record every
+    # week, and a red run means the check itself broke. If enforcement is
+    # turned back on, the shared secrets in docs/SECRET_ROTATION.md keep it red
+    # until they are split. A workflow that fails every morning for a known
+    # reason stops being read, and then the FIRST REAL failure arrives on a
+    # board everyone has learned to ignore — which is the exact failure mode
+    # that let /api/health/crons sit at 503 for 51 hours while the uptime
+    # probe stayed green.
     #
     # Weekly keeps the finding in front of a human without training anyone to
     # skip past it. Still after firewall-drift and pricing-drift (08:29) so the
     # drift jobs do not contend. (GitHub schedules are best-effort and pause on
     # 60-day-quiet repos; a green history is not proof of continuous coverage.)
     #
-    # Make this daily again once the count reaches zero — at that point a red
-    # means something changed, which is worth waking up to.
+    # Make this daily again once enforcement is on and the count reaches
+    # zero — at that point a red means something changed, which is worth
+    # waking up to.
     - cron: '47 8 * * 1'
   workflow_dispatch:
   # Scoped to the checker itself, so a change to the guard is exercised by the
@@ -127,11 +146,12 @@ jobs:
 
       # Guard the guard, BEFORE the live read and BEFORE the credential gate.
       # Every case in --self-test is a state the live data does NOT contain:
-      # today every finding is red, so nothing about the live run proves the
-      # check can still go GREEN once the split is done, nor that a NEW shared
-      # credential would be reported as UNTRACKED rather than folded into the
-      # nearest issue. Pure node, no network, no token — so it must still run
-      # on a day the secret is missing.
+      # nothing about the live run proves the check can still go GREEN once
+      # the split is done, that it still goes RED once enforcement is turned
+      # back on, nor that a NEW shared credential would be reported as
+      # UNTRACKED rather than folded into the nearest issue. Pure node, no
+      # network, no token — so it must still run on a day the secret is
+      # missing.
       #
       # No `npm ci` on purpose: the checker uses only built-in fetch, so this
       # step cannot be broken by a dependency, a lockfile or a registry outage.
@@ -156,7 +176,9 @@ jobs:
       # CI is set by Actions, which disables the checker's local Vercel-CLI
       # auth-file fallback — a CI run can only ever authenticate with the repo
       # secret above.
-      - name: Assert no secret spans production and development/preview
+      # Report-only while ENV_ISOLATION_ENFORCED is false: findings print and
+      # exit 0; only a check that could not run exits non-zero.
+      - name: Report secrets that span production and development/preview
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npm run check:env-isolation
