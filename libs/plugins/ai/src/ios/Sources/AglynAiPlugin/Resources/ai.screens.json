@@ -629,6 +629,10 @@
       "load": {
         "member": {
           "doc": "hosts/{site.id}/members/{params.memberId}"
+        },
+        "usage": {
+          "url": "/api/ai/usage?orgId={org.id}&hostId={site.id}",
+          "optional": true
         }
       },
       "constants": {
@@ -669,6 +673,18 @@
           "tone": "info",
           "when": "data.member.role == owner",
           "text": "The site owner's AI access follows their workspace role."
+        },
+        {
+          "type": "fields",
+          "title": "This month",
+          "when": "data.usage && data.member.status != invited",
+          "footer": "AI credits this collaborator drew on this site, from the workspace's pool.",
+          "rows": [
+            {
+              "label": "Credits on this site",
+              "value": "{data.usage.rows[uid=params.uid].hostCredits ?? '0':number}"
+            }
+          ]
         },
         {
           "type": "list",
@@ -846,6 +862,18 @@
                       "label": "Keep going and flag it"
                     }
                   ]
+                },
+                {
+                  "key": "models",
+                  "label": "Models it may use",
+                  "kind": "multiselect",
+                  "initial": "{data.allot.allotments[subject=params.subject].models}",
+                  "help": "Leave all off to allow every model.",
+                  "optionsFrom": {
+                    "items": "data.allot.models",
+                    "value": "{item.id}",
+                    "label": "{item.label}"
+                  }
                 }
               ],
               "url": "/api/ai/allotments",
@@ -856,7 +884,7 @@
                     "subject": "{params.subject}",
                     "credits": "{form.credits}",
                     "mode": "{form.mode}",
-                    "models": "{data.allot.allotments[subject=params.subject].models}"
+                    "models": "{form.models}"
                   }
                 ]
               },

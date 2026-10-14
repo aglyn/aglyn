@@ -697,6 +697,9 @@ internal sealed interface FieldValue {
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
+  // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
+  field.kind == "multiselect" && value is FieldValue.Text ->
+    value.value.split('\n').filter { it.isNotEmpty() }.let { chosen -> if (chosen.isEmpty()) JsonNull else JsonArray(chosen.map { JsonPrimitive(it) }) }
   field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
@@ -706,6 +709,7 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
 internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
   val resolved = field.initial?.let { ScreenValues.resolve(it, context) } ?: JsonNull
   if (field.kind == "toggle") return FieldValue.Flag(ScreenValues.truthy(resolved))
+  if (field.kind == "multiselect") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
   if (field.kind == "date") ScreenValues.epochMillis(resolved)?.let { millis ->
     val (y, m, d) = localParts(millis, "UTC")
     return FieldValue.Text("$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}")
@@ -721,6 +725,20 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
       "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "multiselect" -> {
+        // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
+        val choices = field.choices(context)
+        val chosen = text.split('\n').filter { it.isNotEmpty() }
+        Text(field.label, style = MaterialTheme.typography.titleSmall)
+        for ((id, label) in choices) {
+          SwitchRow(label, id in chosen, { on ->
+            val offered = choices.map { it.first }
+            val next = offered.filter { if (it == id) on else it in chosen } + chosen.filter { it !in offered }
+            onChange(FieldValue.Text(next.joinToString("\n")))
+          }, supporting = null)
+        }
+        help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
       "select" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }

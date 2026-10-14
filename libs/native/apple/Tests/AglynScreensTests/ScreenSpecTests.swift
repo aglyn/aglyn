@@ -158,6 +158,21 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(asked("question"), ["kind", "summary", "question", "tried", "skipDeflection", "contactConsent"])
   }
 
+  func testAMultiselectHoldsTheChosenIdsAndReadsThemBack() throws {
+    let field = try XCTUnwrap(
+      FieldSpec([
+        "key": "models", "kind": "multiselect", "initial": "{data.row.models}",
+        "optionsFrom": ["items": "data.models", "value": "{item.id}", "label": "{item.label}"],
+      ]))
+    let context: JSONValue = ["data": ["row": ["models": ["a", "c"]], "models": [["id": "a", "label": "A"], ["id": "b", "label": "B"]]]]
+    XCTAssertEqual(field.choices(in: context).map(\.value), ["a", "b"])
+    let start = initialValue(field, in: context)
+    XCTAssertEqual(start, .text("a\nc"))
+    XCTAssertEqual(fieldJSON(field, start), ["a", "c"])
+    XCTAssertEqual(fieldJSON(field, .text("")), .null)
+    XCTAssertEqual(fieldJSON(field, nil), .null)
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])

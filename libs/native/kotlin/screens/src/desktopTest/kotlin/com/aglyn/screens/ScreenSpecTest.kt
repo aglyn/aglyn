@@ -196,6 +196,22 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun aMultiselectHoldsTheChosenIdsAndReadsThemBack() {
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"models","kind":"multiselect","initial":"{data.row.models}",
+           "optionsFrom":{"items":"data.models","value":"{item.id}","label":"{item.label}"}}""",
+      ),
+    )!!
+    val context = Json.parseToJsonElement("""{"data":{"row":{"models":["a","c"]},"models":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}}""")
+    assertEquals(listOf("a", "b"), field.choices(context).map { it.first })
+    val start = initialValue(field, context)
+    assertEquals(FieldValue.Text("a\nc"), start)
+    assertEquals(Json.parseToJsonElement("""["a","c"]"""), fieldJson(field, start))
+    assertEquals(JsonNull, fieldJson(field, FieldValue.Text("")))
+  }
+
+  @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
     val api = client(403 to """{"error":"reauth-required","message":"Confirm it is you"}""", sent = sent)
