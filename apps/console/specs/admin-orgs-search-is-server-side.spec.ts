@@ -366,3 +366,22 @@ describe('every clause reaches the query', () => {
     expect(payload.orgs).toHaveLength(1)
   })
 })
+
+describe('the staff organization list names the plan each row reads as (AGL-3667)', () => {
+  it('says what a lapsed payer and a comped workspace read as, beside what is stored', async () => {
+    orgs = [
+      { id: 'org-lapsed', data: { name: 'Lapsed Co', plan: 'starter', subscription: { status: 'canceled' } } },
+      { id: 'org-none', data: { name: 'Fresh Co' } },
+      { id: 'org-comp', data: { name: 'Comp Co', plan: 'free', entitlements: { planComp: { plan: 'pro' } } } },
+    ]
+    const payload = await (await get()).json()
+    const byId = Object.fromEntries(payload.orgs.map((org: any) => [org.$id, org]))
+    // A paid plan with a dead subscription reads as free, and the stored plan is named.
+    expect(byId['org-lapsed']).toMatchObject({ readsAs: 'free', storedNote: 'stored: starter' })
+    // An org with no stored plan reads as free too, and the row says there is none.
+    expect(byId['org-none']).toMatchObject({ readsAs: 'free', storedNote: 'stored: no plan', compNote: null })
+    // A staff comp lifts the plan the row reads as and is named beside it.
+    expect(byId['org-comp'].readsAs).toBe('pro')
+    expect(byId['org-comp'].compNote).toMatch(/^comp: /)
+  })
+})

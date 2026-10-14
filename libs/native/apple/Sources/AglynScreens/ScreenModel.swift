@@ -162,18 +162,24 @@ public final class ScreenModel {
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
       url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
     }
-    let clauses: [JSONValue] = load.filters.compactMap { clause in
-      let value = ScreenValues.render(clause["value"]?.stringValue ?? "", in: context)
-      guard !value.isEmpty, let field = clause["field"]?.stringValue else { return nil }
-      return ["field": .string(field), "op": clause["op"] ?? "equals", "value": .string(value)]
-    }
-    if !clauses.isEmpty, let data = try? JSONValue.array(clauses).encoded(), let json = String(data: data, encoding: .utf8) {
-      url += (url.contains("?") ? "&" : "?") + "filters=" + ScreenValues.encodeComponent(json)
+    if let filters = Self.filtersParameter(load.filters, in: context) {
+      url += (url.contains("?") ? "&" : "?") + filters
     }
     if let cursor {
       url += (url.contains("?") ? "&" : "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     }
     return url
+  }
+
+  /// A staff list route's `filters=` parameter from `{ field, op, value }` clauses, each kept when its value template is not empty.
+  static func filtersParameter(_ filters: [JSONValue], in context: JSONValue) -> String? {
+    let clauses: [JSONValue] = filters.compactMap { clause in
+      let value = ScreenValues.render(clause["value"]?.stringValue ?? "", in: context)
+      guard !value.isEmpty, let field = clause["field"]?.stringValue else { return nil }
+      return ["field": .string(field), "op": clause["op"] ?? "equals", "value": .string(value)]
+    }
+    guard !clauses.isEmpty, let data = try? JSONValue.array(clauses).encoded(), let json = String(data: data, encoding: .utf8) else { return nil }
+    return "filters=" + ScreenValues.encodeComponent(json)
   }
 
   /// Every load the screen's conditions allow, in parallel. A failed load
@@ -308,7 +314,8 @@ public final class ScreenModel {
     }
     guard let urlTemplate = action.url else { return .done(message: nil, response: nil) }
     guard let api else { return .failed("Sign in to continue.") }
-    let path = ScreenValues.renderURL(urlTemplate, in: scope)
+    var path = ScreenValues.renderURL(urlTemplate, in: scope)
+    if let filters = Self.filtersParameter(action.filters, in: scope) { path += (path.contains("?") ? "&" : "?") + filters }
     let body = action.method == .get ? nil : action.body.map { ScreenValues.resolveBody($0, in: scope) }
     do {
       let sentBody = body ?? (action.method == .get ? nil : [:])

@@ -317,6 +317,24 @@ class ScreenSpecTest {
     assertNull(FieldSpec.parse(Json.parseToJsonElement("""{"key":"name"}"""))!!.generatedValue(JsonObject(emptyMap())))
   }
 
+  /** A GET action can carry the same staff list `filters` a load does, so an export covers what the list shows. */
+  @Test
+  fun anActionCarriesFiltersLikeALoad() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"csv":"a"}""", sent = sent)
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, Json.parseToJsonElement("""{"params":{"scope":"org","from":""}}"""), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Export","method":"GET","url":"/api/admin/audit-log?view=csv","filters":[{"field":"scope","op":"equals","value":"{params.scope}"},{"field":"at","op":"onOrAfter","value":"{params.from}"}]}""",
+      ),
+    )!!
+    model.run(action, model.context)
+    val url = sent[0].url.toString()
+    assertTrue(url.contains("view=csv&filters="))
+    assertTrue(url.contains("scope"))
+    assertFalse(url.contains("onOrAfter"))
+  }
+
   /** A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last. */
   @Test
   fun sortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {

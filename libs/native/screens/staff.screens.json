@@ -348,10 +348,20 @@
           "split": true,
           "items": "data.orgs.orgs",
           "primary": "{item.name|item.$id}",
-          "secondary": "{item.slug} · {item.plan|'Free':title}",
+          "secondary": "{item.slug} · {item.readsAs:title}",
           "tertiary": "Created {item.createdAt:date} · last activity {item.lastActivityAt:date}",
           "icon": "building.2|business",
           "badges": [
+            {
+              "text": "{item.storedNote}",
+              "when": "item.storedNote",
+              "tone": "neutral"
+            },
+            {
+              "text": "{item.compNote}",
+              "when": "item.compNote",
+              "tone": "info"
+            },
             {
               "text": "Suspended",
               "when": "item.suspended",
@@ -414,7 +424,8 @@
             "value": "enterprise",
             "label": "Enterprise"
           }
-        ]
+        ],
+        "scopeNote": "Contribution margin: net revenue less infrastructure COGS only. Support, customer acquisition (CAC) and overhead are not in this figure."
       },
       "actions": [
         {
@@ -570,6 +581,10 @@
           "url": "/api/orgs/activity?orgId={params.orgId}&scope=org-wide",
           "cursor": "nextCursor",
           "items": "entries",
+          "optional": true
+        },
+        "entitlements": {
+          "url": "/api/admin/org-entitlements?orgId={params.orgId}",
           "optional": true
         }
       },
@@ -883,6 +898,31 @@
           "icon": "note.text|description",
           "count": false,
           "empty": "No notes."
+        },
+        {
+          "type": "list",
+          "title": "Effective entitlements",
+          "footer": "Every limit as it resolves now (the plan default, the staff override, a comp, an add-on), beside the plan default and what the workspace holds against it. Sites and manager seats are counted as the gates count them.",
+          "when": "data.entitlements.rows",
+          "items": "data.entitlements.rows",
+          "primary": "{item.key}",
+          "secondary": "plan default {item.planDefault|'—'} · used {item.used|'—'}",
+          "trailing": "{item.effective}",
+          "icon": "slider.horizontal.3|tune",
+          "badges": [
+            {
+              "text": "Override",
+              "when": "item.overridden",
+              "tone": "info"
+            },
+            {
+              "text": "{item.addon}",
+              "when": "item.addon",
+              "tone": "info"
+            }
+          ],
+          "count": false,
+          "empty": "None."
         },
         {
           "type": "list",
@@ -7156,9 +7196,88 @@
               "value": "{params.plan}"
             }
           ]
+        },
+        "fleet": {
+          "when": "params.fleet",
+          "optional": true,
+          "url": "/api/admin/margin-utilization?view=fleet",
+          "filters": [
+            {
+              "field": "plan",
+              "op": "equals",
+              "value": "{params.plan}"
+            }
+          ]
         }
       },
       "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "Nothing has been read yet",
+          "when": "!params.fleet",
+          "text": "The fleet figures are held back until you ask: measuring them reads up to a thousand organizations, four reads each. An empty list is the absence of a measurement, not a report that margin is healthy. Choose Measure the fleet."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Part of the fleet",
+          "when": "params.fleet && data.fleet && !data.fleet.complete",
+          "text": "The scan stopped at its ceiling with more organizations to read. Every figure below describes the {data.fleet.orgs} it read and no others."
+        },
+        {
+          "type": "list",
+          "title": "Utilization across the fleet",
+          "when": "data.fleet.orgs",
+          "footer": "Each organization is measured against its OWN plan’s bands. A band that is uncapped, or that the plan does not include at all, has no percentage and is excluded from the sample rather than folded in as zero. {data.fleet.caption}",
+          "items": "data.fleet.bands",
+          "primary": "{item.label}",
+          "secondary": "median {item.median} · 25th {item.p25} · 75th {item.p75} · 90th {item.p90} · max {item.max}",
+          "tertiary": "{item.counted} orgs · {item.overBand} over the band · {item.excluded}",
+          "icon": "chart.bar|bar_chart",
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "fields",
+          "title": "Margin across the fleet",
+          "when": "data.fleet.orgs",
+          "footer": "{const.scopeNote}",
+          "rows": [
+            {
+              "label": "Median margin",
+              "value": "{data.fleet.margin.median}",
+              "chip": true,
+              "tone": "info"
+            },
+            {
+              "label": "Under the floor",
+              "value": "{data.fleet.margin.underFloor}"
+            },
+            {
+              "label": "Underwater",
+              "value": "{data.fleet.margin.underwater}"
+            },
+            {
+              "label": "Cost",
+              "value": "{data.fleet.margin.cost}"
+            },
+            {
+              "label": "Net revenue",
+              "value": "{data.fleet.margin.revenue}"
+            },
+            {
+              "label": "Of it, the AI add-on",
+              "value": "{data.fleet.margin.aiAddon}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.fleet.margin.nothingBills",
+          "text": "No organization in this scan bills anything, so there is no margin to report. That is an absence of revenue, not a margin of zero."
+        },
         {
           "type": "list",
           "load": "rows",
@@ -7174,8 +7293,8 @@
             }
           },
           "empty": "No rows.",
-          "title": "By organization",
-          "footer": "Four Firestore reads per organization, so a page is read when you open this and more on Load more. Utilization is used against what the plan includes: Uncapped has no ceiling, No allowance has none included. Margin is net of processor fees and measured cost; it is a ceiling, since nothing costs support, acquisition or overhead. The console also draws the fleet-wide distribution of each band and of margin; here each organization carries its own figures.",
+          "title": "By organization, worst margin first",
+          "footer": "Four Firestore reads per organization, so a page is read when you open this and more on Load more. Utilization is used against what the plan includes: Uncapped has no ceiling, No allowance has none included. Margin is net of processor fees and measured cost; it is a ceiling, since nothing costs support, acquisition or overhead. Sorted over the organizations loaded so far.",
           "badges": [
             {
               "text": "{item.rating:title}",
@@ -7193,7 +7312,8 @@
               "tone": "neutral"
             }
           ],
-          "count": true
+          "count": true,
+          "sort": "marginPct"
         }
       ],
       "constants": {
@@ -7230,7 +7350,8 @@
             "value": "enterprise",
             "label": "Enterprise"
           }
-        ]
+        ],
+        "scopeNote": "Contribution margin: net revenue less infrastructure COGS only. Support, customer acquisition (CAC) and overhead are not in this figure."
       },
       "subtitle": "Consumption of each included band, the cost, and the realized margin, worst first",
       "actions": [
@@ -7261,6 +7382,18 @@
             "screen": "core.staff.margin",
             "params": {
               "plan": "{form.plan}"
+            }
+          }
+        },
+        {
+          "id": "fleet",
+          "label": "Measure the fleet",
+          "icon": "chart.bar.xaxis|insights",
+          "navigate": {
+            "screen": "core.staff.margin",
+            "params": {
+              "plan": "{params.plan}",
+              "fleet": "yes"
             }
           }
         }
@@ -9354,6 +9487,19 @@
           "optional": true,
           "cursor": "nextCursor",
           "items": "rows"
+        },
+        "gatewayRows": {
+          "url": "/api/admin/email-health/gateways?view=rows&pageSize=25",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "optional": true,
+          "filters": [
+            {
+              "field": "gateway",
+              "op": "equals",
+              "value": "{params.gateway}"
+            }
+          ]
         }
       },
       "blocks": [
@@ -9681,15 +9827,22 @@
           "empty": "No violations recorded in this window."
         },
         {
-          "type": "list",
-          "title": "Held sending domains",
+          "type": "notice",
+          "tone": "info",
+          "title": "Mail gateway ledger",
           "when": "data.gateways",
+          "text": "Refusals and deliveries each security gateway and mail host gave each sending domain. Two refusals in thirty days with no delivery hold that domain’s bulk mail (campaigns, workflows and sequences) to everyone behind the gateway. Transactional mail is never held."
+        },
+        {
+          "type": "list",
+          "title": "Held now",
+          "when": "data.gateways.held.0",
           "items": "data.gateways.held",
-          "primary": "{item.sendingDomain}",
-          "secondary": "{item.gateway:title} · refused {item.blocked30:number} in 30 days · {item.lastBlockedDetail|'no detail'}",
+          "primary": "{item.sendingDomain} → {const.gatewayLabels[@item.gateway]|item.gateway}",
+          "secondary": "refused {item.blocked30:number} times in 30 days with no delivery · {item.lastBlockedDetail|'no detail'}",
           "badges": [
             {
-              "text": "Shared sender",
+              "text": "Shared sender: every tenant on it is held",
               "when": "item.shared",
               "tone": "error"
             }
@@ -9699,12 +9852,24 @@
           "empty": "None held."
         },
         {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.gateways && !data.gateways.held.0",
+          "text": "No sending domain is held. {data.gateways.refused:count} gateway(s) have refused a sending domain since {data.gateways.sinceMs:date}, none twice with no delivery."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.gateways.truncated",
+          "text": "The read of recent refusals hit its cap, so the oldest are missing from the lists. The table of every sending domain is complete."
+        },
+        {
           "type": "list",
-          "title": "Mail gateway refusals, last 30 days",
+          "title": "Refusals by sending domain, last 30 days",
           "when": "data.gateways",
           "items": "data.gateways.refused",
           "primary": "{item.sendingDomain}",
-          "secondary": "{item.gateway:title} · refused {item.blocked30:number}, delivered {item.delivered30:number}",
+          "secondary": "{const.gatewayLabels[@item.gateway]|item.gateway} · refused {item.blocked30:number}, delivered {item.delivered30:number}",
           "tertiary": "{item.lastBlockedAtMs:datetime}",
           "badges": [
             {
@@ -9717,6 +9882,72 @@
           ],
           "count": false,
           "empty": "No refusals."
+        },
+        {
+          "type": "list",
+          "title": "Every sending domain",
+          "when": "data.gateways",
+          "load": "gatewayRows",
+          "items": "data.gatewayRows.rows",
+          "primary": "{item.sendingDomain}",
+          "secondary": "{const.gatewayLabels[@item.gateway]|item.gateway} · refused {item.blocked30:number}, delivered {item.delivered30:number} in 30 days",
+          "tertiary": "last refusal {item.lastBlockedAtMs:datetime} · {item.lastBlockedDetail|'no diagnostic'}",
+          "icon": "envelope|mail",
+          "badges": [
+            {
+              "text": "Held",
+              "when": "item.holds",
+              "tone": "error"
+            },
+            {
+              "text": "Clear",
+              "when": "!item.holds",
+              "tone": "success"
+            },
+            {
+              "text": "Shared sender",
+              "when": "item.shared",
+              "tone": "neutral"
+            }
+          ],
+          "empty": "No sending domain has a ledger row."
+        },
+        {
+          "type": "actions",
+          "when": "data.gateways",
+          "items": [
+            {
+              "id": "gatewayFilter",
+              "label": "Filter the ledger by gateway",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "prompt": [
+                {
+                  "key": "gateway",
+                  "label": "Gateway",
+                  "kind": "select",
+                  "initial": "{params.gateway}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Any"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "const.gatewayOptions",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "core.staff.health",
+                "params": {
+                  "days": "{params.days}",
+                  "gateway": "{form.gateway}"
+                }
+              }
+            }
+          ]
         },
         {
           "type": "actions",
@@ -10044,7 +10275,42 @@
             "meaning": "This deployment can actually send mail. Misconfigured means invites, password resets and receipts silently go nowhere — every sender no-ops without BOTH the key and the sender address.",
             "remedy": "The blockers listed below are in the order they stop delivery. Domain verification is not observable here, so a clean report can still bounce until DNS is verified."
           }
-        }
+        },
+        "gatewayLabels": {
+          "barracuda": "Barracuda",
+          "proofpoint": "Proofpoint",
+          "mimecast": "Mimecast",
+          "google": "Google Workspace",
+          "microsoft": "Microsoft 365",
+          "other": "Other mail gateway",
+          "none": "No MX record"
+        },
+        "gatewayOptions": [
+          {
+            "value": "barracuda",
+            "label": "Barracuda"
+          },
+          {
+            "value": "proofpoint",
+            "label": "Proofpoint"
+          },
+          {
+            "value": "mimecast",
+            "label": "Mimecast"
+          },
+          {
+            "value": "google",
+            "label": "Google Workspace"
+          },
+          {
+            "value": "microsoft",
+            "label": "Microsoft 365"
+          },
+          {
+            "value": "other",
+            "label": "Other mail gateway"
+          }
+        ]
       }
     },
     {
@@ -10888,26 +11154,52 @@
       ],
       "load": {
         "entries": {
-          "query": {
-            "collection": "adminAudit",
-            "orderBy": "at desc",
-            "limit": 100,
-            "where": [
-              [
-                "scope",
-                "==",
-                "{params.scope}",
-                "optional"
-              ],
-              [
-                "action",
-                "==",
-                "{params.action}",
-                "optional"
-              ]
-            ]
-          },
-          "optional": true
+          "url": "/api/admin/audit-log?pageSize=25",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "optional": true,
+          "filters": [
+            {
+              "field": "action",
+              "op": "equals",
+              "value": "{params.action}"
+            },
+            {
+              "field": "actionGroup",
+              "op": "equals",
+              "value": "{params.group}"
+            },
+            {
+              "field": "scope",
+              "op": "equals",
+              "value": "{params.scope}"
+            },
+            {
+              "field": "targetKind",
+              "op": "equals",
+              "value": "{params.targetKind}"
+            },
+            {
+              "field": "actorUid",
+              "op": "equals",
+              "value": "{params.actor}"
+            },
+            {
+              "field": "targetHostId",
+              "op": "equals",
+              "value": "{params.site}"
+            },
+            {
+              "field": "at",
+              "op": "onOrAfter",
+              "value": "{params.from}"
+            },
+            {
+              "field": "at",
+              "op": "onOrBefore",
+              "value": "{params.to}"
+            }
+          ]
         },
         "archive": "/api/admin/audit-archive/browse?month={params.month|now.month}"
       },
@@ -10921,10 +11213,10 @@
         {
           "type": "list",
           "title": "Admin actions",
-          "footer": "Each entry shows the actor's address as it was when the action was recorded; it is not updated if that account's address changes later. The uid is the identifier that does not go out of date. The latest 100 are read; filter by scope or action to reach further back.",
-          "items": "data.entries.items",
+          "footer": "Each entry shows the actor's address as it was when the action was recorded; it is not updated if that account's address changes later. The uid is the identifier that does not go out of date. Newest first; filter by action, scope, who, site or a date range to reach further back, and search by words.",
+          "items": "data.entries.rows",
           "primary": "{item.action}",
-          "secondary": "{item.scope} · {item.target} · {item.reason}",
+          "secondary": "{item.scope} · {item.target} · {item.why}",
           "tertiary": "{item.actorEmail|item.actorUid} · {item.at:datetime}",
           "icon": "list.bullet.rectangle|history",
           "open": {
@@ -10933,7 +11225,21 @@
               "entryId": "{item.$id}"
             }
           },
-          "empty": "No audit entries match."
+          "empty": "No audit entries match.",
+          "load": "entries",
+          "search": true,
+          "badges": [
+            {
+              "text": "Tenant pool: {item.tenantPool}",
+              "when": "item.tenantPool",
+              "tone": "warning"
+            },
+            {
+              "text": "Reason not recorded: this override predates the required reason",
+              "when": "item.whyMissing",
+              "tone": "warning"
+            }
+          ]
         },
         {
           "type": "list",
@@ -10961,26 +11267,145 @@
           "icon": "line.3.horizontal.decrease|filter_list",
           "prompt": [
             {
-              "key": "scope",
-              "label": "Scope (workspace, site, account...)",
-              "kind": "text",
-              "initial": "{params.scope}"
-            },
-            {
               "key": "action",
               "label": "Action (as recorded, such as org.override)",
               "kind": "text",
               "initial": "{params.action}"
+            },
+            {
+              "key": "group",
+              "label": "Action group (the first part of the action: billing, org, plugins)",
+              "kind": "text",
+              "initial": "{params.group}"
+            },
+            {
+              "key": "scope",
+              "label": "Scope",
+              "kind": "select",
+              "initial": "{params.scope}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                }
+              ],
+              "optionsFrom": {
+                "items": "const.scopes",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
+            },
+            {
+              "key": "targetKind",
+              "label": "Target type",
+              "kind": "select",
+              "initial": "{params.targetKind}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                }
+              ],
+              "optionsFrom": {
+                "items": "const.targetKinds",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
+            },
+            {
+              "key": "actor",
+              "label": "Who (uid)",
+              "kind": "text",
+              "initial": "{params.actor}"
+            },
+            {
+              "key": "site",
+              "label": "Site id",
+              "kind": "text",
+              "initial": "{params.site}"
+            },
+            {
+              "key": "from",
+              "label": "From",
+              "kind": "date",
+              "initial": "{params.from}"
+            },
+            {
+              "key": "to",
+              "label": "To",
+              "kind": "date",
+              "initial": "{params.to}"
             }
           ],
           "navigate": {
             "screen": "core.staff.audit",
             "params": {
-              "scope": "{form.scope}",
               "action": "{form.action}",
+              "group": "{form.group}",
+              "scope": "{form.scope}",
+              "targetKind": "{form.targetKind}",
+              "actor": "{form.actor}",
+              "site": "{form.site}",
+              "from": "{form.from}",
+              "to": "{form.to}",
               "month": "{params.month}"
             }
           }
+        },
+        {
+          "id": "export",
+          "label": "Export as CSV",
+          "icon": "square.and.arrow.up|download",
+          "method": "GET",
+          "url": "/api/admin/audit-log?view=csv",
+          "filters": [
+            {
+              "field": "action",
+              "op": "equals",
+              "value": "{params.action}"
+            },
+            {
+              "field": "actionGroup",
+              "op": "equals",
+              "value": "{params.group}"
+            },
+            {
+              "field": "scope",
+              "op": "equals",
+              "value": "{params.scope}"
+            },
+            {
+              "field": "targetKind",
+              "op": "equals",
+              "value": "{params.targetKind}"
+            },
+            {
+              "field": "actorUid",
+              "op": "equals",
+              "value": "{params.actor}"
+            },
+            {
+              "field": "targetHostId",
+              "op": "equals",
+              "value": "{params.site}"
+            },
+            {
+              "field": "at",
+              "op": "onOrAfter",
+              "value": "{params.from}"
+            },
+            {
+              "field": "at",
+              "op": "onOrBefore",
+              "value": "{params.to}"
+            }
+          ],
+          "file": {
+            "name": "{response.filename}",
+            "type": "text/csv",
+            "from": "response.csv"
+          },
+          "success": "{response.note}"
         },
         {
           "id": "month",
@@ -10998,14 +11423,110 @@
           "navigate": {
             "screen": "core.staff.audit",
             "params": {
-              "month": "{form.month}",
+              "action": "{params.action}",
+              "group": "{params.group}",
               "scope": "{params.scope}",
-              "action": "{params.action}"
+              "targetKind": "{params.targetKind}",
+              "actor": "{params.actor}",
+              "site": "{params.site}",
+              "from": "{params.from}",
+              "to": "{params.to}",
+              "month": "{form.month}"
             }
           }
         }
       ],
-      "subtitle": "What staff did, and the archive of what is older"
+      "subtitle": "What staff did, and the archive of what is older",
+      "constants": {
+        "scopes": [
+          {
+            "value": "asset",
+            "label": "asset"
+          },
+          {
+            "value": "domain",
+            "label": "domain"
+          },
+          {
+            "value": "feature",
+            "label": "feature"
+          },
+          {
+            "value": "host",
+            "label": "host"
+          },
+          {
+            "value": "org",
+            "label": "org"
+          },
+          {
+            "value": "platform",
+            "label": "platform"
+          },
+          {
+            "value": "tenant",
+            "label": "tenant"
+          },
+          {
+            "value": "user",
+            "label": "user"
+          }
+        ],
+        "targetKinds": [
+          {
+            "value": "disputes",
+            "label": "disputes"
+          },
+          {
+            "value": "emailDeliveries",
+            "label": "emailDeliveries"
+          },
+          {
+            "value": "emailSuppressions",
+            "label": "emailSuppressions"
+          },
+          {
+            "value": "hosts",
+            "label": "hosts"
+          },
+          {
+            "value": "lockdowns",
+            "label": "lockdowns"
+          },
+          {
+            "value": "marketplaceListings",
+            "label": "marketplaceListings"
+          },
+          {
+            "value": "marketplaceReports",
+            "label": "marketplaceReports"
+          },
+          {
+            "value": "orgs",
+            "label": "orgs"
+          },
+          {
+            "value": "platform",
+            "label": "platform"
+          },
+          {
+            "value": "remoteConfig",
+            "label": "remoteConfig"
+          },
+          {
+            "value": "stripe",
+            "label": "stripe"
+          },
+          {
+            "value": "systemEmailTemplates",
+            "label": "systemEmailTemplates"
+          },
+          {
+            "value": "users",
+            "label": "users"
+          }
+        ]
+      }
     },
     {
       "id": "core.staff.auditFile",

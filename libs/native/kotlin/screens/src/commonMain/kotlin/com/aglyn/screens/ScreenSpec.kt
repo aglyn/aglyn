@@ -138,6 +138,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val method: ApiMethod = runCatching { ApiMethod.valueOf((json.str("method") ?: "POST").uppercase()) }.getOrDefault(ApiMethod.POST)
   val url: String? = json.str("url")
   val body: JsonElement? = json.obj("body")
+  /** A staff list route's `filters` for a GET action (the audit log's CSV export): `{ field, op, value }` clauses, each kept when its value template is not empty, as a load's are. */
+  val filters: List<JsonElement> = json.arr("filters")
   /**
    * Request headers, name to template. `{attempt}` is a key that stays the same while the same
    * action sends the same body (a retry) and changes with the body: `Idempotency-Key` for a

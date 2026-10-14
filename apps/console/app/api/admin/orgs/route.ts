@@ -30,6 +30,12 @@ import {
   readStaffListQuery,
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
+import {
+  describeOrgPlan,
+  isEnterpriseOrg,
+  PLAN_LABELS,
+  planCompLabel,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { ORG_LIST_QUERY } from '../../../../utils/org-list-query'
 import {
   LAPSED_SUSPENSIONS_NOTICE,
@@ -144,10 +150,29 @@ async function handler(request: Request): Promise<Response> {
       const data = docSnap.data()
       const subscription =
         billingByOrgId.get(docSnap.id)?.subscription ?? data['subscription']
+      // The plan the row READS as, with the notes that explain it (the page's Plan
+      // column): the stored plan and a comp diverge from it exactly when it matters.
+      const planInputs = {
+        plan: data['plan'] ?? null,
+        entitlements: data['entitlements'] ?? null,
+        billingStatus: data['billingStatus'] ?? null,
+        enterprise: data['enterprise'] === true,
+        subscription: subscription
+          ? { status: subscription?.status ?? null, customMonthlyUsd: subscription?.customMonthlyUsd ?? null }
+          : null,
+      }
+      const planState = describeOrgPlan(planInputs as never)
+      const enterprise = isEnterpriseOrg(planInputs as never)
+      const storedPlan = String(data['plan'] ?? 'no plan')
       return {
         $id: docSnap.id,
         name: data['name'] ?? null,
         slug: data['slug'] ?? null,
+        readsAs: enterprise ? PLAN_LABELS.enterprise : planState.effectivePlan,
+        storedNote: !enterprise && storedPlan !== planState.effectivePlan ? `stored: ${storedPlan}` : null,
+        compNote: planState.comp
+          ? `comp: ${planCompLabel(planState.comp, planState.compInForce, planState.comp.plan)}`
+          : null,
         // The Owner UID column, which Manage columns can show.
         ownerUid: data['ownerUid'] ?? null,
         plan: data['plan'] ?? null,

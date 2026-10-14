@@ -153,6 +153,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let method: HTTPMethod
   public let url: String?
   public let body: JSONValue?
+  /// A staff list route's `filters` for a GET action (the audit log's CSV export): `{ field, op, value }` clauses,
+  /// each kept when its value template is not empty, as a load's are.
+  public let filters: [JSONValue]
   /// Request headers, name to template. `{attempt}` is a key that stays the same while the same
   /// action sends the same body (a retry), and changes with the body: `Idempotency-Key` for a
   /// route that provisions something (enterprise billing).
@@ -208,6 +211,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "POST").uppercased()) ?? .post
     self.url = json["url"]?.stringValue
     self.body = json["body"]
+    self.filters = json["filters"].array
     self.headers = json["headers"].objectEntries.reduce(into: [:]) { $0[$1.key] = $1.value.stringValue ?? ScreenValues.text($1.value) }
     self.confirm = json["confirm"]?.stringValue
     self.confirmWhen = json["confirmWhen"]?.stringValue

@@ -71,6 +71,8 @@ export async function staffSources() {
   const quarantine = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-quarantine.ts'))
   const takedown = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/media-takedown-reach.ts'))
   const denyList = await jiti.import(join(ROOT, 'apps/console/utils/media-quarantine-list-query.ts'))
+  const gateways = await jiti.import(join(ROOT, 'libs/shared/util/email/src/lib/mail-gateway.ts'))
+  const auditQuery = await jiti.import(join(ROOT, 'apps/console/utils/admin-audit-list-query.ts'))
   const organizations = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/organizations.ts'))
   const overrideReasons = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/org-override-reason.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
@@ -80,6 +82,10 @@ export async function staffSources() {
   const statuses = await model('plugin-review-status')
   const attestation = await model('publisher-attestation')
   return {
+    audit: {
+      scopes: auditQuery.ADMIN_AUDIT_KNOWN_SCOPES.map((value) => ({ value, label: value })),
+      targetKinds: auditQuery.ADMIN_AUDIT_KNOWN_TARGET_KINDS.map((value) => ({ value, label: value })),
+    },
     quarantine: {
       reasons: quarantine.MEDIA_QUARANTINE_REASONS.map((value) => ({ value, label: quarantine.MEDIA_QUARANTINE_REASON_LABELS[value] })),
       reasonLabels: quarantine.MEDIA_QUARANTINE_REASON_LABELS,
@@ -157,6 +163,7 @@ export async function staffSources() {
     },
     margin: {
       plans: Object.entries(plans.PLAN_LABELS).map(([value, label]) => ({ value, label })),
+      scopeNote: plans.MARGIN_SCOPE_NOTE,
     },
     revenue: {
       orgStates: revenue.ORG_STATE_LABELS,
@@ -200,6 +207,8 @@ export async function staffSources() {
     },
     lockReasons: options(lockdown.LOCKDOWN_REASON_CODES, lockdown.LOCKDOWN_REASON_LABELS),
     cancelReasons: options(cancel.SUBSCRIPTION_CANCEL_REASON_CODES, cancel.SUBSCRIPTION_CANCEL_REASON_LABELS),
+    gatewayLabels: gateways.MAIL_GATEWAY_LABELS,
+    gatewayOptions: gateways.MAIL_GATEWAYS.filter((gateway) => gateway !== 'none').map((value) => ({ value, label: gateways.MAIL_GATEWAY_LABELS[value] })),
     probes: Object.fromEntries(
       health.HEALTH_PROBES.map(({ id, label, path, auth, meaning, remedy }) => [id, { label, path, auth, meaning, remedy }]),
     ),
@@ -471,7 +480,10 @@ const replace = (id, change) => {
   }
   spec.screens[at] = change(spec.screens[at])
 }
-replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
+replace('core.staff.health', (screen) => ({
+  ...screen,
+  constants: { probes: sources.probes, gatewayLabels: sources.gatewayLabels, gatewayOptions: sources.gatewayOptions },
+}))
 replace('core.staff.emails', (screen) => ({ ...screen, constants: sources.emails }))
 replace('core.staff.emailSuppressions', (screen) => ({ ...screen, constants: sources.suppressions }))
 replace('core.staff.orgs', (screen) => ({ ...screen, constants: sources.margin }))
@@ -497,6 +509,7 @@ replace('core.staff.site', (screen) => ({
       : {}),
   })),
 }))
+replace('core.staff.audit', (screen) => ({ ...screen, constants: sources.audit }))
 replace('core.staff.quarantine', (screen) => ({ ...screen, constants: sources.quarantine }))
 replace('core.staff.user', (screen) => ({ ...screen, constants: sources.user }))
 replace('core.staff.settings', (screen) => ({ ...screen, constants: sources.settings }))

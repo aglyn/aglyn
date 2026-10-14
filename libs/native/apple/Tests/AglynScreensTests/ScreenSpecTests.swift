@@ -283,6 +283,23 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertNil(FieldSpec(["key": "name"])?.generatedValue(in: [:]))
   }
 
+  /// A GET action can carry the same staff list `filters` a load does, so an export covers what the list shows.
+  @MainActor
+  func testAnActionCarriesFiltersLikeALoad() async throws {
+    let transport = RecordingTransport(responses: [(200, #"{"csv":"a"}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: ["params": ["scope": "org", "from": ""]], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Export", "method": "GET", "url": "/api/admin/audit-log?view=csv",
+        "filters": [["field": "scope", "op": "equals", "value": "{params.scope}"], ["field": "at", "op": "onOrAfter", "value": "{params.from}"]],
+      ]))
+    _ = await model.run(action, in: model.context)
+    XCTAssertTrue((transport.requests[0].url?.absoluteString ?? "").contains("view=csv&filters="))
+    XCTAssertTrue((transport.requests[0].url?.absoluteString ?? "").contains("filters="))
+    XCTAssertFalse((transport.requests[0].url?.absoluteString ?? "").contains("onOrAfter"))
+  }
+
   /// A list can be ordered by a field of its rows: numbers as numbers, anything else as text, rows without it last.
   func testSortOrdersByAFieldWithNumbersAsNumbersAndKeepsTiesInOrder() {
     let rows: [JSONValue] = [["key": "a", "value": 9], ["key": "b", "value": 10], ["key": "c"], ["key": "d", "value": 10], ["key": "E", "value": 2]]
@@ -379,10 +396,13 @@ final class ScreenSpecTests: XCTestCase {
   }
 }
 
-/// A reader that holds one site document and counts whatever it is asked to.
+/// A reader that holds one site document and counts whatever it is asked to (loads run in parallel, so it locks).
 final class CountingReader: FirestoreReader, @unchecked Sendable {
-  private(set) var counted: [String] = []
-  private(set) var equalities: [String] = []
+  private let lock = NSLock()
+  private var countedPaths: [String] = []
+  private var equalityFields: [String] = []
+  var counted: [String] { lock.withLock { countedPaths } }
+  var equalities: [String] { lock.withLock { equalityFields } }
 
   @MainActor
   func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
@@ -400,8 +420,10 @@ final class CountingReader: FirestoreReader, @unchecked Sendable {
   func deleteDocument(_ path: [String]) async throws {}
 
   func count(_ query: FirestoreQuery) async throws -> Int? {
-    counted.append(query.path)
-    equalities += query.equals.map(\.field)
+    lock.withLock {
+      countedPaths.append(query.path)
+      equalityFields += query.equals.map(\.field)
+    }
     return 42
   }
 }

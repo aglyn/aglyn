@@ -38,6 +38,7 @@ import {
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
 import { ORG_MARGIN_QUERY } from '../../../../utils/org-list-query'
+import { marginFleetView } from '../../../../utils/margin-fleet-view'
 
 /**
  * REALISED BAND UTILIZATION, PER ORGANIZATION.
@@ -94,6 +95,9 @@ const PAGE_SIZE = 25
 /** Clamped, because a page nobody reads is still a page somebody pays for. */
 const MAX_PAGE_SIZE = 100
 
+/** Pages of the fleet view's scan: a thousand organizations, then it says it stopped. */
+const FLEET_MAX_PAGES = 10
+
 export interface MarginUtilizationResponse {
   rows: OrgMarginRow[]
   /**
@@ -110,6 +114,135 @@ export interface MarginUtilizationResponse {
   scanned: number
   /** Firestore document reads this request billed. */
   reads: number
+}
+
+/** One page of organizations, read and priced: what the page and the fleet view both scan. */
+async function scanPage(
+  db: ReturnType<ReturnType<typeof firebaseAdmin.app>['firestore']>,
+  listRequest: NonNullable<ReturnType<typeof readStaffListQuery>>,
+): Promise<MarginUtilizationResponse> {
+  const page = await runStaffListQuery({
+    firestore: db,
+    collection: db.collection('orgs'),
+    declaration: ORG_MARGIN_QUERY,
+    request: listRequest,
+    row: (doc) => doc,
+  })
+  const pageDocs = page.rows
+  let reads = pageDocs.length + (page.hasMore ? 1 : 0) + (listRequest.cursor ? 1 : 0)
+
+  if (!pageDocs.length) {
+    return {
+      rows: [],
+      nextCursor: null,
+      scanned: 0,
+      reads,
+      refused: page.refused,
+      notices: page.notices,
+    } satisfies MarginUtilizationResponse
+  }
+
+  // The billing mirror, one batched round trip for the page rather than a
+  // get per row. `subscription` moved to `orgs/{id}/billing/stripe`, and the
+  // org doc's inline copy is the fallback for anything the backfill missed.
+  const billingSnaps = await db.getAll(
+    ...pageDocs.map((doc) =>
+      doc.ref.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
+    ),
+  )
+  reads += billingSnaps.length
+
+  /*
+   * The newest usage rollup per organization.
+   *
+   * `orderBy('month', 'desc').limit(1)` — the same read `latestMeasuredCogsUsd`
+   * and `/api/admin/org-usage` make, so this surface and the discount
+   * guardrail are looking at the same document. It cannot be batched into a
+   * `getAll` because the newest month's ID is not known until it is read;
+   * the CURRENT month is the wrong guess, since the cron writes the CLOSED
+   * one and a direct read of `usage/{thisMonth}` misses for every org, every
+   * day of the month.
+   */
+  const rollupSnaps = await Promise.all(
+    pageDocs.map((doc) =>
+      doc.ref
+        .collection('usage')
+        .orderBy('month', 'desc')
+        .limit(1)
+        .get()
+        .catch(() => null),
+    ),
+  )
+  reads += rollupSnaps.reduce((sum, snap) => sum + (snap?.docs.length ?? 0), 0)
+
+  /*
+   * The LIVE reading of every cost axis a plugin declares one for, for the
+   * SAME month as each rollup — the AI plugin's provider spend today.
+   *
+   * Live rather than the figure frozen onto the rollup: the rollup is a
+   * snapshot from when the cron ran and the meter keeps counting after it.
+   * Pairing it with the CURRENT month instead would report two different
+   * periods as one figure. It replaces the axis's first rollup field, the
+   * one the cost model and the band both read.
+   */
+  const liveAxes = pluginCostAxes().filter((axis) => axis.live)
+  const liveTargets = pageDocs.flatMap((doc, index) => {
+    const rollupDoc = rollupSnaps[index]?.docs[0]
+    if (!rollupDoc) return []
+    const month = String(rollupDoc.get('month') ?? rollupDoc.id)
+    return liveAxes.map((axis) => ({
+      index,
+      axis,
+      ref: doc.ref.collection(axis.live!.collection).doc(month),
+    }))
+  })
+  const liveSnaps = liveTargets.length
+    ? await db.getAll(...liveTargets.map((target) => target.ref))
+    : []
+  reads += liveSnaps.length
+  const liveByOrg = new Map<number, Record<string, number>>()
+  liveTargets.forEach((target, position) => {
+    const reading = liveMeterReading(liveSnaps[position], target.axis.live!)
+    if (reading === undefined) return
+    const overrides = liveByOrg.get(target.index) ?? {}
+    overrides[target.axis.fields[0]!] = reading
+    liveByOrg.set(target.index, overrides)
+  })
+
+  const rows = pageDocs.map((doc, index) => {
+    const orgData = doc.data()
+    const billingSnap = billingSnaps[index]
+    // Org doc FIRST so a stale inline `subscription` left from before the
+    // billing-mirror backfill loses to the authoritative document.
+    const org = {
+      ...orgData,
+      ...(billingSnap?.exists ? billingSnap.data() : {}),
+    }
+    const rollupDoc = rollupSnaps[index]?.docs[0]
+    return orgMarginRow({
+      orgId: doc.id,
+      name: (orgData['name'] as string | undefined) ?? null,
+      org: org as never,
+      month: rollupDoc ? String(rollupDoc.get('month') ?? rollupDoc.id) : null,
+      rollup: rollupDoc
+        ? {
+            // ONE shared list of priced fields, so this projection cannot
+            // starve the cost model the way a hand-listed one did.
+            ...orgCogsInputFrom(rollupDoc.data()),
+            ...liveByOrg.get(index),
+          }
+        : null,
+    })
+  })
+
+  return {
+    rows,
+    nextCursor: page.nextCursor,
+    scanned: rows.length,
+    reads,
+    refused: page.refused,
+    notices: page.notices,
+  } satisfies MarginUtilizationResponse
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -171,134 +304,32 @@ async function handler(request: Request): Promise<Response> {
      * organization read, resolved to a snapshot — an organization deleted
      * between two pages restarts the walk rather than ending it.
      */
-    const page = await runStaffListQuery({
-      firestore: db,
-      collection: db.collection('orgs'),
-      declaration: ORG_MARGIN_QUERY,
-      request: listRequest,
-      row: (doc) => doc,
-    })
-    const pageDocs = page.rows
-    let reads = pageDocs.length + (page.hasMore ? 1 : 0) + (listRequest.cursor ? 1 : 0)
-
-    if (!pageDocs.length) {
+    const view = String(query['view'] ?? '')
+    if (view === 'fleet') {
+      /*
+       * THE FLEET FOLD, for a client that draws no table: the pages the page
+       * would scan one press at a time, up to a ceiling, folded into the
+       * distribution and the margin. It says whether it reached the end, so a
+       * median over part of the fleet is never presented as the whole one.
+       */
+      const rows: OrgMarginRow[] = []
+      let cursor = listRequest.cursor
+      let pages = 0
+      let reads = 0
+      while (pages < FLEET_MAX_PAGES) {
+        const page = await scanPage(db, { ...listRequest, cursor, pageSize: MAX_PAGE_SIZE })
+        rows.push(...page.rows)
+        reads += page.reads
+        pages += 1
+        cursor = page.nextCursor
+        if (!cursor) break
+      }
       return Response.json(
-        {
-          rows: [],
-          nextCursor: null,
-          scanned: 0,
-          reads,
-          refused: page.refused,
-          notices: page.notices,
-        } satisfies MarginUtilizationResponse,
+        { ...marginFleetView(rows, !cursor), nextCursor: cursor, pages, reads },
         { status: 200 },
       )
     }
-
-    // The billing mirror, one batched round trip for the page rather than a
-    // get per row. `subscription` moved to `orgs/{id}/billing/stripe`, and the
-    // org doc's inline copy is the fallback for anything the backfill missed.
-    const billingSnaps = await db.getAll(
-      ...pageDocs.map((doc) =>
-        doc.ref.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
-      ),
-    )
-    reads += billingSnaps.length
-
-    /*
-     * The newest usage rollup per organization.
-     *
-     * `orderBy('month', 'desc').limit(1)` — the same read `latestMeasuredCogsUsd`
-     * and `/api/admin/org-usage` make, so this surface and the discount
-     * guardrail are looking at the same document. It cannot be batched into a
-     * `getAll` because the newest month's ID is not known until it is read;
-     * the CURRENT month is the wrong guess, since the cron writes the CLOSED
-     * one and a direct read of `usage/{thisMonth}` misses for every org, every
-     * day of the month.
-     */
-    const rollupSnaps = await Promise.all(
-      pageDocs.map((doc) =>
-        doc.ref
-          .collection('usage')
-          .orderBy('month', 'desc')
-          .limit(1)
-          .get()
-          .catch(() => null),
-      ),
-    )
-    reads += rollupSnaps.reduce((sum, snap) => sum + (snap?.docs.length ?? 0), 0)
-
-    /*
-     * The LIVE reading of every cost axis a plugin declares one for, for the
-     * SAME month as each rollup — the AI plugin's provider spend today.
-     *
-     * Live rather than the figure frozen onto the rollup: the rollup is a
-     * snapshot from when the cron ran and the meter keeps counting after it.
-     * Pairing it with the CURRENT month instead would report two different
-     * periods as one figure. It replaces the axis's first rollup field, the
-     * one the cost model and the band both read.
-     */
-    const liveAxes = pluginCostAxes().filter((axis) => axis.live)
-    const liveTargets = pageDocs.flatMap((doc, index) => {
-      const rollupDoc = rollupSnaps[index]?.docs[0]
-      if (!rollupDoc) return []
-      const month = String(rollupDoc.get('month') ?? rollupDoc.id)
-      return liveAxes.map((axis) => ({
-        index,
-        axis,
-        ref: doc.ref.collection(axis.live!.collection).doc(month),
-      }))
-    })
-    const liveSnaps = liveTargets.length
-      ? await db.getAll(...liveTargets.map((target) => target.ref))
-      : []
-    reads += liveSnaps.length
-    const liveByOrg = new Map<number, Record<string, number>>()
-    liveTargets.forEach((target, position) => {
-      const reading = liveMeterReading(liveSnaps[position], target.axis.live!)
-      if (reading === undefined) return
-      const overrides = liveByOrg.get(target.index) ?? {}
-      overrides[target.axis.fields[0]!] = reading
-      liveByOrg.set(target.index, overrides)
-    })
-
-    const rows = pageDocs.map((doc, index) => {
-      const orgData = doc.data()
-      const billingSnap = billingSnaps[index]
-      // Org doc FIRST so a stale inline `subscription` left from before the
-      // billing-mirror backfill loses to the authoritative document.
-      const org = {
-        ...orgData,
-        ...(billingSnap?.exists ? billingSnap.data() : {}),
-      }
-      const rollupDoc = rollupSnaps[index]?.docs[0]
-      return orgMarginRow({
-        orgId: doc.id,
-        name: (orgData['name'] as string | undefined) ?? null,
-        org: org as never,
-        month: rollupDoc ? String(rollupDoc.get('month') ?? rollupDoc.id) : null,
-        rollup: rollupDoc
-          ? {
-              // ONE shared list of priced fields, so this projection cannot
-              // starve the cost model the way a hand-listed one did.
-              ...orgCogsInputFrom(rollupDoc.data()),
-              ...liveByOrg.get(index),
-            }
-          : null,
-      })
-    })
-
-    return Response.json(
-      {
-        rows,
-        nextCursor: page.nextCursor,
-        scanned: rows.length,
-        reads,
-        refused: page.refused,
-        notices: page.notices,
-      } satisfies MarginUtilizationResponse,
-      { status: 200 },
-    )
+    return Response.json(await scanPage(db, listRequest), { status: 200 })
   } catch (error) {
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated

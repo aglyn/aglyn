@@ -248,6 +248,30 @@ beforeEach(() => {
   mockFetched = []
 })
 
+describe('the fleet view (AGL-3667)', () => {
+  it('folds the pages it scanned into the distribution and the margin, and says it reached the end', async () => {
+    mockVerifyIdToken.mockResolvedValueOnce(STAFF)
+    mockOrgDocs = [payingOrg('org-1'), payingOrg('org-2'), payingOrg('org-3')]
+    const response = await call({ token: 'tok', params: { view: 'fleet' } })
+    expect(response.status).toBe(200)
+    const view = await response.json()
+    expect(view).toMatchObject({ orgs: 3, complete: true, nextCursor: null })
+    expect(view.bands.length).toBeGreaterThan(0)
+    expect(view.bands[0]).toEqual(
+      expect.objectContaining({ label: expect.any(String), median: expect.any(String), excluded: expect.any(String) }),
+    )
+    expect(view.caption).toContain('Over 3 organizations')
+    expect(view.margin.cost).toMatch(/^\$\d/)
+  })
+
+  it('is gated like the page: a non-staff token reads nothing', async () => {
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'member-1', email_verified: true })
+    const response = await call({ token: 'tok', params: { view: 'fleet' } })
+    expect(response.status).toBe(403)
+    expect(mockFetched).toEqual([])
+  })
+})
+
 describe('the staff gate', () => {
   it('401s an unauthenticated caller', async () => {
     const response = await call()

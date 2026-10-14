@@ -137,15 +137,20 @@ class ScreenModel(
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
       url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
     }
-    val clauses = load.filters.mapNotNull { clause ->
+    filtersParameter(load.filters, context)?.let { url += (if ('?' in url) "&" else "?") + it }
+    if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
+    return url
+  }
+
+  /** A staff list route's `filters=` parameter from `{ field, op, value }` clauses, each kept when its value template is not empty. */
+  internal fun filtersParameter(filters: List<JsonElement>, context: JsonElement): String? {
+    val clauses = filters.mapNotNull { clause ->
       val value = ScreenValues.render(clause.str("value").orEmpty(), context)
       val field = clause.str("field")
       if (value.isEmpty() || field == null) null
       else JsonObject(mapOf("field" to JsonPrimitive(field), "op" to JsonPrimitive(clause.str("op") ?: "equals"), "value" to JsonPrimitive(value)))
     }
-    if (clauses.isNotEmpty()) url += (if ('?' in url) "&" else "?") + "filters=" + ScreenValues.encodeComponent(JsonArray(clauses).toString())
-    if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
-    return url
+    return if (clauses.isEmpty()) null else "filters=" + ScreenValues.encodeComponent(JsonArray(clauses).toString())
   }
 
   suspend fun load() {
@@ -260,7 +265,9 @@ class ScreenModel(
     }
     val template = action.url ?: return ActionOutcome.Done(null, null)
     val client = api ?: return ActionOutcome.Failed("Sign in to continue.")
-    val path = ScreenValues.renderUrl(template, scope)
+    val path = ScreenValues.renderUrl(template, scope).let { rendered ->
+      filtersParameter(action.filters, scope)?.let { rendered + (if ('?' in rendered) "&" else "?") + it } ?: rendered
+    }
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
       val sent = headers(action, path, body, scope)
