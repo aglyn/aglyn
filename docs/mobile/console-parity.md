@@ -51,6 +51,14 @@ open. The card's per-moment email
 switches belong to the Commerce settings and are not part of this row. A
 funnel has no page design of its own, so it has no Besigner entry.
 
+Workspace settings (AGL-3671) stays open on both platforms for what the console does there that the apps do
+not yet: the logo and favicon fields take a pasted https address, not a pick from the workspace media library
+(`MediaUrlField`); the time zone is a typed IANA name that the route checks, not the console's list; the
+Plugins list and a plugin's page show the built-in plugins and leave out the Marketplace installs, their
+per-site pins and Permissions & data, which belong to the Marketplace row (AGL-3668); and a hold opened from
+a link with `?notice=` shows the list, not that notice's review dialog. Everything else in the twelve sections
+is covered and held to the console's own words by `native-workspace-settings-match-the-console.spec.ts`.
+
 Not screens: `signin`, `signup`, `signout`, `sso`, `reset-password`,
 `verify-email`, `account-recovery`, `auth/handoff/*` and `edit-access` are the
 sign-in flows the shell already owns.

@@ -911,11 +911,14 @@ A file is `{ "screens": [ … ] }`. A screen:
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
 reason, success, instead, check, open, navigate, back, reload, when, link, copy,
-reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+reveal, else, then, write, route }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
-Custom Tabs); `else` runs on a 404 (add a member, else invite them); `then`
+Custom Tabs); `route` is a console path a route answered (a hold's `href`,
+`/acme/billing/settings`) followed the way a notification's link is, by the
+plugin context's `openLink`: the native screen that claims it, else a Besigner
+page, else a note that the page does not open in the app; `else` runs on a 404 (add a member, else invite them); `then`
 follows a success; `write` merges a document the person writes directly, as
 the console does (their own profile, the site document), under the rules.
 `confirm` is a template, or a list of `{ when, text }` segments joined in order
@@ -1036,6 +1039,10 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   step stores the choice for this import, and the hook reads the created ids from the import's results, works the
   job out with `aiProductsImportJob` (the console's `aiProductsBulkBrief` and bulk inputs), and starts it on
   `/api/ai/jobs`, which is where the credits are reserved, as the console's products hub starts it.
+- `ssoEnforcementAccounts(accounts, providerId, designated)` is a `compute` function over a single sign-on rehearsal
+  (the console's `ssoEnforcementAccounts`, `sso-enforcement.ts`): one row per account with the address, what enforcing
+  would remove, what it keeps, whether it can be break-glass and whether it is. The enforcement screen keeps the
+  rehearsal in `stash.ssoPreview` and draws the rows, the lockout alerts and the break-glass choice from it.
 - A field with `mustMatch` is unfinished until the typed text equals it; `mustMatchAs: "dollars"` reads both sides as a
   dollar amount instead (`60`, `$60.00`, `1,250 USD` all mean 6000 cents, as the gift card Confirm step reads a typed
   total), and `mismatch` is what is said under the field while something typed does not match.
