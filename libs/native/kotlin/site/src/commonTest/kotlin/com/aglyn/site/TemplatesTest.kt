@@ -237,4 +237,26 @@ class TemplatesTest {
     assertNull(sent[2]["kind"])
     assertEquals(1, sent[2].getValue("nodes").jsonObject.size)
   }
+
+  @Test
+  fun readsWhatTheSiteChangedOnTopOfItsTheme() {
+    val answer = Json.parseToJsonElement(
+      """{"stale":true,"themeName":"Sunset","changes":[
+        {"path":"colorSchemes.dark.primary.main","label":"Color · dark · primary","scheme":"dark","themeValue":"#90caf9","overrideValue":"#00e5ff"},
+        {"path":"spacing","label":"Spacing","themeValue":8,"overrideValue":4},
+        {"path":"fonts","label":"Fonts","themeValue":null,"overrideValue":{"heading":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}},
+        {"label":"No path"}]}""",
+    ).jsonObject
+    val changes = com.aglyn.site.setup.themeChangesOf(answer["changes"])
+    assertEquals(listOf("colorSchemes.dark.primary.main", "spacing", "fonts"), changes.map { it.path })
+    assertEquals("dark", changes[0].scheme)
+    assertTrue(changes[0].isColor)
+    assertEquals("8", changes[1].themeValue)
+    assertEquals(false, changes[1].isColor)
+    assertNull(changes[2].themeValue)
+    // A structure is shown compact and cut at sixty characters.
+    assertEquals(58, changes[2].overrideValue?.length)
+    assertTrue(changes[2].overrideValue!!.endsWith("…"))
+    assertEquals(emptyList(), com.aglyn.site.setup.themeChangesOf(null))
+  }
 }

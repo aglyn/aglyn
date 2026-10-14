@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 
@@ -252,7 +253,40 @@ fun themePresetsOf(json: JsonElement?): List<ThemePreset> = (json as? JsonArray)
 }
 
 /** What the theme page loads once: the editor's controls, what they show, and the built-in themes. */
-data class ThemeEditorLoad(val catalog: ThemeCatalog, val values: ThemeValues, val presets: List<ThemePreset>)
+data class ThemeEditorLoad(
+  val catalog: ThemeCatalog,
+  val values: ThemeValues,
+  val presets: List<ThemePreset>,
+  /** What the site changed on top of its theme ("What you have changed"). */
+  val changes: List<ThemeChange> = emptyList(),
+  /** The changes were made against a different theme than the one picked now. */
+  val stale: Boolean = false,
+  val themeName: String? = null,
+)
+
+/** One value the site set on top of its theme: what it is, the theme's own and the site's, as the console's card lists them. */
+data class ThemeChange(val path: String, val label: String, val scheme: String?, val themeValue: String?, val overrideValue: String?) {
+  /** Whether the site's value is a color, for a swatch beside it. */
+  val isColor: Boolean get() = overrideValue?.let { Regex("^(#|rgb|hsl)", RegexOption.IGNORE_CASE).containsMatchIn(it.trim()) } == true
+}
+
+/** A value in words: text and numbers as they are, anything else compact and cut at 60 characters. */
+fun themeChangeValue(element: JsonElement?): String? = when {
+  element == null || element is JsonNull -> null
+  element is JsonPrimitive -> element.content
+  else -> element.toString().let { if (it.length > 60) it.take(57) + "…" else it }
+}
+
+fun themeChangesOf(json: JsonElement?): List<ThemeChange> = ((json as? JsonArray).orEmpty()).mapNotNull { entry ->
+  val obj = entry as? JsonObject ?: return@mapNotNull null
+  ThemeChange(
+    path = obj.str("path") ?: return@mapNotNull null,
+    label = obj.str("label") ?: obj.str("path").orEmpty(),
+    scheme = obj.str("scheme"),
+    themeValue = themeChangeValue(obj["themeValue"]),
+    overrideValue = themeChangeValue(obj["overrideValue"]),
+  )
+}
 
 /** The font categories the browser filters by, in the order the console lists them (`HostThemeFontCategory`). */
 val FONT_CATEGORIES: List<Pair<String, String>> = listOf(
@@ -391,7 +425,14 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
   /** The editor's controls, what they show now and the built-in themes on offer. */
   suspend fun themeEditor(): ThemeEditorLoad {
     val answer = theme(mapOf("action" to "values")) as? JsonObject
-    return ThemeEditorLoad(themeCatalogOf(answer?.get("catalog")), themeValuesOf(answer?.get("values")), themePresetsOf(answer?.get("presets")))
+    return ThemeEditorLoad(
+      themeCatalogOf(answer?.get("catalog")),
+      themeValuesOf(answer?.get("values")),
+      themePresetsOf(answer?.get("presets")),
+      changes = themeChangesOf(answer?.get("changes")),
+      stale = (answer?.get("stale") as? JsonPrimitive)?.booleanOrNull == true,
+      themeName = answer.str("themeName"),
+    )
   }
 
   /** Saves the changed controls as the site's theme edits; answers what they show now. */
@@ -412,6 +453,11 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
   /** Writes the edits into the saved theme the site is on (`update`). */
   suspend fun updateSavedTheme() {
     theme(mapOf("action" to "update"))
+  }
+
+  /** Puts one change back at the theme's own value and keeps the rest (`reset`, the Reset beside a change). */
+  suspend fun resetThemeChange(path: String) {
+    theme(mapOf("action" to "reset", "path" to path))
   }
 
   /** Drops the edits, back to the picked theme as it was (`restore`). */

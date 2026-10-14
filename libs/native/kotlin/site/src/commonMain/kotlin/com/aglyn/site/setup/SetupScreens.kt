@@ -568,7 +568,53 @@ private fun ThemeSection(context: NativePluginContext, hostId: String, host: Map
   }
   ThemeLibraryCard(context, hostId, host, api, (load as? Load.Ready)?.value?.presets.orEmpty(), context.siteRole in THEME_LIBRARY_ROLES)
   ThemeEditorCard(load, onRetry = { attempt++ }, api, canEdit)
+  ThemeChangesCard(load, installed = themeSelectionOf(host).kind == "installed", api, canEdit)
   FontInstallerCard(context, hostId, canEdit)
+}
+
+/**
+ * "What you have changed": every value this site set on top of its theme, the
+ * theme's own beside it, and a Reset for each. Shown once the site has a change,
+ * and always for a theme installed from the marketplace.
+ */
+@Composable
+private fun ThemeChangesCard(load: Load<ThemeEditorLoad>, installed: Boolean, api: HostSettingsApi, canEdit: Boolean) {
+  val ready = (load as? Load.Ready)?.value ?: return
+  if (!installed && ready.changes.isEmpty()) return
+  val runner = rememberRunner()
+  val theme = ready.themeName ?: "its theme"
+  SectionCard("What you have changed") {
+    if (ready.stale) {
+      NoticeBanner(
+        "These changes were made against a different theme. They still apply, because a brand color usually still means the same thing, but a component style written for another theme often does not. Check them, or clear them all with Undo all edits.",
+        StatusTone.WARNING,
+      )
+    }
+    runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+    if (ready.changes.isEmpty()) {
+      Text("Nothing: this site is running $theme exactly as its publisher shipped it. Anything you change is stored as your change on top.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+      Text(
+        "${ready.changes.size} value${if (ready.changes.size == 1) "" else "s"} ${if (ready.changes.size == 1) "differs" else "differ"} from $theme.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      ready.changes.forEachIndexed { index, change ->
+        if (index > 0) HorizontalDivider()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.testTag("theme-change-${change.path}")) {
+          Column(Modifier.weight(1f)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+              Text(change.label, style = MaterialTheme.typography.bodyLarge)
+              change.scheme?.let { StatusChip(it, StatusTone.NEUTRAL) }
+            }
+            Text("Theme: ${change.themeValue ?: "not set"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Yours: ${change.overrideValue ?: "not set"}", style = MaterialTheme.typography.bodySmall)
+          }
+          TextButton(onClick = { runner.run { api.resetThemeChange(change.path) } }, enabled = canEdit && !runner.busy) { Text("Reset") }
+        }
+      }
+    }
+  }
 }
 
 @Composable
