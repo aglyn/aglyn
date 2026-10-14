@@ -201,16 +201,66 @@ function pruneFound(nodes: GapNodes, rootId: string, found: ReadonlyArray<{ id: 
   for (const section of touched) {
     if (section === first || !nodes[section] || speaks(nodes, section, true)) continue
     const label = String(nodes[section].props?.['ariaLabel'] ?? section)
-    remove(section)
-    dropped.push(`the section "${label}", left with only its heading`)
-    for (const [id, node] of Object.entries(nodes)) {
-      if (nodes[id] && aiStoredScrollTargets(node).includes(section)) {
-        dropped.push(`"${wordsOf(node)}", a link to that section`)
-        prune(id)
-      }
+    dropped.push(`the section "${label}", left with only its heading`, ...removeSection(nodes, section, remove, prune))
+  }
+  return dropped
+}
+
+/**
+ * Takes a section out, and each link that scrolled to it. A page built in the
+ * layout language is written whole, so its page step and the site start read
+ * a planned section missing from it as one taken out, never one still to
+ * build (AGL-3771).
+ */
+function removeSection(nodes: GapNodes, section: string, remove: (id: string) => void, prune: (id: string) => void): string[] {
+  const dropped: string[] = []
+  remove(section)
+  for (const [id, node] of Object.entries(nodes)) {
+    if (nodes[id] && aiStoredScrollTargets(node).includes(section)) {
+      dropped.push(`"${wordsOf(node)}", a link to that section`)
+      prune(id)
     }
   }
   return dropped
+}
+
+/**
+ * The page with these sections taken out (AGL-3771), each with any link that
+ * scrolled to it: the last answer's sections that still show none of the
+ * items they were planned with. A home page refused whole for one such
+ * section left a published site with nothing at its address; the section
+ * goes, the rest of the page is kept, and the job says which went.
+ */
+export function aiLayoutWithoutSections(
+  input: NodesMap,
+  rootId: string,
+  sections: ReadonlyArray<{ id: string; name: string; why: string }>,
+): { nodes: NodesMap; dropped: string[] } {
+  const present = sections.filter((section) => (input as unknown as GapNodes)[section.id])
+  if (!present.length) return { nodes: input, dropped: [] }
+  const nodes = cloneNodes(input)
+  const dropped: string[] = []
+  const remove = (id: string) => {
+    const parent = parentsOf(nodes).get(id)
+    for (const each of subtree(nodes, id)) delete nodes[each]
+    if (parent && nodes[parent]) nodes[parent].nodes = (nodes[parent].nodes ?? []).filter((child) => child !== id)
+  }
+  /** A link and each element above it left with nothing to say, short of a section. */
+  const sectionRoots = new Set(nodes[rootId]?.nodes ?? [])
+  const prune = (id: string) => {
+    let parent = parentsOf(nodes).get(id)
+    remove(id)
+    while (parent && parent !== rootId && nodes[parent]) {
+      if (sectionRoots.has(parent) || speaks(nodes, parent)) break
+      const above = parentsOf(nodes).get(parent)
+      remove(parent)
+      parent = above
+    }
+  }
+  for (const section of present) {
+    dropped.push(`the section "${section.name}", ${section.why}`, ...removeSection(nodes, section.id, remove, prune))
+  }
+  return { nodes: nodes as unknown as NodesMap, dropped }
 }
 
 /** The page or frame with every gap taken out, and what was taken. */
