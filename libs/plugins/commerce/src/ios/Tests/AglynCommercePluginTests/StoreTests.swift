@@ -76,11 +76,66 @@ final class StoreOrdersTests: XCTestCase {
       live(HostOrder(createdAtMs: ms(now.addingTimeInterval(-86_400 * 2)), status: .fulfilled, totals: OrderTotals(totalCents: 1000))),
       live(HostOrder(createdAtMs: ms(now.addingTimeInterval(-86_400 * 30)), status: .paid, totals: OrderTotals(totalCents: 7000))),
     ]
-    let summary = summarizeSales(orders, now: now, calendar: calendar)
+    let summary = salesReport(orders, range: 7, now: now, calendar: calendar)
     XCTAssertEqual(summary.days.count, 7)
     XCTAssertEqual(summary.today?.orders, 1)
     XCTAssertEqual(summary.today?.cents, orderPaidCents(liftLegacyOrder(orders[0].order)))
-    XCTAssertEqual(summary.weekOrders, 2)
+    XCTAssertEqual(summary.current.orders, 2)
+    XCTAssertEqual(summary.previous.orders, 0, "the order 30 days back is in neither week")
+    XCTAssertNil(summary.revenueDeltaPct, "no baseline, no comparison")
+    let month = salesReport(orders, range: 30, now: now, calendar: calendar)
+    XCTAssertEqual(month.days.count, 30)
+    XCTAssertEqual(month.current.orders, 2)
+    XCTAssertEqual(month.previous.orders, 1)
+  }
+
+  func testAWeekIsComparedWithTheWeekBeforeAndSplitByChannelAndProduct() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let now = Date(timeIntervalSince1970: 1_791_385_200)  // 2026-10-07 15:00 UTC
+    let today = calendar.startOfDay(for: now)
+    let ms = { (date: Date) in date.timeIntervalSince1970 * 1000 }
+    func sale(_ id: String, at: Date, cents: Double, channel: OrderChannel = .online, status: OrderStatus = .paid) -> FigureOrder {
+      FigureOrder(
+        id: id, livemode: true,
+        order: HostOrder(
+          channel: channel, createdAtMs: ms(at), lineItems: [OrderLineItem(name: "Mug", productId: "p1", quantity: 1, unitAmountCents: cents)],
+          status: status, totals: OrderTotals(totalCents: cents)))
+    }
+    let day = 86_400.0
+    let orders = [
+      sale("a", at: today.addingTimeInterval(1), cents: 1000),
+      sale("b", at: today.addingTimeInterval(-day + 5), cents: 500, channel: .pos),
+      sale("c", at: today.addingTimeInterval(-8 * day), cents: 750),
+      sale("d", at: today.addingTimeInterval(2), cents: 999, status: .pending),
+    ]
+    let report = salesReport(orders, range: 7, now: now, calendar: calendar)
+    XCTAssertEqual(report.current.orders, 2)
+    XCTAssertEqual(report.current.revenueCents, 1500)
+    XCTAssertEqual(report.previous.revenueCents, 750)
+    XCTAssertEqual(report.revenueDeltaPct, 100)
+    XCTAssertEqual(report.days.map(\.cents), [0, 0, 0, 0, 0, 500, 1000])
+    XCTAssertEqual(report.channels.map(\.label), ["Online", "POS"])
+    XCTAssertEqual(report.channels.map(\.cents), [1000, 500])
+    XCTAssertEqual(report.topProducts.map(\.name), ["Mug"])
+    XCTAssertEqual(report.topProducts.first?.cents, 1500)
+    XCTAssertNil(salesReport(orders, range: 7, now: now, calendar: calendar, capped: true).revenueDeltaPct, "a capped read makes no comparison")
+    XCTAssertEqual(salesChange(100), "+100% vs the period before")
+    XCTAssertEqual(salesChange(-12.5), "-12.5% vs the period before")
+    XCTAssertNil(salesChange(nil))
+  }
+
+  func testEveryFigureWaitsForAPlanThatSellsCommerceAnalytics() {
+    // The console shows these figures from Pro up; the app shows them to the same plans.
+    XCTAssertTrue(salesAccess(["plan": "pro"]).carried)
+    let starter = salesAccess(["plan": "starter"])
+    XCTAssertFalse(starter.carried)
+    XCTAssertEqual(starter.plan, "Pro", "the plan an upsell names is the cheapest that includes it")
+    XCTAssertFalse(salesAccess(nil).carried, "a workspace that cannot be read gets no figures")
+    XCTAssertTrue(
+      salesAccess(["plan": "starter", "entitlements": ["features": ["commerceAnalytics": true]]]).carried,
+      "a feature granted to the workspace itself counts, as it does in the console")
+    XCTAssertTrue(salesLockedText(starter.plan).contains("included from Pro"))
   }
 }
 

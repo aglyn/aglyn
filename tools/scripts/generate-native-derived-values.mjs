@@ -53,7 +53,7 @@ const ROOT = join(import.meta.dirname, '../..')
 const CHECK = process.argv.includes('--check')
 
 /** The features a native screen gates on, by the console's names. */
-export const NATIVE_PLAN_FEATURES = ['marketingOverlays', 'abTesting', 'screenAnalytics', 'outreach', 'giftCards', 'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating']
+export const NATIVE_PLAN_FEATURES = ['marketingOverlays', 'abTesting', 'screenAnalytics', 'outreach', 'giftCards', 'commerceAnalytics', 'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating']
 
 const JSON_OUT = 'libs/native/contracts/derived-values.generated.json'
 const SWIFT_OUT = 'libs/native/apple/Sources/AglynCore/DerivedValues.generated.swift'
