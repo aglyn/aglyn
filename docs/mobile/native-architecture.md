@@ -958,7 +958,9 @@ A field of kind `hours` is a week of opening hours chosen by touch, as the conso
 for each day and, for an open day, a From and a To time from a menu, with another interval on request. It reads and
 writes the stored text lines (`Mo-Fr 09:00-17:00`), so nobody types them; its `hours` option is `{ noun, sameDay, start,
 end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets, in minutes).
-`libs/native/screens/weekly-hours-cases.json` holds the Swift and Kotlin conversions to the console's own.
+The picker and the conversion are the contracts' and the plugin host's (`WeeklyHours` in AglynContracts, `OpeningHoursPicker` in
+AglynPluginHost and the UI kit), one model and one picker for every screen that picks hours; the contracts' generated function
+cases hold the conversions to the console's own.
 
 A form or prompt can list fields from the data: an entry
 `{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
