@@ -3641,7 +3641,9 @@ public struct WhereUsedResult: Codable, Hashable, Sendable {
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
   public let areaServedMax: Int
+  public let areaServedNameMaxLength: Int
   public let artifactTypeLabels: [String: String]
+  public let authorSameAsMax: Int
   public let bookingFieldAsks: [BookingFieldAsk]
   public let bookingInPersonMaxCents: Int
   public let bookingInPersonMinCents: Int
@@ -3653,6 +3655,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingStateLabels: [String: String]
   public let bookingWeekdays: [String]
   public let browseSorts: [String: ListQuerySort]
+  public let businessProfileFieldOrder: [String]
+  public let businessProfileMaxChars: [String: Double]
+  public let businessProfileMaxServices: Int
+  public let businessProfileOriginLabels: [String: String]
+  public let businessProfileSiteDoc: String
+  public let businessProfileSubcollection: String
+  public let businessProfileWorkspaceDoc: String
+  public let businessToneLabels: [String: String]
+  public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
@@ -3843,7 +3854,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
 
   enum CodingKeys: String, CodingKey {
     case areaServedMax = "AREA_SERVED_MAX"
+    case areaServedNameMaxLength = "AREA_SERVED_NAME_MAX_LENGTH"
     case artifactTypeLabels = "ARTIFACT_TYPE_LABELS"
+    case authorSameAsMax = "AUTHOR_SAME_AS_MAX"
     case bookingFieldAsks = "BOOKING_FIELD_ASKS"
     case bookingInPersonMaxCents = "BOOKING_IN_PERSON_MAX_CENTS"
     case bookingInPersonMinCents = "BOOKING_IN_PERSON_MIN_CENTS"
@@ -3855,6 +3868,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case bookingStateLabels = "BOOKING_STATE_LABELS"
     case bookingWeekdays = "BOOKING_WEEKDAYS"
     case browseSorts = "BROWSE_SORTS"
+    case businessProfileFieldOrder = "BUSINESS_PROFILE_FIELD_ORDER"
+    case businessProfileMaxChars = "BUSINESS_PROFILE_MAX_CHARS"
+    case businessProfileMaxServices = "BUSINESS_PROFILE_MAX_SERVICES"
+    case businessProfileOriginLabels = "BUSINESS_PROFILE_ORIGIN_LABELS"
+    case businessProfileSiteDoc = "BUSINESS_PROFILE_SITE_DOC"
+    case businessProfileSubcollection = "BUSINESS_PROFILE_SUBCOLLECTION"
+    case businessProfileWorkspaceDoc = "BUSINESS_PROFILE_WORKSPACE_DOC"
+    case businessToneLabels = "BUSINESS_TONE_LABELS"
+    case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"

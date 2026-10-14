@@ -111,6 +111,20 @@ final class SetupTests: XCTestCase {
     XCTAssertNil(report.pages[0].versionId)
   }
 
+  func testSaysWhereABusinessProfileValueComesFrom() {
+    let host: [String: Any] = ["seo": ["entity": ["description": "Dog grooming with a calm hand.", "areaServed": ["Austin"]]]]
+    let stored: [String: Any] = ["services": ["Bath"], "audience": "Owners", "sources": ["audience": "ai"]]
+    let resolved = resolveBusinessProfile(host: host, site: stored)
+    XCTAssertEqual(
+      businessOriginLine("whatYouDo", stored: stored, resolved: resolved, fallback: "One sentence"),
+      "Empty here, so Aglyn AI uses “Dog grooming with a calm hand.” from your SEO settings.")
+    XCTAssertEqual(
+      businessOriginLine("audience", stored: stored, resolved: resolved, fallback: "x"), "Suggested by Aglyn AI. Edit it and it becomes yours.")
+    XCTAssertEqual(businessOriginLine("services", stored: stored, resolved: resolved, fallback: "One per line"), "One per line")
+    XCTAssertEqual(SetupSection.allCases.map(\.rawValue), ["details", "business", "seo", "tracking", "theme", "emails"])
+    XCTAssertEqual(SetupSection.of("business"), .business)
+  }
+
   func testReadsTheThemeEditorsAnswer() {
     let catalog = themeCatalog(
       of: .object([

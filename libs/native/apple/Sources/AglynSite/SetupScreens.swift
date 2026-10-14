@@ -108,6 +108,7 @@ struct SetupDetail: View {
       }
       switch section {
       case .details: DetailsSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
+      case .business: BusinessSection(context: context, hostID: hostID, host: doc.data, canEdit: canEdit)
       case .seo: SeoSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
       case .tracking: TrackingSection(host: doc.data, api: api, canEdit: canEdit)
       case .theme: ThemeSection(context: context, hostID: hostID, doc: doc, api: api, canEdit: canEdit)

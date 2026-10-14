@@ -4,6 +4,7 @@
     "Values from the pure modules tools/scripts/native-contracts.json names."
   ],
   "AREA_SERVED_MAX": 20,
+  "AREA_SERVED_NAME_MAX_LENGTH": 120,
   "ARTIFACT_TYPE_LABELS": {
     "component": "Component",
     "datasetSchema": "Dataset schema",
@@ -14,6 +15,7 @@
     "template": "Site template",
     "theme": "Theme"
   },
+  "AUTHOR_SAME_AS_MAX": 12,
   "BOOKING_FIELD_ASKS": [
     "off",
     "optional",
@@ -64,6 +66,46 @@
       "path": "ratingAverage"
     }
   },
+  "BUSINESS_PROFILE_FIELD_ORDER": [
+    "whatYouDo",
+    "services",
+    "serviceArea",
+    "audience",
+    "tone",
+    "toneNotes"
+  ],
+  "BUSINESS_PROFILE_MAX_CHARS": {
+    "audience": 160,
+    "serviceArea": 120,
+    "services": 60,
+    "toneNotes": 200,
+    "whatYouDo": 200
+  },
+  "BUSINESS_PROFILE_MAX_SERVICES": 12,
+  "BUSINESS_PROFILE_ORIGIN_LABELS": {
+    "ai": "Suggested by Aglyn AI",
+    "owner": "You",
+    "site": "Site settings",
+    "start": "Your answers when the site was started",
+    "workspace": "Workspace default"
+  },
+  "BUSINESS_PROFILE_SITE_DOC": "profile",
+  "BUSINESS_PROFILE_SUBCOLLECTION": "businessProfile",
+  "BUSINESS_PROFILE_WORKSPACE_DOC": "defaults",
+  "BUSINESS_TONE_LABELS": {
+    "friendly": "Friendly and warm",
+    "plain": "Plain and direct",
+    "playful": "Playful and upbeat",
+    "premium": "Premium and refined",
+    "professional": "Professional and clear"
+  },
+  "BUSINESS_TONE_ORDER": [
+    "friendly",
+    "professional",
+    "playful",
+    "premium",
+    "plain"
+  ],
   "CAMPAIGN_EMAILS_QUERY": {
     "fields": [
       {

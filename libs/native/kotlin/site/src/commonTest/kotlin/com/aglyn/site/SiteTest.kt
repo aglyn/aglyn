@@ -378,4 +378,18 @@ class SiteTest {
     assertEquals(2L, report.skipped)
     assertEquals(null, report.pages[0].versionId)
   }
+
+  @Test
+  fun saysWhereABusinessProfileValueComesFrom() {
+    val host = mapOf("seo" to mapOf("entity" to mapOf("description" to "Dog grooming with a calm hand.", "areaServed" to listOf("Austin"))))
+    val stored = mapOf("services" to listOf("Bath"), "audience" to "Owners", "sources" to mapOf("audience" to "ai"))
+    val resolved = com.aglyn.contracts.resolveBusinessProfile(host, stored)
+    assertEquals(
+      "Empty here, so Aglyn AI uses “Dog grooming with a calm hand.” from your SEO settings.",
+      com.aglyn.site.setup.businessOriginLine("whatYouDo", stored, resolved, "One sentence"),
+    )
+    assertEquals("Suggested by Aglyn AI. Edit it and it becomes yours.", com.aglyn.site.setup.businessOriginLine("audience", stored, resolved, "x"))
+    assertEquals("One per line", com.aglyn.site.setup.businessOriginLine("services", stored, resolved, "One per line"))
+    assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
+  }
 }
