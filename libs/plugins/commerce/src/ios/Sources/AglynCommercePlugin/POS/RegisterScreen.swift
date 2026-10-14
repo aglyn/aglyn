@@ -153,6 +153,7 @@ struct RegisterScreen: View {
 
   private var catalog: some View {
     VStack(spacing: 0) {
+      PosOrdersZone(context: context)
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
           AglynChoiceChip("All", selected: model.args == PosGridArgs()) { model.showAll() }

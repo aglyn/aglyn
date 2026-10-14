@@ -3571,6 +3571,22 @@
       "apiPrefixes": [
         "delivery-apps"
       ],
+      "mobile": {
+        "$comment": "AGL-3651/AGL-3652: the register's delivery-order queue natively, a widget in the Aglyn POS register's posOrders zone (the commerce plugin hosts the zone and names no plugin): each open DoorDash, Uber Eats or Grubhub order with the one next step, through delivery-apps/queue and delivery-apps/order-action as the signed-in member.",
+        "ios": {
+          "module": "AglynDeliveryAppsPlugin",
+          "register": "registerDeliveryAppsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.deliveryapps",
+          "register": "registerDeliveryAppsNative"
+        },
+        "contributes": {
+          "widgets": [
+            "delivery-apps.pos-orders"
+          ]
+        }
+      },
       "orgKeyedCollections": [
         {
           "$comment": "A site's link to the merchant's OWN DoorDash, Uber Eats or Grubhub store, by the store id the service shows them: the settings, the item matches and the menu's last send (AGL-3644). No credential: every call is signed with the deployment's partner credentials. Top level and closed to every client, so org erasure removes them by orgId.",

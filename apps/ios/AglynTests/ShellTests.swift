@@ -18,6 +18,15 @@ final class ShellTests: XCTestCase {
     XCTAssertNotNil(registry.screen("redirects.list"))
   }
 
+  func testTheRegistersOrdersZoneHoldsTheDeliveryQueueForThePosAppOnly() {
+    let registry = NativePluginRegistry()
+    _ = NativePluginLoader.load(NativePluginManifest.entries, into: registry)
+    // The commerce plugin hosts the zone and the delivery-apps plugin fills it; neither names the other.
+    XCTAssertEqual(registry.widgets(for: .pos, slot: "posOrders").map(\.id), ["delivery-apps.pos-orders"])
+    XCTAssertTrue(registry.widgets(for: .aglyn, slot: "posOrders").isEmpty)
+    XCTAssertFalse(registry.widgets(for: .pos).contains { $0.id == "delivery-apps.pos-orders" }, "and it is never a Home card")
+  }
+
   func testThePlatformEntriesLoadBeforeThePlugins() {
     let registry = NativePluginRegistry()
     let result = NativePluginLoader.load(AppModel.platformEntries + NativePluginManifest.entries, into: registry)
