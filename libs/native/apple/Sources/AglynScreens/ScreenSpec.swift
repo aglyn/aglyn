@@ -79,6 +79,9 @@ public struct LoadSpec: Sendable, Hashable {
   public let query: JSONValue?
   /// `org` or `site`: the plugin switchboard's rows (SwitchboardRows).
   public let switchboard: String?
+  /// A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row,
+  /// with the row as `item`, and its key holds the list of answers (a failed one is null).
+  public let each: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -91,6 +94,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.doc = nil
       self.query = nil
       self.switchboard = nil
+      self.each = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -103,6 +107,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.doc = json["doc"]?.stringValue
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
+      self.each = json["each"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)

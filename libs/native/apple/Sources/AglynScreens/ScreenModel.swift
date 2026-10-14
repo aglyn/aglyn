@@ -168,8 +168,8 @@ public final class ScreenModel {
 
   public var data: JSONValue { context["data"] ?? [:] }
 
-  func url(for load: LoadSpec, cursor: String? = nil) -> String {
-    var url = ScreenValues.renderURL(load.url, in: context)
+  func url(for load: LoadSpec, cursor: String? = nil, in scope: JSONValue? = nil) -> String {
+    var url = ScreenValues.renderURL(load.url, in: scope ?? context)
     if let words = search[load.key], !words.trimmingCharacters(in: .whitespaces).isEmpty {
       url += (url.contains("?") ? "&" : "?") + "search=" + ScreenValues.encodeComponent(words)
     }
@@ -179,8 +179,11 @@ public final class ScreenModel {
     return url
   }
 
-  /// Every load the screen's conditions allow, in parallel. A failed load
-  /// fails the screen with the route's own words.
+  /// The most rows a per-row load (`each`) runs for.
+  static let eachCeiling = 50
+
+  /// Every load the screen's conditions allow, in parallel; the per-row ones (`each`) follow once
+  /// the rows they walk have arrived. A failed load fails the screen with the route's own words.
   public func load() async {
     if case .object(let record) = data, record.isEmpty { phase = .loading }
     guard let api else {
@@ -188,6 +191,7 @@ public final class ScreenModel {
       return
     }
     context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+    context = ScreenContext.with(context, "now", ScreenValues.nowObject())
     let loads = spec.loads.filter { ScreenValues.condition($0.when, in: context) }
     var results: [String: JSONValue] = [:]
     var nextCursors: [String: String] = [:]
@@ -195,7 +199,7 @@ public final class ScreenModel {
       try await withThrowingTaskGroup(of: (String, JSONValue, String?).self) { group in
         let reader = reader
         let context = context
-        for load in loads {
+        for load in loads where load.each == nil {
           let path = url(for: load)
           group.addTask {
             do {
@@ -208,6 +212,30 @@ public final class ScreenModel {
         for try await (key, value, cursor) in group {
           results[key] = value
           if let cursor, !cursor.isEmpty { nextCursors[key] = cursor }
+        }
+      }
+      let walking = loads.filter { $0.each != nil }
+      if !walking.isEmpty {
+        let seen = ScreenContext.with(context, "data", .object(results))
+        for load in walking {
+          let rows = Array(ScreenValues.lookup(load.each ?? "", in: seen).array.prefix(Self.eachCeiling))
+          var answers: [JSONValue] = Array(repeating: .null, count: rows.count)
+          try await withThrowingTaskGroup(of: (Int, JSONValue).self) { group in
+            let reader = reader
+            for (index, row) in rows.enumerated() {
+              let scope = ScreenContext.with(seen, item: row)
+              let path = url(for: load, in: scope)
+              group.addTask {
+                do {
+                  return (index, try await Self.fetch(load, path: path, api: api, reader: reader, context: scope).1)
+                } catch where !(error is CancellationError) {
+                  return (index, .null)
+                }
+              }
+            }
+            for try await (index, value) in group { answers[index] = value }
+          }
+          results[load.key] = .array(answers)
         }
       }
     } catch is CancellationError {

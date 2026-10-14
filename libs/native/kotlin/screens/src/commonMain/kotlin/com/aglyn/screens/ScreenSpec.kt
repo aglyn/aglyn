@@ -70,6 +70,11 @@ class LoadSpec(val key: String, json: JsonElement) {
   val query: JsonElement? = json.obj("query")
   /** `org` or `site`: the plugin switchboard's rows ([SwitchboardRows]). */
   val switchboard: String? = json.str("switchboard")
+  /**
+   * A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row, with the row
+   * as `item`, and its key holds the list of answers (a failed one is null).
+   */
+  val each: String? = json.str("each")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
