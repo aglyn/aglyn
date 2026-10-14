@@ -881,6 +881,17 @@
           ]
         },
         {
+          "type": "links",
+          "items": [
+            {
+              "title": "Charges past your plan",
+              "subtitle": "What this month's usage costs beyond what the plan includes",
+              "icon": "dollarsign.circle|payments",
+              "screen": "core.billing.overage"
+            }
+          ]
+        },
+        {
           "type": "fields",
           "title": "This month, all sites",
           "rows": [

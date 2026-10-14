@@ -145,7 +145,25 @@ class ScreenModel(
   /** Seeds data without a network (previews, snapshot tests). */
   fun seed(data: JsonElement) {
     context = ScreenContext.with(context, "data", data)
+    applyDerived()
     phase = Phase.Ready
+  }
+
+  /**
+   * The screen's `derive` list (`[{ name, when }]`, in order) as `is.<name>`: conditions worked out once over the
+   * loaded data, so a block can say `is.billed` where the condition itself would need brackets. A later entry may
+   * read an earlier one.
+   */
+  private fun applyDerived() {
+    val entries = spec.raw.arr("derive")
+    if (entries.isEmpty()) return
+    val flags = mutableMapOf<String, JsonElement>()
+    for (entry in entries) {
+      val name = entry.str("name") ?: continue
+      val seen = ScreenContext.with(context, "is", JsonObject(flags.toMap()))
+      flags[name] = JsonPrimitive(ScreenValues.condition(entry.str("when"), seen))
+    }
+    context = ScreenContext.with(context, "is", JsonObject(flags.toMap()))
   }
 
   internal fun url(load: LoadSpec, cursor: String? = null, scope: JsonElement = context): String {
@@ -220,6 +238,7 @@ class ScreenModel(
       return
     }
     context = ScreenContext.with(context, "data", JsonObject(results.associate { it.first to it.second }))
+    applyDerived()
     cursors.clear()
     for ((key, _, cursor) in results) if (!cursor.isNullOrEmpty()) cursors[key] = cursor
     phase = Phase.Ready
