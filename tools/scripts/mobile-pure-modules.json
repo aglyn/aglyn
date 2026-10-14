@@ -322,6 +322,22 @@
       "why": "The submissions list query declarations; the native submissions screens plan the same query (AGL-3668)."
     },
     {
+      "path": "libs/plugins/logic/src/lib/model/formula-names.ts",
+      "why": "The names a function's formula can read, grouped as the builder lists them (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/formula.ts",
+      "why": "The formula builder: the expression a picked operation and its values write; the native function editors build the same text (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "why": "A function parameter's choices as rows and back to the stored options (AGL-3668); a type-only import."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
       "why": "The marketplace browse and licenses list declarations and their audience base; the native marketplace screens plan the same Firestore queries (AGL-3668)."
     },

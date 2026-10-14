@@ -29,10 +29,16 @@ import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import type { AiJobResumeOptions } from './ai-job-requests'
 import { aiBuildOpNoun } from '../model/ai-build-progress'
 import { aiBuildStorePagesAdded } from '../model/ai-build-store-pages'
-import { aiJobConfirmingOwnPlan } from '../model/ai-job-activity'
+import {
+  AI_PAGE_BUILDING_JOB_KINDS,
+  AI_SITE_BUILD_IN_FLIGHT_COPY,
+  aiJobConfirmingOwnPlan,
+  aiSiteBuildInFlight,
+} from '../model/ai-job-activity'
 import { aiSiteStarterFallbackOffered } from '../model/ai-job-failure-copy'
+import { useAiJobsInFlightKnown } from './ai-jobs-store'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
-import { Box, Button, Checkbox, Collapse, FormControlLabel, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Checkbox, Collapse, FormControlLabel, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 
 /**
@@ -125,6 +131,16 @@ export function AiJobPlan({
   // Unticked until the person ticks it: a build publishes only when its
   // request asked AND they confirm it here (AGL-3616).
   const [publish, setPublish] = useState(false)
+  // Confirming builds pages while another job is building on this site
+  // (AGL-3765), from the list the indicator and the panel already hold: said
+  // beside Confirm, which still confirms.
+  const confirmsPages =
+    job.status === 'needs_review' &&
+    job.review?.reason === 'plan' &&
+    !aiJobConfirmingOwnPlan(job) &&
+    AI_PAGE_BUILDING_JOB_KINDS.includes(job.kind)
+  const inFlight = useAiJobsInFlightKnown(user, job.orgId, confirmsPages)
+  const building = confirmsPages ? aiSiteBuildInFlight(inFlight, { hostId: job.hostId, exceptJobId: job.id }) : null
   const { plan, review } = job
   if (!plan && !review) return null
   const details = staff ? aiJobReviewDetails(review) : []
@@ -295,6 +311,11 @@ export function AiJobPlan({
           onBuildWhatFits={() => onResume(job, { ...publishing, creditsConfirmed: true })}
           onSmaller={() => onResume(job, { ...publishing, creditsConfirmed: true, reduce: 'first-page' })}
         />
+      )}
+      {building && (
+        <Alert severity="info" sx={{ mt: 1 }}>
+          {AI_SITE_BUILD_IN_FLIGHT_COPY}
+        </Alert>
       )}
       {waiting && !prompt && (
         <Button
