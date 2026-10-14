@@ -206,6 +206,34 @@ class IdentityToolkitAuthSession(
     update(mapOf("deleteProvider" to JsonArray(listOf(JsonPrimitive(providerId)))))
   }
 
+  override suspend fun linkGoogle(googleIdToken: String) {
+    val idToken = lock.withLock { tokens?.idToken } ?: throw AuthError(GoogleLink.linkRefusal(null))
+    val response = try {
+      http.post("$identityBase/v1/accounts:signInWithIdp?key=$apiKey") {
+        contentType(ContentType.Application.Json)
+        setBody(GoogleLink.linkBody(idToken, googleIdToken).toString())
+      }
+    } catch (error: Exception) {
+      throw AuthError(GoogleLink.linkRefusal(null), error)
+    }
+    val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+    if (response.status.value !in 200..299 || body == null) {
+      throw AuthError(GoogleLink.linkRefusal((body?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content))
+    }
+    // The new tokens carry the Google identity, which is what the provider list is read from.
+    lock.withLock {
+      val current = tokens ?: return@withLock
+      val fresh = Tokens(
+        idToken = body["idToken"]?.jsonPrimitive?.content ?: current.idToken,
+        refreshToken = body["refreshToken"]?.jsonPrimitive?.content ?: current.refreshToken,
+        expiresAt = now() + (body["expiresIn"]?.jsonPrimitive?.content?.toLongOrNull() ?: 3600) * 1000,
+        uid = current.uid,
+      )
+      tokens = fresh
+      keep(fresh.refreshToken)
+    }
+  }
+
   override suspend fun updateDisplayName(name: String) {
     val signedIn = (mutable.value as? AuthState.SignedIn)?.user ?: return
     update(mapOf("displayName" to JsonPrimitive(name)))

@@ -34,6 +34,14 @@ class DesktopSessionTest {
         respond("""{"users":[{"localId":"u1","email":"dana@example.test","displayName":"Dana"}]}""", HttpStatusCode.OK, json)
       path.endsWith("accounts:signInWithPassword") ->
         respond("""{"idToken":"id-1","refreshToken":"good-1","expiresIn":"3600","localId":"u1","email":"dana@example.test"}""", HttpStatusCode.OK, json)
+      path.endsWith("accounts:signInWithIdp") -> {
+        val sent = String(request.body.toByteArray())
+        if ("google-id-token" in sent) {
+          respond("""{"idToken":"id-4","refreshToken":"good-4","expiresIn":"3600"}""", HttpStatusCode.OK, json)
+        } else {
+          respond("""{"error":{"message":"FEDERATED_USER_ID_ALREADY_LINKED"}}""", HttpStatusCode.BadRequest, json)
+        }
+      }
       path.endsWith("accounts:update") ->
         respond("""{"idToken":"id-3","refreshToken":"good-3","expiresIn":"3600"}""", HttpStatusCode.OK, json)
       else -> respond("", HttpStatusCode.NotFound)
@@ -89,6 +97,23 @@ class DesktopSessionTest {
     session.unlinkProvider("google.com")
     assertEquals(listOf("accounts:signInWithPassword", "accounts:update"), calls)
     assertEquals("id-3", session.idToken())
+  }
+
+  @Test
+  fun connectingGoogleAttachesItsCredentialAndKeepsTheFreshTokens() = runTest {
+    val calls = mutableListOf<String>()
+    val store = InMemoryCredentialStore()
+    val session = IdentityToolkitAuthSession(http(calls), "key", "127.0.0.1:9299", credentials = store, credentialKey = "k")
+    session.signInWithEmail("dana@example.test", "pw")
+    session.linkGoogle("google-id-token")
+    assertEquals(listOf("accounts:signInWithPassword", "accounts:signInWithIdp"), calls)
+    assertEquals("id-4", session.idToken())
+    assertEquals("good-4", store.read("k"))
+    // A Google account another Aglyn account already holds says so, in the words the Apple app uses.
+    val refused = runCatching { session.linkGoogle("someone-elses") }.exceptionOrNull()
+    assertIs<AuthError>(refused)
+    assertEquals("That Google account is already linked to an Aglyn account.", refused.message)
+    assertEquals("id-4", session.idToken())
   }
 
   @Test

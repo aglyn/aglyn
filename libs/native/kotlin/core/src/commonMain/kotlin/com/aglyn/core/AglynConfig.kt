@@ -38,6 +38,11 @@ data class AglynEnv(
   val brandName: String? = null,
   /** The domain passkeys are made for (`aglyn.com`); empty until the app is linked to it. */
   val passkeyRpId: String? = null,
+  /** The Firebase project's Web OAuth client id, which the Android Credential Manager asks Google's ID token for. */
+  val googleWebClientId: String? = null,
+  /** The desktop OAuth client Google's loopback sign-in uses (its secret is required by the token endpoint, not confidential). */
+  val googleDesktopClientId: String? = null,
+  val googleDesktopClientSecret: String? = null,
 )
 
 data class AglynConfig(
@@ -57,6 +62,10 @@ data class AglynConfig(
    * "Set up a passkey" action hidden, until then.
    */
   val passkeyRelyingParty: String? = null,
+  /** Google sign-in to connect to an account; the web client on Android, the desktop client on Windows. Null, and the action hidden, until set. */
+  val googleWebClientId: String? = null,
+  val googleDesktopClientId: String? = null,
+  val googleDesktopClientSecret: String? = null,
 ) {
   /** What is missing for the app to sign anyone in, in words for a build log. */
   fun problems(): List<String> = buildList {
@@ -134,6 +143,9 @@ data class AglynConfig(
         firestoreEmulatorHost = hostPort(env.firestoreEmulatorHost),
         brandName = clean(env.brandName).ifEmpty { DEFAULT_BRAND_NAME },
         passkeyRelyingParty = relyingParty(env.passkeyRpId),
+        googleWebClientId = clean(env.googleWebClientId).ifEmpty { null },
+        googleDesktopClientId = clean(env.googleDesktopClientId).ifEmpty { null },
+        googleDesktopClientSecret = clean(env.googleDesktopClientSecret).ifEmpty { null },
       )
     }
   }

@@ -34,6 +34,7 @@ kotlin {
       implementation(libs.androidx.browser)
       implementation(libs.androidx.credentials)
       implementation(libs.androidx.credentials.play.services)
+      implementation(libs.google.identity.googleid)
     }
     named("desktopMain") {
       dependencies {

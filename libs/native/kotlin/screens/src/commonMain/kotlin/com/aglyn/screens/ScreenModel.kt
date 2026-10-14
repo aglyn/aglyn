@@ -131,6 +131,9 @@ val LocalScreenSession = compositionLocalOf { ScreenSession() }
 /** Makes a passkey through the platform; the app provides it where the device can (null elsewhere, and the desktop). */
 val LocalPasskeyCreator = compositionLocalOf<PasskeyCreator?> { null }
 
+/** Signs in to Google on this device for "Connect Google": the Credential Manager on Android, the browser on the desktop (null elsewhere). */
+val LocalGoogleCredentialSource = compositionLocalOf<com.aglyn.core.GoogleCredentialSource?> { null }
+
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
   data class NeedsReauth(val message: String) : ActionOutcome

@@ -52,6 +52,8 @@ class MainActivity : ComponentActivity() {
         com.aglyn.ui.LocalFileExporter provides com.aglyn.shell.rememberAndroidFileExporter(),
         // Passkeys: the Credential Manager.
         com.aglyn.screens.LocalPasskeyCreator provides com.aglyn.shell.rememberAndroidPasskeyCreator(),
+        // "Connect Google": the Credential Manager's Google ID token.
+        com.aglyn.screens.LocalGoogleCredentialSource provides com.aglyn.shell.rememberAndroidGoogleCredentialSource(BuildConfig.GOOGLE_WEB_CLIENT_ID),
       ) {
         AglynShell(services, autoSignIn = autoSignIn, pendingLink = pendingLink, onLinkOpened = { pendingLink = null })
       }

@@ -37,7 +37,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Workspace settings | `[orgSlug]/settings/*`, `[orgSlug]/plugins/*` | AGL-3671 | [ ] | [ ] |
 | Team and roles | `[orgSlug]/team/*` | AGL-3671 | [x] | [x] |
 | Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [ ] | [ ] |
-| Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [ ] | [ ] |
+| Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [x] | [x] |
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [ ] | [ ] |
 | Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [ ] | [ ] |
 

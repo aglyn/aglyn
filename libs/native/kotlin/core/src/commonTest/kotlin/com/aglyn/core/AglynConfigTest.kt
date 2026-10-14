@@ -63,4 +63,18 @@ class AglynConfigTest {
       assertNull(AglynConfig.read(AglynEnv(passkeyRpId = wrong), AglynAppId.AGLYN).passkeyRelyingParty, wrong)
     }
   }
+
+  @Test
+  fun googleSignInClientsAreReadTrimmedAndAbsentWhenBlank() {
+    val none = AglynConfig.read(AglynEnv(googleWebClientId = " ", googleDesktopClientId = ""), AglynAppId.AGLYN)
+    assertNull(none.googleWebClientId)
+    assertNull(none.googleDesktopClientId)
+    val set = AglynConfig.read(
+      AglynEnv(googleWebClientId = " web.apps.googleusercontent.com ", googleDesktopClientId = "desk", googleDesktopClientSecret = "shh"),
+      AglynAppId.AGLYN,
+    )
+    assertEquals("web.apps.googleusercontent.com", set.googleWebClientId)
+    assertEquals("desk", set.googleDesktopClientId)
+    assertEquals("shh", set.googleDesktopClientSecret)
+  }
 }

@@ -1148,7 +1148,8 @@ environment variable.
 | `AGLYN_FIREBASE_APP_ID` | `firebaseAppId` | Required | As above. |
 | `AGLYN_FIREBASE_MESSAGING_SENDER_ID` | `firebaseMessagingSenderId` | Optional | As above. |
 | `AGLYN_FIREBASE_STORAGE_BUCKET` | — | Optional | As above. |
-| `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | — | Optional | Google sign-in's OAuth client ids. The Google button is hidden until both are set. |
+| `AGLYN_GOOGLE_IOS_CLIENT_ID`, `AGLYN_GOOGLE_WEB_CLIENT_ID` | `googleWebClientId` | Optional | Google sign-in's OAuth client ids, used by "Connect Google" on the Account page. On Apple both are needed; on Android only the Web client id, and the Firebase project needs an Android OAuth client for the app's package and signing certificate. The action is hidden until they are set. |
+| — | `AGLYN_GOOGLE_DESKTOP_CLIENT_ID`, `AGLYN_GOOGLE_DESKTOP_CLIENT_SECRET` | Optional | The Windows app's OAuth client, for "Connect Google" through the system browser. Google requires the secret of a desktop client and does not treat it as confidential. Environment variables, or `-Daglyn.googleDesktopClientId` and `-Daglyn.googleDesktopClientSecret`. |
 | `AGLYN_PASSKEY_RP_ID` | `passkeyRpId` | Optional | The domain passkeys are made for: your `NEXT_PUBLIC_WORKSPACE_DOMAIN`, bare (`example.com`). "Set up a passkey" is hidden until it is set. Set it only once the app is linked to that domain: an `apple-app-site-association` file and the `webcredentials:` Associated Domains entry for Apple, an `assetlinks.json` naming the app's signing certificate for Android. |
 | `AGLYN_AUTH_EMULATOR_HOST` | `authEmulatorHost` | Development | `host:port` of a local Auth emulator. Never set in a store build. |
 | `AGLYN_FIRESTORE_EMULATOR_HOST` | `firestoreEmulatorHost` | Development | `host:port` of a local Firestore emulator. Never set in a store build. |

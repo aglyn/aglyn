@@ -15,6 +15,8 @@ fun main(args: Array<String>) {
   val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries)
   if (LAUNCH_CHECK_ARG in args) launchCheck("Aglyn") { AglynShell(services) }
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
+  // "Connect Google": the system browser, once the desktop OAuth client is configured.
+  val google = DesktopShell.googleSource(services.config)
   application {
     val navigator = remember { ShellNavigator() }
     AglynWindow(
@@ -41,7 +43,11 @@ fun main(args: Array<String>) {
         }
       },
     ) {
-      AglynShell(services, navigator, autoSignIn = autoSignIn)
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.aglyn.screens.LocalGoogleCredentialSource provides google,
+      ) {
+        AglynShell(services, navigator, autoSignIn = autoSignIn)
+      }
     }
   }
 }

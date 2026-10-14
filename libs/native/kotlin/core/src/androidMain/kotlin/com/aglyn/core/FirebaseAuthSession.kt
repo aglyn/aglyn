@@ -3,6 +3,8 @@ package com.aglyn.core
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +60,19 @@ class FirebaseAuthSession(private val auth: FirebaseAuth) : AuthSession {
       user.getIdToken(true).await()
     } catch (error: Exception) {
       throw AuthError("That sign-in method could not be disconnected. Try again.", error)
+    }
+  }
+
+  override suspend fun linkGoogle(googleIdToken: String) {
+    val user = auth.currentUser ?: throw AuthError(authErrorMessage(null))
+    try {
+      user.linkWithCredential(GoogleAuthProvider.getCredential(googleIdToken, null)).await()
+      // The token's identities are read for the provider list, so ask for a fresh one.
+      user.getIdToken(true).await()
+    } catch (error: FirebaseAuthUserCollisionException) {
+      throw AuthError(GoogleLink.linkRefusal("CREDENTIAL_ALREADY_IN_USE"), error)
+    } catch (error: Exception) {
+      throw AuthError(GoogleLink.linkRefusal(null), error)
     }
   }
 

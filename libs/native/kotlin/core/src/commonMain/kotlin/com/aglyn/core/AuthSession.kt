@@ -39,6 +39,10 @@ interface AuthSession {
   suspend fun unlinkProvider(providerId: String): Unit =
     throw AuthError("Disconnecting a sign-in method is not available here.")
 
+  /** Attaches Google's credential (the ID token a [GoogleCredentialSource] returned) to the account, as the console's `linkWithPopup` does. */
+  suspend fun linkGoogle(googleIdToken: String): Unit =
+    throw AuthError("Connecting Google is not available here.")
+
   /** Keeps the account's display name in step with the profile (rosters and comments read it). */
   suspend fun updateDisplayName(name: String) {}
 }

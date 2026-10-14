@@ -847,6 +847,9 @@ each issue's runbook comment:
   `webcredentials:aglyn.com` Associated Domains entry, the Android certificate hash in
   `PASSKEY_ANDROID_APK_KEY_HASHES`, and `AGLYN_PASSKEY_RP_ID` / `passkeyRpId` in the builds
   (`docs/mobile/well-known/`).
+- Google sign-in for "Connect Google" on Android and Windows: the Web OAuth client id, an Android OAuth client for
+  `com.aglyn.app` and its signing certificate, and a Desktop OAuth client id and secret (Apple has both of its ids
+  configured in `AGLYN_GOOGLE_*`).
 
 ## 13. Console screens as specs (AGL-3671, AGL-3667)
 
