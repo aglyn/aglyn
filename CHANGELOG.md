@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.250 — 2026-10-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.249...v1.0.0-beta.250)
+
+### Added
+
+- **billing:** automatic security hold when stripe flags a workspace's own payment ([AGL-3767](https://linear.app/aglyn/issue/AGL-3767), [AGL-1954](https://linear.app/aglyn/issue/AGL-1954))
+
+### Fixed
+
+- **json-editor:** the Raw JSON warning is a dismissible banner, never under Monaco ([AGL-3770](https://linear.app/aglyn/issue/AGL-3770))
+
 ## v1.0.0-beta.249 — 2026-10-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.248...v1.0.0-beta.249)
