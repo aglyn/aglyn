@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 class LiveChatNativeTest {
   private val declared = mapOf(
     "screens" to listOf("live-chat.settings"),
+    "widgets" to listOf("live-chat.settings.card"),
     "deepLinks" to listOf(),
   )
 
@@ -25,5 +26,6 @@ class LiveChatNativeTest {
     val specs = LiveChatScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("live-chat.settings").sorted(), specs.map { it.id }.sorted())
     assertTrue(specs.any { "sitePluginSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertEquals("hostSettings", specs.first { it.id == "live-chat.settings" }.cardSlot, "its Setup > Integrations card")
   }
 }

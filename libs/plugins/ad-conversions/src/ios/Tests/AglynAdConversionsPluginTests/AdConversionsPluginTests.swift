@@ -12,7 +12,7 @@ final class AdConversionsPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["ad-conversions.provider", "ad-conversions.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["ad-conversions.provider", "ad-conversions.service"], widgets: ["ad-conversions.service.card"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "ad-conversions", contributes: declared, register: registerAdConversionsNative)], into: registry)
     XCTAssertEqual(result.failed, [])

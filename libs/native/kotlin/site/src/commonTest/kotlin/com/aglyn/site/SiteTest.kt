@@ -486,7 +486,30 @@ class SiteTest {
     )
     assertEquals("Suggested by Aglyn AI. Edit it and it becomes yours.", com.aglyn.site.setup.businessOriginLine("audience", stored, resolved, "x"))
     assertEquals("One per line", com.aglyn.site.setup.businessOriginLine("services", stored, resolved, "One per line"))
-    assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
+    assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails", "integrations"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
+  }
+
+  @Test
+  fun integrationsOfferTheCardsOfPluginsRunningOnTheSite() {
+    val registry = com.aglyn.pluginhost.NativePluginRegistry()
+    val entries = listOf("live-chat", "marketing-platforms", "zapier").map { id ->
+      com.aglyn.pluginhost.NativePluginManifestEntry(id, mapOf("widgets" to listOf("$id.card"))) { registrar ->
+        registrar.widget("$id.card", id, order = 1, slot = com.aglyn.site.setup.INTEGRATIONS_SLOT) {}
+      }
+    }
+    assertEquals(emptyList(), registry.load(entries).failed)
+    val cards = registry.widgets(com.aglyn.pluginhost.NativeApp.AGLYN, com.aglyn.site.setup.INTEGRATIONS_SLOT)
+    fun shown(org: Map<String, Any?>?, host: Map<String, Any?>?) =
+      com.aglyn.site.setup.integrationWidgets(cards, com.aglyn.site.setup.runningPlugins(org, host)).map { it.pluginId }.sorted()
+    // Live chat is off for a site until the site turns it on; Zapier has no switch, so its card is always offered.
+    assertEquals(listOf("marketing-platforms", "zapier"), shown(null, emptyMap()))
+    assertEquals(listOf("live-chat", "marketing-platforms", "zapier"), shown(null, mapOf("enabledPlugins" to listOf("live-chat"))))
+    // A site that turned the email platforms off loses that card.
+    assertEquals(
+      listOf("live-chat", "zapier"),
+      shown(mapOf("enabledPlugins" to listOf("live-chat")), mapOf("enabledPlugins" to listOf("live-chat"), "disabledPlugins" to listOf("marketing-platforms"))),
+    )
+    assertEquals(listOf("zapier"), shown(null, mapOf("disabledPlugins" to listOf("marketing-platforms"))))
   }
 
   @Test

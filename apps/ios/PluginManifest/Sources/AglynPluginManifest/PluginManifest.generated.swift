@@ -48,7 +48,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "ad-conversions",
-      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"]],
+      contributes: ["screens": ["ad-conversions.provider", "ad-conversions.service"], "widgets": ["ad-conversions.service.card"]],
       register: AglynAdConversionsPlugin.registerAdConversionsNative
     ),
     NativePluginManifestEntry(
@@ -123,7 +123,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "live-chat",
-      contributes: ["screens": ["live-chat.settings"]],
+      contributes: ["screens": ["live-chat.settings"], "widgets": ["live-chat.settings.card"]],
       register: AglynLiveChatPlugin.registerLiveChatNative
     ),
     NativePluginManifestEntry(
@@ -143,7 +143,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketing-platforms",
-      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"]],
+      contributes: ["screens": ["marketing-platforms.platform", "marketing-platforms.service"], "widgets": ["marketing-platforms.service.card"]],
       register: AglynMarketingPlatformsPlugin.registerMarketingPlatformsNative
     ),
     NativePluginManifestEntry(
@@ -208,7 +208,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "zapier",
-      contributes: ["screens": ["zapier.connections"]],
+      contributes: ["screens": ["zapier.connections"], "widgets": ["zapier.connections.card"]],
       register: AglynZapierPlugin.registerZapierNative
     ),
   ]

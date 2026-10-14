@@ -50,7 +50,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "ad-conversions",
-            contributes = mapOf("screens" to listOf("ad-conversions.provider", "ad-conversions.service")),
+            contributes = mapOf("screens" to listOf("ad-conversions.provider", "ad-conversions.service"), "widgets" to listOf("ad-conversions.service.card")),
             register = ::registerAdConversionsNative,
         ),
         NativePluginManifestEntry(
@@ -125,7 +125,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "live-chat",
-            contributes = mapOf("screens" to listOf("live-chat.settings")),
+            contributes = mapOf("screens" to listOf("live-chat.settings"), "widgets" to listOf("live-chat.settings.card")),
             register = ::registerLiveChatNative,
         ),
         NativePluginManifestEntry(
@@ -145,7 +145,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "marketing-platforms",
-            contributes = mapOf("screens" to listOf("marketing-platforms.platform", "marketing-platforms.service")),
+            contributes = mapOf("screens" to listOf("marketing-platforms.platform", "marketing-platforms.service"), "widgets" to listOf("marketing-platforms.service.card")),
             register = ::registerMarketingPlatformsNative,
         ),
         NativePluginManifestEntry(
@@ -210,7 +210,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "zapier",
-            contributes = mapOf("screens" to listOf("zapier.connections")),
+            contributes = mapOf("screens" to listOf("zapier.connections"), "widgets" to listOf("zapier.connections.card")),
             register = ::registerZapierNative,
         ),
     )

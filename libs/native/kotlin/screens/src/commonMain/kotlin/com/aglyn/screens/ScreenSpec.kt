@@ -39,6 +39,13 @@ class ScreenSpec private constructor(val raw: JsonElement) {
   val links: List<String> = raw.arr("links").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
   /** Core screens' zones this plugin screen contributes to (`orgMember`, `staffOrg`, …). */
   val zones: List<String> = raw.arr("zones").mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+
+  /**
+   * A core page's slot (`hostSettings`) this screen also puts a one-row card in, which opens the screen: the native twin
+   * of the console's `registerConsoleExtension` widget for a plugin whose settings are a whole screen. The card is a
+   * widget named `<screen id>.card`, so the page that hosts the slot draws it without naming the plugin.
+   */
+  val cardSlot: String? = raw.str("cardSlot")
   val loads: List<LoadSpec> = raw.entries("load").map { (key, value) -> LoadSpec(key, value) }
   val blocks: List<BlockSpec> = raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } }
   val actions: List<ActionSpec> = raw.arr("actions").mapNotNull { ActionSpec.parse(it) }

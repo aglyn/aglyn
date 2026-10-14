@@ -3287,7 +3287,8 @@
           "screens": [
             "marketing-platforms.service",
             "marketing-platforms.platform"
-          ]
+          ],
+          "widgets": ["marketing-platforms.service.card"]
         }
       },
       "package": "@aglyn/plugins-marketing-platforms",
@@ -3349,7 +3350,8 @@
           "screens": [
             "ad-conversions.service",
             "ad-conversions.provider"
-          ]
+          ],
+          "widgets": ["ad-conversions.service.card"]
         }
       },
       "package": "@aglyn/plugins-ad-conversions",
@@ -3415,7 +3417,8 @@
         "contributes": {
           "screens": [
             "zapier.connections"
-          ]
+          ],
+          "widgets": ["zapier.connections.card"]
         }
       },
       "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
@@ -4007,7 +4010,8 @@
         "contributes": {
           "screens": [
             "live-chat.settings"
-          ]
+          ],
+          "widgets": ["live-chat.settings.card"]
         }
       },
       "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",

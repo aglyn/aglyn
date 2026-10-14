@@ -21,6 +21,18 @@ struct SetupScreen: View {
   @State private var selection: SetupSection?
   @State private var pushed: SetupSection?
   @State private var opened = false
+  @State private var host = LiveDocument()
+  @State private var org = LiveDocument()
+
+  /// The cards plugins running on this site put in the `hostSettings` zone: the Integrations section exists while there is one.
+  private var integrations: [NativeWidget] {
+    guard case .ready(let hostDoc?) = host.state, case .ready(let orgDoc?) = org.state else { return [] }
+    return integrationWidgets(context.slotWidgets(integrationsSlot), running: runningPlugins(org: orgDoc.data, host: hostDoc.data))
+  }
+
+  private var sections: [SetupSection] {
+    SetupSection.allCases.filter { $0 != .integrations || !integrations.isEmpty }
+  }
 
   var body: some View {
     WideLayoutReader { wide in
@@ -29,7 +41,7 @@ struct SetupScreen: View {
       } else if wide {
         HStack(spacing: 0) {
           List(selection: $selection) {
-            ForEach(SetupSection.allCases) { section in
+            ForEach(sections) { section in
               AglynRow(section.title, subtitle: section.supporting, systemImage: section.systemImage)
                 .tag(section)
                 .aglynListRow()
@@ -41,7 +53,7 @@ struct SetupScreen: View {
           Divider()
           Group {
             if let selection {
-              SetupDetail(context: context, section: selection).id(selection)
+              SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
             } else {
               AglynEmptyState("Pick a section to set it up", systemImage: "gearshape")
             }
@@ -51,7 +63,7 @@ struct SetupScreen: View {
         .onAppear { if selection == nil { selection = SetupSection.of(initialSection ?? "details") } }
       } else {
         List {
-          ForEach(SetupSection.allCases) { section in
+          ForEach(sections) { section in
             Button {
               pushed = section
             } label: {
@@ -66,12 +78,14 @@ struct SetupScreen: View {
         }
         .aglynListBackground()
         .navigationDestination(item: $pushed) { section in
-          SetupDetail(context: context, section: section).navigationTitle(section.title)
+          SetupDetail(context: context, section: section, integrations: integrations).navigationTitle(section.title)
         }
         .onAppear { if pushed == nil, !opened, let initialSection { pushed = SetupSection.of(initialSection); opened = true } }
       }
     }
     .navigationTitle("Setup")
+    .task(id: context.hostID) { if let id = context.hostID { await host.bind(context.firestore, ["hosts", id]) } }
+    .task(id: context.orgID) { if let id = context.orgID { await org.bind(context.firestore, ["orgs", id]) } }
   }
 }
 
@@ -79,6 +93,8 @@ struct SetupScreen: View {
 struct SetupDetail: View {
   let context: NativePluginContext
   let section: SetupSection
+  /// The `hostSettings` cards of plugins running on the site, for the Integrations section.
+  var integrations: [NativeWidget] = []
   @State private var host = LiveDocument()
 
   var body: some View {
@@ -113,6 +129,7 @@ struct SetupDetail: View {
       case .tracking: TrackingSection(host: doc.data, api: api, canEdit: canEdit)
       case .theme: ThemeSection(context: context, hostID: hostID, doc: doc, api: api, canEdit: canEdit)
       case .emails: EmailsSection(context: context, hostID: hostID, api: api, canEdit: canEdit)
+      case .integrations: IntegrationsSection(context: context, widgets: integrations)
       }
     }
     .formStyle(.grouped)
@@ -1076,6 +1093,25 @@ private struct ThemeNumberField: View {
     )
     .onChange(of: value, initial: true) { _, next in
       if parseThemeNumber(text, in: range).value != next { text = formatThemeNumber(next) }
+    }
+  }
+}
+
+// MARK: - Integrations
+
+/// The tools this site connects to (AGL-3711): a card for each plugin running on the site that has one in the `hostSettings`
+/// zone, which opens the plugin's own settings screen. The page never names the plugins.
+private struct IntegrationsSection: View {
+  let context: NativePluginContext
+  let widgets: [NativeWidget]
+
+  var body: some View {
+    Section {
+      Text("Connect this site to the tools you already use.").font(AglynFont.subheadline).foregroundStyle(.secondary)
+      if widgets.isEmpty { AglynNotice("Nothing to connect for this site yet.", tone: .info) }
+    }
+    ForEach(widgets, id: \.id) { widget in
+      Section { widget.make(context).accessibilityIdentifier("zone-widget-\(widget.id)") }
     }
   }
 }
