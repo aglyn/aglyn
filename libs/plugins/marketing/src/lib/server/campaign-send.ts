@@ -65,7 +65,7 @@ import {
   resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
-import { withContactConsentForRuleMembers } from '@aglyn/tenant-data-admin/server/contact-consent'
+import { withContactConsentForRuleMembers } from '@aglyn/tenant-data-admin/server/consent-by-address'
 import { MARKETING_REPUTATION_BREAKER } from '../constants/operator-alerts'
 // The person behind an address, through the plugin that keeps people
 // (AGL-3080): the sender never opens the record system's collections.

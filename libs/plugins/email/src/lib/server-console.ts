@@ -103,7 +103,7 @@ import {
 import {
   CONTACT_LOOKUP_CHUNK,
   withContactConsentForRuleMembers,
-} from '@aglyn/tenant-data-admin/server/contact-consent'
+} from '@aglyn/tenant-data-admin/server/consent-by-address'
 import { registerSubscriptionTopicIndex } from './server-topic-index'
 
 /** `source` stamped on every membership these routes write. */

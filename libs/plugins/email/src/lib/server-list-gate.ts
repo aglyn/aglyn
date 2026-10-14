@@ -72,7 +72,7 @@ import {
 // The leaf, not the barrel: this plugin's specs substitute both barrels
 // wholesale, and what a deleted contact's refusal still says must be read
 // under them by the real store and the real merge.
-import { readContactConsent } from '@aglyn/tenant-data-admin/server/contact-consent'
+import { readContactConsent } from '@aglyn/tenant-data-admin/server/consent-by-address'
 
 /**
  * The most addresses one request may name.
