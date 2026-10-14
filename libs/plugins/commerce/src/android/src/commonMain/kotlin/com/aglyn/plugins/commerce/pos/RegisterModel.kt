@@ -57,6 +57,8 @@ class RegisterModel(
   private val reconnectMs: Long = RECONNECT_MS,
   /** The shift and staff PIN routes. */
   val opsApi: PosOpsApi = OfflinePosOps,
+  /** The customer route. */
+  customersApi: PosCustomersApi = OfflinePosCustomers,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -65,6 +67,9 @@ class RegisterModel(
 
   /** The register's shift and its drawer. */
   val shift = PosShiftModel(opsApi, scope, { register?.id }, { cashier.assertion })
+
+  /** The customer lookup beside the basket. */
+  val customers = PosCustomerModel(customersApi, scope)
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
@@ -372,6 +377,9 @@ class RegisterModel(
   fun setDiscount(pct: Double) = updateCart(cart.withDiscount(pct))
 
   fun setCustomerEmail(email: String) = updateCart(cart.withCustomerEmail(email))
+
+  /** Attaches the customer the lookup found; null lets them go. Their email is the sale's. */
+  fun attachCustomer(customer: PosCustomer?) = updateCart(cart.withCustomer(customer))
 
   fun clearCart() = updateCart(Cart.EMPTY)
 

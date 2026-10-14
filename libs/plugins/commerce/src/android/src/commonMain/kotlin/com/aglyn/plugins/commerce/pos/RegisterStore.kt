@@ -67,7 +67,7 @@ class RegisterStore(private val store: KeyValueStore, private val hostId: String
 
   fun cart(registerId: String): Cart = readStoredCart(store.get(cartKey(registerId)))
 
-  fun saveCart(registerId: String, cart: Cart) = store.set(cartKey(registerId), if (cart.isEmpty && cart.discountPct == 0 && cart.customerEmail.isEmpty()) null else cart.encode())
+  fun saveCart(registerId: String, cart: Cart) = store.set(cartKey(registerId), if (cart.isEmpty && cart.discountPct == 0 && cart.customerEmail.isEmpty() && cart.customer == null) null else cart.encode())
 
   fun pendingSale(registerId: String, nowMs: Long): PendingSale? {
     val sale = runCatching { json.decodeFromString(PendingSale.serializer(), store.get(saleKey(registerId)) ?: return null) }.getOrNull()

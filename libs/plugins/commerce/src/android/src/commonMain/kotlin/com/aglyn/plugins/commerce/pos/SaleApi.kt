@@ -291,6 +291,7 @@ class ConsolePosSaleApi(
       put("lines", cart.saleLines())
       if (cart.discountPct > 0) put("discountPct", cart.discountPct)
       if (cart.customerEmail.isNotEmpty()) put("customerEmail", cart.customerEmail)
+      cart.customer?.let { put("customer", it.toJson()) }
       cashierAssertion()?.let { put("cashierAssertion", it) }
     }
     return readOpenedSale(api.request(POS_ORDER_ROUTE, ApiMethod.POST, body, idempotencyKey = attemptKey))

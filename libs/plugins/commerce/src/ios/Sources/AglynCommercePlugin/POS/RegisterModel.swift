@@ -68,6 +68,8 @@ final class RegisterModel {
   @ObservationIgnored let opsAPI: PosOpsAPI
   @ObservationIgnored private var tillCashier: PosCashier!
   @ObservationIgnored private var tillShift: PosShiftModel!
+  /// The customer lookup beside the basket.
+  @ObservationIgnored let customers: PosCustomerModel
   /// Who is ringing: the cashier a PIN switched in, and the idle lock.
   var cashier: PosCashier { tillCashier }
   /// The register's shift and its drawer.
@@ -75,7 +77,7 @@ final class RegisterModel {
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
-    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil
+    defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -85,6 +87,7 @@ final class RegisterModel {
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
     store = RegisterStore(defaults: defaults, hostID: hostID)
+    customers = PosCustomerModel(api: customersAPI ?? ConsolePosCustomersAPI(api: api, hostID: hostID))
     let ops = self.opsAPI
     let cashier = PosCashier(api: ops, registerID: { [weak self] in self?.register?.id }, autoLockMinutes: { [weak self] in self?.context?.ops.autoLockMinutes ?? 0 })
     cashier.assertionSink = { sale.cashier.assertion = $0 }
@@ -294,6 +297,8 @@ final class RegisterModel {
   func setQuantity(_ key: String, _ quantity: Int) { updateCart(cart.settingQuantity(key, quantity)) }
   func setDiscount(_ pct: Double) { updateCart(cart.withDiscount(pct)) }
   func setCustomerEmail(_ email: String) { updateCart(cart.withCustomerEmail(email)) }
+  /// Attaches the customer the lookup found; nil lets them go. Their email is the sale's.
+  func attachCustomer(_ customer: PosCustomer?) { updateCart(cart.withCustomer(customer)) }
   func clearCart() { updateCart(.empty) }
 
   private func updateCart(_ next: Cart) {

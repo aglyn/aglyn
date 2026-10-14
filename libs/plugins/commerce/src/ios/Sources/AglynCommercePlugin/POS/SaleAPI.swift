@@ -318,6 +318,7 @@ struct ConsolePosSaleAPI: PosSaleAPI {
     if let locationID { body["locationId"] = .string(locationID) }
     if cart.discountPct > 0 { body["discountPct"] = .number(Double(cart.discountPct)) }
     if !cart.customerEmail.isEmpty { body["customerEmail"] = .string(cart.customerEmail) }
+    if let customer = cart.customer { body["customer"] = customer.json }
     if let assertion = cashier.assertion { body["cashierAssertion"] = .string(assertion) }
     return readOpenedSale(
       try await api.request(posOrderRoute, method: .post, body: .object(body), idempotencyKey: attemptKey))

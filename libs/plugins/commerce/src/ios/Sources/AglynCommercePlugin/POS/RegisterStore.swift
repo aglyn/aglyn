@@ -68,7 +68,7 @@ struct RegisterStore {
   func cart(_ register: String) -> Cart { Cart.read(defaults.data(forKey: cartKey(register))) }
 
   func saveCart(_ register: String, _ cart: Cart) {
-    if cart.isEmpty && cart.discountPct == 0 && cart.customerEmail.isEmpty {
+    if cart.isEmpty && cart.discountPct == 0 && cart.customerEmail.isEmpty && cart.customer == nil {
       defaults.removeObject(forKey: cartKey(register))
     } else {
       defaults.set(cart.encoded(), forKey: cartKey(register))

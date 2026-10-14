@@ -254,6 +254,7 @@ struct BasketPanel: View {
       }
       VStack(spacing: AglynSpace.one) {
         Divider()
+        BasketCustomerRow(model: model)
         AglynAmountRow("Subtotal", amount: model.money(model.cart.subtotalCents))
         Button(action: onDiscount) {
           AglynAmountRow(

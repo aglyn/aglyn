@@ -137,6 +137,7 @@ fun RegisterScreen(context: NativePluginContext) {
       peripherals = context.peripherals,
       scope = scope,
       opsApi = ConsolePosOpsApi(context.api, hostId),
+      customersApi = ConsolePosCustomersApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
@@ -734,16 +735,7 @@ private fun BasketPane(model: RegisterModel, onHolds: () -> Unit, inSheet: Boole
             cart.discountPct.toString(),
             { model.setDiscount(it.toDouble()) },
           )
-          var email by remember(cart.customerEmail) { mutableStateOf(cart.customerEmail) }
-          OutlinedTextField(
-            value = email,
-            onValueChange = { email = it; model.setCustomerEmail(it) },
-            label = { Text("Customer email (optional)") },
-            leadingIcon = { Icon(AglynIcons.named("mail"), null) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth(),
-          )
+          BasketCustomer(model)
           AmountRow("Subtotal", money(cart.subtotalCents, model.currency))
           if (cart.discountCents > 0) AmountRow("Discount (${cart.discountPct}%)", "-${money(cart.discountCents, model.currency)}")
           Text("Tax and the final total are worked out when you charge.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
