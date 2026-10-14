@@ -221,6 +221,18 @@ const settled = async (): Promise<void> => {
   })
 }
 
+/*
+ * The card module is large (the data grid and the zone registry come with it),
+ * and the first `import()` of it pays the whole transform. Paid inside the first
+ * test, that cost landed on a 30 s per-test budget: a busy CI runner took longer,
+ * the first test timed out mid-import, and the rest of the file failed after it.
+ * Loading it once here, under its own budget, leaves every test the import cached.
+ */
+beforeAll(async () => {
+  standInConvertedRecordSources()
+  await import('./campaign-conversions-card')
+}, 180_000)
+
 beforeEach(() => {
   pages.clear()
   built.length = 0
