@@ -34,6 +34,7 @@ import { readOrgAiUsageByUser } from '../usage/ai-usage-by-user'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { addonKindFromPriceId } from '@aglyn/tenant-data-admin/server/billing-addons'
 import { orgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
+import { aiAddonName } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   assistCogsAlertThresholdUsd,
   assistMarginMultiple,
@@ -57,6 +58,8 @@ import {
   type StaffOrgAiResponse,
   type StaffOrgAiUser,
 } from '../usage/staff-org-ai'
+import { staffOrgAiView } from '../usage/staff-org-ai-view'
+import { staffAssistPool } from '../usage/staff-org-usage-ai'
 
 /**
  * THE STAFF AI CARD'S BACKING READ (AGL-2930).
@@ -299,6 +302,8 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   const orgId = String(query.orgId ?? '')
   if (!orgId) return Response.json({ error: 'Missing orgId' }, { status: 400 })
+  // The card as it prints, for a client that draws none of it (the staff apps).
+  const prepared = String(query.view ?? '') === 'prepared'
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
@@ -318,7 +323,8 @@ async function handler(request: Request): Promise<Response> {
       orgRef.get(),
       orgRef.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID).get(),
       orgRef.collection('assistUsage').doc(month).get(),
-      orgRef.collection('usage').orderBy('month', 'desc').limit(1).get(),
+      // The newest rollup is the margin's; the prepared card also lists the table's twelve.
+      orgRef.collection('usage').orderBy('month', 'desc').limit(prepared ? 12 : 1).get(),
     ])
     if (!orgSnap.exists) {
       return Response.json({ error: 'No such organization' }, { status: 404 })
@@ -404,6 +410,21 @@ async function handler(request: Request): Promise<Response> {
               accountSnap.exists ? (accountSnap.data() ?? null) : null,
             )
           : null,
+    }
+    if (prepared) {
+      // The AI columns of the usage table, as `/api/admin/org-usage` reads them off each rollup: spend is priced
+      // (absent reads zero), credits and overage are recorded (absent reads as not measured).
+      const recorded = (value: unknown) => (value != null ? Number(value) : null)
+      const months = rollupSnap.docs.map((doc) => ({
+        month: String(doc.get('month') ?? doc.id),
+        assistCostUsd: Number(doc.get('assistCostUsd') ?? 0),
+        assistCredits: recorded(doc.get('assistCredits')),
+        assistOverageUsd: recorded(doc.get('assistOverageUsd')),
+      }))
+      return Response.json(
+        staffOrgAiView(body, aiAddonName(), { pool: staffAssistPool(org as never), months }),
+        { status: 200 },
+      )
     }
     return Response.json(body, { status: 200 })
   } catch (error) {

@@ -2753,7 +2753,10 @@
             "ai.member",
             "ai.staffOrg",
             "ai.staffUser",
-            "ai.signals"
+            "ai.signals",
+            "ai.staffRequests",
+            "ai.requests",
+            "ai.request"
           ],
           "quickActions": [
             "ai.open"

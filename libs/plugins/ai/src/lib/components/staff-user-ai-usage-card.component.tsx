@@ -35,6 +35,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { aiUsageMonthLabel } from '../usage/ai-usage-wire'
 import type { StaffAiAccountAllowance } from '../usage/staff-org-ai'
+import { allowanceSentence } from '../usage/staff-org-ai-view'
 import {
   StaffCreditReturnActions,
   StaffCreditReturnDialog,
@@ -218,11 +219,7 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
       ) : null}
       {allowance ? (
         <Typography variant="body2" sx={{ mb: 1 }}>
-          {`Free AI allowance this month: ${allowance.usedCredits.toLocaleString()} of ${allowance.limitCredits.toLocaleString()} credits used across the free workspaces this account owns` +
-            (allowance.returnedCredits
-              ? ` (${allowance.returnedCredits.toLocaleString()} given back)`
-              : '') +
-            '.'}
+          {allowanceSentence(allowance, 'user')}
         </Typography>
       ) : null}
       {!ready ? (

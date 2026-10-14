@@ -1,5 +1,5 @@
 {
-  "$comment": "The AI plugin's native screens, kept in its Apple package (Resources, so Xcode reads it through the plugin manifest symlink) and linked from its Kotlin module (src/android/screens): AI jobs and their status, credits, the hard cap and overage cap, per-member usage, and the staff zones staffOrg and staffUser. Routes: /api/ai/jobs, /api/ai/jobs/{id}/cancel and /resume, /api/ai/billing/credits, /api/ai/billing/overage, /api/ai/allotments, /api/ai/usage, /api/ai/admin/org, /api/ai/admin/user, /api/ai/admin/credits. Grammar: docs/mobile/native-architecture.md §13.",
+  "$comment": "The AI plugin's native screens, kept in its Apple package (Resources, so Xcode reads it through the plugin manifest symlink) and linked from its Kotlin module (src/android/screens): AI jobs and their status, credits, the hard cap and overage cap, per-member usage, and the staff zones staffOrg and staffUser, and the staff AI requests. Routes: /api/ai/jobs, /api/ai/jobs/{id}/cancel and /resume, /api/ai/billing/credits, /api/ai/billing/overage, /api/ai/allotments, /api/ai/usage, /api/ai/admin/org, /api/ai/admin/user (both with view=prepared), /api/ai/admin/credits, /api/ai/admin/conversations and /api/ai/admin/signals. Grammar: docs/mobile/native-architecture.md §13.",
   "screens": [
     {
       "id": "ai.jobs",
@@ -405,7 +405,7 @@
       "id": "ai.staffOrg",
       "title": "AI",
       "label": "AI",
-      "subtitle": "Add-on, pool, overage and per-person use",
+      "subtitle": "Add-on, credit pool, overage, jobs, tokens and margin",
       "icon": "sparkles|auto_awesome",
       "scope": "staff",
       "requires": "staff.is",
@@ -414,101 +414,387 @@
       ],
       "order": 10,
       "load": {
-        "ai": "/api/ai/admin/org?orgId={params.orgId}"
+        "view": "/api/ai/admin/org?orgId={params.orgId}&view=prepared"
       },
       "blocks": [
         {
           "type": "fields",
-          "object": "data.ai",
+          "title": "Add-on",
+          "object": "data.view.addon",
           "rows": [
             {
-              "label": "Month",
-              "value": "{item.month}"
-            },
-            {
               "label": "Add-on",
-              "value": "{item.addon.active:yesno}"
+              "value": "{item.status}"
             },
             {
-              "label": "Pool",
-              "value": "{item.pool.usedCredits:number} of {item.pool.totalCredits|item.pool.credits:number}"
+              "label": "Price",
+              "value": "{item.price}"
             },
+            {
+              "label": "Since",
+              "value": "{item.since:date}",
+              "when": "item.since"
+            },
+            {
+              "label": "Since",
+              "value": "— ({item.sinceNote})",
+              "when": "item.sinceNote"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Credit pool · {data.view.month}",
+          "object": "data.view.pool",
+          "rows": [
+            {
+              "label": "Band",
+              "value": "{item.band}"
+            },
+            {
+              "label": "Used",
+              "value": "{item.used}"
+            },
+            {
+              "label": "Given back",
+              "value": "{item.returned}",
+              "when": "item.returned"
+            },
+            {
+              "label": "Allowance",
+              "value": "{item.allowance}",
+              "when": "item.allowance"
+            },
+            {
+              "label": "Projected",
+              "value": "{item.projected}"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Overage",
+          "object": "data.view.overage",
+          "rows": [
             {
               "label": "Overage",
-              "value": "{item.overage.credits:number} credits"
+              "value": "{item.line}"
             },
             {
-              "label": "Refused this month",
-              "value": "{item.refusals.count|item.refusals.total:number}"
+              "label": "State",
+              "value": "{item.state}"
             }
           ]
         },
         {
           "type": "list",
-          "title": "People",
-          "items": "data.ai.users",
-          "primary": "{item.email|item.name|item.uid}",
-          "trailing": "{item.usedCredits|item.credits:number}",
-          "open": {
-            "screen": "ai.staffUser",
-            "params": {
-              "uid": "{item.uid}"
-            }
-          },
-          "empty": "No AI use."
+          "title": "{data.view.refusals.heading}",
+          "items": "data.view.refusals.chips",
+          "primary": "{item}",
+          "icon": "hand.raised|block",
+          "count": false,
+          "empty": "No refusals."
         },
         {
-          "type": "actions",
-          "items": [
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.view.jobs.failedRead",
+          "text": "Could not read the generation jobs — a failed read, not an idle org."
+        },
+        {
+          "type": "list",
+          "title": "Generation jobs",
+          "footer": "{data.view.jobs.floor}",
+          "items": "data.view.jobs.chips",
+          "primary": "{item}",
+          "icon": "sparkles|auto_awesome",
+          "count": false,
+          "empty": "No generation jobs yet."
+        },
+        {
+          "type": "list",
+          "title": "Recent jobs",
+          "items": "data.view.jobs.recent",
+          "primary": "{item.id}",
+          "secondary": "{item.kind} · {item.status} · {item.startedAt:date}",
+          "tertiary": "{item.credits} credits · started by {item.startedBy|'unknown'}",
+          "icon": "sparkles|auto_awesome",
+          "open": {
+            "screen": "core.staff.user",
+            "params": {
+              "uid": "{item.startedBy}"
+            },
+            "when": "item.startedBy"
+          },
+          "actions": [
             {
               "id": "give",
-              "label": "Give credits back",
+              "label": "Give back this job’s credits",
               "icon": "gift|card_giftcard",
+              "when": "item.giveBack",
               "url": "/api/ai/admin/credits",
               "prompt": [
+                {
+                  "key": "meter",
+                  "label": "Give back to",
+                  "kind": "select",
+                  "initial": "{data.view.giveBack.defaultMeter}",
+                  "optionsFrom": {
+                    "items": "data.view.giveBack.meters",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
                 {
                   "key": "credits",
                   "label": "Credits",
                   "kind": "number",
-                  "required": true
+                  "required": true,
+                  "initial": "{item.giveBack}",
+                  "help": "For a fault of ours. The spend stays on record; the meter reads it as given back, up to what this month used. {data.view.giveBack.summary}"
                 },
                 {
-                  "key": "meter",
-                  "label": "From",
-                  "kind": "select",
-                  "initial": "workspace",
-                  "options": [
-                    {
-                      "value": "workspace",
-                      "label": "The workspace's credits"
-                    },
-                    {
-                      "value": "account",
-                      "label": "A person's own allowance"
-                    },
-                    {
-                      "value": "both",
-                      "label": "Both"
-                    }
-                  ]
-                },
-                {
-                  "key": "uid",
-                  "label": "Person's account ID",
+                  "key": "jobId",
+                  "label": "AI job id (optional)",
                   "kind": "text",
-                  "when": "form.meter == account,both"
+                  "initial": "{item.id}"
                 }
               ],
               "reason": true,
               "body": {
-                "action": "give",
                 "orgId": "{params.orgId}",
-                "credits": "{form.credits}",
+                "action": "give",
                 "meter": "{form.meter}",
-                "uid": "{form.uid}",
-                "reason": "{form.reason}"
+                "credits": "{form.credits}",
+                "reason": "{form.reason}",
+                "jobId": "{form.jobId}",
+                "idempotencyKey": "{attempt}"
               },
-              "success": "Gave {form.credits} credits back"
+              "report": [
+                {
+                  "text": "Already given back — nothing returned twice.",
+                  "when": "response.duplicate"
+                },
+                {
+                  "each": "response.lines",
+                  "when": "item.credits && !response.duplicate",
+                  "text": "Returned {item.credits:number} credits to the {item.meter}."
+                }
+              ],
+              "reload": true
+            }
+          ],
+          "count": false,
+          "empty": "No recent jobs."
+        },
+        {
+          "type": "fields",
+          "title": "Tokens · {data.view.month}",
+          "object": "data.view.tokens",
+          "when": "data.view.tokens",
+          "rows": [
+            {
+              "label": "Totals",
+              "value": "{item.totals}"
+            },
+            {
+              "label": "Cache",
+              "value": "{item.cacheHit}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Tokens by kind",
+          "items": "data.view.tokens.kinds",
+          "when": "data.view.tokens",
+          "primary": "{item.kind}",
+          "secondary": "{item.headline}",
+          "tertiary": "{item.detail}",
+          "icon": "text.alignleft|text_fields",
+          "count": false,
+          "empty": "No model requests recorded by kind this month."
+        },
+        {
+          "type": "list",
+          "title": "AI by month",
+          "footer": "{data.view.usage.pool}",
+          "items": "data.view.usage.months",
+          "when": "data.view.usage",
+          "primary": "{item.month}",
+          "secondary": "{item.headline}",
+          "tertiary": "{item.detail}",
+          "icon": "calendar|calendar_month",
+          "count": false,
+          "empty": "No usage rollups recorded for this organization yet."
+        },
+        {
+          "type": "list",
+          "title": "Top users this month",
+          "items": "data.view.users",
+          "primary": "{item.name}",
+          "secondary": "{item.headline}",
+          "tertiary": "{item.detail}",
+          "icon": "person|person",
+          "open": {
+            "screen": "core.staff.user",
+            "params": {
+              "uid": "{item.uid}"
+            }
+          },
+          "count": false,
+          "empty": "No AI usage attributed to a person this month."
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "when": "data.view.margin.tone == error",
+          "text": "{data.view.margin.text}"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.view.margin.tone == warning",
+          "text": "{data.view.margin.text}"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "when": "data.view.margin.tone == success",
+          "text": "{data.view.margin.text}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.view.margin.contribution",
+          "text": "{data.view.margin.contribution}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "staff.role != super,billing",
+          "text": "Giving credits back needs the billing or super staff role."
+        },
+        {
+          "type": "actions",
+          "title": "Credits",
+          "when": "staff.role == super,billing",
+          "items": [
+            {
+              "id": "give",
+              "label": "Give back credits",
+              "icon": "gift|card_giftcard",
+              "url": "/api/ai/admin/credits",
+              "prompt": [
+                {
+                  "key": "meter",
+                  "label": "Give back to",
+                  "kind": "select",
+                  "initial": "{data.view.giveBack.defaultMeter}",
+                  "optionsFrom": {
+                    "items": "data.view.giveBack.meters",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                },
+                {
+                  "key": "credits",
+                  "label": "Credits",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{data.view.giveBack.returnable}",
+                  "help": "For a fault of ours. The spend stays on record; the meter reads it as given back, up to what this month used. {data.view.giveBack.summary}"
+                },
+                {
+                  "key": "jobId",
+                  "label": "AI job id (optional)",
+                  "kind": "text"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "give",
+                "meter": "{form.meter}",
+                "credits": "{form.credits}",
+                "reason": "{form.reason}",
+                "jobId": "{form.jobId}",
+                "idempotencyKey": "{attempt}"
+              },
+              "report": [
+                {
+                  "text": "Already given back — nothing returned twice.",
+                  "when": "response.duplicate"
+                },
+                {
+                  "each": "response.lines",
+                  "when": "item.credits && !response.duplicate",
+                  "text": "Returned {item.credits:number} credits to the {item.meter}."
+                }
+              ],
+              "reload": true
+            },
+            {
+              "id": "reset",
+              "label": "Reset this month",
+              "icon": "arrow.counterclockwise|restore",
+              "url": "/api/ai/admin/credits",
+              "prompt": [
+                {
+                  "key": "meter",
+                  "label": "Give back to",
+                  "kind": "select",
+                  "initial": "{data.view.giveBack.defaultMeter}",
+                  "optionsFrom": {
+                    "items": "data.view.giveBack.meters",
+                    "value": "{item.value}",
+                    "label": "{item.label}"
+                  }
+                }
+              ],
+              "reason": true,
+              "confirm": "Return everything used this month on the meter you choose? The spend stays on record; the meter reads it as given back.",
+              "body": {
+                "orgId": "{params.orgId}",
+                "action": "reset",
+                "meter": "{form.meter}",
+                "reason": "{form.reason}",
+                "jobId": "",
+                "idempotencyKey": "{attempt}"
+              },
+              "report": [
+                {
+                  "text": "Already given back — nothing returned twice.",
+                  "when": "response.duplicate"
+                },
+                {
+                  "each": "response.lines",
+                  "when": "item.credits && !response.duplicate",
+                  "text": "Returned {item.credits:number} credits to the {item.meter}."
+                }
+              ],
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "title": "Actions",
+          "items": [
+            {
+              "title": "Credit override and feature toggles",
+              "subtitle": "The entitlement override editor",
+              "icon": "slider.horizontal.3|tune",
+              "screen": "core.staff.orgOverride",
+              "params": {
+                "orgId": "{params.orgId}"
+              }
+            },
+            {
+              "title": "Pause AI for this organization",
+              "subtitle": "Lockdown: the feature keys ai-assist and ai-generate, scoped to the org",
+              "icon": "lock|lock",
+              "screen": "core.staff.lockdown"
             }
           ]
         }
@@ -518,7 +804,7 @@
       "id": "ai.staffUser",
       "title": "AI",
       "label": "AI",
-      "subtitle": "This person's AI use",
+      "subtitle": "This person’s AI use in every workspace, and their Free allowance",
       "icon": "sparkles|auto_awesome",
       "scope": "staff",
       "requires": "staff.is",
@@ -527,31 +813,116 @@
       ],
       "order": 10,
       "load": {
-        "ai": "/api/ai/admin/user?uid={params.uid}"
+        "view": "/api/ai/admin/user?uid={params.uid}&view=prepared"
       },
       "blocks": [
         {
-          "type": "fields",
-          "object": "data.ai",
-          "rows": [
-            {
-              "label": "Month",
-              "value": "{item.month}"
-            },
-            {
-              "label": "Credits used",
-              "value": "{item.usedCredits:number}"
-            }
-          ]
+          "type": "notice",
+          "tone": "info",
+          "when": "data.view.allowance",
+          "text": "{data.view.allowance}"
         },
         {
           "type": "list",
-          "title": "By workspace",
-          "items": "data.ai.orgs",
-          "primary": "{item.orgName|item.orgId}",
-          "trailing": "{item.usedCredits:number}",
+          "title": "AI usage across organizations",
+          "items": "data.view.rows",
+          "primary": "{item.workspace}",
+          "secondary": "{item.month}",
+          "tertiary": "{item.detail}",
+          "trailing": "{item.headline}",
+          "icon": "building.2|business",
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            }
+          },
           "count": false,
-          "empty": "—"
+          "empty": "{data.view.empty}"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "staff.role != super,billing",
+          "text": "Giving credits back needs the billing or super staff role."
+        },
+        {
+          "type": "actions",
+          "title": "Free allowance",
+          "when": "staff.role == super,billing",
+          "items": [
+            {
+              "id": "give",
+              "label": "Give back credits",
+              "icon": "gift|card_giftcard",
+              "url": "/api/ai/admin/credits",
+              "prompt": [
+                {
+                  "key": "credits",
+                  "label": "Credits",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{data.view.giveBack.returnable}",
+                  "help": "For a fault of ours. The spend stays on record; the meter reads it as given back, up to what this month used. {data.view.giveBack.summary}"
+                },
+                {
+                  "key": "jobId",
+                  "label": "AI job id (optional)",
+                  "kind": "text"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "uid": "{params.uid}",
+                "action": "give",
+                "meter": "account",
+                "credits": "{form.credits}",
+                "reason": "{form.reason}",
+                "jobId": "{form.jobId}",
+                "idempotencyKey": "{attempt}"
+              },
+              "report": [
+                {
+                  "text": "Already given back — nothing returned twice.",
+                  "when": "response.duplicate"
+                },
+                {
+                  "each": "response.lines",
+                  "when": "item.credits && !response.duplicate",
+                  "text": "Returned {item.credits:number} credits to the {item.meter}."
+                }
+              ],
+              "reload": true
+            },
+            {
+              "id": "reset",
+              "label": "Reset this month",
+              "icon": "arrow.counterclockwise|restore",
+              "url": "/api/ai/admin/credits",
+              "reason": true,
+              "confirm": "Return everything used this month on the meter you choose? The spend stays on record; the meter reads it as given back.",
+              "body": {
+                "uid": "{params.uid}",
+                "action": "reset",
+                "meter": "account",
+                "reason": "{form.reason}",
+                "jobId": "",
+                "idempotencyKey": "{attempt}"
+              },
+              "report": [
+                {
+                  "text": "Already given back — nothing returned twice.",
+                  "when": "response.duplicate"
+                },
+                {
+                  "each": "response.lines",
+                  "when": "item.credits && !response.duplicate",
+                  "text": "Returned {item.credits:number} credits to the {item.meter}."
+                }
+              ],
+              "reload": true
+            }
+          ]
         }
       ]
     },
@@ -727,6 +1098,205 @@
           },
           "count": false,
           "empty": "No workspace has used Assist yet."
+        }
+      ]
+    },
+    {
+      "id": "ai.staffRequests",
+      "title": "Aglyn AI requests",
+      "label": "Aglyn AI requests",
+      "subtitle": "What people typed to Aglyn AI, and what came back",
+      "icon": "text.bubble|forum",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrg",
+        "staffUser"
+      ],
+      "order": 20,
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "params.orgId",
+          "text": "What people in this organization typed to Aglyn AI, and what it answered. Opening a list is recorded in the audit log."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "params.uid",
+          "text": "What this account typed to Aglyn AI in every organization, and what it answered. Opening a list is recorded in the audit log, and in this account’s data access by staff."
+        },
+        {
+          "type": "links",
+          "title": "Show",
+          "items": [
+            {
+              "title": "Assist chat",
+              "subtitle": "The questions and answers of the Assist chat, kept for 180 days",
+              "icon": "bubble.left.and.bubble.right|forum",
+              "screen": "ai.requests",
+              "params": {
+                "orgId": "{params.orgId}",
+                "uid": "{params.uid}",
+                "kind": "assist"
+              }
+            },
+            {
+              "title": "AI jobs",
+              "subtitle": "Each job’s brief, what was filled in beside it, and its result",
+              "icon": "sparkles|auto_awesome",
+              "screen": "ai.requests",
+              "params": {
+                "orgId": "{params.orgId}",
+                "uid": "{params.uid}",
+                "kind": "jobs"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai.requests",
+      "title": "AI requests",
+      "label": "AI requests",
+      "subtitle": "Newest first",
+      "icon": "text.bubble|forum",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "list": {
+          "url": "/api/ai/admin/conversations?orgId={params.orgId}&uid={params.uid}&kind={params.kind}&view=prepared",
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "rows"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Assist chat",
+          "when": "params.kind == assist",
+          "items": "data.list.rows",
+          "primary": "{item.question}",
+          "secondary": "{item.view.who} · {item.at:datetime}",
+          "tertiary": "{item.view.meta}",
+          "icon": "bubble.left.and.bubble.right|forum",
+          "open": {
+            "screen": "ai.request",
+            "params": {
+              "orgId": "{item.orgId}",
+              "kind": "{params.kind}",
+              "id": "{item.id}"
+            }
+          },
+          "count": false,
+          "empty": "No Assist chat in the last 180 days."
+        },
+        {
+          "type": "list",
+          "title": "AI jobs",
+          "when": "params.kind == jobs",
+          "items": "data.list.rows",
+          "primary": "{item.brief|item.kind}",
+          "secondary": "{item.view.who} · {item.at:datetime}",
+          "tertiary": "{item.view.meta}",
+          "icon": "sparkles|auto_awesome",
+          "open": {
+            "screen": "ai.request",
+            "params": {
+              "orgId": "{item.orgId}",
+              "kind": "{params.kind}",
+              "id": "{item.id}"
+            }
+          },
+          "count": false,
+          "empty": "No AI jobs yet."
+        }
+      ]
+    },
+    {
+      "id": "ai.request",
+      "title": "AI request",
+      "label": "AI request",
+      "icon": "text.bubble|forum",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "row": "/api/ai/admin/conversations?orgId={params.orgId}&kind={params.kind}&id={params.id}&view=prepared"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "error",
+          "when": "data.row.rows[id=params.id].error",
+          "text": "{data.row.rows[id=params.id].error}"
+        },
+        {
+          "type": "fields",
+          "object": "data.row.rows[id=params.id]",
+          "rows": [
+            {
+              "label": "Who",
+              "value": "{item.view.who}"
+            },
+            {
+              "label": "When",
+              "value": "{item.at:datetime}"
+            },
+            {
+              "label": "Details",
+              "value": "{item.view.meta}"
+            },
+            {
+              "label": "Organization",
+              "value": "{item.orgId}"
+            },
+            {
+              "label": "Question",
+              "value": "{item.question}",
+              "when": "params.kind == assist"
+            },
+            {
+              "label": "Answer",
+              "value": "{item.answer}",
+              "when": "params.kind == assist"
+            },
+            {
+              "label": "Brief",
+              "value": "{item.brief}",
+              "when": "params.kind == jobs"
+            },
+            {
+              "label": "Filled in",
+              "value": "{item.view.filledIn}",
+              "when": "item.view.filledIn"
+            },
+            {
+              "label": "{item.view.resultLabel|'Result'}",
+              "value": "{item.view.resultText}",
+              "when": "item.view.resultText"
+            },
+            {
+              "label": "Made",
+              "value": "{item.view.made}",
+              "when": "item.view.made"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "items": [
+            {
+              "title": "Open the organization",
+              "icon": "building.2|business",
+              "screen": "core.staff.org",
+              "params": {
+                "orgId": "{params.orgId}"
+              }
+            }
+          ]
         }
       ]
     }

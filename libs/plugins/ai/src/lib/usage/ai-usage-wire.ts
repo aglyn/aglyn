@@ -261,12 +261,15 @@ export interface AiAllotmentsWire {
   callerUid: string
 }
 
-/** `2026-09` as a reader says it, on the UTC calendar the key is cut from. */
-export function aiUsageMonthLabel(month: string): string {
+/**
+ * `2026-09` as a reader says it, on the UTC calendar the key is cut from, in
+ * the reader's locale (the staff apps' prepared views pass `en-US`).
+ */
+export function aiUsageMonthLabel(month: string, locale?: string): string {
   const [year, monthOfYear] = month.split('-').map(Number)
   if (!year || !monthOfYear) return month
   try {
-    return new Date(Date.UTC(year, monthOfYear - 1, 1)).toLocaleDateString(undefined, {
+    return new Date(Date.UTC(year, monthOfYear - 1, 1)).toLocaleDateString(locale, {
       month: 'long',
       year: 'numeric',
       timeZone: 'UTC',

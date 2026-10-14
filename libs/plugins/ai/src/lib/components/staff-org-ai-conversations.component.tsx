@@ -41,11 +41,11 @@ import {
   STAFF_AI_CONVERSATIONS_PAGE,
   type StaffAiAssistRow,
   type StaffAiConversationKind,
-  type StaffAiConversationPerson,
   type StaffAiConversationsResponse,
   type StaffAiJobResult,
   type StaffAiJobRow,
 } from '../usage/staff-org-ai-conversations'
+import { jobFilledInText, jobMadeText, jobResultText, money, who } from '../usage/staff-org-ai-conversations-view'
 
 /**
  * "Aglyn AI requests" (AGL-3675, AGL-3660): everything people typed to
@@ -62,11 +62,6 @@ import {
  */
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : 'Unknown time')
-
-const who = (person: StaffAiConversationPerson) =>
-  person.email ?? person.name ?? (person.uid ? `uid ${person.uid}` : 'Unknown member')
-
-const money = (value: number | null) => (value === null ? null : `$${value.toFixed(value < 1 ? 4 : 2)}`)
 
 /** A block of what someone typed or what came back, kept as written. */
 const Words = ({ label, children }: { label: string; children: string }) => (
@@ -109,26 +104,8 @@ const AssistRow = ({ row, showOrg }: { row: StaffAiAssistRow; showOrg?: boolean 
 )
 
 const Result = ({ result }: { result: StaffAiJobResult }) => {
-  switch (result.kind) {
-    case 'insight':
-      return (
-        <Words label="Answer">
-          {[...result.insights, ...(result.gap ? [`Not answered: ${result.gap}`] : [])].join('\n\n')}
-        </Words>
-      )
-    case 'crm-record':
-      return (
-        <Words label="Summary">
-          {[result.summary, result.standing, result.nextStep ? `Next step: ${result.nextStep}` : null]
-            .filter(Boolean)
-            .join('\n\n')}
-        </Words>
-      )
-    case 'crm-email':
-      return <Words label="Email draft">{`Subject: ${result.subject}\n\n${result.body}`}</Words>
-    case 'crm-mapping':
-      return <Words label="Column matches">{result.matches.join('\n')}</Words>
-  }
+  const { label, text } = jobResultText(result)
+  return <Words label={label}>{text}</Words>
 }
 
 /** Where a row was asked, on the account card: the org's staff page. */
@@ -162,19 +139,9 @@ const JobRow = ({ row, showOrg }: { row: StaffAiJobRow; showOrg?: boolean }) => 
       <Chip size="small" variant="outlined" label={`${row.credits.toLocaleString()} credits`} />
     </Meta>
     <Words label="Brief">{row.brief}</Words>
-    {row.inputs?.length ? (
-      <Words label="Filled in">
-        {row.inputs.map((input) => `${input.label}: ${input.value}`).join('\n')}
-      </Words>
-    ) : null}
+    {row.inputs?.length ? <Words label="Filled in">{jobFilledInText(row)}</Words> : null}
     {row.result ? <Result result={row.result} /> : null}
-    {row.outputs.length ? (
-      <Words label="Made">
-        {row.outputs
-          .map((output) => [output.label, output.note].filter(Boolean).join(' — '))
-          .join('\n')}
-      </Words>
-    ) : null}
+    {row.outputs.length ? <Words label="Made">{jobMadeText(row)}</Words> : null}
     {row.error ? <Alert severity="error">{row.error}</Alert> : null}
   </Stack>
 )

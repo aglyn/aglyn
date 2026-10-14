@@ -12,7 +12,7 @@ final class AIPluginTests: XCTestCase {
   func testRegistersItsDeclaredScreensAndLinks() {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
-      screens: ["ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.signals", "ai.staffOrg", "ai.staffUser"],
+      screens: ["ai.credits", "ai.job", "ai.jobs", "ai.member", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"],
       quickActions: ["ai.open"],
       deepLinks: ["ai.job.link", "ai.jobs.link", "ai.signals.link"])
     let result = NativePluginLoader.load(

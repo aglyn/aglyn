@@ -123,10 +123,10 @@ import { GET, resetAddonSinceCache } from './ai-admin-org'
 // resolves no add-on credits at all.
 import '../declarations'
 
-const get = (opts: { token?: string; orgId?: string } = {}) =>
+const get = (opts: { token?: string; orgId?: string; view?: string } = {}) =>
   GET(
     new Request(
-      `https://app.aglyn.com/api/ai/admin/org?orgId=${opts.orgId ?? 'org-1'}`,
+      `https://app.aglyn.com/api/ai/admin/org?orgId=${opts.orgId ?? 'org-1'}${opts.view ? `&view=${opts.view}` : ''}`,
       {
         headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {},
       },
@@ -485,5 +485,39 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       cacheHitRate: null,
       kinds: [],
     })
+  })
+
+  it('answers the card as it prints for ?view=prepared, from the same figures', async () => {
+    mockQueryDocs['orgs/org-1/usage'] = [
+      { id: '2026-09', data: { month: '2026-09', assistCostUsd: 1.2345, assistCredits: 1235, assistOverageUsd: 0 } },
+      // A rollup from before the credit meter: spend reads zero, credits and overage read as not measured.
+      { id: '2026-08', data: { month: '2026-08' } },
+    ]
+    staff()
+    const view = await (await get({ token: 'tok', view: 'prepared' })).json()
+    const band = 12_000 + AI_ADDON_CREDITS_PER_MONTH.pro
+    expect(view.pool.band).toBe(
+      `${band.toLocaleString('en-US')} credits = 12,000 staff override + ${AI_ADDON_CREDITS_PER_MONTH.pro.toLocaleString('en-US')} Aglyn AI add-on`,
+    )
+    expect(view.pool.used).toBe(`Used 2,500 credits ($2.50 provider spend) \u00b7 ${(band - 2_500).toLocaleString('en-US')} remaining`)
+    expect(view.refusals.heading).toBe('Refusals this month \u00b7 3')
+    expect(view.refusals.chips[0]).toBe('band 1')
+    expect(view.jobs.recent.map((job: { id: string; giveBack: number }) => [job.id, job.giveBack])).toEqual([
+      ['job-2', 120],
+      ['job-1', 0],
+    ])
+    expect(view.giveBack).toMatchObject({ defaultMeter: 'workspace', returnable: 2_500 })
+    expect(view.users[0]).toMatchObject({ uid: 'user-a', name: 'Ada' })
+    // The usage table's AI columns, and the pool line above them.
+    expect(view.usage.pool).toMatch(/add-on on/)
+    expect(view.usage.months).toEqual([
+      { month: '2026-09', headline: 'Assist $1.2345', detail: 'AI credits used 1,235 \u00b7 AI overage billed $0.00' },
+      { month: '2026-08', headline: 'Assist $0.0000', detail: 'AI credits used \u2014 \u00b7 AI overage billed \u2014' },
+    ])
+  })
+
+  it('leaves the usage rollups out of the card the web draws', async () => {
+    staff()
+    expect((await (await get({ token: 'tok' })).json()).usage).toBeUndefined()
   })
 })
