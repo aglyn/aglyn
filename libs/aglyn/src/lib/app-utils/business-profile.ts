@@ -82,6 +82,9 @@ const SOURCE_RANK: Readonly<Record<BusinessProfileSource, number>> = {
 export const BUSINESS_TONES = ['friendly', 'professional', 'playful', 'premium', 'plain'] as const
 export type BusinessTone = (typeof BUSINESS_TONES)[number]
 
+/** The tones as a plain list, in the order the owner picks them, for the native apps' pickers. */
+export const BUSINESS_TONE_ORDER: readonly string[] = BUSINESS_TONES
+
 /** Each tone as the owner picks it and as a writer is told it. */
 export const BUSINESS_TONE_LABELS: Readonly<Record<BusinessTone, string>> = {
   friendly: 'Friendly and warm',
@@ -101,6 +104,9 @@ export const BUSINESS_PROFILE_FIELDS = [
   'toneNotes',
 ] as const
 export type BusinessProfileField = (typeof BUSINESS_PROFILE_FIELDS)[number]
+
+/** The stored fields as a plain list, for the native apps' writers. */
+export const BUSINESS_PROFILE_FIELD_ORDER: readonly string[] = BUSINESS_PROFILE_FIELDS
 
 /** Each field's ceiling, in characters; `services` is per item. */
 export const BUSINESS_PROFILE_MAX_CHARS: Readonly<Record<Exclude<BusinessProfileField, 'tone'>, number>> = {
