@@ -152,6 +152,7 @@ import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import { settleMediaPageRead } from './media-page-read'
+import { imageEditCopyName } from '@aglyn/aglyn/app-utils/image-edit'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { mediaOriginalSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { probeVideoFile } from '../../utils/video-probe'
@@ -5454,10 +5455,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             // Save-as-copy uploads a new asset via the upload path.
             setBusy(true)
             try {
-              const copyName = (editor?.fileName || 'image').replace(
-                /(\.[^.]+)?$/,
-                ' (edited)$1',
-              )
+              const copyName = imageEditCopyName(editor?.fileName || 'image')
               const response = await authorizedFetch(
                 user,
                 '/api/media/upload',

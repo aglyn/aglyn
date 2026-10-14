@@ -656,6 +656,10 @@
     {
       "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
       "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "why": "The media image editor's arithmetic: the quarter-turn size, the crop a drag draws, where an edit cuts and how big it comes out, the copy's name and type (AGL-3668). No imports."
     }
   ]
 }

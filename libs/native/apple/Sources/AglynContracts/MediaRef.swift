@@ -146,6 +146,16 @@ public func resolveMediaSrc(_ value: String?, hostID: String? = nil) -> String? 
   return "\(mediaCDNRoute)/\(hostQualifiedScope(ref.scope, hostID: hostID))/\(ref.mediaId)"
 }
 
+/// The poster frame a film's reference can be asked for, or nil when the value
+/// is not served by this platform's CDN. Asking is not a promise one exists:
+/// only a film whose document records a captured `poster` has one.
+public func mediaPosterSrc(_ value: String?, hostID: String? = nil, width: Double? = nil) -> String? {
+  guard let src = resolveMediaSrc(value, hostID: hostID), src.hasPrefix("\(mediaCDNRoute)/") else { return nil }
+  var query = "poster=1"
+  if let width, width.isFinite, width > 0 { query += "&w=\(Int64((width + 0.5).rounded(.down)))" }
+  return src + (src.contains("?") ? "&" : "?") + query
+}
+
 /// An org asset's CDN path rewritten to name the site using it, but only for
 /// an asset restricted to some sites; an org-wide asset, a site's own file and
 /// a path already naming a site are returned untouched.
@@ -197,4 +207,15 @@ public func libraryVideoSeconds(_ video: Any?) -> Int? {
   guard duration > 0, duration <= videoMaxDurationMS else { return nil }
   guard width > 0, width <= videoMaxDimension, height > 0, height <= videoMaxDimension else { return nil }
   return max(1, Int((duration / 1000 + 0.5).rounded(.down)))
+}
+
+private let downloadQuery = try! NSRegularExpression(pattern: "[?&]download=1(?:&|$)")
+
+/// The URL of an asset's ORIGINAL bytes: the CDN url with `?download=1`, or the url unchanged when it is not a CDN one.
+/// The bare CDN url is an upright, stripped display copy; the image editor's "Replace original" must start from the file itself
+/// (`mediaOriginalSrc`).
+public func mediaOriginalSrc(_ src: String) -> String {
+  let whole = NSRange(src.startIndex..., in: src)
+  guard src.contains("\(mediaCDNRoute)/"), downloadQuery.firstMatch(in: src, range: whole) == nil else { return src }
+  return src + (src.contains("?") ? "&" : "?") + "download=1"
 }

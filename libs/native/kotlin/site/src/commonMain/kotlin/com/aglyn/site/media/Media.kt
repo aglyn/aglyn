@@ -142,6 +142,8 @@ data class MediaItem(
   val visibleTo: List<String>,
   /** A film's measured length in whole seconds (`videoMediaProps`); null for anything else or a film that records none. */
   val videoSeconds: Long? = null,
+  /** Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404). */
+  val hasPoster: Boolean = false,
 ) {
   /** Where the file is served from: its CDN path on the console origin, else its stored URL. */
   fun src(origin: String): String? = cdnPath?.let { origin.trimEnd('/') + it } ?: url
@@ -178,6 +180,7 @@ data class MediaItem(
         uploadedBy = doc.string("uploadedBy"),
         visibleTo = (doc.data["visibleTo"] as? List<*>)?.filterIsInstance<String>().orEmpty(),
         videoSeconds = libraryVideoSeconds(doc.data["video"]),
+        hasPoster = doc.data["poster"] is Map<*, *>,
       )
     }
   }
@@ -219,10 +222,18 @@ data class MediaFilters(
   val tag: String = "",
   val minMegabytes: String = "",
   val maxMegabytes: String = "",
+  /** The day a file was uploaded on or after, and on or before (`yyyy-MM-dd`, the site's day), or blank. */
+  val uploadedAfter: String = "",
+  val uploadedBefore: String = "",
+  /** The member who uploaded it (a user id, or `api:…` for a key), or null for anyone. */
+  val uploadedBy: String? = null,
 ) {
   /** How many are set, for the Filters button. */
   val count: Int
-    get() = listOf(orientation != null, alt != null, tag.isNotBlank(), minMegabytes.isNotBlank(), maxMegabytes.isNotBlank()).count { it }
+    get() = listOf(
+      orientation != null, alt != null, tag.isNotBlank(), minMegabytes.isNotBlank(), maxMegabytes.isNotBlank(),
+      uploadedAfter.isNotBlank(), uploadedBefore.isNotBlank(), uploadedBy != null,
+    ).count { it }
 
   /**
    * The clauses the query plan reads. A reader limited to some sites has no
@@ -236,6 +247,9 @@ data class MediaFilters(
     if (!scoped) tag.trim().lowercase().takeIf { it.isNotEmpty() }?.let { add(ListFilterRequest("tags", "contains", it)) }
     minMegabytes.trim().takeIf { it.isNotEmpty() }?.let { add(mediaQueryRequest(ListFilterRequest("sizeMb", ">=", it))) }
     maxMegabytes.trim().takeIf { it.isNotEmpty() }?.let { add(mediaQueryRequest(ListFilterRequest("sizeMb", "<=", it))) }
+    uploadedAfter.trim().takeIf { it.isNotEmpty() }?.let { add(ListFilterRequest("uploaded", "onOrAfter", it)) }
+    uploadedBefore.trim().takeIf { it.isNotEmpty() }?.let { add(ListFilterRequest("uploaded", "onOrBefore", it)) }
+    uploadedBy?.let { add(ListFilterRequest("uploadedBy", "equals", it)) }
   }
 }
 
@@ -302,6 +316,21 @@ fun mediaPlanNotices(plan: ListQueryPlan): List<String> =
     val column = ((refusal.clause as? JsonObject)?.get("field") as? JsonPrimitive)?.contentOrNull
     "${Contracts.mediaFilterHeaders[column] ?: column ?: "A filter"}: ${refusal.reason}"
   }
+
+/** A member of the workspace, for the Uploaded by filter: their id, and the name or email they are shown as. */
+data class UploaderOption(val uid: String, val label: String)
+
+/** The workspace's members (`GET /api/orgs/members`), as the Uploaded by filter lists them; none when the route answers no. */
+suspend fun uploaderOptions(api: ConsoleApiClient, orgId: String): List<UploaderOption> {
+  val answer = runCatching { api.request("/api/orgs/members", ApiMethod.GET, query = mapOf("orgId" to orgId)) }.getOrNull() as? JsonObject ?: return emptyList()
+  return (answer["members"] as? JsonArray).orEmpty().mapNotNull { entry ->
+    val member = entry as? JsonObject ?: return@mapNotNull null
+    val uid = (member["\$id"] as? JsonPrimitive)?.contentOrNull ?: (member["uid"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+    val email = (member["email"] as? JsonPrimitive)?.contentOrNull
+    val name = (member["displayName"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+    UploaderOption(uid, name ?: email ?: uid)
+  }.sortedBy { it.label.lowercase() }
+}
 
 /** One library view: its folder, filters and the files read so far. */
 class MediaListModel(
