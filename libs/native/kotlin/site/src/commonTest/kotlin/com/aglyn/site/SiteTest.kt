@@ -508,4 +508,55 @@ class SiteTest {
     assertNull(bodies[1]["rightsConfirmed"])
     assertEquals("I own this audio or have a license to use it on my site", com.aglyn.site.media.AUDIO_RIGHTS_STATEMENT)
   }
+
+  @Test
+  fun aFilmIsReadOnTheDeviceAndItsPosterRidesTheUpload() = runTest {
+    val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      if (text.isNotEmpty()) bodies += Json.parseToJsonElement(text).jsonObject
+      respond("""{"mediaId":"m1"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    var probed = 0
+    val probe = com.aglyn.ui.VideoProbe { probed += 1; com.aglyn.ui.VideoProbeResult(2_500, 1920, 1080, byteArrayOf(9, 9, 9)) }
+    val client = ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val api = com.aglyn.site.media.MediaApi(client, MediaScope.Site("h1"), probe)
+    api.upload(PickedFile("film.mp4", "video/mp4", byteArrayOf(1, 2, 3)), null)
+    api.upload(PickedFile("a.png", "image/png", byteArrayOf(1)), null)
+    // Only a film is probed; the poster is base64 and the three numbers ride together.
+    assertEquals(1, probed)
+    val video = bodies[0].getValue("video").jsonObject
+    assertEquals(listOf("2500", "1920", "1080"), listOf("durationMs", "width", "height").map { video.getValue(it).jsonPrimitive.content })
+    assertEquals("CQkJ", bodies[0]["poster"]?.jsonPrimitive?.content)
+    assertNull(bodies[0]["posterError"])
+    assertNull(bodies[1]["video"])
+    assertNull(bodies[1]["poster"])
+  }
+
+  @Test
+  fun whatAProbeAddsIsBoundedAsTheServerBoundsIt() {
+    val ok = com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 640, 360, byteArrayOf(1)))
+    assertEquals(setOf("video", "poster"), ok.keys)
+    // No poster: the reason goes instead, cut to two hundred characters; and a poster hides the reason.
+    val failed = com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 640, 360, null, "x".repeat(300)))
+    assertEquals(setOf("video", "posterError"), failed.keys)
+    assertEquals(200, (failed["posterError"] as String).length)
+    assertEquals(setOf("video", "poster"), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 640, 360, byteArrayOf(1), "ignored")).keys)
+    // Length and frame size are all or nothing, and bounded: a day, and 16384 a side.
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, null, 360)).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(0, 640, 360)).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(86_400_001, 640, 360)).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 16_385, 360)).keys)
+    // Nothing found and nothing said adds nothing.
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult()).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(reason = "   ")).keys)
+  }
+
+  @Test
+  fun aPosterIsTakenATenthOfTheWayInButNeverPastTheFirstSecond() {
+    assertEquals(0.1, com.aglyn.site.media.posterTimeSeconds(0.0))
+    assertEquals(0.1, com.aglyn.site.media.posterTimeSeconds(Double.POSITIVE_INFINITY))
+    assertEquals(0.5, com.aglyn.site.media.posterTimeSeconds(5.0))
+    assertEquals(1.0, com.aglyn.site.media.posterTimeSeconds(600.0))
+  }
 }
