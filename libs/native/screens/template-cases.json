@@ -416,6 +416,26 @@
         "c": true,
         "until": 1790007200000
       }
+    },
+    {
+      "body": {
+        "types": {
+          "$put": {
+            "map": {},
+            "key": "{params.uid}",
+            "value": {
+              "enabled": true
+            }
+          }
+        }
+      },
+      "expect": {
+        "types": {
+          "u2": {
+            "enabled": true
+          }
+        }
+      }
     }
   ],
   "condition": [

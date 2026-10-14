@@ -282,7 +282,7 @@
               "screen": "core.staff.alerts"
             },
             {
-              "title": "Audit archive",
+              "title": "Audit log",
               "icon": "archivebox|inventory_2",
               "screen": "core.staff.audit"
             },
@@ -2382,16 +2382,51 @@
         "/admin/support"
       ],
       "load": {
-        "tickets": "/api/support/tickets"
+        "queue": {
+          "url": "/api/support/tickets?view=queue&pageSize=50",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "when": "params.status != all",
+          "filters": [
+            {
+              "field": "status",
+              "op": "equals",
+              "value": "{params.status|'open'}"
+            }
+          ]
+        },
+        "allQueue": {
+          "url": "/api/support/tickets?view=queue&pageSize=50",
+          "cursor": "nextCursor",
+          "items": "rows",
+          "when": "params.status == all"
+        },
+        "count": {
+          "url": "/api/support/tickets?view=openCount",
+          "optional": true
+        }
       },
       "blocks": [
         {
+          "type": "fields",
+          "object": "data.count",
+          "rows": [
+            {
+              "label": "Open tickets",
+              "value": "{item.open:number}"
+            }
+          ]
+        },
+        {
           "type": "list",
-          "items": "data.tickets.tickets",
+          "title": "Tickets",
+          "when": "params.status != all",
+          "load": "queue",
           "split": true,
+          "items": "data.queue.rows",
           "primary": "{item.subject}",
-          "secondary": "{item.orgName|item.orgId} · {item.createdByEmail|item.email}",
-          "tertiary": "Due {item.responseDueAt:datetime}",
+          "secondary": "{item.supportTier:title} · {item.plan|'Free':title} · {item.orgId}",
+          "tertiary": "Updated {item.updatedAt:datetime} · reply due {item.responseDueAt:datetime}",
           "icon": "lifepreserver|support",
           "badges": [
             {
@@ -2400,6 +2435,11 @@
                 "Open": "warning",
                 "*": "neutral"
               }
+            },
+            {
+              "text": "First reply owed",
+              "when": "item.status == open && !item.firstRespondedAt",
+              "tone": "error"
             }
           ],
           "open": {
@@ -2409,7 +2449,77 @@
               "orgId": "{item.orgId}"
             }
           },
-          "empty": "No tickets."
+          "empty": "No tickets match. A clear queue is good news."
+        },
+        {
+          "type": "list",
+          "title": "Tickets",
+          "when": "params.status == all",
+          "load": "allQueue",
+          "split": true,
+          "items": "data.allQueue.rows",
+          "primary": "{item.subject}",
+          "secondary": "{item.supportTier:title} · {item.plan|'Free':title} · {item.orgId}",
+          "tertiary": "Updated {item.updatedAt:datetime} · reply due {item.responseDueAt:datetime}",
+          "icon": "lifepreserver|support",
+          "badges": [
+            {
+              "text": "{item.status:title}",
+              "tones": {
+                "Open": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "First reply owed",
+              "when": "item.status == open && !item.firstRespondedAt",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.ticket",
+            "params": {
+              "ticketId": "{item.$id}",
+              "orgId": "{item.orgId}"
+            }
+          },
+          "empty": "No tickets match. A clear queue is good news."
+        }
+      ],
+      "subtitle": "The queue, by what is owed first",
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Open, closed or all",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "status",
+              "label": "Show",
+              "kind": "select",
+              "initial": "{params.status|'open'}",
+              "options": [
+                {
+                  "value": "open",
+                  "label": "Open"
+                },
+                {
+                  "value": "closed",
+                  "label": "Closed"
+                },
+                {
+                  "value": "all",
+                  "label": "All"
+                }
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.support",
+            "params": {
+              "status": "{form.status}"
+            }
+          }
         }
       ]
     },
@@ -2435,11 +2545,11 @@
             },
             {
               "label": "From",
-              "value": "{item.createdByEmail|item.email}"
+              "value": "{data.ticket.messages.0.authorEmail}"
             },
             {
               "label": "Workspace",
-              "value": "{item.orgName|params.orgId}"
+              "value": "{item.orgId|params.orgId}"
             },
             {
               "label": "Opened",
@@ -2448,6 +2558,14 @@
             {
               "label": "Reply due",
               "value": "{item.responseDueAt:datetime}"
+            },
+            {
+              "label": "Plan and tier",
+              "value": "{item.plan|'Free':title} · {item.supportTier:title}"
+            },
+            {
+              "label": "First reply",
+              "value": "{item.firstRespondedAt:datetime|'Not yet'}"
             }
           ]
         },
@@ -2456,8 +2574,15 @@
           "title": "Conversation",
           "items": "data.ticket.messages",
           "primary": "{item.body}",
-          "secondary": "{item.authorEmail|item.from:title} · {item.createdAt:datetime}",
-          "count": false
+          "secondary": "{item.authorEmail} · {item.createdAt:datetime}",
+          "count": false,
+          "badges": [
+            {
+              "text": "Staff",
+              "when": "item.staff",
+              "tone": "info"
+            }
+          ]
         },
         {
           "type": "form",
@@ -4322,8 +4447,13 @@
               "kind": "number"
             },
             {
+              "key": "expiresAt",
+              "label": "Expires on (optional, YYYY-MM-DD)",
+              "kind": "text"
+            },
+            {
               "key": "confirmHigh",
-              "label": "I confirm a discount under cost",
+              "label": "I confirm a discount of 40% or more",
               "kind": "toggle"
             }
           ],
@@ -4336,9 +4466,16 @@
             "duration": "{form.duration}",
             "durationInMonths": "{form.durationInMonths}",
             "maxRedemptions": "{form.maxRedemptions}",
-            "confirmHighDiscount": "{form.confirmHigh}"
+            "confirmHighDiscount": "{form.confirmHigh}",
+            "expiresAt": "{form.expiresAt}"
           },
-          "success": "Created {form.name}"
+          "success": "Created {form.name}",
+          "report": [
+            {
+              "text": "Full-use check: {response.fullUse.ok:yesno}. A coupon at or past the approval threshold needs the confirmation switch.",
+              "when": "response.fullUse"
+            }
+          ]
         }
       ],
       "blocks": [
@@ -4346,18 +4483,44 @@
           "type": "list",
           "items": "data.coupons.coupons",
           "primary": "{item.name|item.id}",
-          "secondary": "{item.duration:title} · {item.percentOff|item.amountOffUsd} off",
-          "tertiary": "Codes: {item.codes|item.code|'none'} · used {item.timesRedeemed|'0'}",
+          "secondary": "{item.percentOff|item.amountOffUsd} off · {item.duration:title} {item.durationInMonths} · used {item.timesRedeemed|'0'} of {item.maxRedemptions|'unlimited'}",
+          "tertiary": "Created {item.created:date} · expires {item.redeemBy:date}",
           "icon": "tag|local_offer",
           "badges": [
             {
+              "text": "Valid",
+              "when": "item.valid",
+              "tone": "success"
+            },
+            {
+              "text": "Not valid",
+              "when": "!item.valid",
+              "tone": "neutral"
+            }
+          ],
+          "actions": [],
+          "empty": "No coupons.",
+          "title": "Coupons",
+          "count": true
+        },
+        {
+          "type": "list",
+          "title": "Codes",
+          "items": "data.coupons.coupons",
+          "flatten": "codes",
+          "primary": "{item.code}",
+          "secondary": "{item.$parent.name|item.$parent.id} · used {item.timesRedeemed|'0'}",
+          "tertiary": "Most redemptions {item.maxRedemptions|'unlimited'}",
+          "icon": "ticket|local_offer",
+          "badges": [
+            {
               "text": "Active",
-              "when": "item.active || item.valid",
+              "when": "item.active",
               "tone": "success"
             },
             {
               "text": "Inactive",
-              "when": "!item.active && !item.valid",
+              "when": "!item.active",
               "tone": "neutral"
             }
           ],
@@ -4365,31 +4528,43 @@
             {
               "id": "deactivate",
               "label": "Deactivate code",
-              "icon": "pause.circle|pause",
-              "when": "item.promotionCodeId && item.active",
+              "icon": "pause.circle|pause_circle",
+              "when": "item.active",
               "url": "/api/admin/coupons",
               "body": {
                 "action": "deactivate",
-                "promotionCodeId": "{item.promotionCodeId}"
+                "promotionCodeId": "{item.id}"
               },
-              "success": "Deactivated"
+              "success": "Deactivated",
+              "reload": true
             },
             {
               "id": "activate",
               "label": "Activate code",
-              "icon": "play.circle|check_circle",
-              "when": "item.promotionCodeId && !item.active",
+              "icon": "play.circle|play_circle",
+              "when": "!item.active",
               "url": "/api/admin/coupons",
+              "prompt": [
+                {
+                  "key": "confirm",
+                  "label": "I confirm a code that gives 40% or more",
+                  "kind": "toggle"
+                }
+              ],
               "body": {
                 "action": "activate",
-                "promotionCodeId": "{item.promotionCodeId}"
+                "promotionCodeId": "{item.id}",
+                "confirmHighDiscount": "{form.confirm}"
               },
-              "success": "Activated"
+              "success": "Activated",
+              "reload": true
             }
           ],
-          "empty": "No coupons."
+          "count": false,
+          "empty": "No promotion codes."
         }
-      ]
+      ],
+      "subtitle": "Stripe coupons and the codes customers type"
     },
     {
       "id": "core.staff.revenue",
@@ -6693,21 +6868,41 @@
       },
       "blocks": [
         {
+          "type": "notice",
+          "tone": "info",
+          "text": "Release flags are global: publishing a change affects every customer immediately (clients refresh within an hour). Staff always see every feature. Editing needs the super staff role."
+        },
+        {
           "type": "list",
           "items": "data.flags.flags",
-          "primary": "{item.key}",
-          "secondary": "{item.note}",
-          "tertiary": "Rollout {item.rolloutPercent|'0'}% · plans {item.plans|'all'}",
+          "primary": "{item.label}",
+          "secondary": "{item.key}",
+          "tertiary": "{item.description}",
           "icon": "flag|flag",
           "badges": [
             {
               "text": "On",
-              "when": "item.enabled",
+              "when": "item.value.enabled",
               "tone": "success"
             },
             {
+              "text": "Staged {item.value.rolloutPercent}%",
+              "when": "!item.value.enabled && item.value.rolloutPercent",
+              "tone": "info"
+            },
+            {
               "text": "Off",
-              "when": "!item.enabled",
+              "when": "!item.value.enabled && !item.value.rolloutPercent",
+              "tone": "neutral"
+            },
+            {
+              "text": "Plans: {item.value.plans}",
+              "when": "item.value.plans",
+              "tone": "info"
+            },
+            {
+              "text": "Not in template (code default)",
+              "when": "!item.published",
               "tone": "neutral"
             }
           ],
@@ -6717,41 +6912,56 @@
               "label": "Change",
               "icon": "slider.horizontal.3|tune",
               "when": "staff.super",
-              "method": "PATCH",
+              "method": "PUT",
               "url": "/api/admin/flags",
               "prompt": [
                 {
                   "key": "enabled",
-                  "label": "On",
+                  "label": "On for everyone",
                   "kind": "toggle",
-                  "initial": "{item.enabled}"
+                  "initial": "{item.value.enabled}"
                 },
                 {
                   "key": "rollout",
-                  "label": "Rollout percent",
+                  "label": "Staged rollout percent (when off)",
                   "kind": "number",
-                  "initial": "{item.rolloutPercent}"
+                  "initial": "{item.value.rolloutPercent}",
+                  "help": "0 to 100. Customers are picked by a stable hash, not by choice."
+                },
+                {
+                  "key": "plans",
+                  "label": "Only these plans (comma separated, blank for every plan)",
+                  "kind": "text",
+                  "initial": "{item.value.plans}",
+                  "help": "Plan ids such as starter, pro, business. Sending blank clears the targeting."
                 },
                 {
                   "key": "note",
                   "label": "Note",
                   "kind": "text",
-                  "initial": "{item.note}"
+                  "initial": "{item.value.note}"
                 }
               ],
+              "confirm": "Publishing {item.label} reaches every customer.",
               "body": {
                 "key": "{item.key}",
                 "enabled": "{form.enabled}",
                 "rolloutPercent": "{form.rollout}",
+                "plans": {
+                  "$split": "{form.plans}"
+                },
                 "note": "{form.note}",
                 "etag": "{data.flags.etag}"
               },
-              "success": "Saved {item.key}"
+              "success": "Published {item.label}",
+              "reload": true
             }
           ],
+          "count": true,
           "empty": "No flags."
         }
-      ]
+      ],
+      "subtitle": "Global switches; publishing a change reaches every customer within an hour"
     },
     {
       "id": "core.staff.health",
@@ -8133,24 +8343,59 @@
       },
       "blocks": [
         {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every alert is a console notification for every staff member. The ones switched on also email the operator and post to the webhook."
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "text": "Email goes to STAFF_ALERT_EMAIL.",
+          "when": "data.alerts.recipients.source == STAFF_ALERT_EMAIL"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Email goes to the support address (NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL).",
+          "when": "data.alerts.recipients.source == NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Email goes to every staff account ({data.alerts.recipients.count}).",
+          "when": "data.alerts.recipients.source == staff-accounts"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Email goes to nobody: no alerts inbox, support address or staff address is set.",
+          "when": "data.alerts.recipients.source == none"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "text": "The out-of-band webhook is set, and signed.",
+          "when": "data.alerts.webhookConfigured && data.alerts.webhookSigned"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "The out-of-band webhook is set, unsigned.",
+          "when": "data.alerts.webhookConfigured && !data.alerts.webhookSigned"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "No out-of-band webhook is set (OPERATOR_ALERT_WEBHOOK_URL). If the mail provider is what failed, only the console bell will say so.",
+          "when": "!data.alerts.webhookConfigured"
+        },
+        {
           "type": "fields",
           "object": "data.alerts",
           "rows": [
             {
-              "label": "Digest hour (UTC)",
+              "label": "Daily digest hour (UTC)",
               "value": "{item.digestHourUtc}"
-            },
-            {
-              "label": "Webhook",
-              "value": "{item.webhookConfigured:yesno}"
-            },
-            {
-              "label": "Recipients",
-              "value": "{item.recipients}"
-            },
-            {
-              "label": "Updated by",
-              "value": "{item.updatedByEmail} · {item.updatedAtMs:datetime}"
             }
           ]
         },
@@ -8160,59 +8405,191 @@
           "items": "data.alerts.alerts",
           "primary": "{item.label|item.type}",
           "secondary": "{item.description}",
+          "tertiary": "{item.tier:title} · {item.category:title} {item.pluginId}",
+          "icon": "bell.badge|notifications",
           "badges": [
             {
-              "text": "On",
-              "when": "item.effective.enabled",
-              "tone": "success"
+              "text": "Changed",
+              "when": "item.overridden",
+              "tone": "info"
             },
             {
               "text": "{item.effective.delivery:title}",
-              "when": "item.effective.enabled"
+              "when": "item.effective.enabled",
+              "tone": "neutral"
             }
           ],
-          "count": false
-        },
-        {
-          "type": "actions",
-          "when": "staff.super",
-          "items": [
+          "toggle": {
+            "value": "{item.effective.enabled}",
+            "disabled": "!staff.super",
+            "label": "{item.label}",
+            "on": {
+              "id": "on",
+              "label": "Turn on",
+              "method": "PUT",
+              "url": "/api/admin/operator-alerts",
+              "body": {
+                "types": {
+                  "$put": {
+                    "map": {},
+                    "key": "{item.type}",
+                    "value": {
+                      "enabled": true
+                    }
+                  }
+                }
+              },
+              "success": "Saved",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off",
+              "method": "PUT",
+              "url": "/api/admin/operator-alerts",
+              "body": {
+                "types": {
+                  "$put": {
+                    "map": {},
+                    "key": "{item.type}",
+                    "value": {
+                      "enabled": false
+                    }
+                  }
+                }
+              },
+              "success": "Saved",
+              "reload": true
+            }
+          },
+          "actions": [
             {
-              "id": "digest",
-              "label": "Change the digest hour",
+              "id": "delivery",
+              "label": "Immediate or daily digest",
               "icon": "clock|schedule",
+              "when": "staff.super && item.effective.enabled",
+              "method": "PUT",
               "url": "/api/admin/operator-alerts",
               "prompt": [
                 {
-                  "key": "hour",
-                  "label": "Hour (0–23, UTC)",
-                  "kind": "number",
-                  "required": true,
-                  "initial": "{data.alerts.digestHourUtc}"
+                  "key": "delivery",
+                  "label": "Deliver",
+                  "kind": "select",
+                  "initial": "{item.effective.delivery}",
+                  "options": [
+                    {
+                      "value": "immediate",
+                      "label": "Immediate"
+                    },
+                    {
+                      "value": "digest",
+                      "label": "Daily digest"
+                    }
+                  ]
                 }
               ],
               "body": {
-                "digestHourUtc": "{form.hour}"
+                "types": {
+                  "$put": {
+                    "map": {},
+                    "key": "{item.type}",
+                    "value": {
+                      "delivery": "{form.delivery}"
+                    }
+                  }
+                }
               },
-              "success": "Saved"
+              "success": "Saved",
+              "reload": true
             },
             {
               "id": "test",
-              "label": "Send a test alert",
+              "label": "Send a test",
               "icon": "paperplane|send",
+              "when": "staff.super",
               "url": "/api/admin/operator-alerts",
               "body": {
-                "action": "test"
+                "action": "test",
+                "type": "{item.type}"
               },
-              "success": "Sent"
+              "reload": false,
+              "success": "Test sent",
+              "report": [
+                {
+                  "text": "Email: sent",
+                  "when": "response.email.sent"
+                },
+                {
+                  "text": "Email: not sent {response.email.reason}",
+                  "when": "!response.email.sent"
+                },
+                {
+                  "text": "Webhook: posted",
+                  "when": "response.webhook.posted"
+                },
+                {
+                  "text": "Webhook: not posted {response.webhook.reason} {response.webhook.status}",
+                  "when": "!response.webhook.posted"
+                }
+              ]
             }
-          ]
+          ],
+          "count": true,
+          "empty": "No alert types."
+        },
+        {
+          "type": "list",
+          "title": "Health checks",
+          "footer": "Each check's last recorded state. A change alerts the operator once: once when it goes degraded and once when it recovers.",
+          "items": "data.alerts.health",
+          "primary": "{item.label}",
+          "secondary": "{item.detail}",
+          "tertiary": "Since {item.sinceMs:datetime}",
+          "badges": [
+            {
+              "text": "OK",
+              "when": "item.status == ok",
+              "tone": "success"
+            },
+            {
+              "text": "Degraded",
+              "when": "item.status != ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No check has reported yet."
+        }
+      ],
+      "subtitle": "Which faults email the operator, and whether the channels work",
+      "actions": [
+        {
+          "id": "digest",
+          "label": "Change the digest hour",
+          "icon": "clock|schedule",
+          "when": "staff.super",
+          "method": "PUT",
+          "url": "/api/admin/operator-alerts",
+          "prompt": [
+            {
+              "key": "hour",
+              "label": "Hour (0 to 23, UTC)",
+              "kind": "number",
+              "required": true,
+              "initial": "{data.alerts.digestHourUtc}"
+            }
+          ],
+          "body": {
+            "digestHourUtc": "{form.hour}"
+          },
+          "success": "Saved",
+          "reload": true
         }
       ]
     },
     {
       "id": "core.staff.audit",
-      "title": "Audit archive · {params.month|now.month}",
+      "title": "Audit log",
       "icon": "archivebox|inventory_2",
       "scope": "staff",
       "group": "staff",
@@ -8222,9 +8599,54 @@
         "/admin/audit"
       ],
       "load": {
+        "entries": {
+          "query": {
+            "collection": "adminAudit",
+            "orderBy": "at desc",
+            "limit": 100,
+            "where": [
+              [
+                "scope",
+                "==",
+                "{params.scope}",
+                "optional"
+              ],
+              [
+                "action",
+                "==",
+                "{params.action}",
+                "optional"
+              ]
+            ]
+          },
+          "optional": true
+        },
         "archive": "/api/admin/audit-archive/browse?month={params.month|now.month}"
       },
       "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Could not read the audit log. This is not the same as there being no entries.",
+          "when": "!data.entries"
+        },
+        {
+          "type": "list",
+          "title": "Admin actions",
+          "footer": "Each entry shows the actor's address as it was when the action was recorded; it is not updated if that account's address changes later. The uid is the identifier that does not go out of date. The latest 100 are read; filter by scope or action to reach further back.",
+          "items": "data.entries.items",
+          "primary": "{item.action}",
+          "secondary": "{item.scope} · {item.target} · {item.reason}",
+          "tertiary": "{item.actorEmail|item.actorUid} · {item.at:datetime}",
+          "icon": "list.bullet.rectangle|history",
+          "open": {
+            "screen": "core.staff.auditEntry",
+            "params": {
+              "entryId": "{item.$id}"
+            }
+          },
+          "empty": "No audit entries match."
+        },
         {
           "type": "list",
           "items": "data.archive.files",
@@ -8238,14 +8660,43 @@
               "month": "{params.month|now.month}"
             }
           },
-          "empty": "Nothing archived for this month."
+          "empty": "Nothing archived for this month.",
+          "title": "Archive ({params.month|now.month})",
+          "footer": "Entries past the 90-day window are moved into the Storage compliance trail; browse the archive up to 365 days back."
         }
       ],
-      "label": "Audit archive",
+      "label": "Audit log",
       "actions": [
         {
+          "id": "filter",
+          "label": "Filter the log",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "scope",
+              "label": "Scope (workspace, site, account...)",
+              "kind": "text",
+              "initial": "{params.scope}"
+            },
+            {
+              "key": "action",
+              "label": "Action (as recorded, such as org.override)",
+              "kind": "text",
+              "initial": "{params.action}"
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.audit",
+            "params": {
+              "scope": "{form.scope}",
+              "action": "{form.action}",
+              "month": "{params.month}"
+            }
+          }
+        },
+        {
           "id": "month",
-          "label": "Another month",
+          "label": "Another archive month",
           "icon": "calendar|event",
           "prompt": [
             {
@@ -8259,11 +8710,14 @@
           "navigate": {
             "screen": "core.staff.audit",
             "params": {
-              "month": "{form.month}"
+              "month": "{form.month}",
+              "scope": "{params.scope}",
+              "action": "{params.action}"
             }
           }
         }
-      ]
+      ],
+      "subtitle": "What staff did, and the archive of what is older"
     },
     {
       "id": "core.staff.auditFile",
@@ -8528,6 +8982,22 @@
             },
             "success": "Saved"
           }
+        },
+        {
+          "type": "fields",
+          "title": "Mail sent this hour",
+          "when": "data.rate.window",
+          "object": "data.rate.window",
+          "rows": [
+            {
+              "label": "Sent this hour",
+              "value": "{item.used:number} of {data.rate.config.perHour:number}"
+            },
+            {
+              "label": "Resets",
+              "value": "{item.resetMs:datetime}"
+            }
+          ]
         },
         {
           "type": "form",
@@ -11109,6 +11579,76 @@
             {
               "label": "Body",
               "value": "{item.text|'No plain-text version was stored.'}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.staff.auditEntry",
+      "title": "{data.entry.action|'Audit entry'}",
+      "label": "Audit entry",
+      "subtitle": "What was recorded",
+      "icon": "list.bullet.rectangle|history",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "entry": {
+          "doc": "adminAudit/{params.entryId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "object": "data.entry",
+          "rows": [
+            {
+              "label": "Action",
+              "value": "{item.action}"
+            },
+            {
+              "label": "Scope",
+              "value": "{item.scope}"
+            },
+            {
+              "label": "Target",
+              "value": "{item.target}"
+            },
+            {
+              "label": "Workspace tenant",
+              "value": "{item.targetTenantId}"
+            },
+            {
+              "label": "Who",
+              "value": "{item.actorEmail} {item.actorUid}"
+            },
+            {
+              "label": "When",
+              "value": "{item.at:datetime}"
+            },
+            {
+              "label": "Reason",
+              "value": "{item.reason}"
+            },
+            {
+              "label": "Note",
+              "value": "{item.note}"
+            }
+          ],
+          "footer": "The email is the address when the action was recorded."
+        },
+        {
+          "type": "fields",
+          "title": "Before and after",
+          "object": "data.entry",
+          "rows": [
+            {
+              "label": "Before",
+              "value": "{item.before:json}"
+            },
+            {
+              "label": "After",
+              "value": "{item.after:json}"
             }
           ]
         }

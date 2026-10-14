@@ -34,15 +34,19 @@ internal object FirestoreLoads {
 
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
 
-  /** `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. */
+  /**
+   * `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. A clause may end in
+   * `"optional"`, and is then left out when its value is empty (a filter the screen was not asked for).
+   */
   suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement): JsonElement {
     val collection = ScreenValues.render(spec.str("collection").orEmpty(), context)
     val filters = spec.arr("where").mapNotNull { clause ->
       val parts = clause as? JsonArray ?: return@mapNotNull null
-      if (parts.size != 3) return@mapNotNull null
+      if (parts.size != 3 && parts.size != 4) return@mapNotNull null
       val field = (parts[0] as? JsonPrimitive)?.content ?: return@mapNotNull null
       val raw = parts[2]
       val value = ScreenValues.resolve((raw as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ScreenValues.text(raw), context)
+      if (parts.size == 4 && (parts[3] as? JsonPrimitive)?.content == "optional" && !ScreenValues.truthy(value)) return@mapNotNull null
       val plain: Any? = (value as? JsonPrimitive)?.let { p ->
         when {
           p.isString -> p.content

@@ -66,13 +66,15 @@ enum FirestoreLoads {
   }
 
   /// A collection query, read once: `{ "items": [...] }`.
-  /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`.
+  /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. A clause may end in
+  /// `"optional"`, and is then left out when its value is empty (a filter the screen was not asked for).
   @MainActor
   static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue) async throws -> JSONValue {
     let collection = ScreenValues.render(spec["collection"]?.stringValue ?? "", in: context)
     let equals: [(field: String, value: Any)] = spec["where"].array.compactMap { clause in
-      guard case .array(let parts) = clause, parts.count == 3, let field = parts[0].stringValue else { return nil }
+      guard case .array(let parts) = clause, parts.count == 3 || parts.count == 4, let field = parts[0].stringValue else { return nil }
       let value = ScreenValues.resolve(parts[2].stringValue ?? ScreenValues.text(parts[2]), in: context)
+      if parts.count == 4, parts[3] == "optional", !ScreenValues.truthy(value) { return nil }
       switch value {
       case .bool(let flag): return (field, flag)
       case .number(let number): return (field, number)

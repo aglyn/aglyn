@@ -72,7 +72,13 @@ line here is done; each line names the console source it was read from.
 | Marketplace reports | `/admin/marketplace-reports` (`/api/marketplace/admin/reports`): state filter, mark reviewing, resolve with a note | done |
 | Revenue | Read fields its route never sends (`mrrUsd`, `byPlan`, `subscriptions`), so it was empty. Rebuilt on `/api/admin/revenue`: period, the lower-bound and coverage warnings, the two bases, how each org is treated, the gap and its causes, where the money came from, gross versus net, the orgs attribution and the plugin attribution tables (generated texts from `revenue-view.ts`). The bars of the console's charts are lists | done |
 | Margin | Rows read the right bands but showed neither cost nor margin; now MRR, net, cost, margin and rating, the utilization of each band, a plan filter. The fleet-wide distributions of each band and of margin are not computed natively | partial |
-| Sales tax, Audit log, Support, Coupons, Flags, Settings, Alerts, Churn, and the Workspaces, Sites and People lists | read against the console page by page in the PRs that follow; findings are added to this table | open |
+| Feature flags | Edit sent PATCH to a route that takes PUT, and read `enabled` and `note` where the route nests them under `value`; now label, description, on or staged rollout, plan targeting, note, with the publish confirmation | done |
+| Support | The queue read the newest hundred instead of `view=queue`: now open, closed or all, the open count, tier, plan, who is owed a first reply; the thread shows who is staff | done |
+| Coupons | Promotion codes live inside each coupon, so Activate and Deactivate never showed; codes are their own list now (flatten), the create form gains the expiry, and the result reports the full-use check | done |
+| Alerts | Per-type switches and delivery, the digest hour (it POSTed to a route that takes PUT), the test per type (it sent none), recipients, webhook and health checks | done |
+| Platform settings | Mail sent this hour beside the send-rate form | done |
+| Audit log | Only the archive was native; now the admin actions (latest 100, scope and action filters) and one entry with before and after, then the archive. The console's date range and CSV export are not carried | partial |
+| Sales tax, Churn, and the Workspaces, Sites and People lists | read against the console page by page in the PRs that follow; findings are added to this table | open |
 
 Texts (`sms`): the plugin is infrastructure with no console page of its own.
 The console's texts surfaces are the Commerce settings card's "Also send as
