@@ -73,17 +73,20 @@ final class RegisterModel {
   /// The last sale this register finished, and its receipt.
   @ObservationIgnored let lastReceipt: PosLastReceiptModel
   @ObservationIgnored private var tillOffline: PosOfflineModel!
+  @ObservationIgnored private var tillReturns: PosReturnModel!
   /// Who is ringing: the cashier a PIN switched in, and the idle lock.
   var cashier: PosCashier { tillCashier }
   /// The register's shift and its drawer.
   var shift: PosShiftModel { tillShift }
   /// The cash sales rung while offline, and their sync.
   var offline: PosOfflineModel { tillOffline }
+  /// The return being rung at the register.
+  var returns: PosReturnModel { tillReturns }
 
   init(
     hostID: String, reader: FirestoreReader, api: ConsoleAPIClient, collector: CardCollector?,
     defaults: UserDefaults = .standard, opsAPI: PosOpsAPI? = nil, customersAPI: PosCustomersAPI? = nil,
-    uid: String = "", offlineAPI: PosOfflineAPI? = nil
+    uid: String = "", offlineAPI: PosOfflineAPI? = nil, returnsAPI: PosReturnsAPI? = nil
   ) {
     self.hostID = hostID
     self.reader = reader
@@ -107,6 +110,9 @@ final class RegisterModel {
       shiftID: { [weak self] in self?.tillShift.shift?.id }, assertion: { [weak cashier] in cashier?.assertion })
     offline.networkSink = { [weak self] failed in if failed { self?.online = false } }
     tillOffline = offline
+    tillReturns = PosReturnModel(
+      api: returnsAPI ?? ConsolePosReturnsAPI(api: api, hostID: hostID), registerID: { [weak self] in self?.register?.id },
+      assertion: { [weak cashier] in cashier?.assertion })
   }
 
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }

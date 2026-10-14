@@ -304,6 +304,11 @@ export function useAiJobsInFlight(
     }
   }, [entry])
 
+  return useEntryJobs(entry)
+}
+
+/** An entry's jobs, kept current as the entry moves. */
+function useEntryJobs(entry: Entry | null): readonly AiJobSummary[] {
   const subscribe = useMemo(
     () => (listener: () => void) => {
       if (!entry) return () => undefined
@@ -316,6 +321,29 @@ export function useAiJobsInFlight(
   )
   const snapshot = (): readonly AiJobSummary[] => entry?.jobs ?? NONE
   return useSyncExternalStore(subscribe, snapshot, snapshot)
+}
+
+/**
+ * The same list, as the surfaces that read it hold it, without reading it
+ * here (AGL-3765): for a door that warns from what is already known — the
+ * top-bar indicator and the Assist panel read the list wherever a person can
+ * start a job — and asks no server of its own. It moves with every read they
+ * make and every job a surface hands in through {@link publishAiJob}; empty
+ * where nothing has read it, and when `enabled` is false.
+ */
+export function useAiJobsInFlightKnown(
+  user: (TokenSource & { uid?: string | null }) | null | undefined,
+  orgId: string | null | undefined,
+  enabled = true,
+): readonly AiJobSummary[] {
+  const uid = user?.uid ?? null
+  const userRef = useRef<MaybeTokenSource>(user)
+  userRef.current = user
+  const entry = useMemo(
+    () => (enabled && uid && orgId ? entryFor(uid, orgId, userRef.current) : null),
+    [enabled, uid, orgId],
+  )
+  return useEntryJobs(entry)
 }
 
 /** What the indicator and the launcher show for the workspace, or `null` for nothing. */

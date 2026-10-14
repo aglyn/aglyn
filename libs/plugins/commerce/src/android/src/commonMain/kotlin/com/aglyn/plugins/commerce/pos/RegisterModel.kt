@@ -63,6 +63,8 @@ class RegisterModel(
   uid: String = "",
   /** The offline register's kit and sync routes. */
   offlineApi: PosOfflineApi = UnreachablePosOffline,
+  /** The return route. */
+  returnsApi: PosReturnsApi = OfflinePosReturns,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -85,6 +87,8 @@ class RegisterModel(
 
   /** The offline cash dialog is open. */
   var offlineCashOpen by mutableStateOf(false)
+  /** The return being rung at the register. */
+  val returns = PosReturnModel(returnsApi, scope, { register?.id }, { cashier.assertion })
 
   var registers by mutableStateOf<Load<List<PosRegister>>>(Load.Loading)
     private set
