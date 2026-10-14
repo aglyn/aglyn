@@ -441,15 +441,25 @@ const verifyLink = await adminAuth.generateEmailVerificationLink(EMAIL)
 const oobCode = new URL(verifyLink).searchParams.get('oobCode')
 check('3-verify', 'verification link carries an oobCode', Boolean(oobCode))
 
-// `commit`, and tolerant of an abort: the app redirects out of this route as
-// soon as the code applies, which supersedes the navigation and would
-// otherwise throw ERR_ABORTED on a successful verification.
+// `commit`, and tolerant of an abort: an aborted navigation still leaves the
+// confirm screen to act on.
 await page
   .goto(`${CONSOLE_URL}/verify-email?oobCode=${oobCode}`, {
     waitUntil: 'commit',
     timeout: TIMEOUT_MS,
   })
   .catch(() => undefined)
+// The page holds the code until a person confirms (AGL-3786) — a mail
+// scanner rendering the link must not verify the address.
+await sleep(3000)
+check(
+  '3-verify',
+  'opening the link alone did not verify the address (AGL-3786)',
+  (await adminAuth.getUser(UID)).emailVerified === false,
+)
+await page
+  .getByRole('button', { name: 'Confirm my email' })
+  .click({ timeout: TIMEOUT_MS })
 let verified = false
 for (let attempt = 0; attempt < 30 && !verified; attempt += 1) {
   await sleep(1000)

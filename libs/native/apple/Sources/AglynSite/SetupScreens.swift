@@ -137,6 +137,8 @@ private struct HostTextCard<Content: View>: View {
   var clearable: Set<String> = []
   var validate: ([String: String]) -> Bool = { _ in true }
   var transform: ([String: String]) -> [String: Any] = { $0 }
+  /// Values a plugin's widget proposed for this page's form, staged over the stored ones.
+  var draft: FormDraft?
   @ViewBuilder let content: (_ field: @escaping (String) -> Binding<String>) -> Content
   @State private var fields: [String: String] = [:]
   @State private var runner = newRunner()
@@ -156,6 +158,10 @@ private struct HostTextCard<Content: View>: View {
       content { path in Binding(get: { fields[path] ?? "" }, set: { fields[path] = $0 }) }
     }
     .onChange(of: stored, initial: true) { _, next in fields = next }
+    .onChange(of: draft?.version) { _, _ in
+      guard let draft else { return }
+      for path in paths { if let value = draft.values[path] { fields[path] = value } }
+    }
   }
 }
 
@@ -376,15 +382,21 @@ private struct SeoSection: View {
   let api: HostSettingsAPI
   let canEdit: Bool
   private let contracts = ContractValues.shared
+  @State private var draft = FormDraft()
 
   var body: some View {
     // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
     SeoCheckCard(context: context, hostID: hostID, host: host)
+    // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
+    SlotCards(context: context, slot: "hostSeo")
+      .environment(
+        \.seoZone, SeoZone(seo: host["seo"] as? [String: Any], proposeDraft: { [draft] values, key in draft.propose(values, key: key) }))
     HostTextCard(
       title: "Search appearance", host: host, paths: ["seo.title", "seo.description", "seo.separator", "seo.titlePattern"],
       api: api, canEdit: canEdit, message: "How your site reads in search results and link previews.",
       clearable: ["seo.titlePattern"],
-      validate: { f in ["seo.title", "seo.description", "seo.separator"].allSatisfy { !(f[$0] ?? "").trimmed.isEmpty } }
+      validate: { f in ["seo.title", "seo.description", "seo.separator"].allSatisfy { !(f[$0] ?? "").trimmed.isEmpty } },
+      draft: draft
     ) { f in
       AglynCountedField("Title", text: f("seo.title"), max: SeoLimits.title, required: true, enabled: canEdit)
       AglynCountedField("Description", text: f("seo.description"), max: SeoLimits.description, required: true, multiline: true, enabled: canEdit)
@@ -409,7 +421,7 @@ private struct SeoSection: View {
       paths: [
         "seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email",
         "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo",
-      ], api: api, canEdit: canEdit, message: "Who runs the site, as search engines read it."
+      ], api: api, canEdit: canEdit, message: "Who runs the site, as search engines read it.", draft: draft
     ) { f in
       Picker("This site is run by", selection: f("seo.entity.type")) {
         Text("Not set").tag("")
@@ -434,7 +446,7 @@ private struct SeoSection: View {
     LocalBusinessCard(host: host, api: api, canEdit: canEdit)
     HostTextCard(
       title: "AI agents", host: host, paths: ["seo.agent.whenToUse", "seo.agent.howToUse"], api: api, canEdit: canEdit,
-      message: "What AI assistants read about when and how to send people to your site (llms.txt)."
+      message: "What AI assistants read about when and how to send people to your site (llms.txt).", draft: draft
     ) { f in
       AglynCountedField("When to use this site", text: f("seo.agent.whenToUse"), max: SeoLimits.agent, multiline: true, enabled: canEdit)
       AglynCountedField("How to use this site", text: f("seo.agent.howToUse"), max: SeoLimits.agent, multiline: true, enabled: canEdit)

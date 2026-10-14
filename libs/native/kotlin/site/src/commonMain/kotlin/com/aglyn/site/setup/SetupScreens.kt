@@ -28,6 +28,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,7 +57,9 @@ import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
+import com.aglyn.pluginhost.LocalSeoZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SeoZone
 import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -181,11 +184,16 @@ private fun HostTextCard(
   clearable: Set<String> = emptySet(),
   validate: (Map<String, String>) -> Boolean = { true },
   transform: (Map<String, String>) -> Map<String, Any?> = { it },
+  /** Values a plugin's widget proposed for this page's form, staged over the stored ones. */
+  draft: FormDraft? = null,
   content: @Composable (SnapshotStateMap<String, String>) -> Unit,
 ) {
   val stored = remember(host) { paths.associateWith { host.text(it) } }
   val fields = rememberFields(stored)
   val runner = rememberRunner()
+  if (draft != null) {
+    LaunchedEffect(draft.version) { paths.forEach { path -> draft.values[path]?.let { fields[path] = it } } }
+  }
   FormCard(
     title = title,
     description = description,
@@ -328,6 +336,11 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
   val c = Contracts
   // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
   SeoCheckCard(context, hostId, host)
+  // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
+  val draft = remember { FormDraft() }
+  @Suppress("UNCHECKED_CAST")
+  val zone = remember(host, draft) { SeoZone(host.at("seo") as? Map<String, Any?>, draft::propose) }
+  CompositionLocalProvider(LocalSeoZone provides zone) { SlotCards(context, "hostSeo") }
   HostTextCard(
     "Search appearance",
     host,
@@ -337,6 +350,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     description = "How your site reads in search results and link previews.",
     clearable = setOf("seo.titlePattern"),
     validate = { f -> listOf("seo.title", "seo.description", "seo.separator").all { !f[it].isNullOrBlank() } },
+    draft = draft,
   ) { f ->
     CountedTextField("Title", f["seo.title"].orEmpty(), { f["seo.title"] = it }, max = SeoLimits.TITLE, required = true, enabled = canEdit)
     CountedTextField("Description", f["seo.description"].orEmpty(), { f["seo.description"] = it }, max = SeoLimits.DESCRIPTION, required = true, multiline = true, minLines = 2, enabled = canEdit)
@@ -365,7 +379,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     CountedTextField("Image description", f["seo.imageAlt"].orEmpty(), { f["seo.imageAlt"] = it }, max = SeoLimits.IMAGE_ALT, enabled = canEdit, supporting = "What the social image shows, for screen readers")
   }
   val entityPaths = listOf("seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email", "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo")
-  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.") { f ->
+  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.", draft = draft) { f ->
     SelectField("This site is run by", ENTITY_TYPES.map { SelectOption(it.first, it.second) }, f["seo.entity.type"]?.ifEmpty { null }, { f["seo.entity.type"] = it.orEmpty() }, enabled = canEdit, noneLabel = "Not set")
     CountedTextField("Name", f["seo.entity.name"].orEmpty(), { f["seo.entity.name"] = it }, enabled = canEdit)
     CountedTextField("Description", f["seo.entity.description"].orEmpty(), { f["seo.entity.description"] = it }, max = SeoLimits.ENTITY_DESCRIPTION, multiline = true, enabled = canEdit)
@@ -390,6 +404,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     api,
     canEdit,
     description = "What AI assistants read about when and how to send people to your site (llms.txt).",
+    draft = draft,
   ) { f ->
     CountedTextField("When to use this site", f["seo.agent.whenToUse"].orEmpty(), { f["seo.agent.whenToUse"] = it }, max = SeoLimits.AGENT, multiline = true, enabled = canEdit)
     CountedTextField("How to use this site", f["seo.agent.howToUse"].orEmpty(), { f["seo.agent.howToUse"] = it }, max = SeoLimits.AGENT, multiline = true, enabled = canEdit)

@@ -84,7 +84,7 @@ pool. The window shows an estimate before you create anything:
 
 | Kinds | About, per picture | What it is made of |
 | --- | --- | --- |
-| Vector | 18 credits | The words the AI reads and writes to draw the SVG, at the same rates as other AI text |
+| Vector | 4 credits | The words the AI reads and writes to draw the SVG, at the same rates as other AI text |
 | Photo, Art and Design, on the Free plan | 75 credits | A 512 px picture, plus the description and the thinking the image model does before it draws |
 | Photo, Art and Design, on a paid plan | 108 credits | A 1K picture (about 1024 px on its longer side), plus the same |
 

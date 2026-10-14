@@ -3869,6 +3869,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let heldLicenceQuery: ListQueryDeclaration
   public let hostEvents: [HostEventDeclaration]
   public let hostVariableTypeLabels: [String: String]
+  public let imageEditAspectsJson: String
+  public let imageEditJpegQuality: Double
+  public let imageEditPreviewMax: Int
   public let installTargets: [String: [InstallTarget]]
   public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
@@ -4090,6 +4093,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case heldLicenceQuery = "HELD_LICENCE_QUERY"
     case hostEvents = "HOST_EVENTS"
     case hostVariableTypeLabels = "HOST_VARIABLE_TYPE_LABELS"
+    case imageEditAspectsJson = "IMAGE_EDIT_ASPECTS_JSON"
+    case imageEditJpegQuality = "IMAGE_EDIT_JPEG_QUALITY"
+    case imageEditPreviewMax = "IMAGE_EDIT_PREVIEW_MAX"
     case installTargets = "INSTALL_TARGETS"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"

@@ -2593,6 +2593,9 @@ internal data class ContractValuesPart2(
     @SerialName("HELD_LICENCE_QUERY") val heldLicenceQuery: ListQueryDeclaration,
     @SerialName("HOST_EVENTS") val hostEvents: List<HostEventDeclaration>,
     @SerialName("HOST_VARIABLE_TYPE_LABELS") val hostVariableTypeLabels: Map<String, String>,
+    @SerialName("IMAGE_EDIT_ASPECTS_JSON") val imageEditAspectsJson: String,
+    @SerialName("IMAGE_EDIT_JPEG_QUALITY") val imageEditJpegQuality: Double,
+    @SerialName("IMAGE_EDIT_PREVIEW_MAX") val imageEditPreviewMax: Long,
     @SerialName("INSTALL_TARGETS") val installTargets: Map<String, List<InstallTarget>>,
     @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
@@ -2600,13 +2603,13 @@ internal data class ContractValuesPart2(
     @SerialName("LEAD_SOURCE_OPTIONS") val leadSourceOptions: List<ListFilterOption>,
     @SerialName("LIST_MEMBER_QUERY") val listMemberQuery: ListQueryDeclaration,
     @SerialName("LIST_QUERY_DISJUNCTIONS") val listQueryDisjunctions: Long,
-    @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
-    @SerialName("LISTING_CATEGORIES") val listingCategories: List<String>,
-    @SerialName("LOCAL_BUSINESS_TYPE_OPTIONS") val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem>,
 )
 
 @Serializable
 internal data class ContractValuesPart3(
+    @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
+    @SerialName("LISTING_CATEGORIES") val listingCategories: List<String>,
+    @SerialName("LOCAL_BUSINESS_TYPE_OPTIONS") val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem>,
     @SerialName("LOCAL_FULFILLMENT_OPEN_STATUSES") val localFulfillmentOpenStatuses: List<String>,
     @SerialName("LOCAL_FULFILLMENT_QUEUE_FIELDS") val localFulfillmentQueueFields: LocalFulfillmentQueueFields,
     @SerialName("LOCAL_FULFILLMENT_QUEUE_LIMIT") val localFulfillmentQueueLimit: Long,
@@ -2652,13 +2655,13 @@ internal data class ContractValuesPart3(
     @SerialName("ORDER_LIST_QUERY") val orderListQuery: ListQueryDeclaration,
     @SerialName("ORDER_LIST_SELECT_FIELDS") val orderListSelectFields: List<String>,
     @SerialName("ORDER_LOCAL_DELIVERY_STATUS_LABELS") val orderLocalDeliveryStatusLabels: Map<String, String>,
-    @SerialName("ORDER_PICKUP_STATUS_LABELS") val orderPickupStatusLabels: Map<String, String>,
-    @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
-    @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("ORDER_PICKUP_STATUS_LABELS") val orderPickupStatusLabels: Map<String, String>,
+    @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
+    @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
     @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_DEFAULT_ALLOWED_COUNTRIES") val outreachDefaultAllowedCountries: List<String>,
@@ -2704,13 +2707,13 @@ internal data class ContractValuesPart4(
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
-    @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
-    @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
-    @SerialName("RESERVED_SCREEN_ROUTE_SEGMENTS") val reservedScreenRouteSegments: List<String>,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
+    @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
+    @SerialName("RESERVED_SCREEN_ROUTE_SEGMENTS") val reservedScreenRouteSegments: List<String>,
     @SerialName("RETURN_REASON_LABELS") val returnReasonLabels: Map<String, String>,
     @SerialName("RETURN_REASONS") val returnReasons: List<ReturnReason>,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
@@ -2838,6 +2841,9 @@ class ContractValues internal constructor(
     val heldLicenceQuery: ListQueryDeclaration get() = part2.heldLicenceQuery
     val hostEvents: List<HostEventDeclaration> get() = part2.hostEvents
     val hostVariableTypeLabels: Map<String, String> get() = part2.hostVariableTypeLabels
+    val imageEditAspectsJson: String get() = part2.imageEditAspectsJson
+    val imageEditJpegQuality: Double get() = part2.imageEditJpegQuality
+    val imageEditPreviewMax: Long get() = part2.imageEditPreviewMax
     val installTargets: Map<String, List<InstallTarget>> get() = part2.installTargets
     val layoutListQuery: ListQueryDeclaration get() = part2.layoutListQuery
     val leadListDeclaration: ListQueryDeclaration get() = part2.leadListDeclaration
@@ -2845,9 +2851,9 @@ class ContractValues internal constructor(
     val leadSourceOptions: List<ListFilterOption> get() = part2.leadSourceOptions
     val listMemberQuery: ListQueryDeclaration get() = part2.listMemberQuery
     val listQueryDisjunctions: Long get() = part2.listQueryDisjunctions
-    val listQueryIdPath: String get() = part2.listQueryIdPath
-    val listingCategories: List<String> get() = part2.listingCategories
-    val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem> get() = part2.localBusinessTypeOptions
+    val listQueryIdPath: String get() = part3.listQueryIdPath
+    val listingCategories: List<String> get() = part3.listingCategories
+    val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem> get() = part3.localBusinessTypeOptions
     val localFulfillmentOpenStatuses: List<String> get() = part3.localFulfillmentOpenStatuses
     val localFulfillmentQueueFields: LocalFulfillmentQueueFields get() = part3.localFulfillmentQueueFields
     val localFulfillmentQueueLimit: Long get() = part3.localFulfillmentQueueLimit
@@ -2893,9 +2899,9 @@ class ContractValues internal constructor(
     val orderListQuery: ListQueryDeclaration get() = part3.orderListQuery
     val orderListSelectFields: List<String> get() = part3.orderListSelectFields
     val orderLocalDeliveryStatusLabels: Map<String, String> get() = part3.orderLocalDeliveryStatusLabels
-    val orderPickupStatusLabels: Map<String, String> get() = part3.orderPickupStatusLabels
-    val orderStatusColor: Map<String, OrderStatusColorValue> get() = part3.orderStatusColor
-    val orderStatusLabels: Map<String, String> get() = part3.orderStatusLabels
+    val orderPickupStatusLabels: Map<String, String> get() = part4.orderPickupStatusLabels
+    val orderStatusColor: Map<String, OrderStatusColorValue> get() = part4.orderStatusColor
+    val orderStatusLabels: Map<String, String> get() = part4.orderStatusLabels
     val orderStatusOptions: List<ListFilterOption> get() = part4.orderStatusOptions
     val orgSubmissionListQuery: ListQueryDeclaration get() = part4.orgSubmissionListQuery
     val outreachDefaultAllowedCountries: List<String> get() = part4.outreachDefaultAllowedCountries
@@ -2941,9 +2947,9 @@ class ContractValues internal constructor(
     val productListSelectFields: List<String> get() = part4.productListSelectFields
     val reminderWindowEndHours: Long get() = part4.reminderWindowEndHours
     val reminderWindowStartHours: Long get() = part4.reminderWindowStartHours
-    val replyBodyMax: Long get() = part4.replyBodyMax
-    val replySubjectMax: Long get() = part4.replySubjectMax
-    val reservedScreenRouteSegments: List<String> get() = part4.reservedScreenRouteSegments
+    val replyBodyMax: Long get() = part5.replyBodyMax
+    val replySubjectMax: Long get() = part5.replySubjectMax
+    val reservedScreenRouteSegments: List<String> get() = part5.reservedScreenRouteSegments
     val returnReasonLabels: Map<String, String> get() = part5.returnReasonLabels
     val returnReasons: List<ReturnReason> get() = part5.returnReasons
     val scopedSearchJoin: String get() = part5.scopedSearchJoin

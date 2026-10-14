@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.inheritedMediaAlt
+import com.aglyn.contracts.mediaPosterSrc
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
@@ -394,7 +395,12 @@ private fun EntryEditor(
             context,
             "Cover video",
             draft.coverVideo,
-            onPick = { chosen -> draft = draft.copy(coverVideo = chosen.reference, coverVideoDuration = chosen.item.videoSeconds?.toString().orEmpty()) },
+            onPick = { chosen ->
+              draft = draft.copy(coverVideo = chosen.reference, coverVideoDuration = chosen.item.videoSeconds?.toString().orEmpty())
+              // A film with a captured frame and an entry with no cover of its own: the frame is the cover (and its description follows).
+              val poster = if (draft.coverImage.isBlank() && chosen.item.hasPoster) mediaPosterSrc(chosen.reference, context.hostId) else null
+              if (poster != null) draft = draft.copy(coverImage = poster, coverImageAlt = inheritedMediaAlt(draft.coverImageAlt, chosen.item.alt) ?: draft.coverImageAlt)
+            },
             onClear = { draft = draft.copy(coverVideo = "") },
             kind = "video",
             enabled = canWrite,

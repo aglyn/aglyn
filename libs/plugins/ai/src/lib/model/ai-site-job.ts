@@ -148,14 +148,17 @@ export interface AiFreeSiteWorstCase {
  * moves and this does not.
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
-  plan: 36,
-  look: 7,
+  // The plan, the look and a listing run on the fast tier, billed at the
+  // platform's markup on Claude Haiku 5.5 since AGL-3781 (36, 7 and 3 credits
+  // at Haiku 4.5's cost before).
+  plan: 5,
+  look: 2,
   layout: 23,
   form: 29,
   page: 43,
   section: 4,
   retry: 64,
-  listing: 3,
+  listing: 1,
 }
 
 /**

@@ -73,4 +73,15 @@ class MediaRefCasesTest {
       assertEquals(expected, libraryVideoSeconds(plainOf(args[0].jsonObject["assetVideo"])), args.toString())
     }
   }
+
+  @Test
+  fun aFilmsPosterIsAskedForOnlyFromThePlatformsOwnCdn() {
+    val all = cases("mediaPosterSrc")
+    assertTrue(all.size >= 10)
+    for ((args, result) in all) {
+      val options = args.getOrNull(1) as? JsonObject
+      val width = (options?.get("width") as? JsonPrimitive)?.content?.toDouble()
+      assertEquals(text(result), mediaPosterSrc(text(args[0]), options?.get("hostId")?.let(::text), width), args.toString())
+    }
+  }
 }

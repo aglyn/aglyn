@@ -17,6 +17,7 @@
 
 import { AI_SETTING_PLATFORM, AI_STEP_MODEL_SETTING } from '../plugin-config'
 import {
+  AI_MODEL_CATALOG,
   AI_STEP_TIERS,
   aiCatalogEntry,
   aiDefaultModelFor,
@@ -48,6 +49,21 @@ export const ASSIST_MODEL_ENV = 'ASSIST_MODEL'
 
 /** The org's resolved `pluginSettings/ai` values, as `getPluginConfig` merges them. */
 export type AiPluginSettings = Record<string, unknown>
+
+/**
+ * The model that serves a catalog id (AGL-3781): the id itself, or for a
+ * retired row the successor it names, followed to a current row. An id the
+ * catalog does not know is returned as it is, for the caller to refuse.
+ */
+export function aiServingModelId(modelId: string): string {
+  let current = modelId
+  for (let hops = 0; hops < AI_MODEL_CATALOG.length; hops += 1) {
+    const successor = aiCatalogEntry(current)?.successor
+    if (!successor) return current
+    current = successor
+  }
+  return current
+}
 
 export interface AiRoute {
   provider: AiProvider
@@ -83,8 +99,12 @@ export function resolveAiRoute(
 ): AiRoute | undefined {
   const provider = resolveAiProvider(settings)
   if (!provider) return undefined
-  const servedBy = (modelId: string | undefined): string | undefined =>
-    modelId && aiCatalogEntry(modelId)?.provider === provider.id ? modelId : undefined
+  // A setting or an override that names a retired model is served by its
+  // successor, never by the retired model itself.
+  const servedBy = (modelId: string | undefined): string | undefined => {
+    const serving = modelId ? aiServingModelId(modelId) : undefined
+    return serving && aiCatalogEntry(serving)?.provider === provider.id ? serving : undefined
+  }
   const model =
     servedBy(chosen(settings, AI_STEP_MODEL_SETTING[kind])) ??
     (kind === 'assist.chat' ? servedBy(process.env[ASSIST_MODEL_ENV]?.trim()) : undefined) ??
@@ -100,7 +120,11 @@ export function resolveAiRoute(
  * briefs (AGL-2937).
  */
 export interface AiRoutingRow {
-  /** `null` sends no setting: the model's own default, and all a fast-tier model accepts. */
+  /**
+   * `null` sends no setting: the model's own default, which on every current
+   * model is adaptive thinking. A row whose ceiling holds the answer alone
+   * says `off` (AGL-3781).
+   */
   thinking: AiThinking | null
   effort: AiEffort | null
   /** The answer ceiling, thinking included. */
@@ -150,7 +174,10 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['chat'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'copy.element': {
-    thinking: null,
+    // One element's copy on the fast tier, whose model thinks unless told not
+    // to (AGL-3781): the ceiling holds the copy alone, as it always has, and
+    // the effort is the model's own.
+    thinking: 'off',
     effort: null,
     maxTokens: 1024,
     maxTokensBasis: 'one element of copy, about the length of the text it replaces',
@@ -208,9 +235,11 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     // CRM by AI (AGL-2917): short answers through a strict tool, written from
     // the facts the CRM reports about the record the member opened, with no
     // thinking. The ceiling fits an inline door, so a member is answered in
-    // the request that asked.
-    thinking: null,
-    effort: null,
+    // the request that asked, and has no room for thinking: the fast tier's
+    // model thinks unless told not to, so the row says off, and its effort
+    // is the low one a short answer read off given facts needs (AGL-3781).
+    thinking: 'off',
+    effort: 'low',
     maxTokens: 700,
     maxTokensBasis:
       "the largest answer a CRM tool accepts: sixty columns matched to fields by number, or an email draft at its length limits, at three characters a token with room, as ai-job-crm-step.spec.ts measures it",
@@ -337,8 +366,12 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['edit'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.seo': {
-    thinking: null,
-    effort: null,
+    // A listing written from the page's own text to fixed lengths, sized for
+    // the answer alone: no thinking, which the fast tier's model does unless
+    // told not to, at the low effort a short bounded answer needs (AGL-3781).
+    // The audit's site proposal and fix batches run on the same row.
+    thinking: 'off',
+    effort: 'low',
     maxTokens: 1024,
     maxTokensBasis:
       "the largest listing the tool accepts, at three characters a token with a quarter again, as ai-job-seo-step.spec.ts measures it; an audit's site proposal and fix batches keep ceilings of their own, measured the same way",
@@ -372,6 +405,19 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       meanScore: null,
     },
   },
+}
+
+/**
+ * What a step kind's row asks of its model, as the fields a request carries:
+ * only those the row names, so a row that names none sends none and the
+ * model's own default stands.
+ */
+export function aiRouteSettings(kind: AiStepKind): { thinking?: AiThinking; effort?: AiEffort } {
+  const row = AI_ROUTING_TABLE[kind]
+  return {
+    ...(row.thinking ? { thinking: row.thinking } : {}),
+    ...(row.effort ? { effort: row.effort } : {}),
+  }
 }
 
 /** The model id alone — what a door records on the meter and the job. */

@@ -52,13 +52,15 @@ export const AI_MEDIA_PHOTO_NOMINAL_USAGE: AiUsage & { images: number } = {
 }
 
 /**
- * An illustration's nominal tokens: about 2,100 of instructions — under the
- * fast tier's caching minimum, so read at full rate every time — the tool and
- * the description, and a few thousand of SVG.
+ * An illustration's nominal tokens, as the fast tier's Claude Haiku 5.5 counts
+ * them (about 30% more than Claude Haiku 4.5 did for the same text, AGL-3781):
+ * about 2,700 of instructions, the tool and the description, and a few
+ * thousand of SVG. The instructions cache on that model, but an illustration
+ * asked once writes them, so they are counted here at the full input rate.
  */
 export const AI_MEDIA_SVG_NOMINAL_USAGE: AiUsage = {
-  inputTokens: 2_500,
-  outputTokens: 3_000,
+  inputTokens: 3_250,
+  outputTokens: 3_900,
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
 }

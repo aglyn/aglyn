@@ -2205,6 +2205,9 @@
     "text": "Plain text",
     "time": "Time"
   },
+  "IMAGE_EDIT_ASPECTS_JSON": "[{\"label\":\"Free\",\"ratio\":null},{\"label\":\"1:1\",\"ratio\":1},{\"label\":\"4:3\",\"ratio\":1.3333333333333333},{\"label\":\"3:2\",\"ratio\":1.5},{\"label\":\"16:9\",\"ratio\":1.7777777777777777}]",
+  "IMAGE_EDIT_JPEG_QUALITY": 0.9,
+  "IMAGE_EDIT_PREVIEW_MAX": 480,
   "INSTALL_TARGETS": {
     "component": [
       "host"

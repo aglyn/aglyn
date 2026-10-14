@@ -31,8 +31,14 @@
 // replay cache (AGL-3660, docs/AI_JOBS.md "Verifying a prompt change"): a
 // brief whose request was answered before is replayed from .cache/ai-replay
 // for nothing, and only a changed prompt reaches the provider. The run prints
-// how many requests went live. AGLYN_AI_REPLAY=refresh asks every one again;
-// AGLYN_LIVE_AI_BATCH=1 sends the round as one Message Batch at half price.
+// how many requests went live. AGLYN_AI_REPLAY=refresh asks every one again.
+//
+// The round is sent as Message Batches at half price unless the caller says
+// AGLYN_LIVE_AI_BATCH=0 (AGL-3781): the launcher's mark turns batch mode on
+// in the runtime (ai-dev-env.ts), and its briefs run side by side in batch
+// mode, so every brief's answer goes in one batch, each re-ask in the next and
+// the grades after. Minutes rather than seconds; set AGLYN_LIVE_AI_BATCH=0 for
+// one quick brief.
 //
 // The run keeps the environment it is started with, the provider key included
 // (AGL-3038). The shared jest setup removes every value the repo-root .env
