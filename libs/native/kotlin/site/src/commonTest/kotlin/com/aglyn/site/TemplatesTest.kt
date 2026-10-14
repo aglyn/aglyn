@@ -259,4 +259,42 @@ class TemplatesTest {
     assertTrue(changes[2].overrideValue!!.endsWith("…"))
     assertEquals(emptyList(), com.aglyn.site.setup.themeChangesOf(null))
   }
+
+  @Test
+  fun readsAComponentsIconAndSearchesTheIconSet() = runTest {
+    val chosen = com.aglyn.site.artifacts.componentIconOf(FirestoreDoc("c1", "hosts/h/components/c1", mapOf("icon" to mapOf("iconId" to "cart", "iconPath" to "M1 1h2"))))
+    assertEquals(com.aglyn.site.artifacts.ComponentIcon("cart", "M1 1h2"), chosen)
+    assertEquals(mapOf("iconId" to "cart", "iconPath" to "M1 1h2"), chosen?.stored())
+    // Cleared (an empty map), never chosen and unreadable all read as no icon.
+    assertNull(com.aglyn.site.artifacts.componentIconOf(FirestoreDoc("c1", "p", mapOf("icon" to emptyMap<String, Any?>()))))
+    assertNull(com.aglyn.site.artifacts.componentIconOf(FirestoreDoc("c1", "p", emptyMap())))
+    assertNull(com.aglyn.site.artifacts.componentIconOf(FirestoreDoc("c1", "p", mapOf("icon" to "cart"))))
+
+    val http = HttpClient(
+      MockEngine { request ->
+        assertEquals("/api/hosts/icons", request.url.encodedPath)
+        assertEquals("cart", request.url.parameters["search"])
+        respond("""{"icons":[{"id":"cart","name":"Cart","path":"M1 1h2"},{"id":"cart-outline","name":"Cart Outline","path":"M2 2"},{"name":"No id"}]}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+      },
+    )
+    val client = ConsoleApiClient("https://console.test/", http, getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val found = com.aglyn.site.artifacts.searchComponentIcons(client, " cart ")
+    assertEquals(listOf("cart", "cart-outline"), found.map { it.id })
+    assertEquals("Cart Outline", found[1].name)
+  }
+
+  @Test
+  fun savesAComponentsIconOnlyWhenTheDialogChangedIt() = runTest {
+    val writer = RecordingWriter()
+    val api = ArtifactsApi(Calls().client, writer, "h", ArtifactKind.COMPONENT)
+    api.saveDetails("c1", "Header", "The top band")
+    assertEquals(false, writer.updates.single().second.containsKey("icon"))
+    writer.updates.clear()
+    api.saveDetails("c1", "Header", "The top band", icon = com.aglyn.site.artifacts.ComponentIcon("cart", "M1 1h2").stored())
+    assertEquals(mapOf("iconId" to "cart", "iconPath" to "M1 1h2"), writer.updates.single().second["icon"])
+    writer.updates.clear()
+    // A cleared icon is an empty map, as the console's picker writes it.
+    api.saveDetails("c1", "Header", "The top band", icon = emptyMap())
+    assertEquals(emptyMap<String, Any?>(), writer.updates.single().second["icon"])
+  }
 }

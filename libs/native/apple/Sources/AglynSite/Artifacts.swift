@@ -157,6 +157,8 @@ public struct ArtifactRow: Identifiable, Equatable, Sendable {
   public let libraryRow: Bool
   public let updatedAt: Date?
   public let createdAt: Date?
+  /// A component's icon (`ReusableComponentIcon`), drawn in the Besigner's drawers and its marketplace listing.
+  public let icon: ComponentIcon?
 
   public var isStarterBundle: Bool { starterID != nil }
 
@@ -177,6 +179,7 @@ public struct ArtifactRow: Identifiable, Equatable, Sendable {
     libraryRow = doc.bool("libraryRow") == true
     updatedAt = doc.date("updatedAt")
     createdAt = doc.date("createdAt")
+    icon = componentIcon(of: doc)
   }
 }
 
@@ -422,13 +425,15 @@ public struct ArtifactsAPI: Sendable {
   }
 
   /// The details form's save: the name with its search keys, the description, and a layout's parent.
-  public func saveDetails(_ id: String, name: String, description: String, parentLayoutID: String? = nil, setParent: Bool = false)
-    async throws
-  {
+  /// A component's `icon` is written only when the dialog changed it; an empty map clears it, as the console's picker does.
+  public func saveDetails(
+    _ id: String, name: String, description: String, parentLayoutID: String? = nil, setParent: Bool = false, icon: [String: Any]? = nil
+  ) async throws {
     var fields = displayNameSearchFields(name.trimmed)
     fields["displayName"] = name.trimmed
     fields["description"] = description.trimmed
     if setParent { fields["layoutId"] = parentLayoutID.map { $0 as Any } ?? FirestoreSentinel.delete }
+    if let icon { fields["icon"] = icon }
     fields["updatedAt"] = Date()
     try await writer.merge(path(id), fields)
   }

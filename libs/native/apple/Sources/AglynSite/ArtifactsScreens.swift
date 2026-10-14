@@ -624,6 +624,8 @@ private struct ArtifactDetailsSheet: View {
   @State private var name = ""
   @State private var description = ""
   @State private var parent = ""
+  @State private var icon: ComponentIcon?
+  @State private var choosingIcon = false
   @State private var layouts = LiveQuery()
 
   private var parents: [ArtifactRow] {
@@ -636,15 +638,19 @@ private struct ArtifactDetailsSheet: View {
       "Edit details", confirmLabel: "Save", confirmEnabled: !name.trimmed.isEmpty, busy: runner.busy, error: runner.error, onCancel: close,
       onConfirm: {
         let (name, description, parent) = (name, description, parent)
+        let iconWrite: [String: Any]? = kind == .component && icon?.id != row.icon?.id ? (icon?.stored ?? [:]) : nil
         runner.run("Saved.", onDone: close) {
           try await api.saveDetails(
             row.id, name: name, description: description, parentLayoutID: parent.isEmpty ? nil : parent,
-            setParent: kind == .layout && (parent.isEmpty ? nil : parent) != row.parentLayoutID)
+            setParent: kind == .layout && (parent.isEmpty ? nil : parent) != row.parentLayoutID, icon: iconWrite)
         }
       }
     ) {
       TextField("Name", text: Binding(get: { name }, set: { name = $0.capped(artifactNameMax) })).accessibilityIdentifier("details-name")
       TextField("Description", text: Binding(get: { description }, set: { description = $0.capped(artifactDescriptionMax) }))
+      if kind == .component {
+        ComponentIconField(icon: icon, onChoose: { choosingIcon = true }, onClear: { icon = nil })
+      }
       if kind == .layout {
         Picker("Renders inside", selection: $parent) {
           Text("Nothing (outermost layout)").tag("")
@@ -657,6 +663,11 @@ private struct ArtifactDetailsSheet: View {
       name = row.name
       description = row.description ?? ""
       parent = row.parentLayoutID ?? ""
+      icon = row.icon
+    }
+    .sheet(isPresented: $choosingIcon) {
+      ComponentIconPicker(
+        api: context.api, current: icon, onPick: { icon = $0; choosingIcon = false }, close: { choosingIcon = false })
     }
     .task(id: hostID) {
       guard kind == .layout else { return }

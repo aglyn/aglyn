@@ -131,6 +131,8 @@ data class ArtifactRow(
   val libraryRow: Boolean,
   val updatedAt: FirestoreTimestamp?,
   val createdAt: FirestoreTimestamp?,
+  /** A component's icon (`ReusableComponentIcon`), drawn in the Besigner's drawers and its marketplace listing. */
+  val icon: ComponentIcon? = null,
 ) {
   val isStarterBundle: Boolean get() = starterId != null
 
@@ -153,6 +155,7 @@ data class ArtifactRow(
         libraryRow = doc.bool("libraryRow") == true,
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
         createdAt = doc.data["createdAt"] as? FirestoreTimestamp,
+        icon = componentIconOf(doc),
       )
     }
   }
@@ -370,7 +373,15 @@ class ArtifactsApi(private val api: ConsoleApiClient, private val writer: Firest
   ).field("id")
 
   /** The details form's save: the name with its search keys, the description, and a layout's parent. */
-  suspend fun saveDetails(id: String, name: String, description: String, parentLayoutId: String? = null, setParent: Boolean = false) {
+  suspend fun saveDetails(
+    id: String,
+    name: String,
+    description: String,
+    parentLayoutId: String? = null,
+    setParent: Boolean = false,
+    /** A component's icon, written only when the dialog changed it; an empty map clears it, as the console's picker does. */
+    icon: Map<String, Any?>? = null,
+  ) {
     writer.update(
       path(id),
       buildMap {
@@ -378,6 +389,7 @@ class ArtifactsApi(private val api: ConsoleApiClient, private val writer: Firest
         putAll(displayNameSearchFields(name.trim()))
         put("description", description.trim())
         if (setParent) put("layoutId", parentLayoutId ?: com.aglyn.core.FirestoreDelete)
+        if (icon != null) put("icon", icon)
         put("updatedAt", firestoreNow())
       },
     )

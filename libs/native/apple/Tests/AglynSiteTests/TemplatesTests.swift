@@ -220,4 +220,44 @@ final class TemplatesTests: XCTestCase {
     XCTAssertNil(sent[2]["kind"])
     XCTAssertEqual((sent[2]["nodes"] as? [String: Any])?.count, 1)
   }
+
+  func testReadsAComponentsIconAndSearchesTheIconSet() async throws {
+    let chosen = componentIcon(of: FirestoreDocument(id: "c1", data: ["icon": ["iconId": "cart", "iconPath": "M1 1h2"]]))
+    XCTAssertEqual(chosen, ComponentIcon(id: "cart", path: "M1 1h2"))
+    XCTAssertEqual(chosen?.stored["iconId"] as? String, "cart")
+    XCTAssertEqual(chosen?.stored["iconPath"] as? String, "M1 1h2")
+    // Cleared (an empty map), never chosen and unreadable all read as no icon.
+    XCTAssertNil(componentIcon(of: FirestoreDocument(id: "c1", data: ["icon": [String: Any]()])))
+    XCTAssertNil(componentIcon(of: FirestoreDocument(id: "c1", data: [:])))
+    XCTAssertNil(componentIcon(of: FirestoreDocument(id: "c1", data: ["icon": "cart"])))
+
+    final class IconTransport: HTTPTransport, @unchecked Sendable {
+      var seen: [URL] = []
+      func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        seen.append(request.url!)
+        let body = #"{"icons":[{"id":"cart","name":"Cart","path":"M1 1h2"},{"id":"cart-outline","name":"Cart Outline","path":"M2 2"},{"name":"No id"}]}"#
+        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+      }
+    }
+    let transport = IconTransport()
+    let client = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in }, maxAttempts: 1)
+    let found = try await searchComponentIcons(client, search: " cart ")
+    XCTAssertEqual(found.map(\.id), ["cart", "cart-outline"])
+    XCTAssertEqual(found[1].name, "Cart Outline")
+    XCTAssertEqual(transport.seen.first?.path, "/api/hosts/icons")
+    XCTAssertEqual(URLComponents(url: try XCTUnwrap(transport.seen.first), resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "cart")
+  }
+
+  func testSavesAComponentsIconOnlyWhenTheDialogChangedIt() async throws {
+    let writer = RecordingWriter()
+    let client = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }, transport: TemplatesTransport(), sleep: { _ in }, maxAttempts: 1)
+    let components = ArtifactsAPI(api: client, writer: writer, hostID: "h", kind: .component)
+    try await components.saveDetails("c1", name: "Header", description: "The top band")
+    XCTAssertNil(writer.merges.last?.data["icon"])
+    try await components.saveDetails("c1", name: "Header", description: "The top band", icon: ComponentIcon(id: "cart", path: "M1 1h2").stored)
+    XCTAssertEqual((writer.merges.last?.data["icon"] as? [String: Any])?["iconId"] as? String, "cart")
+    // A cleared icon is an empty map, as the console's picker writes it.
+    try await components.saveDetails("c1", name: "Header", description: "The top band", icon: [:])
+    XCTAssertEqual((writer.merges.last?.data["icon"] as? [String: Any])?.count, 0)
+  }
 }

@@ -500,6 +500,8 @@ private fun ArtifactDialogs(
       var name by remember(dialog) { mutableStateOf(dialog.row.name) }
       var description by remember(dialog) { mutableStateOf(dialog.row.description.orEmpty()) }
       var parent by remember(dialog) { mutableStateOf(dialog.row.parentLayoutId) }
+      var icon by remember(dialog) { mutableStateOf(dialog.row.icon) }
+      var choosingIcon by remember(dialog) { mutableStateOf(false) }
       val parents = if (kind == ArtifactKind.LAYOUT) layoutChoices(context, hostId, dialog.row.id) else emptyList()
       ActionDialog(
         title = "Edit details",
@@ -511,12 +513,18 @@ private fun ArtifactDialogs(
         onDismiss = close,
         onConfirm = {
           runner.run("Saved.", onDone = close) {
-            api.saveDetails(dialog.row.id, name, description, parent, setParent = kind == ArtifactKind.LAYOUT && parent != dialog.row.parentLayoutId)
+            api.saveDetails(
+              dialog.row.id, name, description, parent, setParent = kind == ArtifactKind.LAYOUT && parent != dialog.row.parentLayoutId,
+              icon = if (kind == ArtifactKind.COMPONENT && icon?.id != dialog.row.icon?.id) icon?.stored() ?: emptyMap() else null,
+            )
           }
         },
       ) {
         OutlinedTextField(name, { name = it.take(ARTIFACT_NAME_MAX) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("details-name"))
         OutlinedTextField(description, { description = it.take(ARTIFACT_DESCRIPTION_MAX) }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
+        if (kind == ArtifactKind.COMPONENT) {
+          ComponentIconField(icon, enabled = !runner.busy, onChoose = { choosingIcon = true }, onClear = { icon = null })
+        }
         if (kind == ArtifactKind.LAYOUT) {
           SelectField(
             "Renders inside",
@@ -528,6 +536,7 @@ private fun ArtifactDialogs(
           )
         }
       }
+      if (choosingIcon) ComponentIconPicker(context.api, icon, { icon = it; choosingIcon = false }, { choosingIcon = false })
     }
     is ArtifactDialog.Duplicate -> {
       var name by remember(dialog) { mutableStateOf((DUPLICATE_NAME_PREFIX + dialog.row.name).take(DUPLICATE_NAME_MAX)) }
