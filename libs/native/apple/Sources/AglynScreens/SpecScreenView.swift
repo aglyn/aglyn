@@ -6,6 +6,7 @@ import AglynPluginHost
 import AglynUI
 import AuthenticationServices
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
   import UIKit
@@ -127,6 +128,7 @@ struct SpecScreenBody: View {
   @State private var reauthing: PendingAction?
   @State private var notice: (text: String, tone: AglynTone)?
   @State private var revealed: (title: String, value: String)?
+  @State private var exporting: ExportedDownload?
   @State private var running: String?
   @State private var searchText = ""
 
@@ -169,6 +171,13 @@ struct SpecScreenBody: View {
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
         }
+      }
+      .fileExporter(
+        isPresented: Binding(get: { exporting != nil }, set: { if !$0 { exporting = nil } }),
+        document: exporting.map { ExportedDocument(data: $0.data) },
+        contentType: exporting?.type ?? .data, defaultFilename: exporting?.name
+      ) { result in
+        if case .failure(let error) = result { show(error.localizedDescription, .error) }
       }
       .alert(
         revealed?.title ?? "",
@@ -398,6 +407,9 @@ struct SpecScreenBody: View {
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.error)
       #endif
+    case .file(let file, let name, let message):
+      exporting = ExportedDownload(name: name, data: file.data, contentType: file.contentType)
+      if let message, !message.isEmpty { show(message, .success) }
     case .done(let message, let response):
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -481,4 +493,26 @@ struct SearchModifier: ViewModifier {
       content
     }
   }
+}
+
+/// A file a route answered with, waiting for the person to choose where it goes.
+struct ExportedDownload {
+  let name: String
+  let data: Data
+  let contentType: String
+
+  var type: UTType {
+    UTType(mimeType: contentType.split(separator: ";").first.map(String.init) ?? contentType)
+      ?? UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
+  }
+}
+
+/// The bytes a save panel or the Files app writes.
+struct ExportedDocument: FileDocument {
+  static var readableContentTypes: [UTType] { [.data] }
+  let data: Data
+
+  init(data: Data) { self.data = data }
+  init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }

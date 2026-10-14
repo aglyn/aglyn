@@ -169,6 +169,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
+  /// `download`: the route answers with a file (an export), not JSON; the person saves or shares it.
+  /// Its value names the file when the route names none.
+  public let download: String?
   /// `{ when, title, text }`: when the route's answer meets `when`, the person is shown `text`
   /// (a template over `response`) in place of the success message, as the console's report
   /// dialog shows the documentation that may already answer a question.
@@ -200,6 +203,7 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
     self.instead = json["instead"]
   }
 

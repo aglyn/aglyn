@@ -344,13 +344,15 @@
           "items": [
             {
               "id": "export",
-              "label": "Email me a copy of my data",
+              "label": "Download a copy of my data",
               "icon": "arrow.down.doc|download",
+              "method": "GET",
               "url": "/api/account/export",
-              "body": {},
-              "success": "The export is on its way to {user.email}"
+              "download": "aglyn-data-export.json",
+              "success": "Your data is ready to save"
             }
-          ]
+          ],
+          "footer": "Everything tied to your sign-in as a JSON file. You may be asked for your password first."
         },
         {
           "type": "notice",
