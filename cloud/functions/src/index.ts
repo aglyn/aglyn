@@ -934,6 +934,17 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '20 * * * *',
     route: '/api/admin/retention-emails',
   },
+  /*
+   * Nightly (AGL-3780): the operator's own account holders, as hashed
+   * addresses, kept in step with a customer-list audience on each ad account
+   * whose variables are set. Sends nothing while `release_ad_audience_sync`
+   * is off. Late in the US night, after the erasures and reapers above, so an
+   * account erased today has left the audience by morning.
+   */
+  'ad-audience-sync': {
+    schedule: '40 7 * * *',
+    route: '/api/admin/ad-audience-sync',
+  },
 } as const
 
 /**
@@ -1006,6 +1017,7 @@ export const consoleRiskNoticeDigests = consoleDailyCron('risk-notice-digests')
 export const consoleUsageEmail = consoleDailyCron('usage-email')
 export const consoleWebRiskRecheck = consoleDailyCron('web-risk-recheck')
 export const consoleRetentionEmails = consoleDailyCron('retention-emails')
+export const consoleAdAudienceSync = consoleDailyCron('ad-audience-sync')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

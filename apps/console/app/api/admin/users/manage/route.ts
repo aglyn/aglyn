@@ -48,6 +48,10 @@ import {
   validateNewPassword,
 } from '../../../_lib/password-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  AD_AUDIENCE_OPT_OUT_FIELD,
+  readAdAudienceOptOut,
+} from '@aglyn/aglyn/app-utils/ad-audience'
 
 const ACTIONS = [
   'grantStaff',
@@ -61,6 +65,8 @@ const ACTIONS = [
   // AGL-1513 part 2. The narrowest session control staff have: end the
   // sessions on ONE recorded device without disabling the account.
   'signOutDevice',
+  // AGL-3780. Leave the account out of the operator's own ad audiences.
+  'setAdAudienceOptOut',
   // Permanent, and the only action here that cannot be undone by another
   // action (AGL-1140). Everything else on this list is reversible.
   'erase',
@@ -302,6 +308,32 @@ async function handler(request: Request): Promise<Response> {
         at: FieldValue.serverTimestamp(),
       })
       return Response.json({ ok: true }, { status: 200 })
+    }
+
+    // The account-holder ad audiences (AGL-3780): keep this account out of
+    // the operator's own Meta, Google and LinkedIn customer lists, or let it
+    // back in. The nightly sync removes an opted-out account on its next run.
+    // The rules refuse the field to every client, so this is its one writer.
+    if (action === 'setAdAudienceOptOut') {
+      const optOut = body?.optOut === true
+      const profileRef = firebaseAdmin.app().firestore().collection('users').doc(uid)
+      const previous = readAdAudienceOptOut(
+        ((await profileRef.get()).data() as Record<string, unknown> | undefined) ?? null,
+      )
+      const record = optOut ? { atMs: Date.now(), by: decoded.uid } : null
+      await profileRef.set(
+        { [AD_AUDIENCE_OPT_OUT_FIELD]: record ?? FieldValue.delete() },
+        { merge: true },
+      )
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        action: 'user.setAdAudienceOptOut',
+        target: `users/${uid}`,
+        before: { adAudienceOptOut: previous },
+        after: { adAudienceOptOut: record },
+        at: FieldValue.serverTimestamp(),
+      })
+      return Response.json({ ok: true, adAudienceOptOut: record }, { status: 200 })
     }
 
     // Password help (AGL-912). Both actions need somewhere to send mail —
