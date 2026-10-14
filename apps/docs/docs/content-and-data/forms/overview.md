@@ -371,9 +371,11 @@ row actions.
   derived from the name, so one sender keeps one color on every machine.
 - Unread submissions are **bold with a dot** at the left of the row. There is no "New"
   chip — bold text and a chip saying *New* are the same fact twice. Site managers also
-  get an in-app notification per submission, and an email too for anyone who switched
-  that on. It names the form, the page and the campaign, and opens **that submission**
+  get an in-app notification per submission, and an email too unless they switched
+  that off. It names the form, the page and the campaign, and opens **that submission**
   rather than the list — see [What an open submission links to](#what-it-links-to).
+  The email also lists every answer under the field's label, so you can read an
+  enquiry without opening the console; the in-app notification leaves the answers out.
 - The row's **⋮** menu holds **Open contact in CRM** — the person this submission
   updated, found by the address they gave — beside **Mark read** and **Delete**. A
   submission that carried no email address updated no contact, and the item says so.

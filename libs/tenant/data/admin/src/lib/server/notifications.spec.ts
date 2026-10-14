@@ -513,6 +513,39 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(sends[0]['text']).toContain('https://app.example.com/manage/notifications/settings')
   })
 
+  it('lists the details the caller hands it, in the email and nowhere else', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('hosts/host-1', {
+      orgId: 'org-1',
+      memberRoles: { 'uid-a': 'admin' },
+    })
+    await notifyHostManagers(
+      'host-1',
+      {
+        type: 'content.formSubmission',
+        title: 'New form submission',
+        body: 'Someone filled in Contact us.',
+      },
+      {
+        emailDetails: [
+          { label: 'Name', value: 'Jane <Doe>' },
+          { label: 'Phone', value: '   ' },
+          { label: 'Message', value: 'Two lines\nof question' },
+        ],
+      },
+    )
+    expect(sends).toHaveLength(1)
+    const html = String(sends[0]['html'])
+    // Escaped, line by line, and a blank answer is left out.
+    expect(html).toContain('Name: Jane &lt;Doe&gt;<br />Message: Two lines<br />of question')
+    expect(html).not.toContain('Phone')
+    expect(sends[0]['text']).toContain('Name: Jane <Doe>\nMessage: Two lines\nof question')
+    // The feed entry keeps to the notification itself.
+    expect(written).toHaveLength(1)
+    expect(JSON.stringify(written[0].data)).not.toContain('Jane')
+  })
+
   it('opens a stored host link on the page it names today, not the dead legacy path', async () => {
     userDocs.set('uid-a', ON)
     directory.set('uid-a', 'a@example.com')
