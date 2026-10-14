@@ -74,7 +74,8 @@ public struct SpecScreenView: View {
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {
       let fresh = ScreenModel(
-        spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer)
+        spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer,
+        account: session.account)
       model = fresh
       selection = nil
       await fresh.load()
