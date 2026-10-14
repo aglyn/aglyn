@@ -16,6 +16,7 @@
  */
 
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
+import { isFormInputNode } from '@aglyn/aglyn/app-utils/forms'
 import {
   formatBytes,
   measureNodeMap,
@@ -37,10 +38,14 @@ import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
   AI_BUILD_PLAN_EMBED_HOST_NAMES,
+  AI_BUILD_PLAN_LIMITS,
   AI_PLAN_ASKS_FOR_VIDEO,
   aiEmbedHostOf,
   aiEmbedVideoKey,
+  AI_PLAN_DATASET_ITEM_OP,
   aiPlanCreateFor,
+  aiPlanFormDatasetNames,
+  aiPlanItemFor,
   aiPlanSlugKey,
   aiPlanUndeclaredRefs,
   isAiPlanNewRef,
@@ -59,7 +64,14 @@ import {
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiFreeSiteSectionsWithin, aiSiteHomeMinSections, aiSitePlanIsHome } from '../model/ai-site-job'
+import {
+  aiFreeSiteSectionsWithin,
+  aiSiteHomeMinSections,
+  aiSitePlanIsHome,
+  aiSiteSectionShowsWork,
+} from '../model/ai-site-job'
+import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
+import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import {
   AI_INSTANCE_REF_PROP,
   validateAiNodeTree,
@@ -236,6 +248,19 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * to when the site has none for what it promises. Absent: none is known.
    */
   homeScreenIds?: readonly string[]
+  /**
+   * The home pages' own titles (AGL-3760): a link home under one of them says
+   * where it goes in the site's language, as "Inicio" does on a Spanish site.
+   */
+  homeLabels?: readonly string[]
+  /**
+   * The site's pages that place its form, by id (AGL-3729): where a link whose
+   * words ask a visitor to get in touch (`aiAsksToGetInTouch`) does what it
+   * says, even when that page is home. A guided start's café put its
+   * pre-order form on Home, and its Menu page's "Request weekend pickup"
+   * links there. Absent: none is known, and a link home is held to its words.
+   */
+  formScreenIds?: readonly string[]
   /**
    * The node as the model wrote it, by the id the checked tree gives it
    * (AGL-3078), for a tree that was stored before it is checked: a page
@@ -499,12 +524,15 @@ export function detectRepeatedSubtrees(
   const index = indexShapes(tree)
   /**
    * A compiled picture card (AGL-3660): a Stack that opens with its picture,
-   * in a cell of a grid — or that cell, holding only the card.
+   * in a cell of a grid — or that cell, holding only the card. A storefront's
+   * icon column (AGL-3676), a Stack that opens with its library icon, is the
+   * compiler's the same way: no model writes an Icon on a page.
    */
   const card = (id: string | undefined): boolean => {
     const node = id === undefined ? undefined : tree.nodes[id]
     const first = node?.nodes?.[0]
-    return node?.componentId === 'muiStack' && first !== undefined && tree.nodes[first]?.componentId === 'image'
+    const opens = first === undefined ? undefined : tree.nodes[first]?.componentId
+    return node?.componentId === 'muiStack' && (opens === 'image' || opens === 'icon')
   }
   const pictureCard = (id: string): boolean => {
     const node = tree.nodes[id]
@@ -733,7 +761,9 @@ export function detectLayoutRegions(
 /**
  * Rule 3. A form on a page is a Form bound by id to a form built on the
  * Forms page — fields, validation, consent and routing kept in one place.
- * Loose fields, an unbound Form, and fields drawn inside a bound Form (which
+ * Loose fields — a Form Field, or any of MUI's answer elements (an Input,
+ * Select, Radio Group, Checkbox or Rating) — an unbound Form, and fields
+ * drawn inside a bound Form (which
  * the page never renders: the placed form's own design replaces them) are
  * refused. A form's own design is the one place fields are drawn.
  *
@@ -754,7 +784,7 @@ export function detectInlineForms(
   const shadowed: string[] = []
   for (const visit of walkTree(tree)) {
     if (
-      visit.node.componentId === 'formField' &&
+      isFormInputNode(visit.node as never) &&
       !hasAncestor(tree, visit, (node) => node.componentId === 'form')
     ) {
       loose.push(visit.id)
@@ -2002,6 +2032,119 @@ export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputK
 /** A link's words that say it goes home. */
 const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 
+/** A label's words, lowercase, for comparing one label with another. */
+const labelWords = (label: string) => label.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ')
+
+/** Words that ask a visitor to get in touch, which the site's form answers. */
+const GET_IN_TOUCH_WORDS =
+  /\b(?:contact|book|booking|call|quote|estimate|appointment|schedule|reserve|reservation|get in touch|request|visit|enquire|inquire|enquiry|inquiry|message|talk|consult|consultation|order|pre-?order|sign up|join|apply|start)\b/i
+
+/**
+ * Whether a link's words ask a visitor to get in touch — contact, book, quote,
+ * request, order, pre-order, enquire — which the site's form answers
+ * (AGL-3729). The layout language sends such a link to the form.
+ */
+export function aiAsksToGetInTouch(label: string): boolean {
+  return GET_IN_TOUCH_WORDS.test(label)
+}
+
+/**
+ * The links rule 10 refuses as sent home for nothing (`detectUnrelatedScreenLinks`),
+ * in document order. A link whose words ask a visitor to get in touch, sent to
+ * a home page that places the site's form, does what it says (AGL-3729).
+ */
+function unrelatedScreenLinks(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'>,
+): Array<{ id: string; label: string }> {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const home = new Set(context.homeScreenIds ?? [])
+  const forms = new Set(context.formScreenIds ?? [])
+  const homeLabels = new Set((context.homeLabels ?? []).map(labelWords).filter(Boolean))
+  const sent: Array<{ id: string; label: string }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    const screenId = node.props?.['screenId']
+    const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    if (!linksHome || !label || HOME_WORDS.test(label) || homeLabels.has(labelWords(label))) continue
+    // Home holds the site's form, and the words ask for what it does (AGL-3729).
+    if (typeof screenId === 'string' && forms.has(screenId) && aiAsksToGetInTouch(label)) continue
+    // The header and the navigation link home by name and by the site's own brand.
+    const inNavigation = hasAncestor(
+      tree,
+      visit,
+      (ancestor) => ancestor.componentId === 'muiAppBar' || ['header', 'nav'].includes(elementOf(ancestor)),
+    )
+    if (!inNavigation) sent.push({ id: visit.id, label })
+  }
+  return sent
+}
+
+/**
+ * RULE 10'S LINK SENT HOME, REPAIRED IN CODE (AGL-3729).
+ *
+ * The rule's own advice is "link the page that does, or leave the link out",
+ * and both halves are something code can do once it knows where the site's
+ * form is. A Free guided start's café (beta.243, 2026-10-12) put its contact
+ * and pre-order form on Home; its Menu page's "Request weekend pickup" was
+ * sent to Home, and the page was refused on every answer, since the
+ * destination was the compiler's, not the model's. So, before the check reads
+ * the tree, each link `detectUnrelatedScreenLinks` would refuse is:
+ *
+ * - repointed to the page that places the site's form, when its words ask a
+ *   visitor to get in touch and the site has such a page that is not the page
+ *   being checked (`formScreenIds`, `ownScreenIds`). The platform reaches a
+ *   section of another page by no anchor (AGL-2867), so the link names the
+ *   page; a link to a section of its own page is the Scroll to element
+ *   interaction, which this never writes;
+ * - otherwise left out: the node and everything under it are taken off the
+ *   page, and out of its parent's children.
+ *
+ * The root is never taken out. A tree with nothing to repair comes back as
+ * the same object; a node that is changed is copied, never edited in place.
+ */
+export function aiSettleUnrelatedScreenLinks<T extends AiDoctrineTree>(
+  tree: T,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'> & {
+    /** The page being checked, by every id it goes by: a link never goes to itself. */
+    ownScreenIds?: readonly string[]
+  } = {},
+): T {
+  const sent = unrelatedScreenLinks(tree, outputKind, context)
+  if (!sent.length) return tree
+  const own = new Set(context.ownScreenIds ?? [])
+  const formScreen = (context.formScreenIds ?? []).find((id) => !own.has(id)) ?? null
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const parents = new Map<string, string>()
+  for (const visit of walkTree(tree)) {
+    const parent = visit.ancestors[visit.ancestors.length - 1]
+    if (parent !== undefined) parents.set(visit.id, parent)
+  }
+  for (const { id, label } of sent) {
+    if (!nodes[id]) continue
+    if (formScreen && aiAsksToGetInTouch(label)) {
+      const props: Record<string, unknown> = { ...(nodes[id].props ?? {}), screenId: formScreen }
+      delete props['href']
+      nodes[id] = { ...nodes[id], props }
+      continue
+    }
+    const parent = parents.get(id)
+    if (parent === undefined || !nodes[parent]) continue
+    nodes[parent] = { ...nodes[parent], nodes: (nodes[parent].nodes ?? []).filter((child) => child !== id) }
+    const stack = [id]
+    while (stack.length) {
+      const next = stack.pop() as string
+      stack.push(...(nodes[next]?.nodes ?? []))
+      delete nodes[next]
+    }
+  }
+  return { ...tree, nodes } as T
+}
+
 /**
  * Rule 10, for a link sent where the site has nothing for it (AGL-3056). A
  * link whose purpose the site has no screen for is left out; it never goes to
@@ -2016,26 +2159,9 @@ const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 export function detectUnrelatedScreenLinks(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
-  context: Pick<AiDoctrineTreeContext, 'homeScreenIds'> = {},
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds' | 'formScreenIds' | 'homeLabels'> = {},
 ): AiDoctrineViolation[] {
-  if (outputKind === 'email' || outputKind === 'form') return []
-  const home = new Set(context.homeScreenIds ?? [])
-  const sent: Array<{ id: string; label: string }> = []
-  for (const visit of walkTree(tree)) {
-    const { node } = visit
-    if (!LINK_COMPONENTS.has(node.componentId)) continue
-    const screenId = node.props?.['screenId']
-    const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
-    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
-    if (!linksHome || !label || HOME_WORDS.test(label)) continue
-    // The header and the navigation link home by name and by the site's own brand.
-    const inNavigation = hasAncestor(
-      tree,
-      visit,
-      (ancestor) => ancestor.componentId === 'muiAppBar' || ['header', 'nav'].includes(elementOf(ancestor)),
-    )
-    if (!inNavigation) sent.push({ id: visit.id, label })
-  }
+  const sent = unrelatedScreenLinks(tree, outputKind, context)
   if (!sent.length) return []
   return [
     {
@@ -2536,6 +2662,13 @@ function embedVerdict(
 }
 
 /**
+ * Containers whose empty state is something they draw themselves, so an empty
+ * one is a placement and not a gap (AGL-3716): the Music player, placed with
+ * no tracks, asks its owner to add their own; a model never fills it.
+ */
+const OWNS_ITS_EMPTY_STATE: ReadonlySet<string> = new Set(['musicPlayer'])
+
+/**
  * Rule 16. The flattest tree that renders the design: no container that
  * wraps one other container and adds nothing, no empty containers, no inline
  * style repeated where a token or a component prop would carry it, no font
@@ -2575,7 +2708,9 @@ export function detectHeavyDocument(
       wrappers.push(id)
     }
     const boundForm = node.componentId === 'form' && typeof node.props?.['formId'] === 'string'
-    if (entry?.acceptsChildren && !children.length && !boundForm) empty.push(id)
+    if (entry?.acceptsChildren && !children.length && !boundForm && !OWNS_ITS_EMPTY_STATE.has(node.componentId)) {
+      empty.push(id)
+    }
     if (outputKind !== 'email' && node.sx?.['fontFamily'] !== undefined) fonts.push(id)
     if (node.componentId === 'image') {
       images += 1
@@ -3167,6 +3302,174 @@ export function aiSettleCutHeadings(input: unknown): unknown {
   return nodes ? { ...input, nodes } : input
 }
 
+// ── Mechanical rules, settled in code (AGL-3660) ─────────────────────────
+
+/**
+ * THE RULES A CHECK WOULD REFUSE FOR AN ATTRIBUTE, SETTLED IN CODE (AGL-3660).
+ *
+ * A finding whose fix is one attribute, one level or one key, with nothing to
+ * decide about what the page says, is applied before the check reads the
+ * tree, as `aiSettleGridItems` sizes a container's items. A live Free guided
+ * start's Portfolio page (2026-10-10) was refused for rule 16's `eager-image`:
+ * the pictures step loaded every photo of the opening section eagerly, the
+ * last pass reads the stored page and asks no model, and Try again could only
+ * refuse the same page for the same reason. None of these is a choice a model
+ * makes better than the code that knows the answer:
+ *
+ * - `eager-image` (16): only the tree's first image may load eagerly; every
+ *   later one has `loading` unset, so the renderer loads it when reached;
+ * - `autoplay-video` (16), its attribute half: `autoPlay` and `preload: auto`
+ *   are taken off. A film with no poster still needs a picture, and is left;
+ * - `extra-font` (16): an `sx` font family outside an email is taken off, so
+ *   the element reads the theme's typography;
+ * - `multiple-h1` and `skipped-heading` (11): every top-level heading after a
+ *   page's first renders as an h2 (a layout's all do, a component's after its
+ *   first), and a heading after it that skips a level renders one below the
+ *   heading before it. Only the element changes (`component`): the variant,
+ *   and so the look, is kept. A heading before a page's h1, and a page with no
+ *   h1, are the model's to mend;
+ * - `multiple-main` and `landmark-in-fragment` (11): a `main` landmark after
+ *   the first, and any in a component, a form or an email, is unset;
+ * - `grid-gap` (12): a Grid container's `sx` gap is taken off and becomes its
+ *   `spacing` where it sets none, a number gap as itself, anything else 2,
+ *   which is what the re-ask asks for;
+ * - `link-color-on-band` (5): a link or a button whose words are drawn in its
+ *   band's own family is given that family's contrast text as its `sx` color,
+ *   which is what the re-ask asks for.
+ *
+ * A tree with nothing to settle comes back as the same object, so settling is
+ * idempotent; a node that is changed is copied, never edited in place.
+ */
+export function aiSettleMechanicalRules<T extends AiDoctrineTree>(tree: T, outputKind: AiOutputKind): T {
+  if (!tree.nodes[tree.rootId]) return tree
+  const nodes: Record<string, AiDoctrineNode> = { ...tree.nodes }
+  const copied = new Set<string>()
+  const edit = (id: string): AiDoctrineNode => {
+    if (!copied.has(id)) {
+      const node = nodes[id]
+      nodes[id] = {
+        ...node,
+        ...(node.props ? { props: { ...node.props } } : {}),
+        ...(node.sx ? { sx: { ...node.sx } } : {}),
+      }
+      copied.add(id)
+    }
+    return nodes[id]
+  }
+  const unsetProp = (id: string, name: string): void => {
+    if (nodes[id].props?.[name] === undefined) return
+    delete (edit(id).props as Record<string, unknown>)[name]
+  }
+  const setProp = (id: string, name: string, value: unknown): void => {
+    if (nodes[id].props?.[name] === value) return
+    const node = edit(id)
+    node.props = { ...(node.props ?? {}), [name]: value }
+  }
+  const unsetSx = (id: string, name: string): void => {
+    if (nodes[id].sx?.[name] === undefined) return
+    delete (edit(id).sx as Record<string, unknown>)[name]
+  }
+  const visits = walkTree(tree)
+  const email = outputKind === 'email'
+  const framed = !email && outputKind !== 'form'
+  const fragment = outputKind === 'component' || email || outputKind === 'form'
+
+  let images = 0
+  let mains = 0
+  for (const { id, node } of visits) {
+    // Rule 16: one eager image, the first; the rest load when they are reached.
+    if (node.componentId === 'image') {
+      images += 1
+      if (images > 1 && node.props?.['loading'] === 'eager') unsetProp(id, 'loading')
+    }
+    // Rule 16: a film loads nothing before it is played.
+    if (node.componentId === 'video') {
+      if (node.props?.['autoPlay'] === true) unsetProp(id, 'autoPlay')
+      if (node.props?.['preload'] === 'auto') unsetProp(id, 'preload')
+    }
+    // Rule 16: the theme's typography, outside an email.
+    if (!email && node.sx?.['fontFamily'] !== undefined) unsetSx(id, 'fontFamily')
+    // Rule 11: one main landmark, and none in what is placed inside pages.
+    if (elementOf(node) === 'main') {
+      mains += 1
+      if (fragment || mains > 1) {
+        if (node.props?.['component'] === 'main') unsetProp(id, 'component')
+        if (node.props?.['element'] === 'main') unsetProp(id, 'element')
+      }
+    }
+    // Rule 12: a container is spaced by its `spacing`, never an sx gap.
+    if (framed && node.componentId === GRID && node.props?.['container'] === true) {
+      const gap = GRID_GAP_SX_KEYS.find((key) => node.sx?.[key] !== undefined)
+      if (gap) {
+        const value = node.sx?.[gap]
+        for (const key of GRID_GAP_SX_KEYS) unsetSx(id, key)
+        if (node.props?.['spacing'] === undefined) setProp(id, 'spacing', typeof value === 'number' ? value : 2)
+      }
+    }
+  }
+
+  // Rule 11: the heading outline, in document order.
+  if (framed) {
+    const headings = visits
+      .map((visit) => ({ id: visit.id, level: aiHeadingLevel(nodes[visit.id]) }))
+      .filter((entry): entry is { id: string; level: number } => entry.level !== null)
+    const page = outputKind === 'page' || outputKind === 'template'
+    const firstH1 = headings.findIndex((heading) => heading.level === 1)
+    // A page's outline is settled from its h1 on; a layout's and a component's from their first heading.
+    const start = page ? firstH1 : 0
+    let previous: number | null = page ? 0 : null
+    for (let index = Math.max(start, 0); start >= 0 && index < headings.length; index += 1) {
+      const heading = headings[index]
+      // A page keeps its first h1, a component its first, and a layout none.
+      const keepsH1 = outputKind !== 'layout' && index === firstH1
+      let level = heading.level === 1 && !keepsH1 ? 2 : heading.level
+      previous ??= level - 1
+      if (level > previous + 1) level = previous + 1
+      if (level !== heading.level) setProp(heading.id, 'component', `h${level}`)
+      previous = level
+    }
+  }
+
+  // Rule 5: a link's words in its band's contrast text, read on the tree as settled so far.
+  if (framed) {
+    const settled: AiDoctrineTree = { rootId: tree.rootId, nodes }
+    for (const visit of walkTree(settled)) {
+      if (!LINK_COMPONENTS.has(visit.node.componentId)) continue
+      const family = linkWordsFamily(visit.node)
+      const band = family ? bandOf(settled, visit) : null
+      if (!band || band.family !== family) continue
+      const node = edit(visit.id)
+      node.sx = { ...(node.sx ?? {}), color: `${family}.contrastText` }
+    }
+  }
+  return copied.size ? ({ ...tree, nodes } as T) : tree
+}
+
+/**
+ * `aiSettleMechanicalRules` on a tree as the model wrote it, before the
+ * palette validator reads it (AGL-3660), as `aiSettleWrittenGridItems` settles
+ * its items. Anything that is no flat node map comes back as it was, and a
+ * node whose shape is not a palette node's is read as nothing and left as written.
+ */
+export function aiSettleWrittenMechanicalRules(input: unknown, outputKind: AiOutputKind): unknown {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return input
+  const readable = Object.entries(input['nodes']).filter(
+    ([, node]) =>
+      isRecord(node) &&
+      typeof node['componentId'] === 'string' &&
+      (node['props'] === undefined || isRecord(node['props'])) &&
+      (node['sx'] === undefined || isRecord(node['sx'])) &&
+      (node['nodes'] === undefined ||
+        (Array.isArray(node['nodes']) && node['nodes'].every((child) => typeof child === 'string'))),
+  )
+  const tree = {
+    rootId: input['rootId'],
+    nodes: Object.fromEntries(readable) as unknown as Record<string, AiDoctrineNode>,
+  }
+  const settled = aiSettleMechanicalRules(tree, outputKind)
+  return settled === tree ? input : { ...input, nodes: { ...input['nodes'], ...settled.nodes } }
+}
+
 export interface AiDoctrineTreeReport {
   ok: boolean
   /** The palette validator's result: the tree to store, its repairs and its id map. */
@@ -3230,7 +3533,10 @@ export function validateAiDoctrineTree(
   const storedOf = (id: string): unknown => written[validated.sourceIds[id] ?? id]
   const violations = [
     ...publish,
-    ...detectRepeatedSubtrees(tree, otherPages, context),
+    // A form's fields share a shape because a field IS one shape — a Form
+    // Control over a Form Label and an answer — and a form places no
+    // instances, so rule 1 has nothing to ask of one.
+    ...(outputKind === 'form' ? [] : detectRepeatedSubtrees(tree, otherPages, context)),
     ...detectLayoutRegions(tree, outputKind),
     ...detectInlineForms(tree, outputKind),
     ...detectLiteralStyles(tree, outputKind),
@@ -3551,12 +3857,22 @@ function creationKey(name: string): string {
  * creation before the rules read the plan, when exactly one creation matches
  * it with case, spaces and punctuation ignored. Two that match, or none, are
  * left for the rules to ask about.
+ *
+ * So is a creation named without its prefix — `Contact form` in a section's
+ * uses for the "Contact form" the plan creates — where the name is no record
+ * the site has (AGL-3660). A re-asked plan told to place its form "by id"
+ * can answer with the form's bare name, which is no reference at all.
  */
-export function aiSettlePlanRefs(plan: AiBuildPlan): AiBuildPlan {
+export function aiSettlePlanRefs(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null = null,
+): AiBuildPlan {
   if (!plan.create.length) return plan
+  const kinds = inventoryKinds(inventory)
   const resolve = (ref: string | null): string | null => {
-    if (!isAiPlanNewRef(ref) || aiPlanCreateFor(plan, ref)) return ref
-    const key = creationKey(ref.slice('new:'.length))
+    if (!ref || kinds.has(ref) || aiPlanCreateFor(plan, ref)) return ref
+    const key = creationKey(isAiPlanNewRef(ref) ? ref.slice('new:'.length) : ref)
+    if (!key) return ref
     const matches = plan.create.filter((entry) => creationKey(entry.name) === key)
     return matches.length === 1 ? `new:${matches[0].name}` : ref
   }
@@ -3576,6 +3892,155 @@ export function aiSettlePlanRefs(plan: AiBuildPlan): AiBuildPlan {
     })),
   }))
   return changed ? { ...plan, screens } : plan
+}
+
+/**
+ * What customers say, which no dataset of the site's holds: a review, a
+ * testimonial, a rating, a quote (AGL-3616). A job never writes them for the
+ * people who did not, so a dataset of them is one nothing can seed.
+ */
+export const AI_DATASET_SAID_NAME = /\b(reviews?|testimonials?|ratings?|quotes?|stars?|endorsements?)\b/i
+
+/**
+ * A plan that creates more datasets than this job may make is settled in
+ * code, never re-asked (AGL-3616). The live eval of 2026-10-10 refused a
+ * dental practice's plan four times over for a fourth dataset, and a food
+ * bank's re-ask for one broke a layout rule its first answer had kept.
+ *
+ * A dataset of what customers say (`AI_DATASET_SAID_NAME`, in its name or a
+ * field) is let go first, whatever the cap: both of those plans made one of
+ * testimonials, which nothing may seed.
+ *
+ * The datasets kept are the most useful: the ones the most sections list,
+ * a record template counting double, plan order breaking ties. Each one let
+ * go leaves the plan whole — its `new:` reference comes off every section,
+ * a record template of it becomes a page of its own, and a section that
+ * listed it shows fewer items than rule 8 binds, so its items are written
+ * out on the page. Where the job may create no dataset at all, rule 7 still
+ * asks, as it does for any creation.
+ */
+export function aiSettlePlanDatasets(plan: AiBuildPlan, capabilities: AiPlanCapabilities | null = null): AiBuildPlan {
+  const entry = capabilities?.create.dataset
+  if (!entry?.allowed) return plan
+  const cap = Math.min(capabilities?.datasetsMax ?? Infinity, entry.left ?? Infinity)
+  const datasets = plan.create.filter((one) => one.kind === 'dataset')
+  // A dataset a form writes to holds what visitors send (AGL-3616): its
+  // fields may well be a rating or a quote request, and nothing seeds it.
+  const forForms = aiPlanFormDatasetNames(plan)
+  const said = (one: (typeof datasets)[number]) =>
+    !forForms.has(one.name.trim().toLowerCase()) &&
+    (AI_DATASET_SAID_NAME.test(one.name) || one.fields.some((field) => AI_DATASET_SAID_NAME.test(field)))
+  if (!datasets.some(said) && (!Number.isFinite(cap) || datasets.length <= cap)) return plan
+  const named = (ref: string | null | undefined, name: string) =>
+    !!ref && isAiPlanNewRef(ref) && ref.slice('new:'.length).trim().toLowerCase() === name.trim().toLowerCase()
+  // A form's dataset counts as much as a record template: the form the
+  // person asked for is built around it.
+  const score = (name: string) =>
+    (forForms.has(name.trim().toLowerCase()) ? 2 : 0) +
+    plan.screens.reduce(
+      (total, screen) =>
+        total +
+        (named(screen.record?.dataset, name) ? 2 : 0) +
+        screen.sections.filter((section) => section.uses.some((ref) => named(ref, name))).length,
+      0,
+    )
+  const ranked = datasets
+    .filter((one) => !said(one))
+    .map((one, index) => ({ name: one.name, index, score: score(one.name) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+  const kept = new Set(ranked.slice(0, Math.max(0, cap)).map((one) => one.name.trim().toLowerCase()))
+  const dropped = new Set(datasets.map((one) => one.name.trim().toLowerCase()).filter((name) => !kept.has(name)))
+  const isDropped = (ref: string | null | undefined) => [...dropped].some((name) => named(ref, name))
+  return {
+    ...plan,
+    create: plan.create
+      .filter((one) => one.kind !== 'dataset' || !dropped.has(one.name.trim().toLowerCase()))
+      // A form whose dataset was let go sends its submissions to the Inbox only.
+      .map((one) => (one.kind === 'form' && isDropped(one.writesTo) ? withoutWritesTo(one) : one)),
+    screens: plan.screens.map((screen) => ({
+      ...screen,
+      record: screen.record && isDropped(screen.record.dataset) ? null : screen.record,
+      sections: screen.sections.map((section) =>
+        section.uses.some(isDropped)
+          ? {
+              ...section,
+              uses: section.uses.filter((ref) => !isDropped(ref)),
+              items: Math.min(section.items, AI_TYPED_LIST_MIN_ITEMS - 1),
+            }
+          : section,
+      ),
+    })),
+  }
+}
+
+/** A creation with no `writesTo`, as a plan that never said one reads. */
+function withoutWritesTo<T extends { writesTo?: string | null }>(creation: T): T {
+  const rest = { ...creation }
+  delete rest.writesTo
+  return rest
+}
+
+/**
+ * A form's dataset, settled in code before the rules read the plan
+ * (AGL-3616, Zach 2026-10-10: Aglyn AI's forms write to its datasets).
+ *
+ *  - A `writesTo` that names nothing the form can write to comes off: a
+ *    `new:` of no dataset this plan creates, an id the inventory does not
+ *    hold, or a dataset this job may not create. The form is then the
+ *    form it always was, its submissions in the Inbox. A dataset the
+ *    inventory holds, named by its name rather than its id, is given its id.
+ *  - A dataset this plan creates for a form holds the people who send it:
+ *    no page lists it and none is its record template, so its `new:` comes
+ *    off every section and record that named it, and a section that listed
+ *    it shows fewer items than rule 8 binds.
+ */
+export function aiSettlePlanFormDatasets(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  if (!plan.create.some((one) => one.kind === 'form' && one.writesTo)) return plan
+  const held = inventory?.datasets ?? []
+  const creatable = !capabilities || capabilities.create.dataset.allowed
+  let changed = false
+  const create = plan.create.map((one) => {
+    if (one.kind !== 'form' || !one.writesTo) return one
+    const ref = one.writesTo.trim()
+    if (isAiPlanNewRef(ref)) {
+      if (creatable && aiPlanCreateFor(plan, ref)?.kind === 'dataset') return one
+      // A build's dataset item, which the data plugin's operation makes.
+      if (aiPlanItemFor(plan, ref)?.op === AI_PLAN_DATASET_ITEM_OP) return one
+    } else {
+      if (held.some((row) => row.id === ref)) return one
+      const byName = held.find((row) => aiNamesMatch(row.name, ref))
+      if (byName) {
+        changed = true
+        return { ...one, writesTo: byName.id }
+      }
+    }
+    changed = true
+    return withoutWritesTo(one)
+  })
+  const settled = { ...plan, create }
+  const forForms = aiPlanFormDatasetNames(settled)
+  const listsOne = (ref: string | null | undefined) =>
+    isAiPlanNewRef(ref) && forForms.has(ref.slice('new:'.length).trim().toLowerCase())
+  const screens = plan.screens.map((screen) => {
+    const record = screen.record && listsOne(screen.record.dataset) ? null : screen.record
+    const sections = screen.sections.map((section) =>
+      section.uses.some(listsOne)
+        ? {
+            ...section,
+            uses: section.uses.filter((ref) => !listsOne(ref)),
+            items: Math.min(section.items, AI_TYPED_LIST_MIN_ITEMS - 1),
+          }
+        : section,
+    )
+    if (record === screen.record && sections.every((section, index) => section === screen.sections[index])) return screen
+    changed = true
+    return { ...screen, record, sections }
+  })
+  return changed ? { ...settled, screens } : plan
 }
 
 /**
@@ -3629,6 +4094,238 @@ export function aiSettlePlanLayouts(
     ],
     screens: plan.screens.map((screen) => ({ ...screen, layout: `new:${name}` })),
   }
+}
+
+/**
+ * A page section that is a layout region — a header, navigation or footer,
+ * read by the name rule 2's `plan-layout-region-section` reads — is taken off
+ * the page before the rules read the plan (AGL-3750). The region is already
+ * the layout's, so the rule's own answer, "take the section off the page", is
+ * the only one: a live Free start of 2026-10-12 (a bakery that sells cakes to
+ * order) planned a Header and a Footer on its pages three times and stopped.
+ *
+ * Only a section that places nothing, or nothing but a layout (which rule 2
+ * refuses placing as well), is taken off: one that places a form or a
+ * component may be a band misnamed, so the rule still asks. A page whose
+ * every section is a region keeps them all, and is re-asked as before, since
+ * a page of no sections has no answer here. A home this leaves under its
+ * fewest sections, or a Free plan still past its wall, is the existing
+ * checks' to settle or refuse.
+ */
+export function aiSettlePlanLayoutRegionSections(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+): AiBuildPlan {
+  const kinds = inventoryKinds(inventory)
+  const removable = (section: AiBuildPlan['screens'][number]['sections'][number]) =>
+    LAYOUT_REGION_NAME.test(section.name) &&
+    section.uses.every((ref) => refKind(ref, plan, kinds) === 'layout')
+  let changed = false
+  const screens = plan.screens.map((screen) => {
+    const kept = screen.sections.filter((section) => !removable(section))
+    if (kept.length === screen.sections.length || !kept.length) return screen
+    changed = true
+    return { ...screen, sections: kept }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
+/**
+ * A section that shows the work — a gallery, a portfolio, selected works, by
+ * the name `aiSiteSectionShowsWork` reads — planned with fewer pieces than
+ * the job's `galleryMinItems` is raised to it before the rules read the plan
+ * (AGL-3754). The site start's `plan-empty-gallery` refusal names one answer,
+ * "plan it with three to six items", and the fewest is the one that keeps
+ * the plan's own count closest: a section's items move no section cap, Free
+ * wall or credit figure, which count sections and pages.
+ *
+ * A section the rule reads as one item of a list split into sections is
+ * left for rule 1's re-ask to join, as the Free wall's trim leaves it: raised
+ * here, it would hide the split. A job that sets no `galleryMinItems` (every
+ * job but a site start) is returned unchanged.
+ */
+export function aiSettlePlanGalleries(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  const least = capabilities?.galleryMinItems ?? 0
+  const thin = (section: AiBuildPlanSection) => aiSiteSectionShowsWork(section.name) && section.items < least
+  if (!plan.screens.some((screen) => screen.sections.some(thin))) return plan
+  const split = new Set(detectPlanSplitLists(plan, inventory, capabilities).flatMap((violation) => violation.paths ?? []))
+  let changed = false
+  const screens = plan.screens.map((screen, screenIndex) => {
+    if (!screen.sections.some(thin)) return screen
+    return {
+      ...screen,
+      sections: screen.sections.map((section, sectionIndex) => {
+        if (!thin(section) || split.has(`screens[${screenIndex}].sections[${sectionIndex}]`)) return section
+        changed = true
+        return { ...section, items: least }
+      }),
+    }
+  })
+  return changed ? { ...plan, screens } : plan
+}
+
+/** A saved form a plan section could place: one the plan creates, or one the site has. */
+interface AiPlanFormChoice {
+  /** As a section's uses names it: `new:<name>` or the inventory id. */
+  ref: string
+  name: string
+  created: boolean
+}
+
+/** Every saved form a plan could place, the plan's own creations first. */
+function planFormChoices(plan: AiBuildPlan, inventory: AiSiteInventory | null): AiPlanFormChoice[] {
+  return [
+    ...plan.create
+      .filter((entry) => entry.kind === 'form')
+      .map((entry) => ({ ref: `new:${entry.name}`, name: entry.name, created: true })),
+    ...(inventory?.forms ?? []).map((form) => ({ ref: form.id, name: form.name, created: false })),
+  ]
+}
+
+/** The form a plan's own words would name for a section's reference, so placements count alike. */
+function formChoiceKey(ref: string, plan: AiBuildPlan): string {
+  const created = isAiPlanNewRef(ref) ? aiPlanCreateFor(plan, ref) : undefined
+  return created ? `new:${created.name}` : ref
+}
+
+/**
+ * The form a section that collects answers places: the one whose name shares
+ * the most words with the section's ("Commission inquiry" → "Commission
+ * inquiry form"), then the one the plan already places most, then the plan's
+ * own creation over a form the site has. `null` when there is none.
+ */
+function bestPlanForm(
+  section: AiBuildPlanSection,
+  choices: readonly AiPlanFormChoice[],
+  placed: ReadonlyMap<string, number>,
+): AiPlanFormChoice | null {
+  const words = new Set(nameTokens(section.name).filter((word) => word !== 'form'))
+  const score = (choice: AiPlanFormChoice) =>
+    nameTokens(choice.name).filter((word) => word !== 'form' && words.has(word)).length
+  const ranked = [...choices].sort(
+    (a, b) =>
+      score(b) - score(a) ||
+      (placed.get(b.ref) ?? 0) - (placed.get(a.ref) ?? 0) ||
+      Number(b.created) - Number(a.created),
+  )
+  return ranked[0] ?? null
+}
+
+/** The contact form a plan is given when a section collects answers and the plan makes no form. */
+export const AI_PLAN_SETTLED_FORM = {
+  name: 'Contact form',
+  why: 'Visitors need a way to reach the owner, and the site has no saved form for it.',
+  fields: ['name', 'email', 'message'],
+} as const
+
+/**
+ * A section that collects answers and places no saved form is given one
+ * before the rules read the plan (AGL-3660), rather than failing the build.
+ * A production guided start for a ceramic artist's portfolio (2026-10-09,
+ * five pages, 94 credits refunded) planned a section that asks for
+ * commissions on its work page without placing the contact form the plan
+ * made for its Contact page; the answer and its re-ask both did, and rule 3
+ * failed the whole site for one section.
+ *
+ * The section places, in order of preference:
+ * 1. the form whose name best matches it, among those the plan creates and
+ *    the site has, preferring one the plan already places — so a guided
+ *    start, which makes one form, places that same form again rather than a
+ *    second one;
+ * 2. where there is no form at all and this job may create one, a form the
+ *    plan now creates: named for the `new:` reference the section already
+ *    holds when it names a form it never declared, the contact form
+ *    otherwise.
+ *
+ * Nothing is taken out of the plan: the section keeps its name, its other
+ * uses and its items. Where the site has no form and the job may create none,
+ * rule 3 asks for nothing (AGL-3596), and neither does this. A section whose
+ * uses are already full is left for the rule to ask about.
+ */
+export function aiSettlePlanForms(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  if (!aiPlanCanPlaceForm(inventory, capabilities)) return plan
+  const kinds = inventoryKinds(inventory)
+  const unbound = (current: AiBuildPlan) =>
+    sectionPaths(current).filter(
+      ({ section }) =>
+        FORM_SECTION_NAME.test(section.name) &&
+        section.uses.length < AI_BUILD_PLAN_LIMITS.uses &&
+        !section.uses.some((ref) => refKind(ref, current, kinds) === 'form'),
+    )
+  const first = unbound(plan)
+  if (!first.length) return plan
+  let next = plan
+  if (!planFormChoices(next, inventory).length) {
+    if (capabilities && !capabilities.create.form.allowed) return plan
+    // A form the section already names and the plan never declared is the form it meant.
+    const named = first
+      .flatMap(({ section }) => section.uses)
+      .find((ref) => isAiPlanNewRef(ref) && !aiPlanCreateFor(next, ref) && !aiPlanItemFor(next, ref))
+    const taken = new Set(next.create.map((entry) => entry.name.toLowerCase()))
+    const name = named
+      ? named.slice('new:'.length).trim()
+      : taken.has(AI_PLAN_SETTLED_FORM.name.toLowerCase())
+        ? 'Get in touch form'
+        : AI_PLAN_SETTLED_FORM.name
+    next = {
+      ...next,
+      create: [
+        ...next.create,
+        {
+          kind: 'form',
+          name,
+          why: AI_PLAN_SETTLED_FORM.why,
+          duplicateOf: null,
+          fields: [...AI_PLAN_SETTLED_FORM.fields],
+        },
+      ],
+    }
+  }
+  const choices = planFormChoices(next, inventory)
+  const placed = new Map<string, number>()
+  for (const { section } of sectionPaths(next)) {
+    for (const ref of section.uses) {
+      if (refKind(ref, next, kinds) !== 'form') continue
+      const key = formChoiceKey(ref, next)
+      placed.set(key, (placed.get(key) ?? 0) + 1)
+    }
+  }
+  const settle = new Map<string, string>()
+  for (const { section, path } of unbound(next)) {
+    const form = bestPlanForm(section, choices, placed)
+    if (form) settle.set(path, form.ref)
+  }
+  if (!settle.size) return next
+  return {
+    ...next,
+    screens: next.screens.map((screen, screenIndex) => ({
+      ...screen,
+      sections: screen.sections.map((section, sectionIndex) => {
+        const ref = settle.get(`screens[${screenIndex}].sections[${sectionIndex}]`)
+        if (!ref) return section
+        // The undeclared reference the form was named for now names it; any other stays.
+        const uses = section.uses.some((use) => formChoiceKey(use, next) === ref) ? section.uses : [...section.uses, ref]
+        return { ...section, uses }
+      }),
+    })),
+  }
+}
+
+/** The forms a section that collects answers can place, as the re-ask names them. */
+function planFormChoicesText(plan: AiBuildPlan, inventory: AiSiteInventory | null): string {
+  const choices = planFormChoices(plan, inventory)
+  if (!choices.length) return 'Plan one in create as a form, and put new:<its name> in the section\'s uses.'
+  return `Put one of these in the section's uses: ${choices
+    .map((choice) => (choice.created ? choice.ref : `${choice.ref} (${choice.name})`))
+    .join(', ')}.`
 }
 
 /**
@@ -3718,6 +4415,7 @@ export function detectPlanInlineForms(
           code: 'plan-form-not-placed',
           message:
             'A section collects answers without a form. Reuse a form from the Forms page, or plan one there, and place it by id.',
+          detail: planFormChoicesText(plan, inventory),
           paths: unbound.map((entry) => entry.path),
         },
       ]
@@ -4230,6 +4928,168 @@ function freePlanLayouts(plan: AiBuildPlan, inventory: AiSiteInventory | null, c
   return Math.max(creates, needs)
 }
 
+/** What the Free wall holds a plan to: its sections, the sections it fits, and the home's fewest. */
+interface AiFreePlanWall {
+  /** The sections the plan asks for, across its pages. */
+  asked: number
+  /** The sections the wall fits beside what the job builds first. */
+  fits: number
+  layouts: number
+  pages: number
+  /** A site start's page cap (AGL-3594); undefined on a page job. */
+  sitePages: number | undefined
+  /** Whether a site start plans more pages than its cap, which the wall refuses before it counts sections. */
+  overPages: boolean
+  /** The fewest sections a site start's home at / keeps on this wall (AGL-3660); 0 where it keeps no minimum. */
+  homeMin: number
+}
+
+/** The Free wall a plan is held to, or null where the job is not on the Free taste. */
+function freePlanWall(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null,
+): AiFreePlanWall | null {
+  if (!capabilities?.freeTaste) return null
+  const asked = plan.screens.reduce((sum, screen) => sum + screen.sections.length, 0)
+  const layouts = freePlanLayouts(plan, inventory, capabilities)
+  const pages = Math.max(plan.screens.length, 1)
+  // A Free site scaffold (AGL-3594) is held to its page cap first, and then to
+  // what a SITE plan's worst case leaves for sections, with room for a retry.
+  const sitePages = capabilities.freeSitePages
+  const overPages = sitePages !== undefined && plan.screens.length > sitePages
+  // A site start's saved form is a step of its own (AGL-3596), counted on the wall since AGL-3660.
+  const forms =
+    plan.create.filter((entry) => entry.kind === 'form').length -
+    aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'form').length
+  const fits =
+    sitePages !== undefined
+      ? aiFreeSiteSectionsWithin({ layouts, pages, forms: Math.max(0, forms) }, FREE_AI_TASTE_CREDITS_PER_MONTH)
+      : aiFreePageSectionsWithin({ layouts, pages })
+  // A site start's home keeps its full five (AGL-3660): told only "plan at
+  // most 8", the live yoga start of 2026-10-08 cut a home of 6 to 4 and kept
+  // its other page, so the redo names where the sections come from.
+  const homeMin =
+    sitePages !== undefined && plan.screens.some(aiSitePlanIsHome)
+      ? aiSiteHomeMinSections({ pages, across: fits })
+      : 0
+  return { asked, fits, layouts, pages, sitePages, overPages, homeMin }
+}
+
+/**
+ * The most sections past the Free wall a plan is trimmed by rather than
+ * re-asked (AGL-3737). The live candle-shop start of 2026-10-12 planned 9
+ * sections against a wall of 8 on all three answers, each with a home of 7:
+ * the model reaching for the budget the site redo names ("plan 7 to 8") and
+ * landing one band past it, which no re-ask cured. Within two, the plan's
+ * shape is right and only a band or two the brief needs least is extra, so
+ * taking those from the end loses nothing the plan depends on. Further over,
+ * the shape itself is off — a list planned as sections, a page the wall
+ * cannot pay for — and cutting more would drop content the model meant, so
+ * that plan is still re-asked.
+ */
+export const AI_FREE_WALL_SETTLE_MAX_OVER = 2
+
+/** A section through which a visitor reaches the owner: contact, a visit, a booking. */
+const REACH_SECTION_NAME =
+  /\b(?:contact|get in touch|visit(?: us)?|find us|locations?|hours|book(?:ing)?|reserve|reservations?)\b/i
+
+/**
+ * Whether the Free wall's trim keeps a section of a page (AGL-3737): the
+ * page's opening, any section that places something (a dataset it lists, a
+ * form, a component — dropping it would leave a creation unplaced), one that
+ * collects answers or says how to reach the owner, and a storefront's
+ * listing parts — the bestsellers, the collections, the sign-up, and a Shop
+ * page's product grid.
+ */
+function freeWallKeeps(screen: AiBuildPlan['screens'][number], index: number): boolean {
+  const section = screen.sections[index]
+  if (index === 0 || section.uses.length > 0) return true
+  if (FORM_SECTION_NAME.test(section.name) || REACH_SECTION_NAME.test(section.name)) return true
+  if (
+    aiStorefrontSays('featured', section.name) ||
+    aiStorefrontSays('collections', section.name) ||
+    aiStorefrontSays('signup', section.name)
+  ) {
+    return true
+  }
+  return aiLayoutIsShopPage(screen) && aiLayoutShopGridSection(screen.sections) === index
+}
+
+/**
+ * A Free plan a section or two past the wall is trimmed to fit before the
+ * rules read the plan (AGL-3737), rather than re-asked: which sections go has
+ * one answer, so the re-ask only costs the member a stopped start. The live
+ * candle-shop start of 2026-10-12 asked for a home of 7 and a second page of
+ * 2 against a wall of 8, three answers running, and stopped needing input.
+ *
+ * One section goes at a time, the last of its page that `freeWallKeeps`
+ * does not hold, from the page furthest past its share: the home at / past
+ * its fewest (`aiSiteHomeMinSections`, five on a site start whose wall pays
+ * for a full home), any other page past two; on a tie, the longer page, then
+ * the home. No home goes under its fewest and no page under one section. The
+ * shares are what a site start is told to plan (a home of five or six, the
+ * other page two or three): the candle shop's 7 + 2 becomes 6 + 2, never
+ * 7 + 1, and the recorded yoga answer's 6 + 4 becomes 5 + 3, the shape its
+ * own redo chose.
+ *
+ * A plan more than `AI_FREE_WALL_SETTLE_MAX_OVER` past the wall, a site
+ * start past its page cap, a plan with a list split into sections, and a
+ * plan the trim cannot fit without a section it keeps are returned
+ * unchanged, for the wall to re-ask.
+ */
+export function aiSettlePlanFreeWall(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  const wall = freePlanWall(plan, inventory, capabilities)
+  if (!wall || wall.overPages) return plan
+  const over = wall.asked - wall.fits
+  if (over <= 0 || over > AI_FREE_WALL_SETTLE_MAX_OVER) return plan
+  // A list split into sections is joined by its re-ask, which frees the room;
+  // a trim would cut one of its items and hide the split from the rule.
+  if (detectPlanSplitLists(plan, inventory, capabilities).length) return plan
+  const kept = plan.screens.map((screen) => screen.sections.map((section, index) => ({ section, index })))
+  const home = plan.screens.findIndex(aiSitePlanIsHome)
+  const floor = (screenIndex: number) => (screenIndex === home ? Math.max(wall.homeMin, 1) : 1)
+  const target = (screenIndex: number) => (screenIndex === home ? Math.max(wall.homeMin, 1) : 2)
+  // The last section of a page the trim may take, or -1.
+  const last = (screenIndex: number) => {
+    const entries = kept[screenIndex]
+    if (entries.length <= floor(screenIndex)) return -1
+    for (let at = entries.length - 1; at > 0; at -= 1) {
+      if (!freeWallKeeps(plan.screens[screenIndex], entries[at].index)) return at
+    }
+    return -1
+  }
+  for (let left = over; left > 0; left -= 1) {
+    let pick = -1
+    for (let index = 0; index < kept.length; index += 1) {
+      if (last(index) === -1) continue
+      const room = kept[index].length - target(index)
+      const best = pick === -1 ? null : kept[pick].length - target(pick)
+      if (
+        best === null ||
+        room > best ||
+        (room === best && (kept[index].length > kept[pick].length || (kept[index].length === kept[pick].length && index === home)))
+      ) {
+        pick = index
+      }
+    }
+    if (pick === -1) return plan
+    kept[pick].splice(last(pick), 1)
+  }
+  return {
+    ...plan,
+    screens: plan.screens.map((screen, index) =>
+      kept[index].length === screen.sections.length
+        ? screen
+        : { ...screen, sections: kept[index].map((entry) => entry.section) },
+    ),
+  }
+}
+
 /**
  * The Free wall (plan): a plan asks for no more sections than the Free taste
  * pays for at its worst beside what the job builds first (AGL-3070). A live
@@ -4245,14 +5105,10 @@ export function detectPlanOverFreeWall(
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
 ): AiDoctrineViolation[] {
-  if (!capabilities?.freeTaste) return []
-  const asked = plan.screens.reduce((sum, screen) => sum + screen.sections.length, 0)
-  const layouts = freePlanLayouts(plan, inventory, capabilities)
-  const pages = Math.max(plan.screens.length, 1)
-  // A Free site scaffold (AGL-3594) is held to its page cap first, and then to
-  // what a SITE plan's worst case leaves for sections, with room for a retry.
-  const sitePages = capabilities.freeSitePages
-  if (sitePages !== undefined && plan.screens.length > sitePages) {
+  const wall = freePlanWall(plan, inventory, capabilities)
+  if (!wall) return []
+  const { asked, layouts, pages, sitePages, fits, homeMin } = wall
+  if (sitePages !== undefined && wall.overPages) {
     return [
       {
         rule: null,
@@ -4262,24 +5118,9 @@ export function detectPlanOverFreeWall(
       },
     ]
   }
-  // A site start's saved form is a step of its own (AGL-3596), counted on the wall since AGL-3660.
-  const forms =
-    plan.create.filter((entry) => entry.kind === 'form').length -
-    aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'form').length
-  const fits =
-    sitePages !== undefined
-      ? aiFreeSiteSectionsWithin({ layouts, pages, forms: Math.max(0, forms) }, FREE_AI_TASTE_CREDITS_PER_MONTH)
-      : aiFreePageSectionsWithin({ layouts, pages })
   if (asked <= fits) return []
   const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'
   const beside = layouts ? ` that creates ${layouts > 1 ? `${layouts} layouts` : 'its layout'}` : ''
-  // A site start's home keeps its full five (AGL-3660): told only "plan at
-  // most 8", the live yoga start of 2026-10-08 cut a home of 6 to 4 and kept
-  // its other page, so the redo names where the sections come from.
-  const homeMin =
-    sitePages !== undefined && plan.screens.some(aiSitePlanIsHome)
-      ? aiSiteHomeMinSections({ pages, across: fits })
-      : 0
   const keepHome = homeMin
     ? ` Keep the home page at / at ${homeMin} or more sections, and take the rest from the other ${pages > 2 ? 'pages' : 'page'}.`
     : ''

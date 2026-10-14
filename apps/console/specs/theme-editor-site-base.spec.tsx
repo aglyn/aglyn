@@ -32,6 +32,7 @@ import type { ReactNode } from 'react'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <section>{children}</section>,
+  MdiIcon: () => null,
 }))
 jest.mock('@aglyn/shared-ui-color-picker', () => ({ ColorPicker: () => null }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))

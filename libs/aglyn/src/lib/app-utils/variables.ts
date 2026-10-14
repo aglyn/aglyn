@@ -75,6 +75,11 @@ export interface HostVariable {
 
 export const VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,39}$/
 
+/** Whether `name` may name a variable or a function's parameter (`VARIABLE_NAME_PATTERN`). */
+export function isVariableName(name: string): boolean {
+  return VARIABLE_NAME_PATTERN.test(name)
+}
+
 /** Human-readable rendering of a variable's value for text interpolation. */
 export function formatVariableValue(variable: HostVariable): string {
   const raw = variable.value ?? ''

@@ -23,8 +23,8 @@ compare-at price, weight, image, and inventory count.
   `service`.
 - **Status**: `draft` (invisible to visitors), `active`, or `archived`.
   A product created for you rather than added in the editor — a proposed
-  product, for one — starts as a draft with no photo, and its price stays
-  empty unless one was given. It counts toward your plan's product
+  product, for one — starts as a draft with no photo, at the price it was given
+  (an AI proposal's suggested price) or else a default price, for you to change. It counts toward your plan's product
   allowance like any other product.
 - **Pricing**: a variant with a **compare-at price** above its price shows a
   sale badge on storefront blocks.
@@ -78,10 +78,14 @@ decrement it.
 Aglyn AI can write a product's description, search listing and tags from what it says
 and shows, write copy for many products or an import at once, propose a first catalog
 from a brief, and propose categories and discounts. Every proposal is reviewed before it
-is saved. Proposed products are created as drafts with their prices left empty, and
+is saved. Proposed products are created as drafts at their suggested prices, and
 proposed discounts are created switched off. See [Products with AI](../../ai/products-with-ai.md).
 
 ## Categories and tags
+
+The **Categories & collections** card, in the products hub's catalog, organizes
+your products into categories and collections that storefront pages and filters
+use.
 
 **Categories** are hierarchical (each may have a parent) and slugged for
 URLs. **Tags** are free-form labels. Both drive storefront filtering and
@@ -111,6 +115,54 @@ rules and a price *below* keeps every control. A price *below* rule is a price r
 that collection's grid is in price order — high to low if that is the sort chosen, low to
 high otherwise.
 
+## Product reviews {#product-reviews}
+
+Shoppers rate a product from 1 to 5 and write a review in the **Product
+reviews** block on your product page template. Pro plan and above.
+
+### Review settings {#review-settings}
+
+The **Reviews** card in **Settings** decides who can review your products
+and when customers are asked for a review.
+
+**Who can review.** By default only customers who bought the product can
+review it, and their reviews show a **Verified buyer** badge. A customer is
+verified when they are signed in to their account on your store with the
+email their order went to, or when they open the link in their
+review-request email. Typing an email address into the form never verifies
+anyone. Everyone else sees "Only customers who bought this can review" and a
+**Sign in** link. To accept reviews from anyone, set **Who can review** to
+**Anyone** on the **Reviews** card in **Settings**: verified buyers still
+publish right away, and everyone else gives a name and an email (never shown)
+and waits for your approval.
+
+**The review-request email.** A set number of days after an order is
+fulfilled (7 by default, anywhere from 3 to 30), the buyer gets one email
+asking for a review, with a link for each product on the order. Each link
+works once, for 60 days, and only for that order, product and buyer. Items
+that were refunded are left out, and register sales are never asked. The
+email respects unsubscribes and your suppression list. Turn it off or change
+the delay on the **Reviews** card, and change its wording under **Emails →
+Review request**.
+
+### Review moderation {#review-moderation}
+
+The **Review moderation** card, in the products hub's **Promotions**
+section, lists your reviews so you can publish, hide and reply to them:
+
+1. Verified reviews publish as soon as they are written, good or bad.
+   You can **Hide** one only for a content reason: spam or advertising,
+   abusive or hateful language, not being about the product, or sharing
+   private information. The reason is recorded with the review.
+2. Reviews from shoppers who are not verified (only when **Who can review**
+   is **Anyone**) wait under **Show: Pending**. Select **Approve** to publish
+   one, or **Reject** with a reason to keep it off your site.
+3. **Reply** adds your answer under a review.
+
+Only published reviews show on your site, with the product's average rating.
+Switch **Show** to **Published**, **Hidden**, **Rejected** or **All** to look
+back.
+
 ## Slugs
 
 Products, categories, and collections each have a host-unique slug used in
@@ -121,8 +173,8 @@ lowercase letters, numbers, and dashes.
 
 Your catalog is published as a product feed for Google Merchant Center, and
 for Meta, TikTok, Pinterest, Snapchat and Microsoft Shopping too. Each
-channel has its own feed address and setup steps under **Products → Settings
-→ Sales channels**; see [Sales channels](./sales-channels.md).
+channel has its own feed address and setup steps in the store's settings,
+under **Sales channels**; see [Sales channels](./sales-channels.md).
 
 ## Related
 

@@ -43,6 +43,14 @@ You need:
 3. If your login reaches more than one Xero organization, choose the one to use
    and select **Use this organization**.
 
+## Choose an organization {#choose-an-organization}
+
+When your Xero login reaches more than one organization, the Accounting page asks
+which one this workspace posts to: pick it and select **Use this organization**.
+
+Nothing is posted until you choose. Every paid order, refund, fee and payout of
+the workspace then goes to that organization.
+
 ## Choose your accounts
 
 Under **Accounts and tax**, pick the **Sales income**, **Shipping income**

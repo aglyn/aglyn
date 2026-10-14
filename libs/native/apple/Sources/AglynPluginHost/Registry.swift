@@ -79,9 +79,19 @@ public final class NativePluginRegistry {
     tabList.values.filter { $0.apps.contains(app) }.sorted(by: Self.byOrder(\.order, \.id))
   }
 
-  /// Home's widgets (`slot` nil), or a core page's slot's.
+  /// Home's widgets (`slot` nil), or a core page's slot's: never a staff card.
   public func widgets(for app: AglynAppKind, slot: String? = nil) -> [NativeWidget] {
-    widgetList.values.filter { $0.apps.contains(app) && $0.slot == slot }.sorted(by: Self.byOrder(\.order, \.id))
+    widgetList.values.filter { $0.apps.contains(app) && $0.slot == slot && $0.staffZone == nil }.sorted(by: Self.byOrder(\.order, \.id))
+  }
+
+  /// One staff zone's cards that `staff` may see, in order.
+  public func staffWidgets(_ zone: StaffZone, for staff: StaffStanding?) -> [NativeWidget] {
+    widgetList.values.filter { $0.staffZone == zone && $0.admits(staff) }.sorted(by: Self.byOrder(\.order, \.id))
+  }
+
+  /// The staff screens `staff` may open, for the shell's Staff section.
+  public func staffScreens(for staff: StaffStanding?) -> [NativeScreen] {
+    screens.values.filter { $0.staffRoles != nil && $0.admits(staff) }.sorted { $0.title < $1.title }
   }
 
   public func quickActions(for app: AglynAppKind) -> [NativeQuickAction] {
@@ -90,7 +100,7 @@ public final class NativePluginRegistry {
 
   public func screens(for app: AglynAppKind, placement: POSPlacement? = nil) -> [NativeScreen] {
     screens.values
-      .filter { $0.apps.contains(app) && (placement == nil || $0.placement == placement) }
+      .filter { $0.apps.contains(app) && $0.staffRoles == nil && (placement == nil || $0.placement == placement) }
       .sorted { $0.id < $1.id }
   }
 
@@ -157,14 +167,30 @@ public final class NativePluginRegistrar {
 
   public func screen<V: View>(
     _ id: String, title: String, requiresSite: Bool = false, apps: Set<AglynAppKind> = [.aglyn],
-    icon: String? = nil, placement: POSPlacement? = nil,
+    icon: String? = nil, placement: POSPlacement? = nil, staffRoles: [String]? = nil,
     @ViewBuilder _ content: @escaping @MainActor (NativePluginContext, NativeParams) -> V
   ) {
     admit(.screens, id) {
       try registry.add(
         NativeScreen(
           pluginID: pluginID, id: id, title: title, requiresSite: requiresSite, apps: apps, icon: icon,
-          placement: placement, make: { AnyView(content($0, $1)) }))
+          placement: placement, staffRoles: staffRoles, make: { AnyView(content($0, $1)) }))
+    }
+  }
+
+  /// A card on the staff console's `zone`, given the zone's subject as
+  /// params; `roles` limits it to staff whose role admits it (nil: any).
+  public func staffWidget<V: View>(
+    _ id: String, title: String, zone: StaffZone, icon: String? = nil, order: Int, size: WidgetSize = .full,
+    roles: [String]? = nil,
+    @ViewBuilder _ content: @escaping @MainActor (NativePluginContext, NativeParams) -> V
+  ) {
+    admit(.widgets, id) {
+      try registry.add(
+        NativeWidget(
+          pluginID: pluginID, id: id, title: title, icon: icon, order: order, size: size, requiresSite: false,
+          apps: [.aglyn], staffZone: zone, staffRoles: roles, make: { AnyView(content($0, [:])) },
+          makeStaff: { AnyView(content($0, $1)) }))
     }
   }
 

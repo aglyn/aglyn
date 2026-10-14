@@ -11,6 +11,8 @@ Feature flags are managed from the staff console and require a staff claim; publ
 changes requires the **super** staff role.
 :::
 
+## What a release flag is {#what-a-release-flag-is}
+
 Release flags control whether a feature is **launched** — a separate axis from
 [plan entitlements](../workspace-and-billing/billing-and-plans/overview.md), which control whether an organization's
 *plan includes* a feature. A customer sees a feature only when it's released **and**

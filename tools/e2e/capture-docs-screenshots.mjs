@@ -457,6 +457,19 @@ const shots = [
     waitFor: 'Theme',
     settleMs: 6000,
   },
+  // The Style components card: buttons, form inputs and cards, each a
+  // choice from a list, with the overrides behind a collapsed Advanced.
+  {
+    out: 'theme-builder/style-components.png',
+    path: `/${HOST_BASE}/theme`,
+    waitFor: 'Button style',
+    settleMs: 6000,
+    // The card sits under the long Color scheme card. A scroll stops short
+    // of its bottom edge, so the window is made tall enough to hold it
+    // where it lies.
+    viewport: { width: 1440, height: 4100 },
+    clipTo: { locator: '.MuiCard-root:has-text("Style components"):has-text("Button style")' },
+  },
   // The font picker (AGL-3656): the Typography card's body and heading
   // fonts with their cost, then the catalog browser on the site's current
   // body font — its styles, download size and pairings beside the list.

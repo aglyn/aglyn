@@ -1630,6 +1630,10 @@ describe('hosts', () => {
       // connection a sealed channel OAuth token; only the sales-channels
       // routes read or write either.
       'salesChannels',
+      // The hashed review links (AGL-3736). Only the review-request sweep
+      // mints one and only /api/commerce/reviews spends one; a client that
+      // could write a row could mint a "verified buyer" review.
+      'reviewTokens',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -2237,7 +2241,7 @@ describe('hosts', () => {
     // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
       'overlays', 'experiments', 'emailTemplates',
-      'coupons', 'discounts', 'reviews',
+      'coupons', 'discounts',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
@@ -2250,6 +2254,11 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
+    // `reviews` LEFT this list in AGL-3736: only `/api/commerce/reviews`
+    // creates one (it alone decides `verified`), no client deletes one, and
+    // an update may touch only the moderation fields. All of it is asserted
+    // in `storefront reviews: verified and status are the server's`.
+    //
     // `siteMembers` LEFT this list in AGL-3308: no client creates one, an
     // update may flip `suspended` and nothing else, and a delete is refused
     // once the member has a credential document. All of it is asserted in
@@ -6442,6 +6451,50 @@ describe('acquisition is the platform\'s to write, never a client\'s (AGL-3289)'
 })
 
 /**
+ * When any member last used the workspace (`orgs/{orgId}.lastActivityAt`).
+ * Stamped only by /api/orgs/last-activity through the Admin SDK, on the
+ * server's clock, and sorted by on the staff Organizations list — so no
+ * client writes it: not the owner (who could make a dormant workspace read as
+ * busy), and not staff from the browser either. The owner's ordinary edits
+ * still land beside it, so the guard cannot be satisfied by closing the doc.
+ */
+describe('lastActivityAt is the platform\'s to write, never a client\'s', () => {
+  it('refuses the owner and staff setting it from a client', async () => {
+    await mustDeny(
+      'the owner stamping it',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { lastActivityAt: new Date() }),
+    )
+    await mustDeny(
+      'the owner merging it beside a field the owner may write',
+      setDoc(
+        doc(authed(OWNER), 'orgs', ORG),
+        { name: 'Acme Goods', lastActivityAt: new Date() },
+        { merge: true },
+      ),
+    )
+    await mustDeny(
+      'super staff stamping it',
+      updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        lastActivityAt: new Date(),
+      }),
+    )
+    await mustDeny(
+      'billing staff stamping it',
+      updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'billing' }), 'orgs', ORG), {
+        lastActivityAt: new Date(),
+      }),
+    )
+  })
+
+  it('still lets the owner edit the workspace name', async () => {
+    await mustAllow(
+      'the owner renaming',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Goods' }),
+    )
+  })
+})
+
+/**
  * The consent-group declaration and its confirmation switch (AGL-3316).
  * `consentGroupForHost` reads both off the org document to decide who a
  * marketing basis covers, whose opt-outs hold a send and — with the switch on
@@ -9152,6 +9205,144 @@ describe('the inventory ledger is append-only (AGL-2269)', () => {
         },
       ),
     )
+  })
+})
+
+describe('storefront reviews: verified and status are the server\'s; moderation stays client-side (AGL-3736)', () => {
+  const VERIFIED = 'review-verified'
+  const UNVERIFIED = 'review-unverified'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'reviews', VERIFIED), {
+        productId: 'prod-1',
+        rating: 1,
+        body: 'Broke in a week.',
+        authorName: 'Jane D',
+        authorEmail: 'jane@x.z',
+        verified: true,
+        status: 'approved',
+        createdAtMs: 1_760_000_000_000,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'reviews', UNVERIFIED), {
+        productId: 'prod-1',
+        rating: 5,
+        body: 'Love it',
+        authorName: 'Sam',
+        authorEmail: 'sam@x.z',
+        verified: false,
+        status: 'pending',
+        createdAtMs: 1_760_000_000_001,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'reviewTokens', 'hash-1'), {
+        orderId: 'o1',
+        productId: 'prod-1',
+        email: 'jane@x.z',
+        expiresAtMs: 1_765_000_000_000,
+        usedAtMs: null,
+      })
+    })
+  })
+
+  it('no client creates a review — least of all a verified, approved one', async () => {
+    for (const uid of [EDITOR, OWNER]) {
+      await mustDeny(
+        `${uid} minting a verified review`,
+        setDoc(doc(authed(uid), 'hosts', HOST, 'reviews', 'forged'), {
+          productId: 'prod-1',
+          rating: 5,
+          body: 'Best ever',
+          authorName: 'Fan',
+          verified: true,
+          status: 'approved',
+          createdAtMs: 1,
+        }),
+      )
+    }
+  })
+
+  it('no client flips the badge or rewrites what the buyer said', async () => {
+    await mustDeny(
+      'the EDITOR verifying an unverified review',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', UNVERIFIED), { verified: true }),
+    )
+    await mustDeny(
+      'the OWNER raising a rating',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED), { rating: 5 }),
+    )
+    await mustDeny(
+      'the OWNER rewriting the text',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED), { body: 'Great!' }),
+    )
+    await mustDeny(
+      'the OWNER deleting a review',
+      deleteDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED)),
+    )
+  })
+
+  it('a verified review is hidden or rejected only for a content reason, and never re-queued', async () => {
+    await mustDeny(
+      'hiding a verified review with no reason',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), { status: 'hidden' }),
+    )
+    await mustDeny(
+      'rejecting a verified review for being negative',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), {
+        status: 'rejected',
+        moderationReason: 'negative',
+      }),
+    )
+    await mustDeny(
+      'sending a verified review back to pending',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), { status: 'pending' }),
+    )
+    await mustAllow(
+      'hiding a verified review as spam',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', VERIFIED), {
+        status: 'hidden',
+        moderationReason: 'spam',
+        moderatedAtMs: 1_760_000_000_500,
+      }),
+    )
+  })
+
+  it('POSITIVE CONTROL: the moderation card approves, rejects and replies', async () => {
+    await mustAllow(
+      'approving a pending unverified review',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'reviews', UNVERIFIED), { status: 'approved' }),
+    )
+    await mustAllow(
+      'a seller reply',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'reviews', VERIFIED), { reply: 'Sorry — we will replace it.' }),
+    )
+    await mustAllow(
+      'members read the queue',
+      getDoc(doc(authed(VIEWER), 'hosts', HOST, 'reviews', UNVERIFIED)),
+    )
+  })
+
+  it('review links are closed to every client, read and write', async () => {
+    for (const uid of [EDITOR, OWNER]) {
+      await mustDeny(
+        `${uid} reading a review link row`,
+        getDoc(doc(authed(uid), 'hosts', HOST, 'reviewTokens', 'hash-1')),
+      )
+      await mustDeny(
+        `${uid} minting a review link`,
+        setDoc(doc(authed(uid), 'hosts', HOST, 'reviewTokens', 'hash-2'), {
+          orderId: 'o1',
+          productId: 'prod-1',
+          email: 'me@x.z',
+          expiresAtMs: 9_999_999_999_999,
+          usedAtMs: null,
+        }),
+      )
+      await mustDeny(
+        `${uid} un-spending a review link`,
+        updateDoc(doc(authed(uid), 'hosts', HOST, 'reviewTokens', 'hash-1'), { usedAtMs: null }),
+      )
+    }
   })
 })
 
@@ -13786,6 +13977,48 @@ describe('rewards records are the server’s alone (AGL-3640)', () => {
   })
 })
 
+describe('review platform records are the server’s alone (AGL-3699)', () => {
+  // A site's Trustpilot invitation address and sealed API credentials, its
+  // Yotpo keys, and whether each service was asked to invite one order's
+  // buyer. Written and read through the Admin SDK by the review-platforms
+  // plugin's routes, email copies and event handlers; the owner and staff
+  // are refused like everyone.
+  const ORG_DOCS = [
+    ['reviewPlatformsHostSettings', HOST],
+    ['reviewPlatformsInvitations', `${HOST}__order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [name, id] of ORG_DOCS) {
+        await setDoc(doc(db, 'orgs', ORG, name, id), { orgId: ORG, hostId: HOST, recordId: 'order-1' })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const [name, id] of ORG_DOCS) {
+        const ref = doc(db, 'orgs', ORG, name, id)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, 'orgs', ORG, name), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { trustpilot: { bccAddress: 'me@example.com' } }))
+        await mustDeny(`${who} creating ${name}`, setDoc(doc(db, 'orgs', ORG, name, 'new'), { orgId: ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('tax service records are the server’s alone (AGL-3631)', () => {
   // A site's connection holds the merchant's sealed AvaTax or TaxJar
   // credential; the exemptions decide who pays no tax; the records say which
@@ -13890,6 +14123,52 @@ describe('email platform connections are the server’s alone (AGL-3639)', () =>
     ['marketingPlatformConnections', `${HOST}_klaviyo`],
     ['marketingPlatformConnections', `${HOST}_klaviyo`, 'log', 'run-1'],
     ['marketingPlatformEvents', `${HOST}_klaviyo_evt-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          sealedToken: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc',
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
+describe('ad conversions are the server’s alone (AGL-3694)', () => {
+  // A connection holds the merchant's sealed Meta, TikTok or Pinterest access
+  // token; a consent is what lets a purchase be reported at all; an owed
+  // event is a conversion about to reach the merchant's ad account. All
+  // written and read by the ad-conversions plugin through the Admin SDK.
+  const DOCS = [
+    ['adConversionConnections', `${HOST}_meta`],
+    ['adConversionConsents', `${HOST}_cs_live_1`],
+    ['adConversionEvents', `${HOST}_meta_purchase.cs_live_1`],
   ]
   const PRINCIPALS = [
     ['owner', () => authed(OWNER)],
@@ -14119,6 +14398,52 @@ describe('fulfillment network records are the server’s alone (AGL-3634)', () =
   })
 })
 
+describe('courier records are the server’s alone (AGL-3695)', () => {
+  // A connection holds the merchant's sealed DoorDash Drive signing secret
+  // and the hash of the token DoorDash's webhooks carry; a delivery record
+  // decides whether a courier is booked or called off. All written and read
+  // by the couriers plugin's routes, webhook, event intake and job through
+  // the Admin SDK.
+  const DOCS = [
+    ['courierConnections', `${HOST}_doordash`],
+    ['courierDeliveries', `${HOST}_order-1`],
+  ]
+  const PRINCIPALS = [
+    ['owner', () => authed(OWNER)],
+    ['editor', () => authed(EDITOR)],
+    ['outsider', () => authed(OUTSIDER)],
+    ['staff', () => authed(STAFF, { staff: true })],
+    ['anonymous', () => anon()],
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const path of DOCS) {
+        await setDoc(doc(db, ...path), {
+          orgId: ORG,
+          hostId: HOST,
+          live: { sealedSigningSecret: 'sb1.tek1.aaaaaaaaaaaaaaaa.bbbb.cccccccccccccccccccccc' },
+        })
+      }
+    })
+  })
+
+  it('no client reads, lists or writes them, staff and the owner included', async () => {
+    for (const [who, client] of PRINCIPALS) {
+      const db = client()
+      for (const path of DOCS) {
+        const name = path.join('/')
+        const ref = doc(db, ...path)
+        await mustDeny(`${who} reading ${name}`, getDoc(ref))
+        await mustDeny(`${who} listing ${name}`, getDocs(query(collection(db, ...path.slice(0, -1)), limit(10))))
+        await mustDeny(`${who} writing ${name}`, setDoc(ref, { orgId: OTHER_ORG }))
+        await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
+      }
+    }
+  })
+})
+
 describe('marketplace records are the server’s alone (AGL-3638)', () => {
   // A connection holds the merchant's sealed marketplace grant and what each
   // listing was last sent; an imported order's record says which shipments
@@ -14253,5 +14578,56 @@ describe('delivery-app records are the server’s alone (AGL-3644)', () => {
         await mustDeny(`${who} deleting ${name}`, deleteDoc(ref))
       }
     }
+  })
+})
+
+describe("a site's live chat settings are written by their route alone (AGL-3698)", () => {
+  /*
+   * `hosts/{hostId}/pluginSettings/live-chat` decides which vendor script a
+   * published page loads and which hosts the site's policy admits, so no
+   * member of the site writes it — the owner included. `/api/live-chat/settings`
+   * parses every field and writes it with the Admin SDK. Staff keep the host
+   * catch-all's staff write, as for every subcollection. Members still READ
+   * it, like every other plugin's site settings, and the generic document
+   * beside it keeps its admin write: both halves asserted, so a rule that
+   * closed every plugin's settings would fail here too.
+   */
+  const LIVE_CHAT = ['hosts', HOST, 'pluginSettings', 'live-chat']
+  const settings = {
+    enabled: true,
+    provider: 'tidio',
+    publicKey: 'abcdefghijklmnopqrstuvwxyz123456',
+    pages: 'all',
+    paths: [],
+    position: 'right',
+    loadWithPage: false,
+  }
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), ...LIVE_CHAT), settings)
+    })
+  })
+
+  it("refuses every write by the site's own members, the admin included", async () => {
+    for (const [who, client] of [
+      ['the owner', () => authed(OWNER)],
+      ['an editor', () => authed(EDITOR)],
+      ['a viewer', () => authed(VIEWER)],
+    ]) {
+      await mustDeny(
+        `${who} pointing the chat at another key`,
+        setDoc(doc(client(), ...LIVE_CHAT), { ...settings, publicKey: 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz' }),
+      )
+      await mustDeny(`${who} deleting the chat settings`, deleteDoc(doc(client(), ...LIVE_CHAT)))
+    }
+  })
+
+  it('still lets a member read them, and the owner write another plugin’s', async () => {
+    await mustAllow('the owner reading the chat settings', getDoc(doc(authed(OWNER), ...LIVE_CHAT)))
+    await mustAllow(
+      "the owner writing another plugin's site settings",
+      setDoc(doc(authed(OWNER), 'hosts', HOST, 'pluginSettings', 'marketing'), { fromName: 'Acme' }),
+    )
   })
 })

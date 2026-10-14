@@ -10,12 +10,15 @@ import com.aglyn.plugins.ai.registerAINative
 import com.aglyn.plugins.bookings.registerBookingsNative
 import com.aglyn.plugins.commerce.registerCommerceNative
 import com.aglyn.plugins.crm.registerCrmNative
+import com.aglyn.plugins.data.registerDataNative
 import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
 import com.aglyn.plugins.funnels.registerFunnelsNative
 import com.aglyn.plugins.inbox.registerInboxNative
+import com.aglyn.plugins.logic.registerLogicNative
 import com.aglyn.plugins.marketing.registerMarketingNative
+import com.aglyn.plugins.marketplace.registerMarketplaceNative
 import com.aglyn.plugins.outreach.registerOutreachNative
 import com.aglyn.plugins.redirects.registerRedirectsNative
 import com.aglyn.plugins.sms.registerSmsNative
@@ -44,6 +47,11 @@ object NativePluginManifest {
             register = ::registerCrmNative,
         ),
         NativePluginManifestEntry(
+            id = "data",
+            contributes = mapOf("screens" to listOf("data.datasets", "data.records", "data.schema"), "quickActions" to listOf("data.open"), "deepLinks" to listOf("data.page")),
+            register = ::registerDataNative,
+        ),
+        NativePluginManifestEntry(
             id = "email",
             contributes = mapOf("screens" to listOf("email.audiences", "email.messages", "email.sending", "email.suppressions", "email.templates", "email.topics"), "quickActions" to listOf("email.open"), "deepLinks" to listOf("email.audiences-page", "email.list-page", "email.message-page", "email.messages-page", "email.page", "email.sending-page", "email.suppressions-page", "email.templates-page", "email.topics-page")),
             register = ::registerEmailNative,
@@ -69,9 +77,19 @@ object NativePluginManifest {
             register = ::registerInboxNative,
         ),
         NativePluginManifestEntry(
+            id = "logic",
+            contributes = mapOf("screens" to listOf("logic.function", "logic.page"), "quickActions" to listOf("logic.open"), "deepLinks" to listOf("logic.page")),
+            register = ::registerLogicNative,
+        ),
+        NativePluginManifestEntry(
             id = "marketing",
             contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
             register = ::registerMarketingNative,
+        ),
+        NativePluginManifestEntry(
+            id = "marketplace",
+            contributes = mapOf("screens" to listOf("marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing"), "quickActions" to listOf("marketplace.open"), "deepLinks" to listOf("marketplace.listing-page", "marketplace.page")),
+            register = ::registerMarketplaceNative,
         ),
         NativePluginManifestEntry(
             id = "outreach",

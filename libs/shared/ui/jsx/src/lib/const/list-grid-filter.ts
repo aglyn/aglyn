@@ -106,18 +106,83 @@ export function listFilterColumn(
     : { filterable: false }
 }
 
+/** A row's value at a dotted path (`owner.email`), or undefined. */
+const valueAtPath = (row: unknown, path: string): unknown =>
+  path
+    .split('.')
+    .reduce<unknown>(
+      (at, key) => (at == null ? undefined : (at as Record<string, unknown>)[key]),
+      row,
+    )
+
+/**
+ * How a filter-only column's cell reads a stored value: an option's label
+ * when the field has choices (`true` → "Suspended"), a list joined, a
+ * Firestore timestamp or a date as the local date and time, Yes/No for a
+ * bare boolean, and the value itself otherwise.
+ */
+export function listFilterCellText(
+  value: unknown,
+  labels: ReadonlyMap<string, string> = new Map(),
+): string {
+  if (value === undefined || value === null || value === '') return ''
+  if (Array.isArray(value)) {
+    return value.map((entry) => listFilterCellText(entry, labels)).filter(Boolean).join(', ')
+  }
+  const label = labels.get(String(value))
+  if (label !== undefined) return label
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (value instanceof Date) return value.toLocaleString()
+  if (typeof value === 'object') {
+    const seconds = (value as { seconds?: unknown; _seconds?: unknown }).seconds ??
+      (value as { _seconds?: unknown })._seconds
+    if (typeof seconds === 'number') return new Date(seconds * 1000).toLocaleString()
+    return ''
+  }
+  return String(value)
+}
+
+/**
+ * What a column that exists only so the Filters panel can reach its field
+ * draws when a reader turns it on in Manage columns: the row's own value —
+ * by the column's name, else the field's stored path — read as
+ * {@link listFilterCellText} reads it.
+ *
+ * These columns used to be `hideable: false`, because they had no cell and
+ * an unhidden one was a strip of blanks. MUI's Manage columns draws a
+ * column that cannot be hidden as a DISABLED, greyed-out checkbox, so every
+ * staff table listed half its fields as if they were switched off for good
+ * (Zach, 2026-10-09: "why are these columns disabled?"). With a cell of
+ * their own they are ordinary columns: hidden by default, one click away.
+ */
+function filterOnlyColumnProps(
+  field: ListFilterField,
+  options: Readonly<Record<string, readonly ListFilterOption[]>>,
+): Pick<GridColDef, 'valueGetter' | 'renderCell' | 'minWidth' | 'flex'> {
+  const labels = new Map((options[field.column] ?? []).map((choice) => [choice.value, choice.label]))
+  const read = (row: unknown) => {
+    const own = valueAtPath(row, field.column)
+    return own === undefined ? valueAtPath(row, field.path) : own
+  }
+  return {
+    minWidth: 140,
+    flex: 0.8,
+    valueGetter: (_value: unknown, row: unknown) => read(row),
+    renderCell: (params: { value?: unknown }) => listFilterCellText(params.value, labels),
+  } as Pick<GridColDef, 'valueGetter' | 'renderCell' | 'minWidth' | 'flex'>
+}
+
 /**
  * Fields a reader can filter by that are NOT columns on the table.
  *
  * MUI's filter panel lists COLUMNS — `gridFilterableColumnDefinitionsSelector`
  * reads every column definition, hidden ones included — so a filterable field
  * with no column is a field nobody can reach however well the route answers it.
- * Declaring it as a permanently hidden column keeps one source of truth, the
- * field list, instead of a second list of "extra filters" that drifts from it.
+ * Declaring it as a hidden column keeps one source of truth, the field list,
+ * instead of a second list of "extra filters" that drifts from it.
  *
- * `hideable: false` keeps them out of Manage columns as well: a column with no
- * `renderCell` and no width has nothing to show, and a reader who unhid one
- * would get a strip of blank cells for their trouble.
+ * Each draws the row's value (`filterOnlyColumnProps`), so it is an ordinary
+ * column in Manage columns — hidden by default, never greyed out as locked.
  *
  * Pair with {@link hiddenFilterVisibility}, which is what actually hides them.
  */
@@ -125,19 +190,13 @@ export function hiddenFilterColumns(
   fields: readonly ListFilterField[],
   visible: readonly string[],
   headers: Readonly<Record<string, string>> = {},
-): Array<{
-  field: string
-  headerName: string
-  hideable: boolean
-  filterable: boolean
-  filterOperators?: GridFilterOperator[]
-}> {
+): GridColDef[] {
   return fields
     .filter((field) => !visible.includes(field.column))
     .map((field) => ({
       field: field.column,
       headerName: headers[field.column] ?? field.column,
-      hideable: false,
+      ...filterOnlyColumnProps(field, {}),
       ...listFilterColumn(fields, field.column),
     }))
     .filter((column) => column.filterable)
@@ -225,7 +284,7 @@ export function listFilterGridColumns(
       const base = {
         field: field.column,
         headerName: headers[field.column] ?? field.column,
-        hideable: false,
+        ...filterOnlyColumnProps(field, options),
       }
       if (options[field.column]) return [{ ...base, ...selectProps(field) } as GridColDef]
       const plain = listFilterColumn(fields, field.column)

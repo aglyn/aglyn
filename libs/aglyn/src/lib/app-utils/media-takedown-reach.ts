@@ -38,8 +38,9 @@
  *
  * Costed honestly rather than listed as options:
  *
- * * **The origin.** Yes, ~15 s. The deny list and the lockdown verdict share
- *   one TTL, so a warm process refuses within that of the write. This is the
+ * * **The origin.** Yes, ~15 s for a file: the quarantine deny list's TTL,
+ *   so a warm process refuses within that of the write. A workspace or site
+ *   lockdown's verdict is held longer, up to a minute (AGL-3741). This is the
  *   whole of what the CDN gate does, and it is not nothing.
  * * **The raw Storage URL.** Yes, immediately — by rotating the object's
  *   download token, which is the ONLY lever that works there, because no
@@ -75,12 +76,18 @@
  */
 
 /**
- * How long a warm origin can keep serving after the write.
- *
- * The deny list's TTL and the lockdown verdict's cache TTL, which are
- * deliberately the same 15 s so both levers converge on one clock.
+ * How long a warm origin can keep serving a file after its takedown: the
+ * quarantine deny list's TTL (`MEDIA_QUARANTINE_TTL_MS`).
  */
 export const MEDIA_TAKEDOWN_ORIGIN_MS = 15_000
+
+/**
+ * How long a warm origin can keep serving after a workspace or site
+ * lockdown: the scope verdict's cache TTL (`MEDIA_CDN_LOCK_TTL_MS`), a minute
+ * since AGL-3741 because image requests land on short-lived instances. Never
+ * shorter than {@link MEDIA_TAKEDOWN_ORIGIN_MS}.
+ */
+export const MEDIA_LOCKDOWN_ORIGIN_MS = 60_000
 
 /** `max-age` on the stable CDN URL — one browser's worst-case stale read. */
 export const MEDIA_TAKEDOWN_BROWSER_STABLE_MS = 60_000

@@ -50,15 +50,14 @@ import CardDisplayFormTemplate from '../card-display-form-template'
 import { docsHelp } from '../../constants/docs-links'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 
+/** One card, drawn by the form or by the unreadable-profile notice. */
+const BASIC_INFO_HELP = docsHelp('manageAccount', { anchor: '#basic-info' })
+
 const basicSchema: FormSchema = {
   id: 'basic',
   title: 'Basic info',
   CardDisplayProps: {
-    help: docsHelp('account', {
-      excerpt:
-        'Your name and contact details, stored on your personal console ' +
-        'account and shown to teammates.',
-    }),
+    help: BASIC_INFO_HELP,
   },
   fields: [
     FIELD_SCHEMA_FIRST_NAME,
@@ -248,11 +247,7 @@ export function BasicInfoCard() {
     return (
       <CardDisplay
         header="Basic info"
-        help={docsHelp('manageAccount', {
-          excerpt:
-            'Your name and contact details, as they appear to teammates across ' +
-            'every organization you belong to.',
-        })}
+        help={BASIC_INFO_HELP}
         contentGutterX
         contentGutterY
       >

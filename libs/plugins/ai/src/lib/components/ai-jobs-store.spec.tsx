@@ -31,6 +31,13 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (_user: unknown, url: string, init?: RequestInit) => mockFetch(url, init),
 }))
 
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useUser: () => ({ data: { uid: 'u1' } }),
+}))
+
+import { followAiJobsForUsageMeter } from './ai-usage-meter-refresh'
+import { publishAiUsageMeter, resetAiUsageMetersForTests, useAiUsageMeter } from './use-ai-usage-meter'
 import {
   AI_JOBS_ACTIVE_POLL_MS,
   openAiJobs,
@@ -58,6 +65,8 @@ function answer(jobs: unknown[], status = 200) {
 }
 
 beforeEach(() => {
+  resetAiUsageMetersForTests()
+  localStorage.clear()
   resetAiJobsStoreForTests()
   mockFetch.mockReset()
 })
@@ -143,5 +152,66 @@ describe('the shared list of unsettled jobs', () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
     act(() => publishAiJob(running as never))
     expect(view.getByTestId('ids').textContent).toBe('')
+  })
+})
+
+describe('the usage strip follows the jobs list (AGL-3722)', () => {
+  const freeMeter = (used: number) => ({
+    month: new Date().toISOString().slice(0, 7),
+    pool: { used: 40, limit: 300 },
+    mine: { used, limit: 300, mode: 'hard', scope: null, free: true },
+    last: 12,
+    refused: false,
+    state: 'ok',
+    model: null,
+  })
+  const freeCredits = { left: 150, total: 300, resetsOn: '2026-11-01', used: { account: 150, org: 90, orgBand: 300, state: 'ok' } }
+
+  it('moves a Free strip to what the jobs read says is left, keeping the last request', async () => {
+    publishAiUsageMeter('u1', 'org-1', freeMeter(100))
+    mockFetch.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({ jobs: [], freeCredits }) }))
+    let seen: ReturnType<typeof useAiUsageMeter> = null
+    const Probe = () => {
+      seen = useAiUsageMeter('org-1')
+      return null
+    }
+    const stop = followAiJobsForUsageMeter()
+    render(
+      <>
+        <List />
+        <Probe />
+      </>,
+    )
+    await waitFor(() => expect((seen as { mine: { used: number } } | null)?.mine.used).toBe(150))
+    expect(seen).toMatchObject({ pool: { used: 90, limit: 300 }, last: 12, mine: { free: true } })
+    stop()
+  })
+
+  it('leaves a paid workspace’s envelope alone', async () => {
+    publishAiUsageMeter('u1', 'org-1', { ...freeMeter(100), mine: { used: 100, limit: null, mode: null, scope: null } })
+    mockFetch.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({ jobs: [], freeCredits }) }))
+    let seen: ReturnType<typeof useAiUsageMeter> = null
+    const Probe = () => {
+      seen = useAiUsageMeter('org-1')
+      return null
+    }
+    const stop = followAiJobsForUsageMeter()
+    render(
+      <>
+        <List />
+        <Probe />
+      </>,
+    )
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    stop()
+    expect((seen as { mine: { used: number } } | null)?.mine.used).toBe(100)
+  })
+
+  it('reads again the moment a job settles, so its spend reaches the strip', async () => {
+    answer([running])
+    render(<List />)
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    act(() => publishAiJob({ ...running, status: 'done' } as never))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
   })
 })

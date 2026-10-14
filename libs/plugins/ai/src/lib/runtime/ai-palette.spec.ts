@@ -56,6 +56,20 @@ const NEVER_OFFERED = [
   'emailRichtext',
 ]
 
+const FORM_ELEMENT_IDS: readonly string[] = [
+  'muiCheckbox',
+  'muiFormControl',
+  'muiFormControlLabel',
+  'muiFormHelperText',
+  'muiFormLabel',
+  'muiInput',
+  'muiRadio',
+  'muiRadioGroup',
+  'muiRating',
+  'muiSelect',
+  'muiSelectOption',
+]
+
 describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
   it('names, in every surface, only registered components and never the excluded ones', () => {
     for (const surface of AI_SURFACE_NAMES) {
@@ -70,8 +84,15 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
   })
 
   it('builds the page palette over the marketplace allowlist', () => {
-    for (const id of PORTABLE_COMPONENT_ID_ALLOWLIST) {
+    // MUI's separate form elements travel between workspaces, but a page
+    // places a saved form rather than drawing one, so its prompt omits them.
+    for (const id of PORTABLE_COMPONENT_ID_ALLOWLIST.filter(
+      (id) => !FORM_ELEMENT_IDS.includes(id),
+    )) {
       expect(AI_SURFACES.screen.allow).toContain(id)
+    }
+    for (const id of FORM_ELEMENT_IDS) {
+      expect(AI_SURFACES.screen.allow).not.toContain(id)
     }
     // A component may also place an Icon, bound to an icon the site owner picks (AGL-3054).
     expect(AI_SURFACES.component.allow).toEqual([...AI_SURFACES.screen.allow, 'icon'].sort())
@@ -89,10 +110,24 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
     )
   })
 
-  it('offers the form palette as the form components', () => {
+  it('offers the form palette as the Form, MUI’s separate form elements and a Button — never the all-in-one Form Field', () => {
     expect(AI_SURFACES.form).toEqual({
       root: 'form',
-      allow: ['form', 'formField'],
+      allow: [
+        'form',
+        'muiButton',
+        'muiCheckbox',
+        'muiFormControl',
+        'muiFormControlLabel',
+        'muiFormHelperText',
+        'muiFormLabel',
+        'muiInput',
+        'muiRadio',
+        'muiRadioGroup',
+        'muiRating',
+        'muiSelect',
+        'muiSelectOption',
+      ],
     })
   })
 
@@ -348,6 +383,8 @@ describe('auditNodeCapabilities reports a capability the palette lost (AGL-3156)
   })
 })
 
+const UNLISTED = new Set(['musicPlayer', 'musicTrack'])
+
 describe('AI_PALETTE_CATALOG stays inside its prompt budget (AGL-2905)', () => {
   it.each(AI_SURFACE_NAMES)('%s is under the token ceiling', (surface) => {
     const catalog = AI_PALETTE_CATALOG[surface]
@@ -356,6 +393,9 @@ describe('AI_PALETTE_CATALOG stays inside its prompt budget (AGL-2905)', () => {
     )
     // Every allowed element has its line, named where its name is more than its id spelled again.
     for (const id of AI_SURFACES[surface].allow) {
+      // The Music player is admitted but unlisted (AGL-3716): Assist's edit
+      // protocol names it, and a music site's player is placed by the compiler.
+      if (UNLISTED.has(id)) continue
       expect([id, new RegExp(`^- ${id}(?: \\([^)]+\\))?: `, 'm').test(catalog)]).toEqual([id, true])
     }
     expect(catalog).toContain(`Surface: ${surface}.`)

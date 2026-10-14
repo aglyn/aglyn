@@ -25,7 +25,8 @@ import {
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
-import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { AppLink, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Box,
@@ -47,15 +48,24 @@ import {
   type AiJobPhase,
 } from '../model/ai-job-activity'
 import type { AiInsightSurface } from '../model/ai-insight'
-import { cancelAiJobRequest, resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
-import { aiBuildCanRetry, aiBuildItemRows, aiSitePartialCopy } from '../model/ai-build-progress'
+import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
+import { useAiJobCancel } from './ai-job-cancel.component'
+import { aiBuildCanRetry, aiBuildItemRows, aiBuildRetryCreditRange, aiSitePartialCopy } from '../model/ai-build-progress'
+import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
+import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import { publishAiJob, type AiJobsOpenRequest } from './ai-jobs-store'
 import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
 import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiJobPlan } from './ai-job-plan.component'
-import { aiJobOutputHref, aiJobPrimaryLink, aiSiteBuildHref } from './ai-job-links'
+import { aiCreditsBillingHref, aiJobOutputHref, aiJobPrimaryLink, aiSiteBuildHref } from './ai-job-links'
 import { aiJobRefundCopy } from '../model/ai-job-failure-copy'
 import { readEventFrames } from './ai-job-events'
+
+/** Try again, with what it is likely to cost (AGL-3722). */
+function aiBuildRetryLabel(job: AiJobSummary): string {
+  const range = aiBuildRetryCreditRange(job)
+  return range ? `Try again what failed · ${aiCreditRangeText(range)}` : 'Try again what failed'
+}
 
 // Where an output opens, and the stream reader, live beside the dialogs that
 // share them (AGL-3593); this module has always exported them.
@@ -384,22 +394,14 @@ export function AssistJobsDrawer({
     }
   }, [expanded, orgId, watchedId, user, patchJob])
 
-  // The same door the dialog that started the job cancels through (AGL-3593).
-  const cancel = useCallback(
-    async (jobId: string) => {
-      if (!orgId) return
-      const { job, error } = await cancelAiJobRequest(user, orgId, jobId)
-      if (error) {
-        setNotice(error)
-        return
-      }
-      if (job) patchJob(job)
-    },
-    [orgId, user, patchJob],
-  )
+  // The same door the dialog that started the job cancels through (AGL-3593),
+  // behind the one confirm every Cancel shows (AGL-3616).
+  const canceling = useAiJobCancel({ user, orgId, onJob: patchJob })
 
   /** The job whose resume is in flight, so its button cannot send twice. */
   const [resuming, setResuming] = useState<string | null>(null)
+  // A Free Try again past what is left (AGL-3722): its prompt, by job, until chosen.
+  const [retryPrompt, setRetryPrompt] = useState<{ jobId: string; prompt: AiCreditsPrompt } | null>(null)
 
   // Confirms a plan, or tries again a step whose answer broke a building
   // rule (AGL-2935). The door runs the next step inline and answers with the
@@ -409,10 +411,14 @@ export function AssistJobsDrawer({
       if (!orgId) return
       setResuming(job.id)
       setNotice(null)
+      setRetryPrompt(null)
       // The same door the dialog that started the job confirms through (AGL-3593).
-      const { job: next, error } = await resumeAiJobRequest(user, orgId, job, options)
+      const { job: next, error, credits } = await resumeAiJobRequest(user, orgId, job, options)
       if (next) patchJob(next)
-      if (error) setNotice(error)
+      // A Free job past what is left asks with its choices (AGL-3722): a
+      // retry here, a plan on its own card from the job the door answered with.
+      if (credits && options?.retry) setRetryPrompt({ jobId: job.id, prompt: credits })
+      else if (error && !(credits && job.status === 'needs_review')) setNotice(error)
       setResuming(null)
     },
     [orgId, user, patchJob],
@@ -439,6 +445,13 @@ export function AssistJobsDrawer({
             />
           ))}
         </Typography>
+        <HelpTip
+          {...pluginDocsHelp('aiJobs', {
+            anchor: '#ai-jobs-in-assist',
+            excerpt:
+              'Every AI job in this workspace, newest first: where it stands, the credits it used, and its plan to confirm, cancel or try again.',
+          })}
+        />
         {/* A question about the page's figures (AGL-2915). */}
         {insight && (
           <Button size="small" onClick={() => setInsightOpen('ask')}>
@@ -480,6 +493,7 @@ export function AssistJobsDrawer({
             No AI jobs yet.
           </Typography>
         )}
+        {canceling.dialog}
         <Stack ref={listRef} spacing={1} sx={{ mt: 1 }} role="list" aria-label="AI jobs">
           {jobs.map((job) => {
             const restartHref = (row: AiJobSummary) =>
@@ -523,8 +537,12 @@ export function AssistJobsDrawer({
                     {netCredits(job) > 0 ? ` · ${netCredits(job)} credits` : ''}
                   </Typography>
                   {!terminal && (
-                    <Button size="small" onClick={() => void cancel(job.id)}>
-                      Cancel
+                    <Button
+                      size="small"
+                      disabled={Boolean(job.cancelRequested) || canceling.busyJobId === job.id}
+                      onClick={() => canceling.ask(job)}
+                    >
+                      {job.cancelRequested ? 'Stopping…' : 'Cancel'}
                     </Button>
                   )}
                 </Stack>
@@ -569,8 +587,28 @@ export function AssistJobsDrawer({
                     onClick={() => void resume(job, { retry: 'failed-items' })}
                     sx={{ mt: 0.5 }}
                   >
-                    {'Try again what failed'}
+                    {aiBuildRetryLabel(job)}
                   </Button>
+                ) : null}
+                {retryPrompt?.jobId === job.id ? (
+                  <AiCreditsPromptNotice
+                    prompt={retryPrompt.prompt}
+                    noun="build"
+                    orgSlug={orgSlug}
+                    busy={resuming === job.id}
+                    onBuildWhatFits={() => void resume(job, { retry: 'failed-items', creditsConfirmed: true })}
+                  />
+                ) : null}
+                {/* Paused by the meter (AGL-3722): Resume carries on from where it stopped. */}
+                {job.status === 'needs_input' ? (
+                  <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                    <Button size="small" variant="contained" disabled={resuming === job.id} onClick={() => void resume(job)}>
+                      {'Resume'}
+                    </Button>
+                    <Button size="small" component={AppLink} href={aiCreditsBillingHref(orgSlug)}>
+                      {'Upgrade'}
+                    </Button>
+                  </Stack>
                 ) : null}
                 {restartHref(job) ? (
                   <Button size="small" variant="contained" component={AppLink} href={restartHref(job) as string} sx={{ mt: 0.5 }}>
@@ -639,6 +677,7 @@ export function AssistJobsDrawer({
                   busy={resuming === job.id}
                   staff={isStaff}
                   user={user}
+                  orgSlug={orgSlug}
                 />
               </Box>
             )

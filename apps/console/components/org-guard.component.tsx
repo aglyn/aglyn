@@ -19,6 +19,7 @@
 import { Box, CircularProgress } from '@mui/material'
 import { notFound, usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
+import { useOrgLastActivity } from '../hooks/use-org-last-activity'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { useOrgReach, useReachableSites } from '../hooks/use-org-reach'
 import { collaboratorRedirect } from '../utils/collaborator-navigation'
@@ -48,6 +49,11 @@ function GuardSpinner() {
 export function OrgGuard({ children }: { children?: ReactNode }) {
   const { orgs, pathOrgSlug, loading, confirmed, slugExists } = useOrgScope()
   const known = !pathOrgSlug || orgs.some((org) => org.slug === pathOrgSlug)
+  // The workspace in the URL, once it is one this person belongs to: being
+  // here is activity in it, for the staff Organizations list's Last activity.
+  useOrgLastActivity(
+    pathOrgSlug ? orgs.find((org) => org.slug === pathOrgSlug)?.$id : undefined,
+  )
   const pathname = usePathname()
   const router = useRouter()
   // A site collaborator gets their site, not the org (AGL-1032). Scoped is

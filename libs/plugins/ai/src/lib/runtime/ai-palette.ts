@@ -350,7 +350,9 @@ export const AI_EMAIL_CLIP_BYTES = 102_000
  * A page is a few hundred elements and tens of kilobytes of stored map; a
  * reusable component is one repeated block; a layout is the chrome every
  * page loads, so it carries the least imagery; a form is fields and a
- * button; an email is held to the clipping threshold on its rendered HTML.
+ * button — each field a Form Control over a Form Label and its answer, a
+ * choice a Choice Label over its Radio or Checkbox, so a form of a few dozen
+ * questions is a hundred-odd elements; an email is held to the clipping threshold on its rendered HTML.
  * No kind names a font beyond the theme's.
  *
  * A third-party player is a page's or a component's to carry, and only where
@@ -389,8 +391,8 @@ export const AI_OUTPUT_BUDGETS: Record<AiOutputKind, AiOutputBudget> = {
     fontFamilies: 0,
   },
   form: {
-    nodes: 60,
-    bytes: 8_000,
+    nodes: 150,
+    bytes: 15_000,
     imageBytes: 0,
     embeds: 0,
     fontFamilies: 0,

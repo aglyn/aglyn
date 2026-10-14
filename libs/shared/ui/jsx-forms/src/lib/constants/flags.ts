@@ -51,6 +51,8 @@ export enum FieldComponentType {
   THEME_SCALE = 'theme-scale',
   TIME_PICKER = 'time-picker',
   TOGGLE_BUTTON = 'toggle-button',
+  /** Open/closed switch and from/to times per weekday; one hours string. */
+  WEEKLY_HOURS = 'weekly-hours',
   WIZARD = 'wizard',
 }
 

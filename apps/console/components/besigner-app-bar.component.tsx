@@ -585,8 +585,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
               <AppLink
                 componentVariant="button"
                 href={liveUrl || ''}
-                target="_blank"
-                rel="noopener noreferrer"
+                newTab
                 size="small"
                 color="primary"
                 disabled={!liveUrl}

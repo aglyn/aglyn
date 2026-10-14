@@ -18,7 +18,10 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { eraseMediaDeliveryScope } from './media-delivery'
-import { deleteHostProjectionForAllMembers } from './host-memberships'
+import {
+  deleteHostProjectionForAllMembers,
+  deleteHostProjectionForUids,
+} from './host-memberships'
 import { detachWorkspaceDomain } from './workspace-domains'
 import {
   CONSOLE_DOMAINS_COLLECTION,
@@ -144,6 +147,45 @@ async function eraseHostSupplierDeliveries(hostId: string): Promise<number> {
 }
 
 /**
+ * Every in-app notification about the site, in every inbox (AGL-3719).
+ *
+ * `users/{uid}/notifications/{id}` names the site in `hostId` — "Your site is
+ * live", "Your site job needs you", the staff operator alerts — and links into
+ * it (`/{hostId}/ai-jobs/…`). Nothing else collects them: they carry no TTL,
+ * the `recursiveDelete(hosts/{hostId})` below cannot see a user's tree, and
+ * the inbox outlives the site, so every one became a link to a 404 that stood
+ * forever. A 2026-10-09 audit found 14 of them against deleted test sites.
+ *
+ * A collection-group query rather than a walk of the org's members, because
+ * the staff alerts land in inboxes that are not members of the org. That
+ * query needs the `notifications.hostId` COLLECTION_GROUP override in
+ * `cloud/firebase-firestore.indexes.json`.
+ *
+ * Best-effort, like every other trailing cleanup in `eraseHost`.
+ */
+async function eraseHostNotifications(hostId: string): Promise<number> {
+  if (!hostId) return 0
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const rows = await firestore
+      .collectionGroup('notifications')
+      .where('hostId', '==', hostId)
+      .get()
+    for (let index = 0; index < rows.docs.length; index += 400) {
+      const batch = firestore.batch()
+      for (const doc of rows.docs.slice(index, index + 400)) {
+        batch.delete(doc.ref)
+      }
+      await batch.commit()
+    }
+    return rows.size
+  } catch (error) {
+    console.error(`eraseHost: notification cleanup failed for ${hostId}`, error)
+    return 0
+  }
+}
+
+/**
  * Destroy the org documents that belong to the site (AGL-3273).
  *
  * Some plugin storage is the organization's and names the site each document
@@ -261,6 +303,13 @@ export async function eraseHost(
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   const orgId = hostSnapshot.get('orgId') as string | undefined
+  // Everyone holding a role on the site itself, org member or not: each has a
+  // `users/{uid}/hostMemberships/{hostId}` row the switcher and the console's
+  // address resolution read, so each must lose it with the site.
+  const hostMemberUids = Object.keys(
+    (hostSnapshot.get('memberRoles') as Record<string, unknown> | undefined) ??
+      {},
+  )
 
   /*==========================================
    * A SITE ITS CONSENT GROUP STILL NEEDS IS NOT ERASED (AGL-3320).
@@ -313,6 +362,8 @@ export async function eraseHost(
   // SUPPLIER_DELIVERY_COLLECTION below for why this is here and not implied
   // by the recursiveDelete at the end of this function.
   await eraseHostSupplierDeliveries(hostId)
+  // In-app notifications about the site, in every inbox (AGL-3719).
+  await eraseHostNotifications(hostId)
 
   // Routing: the middleware resolves a request to a host via hostIndex and
   // the owning org's hosts map — drop both so the subdomain/cname 404s.
@@ -348,12 +399,26 @@ export async function eraseHost(
       .catch(() => undefined)
     // Drop every member's reverse-index row for this host (AGL-844); the
     // members still exist here (recursiveDelete of the org, if any, is later).
-    await deleteHostProjectionForAllMembers(orgId, hostId).catch(() => undefined)
+    await deleteHostProjectionForAllMembers(
+      orgId,
+      hostId,
+      hostMemberUids,
+    ).catch((error) => {
+      console.error(`eraseHost: projection cleanup failed for ${hostId}`, error)
+    })
     await eraseHostOwnedOrgDocuments(orgId, hostId)
   }
 
   // The host document tree (screens/layouts/versions/counters/products/…).
   await firestore.recursiveDelete(hostRef)
+
+  // Once more now the site is gone: a membership sync that was mid-flight when
+  // the first pass ran can write the row back afterwards, and a row for a
+  // deleted site keeps it in the switcher and mapped to its subdomain. Last
+  // thing that touches the rows, so nothing can follow it.
+  await deleteHostProjectionForUids(hostId, hostMemberUids).catch(
+    () => undefined,
+  )
 
   // The site's names no longer serve it (AGL-3629): plugins undo what they
   // registered for each — commerce's Stripe payment method domains. Raised
@@ -398,6 +463,63 @@ export async function eraseSubtree(
   await firestore.recursiveDelete(
     firestore.collection(scope).doc(scopeId).collection(kind).doc(id),
   )
+}
+
+/**
+ * The collections the page-view beacon writes under `hosts/{hostId}`
+ * (`apps/tenant/app/api/analytics/collect/route.ts`), with `set(…, merge)`.
+ */
+export const HOST_BEACON_COLLECTIONS: readonly string[] = [
+  'analytics',
+  'screenAnalytics',
+]
+
+export interface ReapHostBeaconRemnantsResult {
+  /** Phantom `hosts/{id}` trees removed. */
+  reaped: string[]
+  /** Phantoms holding anything else — left for a person to look at. */
+  left: Array<{ hostId: string; collections: string[] }>
+}
+
+/**
+ * Remove what a deleted site's late beacons wrote after `eraseHost` (AGL-3744).
+ *
+ * The beacon trusts a positive host-exists read for an hour per instance, so
+ * a tab left open on a site that is then deleted still lands its dwell or
+ * page view, and the merge-write recreates `hosts/{id}/analytics/{day}` or
+ * `screenAnalytics/{screenId}:{day}` under a host with no document. Nothing
+ * reads those again, and nothing else would ever delete them: a 2026-10-12
+ * audit found one standing three days after its site was erased.
+ *
+ * A host document is written before any beacon can count for it, so a
+ * missing document whose only children are the beacon's own counters is a
+ * deleted site and nothing else. A phantom holding any other collection is
+ * not this leak and is reported, never deleted.
+ *
+ * `listDocuments` lists every host id once, which is a run's whole cost.
+ */
+export async function reapHostBeaconRemnants(
+  options: { dryRun?: boolean } = {},
+): Promise<ReapHostBeaconRemnantsResult> {
+  const firestore = firebaseAdmin.app().firestore()
+  const result: ReapHostBeaconRemnantsResult = { reaped: [], left: [] }
+  const refs = await firestore.collection('hosts').listDocuments()
+  for (let index = 0; index < refs.length; index += 300) {
+    const snapshots = await firestore.getAll(...refs.slice(index, index + 300))
+    for (const snapshot of snapshots) {
+      if (snapshot.exists) continue
+      const collections = (await snapshot.ref.listCollections()).map(
+        (collection) => collection.id,
+      )
+      if (!collections.every((id) => HOST_BEACON_COLLECTIONS.includes(id))) {
+        result.left.push({ hostId: snapshot.id, collections })
+        continue
+      }
+      if (!options.dryRun) await firestore.recursiveDelete(snapshot.ref)
+      result.reaped.push(snapshot.id)
+    }
+  }
+  return result
 }
 
 /** Best-effort Stripe customer deletion — PII lives at the processor too. */

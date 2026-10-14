@@ -367,7 +367,7 @@ describe('the layout step', () => {
     })
   })
 
-  it('re-asks the live footer: a link drawn in the band’s own color, sent home for a purpose the site has no screen for, and lists the facts to fill (AGL-3056)', async () => {
+  it('re-asks the live footer: a link sent home for a purpose the site has no screen for, its band’s own color settled in code, and lists the facts to fill (AGL-3056, AGL-3660)', async () => {
     // The Harborline layout's footer: a primary band, the facts the brief never gave, and a consultation link with nowhere to go.
     const footer = (link: Record<string, unknown> | null) => ({
       rootId: 'root',
@@ -391,9 +391,9 @@ describe('the layout step', () => {
     const outcome = await createAiJobLayoutStep()(context())
 
     const reask = mockRunAiRequest.mock.calls[1][0].messages[2].content as string
-    expect(reask).toContain(
-      '- Rule 5 (Colors, spacing and type come from the theme): A link or button on a primary.main band draws its words in the theme\'s primary color, the band\'s own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is primary.contrastText, or set its own sx color to primary.contrastText. (nodes consult)',
-    )
+    // The link drawn in the band's own color is given its contrast text in code (AGL-3660), and not asked about.
+    expect(reask).not.toContain('- Rule 5')
+    expect(reask).toContain('"sx":{"color":"primary.contrastText"}')
     expect(reask).toContain(
       '- Rule 10 (Navigation and SEO travel with a page): "Request a Consultation" links the home page, which does not do what its words say. Link the page that does, or leave the link out when the site has none. (nodes consult)',
     )

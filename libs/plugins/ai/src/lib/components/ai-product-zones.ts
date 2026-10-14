@@ -85,7 +85,7 @@ export interface ConsoleProductSummary {
   hasPhoto: boolean
 }
 
-/** A new product proposed to the hub, which creates it as a draft with no price. */
+/** A new product proposed to the hub, which creates it as a draft at its suggested price, else the default. */
 export interface ConsoleProposedProduct {
   name: string
   type: ConsoleProductType
@@ -94,6 +94,8 @@ export interface ConsoleProposedProduct {
   options: ConsoleProductOption[]
   seoTitle: string
   seoDescription: string
+  /** The suggested price for every variant, in dollars; absent or `null` is the store's default price. */
+  priceUsd?: number | null
 }
 
 /** A discount proposed to the hub, which creates it switched off. */

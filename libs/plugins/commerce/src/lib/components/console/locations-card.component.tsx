@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { OpeningHoursPicker } from '@aglyn/shared-ui-jsx/components/weekly-hours-picker.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -279,7 +280,7 @@ export function LocationsCard(props: LocationsCardProps) {
   return (
     <CardDisplay
       header={'Inventory locations'}
-      help={pluginDocsHelp('commerce', { anchor: '#inventory' })}
+      help={pluginDocsHelp('commerce', { anchor: '#inventory-locations' })}
       contentGutterX
       contentGutterY
     >
@@ -393,20 +394,11 @@ export function LocationsCard(props: LocationsCardProps) {
                 {'Add this location’s address so buyers know where to go.'}
               </Typography>
             ) : null}
-            <TextField
+            <OpeningHoursPicker
               label="Pickup hours"
               value={pickupDraft.hours ?? ''}
-              onChange={(event) => setPickupDraft((prior) => ({ ...prior, hours: event.target.value }))}
-              multiline
-              minRows={2}
-              size="small"
-              placeholder={'Mo-Fr 09:00-17:00\nSa 10:00-14:00'}
-              error={badHourLines.length > 0}
-              helperText={
-                badHourLines.length
-                  ? `Line ${badHourLines.join(', ')} does not read as days and times, like Mo-Fr 09:00-17:00.`
-                  : 'One line per set of days, like Mo-Fr 09:00-17:00.'
-              }
+              onChange={(hours) => setPickupDraft((prior) => ({ ...prior, hours }))}
+              helperText="Switch on each day buyers can collect, then pick the times."
             />
             <TextField
               label="Arrival instructions"

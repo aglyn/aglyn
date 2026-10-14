@@ -45,6 +45,7 @@ import { productCollectionIds, productSearchFields, productStockFields } from '.
 import {
   catalogHandler,
   createCatalogReadScope,
+  productCardImage,
   queryPublicCatalog,
 } from './catalog'
 
@@ -687,5 +688,45 @@ describe('the index file serves every storefront shape', () => {
       'status:ASCENDING,nameLower:ASCENDING',
       'type:ASCENDING,nameLower:ASCENDING',
     ])
+  })
+})
+
+/**
+ * What a card needs to draw a photo and offer a quick add (AGL-3676
+ * follow-up): a "You may also like" tile came back with no image on a live
+ * store, and a grid's quick add needs to know whether one variant sells.
+ */
+describe('the card a catalog item draws', () => {
+  it('takes the first non-blank photo: media, the legacy image, then a variant photo', () => {
+    expect(productCardImage({ mediaUrls: ['', '/media/b.jpg'], variants: [] } as never)).toBe('/media/b.jpg')
+    expect(productCardImage({ mediaUrls: [''], imageUrl: '/media/legacy.jpg', variants: [] } as never)).toBe(
+      '/media/legacy.jpg',
+    )
+    expect(
+      productCardImage({ mediaUrls: [], variants: [{ id: 'a' }, { id: 'b', imageUrl: 'media:host/m1' }] } as never),
+    ).toBe('media:host/m1')
+    expect(productCardImage({ variants: [{ id: 'a' }] } as never)).toBeUndefined()
+  })
+
+  it('lists a blank first photo as the next real one, not as no image', async () => {
+    seedProduct('tin', { name: 'Travel Tin', mediaUrls: ['  ', '/media/tin.jpg'] })
+    const result = await run({ ids: 'tin' })
+    expect(result.body.items[0]).toMatchObject({ imageUrl: '/media/tin.jpg' })
+  })
+
+  it('names the one variant a quick add sells, and counts several', async () => {
+    seedProduct('one', { name: 'One' })
+    seedProduct('many', {
+      name: 'Many',
+      variants: [
+        { id: 'small', priceUsd: 10, inventory: null, options: { Size: 'S' } },
+        { id: 'large', priceUsd: 12, inventory: null, options: { Size: 'L' } },
+      ],
+    })
+    const result = await run({ ids: 'one,many' })
+    const [one, many] = result.body.items
+    expect(one).toMatchObject({ variantCount: 1, defaultVariantId: 'default' })
+    expect(many).toMatchObject({ variantCount: 2 })
+    expect(many).not.toHaveProperty('defaultVariantId')
   })
 })

@@ -11720,6 +11720,348 @@
         ],
         "notices": []
       }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": []
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "category equals",
+      "request": {
+        "clauses": [
+          {
+            "field": "category",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "category",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "category",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "sort createdAt desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "sort createdAt reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "createdAt"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "sort installCount desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "installCount"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "installCount"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "sort installCount reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "installCount"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "sort ratingAverage desc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "ratingAverage"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "ratingAverage"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "sort ratingAverage reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "ratingAverage"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        }
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "browseTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "browseTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "search with an exact clause",
+      "request": {
+        "clauses": [
+          {
+            "field": "category",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "search": [
+          "acme"
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "path": "browseTokens",
+            "op": "array-contains",
+            "value": "acme"
+          },
+          {
+            "path": "category",
+            "op": "==",
+            "value": "alpha"
+          }
+        ],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [
+          {
+            "field": "category",
+            "op": "equals",
+            "value": "alpha"
+          }
+        ],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "MARKETPLACE_BROWSE_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [],
+        "orderBy": {
+          "direction": "desc",
+          "path": "createdAt"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
     }
   ]
 }

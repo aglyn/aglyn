@@ -186,13 +186,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
     return (
       <CardDisplay
         header={'Commerce analytics (30 days)'}
-        help={pluginDocsHelp('commerce', {
-          anchor: '#orders',
-          excerpt:
-            'Revenue, orders and average order value over the last 30 days, ' +
-            'each against the 30 days before it. Pending and canceled orders ' +
-            'are left out — neither is money.',
-        })}
+        help={pluginDocsHelp('commerce', { anchor: '#commerce-analytics' })}
         contentGutterX
         contentGutterY
       >
@@ -207,13 +201,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
     return (
       <CardDisplay
         header={'Commerce analytics (30 days)'}
-        help={pluginDocsHelp('commerce', {
-          anchor: '#orders',
-          excerpt:
-            'Revenue, orders and average order value over the last 30 days, ' +
-            'each against the 30 days before it. Pending and canceled orders ' +
-            'are left out — neither is money.',
-        })}
+        help={pluginDocsHelp('commerce', { anchor: '#commerce-analytics' })}
         contentGutterX
         contentGutterY
       >
@@ -244,13 +232,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
   return (
     <CardDisplay
       header={'Commerce analytics (30 days)'}
-      help={pluginDocsHelp('commerce', {
-        anchor: '#orders',
-        excerpt:
-          'Revenue, orders and average order value over the last 30 days, ' +
-          'each against the 30 days before it. Pending and canceled orders ' +
-          'are left out — neither is money.',
-      })}
+      help={pluginDocsHelp('commerce', { anchor: '#commerce-analytics' })}
       contentGutterX
       contentGutterY
     >

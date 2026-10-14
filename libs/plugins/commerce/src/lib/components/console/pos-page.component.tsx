@@ -949,8 +949,9 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         ref={fill.ref}
         sx={{
           display: 'flex',
-          // From under the console's header, nav and page title to the
-          // bottom of the window, not a whole window tall below them.
+          // From under the console's header, nav and page title down to
+          // where the page's padding and footer begin, so the whole page fits
+          // the window (AGL-3679, AGL-3710).
           height: fill.height,
           overflow: 'hidden',
         }}

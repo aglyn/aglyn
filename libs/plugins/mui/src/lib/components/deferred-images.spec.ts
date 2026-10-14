@@ -96,6 +96,9 @@ const TENANT_IMAGE_SOURCES = [
   // Listed so the sweep is complete: an element that renders a poster and is
   // not scanned is exactly the blind spot this file exists to close.
   'libs/plugins/mui/src/lib/components/video.tsx',
+  // The picture lightbox (AGL-3717): the full-size picture a visitor opened,
+  // and the gallery's thumbnail strip.
+  'libs/plugins/mui/src/lib/components/image-lightbox.tsx',
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
   'libs/plugins/commerce/src/lib/components/related-products.tsx',
   'libs/plugins/commerce/src/lib/components/wishlist.tsx',
@@ -142,6 +145,16 @@ const EAGER_BY_DESIGN: ReadonlyArray<{ file: string; srcExpression: string }> =
       // and nothing here has seen the viewport.
       file: 'libs/plugins/mui/src/lib/components/video.tsx',
       srcExpression: 'posterBase',
+    },
+    {
+      // The full-size picture in the picture lightbox (AGL-3717). Not an LCP
+      // candidate of the page at all: it does not exist until a visitor
+      // presses a picture, and it is then the one thing on screen they asked
+      // for. Deferring it would make the dialog open on an empty frame and
+      // wait for layout to decide the visitor is looking at it — which they
+      // are, by definition. The thumbnails beside it spread the deferred set.
+      file: 'libs/plugins/mui/src/lib/components/image-lightbox.tsx',
+      srcExpression: 'current.src',
     },
   ]
 
@@ -327,10 +340,11 @@ describe('every tenant-rendered image declares its loading rank (AGL-2486)', () 
         ),
     ).map((exemption) => `${exemption.file} (src=${exemption.srcExpression})`)
     expect(unmatched).toEqual([])
-    // Moved 2 → 3 for the Video lightbox poster (AGL-2744). The number is
-    // pinned so a third exemption cannot arrive as a side effect of somebody
-    // making a red test green; the reasoning for this one is at its entry.
-    expect(EAGER_BY_DESIGN).toHaveLength(3)
+    // Moved 2 → 3 for the Video lightbox poster (AGL-2744), and 3 → 4 for
+    // the picture a visitor opens in the picture lightbox (AGL-3717). The
+    // number is pinned so another exemption cannot arrive as a side effect of
+    // somebody making a red test green; the reasoning for each is at its entry.
+    expect(EAGER_BY_DESIGN).toHaveLength(4)
   })
 
   it('spreads the one shared set rather than three literals', () => {

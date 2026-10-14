@@ -24,6 +24,7 @@ import {
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
   aiHomeScreenIds,
+  aiHomeScreenNames,
   aiInventoryLine,
   aiInventoryRows,
   type AiInventoryKind,
@@ -50,9 +51,16 @@ import {
   aiSettleCutHeadings,
   aiSettleOffBrandEmailColors,
   aiSettleDisagreeingNodes,
+  aiSettlePlanDatasets,
+  aiSettlePlanFormDatasets,
+  aiSettlePlanForms,
+  aiSettlePlanFreeWall,
+  aiSettlePlanGalleries,
+  aiSettlePlanLayoutRegionSections,
   aiSettlePlanLayouts,
   aiSettlePlanRefs,
   aiSettleWrittenGridItems,
+  aiSettleWrittenMechanicalRules,
   validateAiBuildPlan,
   validateAiDoctrineTree,
   type AiCopyFraming,
@@ -298,6 +306,8 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'site-look': 'fields',
   // A site's first posts (AGL-3676): an entry's fields, which its own check holds.
   'blog-post': 'fields',
+  // A site's datasets (AGL-3616): a dataset's fields and records, which its own check holds.
+  dataset: 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
@@ -617,7 +627,11 @@ export function aiDoctrineTreeCheck(
     // whose first clause fits its ceiling and a Grid container's unsized items
     // are settled where each has one reading before the tree is read (AGL-3596),
     // and so is an email's color outside the brand (AGL-3676).
-    const settled = aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer))))
+    // An attribute a rule has one answer for is applied too (AGL-3660).
+    const settled = aiSettleWrittenMechanicalRules(
+      aiSettleWrittenGridItems(aiSettleCutHeadings(aiSettleDisagreeingNodes(aiAnswerTree(answer)))),
+      kind,
+    )
     const input = kind === 'email' ? aiSettleOffBrandEmailColors(settled, context.brand) : settled
     const report = validateAiDoctrineTree(input, kind, context, otherPages)
     if (!report.tree || !report.score) {
@@ -666,6 +680,7 @@ export function aiDoctrinePlanCheck(
   inventory: AiSiteInventory | null,
   framing: AiCopyFraming = null,
   capabilities: AiPlanCapabilities | null = null,
+  settle: ((plan: AiBuildPlan) => AiBuildPlan) | null = null,
 ): AiGenerationCheck<AiBuildPlan> {
   return (answer) => {
     const publish = detectPublishIntent(answer)
@@ -685,8 +700,43 @@ export function aiDoctrinePlanCheck(
       }
     }
     // A reference or a page's layout that has only one answer is given it,
-    // not refused for it.
-    const plan = aiSettlePlanLayouts(aiSettlePlanRefs(parsed.plan), inventory, capabilities)
+    // not refused for it; so is a section that collects answers with no form
+    // placed, which places the plan's own (AGL-3660).
+    // A plan past the datasets this job may make keeps the most useful
+    // (AGL-3616), once a form's dataset is one it can write to and no page
+    // lists it.
+    // A page section that is a layout region (header, navigation, footer) is
+    // taken off the page (AGL-3750), first after the refs, so the wall
+    // counts what the page keeps. A site start's section that shows the work
+    // with fewer pieces than its fewest is given that many (AGL-3754).
+    // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
+    // last, once every creation the wall counts is settled. The door's own
+    // settling (a build's events page, AGL-3755) runs first, so every rule
+    // after it holds what it added.
+    const plan = aiSettlePlanFreeWall(
+      aiSettlePlanForms(
+        aiSettlePlanLayouts(
+          aiSettlePlanDatasets(
+            aiSettlePlanFormDatasets(
+              aiSettlePlanGalleries(
+                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                inventory,
+                capabilities,
+              ),
+              inventory,
+              capabilities,
+            ),
+            capabilities,
+          ),
+          inventory,
+          capabilities,
+        ),
+        inventory,
+        capabilities,
+      ),
+      inventory,
+      capabilities,
+    )
     const violations = [
       ...publish,
       ...validateAiBuildPlan(plan, inventory, framing, capabilities),
@@ -878,6 +928,11 @@ export interface AiPlanGenerationInput extends AiGenerationInputBase {
   capabilities?: AiPlanCapabilities | null
   /** Checks the door adds to the doctrine's own, run on a plan that parsed. */
   extend?: (plan: AiBuildPlan, answer: Record<string, unknown>) => AiDoctrineViolation[]
+  /**
+   * What the door settles in a plan that parsed, before the doctrine's own
+   * settling and every rule (a build's events page, AGL-3755); pure.
+   */
+  settle?: (plan: AiBuildPlan) => AiBuildPlan
 }
 
 export interface AiCustomGenerationInput<T> extends Omit<AiGenerationInputBase, 'inventory'> {
@@ -972,6 +1027,7 @@ export function aiDoctrineTreeContext(
       : null,
     ...aiNodeTreeContextFromInventory(inventory),
     homeScreenIds: aiHomeScreenIds(inventory),
+    homeLabels: aiHomeScreenNames(inventory),
     ...extra,
   }
 }
@@ -980,7 +1036,7 @@ function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   if (kind === 'plan') {
     const plan = input as AiPlanGenerationInput
     return withExtension(
-      aiDoctrinePlanCheck(plan.inventory, plan.framing ?? null, plan.capabilities ?? null),
+      aiDoctrinePlanCheck(plan.inventory, plan.framing ?? null, plan.capabilities ?? null, plan.settle ?? null),
       plan.extend,
     ) as AiGenerationCheck<unknown>
   }

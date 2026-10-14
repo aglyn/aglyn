@@ -194,6 +194,23 @@ export function isRetentionCandidate(input: {
   )
 }
 
+/**
+ * Whether {@link planRetentionEmail} could decide differently for this account
+ * depending on its sites and pages. Unconfirmed accounts, a recorded No to
+ * product email and a session in progress are all decided before any page is
+ * looked at, so the sweep reads those accounts' sites only if an email is
+ * actually owed and its merge needs them.
+ */
+export function retentionNeedsPages(input: {
+  nowMs: number
+  lastSeenMs: number | null
+  emailVerified: boolean
+  declinedProductEmail: boolean
+}): boolean {
+  if (!input.emailVerified || input.declinedProductEmail) return false
+  return input.lastSeenMs === null || input.nowMs - input.lastSeenMs >= ACTIVE_SESSION_MS
+}
+
 /** One page as the sweep reads it from `hosts/{hostId}/screens`. */
 export interface RetentionPage {
   createdAtMs: number | null

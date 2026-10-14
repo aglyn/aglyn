@@ -19,7 +19,7 @@
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiDeleteOutline,
-  mdiEyeOutline,
+  mdiPageNextOutline,
   mdiPaletteOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
@@ -139,12 +139,7 @@ import { useCampaignTopicOptions } from './use-campaign-topic-options'
 /** How many of a campaign's emails the detail page enumerates. */
 const CAMPAIGN_EMAIL_CEILING = 50
 
-const detailDocsHelp = pluginDocsHelp('emailCampaigns', {
-  anchor: '#the-campaign-report',
-  excerpt:
-    'A campaign groups the emails sent to its lists. The figures here are ' +
-    'the sum across those emails, and each one keeps its own report.',
-})
+const detailDocsHelp = pluginDocsHelp('emailCampaigns', { anchor: '#campaign-page' })
 
 /**
  * A rolled-up figure, in the shared `Figure`'s shape.
@@ -648,7 +643,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       {
         key: 'details',
         label: 'Open report',
-        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        icon: <MdiIcon path={mdiPageNextOutline.path} size={0.8} />,
         href: sendHref(send),
         disabled: !sendHref(send),
         disabledReason: 'This site’s console URL has not resolved yet',

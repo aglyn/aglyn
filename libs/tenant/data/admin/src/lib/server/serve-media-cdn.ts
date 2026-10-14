@@ -554,7 +554,11 @@ export function lockdownStopsMediaDelivery(
  * per TTL.
  *
  * **Staleness bound, stated rather than hidden:** a warm origin refuses
- * within ≤15s of the org-doc write (the platform panic number). What the
+ * within ≤60s of the org-doc write. It was the platform panic number, 15s,
+ * until AGL-3741: image requests land on many short-lived instances, so a
+ * 15s entry was rarely warm and the org, host and index reads ran on nearly
+ * every edge miss — the largest single source of Firestore reads left. A
+ * minute is still well inside the hour an edge-held image keeps serving. What the
  * origin cannot reach: browsers hold the stable URL up to 60s
  * (`max-age=60`), and a versioned image URL a published page names for a
  * year in a browser that already fetched it (AGL-3485); Vercel's edge holds image responses up to `s-maxage=3600`
@@ -578,7 +582,7 @@ export function lockdownStopsMediaDelivery(
  * stops only new origin fetches (AGL-1615). Bytes already cached anywhere
  * remain out of reach of both.
  */
-const MEDIA_CDN_LOCK_TTL_MS = 15_000
+const MEDIA_CDN_LOCK_TTL_MS = 60_000
 
 /**
  * Everything the scope documents say about serving, read once per scope per
@@ -808,7 +812,7 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
  * (both are the same neutral 410), so the order is a cost decision only.
  *
  * Read cost, since this sits on the hottest unauthenticated path: the scope
- * verdict is one read per SCOPE per 15s, and the quarantine deny list is
+ * verdict is one read per SCOPE per minute, and the quarantine deny list is
  * one read per PROCESS per 15s for every asset in existence — it is a
  * single document. Fifty DAM tiles pay two reads between them, not a
  * hundred.

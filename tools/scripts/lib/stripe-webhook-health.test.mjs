@@ -383,13 +383,14 @@ test('a catch-all `*` subscription satisfies the required set', () => {
   assert.equal(result.ok, true)
 })
 
-test('the required event list carries the seventeen the platform destination needs', () => {
+test('the required event list carries the twenty the platform destination needs', () => {
   // A guard on the list itself: AGL-1798 was a MISSING entry, so a silent
   // shrink here would quietly narrow every assertion above.
-  assert.equal(WEBHOOK_EVENTS.length, 17)
-  assert.equal(new Set(WEBHOOK_EVENTS).size, 17)
+  assert.equal(WEBHOOK_EVENTS.length, 20)
+  assert.equal(new Set(WEBHOOK_EVENTS).size, 20)
   for (const required of [
     'charge.refunded',
+    'charge.failed',
     'charge.dispute.created',
     'charge.dispute.closed',
     'invoice.payment_failed',

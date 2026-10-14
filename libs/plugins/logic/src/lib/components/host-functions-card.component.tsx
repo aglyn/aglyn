@@ -78,11 +78,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
-import {
-  formatParameterOptions,
-  parseParameterOptions,
-} from '../model/parameter-options'
+import { ParameterChoicesEditor } from './parameter-choices-editor.component'
 import WhereUsedDialog from './where-used-dialog.component'
+import { FormulaBuilderButton } from './formula-builder.component'
+import { formulaNames } from '../model/formula-names'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   HOST_LOGIC_ZONE,
@@ -141,70 +140,123 @@ function emptyDraft(): FunctionDraft {
 /**
  * What a VISITOR meets for one parameter (AGL-3202): the label above the
  * input, what it starts with, and — for a question with fixed answers — the
- * choices. Empty fields are dropped from the definition rather than stored
- * as empty strings, so a function nobody has dressed for visitors saves
- * exactly the shape it always did.
+ * choices, one row each (AGL-3768). Empty fields are dropped from the
+ * definition rather than stored as empty strings, so a function nobody has
+ * dressed for visitors saves exactly the shape it always did.
  *
- * The choices keep their own text while being typed. Parsing every keystroke
- * back into the box would eat the space after a comma, and the colon after a
- * value, the moment they were typed.
+ * "Starts as" is picked, not typed, wherever there is a list to pick from:
+ * the choices when there are any, on or off for a true/false.
  */
 function ParameterAudienceFields(props: {
   parameter: HostFunctionParameter
   onChange: (next: HostFunctionParameter) => void
 }) {
   const { parameter, onChange } = props
-  const [choices, setChoices] = useState(() =>
-    formatParameterOptions(parameter.options),
-  )
   const assign = (field: 'label' | 'defaultValue', value: string) => {
     const next = { ...parameter }
     if (value) next[field] = value
     else delete next[field]
     onChange(next)
   }
+  const options = parameter.options ?? []
+  const startsAsChoices: { value: string; label: string }[] | null =
+    parameter.type === 'boolean'
+      ? [
+          { value: 'true', label: 'On' },
+          { value: 'false', label: 'Off' },
+        ]
+      : options.length
+        ? options.map((option) => ({
+            value: option.value,
+            label: option.label ?? option.value,
+          }))
+        : null
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ width: 110, flexShrink: 0 }}
-        noWrap
-      >
-        {parameter.name || '—'}
-      </Typography>
-      <TextField
-        label="Label"
-        placeholder={parameter.name}
-        value={parameter.label ?? ''}
-        onChange={(event) => assign('label', event.target.value.slice(0, 80))}
-        size="small"
-        sx={{ flex: 2 }}
-      />
-      <TextField
-        label="Starts as"
-        value={parameter.defaultValue ?? ''}
-        onChange={(event) =>
-          assign('defaultValue', event.target.value.slice(0, 120))
-        }
-        size="small"
-        sx={{ flex: 1 }}
-      />
-      <TextField
-        label="Choices"
-        placeholder="value: Label, value: Label"
-        value={choices}
-        onChange={(event) => {
-          setChoices(event.target.value)
-          const options = parseParameterOptions(event.target.value)
-          const next = { ...parameter }
-          if (options.length) next.options = options
-          else delete next.options
-          onChange(next)
-        }}
-        size="small"
-        sx={{ flex: 3 }}
-      />
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ width: 110, flexShrink: 0 }}
+          noWrap
+        >
+          {parameter.name || '—'}
+        </Typography>
+        <TextField
+          label="Label"
+          placeholder={parameter.name}
+          value={parameter.label ?? ''}
+          onChange={(event) => assign('label', event.target.value.slice(0, 80))}
+          size="small"
+          sx={{ flex: 2 }}
+        />
+        {startsAsChoices ? (
+          <TextField
+            select
+            label="Starts as"
+            value={
+              startsAsChoices.some(
+                (choice) => choice.value === parameter.defaultValue,
+              )
+                ? parameter.defaultValue
+                : ''
+            }
+            onChange={(event) => assign('defaultValue', event.target.value)}
+            size="small"
+            sx={{ flex: 1 }}
+          >
+            <MenuItem value="">
+              <em>{'Nothing chosen'}</em>
+            </MenuItem>
+            {startsAsChoices.map((choice) => (
+              <MenuItem key={choice.value} value={choice.value}>
+                {choice.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : (
+          <TextField
+            label="Starts as"
+            value={parameter.defaultValue ?? ''}
+            onChange={(event) =>
+              assign(
+                'defaultValue',
+                parameter.type === 'number'
+                  ? event.target.value.replace(/[^0-9.-]/g, '')
+                  : event.target.value.slice(0, 120),
+              )
+            }
+            slotProps={
+              parameter.type === 'number'
+                ? { htmlInput: { inputMode: 'decimal' } }
+                : undefined
+            }
+            size="small"
+            sx={{ flex: 1 }}
+          />
+        )}
+      </Stack>
+      {parameter.type === 'boolean' ? null : (
+        <ParameterChoicesEditor
+          parameterName={parameter.name}
+          type={parameter.type}
+          options={parameter.options}
+          onChange={(nextOptions) => {
+            const next = { ...parameter }
+            if (nextOptions.length) next.options = nextOptions
+            else delete next.options
+            // A start that is no longer a choice would preselect nothing.
+            if (
+              nextOptions.length &&
+              next.defaultValue !== undefined &&
+              !nextOptions.some((option) => option.value === next.defaultValue)
+            ) {
+              delete next.defaultValue
+            }
+            onChange(next)
+          }}
+        />
+      )}
     </Stack>
   )
 }
@@ -399,6 +451,37 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     ...(draft?.parameters ?? []).map((parameter) => parameter.name),
     ...(draft?.variables ?? []).map((variable) => variable.name),
   ].filter((name) => VARIABLE_NAME_PATTERN.test(name))
+
+  /**
+   * The site's variables, for the formula builder's value picker
+   * (AGL-3757). Read the first time a builder opens, like the test run's
+   * read below, so an author who never builds a formula costs nothing.
+   */
+  const [siteVariables, setSiteVariables] = useState<HostVariable[] | null>(
+    null,
+  )
+  const loadSiteVariables = useCallback(() => {
+    if (siteVariables) return
+    setSiteVariables([])
+    getDocs(query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)))
+      .then((snapshot) => {
+        const rows: HostVariable[] = []
+        snapshot.forEach((row) => {
+          const data = row.data() as HostVariable & { deletedAt?: unknown }
+          if (data?.name && !data.deletedAt) rows.push(data)
+        })
+        setSiteVariables(rows)
+      })
+      .catch((error) => {
+        // The builder still offers the function's own names.
+        console.error(error)
+      })
+  }, [siteVariables, firestore, hostId])
+  const formulaNameOptions = formulaNames({
+    parameters: draft?.parameters ?? [],
+    locals: draft?.variables ?? [],
+    siteVariables: siteVariables ?? [],
+  })
 
   // Case-insensitive uniqueness (AGL-185): function names must stay
   // unambiguous for legacy {{fn:name(...)}} token resolution.
@@ -639,6 +722,14 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
               size="small"
               sx={{ flex: 1 }}
             />
+            <FormulaBuilderButton
+              current={row.expression}
+              names={formulaNameOptions}
+              onOpen={loadSiteVariables}
+              onUse={(expression) =>
+                setRow(section, operationIndex, rowIndex, 'expression', expression)
+              }
+            />
             <IconButton
               size="small"
               aria-label="remove operation row"
@@ -688,7 +779,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   return (
     <CardDisplay
       header={'Functions'}
-      help={pluginDocsHelp('bindings', { anchor: '#no-code-functions' })}
+      help={pluginDocsHelp('bindings', { anchor: '#functions-card' })}
       // Another way to start a function (AGL-3603), in the card's header.
       actions={
         ExtensionZone ? (
@@ -960,8 +1051,8 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
               <SectionLabel>{'What visitors see'}</SectionLabel>
               <Typography variant="caption" color="text.secondary">
                 {'Used by a Function Widget on a page. A parameter with ' +
-                  'choices is asked as a list, a number as a number box and ' +
-                  'a true/false as a switch.'}
+                  'choices is asked as a list — Add choice gives it one — a ' +
+                  'number as a number box and a true/false as a switch.'}
               </Typography>
               {(draft?.parameters ?? []).map((parameter, index) => (
                 <ParameterAudienceFields
@@ -1069,7 +1160,9 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
 
           <SectionLabel>{'Operations'}</SectionLabel>
           <Typography variant="caption" color="text.secondary">
-            {'An expression can use + − × ÷ and parentheses, any site ' +
+            {'Press ƒx beside a box to build its formula by picking values — ' +
+              'add, smallest of, format as money and more. A box also takes ' +
+              'a formula written out: + − × ÷ and parentheses, any site ' +
               'variable by its name (a dictionary’s members as ' +
               'name.member), and ' +
               `${FUNCTION_BUILTIN_NAMES.map((name) => `${name}()`).join(', ')}.`}
@@ -1104,6 +1197,21 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                   }
                   size="small"
                   sx={{ flex: 1 }}
+                />
+                <FormulaBuilderButton
+                  current={operation.if.left}
+                  names={formulaNameOptions}
+                  onOpen={loadSiteVariables}
+                  onUse={(expression) =>
+                    patch((previous) => ({
+                      ...previous,
+                      operations: previous.operations.map((op, index2) =>
+                        index2 === index
+                          ? { ...op, if: { ...op.if, left: expression } }
+                          : op,
+                      ),
+                    }))
+                  }
                 />
                 <TextField
                   value={operation.if.comparator}
@@ -1149,6 +1257,21 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                   }
                   size="small"
                   sx={{ flex: 1 }}
+                />
+                <FormulaBuilderButton
+                  current={operation.if.right}
+                  names={formulaNameOptions}
+                  onOpen={loadSiteVariables}
+                  onUse={(expression) =>
+                    patch((previous) => ({
+                      ...previous,
+                      operations: previous.operations.map((op, index2) =>
+                        index2 === index
+                          ? { ...op, if: { ...op.if, right: expression } }
+                          : op,
+                      ),
+                    }))
+                  }
                 />
               </Stack>
               <Typography variant="caption" color="text.secondary">

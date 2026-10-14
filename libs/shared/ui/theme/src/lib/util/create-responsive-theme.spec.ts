@@ -374,8 +374,12 @@ describe('tints survive theme creation untouched (AGL-1244)', () => {
         ),
       ),
     })
-    // Palette merges ONE level, so a host that sets one tint owns the group —
-    // the same semantics as overriding `primary`.
-    expect(theme.palette.tint).toEqual({ primary: '#FFEEDD' })
+    // Tints merge per color: the host's one tint replaces the base's, and the
+    // other two stay, so a tile on `tint.secondary` keeps its fill.
+    expect(theme.palette.tint).toEqual({
+      primary: '#FFEEDD',
+      secondary: '#FBE6FE',
+      tertiary: '#EEF0F2',
+    })
   })
 })

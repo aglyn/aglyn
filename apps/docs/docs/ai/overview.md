@@ -32,12 +32,16 @@ you is the credits it spent and a draft you delete.
 
 ## What it can build {#what-it-can-build}
 
-Each capability has its own page, next to the thing it builds:
+Each capability has its own page, next to the thing it builds. Every list it can fill has
+a [Create with AI](create-with-ai.md) button.
+
 
 | You want | Where you start | The page |
 | --- | --- | --- |
 | A page from a brief | **Pages → Create with AI** | [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md) |
+| A new site, planned, written and published from a few questions | **Start your site**, when you create a site | [Start a new site with AI](start-with-ai.md) |
 | A whole small site | **Pages**, or **Sites** for several at once | [Generate a site](generate-a-site.md) |
+| Several things from one message — pages, a form, an email, products, an automation | The Assist chat | [Build from Assist chat](assist-builds.md) |
 | Many client sites, run as an agency | **Sites** | [An AI website builder for agencies](agency-sites.md) |
 | A layout — header, navigation, footer | **Layouts → Create with AI** | [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai) |
 | A page template | **Templates → Create with AI** | [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai) |
@@ -117,7 +121,8 @@ A request that fails before the model answers does not spend credits. An answer 
 was generated and then refused for breaking a building rule does — the rules page says
 which, and why.
 
-The figures behind all of that are on
+What each plan includes, what typical jobs cost and when credits are given back are on
+[AI credits](ai-credits.md). The billing figures behind all of that are on
 [Billing & Plans](../workspace-and-billing/billing-and-plans/overview.md#assist-overage),
 and your own usage is on **Billing → Usage**.
 
@@ -172,6 +177,10 @@ contact, lead, deal, form submission or list member is read to build a page.
 ## Related
 
 - [How Aglyn AI builds](how-aglyn-ai-builds.md)
+- [Start a new site with AI](start-with-ai.md)
+- [AI credits](ai-credits.md)
+- [AI jobs and activity](ai-jobs-and-activity.md)
+- [Privacy and Aglyn AI](ai-privacy.md)
 - [Business profile](business-profile.md)
 - [Aglyn Assist](../getting-started/aglyn-assist.md)
 - [AI allotments, usage and model choice](ai-allotments.md)

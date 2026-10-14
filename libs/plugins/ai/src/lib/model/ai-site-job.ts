@@ -18,12 +18,30 @@
 import { aiSiteKind } from './ai-site-kinds'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
+  aiPlanFormDatasetNames,
   aiPlanUndeclaredRefs,
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
 } from './ai-build-plan'
 import { AI_JOB_CREATE_KINDS } from './ai-job-creations'
 import { AI_PAGE_CREATE_KINDS } from './ai-page-job'
+import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
+import {
+  AI_CREDIT_RANGE_ZERO,
+  AI_MEASURED_PAID_SITE_CREDITS,
+  AI_MEASURED_PASS_CREDITS,
+  AI_MEASURED_STANDALONE_CREATION_CREDITS,
+  AI_MEASURED_UNIT_CREDITS,
+  aiCreditRangeAdd,
+  aiCreditRangeOf,
+  aiCreditRangeOrdered,
+  aiCreditsPromptFor,
+  aiMeasuredPageCredits,
+  aiMeasuredStandalonePageCredits,
+  type AiCreditRange,
+  type AiCreditsPrompt,
+  type AiMeasuredCredits,
+} from './ai-credit-estimate'
 
 /**
  * What a site scaffold is (AGL-2911): the inputs a `site` job is admitted
@@ -130,7 +148,7 @@ export interface AiFreeSiteWorstCase {
  * moves and this does not.
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
-  plan: 35,
+  plan: 36,
   look: 7,
   layout: 23,
   form: 29,
@@ -194,26 +212,27 @@ export function aiFreeSiteSectionsWithin(
   return Math.min(AI_FREE_SITE_MAX_SECTIONS, pages * AI_SITE_MAX_SECTIONS, paid)
 }
 
-/** Sections a Free site's page is assumed to hold before its plan names them. */
-export const AI_FREE_SITE_NOMINAL_SECTIONS = 4
-
 /**
- * About what a Free site start of this many pages costs at its worst, in
- * credits, for the dialog that asks for one: the plan, its look, the layout
- * and form a new site builds, each page's answer and listing, and its
- * sections at the nominal count, from the figures the wall is proven with
- * rather than the nominal credits a paid estimate counts. No retry room: the
- * dialog says what a start costs, not what the wall holds back.
+ * What a Free site start of this many pages can cost at its worst, in
+ * credits (AGL-3660): `aiFreeSiteWorstCaseCredits` for an empty site — the
+ * plan, its look, the layout and form a guided start builds, each page's
+ * answer and listing, the sections its plan is held to
+ * (`aiFreeSiteSectionsWithin` at the month's whole taste, which is what the
+ * plan step allows) and the room for one retried page.
+ *
+ * The CEILING a start is quoted with ("up to 283"), no longer the figure it
+ * is admitted on (AGL-3722): that is the measured p90
+ * (`aiFreeSiteCreditRange`), and a start past what is left is asked to be
+ * confirmed and pauses with Resume when its credits run out, instead of
+ * being held back from starting at all.
  */
 export function aiFreeSiteCreditEstimate(
   pages: number,
   credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
 ): number {
-  const count = Math.max(1, Math.floor(pages))
-  return (
-    aiFreeSiteWorstCaseCredits({ layouts: 1, forms: 1, pages: count }, count * AI_FREE_SITE_NOMINAL_SECTIONS, credits) -
-    credits.retry
-  )
+  const creations: AiFreeSiteCreations = { layouts: 1, forms: 1, pages: Math.max(1, Math.floor(pages)) }
+  const sections = aiFreeSiteSectionsWithin(creations, FREE_AI_TASTE_CREDITS_PER_MONTH, credits)
+  return aiFreeSiteWorstCaseCredits(creations, sections, credits)
 }
 
 /**
@@ -227,6 +246,19 @@ export interface AiFreeCreditsLeft {
   left: number
   total: number
   resetsOn: string
+  /**
+   * Both meters `left` is the lesser of, in credits net of give-backs, for the
+   * usage strip's live read (AGL-3722): the owner's Free allowance across
+   * their Free workspaces (`account`, `null` with no owner) and this
+   * workspace's band.
+   */
+  used?: {
+    account: number | null
+    org: number
+    orgBand: number | null
+    /** The strip's warn state for these figures, worked out where the strip's own rule is not shipped to the browser. */
+    state: 'ok' | 'warn' | 'capped'
+  }
 }
 
 /** The first UTC day of the month after `now`, `YYYY-MM-DD`: when the Free credits come back. */
@@ -244,33 +276,64 @@ export function aiFreeCreditsResetLabel(resetsOn: string): string {
 }
 
 /**
- * The credits a Free site start needs and does not have (AGL-3660), or `null`
- * when what is left covers it — or when nothing is known about what is left,
- * since the reservation still refuses at the wall. The figure is the one the
- * dialog quotes (`aiFreeSiteCreditEstimate`), so the number a person is shown
- * is the number they are held to.
+ * What a Free site start of this many pages is likely to cost, its p90 and
+ * its ceiling (AGL-3722), before a plan names its sections: the plan, the
+ * look, the layout and form a guided start builds, and each page at the
+ * nominal section count, at what each MEASURED in production
+ * (`AI_MEASURED_UNIT_CREDITS`); the ceiling is the whole worst case the wall
+ * is proven with (`aiFreeSiteCreditEstimate`). Two pages: about 137
+ * (p90 213, up to 283).
  */
-export function aiFreeSiteShortfall(
-  credits: Pick<AiFreeCreditsLeft, 'left'> | null | undefined,
-  pages: number,
-): { needed: number; left: number } | null {
-  if (!credits || !Number.isFinite(credits.left)) return null
-  const needed = aiFreeSiteCreditEstimate(pages)
-  const left = Math.max(0, Math.floor(credits.left))
-  return left < needed ? { needed, left } : null
+export function aiFreeSiteCreditRange(pages: number): AiCreditRange {
+  const count = Math.max(1, Math.floor(pages))
+  return aiCreditRangeOrdered({
+    ...aiSiteStartMeasured(count),
+    ceiling: aiFreeSiteCreditEstimate(count),
+  })
 }
 
-/** Why a Free site start is refused before it spends: what is left, when it comes back, and the way on. */
-export function aiFreeSiteShortfallText(
-  shortfall: { needed: number; left: number },
-  resetsOn: string,
-): string {
-  const left = shortfall.left === 1 ? '1 is' : `${shortfall.left.toLocaleString('en-US')} are`
+/** A site start's measured likely and p90 before its plan: plan, look, layout, form and its pages at the nominal sections. */
+function aiSiteStartMeasured(pages: number): Pick<AiCreditRange, 'likely' | 'p90'> {
+  const { plan, theme, layout, form } = AI_MEASURED_UNIT_CREDITS
+  const page = aiMeasuredPageCredits(AI_SITE_NOMINAL_SECTIONS)
+  return {
+    likely: plan.median + theme.median + layout.median + form.median + pages * page.median,
+    p90: plan.p90 + theme.p90 + layout.p90 + form.p90 + pages * page.p90,
+  }
+}
+
+/** The smaller first build a site start offers: its home page alone. */
+export const AI_SITE_HOME_FIRST_LABEL = 'Build the home page first'
+
+/**
+ * What a Free site start says before it starts when what is left does not
+ * cover its p90 (AGL-3722), or `null` when it fits — or when nothing is known
+ * about what is left, since the reservation still decides each pass. Not a
+ * refusal: the person may build what fits (the job pauses with Resume when
+ * the credits run out), build the home page first, or upgrade.
+ */
+export function aiFreeSitePrompt(
+  credits: Pick<AiFreeCreditsLeft, 'left' | 'resetsOn'> | null | undefined,
+  pages: number,
+): AiCreditsPrompt | null {
+  if (!credits || !Number.isFinite(credits.left)) return null
+  const count = Math.max(1, Math.floor(pages))
+  const home = aiFreeSiteCreditRange(1)
+  return aiCreditsPromptFor(
+    aiFreeSiteCreditRange(count),
+    credits,
+    count > 1 ? { label: AI_SITE_HOME_FIRST_LABEL, ...home } : null,
+  )
+}
+
+/**
+ * Why a Free start is refused outright (AGL-3722): nothing at all is left,
+ * so there is nothing for "build what fits" to build.
+ */
+export function aiFreeCreditsNoneLeftText(resetsOn: string): string {
   return (
-    `Building this site can take up to about ${shortfall.needed.toLocaleString('en-US')} AI credits, ` +
-    `and only ${left} left of your free AI credits this month. They are shared by all your Free ` +
-    `workspaces and reset on ${aiFreeCreditsResetLabel(resetsOn)}. Upgrade this workspace to build ` +
-    'your site now, or start from the starter site and try AI again after the reset.'
+    `You have no free AI credits left this month. They are shared by all your Free workspaces and ` +
+    `renew on ${aiFreeCreditsResetLabel(resetsOn)}. Upgrade this workspace to build with AI now.`
   )
 }
 
@@ -810,14 +873,20 @@ export function aiSiteWords(
 
 /**
  * What a scaffold builds for itself: the layout its pages render inside, the
- * form they place, and the palette suggestion a member applies in the Theme
- * section. Anything else a plan asks to create is a job of its own.
+ * form they place, the palette suggestion a member applies in the Theme
+ * section, and the datasets its structured content is kept in (AGL-3616),
+ * which the data plugin writes. Anything else a plan asks to create is a job
+ * of its own.
  */
 export const AI_SITE_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'layout',
   'form',
   'theme-change',
+  'dataset',
 ]
+
+/** The most datasets one site start creates (AGL-3616). */
+export const AI_SITE_DATASETS_MAX = 3
 
 /** The creations a scaffold cannot build, in the order the plan lists them, each named once. */
 export function aiSitePlanPrerequisites(
@@ -878,6 +947,10 @@ export function aiSitePlanShapeRefusal(
   if (!screens.some((screen) => screen.nav)) {
     return 'No page in this plan is in the site navigation. Describe the site again.'
   }
+  const datasets = plan.create.filter((entry) => entry.kind === 'dataset').length
+  if (datasets > AI_SITE_DATASETS_MAX) {
+    return `This plan creates ${datasets} datasets, and a site scaffold creates at most ${AI_SITE_DATASETS_MAX}. Keep the others' items on their pages.`
+  }
   return null
 }
 
@@ -909,6 +982,17 @@ export interface AiPlanPassOptions {
   welcomeEmail?: boolean
   /** The creation kinds the job builds itself; a scaffold's when absent. */
   creates?: readonly AiBuildPlanCreateKind[]
+  /** Each page and creation written on its own (`aiStandaloneScreenCreditRange`), not as a site start’s (AGL-3722). */
+  standalonePages?: boolean
+}
+
+/**
+ * Whether a creation is built with no model: a dataset a form of the plan
+ * writes to (AGL-3616) starts empty, designed from its planned fields, so it
+ * is no pass of the estimate.
+ */
+function aiPlanCreationIsModelFree(plan: Pick<AiBuildPlan, 'create'>, entry: AiBuildPlan['create'][number]): boolean {
+  return entry.kind === 'dataset' && aiPlanFormDatasetNames(plan).has(entry.name.trim().toLowerCase())
 }
 
 /**
@@ -922,7 +1006,7 @@ export function aiPlanPasses(plan: AiBuildPlan, options: AiPlanPassOptions = {})
     0,
   )
   const creates = options.creates ?? AI_SITE_CREATE_KINDS
-  const creations = plan.create.filter((entry) => creates.includes(entry.kind)).length
+  const creations = plan.create.filter((entry) => creates.includes(entry.kind) && !aiPlanCreationIsModelFree(plan, entry)).length
   return screens + creations + (options.welcomeEmail ? 1 : 0)
 }
 
@@ -957,13 +1041,125 @@ export function aiJobPlanCreditEstimate(kind: string, plan: AiBuildPlan): number
  */
 export function aiSiteCreditEstimate(
   pages: number,
-  options: { welcomeEmail?: boolean } = {},
+  options: { welcomeEmail?: boolean; siteKind?: string | null } = {},
 ): number {
   const screens = Math.max(0, Math.floor(pages))
+  const content = aiSiteStartContent(options.siteKind)
   const passes =
     1 +
     screens * (AI_SITE_NOMINAL_SECTIONS + 1) +
     2 +
-    (options.welcomeEmail ? 1 : 0)
+    (options.welcomeEmail ? 1 : 0) +
+    (content === 'products' ? 1 : content === 'posts' ? AI_SITE_START_POSTS : 0)
   return passes * AI_SITE_PASS_CREDITS
+}
+
+/** How many first posts a paid blog start writes, one pass each (`AI_SITE_POSTS`, held equal by `ai-site-job.spec.ts`). */
+export const AI_SITE_START_POSTS = 3
+
+/**
+ * The first content a paid start of this kind writes (AGL-3676): a store's
+ * first products, a blog's first posts, or nothing. `aiSiteContentPart`'s
+ * answer for a paid start, by the kind's id.
+ */
+export function aiSiteStartContent(siteKind: string | null | undefined): 'posts' | 'products' | null {
+  if (siteKind === 'store') return 'products'
+  if (siteKind === 'blog') return 'posts'
+  return null
+}
+
+/**
+ * The measured cost of one creation a plan builds (AGL-3722): a layout's or
+ * a form's as measured, a theme's as the site start's look measured, and
+ * any other kind at the stand-in a single-answer creation is priced at.
+ * `standalone` for one written on its own — a build's, a page job's — rather
+ * than inside a site start's warm run.
+ */
+export function aiCreationMeasuredCredits(kind: string, options: { standalone?: boolean } = {}): AiMeasuredCredits {
+  if (kind === 'layout') {
+    return options.standalone ? AI_MEASURED_STANDALONE_CREATION_CREDITS.layout : AI_MEASURED_UNIT_CREDITS.layout
+  }
+  if (kind === 'form') return AI_MEASURED_UNIT_CREDITS.form
+  if (kind === 'theme' || kind === 'theme-change') return AI_MEASURED_UNIT_CREDITS.theme
+  return AI_MEASURED_PASS_CREDITS
+}
+
+/** A planned page's range: its sections scaled around the measured page, its ceiling one pass a section and one for its listing. */
+export function aiScreenCreditRange(sections: number): AiCreditRange {
+  return aiCreditRangeOf(aiMeasuredPageCredits(sections), (Math.max(0, sections) + 1) * AI_SITE_PASS_CREDITS)
+}
+
+/**
+ * A page written on its own — an Assist build's, a page job's — as a range
+ * (AGL-3722): a fixed cost and one per section as such pages measured
+ * (`AI_MEASURED_STANDALONE_PAGE`), never a site start's later, cheaper
+ * pages; the ceiling as `aiScreenCreditRange`'s.
+ */
+export function aiStandaloneScreenCreditRange(sections: number): AiCreditRange {
+  return aiCreditRangeOf(
+    aiMeasuredStandalonePageCredits(sections),
+    (Math.max(0, sections) + 1) * AI_SITE_PASS_CREDITS,
+  )
+}
+
+/**
+ * What a plan is likely to cost, its p90 and its ceiling (AGL-3722): the
+ * same units `aiPlanCreditEstimate` counts, each at what it measured; the
+ * ceiling IS `aiPlanCreditEstimate`.
+ */
+export function aiPlanCreditRange(plan: AiBuildPlan, options: AiPlanPassOptions = {}): AiCreditRange {
+  const creates = options.creates ?? AI_SITE_CREATE_KINDS
+  let range = AI_CREDIT_RANGE_ZERO
+  const screenRange = options.standalonePages ? aiStandaloneScreenCreditRange : aiScreenCreditRange
+  for (const screen of plan.screens) range = aiCreditRangeAdd(range, screenRange(screen.sections.length))
+  for (const entry of plan.create) {
+    if (!creates.includes(entry.kind) || aiPlanCreationIsModelFree(plan, entry)) continue
+    range = aiCreditRangeAdd(
+      range,
+      aiCreditRangeOf(aiCreationMeasuredCredits(entry.kind, { standalone: options.standalonePages }), AI_SITE_PASS_CREDITS),
+    )
+  }
+  if (options.welcomeEmail) range = aiCreditRangeAdd(range, aiCreditRangeOf(AI_MEASURED_PASS_CREDITS, AI_SITE_PASS_CREDITS))
+  return aiCreditRangeOrdered(range)
+}
+
+/**
+ * `aiJobPlanCreditEstimate` as a range (AGL-3722): the same kinds, each at
+ * what it measured. Only a site start writes its pages in one warm run; every
+ * other kind's page is written on its own.
+ */
+export function aiJobPlanCreditRange(kind: string, plan: AiBuildPlan): AiCreditRange {
+  const creates =
+    kind === 'page' ? AI_PAGE_CREATE_KINDS : AI_JOB_CREATE_KINDS[kind as keyof typeof AI_JOB_CREATE_KINDS]
+  return aiPlanCreditRange(plan, { ...(creates ? { creates } : {}), standalonePages: kind !== 'site' })
+}
+
+/**
+ * A paid site start's range before its plan (AGL-3722): the plan, its look,
+ * layout and form, and each page at the nominal sections, as measured; the
+ * ceiling is `aiSiteCreditEstimate`.
+ */
+export function aiSiteCreditRange(
+  pages: number,
+  options: { welcomeEmail?: boolean; siteKind?: string | null } = {},
+): AiCreditRange {
+  const count = Math.max(0, Math.floor(pages))
+  // A paid start plans and writes on the paid routing, measured apart (AGL-3739).
+  const { plan, theme, layout, form, page, email, products } = AI_MEASURED_PAID_SITE_CREDITS
+  const content = aiSiteStartContent(options.siteKind)
+  // A blog's posts have no measurement of their own yet: the stand-in pass.
+  const parts: AiMeasuredCredits[] = [
+    plan,
+    theme,
+    layout,
+    form,
+    ...Array.from({ length: count }, () => page),
+    ...(options.welcomeEmail ? [email] : []),
+    ...(content === 'products' ? [products] : content === 'posts' ? [AI_MEASURED_PASS_CREDITS] : []),
+  ]
+  return aiCreditRangeOrdered({
+    likely: parts.reduce((total, part) => total + part.median, 0),
+    p90: parts.reduce((total, part) => total + part.p90, 0),
+    ceiling: aiSiteCreditEstimate(count, options),
+  })
 }

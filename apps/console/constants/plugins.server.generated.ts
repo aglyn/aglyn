@@ -119,6 +119,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-post-purchase/server'),
   },
   {
+    id: 'review-platforms',
+    apiPrefixes: ["review-platforms"],
+    register: {"consoleApi":"registerReviewPlatformsConsoleApi"},
+    load: () => import('@aglyn/plugins-review-platforms/server'),
+  },
+  {
     id: 'loyalty',
     apiPrefixes: ["loyalty"],
     register: {"consoleApi":"registerLoyaltyConsoleApi"},
@@ -137,6 +143,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketing-platforms/server'),
   },
   {
+    id: 'ad-conversions',
+    apiPrefixes: ["ad-conversions"],
+    register: {"consoleApi":"registerAdConversionsConsoleApi"},
+    load: () => import('@aglyn/plugins-ad-conversions/server'),
+  },
+  {
     id: 'zapier',
     apiPrefixes: ["zapier"],
     register: {"consoleApi":"registerZapierConsoleApi"},
@@ -147,6 +159,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["fulfillment-networks"],
     register: {"consoleApi":"registerFulfillmentNetworksConsoleApi"},
     load: () => import('@aglyn/plugins-fulfillment-networks/server'),
+  },
+  {
+    id: 'couriers',
+    apiPrefixes: ["couriers"],
+    register: {"consoleApi":"registerCouriersConsoleApi"},
+    load: () => import('@aglyn/plugins-couriers/server'),
   },
   {
     id: 'marketplaces',
@@ -183,5 +201,11 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["funnels"],
     register: {"consoleApi":"registerFunnelsConsoleApi"},
     load: () => import('@aglyn/plugins-funnels/server'),
+  },
+  {
+    id: 'live-chat',
+    apiPrefixes: ["live-chat"],
+    register: {"consoleApi":"registerLiveChatConsoleApi"},
+    load: () => import('@aglyn/plugins-live-chat/server'),
   },
 ]

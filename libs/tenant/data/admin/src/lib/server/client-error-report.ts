@@ -55,6 +55,11 @@ import {
 // subpath, not the `/server` barrel: specs that stub that barrel with a
 // hand-built factory would silently turn this into `undefined`.
 import { isForeignScriptStack } from '@aglyn/aglyn/app-utils/foreign-script'
+// The seven browser families the beacon writes (AGL-3732), same subpath rule.
+import {
+  isBrowserFamily,
+  type BrowserFamily,
+} from '@aglyn/aglyn/app-utils/browser-family'
 
 import {
   readBeaconHeartbeat,
@@ -75,6 +80,26 @@ export interface ClientErrorEvent {
   source?: string
   line?: number
   url?: string
+  /** Hydration only: the translator the beacon saw on the page. */
+  translated?: string
+  /** Hydration only: the visitor's `navigator.language`. */
+  language?: string
+  /**
+   * The coarse browser family the beacon classified (AGL-3732). Only the
+   * seven values it writes are kept; anything else — a raw user agent from
+   * some other caller included — is dropped, never logged.
+   */
+  browser?: BrowserFamily
+}
+
+/**
+ * A short label the beacon wrote itself (`chrome`, `lang:tr`, `en-US`) —
+ * anything else is refused rather than logged, since the field is free text
+ * from any caller of a public endpoint.
+ */
+function label(value: unknown): string | undefined {
+  const text = clampString(value, 24)
+  return /^[A-Za-z0-9:_-]+$/.test(text) ? text : undefined
 }
 
 function clampString(value: unknown, max: number): string {
@@ -137,6 +162,9 @@ export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
       source: scrubUrl(event.source) || undefined,
       line: typeof event.line === 'number' ? Math.trunc(event.line) : undefined,
       url: scrubUrl(event.url) || undefined,
+      translated: label(event.translated),
+      language: label(event.language),
+      browser: isBrowserFamily(event.browser) ? event.browser : undefined,
     })
   }
   return parsed
@@ -148,6 +176,19 @@ export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
  * drops it. Both shapes are built here so every accepted beacon event is
  * representable.
  */
+/**
+ * The stack, headed by the message when the stack does not already carry it.
+ *
+ * V8 opens a stack with `Name: message`; JavaScriptCore and SpiderMonkey do
+ * not, so a Safari or Firefox report used to arrive as bare frames with no
+ * message at all — the 2026-10-09 01:23Z `host-activity-write` page could not
+ * say what had failed.
+ */
+function stackWithMessage(stack: string, message: string | undefined): string {
+  if (!message || stack.includes(message)) return stack
+  return `Error: ${message}\n${stack}`
+}
+
 function toReportedEvent(
   event: ClientErrorEvent,
   service: string,
@@ -158,7 +199,9 @@ function toReportedEvent(
     '@type':
       'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
     serviceContext: { service, version },
-    message: hasStack ? event.stack : `${event.kind}: ${event.message}`,
+    message: hasStack
+      ? stackWithMessage(event.stack as string, event.message)
+      : `${event.kind}: ${event.message}`,
     // Outside `serviceContext` so Error Reporting ignores it while a log-match
     // policy can still filter on it — the same placement, for the same reason,
     // that the server half gives `route`/`method`/`digest`.
@@ -170,6 +213,11 @@ function toReportedEvent(
     // than "any entry at all". That is why it pages for one visitor whose
     // webview rewrote the DOM.
     kind: clampString(event.kind, 32) || 'error',
+    ...(event.translated ? { translated: event.translated } : {}),
+    ...(event.language ? { language: event.language } : {}),
+    // Top-level beside `kind`, so a Logs query or a log-based metric label
+    // can filter on `jsonPayload.browser` (AGL-3732).
+    ...(event.browser ? { browser: event.browser } : {}),
     context: {
       httpRequest: event.url ? { url: event.url } : undefined,
       ...(hasStack

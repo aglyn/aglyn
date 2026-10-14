@@ -37,6 +37,9 @@ class ConsoleApiError(
 
 enum class ApiMethod { GET, POST, PUT, PATCH, DELETE }
 
+/** A request body that is not JSON: bytes sent as they are, with their own content type (the font installer's file upload). */
+class RawBody(val bytes: ByteArray, val contentType: String)
+
 /** A file a route answered with: its name (from `Content-Disposition`), type, bytes and headers. */
 class DownloadedFile(val name: String?, val contentType: String, val bytes: ByteArray, val headers: io.ktor.http.Headers)
 
@@ -77,6 +80,7 @@ class ConsoleApiClient(
     query: Map<String, Any?> = emptyMap(),
     idempotencyKey: String? = null,
     anonymous: Boolean = false,
+    rawBody: RawBody? = null,
   ): JsonElement? {
     val retryable = method == ApiMethod.GET || idempotencyKey != null
     var forceRefresh = false
@@ -93,7 +97,10 @@ class ConsoleApiClient(
           header("Accept", "application/json")
           if (bearer != null) header("Authorization", "Bearer $bearer")
           if (idempotencyKey != null) header("Idempotency-Key", idempotencyKey)
-          if (body != null) {
+          if (rawBody != null) {
+            contentType(ContentType.parse(rawBody.contentType))
+            setBody(rawBody.bytes)
+          } else if (body != null) {
             contentType(ContentType.Application.Json)
             setBody(body.toString())
           }

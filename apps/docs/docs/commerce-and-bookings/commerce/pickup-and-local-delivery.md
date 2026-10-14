@@ -22,13 +22,14 @@ are covered by [Delivery apps](./delivery-apps.md), which work separately.
 
 ## Set up pickup {#set-up-pickup}
 
-Pickup is set per location under **Products → Settings → Inventory locations**.
-On a location's row, choose **Pickup**, then:
+Pickup is turned on per location, on the **Inventory locations** card in the
+store's settings, so buyers can collect orders there at the hours you set. On a
+location's row, choose **Pickup**, then:
 
 1. Turn on **Buyers can pick up orders here**.
-2. Enter the **Pickup hours**, one line per set of days, like `Mo-Fr 09:00-17:00`
-   and `Sa 10:00-14:00`. A line that doesn't read as days and times is flagged
-   before you save.
+2. Under **Pickup hours**, switch on each day buyers can collect, then pick the
+   **From** and **To** times. For a split day, such as a lunch break, select
+   **Add hours** on that day.
 3. Add **Arrival instructions** if buyers need them, such as which door to use.
 4. Choose how long an order is **Usually ready in**, or leave it unsaid.
 
@@ -48,8 +49,9 @@ locations instead.
 
 ## Set up local delivery {#set-up-local-delivery}
 
-Local delivery is set up on the **Local delivery** card under **Products →
-Settings**:
+The **Local delivery** card, in the store's settings, lets your own driver
+deliver orders: buyers enter their postal code at the cart, pay your fee and
+book a delivery time. To set it up:
 
 1. Turn on **Deliver orders yourself** and enter the two-letter **Country** you
    deliver in.
@@ -60,8 +62,9 @@ Settings**:
    as `10010-10020`. Each zone has its own **Fee**, an optional **Minimum order**
    and an optional **Free over** amount. When a postal code is in more than one
    zone, the zone listed first is used.
-4. Enter your **Delivery windows**, one per line, like `Mo-Fr 09:00-12:00`. Each
-   line is offered on each of its days.
+4. Under **Delivery windows**, switch on each day you deliver and pick a window's
+   **From** and **To** times. Select **Add window** for a second window on the
+   same day. Each window is offered on its day.
 5. Choose how long before a window an order must be placed (**Order at least**)
    and how many days ahead buyers can book.
 6. Optionally add **What buyers should know**, such as "We text when we're 10
@@ -111,6 +114,24 @@ and accounting, exactly like shipped ones.
 
 The buyer's [order status page](./order-notifications.md) shows where to pick
 up, the pickup hours, or the delivery time, and each step as it happens.
+
+## Ask Aglyn AI {#ask-aglyn-ai}
+
+You can ask [Aglyn Assist](../../ai/assist-builds.md) to set up pickup or delivery, such as
+*offer local pickup at our Austin shop, weekdays 9 to 5* or *deliver to 78701 and 78702
+for $5, free over $75, weekday mornings*. The plan card lists each change, and **Confirm
+plan** saves it.
+
+- Pickup is turned on for one of your [inventory locations](./overview.md#inventory-locations),
+  found by its name, city or street. Aglyn AI never adds a location: add it first, then
+  ask. Without a location, it turns on the store-wide **Offer free local pickup** choice.
+- Local delivery uses postal-code zones. Aglyn AI turns delivery on only when checkout can
+  offer it: a country, at least one zone and at least one delivery window. Distance zones
+  need your store placed on the map, so you set those up yourself.
+- It uses only the fees and times you give.
+- Changes work as soon as they are saved, and cost no AI credits.
+- Only an admin or editor on the site can ask Aglyn AI for these changes. An author can
+  still make them on the card.
 
 ## Related
 

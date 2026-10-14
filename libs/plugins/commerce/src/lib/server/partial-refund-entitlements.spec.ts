@@ -176,13 +176,14 @@ function makeCollectionRef(
     where: (field: string, op: string, value: unknown) =>
       makeCollectionRef(path, [...filters, [field, op, value]]),
     limit: () => ref,
-    get: async () => ({
-      docs: childPaths(path)
+    get: async () => {
+      const matched = childPaths(path)
         .map(makeSnapshot)
         .filter((snapshot) =>
           filters.every(([field, , value]) => snapshot.get(field) === value),
-        ),
-    }),
+        )
+      return { docs: matched, empty: matched.length === 0, size: matched.length }
+    },
     add: async (value: Record<string, any>) => {
       const created = makeDocRef(`${path}/auto-${++autoIdCounter}`)
       docs.set(created.path, value)
@@ -258,7 +259,35 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({
     org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
   }),
+  consumeRateLimit: async () => ({ allowed: true, count: 1, resetMs: Date.now() + 1000 }),
 }))
+
+/**
+ * The reviewer (AGL-3736). A typed email no longer verifies a review, so the
+ * gate is driven as the storefront drives it for a buyer: a signed-in site
+ * member whose email the inbox has proven. Every other caller in this file
+ * gets the real session reader.
+ */
+let reviewMember: Record<string, unknown> | null = null
+jest.mock('./membership', () => {
+  const actual = jest.requireActual('./membership')
+  return {
+    ...actual,
+    readActiveMemberSession: async (req: unknown, hostId: string) =>
+      reviewMember
+        ? {
+            status: 'active',
+            memberId: 'member-1',
+            member: {
+              exists: true,
+              id: 'member-1',
+              get: (field: string) => reviewMember?.[field],
+              data: () => reviewMember,
+            },
+          }
+        : actual.readActiveMemberSession(req, hostId),
+  }
+})
 
 /**
  * The org-scope half of the refund gate (AGL-2372). `admin-1` here is the
@@ -662,6 +691,17 @@ describe('licence keys are RETIRED, never returned to the pool (AGL-2454)', () =
 })
 
 describe('the reviews gate (AGL-2454)', () => {
+  beforeEach(() => {
+    reviewMember = {
+      email: 'buyer@example.com',
+      displayName: 'Bea Buyer',
+      emailVerifiedAtMs: 1,
+    }
+  })
+  afterEach(() => {
+    reviewMember = null
+  })
+
   async function postReview(productId: string) {
     const { res, result } = makeResponse()
     await reviewsHandler(
@@ -695,9 +735,9 @@ describe('the reviews gate (AGL-2454)', () => {
    */
   it('stops verifying a buyer whose line was refunded, and keeps the one they kept', async () => {
     await refund({ lineItemIds: [1] })
-    const [pluginReview] = await postReview('plugin')
-    expect(pluginReview.productId).toBe('plugin')
-    expect(pluginReview.verified).toBe(false)
+    // The store is verified-only (the default), so the refunded line's review
+    // is refused outright rather than saved unverified.
+    expect(await postReview('plugin')).toEqual([])
     const ebookReview = (await postReview('ebook')).find(
       (review) => review.productId === 'ebook',
     )

@@ -56,6 +56,8 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobPlanStep: jest.fn(),
 }))
 
+import { AI_CREDITS_CONFIRM_CODE } from '../model/ai-credit-estimate'
+import { AI_JAZZ_EVENTS_BRIEF, AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER } from './fixtures/ai-jazz-events-build-plan-recording'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -82,6 +84,7 @@ import {
   AI_PLAN_NO_FORM_SENTENCE,
   aiPlanCapabilitiesForJob,
   aiPlanCapabilityLines,
+  aiPlanUncreatable,
   aiUnrestrictedPlanCapabilities,
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
@@ -97,14 +100,22 @@ import {
   aiJobPlanKey,
   aiJobPlanMaxTokens,
   aiJobPlanPrompt,
+  aiPlanTodaySentence,
   aiReusablePlan,
   createAiJobPlanStep,
   readAiJobPlanCapabilities,
   runAiJobPlanStep,
   type AiJobPlanCandidate,
   registerAiJobPlan,
+  aiSiteDatasetSentence,
+  AI_SITE_STORE_SHOP_CODE,
+  AI_SITE_STORE_SHOP_SENTENCE,
+  aiPlanSiteLines,
+  aiSiteStoreShopCheck,
+  aiSiteStoreShopPageViolations,
 } from './ai-job-plan-step'
 import { registerAiJobPlanStep } from './ai-jobs'
+import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 
 const NOW = new Date('2026-09-15T12:00:00.000Z')
 const firestore = { handle: 'the machine’s' } as unknown as FirebaseFirestore.Firestore
@@ -296,6 +307,49 @@ describe('the plan step', () => {
     mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
     await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
     expect(mockRunAiRequest.mock.calls[1][0].tools?.[0]).toBe(AI_BUILD_PLAN_TOOL)
+  })
+
+  it('asks a site plan for the language its brief is written in, and no other kind (AGL-3750)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
+    await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest.mock.calls[0][0].tools?.[0]).toBe(AI_BUILD_PLAN_TOOL)
+    await planStep()({ job: job({ kind: 'site', brief: 'Un sitio web para una panadería en Madrid.' }), stepIndex: 0, now: NOW, firestore })
+    const tool = mockRunAiRequest.mock.calls[1][0].tools?.[0]
+    expect(tool?.inputSchema['required']).toContain('language')
+    expect(tool?.inputSchema['properties']).toHaveProperty('language')
+    // And what its photos show, in English, which a library is searched by (AGL-3760).
+    expect(tool?.inputSchema['required']).toContain('photoWords')
+  })
+
+  it('offers an event-led start the event items it may plan, and every other start none (AGL-3755)', async () => {
+    mockRunAiRequest.mockResolvedValue(planAnswer(PLAN))
+    mockReadInventory.mockResolvedValue({ ...INVENTORY, datasets: [] })
+    const event = {
+      op: 'event',
+      noun: 'event',
+      where: 'Events',
+      intents: ['dated events'],
+      argsSchema: { type: 'object' as const, properties: { title: { type: 'string' as const, description: 'Its name.' } }, required: ['title'], additionalProperties: false as const },
+      maxPerPlan: 6,
+      freeAllowed: true,
+      draftResource: 'event',
+      estimateCredits: () => 0,
+      degrade: 'omit' as const,
+    }
+    const readSiteEvents = jest.fn(async () => ({ ops: new Map([['event', event]]), timeZone: 'America/Chicago' }))
+    const club = job({ kind: 'site', brief: 'A website for a jazz club.' })
+    await planStep({ readSiteEvents })({ job: club, stepIndex: 0, now: NOW, firestore })
+    expect(readSiteEvents).toHaveBeenCalledWith(expect.objectContaining({ job: club, now: NOW }))
+    const [request] = mockRunAiRequest.mock.calls[0]
+    expect(request.tools[0].inputSchema.required).toContain('items')
+    expect(request.messages[0].content).toContain('plan its first 3 upcoming events in items, each with op event')
+    expect(request.messages[0].content).toContain("The business's time zone is America/Chicago")
+    // A start the gate gives no events is told nothing of them, and offered no items.
+    await planStep({ readSiteEvents: async () => null })({ job: club, stepIndex: 0, now: NOW, firestore })
+    const [plain] = mockRunAiRequest.mock.calls[mockRunAiRequest.mock.calls.length - 1]
+    expect(plain.tools[0].inputSchema.required).not.toContain('items')
+    expect(plain.messages[0].content).not.toContain('op event')
   })
 
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {
@@ -623,6 +677,32 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
     expect(outcome).toMatchObject({ usage: USAGE, estCostUsd: 0.0105 })
   })
 
+  it('keeps a Free build past what is left for its card to ask about, rather than failing it (2026-10-09 16:38Z)', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => ({
+        status: 409,
+        error: 'This build is about 106 credits (up to 650). You have 90 left.',
+        code: AI_CREDITS_CONFIRM_CODE,
+      }),
+    })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.customerLimit).toBeUndefined()
+    expect(outcome.plan).toMatchObject({ status: 'proposed' })
+    expect(outcome.review?.reason).toBe('plan')
+  })
+
+  it('fails a plan when no Free credits are left at all, as the customer’s limit rather than ours', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => ({ status: 429, error: 'You have no free AI credits left this month.' }),
+    })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(outcome).toMatchObject({ failure: 'You have no free AI credits left this month.', customerLimit: true })
+    expect(outcome.plan).toBeUndefined()
+  })
+
   it('holds a reused plan to the same door, and spends nothing on it', async () => {
     mockFindPlans.mockResolvedValue([candidate()])
     const outcome = await planStep({
@@ -911,6 +991,8 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
     expect(first.tools[0].inputSchema.required).toContain('items')
     expect(first.messages[0].content).toContain('- booking-service: a booking service, at most 2')
     expect(first.messages[0].content).toContain('places the Booking block')
+    // A dated item, such as an event (AGL-3743), is dated after the build.
+    expect(first.messages[0].content).toContain(aiPlanTodaySentence(NOW))
     expect(second.messages[2].content).toContain('"durationMinutes" must be at least 5')
     expect(outcome.plan?.items).toEqual([
       expect.objectContaining({ slot: 'i0', args: { durationMinutes: 30 }, id: expect.stringMatching(RESOURCE_ID), credits: 0 }),
@@ -918,7 +1000,171 @@ describe('the plan step — a build from one request (AGL-3616)', () => {
     expect(outcome.plan?.screens[0]?.id).toMatch(RESOURCE_ID)
   })
 
+  describe('a build whose events no page lists (AGL-3755)', () => {
+    const EVENT = {
+      op: 'event',
+      noun: 'event',
+      where: 'Events',
+      intents: ['dated events'],
+      argsSchema: {
+        type: 'object' as const,
+        properties: {
+          title: { type: 'string' as const, description: 'Its name.' },
+          startsAt: { type: 'string' as const, description: 'When.' },
+          timezone: { type: 'string' as const, description: 'Zone.' },
+          description: { type: 'string' as const, description: 'What.' },
+        },
+        required: ['title', 'startsAt', 'timezone', 'description'],
+        additionalProperties: false as const,
+      },
+      maxPerPlan: 6,
+      freeAllowed: true,
+      draftResource: 'event',
+      live: true,
+      estimateCredits: () => 0,
+      degrade: 'omit' as const,
+      pageBlocks: ['eventList'],
+    }
+    const EVENT_OPS = new Map([[EVENT.op, EVENT]])
+    const answer = { ...PLAN, ...AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER }
+    const names = AI_JAZZ_EVENTS_BUILD_PLAN_ANSWER.items.map((item) => `new:${item.name}`)
+
+    it('settles the recorded jazz-nights answer with an Events page that lists them, without a re-ask', async () => {
+      mockRunAiRequest.mockResolvedValue(planAnswer(answer as never))
+      const outcome = await planStep({ readOps: async () => EVENT_OPS })({
+        job: job({ kind: 'build', brief: AI_JAZZ_EVENTS_BRIEF }),
+        stepIndex: 0,
+        now: NOW,
+        firestore,
+      })
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect(outcome.plan?.items?.map((item) => item.args['startsAt'])).toEqual(['2026-10-16T20:00', '2026-10-23T20:00', '2026-10-30T20:00'])
+      expect(outcome.plan?.screens).toEqual([
+        expect.objectContaining({
+          title: 'Events',
+          slug: '/events',
+          nav: true,
+          // In the site's layout, as its Home page is.
+          layout: 'lay-site',
+          id: expect.stringMatching(RESOURCE_ID),
+          sections: [{ name: 'Upcoming events', uses: names, items: 0 }],
+        }),
+      ])
+    })
+
+    it('re-asks once, naming the events, where the site already has an events page', async () => {
+      mockReadInventory.mockResolvedValue({
+        ...INVENTORY,
+        screens: [...INVENTORY.screens, { id: 'scr-events', name: 'Events', slug: '/events', layoutId: 'lay-site', template: false }],
+      })
+      mockRunAiRequest.mockResolvedValue(planAnswer(answer as never))
+      await planStep({ readOps: async () => EVENT_OPS })({
+        job: job({ kind: 'build', brief: AI_JAZZ_EVENTS_BRIEF }),
+        stepIndex: 0,
+        now: NOW,
+        firestore,
+      })
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      const [, second] = mockRunAiRequest.mock.calls.map(([request]) => request)
+      expect(JSON.stringify(second.messages)).toContain('are listed on no page, so no visitor would see them')
+    })
+  })
+
+  it('tells a build, and only a build, the date its dated items fall after (AGL-3743)', () => {
+    const now = new Date('2026-10-12T23:30:00.000Z')
+    expect(aiPlanTodaySentence(now)).toBe(
+      'Today is 2026-10-12 (UTC). Anything an item dates, such as an event, falls after today.',
+    )
+    expect(aiJobPlanPrompt(job({ kind: 'build' }), null, null, OPS, now)).toContain('Today is 2026-10-12')
+    expect(aiJobPlanPrompt(job(), null, null, OPS, now)).not.toContain('Today is')
+    expect(aiJobPlanPrompt(job({ kind: 'build' }), null, null, OPS)).not.toContain('Today is')
+  })
+
   it('scopes a build to the creations it builds', () => {
     expect(AI_JOB_PLAN_SCOPES.build?.creates).toEqual(['layout', 'form', 'component', 'email'])
+  })
+})
+
+/*
+ * A store's Shop page is its storefront (AGL-3676): the live Hearth & Wick
+ * start was told to plan "Shop presenting the range as image cards", and
+ * did. A store plan is told the platform lists its products in the Shop
+ * page's "Product grid", and a plan of two or more pages with no Shop page
+ * is re-asked once.
+ */
+describe('a store plan’s Shop page (AGL-3676)', () => {
+  const screen = (title: string, slug: string) => ({ title, slug, sections: [{ name: 'Intro', uses: [], items: 0 }] })
+  const plan = (screens: Array<ReturnType<typeof screen>>) => ({ reuse: [], create: [], screens }) as unknown as AiBuildPlan
+
+  it('tells a store plan the products are listed in its Shop page’s product grid, and never drawn as cards', () => {
+    const lines = aiPlanSiteLines({ kind: 'site', inputs: { siteKind: 'store', businessType: 'candles' } }, null, null)
+    expect(lines).toContain(AI_SITE_STORE_SHOP_SENTENCE)
+    expect(lines.join(' ')).not.toMatch(/range as image cards/)
+    expect(aiPlanSiteLines({ kind: 'site', inputs: { siteKind: 'portfolio', businessType: 'ceramics' } }, null, null)).not.toContain(
+      AI_SITE_STORE_SHOP_SENTENCE,
+    )
+  })
+
+  it('asks once for a Shop page a store plan left out', () => {
+    expect(aiSiteStoreShopPageViolations(plan([screen('Home', '/'), screen('Shop', '/shop')]))).toEqual([])
+    expect(aiSiteStoreShopPageViolations(plan([screen('Home', '/')]))).toEqual([])
+    const missing = plan([screen('Home', '/'), screen('About', '/about'), screen('Contact', '/contact')])
+    expect(aiSiteStoreShopPageViolations(missing).map((violation) => violation.code)).toEqual([AI_SITE_STORE_SHOP_CODE])
+    const check = aiSiteStoreShopCheck()
+    expect(check(missing)).toHaveLength(1)
+    expect(check(missing)).toEqual([])
+  })
+})
+
+/*
+ * A site plan keeps its structured content as datasets (AGL-3616): "Aglyn AI
+ * can also use/create datasets too for whatever it needs" (Zach, 2026-10-10).
+ * Told so only where it may create one, so a Free plan's turn — whose length
+ * its wall is proven at — is unchanged.
+ */
+describe('a site plan’s datasets (AGL-3616)', () => {
+  const site = { kind: 'site' as const, brief: 'A trattoria in Bologna', inputs: { businessType: 'a trattoria' } }
+  const paid = aiPlanCapabilitiesFrom({ plan: 'pro' } as never)
+  const free = aiPlanCapabilitiesFrom({ plan: 'free' } as never)
+  const menuPlan = {
+    reuse: [],
+    create: [{ kind: 'dataset', name: 'Menu', why: 'the dishes', duplicateOf: null, fields: ['Dish', 'Description'] }],
+    screens: [
+      {
+        title: 'Menu',
+        slug: '/menu',
+        layout: null,
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'Menu',
+        seoDescription: 'The menu',
+        record: null,
+        sections: [{ name: 'The whole menu', uses: ['new:Menu'], items: 12 }],
+      },
+    ],
+  } as unknown as AiBuildPlan
+
+  it('tells a paid site plan to keep a list of like things as a dataset, named in the sections that list it', () => {
+    const scoped = aiPlanCapabilitiesForJob(paid, AI_JOB_PLAN_SCOPES.site)
+    expect(scoped.create.dataset.allowed).toBe(true)
+    expect(aiPlanSiteLines(site, null, scoped)).toContain(aiSiteDatasetSentence(3))
+    expect(aiJobPlanPrompt(site, scoped)).toContain('- dataset: yes')
+  })
+
+  it('tells a Free plan nothing new: its plan includes no datasets', () => {
+    const scoped = aiPlanCapabilitiesForJob(free, AI_JOB_PLAN_SCOPES.site)
+    expect(scoped.create.dataset).toEqual({ allowed: false, left: 0, reason: "this workspace's plan does not include datasets" })
+    expect(aiPlanSiteLines(site, null, scoped)).not.toContain(aiSiteDatasetSentence(3))
+  })
+
+  it('keeps a paid plan that creates a dataset and lists it, and a scaffold builds it', () => {
+    const scoped = aiPlanCapabilitiesForJob(paid, AI_JOB_PLAN_SCOPES.site)
+    expect(aiPlanUncreatable(menuPlan, scoped)).toEqual([])
+    expect(AI_JOB_PLAN_SCOPES.site?.creates).toContain('dataset')
+    // A Free one is told it may not, and to write the items out instead.
+    expect(aiPlanUncreatable(menuPlan, aiPlanCapabilitiesForJob(free, AI_JOB_PLAN_SCOPES.site))[0]?.message).toContain(
+      'keep the list short enough to write out',
+    )
   })
 })

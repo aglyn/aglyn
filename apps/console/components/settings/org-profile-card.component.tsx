@@ -257,6 +257,7 @@ export function OrgProfileCard() {
 <CardDisplay
   header={'Billing address'}
   help={docsHelp('billing', {
+    anchor: '#billing-address-on-profile',
     excerpt:
       'The address Aglyn issues this organization’s invoices to, and ' +
       'the input sales tax on your Aglyn subscription is computed from.',

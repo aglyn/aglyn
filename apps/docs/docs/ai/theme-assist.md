@@ -9,10 +9,10 @@ description: Describe a change to your site's theme and get a proposal for the t
 The **Theme assistant** sits on your site's **Setup → Theme** section, above the
 [theme editor](../building-sites/theme-builder/edit-your-theme.md). Describe what you
 want and it proposes values for the editor's own controls — the same colors, font,
-corner radius, spacing, navigation heights, dark scheme and component overrides you can
+corner radius, spacing, navigation heights, dark scheme and button, input and card styles you can
 set by hand. Nothing changes on your site until you save.
 
-## Change what you describe, or design a new theme
+## Change what you describe, or design a new theme {#describe-a-change}
 
 - **Change what I describe** makes a targeted change. "Make it feel warmer" proposes new
   colors and leaves your font, corners and spacing alone; "bigger headings on mobile"

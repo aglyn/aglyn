@@ -55,6 +55,32 @@ the latest saved design whole, under the name you give it, and is sent by
 nothing until a campaign picks it — so a copy is the safe way to try a
 variation without touching the design a campaign is already using.
 
+## A template's page {#template-page}
+
+Open a template from the list to see it on its own page: rename it under **Name**
+(the name the campaign composer's design picker shows), and open it in the
+besigner with **Edit in besigner** to change the design. A template installed from
+a listing says so at the top of the card, because its content is versioned by
+whoever published it.
+
+Under it come what the emails sent from it did, who received them, and a preview.
+
+### Sent from this template {#template-report}
+
+The **Sent from this template** card lists every email sent from the template and adds
+up what they did, each rate over the population it was measured against. A design used
+by several emails has its figures in one place, and each row opens that email's own
+report.
+
+Who those emails reached is the card under it — the same
+[Recipients](./overview.md#email-recipients) table an email's own page carries.
+
+### Preview {#template-preview}
+
+The **Preview** card draws the template as an inbox receives it, with the same renderer
+the send uses; merge tokens are left standing, because a real send fills them from each
+recipient. A template with nothing in it yet says so, with the way into the besigner.
+
 ## Styling email blocks
 
 The styles panel works on email blocks exactly as on page elements —

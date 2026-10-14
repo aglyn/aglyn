@@ -80,8 +80,8 @@ import { registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
  * person accepts: the product editor's Save, the products card's apply, and
  * the create paths the catalog and discount cards already use — each with the
  * allowance, role and seed checks those paths carry. A proposed product is
- * created as a draft with no price, and a proposed discount is created
- * switched off.
+ * created as a draft at its suggested price (the store's default where it has
+ * none, Zach 2026-10-12), and a proposed discount is created switched off.
  *
  * ## A bulk job, a product at a time
  *

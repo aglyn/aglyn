@@ -118,7 +118,7 @@ export function StaffEmailHistoryImportCard() {
     <CardDisplay
       header="Import delivery history"
       help={docsHelp('staffConsole', {
-        anchor: '#email-delivery',
+        anchor: '#import-delivery-history',
         excerpt:
           'Fills the per-person delivery log with mail sent before the ' +
           'delivery feed was connected.',

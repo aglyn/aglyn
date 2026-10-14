@@ -31,6 +31,7 @@ import {
   readAuditLogFilters,
 } from '../../../../utils/server/audit-log-filter'
 import { ACTIVITY_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
+import { withScopeNames } from '../../../../utils/server/audit-names'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // what someone did. A lockdown is often the reason staff are reading it.
@@ -83,7 +84,14 @@ async function handler(request: Request): Promise<Response> {
     })
     // A row that recorded the uid alone names the address it has now.
     return Response.json(
-      { ...page, entries: await withResolvedActors(page.entries, { staff: true }) },
+      {
+        ...page,
+        // Where reads the site's or organization's name (AGL-3660).
+        entries: await withScopeNames(
+          firebaseAdmin.app().firestore(),
+          await withResolvedActors(page.entries, { staff: true }),
+        ),
+      },
       { status: 200 },
     )
   } catch (error) {

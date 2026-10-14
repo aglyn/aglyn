@@ -129,7 +129,7 @@ export function OrgPrivacyCard() {
       <CardDisplay
         header="Export the people you hold"
         help={docsHelp('account', {
-          anchor: '#privacy-requests',
+          anchor: '#exporting-contacts-and-leads',
           excerpt:
             'Export every contact and every lead this workspace holds, and file a ' +
             'privacy erasure for a person, on every plan.',
@@ -160,7 +160,7 @@ export function OrgPrivacyCard() {
       <CardDisplay
         header="Erase a person"
         help={docsHelp('account', {
-          anchor: '#privacy-requests',
+          anchor: '#erasing-a-person',
           excerpt:
             'File a privacy erasure for anyone this workspace may hold, by the address ' +
             'typed twice. It suppresses the address at once and runs with the nightly job.',

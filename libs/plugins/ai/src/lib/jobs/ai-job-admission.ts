@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { AiCreditsPrompt } from '../model/ai-credit-estimate'
 import type { AiJobKind, AiJobPlan } from '../model/ai-jobs.types'
 import {
   AI_OFF_FOR_SITE_COPY,
@@ -65,13 +66,32 @@ export interface AiJobAdmissionContext {
    * writes asks that plugin whether this member may create one.
    */
   uid?: string | null
+  /**
+   * The person chose "Build what fits" (AGL-3722): a Free job whose p90 is
+   * more than what is left is admitted, to build as much as it can and pause
+   * with Resume. Unset, such a job is answered with the prompt instead.
+   */
+  creditsConfirmed?: boolean
+  /**
+   * Told the prompt a confirmed Free job was admitted past (AGL-3722), so the
+   * door records the confirmation on the job: who, when, what was left.
+   */
+  onCreditsConfirmed?: (prompt: AiCreditsPrompt) => void
 }
 
 export interface AiJobAdmissionRefusal {
-  /** 429: what the month's AI credits have left cannot pay for it (AGL-3660). */
-  status: 400 | 403 | 404 | 429
+  /**
+   * 429: what the month's AI credits have left cannot pay for it (AGL-3660);
+   * 409: a Free job past what is left, waiting for the person's go-ahead
+   * (AGL-3722) — `code` and `credits` say what to ask.
+   */
+  status: 400 | 403 | 404 | 409 | 429
   /** Customer-safe: the door answers with it as it stands. */
   error: string
+  /** `AI_CREDITS_CONFIRM_CODE` on a 409 that asks for the go-ahead. */
+  code?: string
+  /** The figures and choices that 409 asks with. */
+  credits?: AiCreditsPrompt
 }
 
 export type AiJobAdmission = (

@@ -26,6 +26,10 @@ import {
 } from '@aglyn/aglyn/plugin-manager/video-embed-provider'
 import { mdiPlay, mdiVideo } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  type LightboxAppearanceProps,
+  splitLightboxAppearanceProps,
+} from '@aglyn/shared-ui-jsx/components/lightbox/lightbox-appearance'
 import Box from '@mui/material/Box'
 import type { SxProps } from '@mui/material/styles'
 import useEventCallback from '@mui/utils/useEventCallback'
@@ -41,6 +45,10 @@ import {
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  lightboxAppearanceAttributes,
+  WHEN_LIGHTBOX_ON,
+} from '../utils/lightbox-attributes'
 import { useVideoPlaybackBeacon } from './video-playback-beacon'
 import { VideoPlayerFrame } from './video-player-frame'
 
@@ -116,7 +124,7 @@ export function resolveVideoPreload(options: {
   return poster ? 'none' : 'metadata'
 }
 
-export interface VideoProps {
+export interface VideoProps extends LightboxAppearanceProps {
   /**
    * Where the video comes from. Either a **media reference** —
    * `media:{scope}/{mediaId}`, what "Browse media" stores (AGL-1215) — or any
@@ -288,7 +296,11 @@ export interface VideoProps {
  * An empty src shows a labeled placeholder so the element stays selectable in
  * the editor.
  */
-const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
+const Video = forwardRef<HTMLElement, VideoProps>((allProps, ref) => {
+  // The lightbox's look (AGL-3717) rides its own props, never the `<video>`.
+  // With none set the dialog is exactly the one AGL-2744 shipped.
+  const { appearance: lightboxAppearance, rest: props } =
+    splitLightboxAppearanceProps(allProps)
   const {
     src: storedSrc,
     poster: storedPoster,
@@ -860,6 +872,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
               captions={track}
               playback={playback}
               embedSrc={embedId ? playerSrc : undefined}
+              appearance={lightboxAppearance}
             />
           </Suspense>
         ) : null}
@@ -992,6 +1005,7 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Open in a lightbox',
     },
+    ...lightboxAppearanceAttributes(WHEN_LIGHTBOX_ON),
     {
       name: 'loadPlayer',
       description:

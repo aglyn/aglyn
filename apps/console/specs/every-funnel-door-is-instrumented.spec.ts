@@ -276,6 +276,11 @@ const ORG_DOORS = [
     what: 'the workspace the server provisions on the way to a first site',
     navigates: false,
   },
+  {
+    file: 'apps/console/utils/first-site-workspace.ts',
+    what: 'the workspace the empty console makes before a first site (AGL-3761)',
+    navigates: true,
+  },
 ] as const
 
 describe('every org-creation door reports an org_created (AGL-2587)', () => {

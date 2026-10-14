@@ -89,6 +89,17 @@ import type { OperatorHealthStateDoc } from './operator-health'
  * One page per site per run, rotating through that site's list: a platform
  * break fails every page with an image, so every run, and alerts as fast as
  * before; a break on one page alone is seen on its turn.
+ *
+ * ## Layout probes take turns past the first site
+ *
+ * A fresh layout reads the site's whole screen and collection lists, and a
+ * large site makes that the most expensive request the platform serves: the
+ * marketing site's 109 screens made this monitor a fifth of the project's
+ * Firestore reads. The first target — the demonstration site — draws both
+ * layout probes on every run, and a platform-wide render break fails it
+ * first; every other site draws them on its turn, one site per run (see
+ * {@link renderMonitorProbesLayout}). `page` probes still run on every run,
+ * so the page-body break they exist for is seen as fast as before.
  */
 
 /** The state documents' collection: the health checks' own. */
@@ -398,6 +409,16 @@ export function resolveRenderMonitorTargets(
   // A site whose pages are rendered is watched whole: its layout probes too.
   const paged = resolveRenderMonitorPages(env).pages.map((page) => page.origin)
   return [...new Set([demo, ...listed, ...paged].filter(Boolean))]
+}
+
+/**
+ * Whether the target at `index` (of `count`, in
+ * {@link resolveRenderMonitorTargets} order) draws its layout probes in the
+ * five-minute `slot`: the first always, the rest one per slot in turn.
+ */
+export function renderMonitorProbesLayout(index: number, count: number, slot: number): boolean {
+  if (index <= 0 || count <= 2) return true
+  return Math.abs(slot) % (count - 1) === index - 1
 }
 
 /** The state document id for one origin. */
@@ -722,13 +743,24 @@ export async function runRenderMonitor(
   const runAt = clock()
   const slot = Math.floor(runAt / 300_000)
 
+  const targets = resolveRenderMonitorTargets(env)
+  const due = targets
+    .map((origin, index) => ({
+      origin,
+      layout: renderMonitorProbesLayout(index, targets.length, slot),
+      site: canRenderPages ? pages.find((page) => page.origin === origin) : undefined,
+    }))
+    // A site with nothing to draw this run keeps its state as it is.
+    .filter((target) => target.layout || target.site)
+
   const sites = await Promise.all(
-    resolveRenderMonitorTargets(env).map(
-      async (origin): Promise<RenderMonitorSiteResult> => {
-        const layoutProbes = RENDER_PROBES.map((spec) =>
-          runProbe(`${origin}${spec.path(nonce())}`, spec, probeOptions),
-        )
-        const site = canRenderPages ? pages.find((page) => page.origin === origin) : undefined
+    due.map(
+      async ({ origin, layout, site }): Promise<RenderMonitorSiteResult> => {
+        const layoutProbes = layout
+          ? RENDER_PROBES.map((spec) =>
+              runProbe(`${origin}${spec.path(nonce())}`, spec, probeOptions),
+            )
+          : []
         const pageProbe = site
           ? [
               runProbe(

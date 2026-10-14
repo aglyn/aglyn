@@ -87,6 +87,14 @@ export interface SendEmailOptions {
   /** Delivery tags for the opens/clicks webhook. */
   tags?: EmailTag[]
   replyTo?: string | string[]
+  /**
+   * Blind copies (AGL-3699): addresses that receive the same message without
+   * appearing on it — a review platform's invitation inbox copied on an order
+   * email, for one. Never a second customer: a blind copy is not screened by
+   * the deliverability preflight or the marketing gate, which ask about the
+   * `to` recipients, so a marketing send refuses any.
+   */
+  bcc?: string | string[]
   /*
    * THERE IS NO `from`.
    *
@@ -855,6 +863,15 @@ export async function sendEmail(
   let unsubscribeUrl = options.marketing?.unsubscribeUrl ?? ''
   let oneClickUrl = options.marketing?.oneClickUrl ?? ''
   if (options.marketing) {
+    if (normalizeRecipients(options.bcc ?? []).length) {
+      // A blind copy of a marketing send is mail the gate never asked about.
+      console.error(`${label} refused — a marketing send carries no blind copies`)
+      return {
+        sent: false,
+        reason: 'no-recipient',
+        detail: 'A marketing send carries no blind copies.',
+      }
+    }
     if (to.length !== 1) {
       // Not a delivery outcome — a caller error, and one that would put the
       // first recipient's signed unsubscribe link in everybody else's copy.
@@ -1001,6 +1018,17 @@ export async function sendEmail(
    *     guarding. The same posture `sendEmail` takes everywhere else: it
    *     never throws, and neither does this.
    */
+  // Blind copies, de-duplicated against the visible recipients: an address
+  // on both would receive the message twice.
+  const visible = new Set(to.map((address) => address.toLowerCase()))
+  const bcc = [
+    ...new Set(
+      normalizeRecipients(options.bcc ?? []).filter(
+        (address) => !visible.has(address.toLowerCase()),
+      ),
+    ),
+  ]
+
   const priority = resolveSendPriority(options.context, options.priority)
   const governor = getEmailSendGovernor()
   if (governor) {
@@ -1008,7 +1036,7 @@ export async function sendEmail(
     try {
       verdict = await governor({
         priority,
-        count: to.length,
+        count: to.length + bcc.length,
         context: options.context,
       })
     } catch (error) {
@@ -1093,6 +1121,7 @@ export async function sendEmail(
         ...(Object.keys(headers).length ? { headers } : {}),
         ...(tags.length ? { tags } : {}),
         ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+        ...(bcc.length ? { bcc } : {}),
       },
       options.context,
     )

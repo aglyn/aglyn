@@ -28,6 +28,10 @@ import {
   type PluginShipmentRecords,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import {
+  registerPluginLocalDeliveryRecords,
+  type PluginLocalDeliveryRecords,
+} from '@aglyn/aglyn/plugin-manager/plugin-local-deliveries'
+import {
   registerPluginProductCatalog,
   type PluginProductCatalog,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
@@ -71,6 +75,9 @@ export function registerCommerceServerDeclarations(): void {
   // lines and the address, write a shipment, record tracking. The module and
   // the Admin SDK load with the first call.
   registerPluginShipmentRecords(lazyShipmentRecords, { pluginId: BUNDLE_ID })
+  // Local deliveries, as a courier plugin reads and writes them (AGL-3695):
+  // the drop's two ends, and the courier's run and the step it brings.
+  registerPluginLocalDeliveryRecords(lazyLocalDeliveries, { pluginId: BUNDLE_ID })
   // A site's domains as Stripe payment method domains (AGL-3629), so Apple
   // Pay and the other wallets show on the merchant's own domain. The Stripe
   // calls arrive with the first event, not with the boot.
@@ -126,6 +133,14 @@ const lazyShipmentRecords: PluginShipmentRecords = {
   recordShipment: async (write) => (await loadShipmentRecords()).recordShipment(write),
   recordTracking: async (update) => (await loadShipmentRecords()).recordTracking(update),
   shipFromAddresses: async (hostId) => (await loadShipmentRecords()).shipFromAddresses(hostId),
+}
+
+const loadLocalDeliveries = async () =>
+  (await import('./server/local-delivery-records')).commerceLocalDeliveryRecords
+
+const lazyLocalDeliveries: PluginLocalDeliveryRecords = {
+  read: async (hostId, recordId) => (await loadLocalDeliveries()).read(hostId, recordId),
+  recordCourier: async (write) => (await loadLocalDeliveries()).recordCourier(write),
 }
 
 /** The catalog, with the Admin SDK and the model arriving on the first read. */

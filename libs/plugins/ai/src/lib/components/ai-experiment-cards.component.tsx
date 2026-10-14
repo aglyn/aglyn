@@ -339,7 +339,7 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
             target="_blank"
             rel="noopener"
             variant="caption"
-            title={variantsHelp.excerpt}
+            title={variantsHelp.excerptText}
           >
             {'How it works'}
           </Link>
@@ -615,7 +615,7 @@ export function AiExperimentResultCard(props: AiExperimentResultCardProps) {
             target="_blank"
             rel="noopener"
             variant="caption"
-            title={resultHelp.excerpt}
+            title={resultHelp.excerptText}
           >
             {'How it works'}
           </Link>

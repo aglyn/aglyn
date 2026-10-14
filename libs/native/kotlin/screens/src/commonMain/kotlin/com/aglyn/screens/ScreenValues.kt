@@ -36,6 +36,9 @@ object ScreenValues {
           val wanted = text(lookup(inner.substring(equals + 1), context))
           val field = inner.substring(0, equals)
           current = (current as? JsonArray)?.firstOrNull { text(lookup(field, it)) == wanted }
+        } else if (inner.startsWith("@")) {
+          // `map[@path]`: the key is the text at path.
+          current = step(current, text(lookup(inner.substring(1), context)))
         } else {
           current = step(current, inner)
         }
@@ -110,6 +113,24 @@ object ScreenValues {
       format = body.substring(colon + 1).trim()
       body = body.substring(0, colon)
     }
+    // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
+    if (body.contains("??")) {
+      var found: JsonElement? = null
+      for (alternative in body.split("??")) {
+        val part = alternative.trim()
+        if (part.length >= 2 && part.startsWith("'") && part.endsWith("'")) {
+          found = JsonPrimitive(part.substring(1, part.length - 1))
+          break
+        }
+        val value = lookup(part, context)
+        if (value != null && value != JsonNull) {
+          found = value
+          break
+        }
+      }
+      val named = format
+      return if (named.isNullOrEmpty()) found else JsonPrimitive(formatted(found, named, context))
+    }
     var picked: JsonElement? = null
     var firstPresent: JsonElement? = null
     for (alternative in splitUnquoted(body, '|')) {
@@ -179,6 +200,18 @@ object ScreenValues {
         list.removeAll { it == item }
       }
       JsonArray(list)
+    } else if (body.size == 1 && body["\$put"] is JsonObject) {
+      // `{"$put": {"map": "{a}", "key": "{b}", "value": "{c}"}}`: the map with the key set, or removed when the value is empty.
+      val spec = body["\$put"] as JsonObject
+      val map = ((spec["map"]?.let { resolveBody(it, context) }) as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+      val key = text(spec["key"]?.let { resolveBody(it, context) })
+      val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
+      if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
+      JsonObject(map)
+    } else if (body.size == 1 && body["\$split"] != null) {
+      // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
+      val parts = text(resolveBody(body.getValue("\$split"), context)).split(',').map { it.trim() }.filter { it.isNotEmpty() }
+      JsonArray(parts.map { part -> part.toLongOrNull()?.let { JsonPrimitive(it) } ?: part.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(part) })
     } else if (body.size == 1 && body["\$pick"] is JsonObject) {
       // `{"$pick": {"a": "{form.x}"}}`: the keys whose values are truthy, as a list.
       val options = body["\$pick"] as JsonObject

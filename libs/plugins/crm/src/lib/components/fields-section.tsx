@@ -117,7 +117,7 @@ export type ContactsFieldsSectionProps = Pick<ConsolePluginPageProps, 'hostId' |
 const OBJECT_INTRO: Record<CrmFieldObject, string> = {
   contact:
     'The custom fields on a contact — text, number, date, choice, ' +
-    'checkbox or link. They show on every contact, as columns on the ' +
+    'checkbox, link or currency. They show on every contact, as columns on the ' +
     'list, and a form field can save into one.',
   company:
     'The custom fields on a company. They show on every company’s page ' +
@@ -394,7 +394,9 @@ function FieldsTable(props: FieldsTableProps) {
             renderCell: ({ row }: { row: FieldRow }) => (
               <Typography variant="body2">
                 {typeLabel(row.type)}
-                {row.definition.type === 'select' && row.definition.options?.length
+                {row.definition.type === 'currency'
+                  ? ` · ${String(row.definition.currency || 'usd').toUpperCase()}`
+                  : row.definition.type === 'select' && row.definition.options?.length
                   ? ` · ${row.definition.options.length} choices`
                   : ''}
               </Typography>
@@ -643,6 +645,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             label: draft.label,
             type: draft.type,
             ...(draft.type === 'select' ? { options: draft.options } : {}),
+            ...(draft.type === 'currency' && draft.currency ? { currency: draft.currency } : {}),
             required: draft.required,
             order,
             retiredAt: null,

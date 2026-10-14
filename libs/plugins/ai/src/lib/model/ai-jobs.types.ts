@@ -19,6 +19,8 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { AiEffort } from '../providers/contract'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiBuildPlan } from './ai-build-plan'
+import type { AiFreeCreditsLeft } from './ai-site-job'
+import type { AiJobCreditsConfirmation } from './ai-credit-estimate'
 
 /**
  * AI generation jobs (AGL-2904).
@@ -77,6 +79,16 @@ export type AiJobKind =
   | 'text'
   | 'theme'
   | 'build'
+  /** A change to a site's header or footer menu, made by code (AGL-3728). */
+  | 'navigation'
+  /** A copy of something a site already has, made by core's duplicate (AGL-3740). */
+  | 'duplicate'
+  /** A change to a site's settings, made by code and saved live (AGL-3748). */
+  | 'settings'
+  /** Folders, tags, alt text and names in a site's media library, made by code and saved live (AGL-3752). */
+  | 'media'
+  /** A change to a site's analytics and advertising tags, made by code and saved live (AGL-3751). */
+  | 'tracking'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -100,6 +112,11 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'text',
   'theme',
   'build',
+  'navigation',
+  'duplicate',
+  'settings',
+  'media',
+  'tracking',
 ]
 
 /**
@@ -247,6 +264,12 @@ export type AiJobOutputResource =
   | 'orgAutomation'
   /** A post a guided start wrote into the site's blog (AGL-3676): a content collection entry. */
   | 'entry'
+  /** A site's settings a build changed (AGL-3748): saved live, on the host document. */
+  | 'settings'
+  /** Files in a site's media library a build organized (AGL-3752): saved live, on their documents. */
+  | 'media'
+  /** A site's tracking tags a build changed (AGL-3751): saved live, on the host document. */
+  | 'tracking'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -401,6 +424,13 @@ export interface AiJobReview {
    * disabled with this beside it.
    */
   retryRefusal?: string
+  /**
+   * What a Free workspace had left when a build's plan was kept (AGL-3722),
+   * so its plan card says, before Confirm, whether the build fits and offers
+   * the go-ahead or a smaller first build when it does not. The confirm door
+   * reads what is left again; this is what the card shows.
+   */
+  freeCredits?: AiFreeCreditsLeft
 }
 
 export type AiJobPlanStatus = 'proposed' | 'confirmed'
@@ -565,6 +595,27 @@ export interface AiJob {
   items?: AiJobItemLedger[] | null
   /** A `build` job's planning spend and how it settled (AGL-3616). */
   orchestration?: AiJobOrchestration | null
+  /**
+   * A Free job started past what was left (AGL-3722): the person chose to
+   * build what fits, knowing it pauses where the credits run out. Who, when,
+   * what was left and the range they were shown; absent on every job that fit.
+   */
+  creditsConfirmed?: AiJobCreditsConfirmation | null
+  /**
+   * A person asked to stop the job (AGL-3616): written only by the cancel
+   * door, in the transaction that decides it. A job no step holds ends
+   * `canceled` in that same write; a job whose step holds a live lease keeps
+   * running until the step finishes or aborts, and the machine ends it
+   * `canceled` at its next write. Absent on a job nobody canceled.
+   */
+  cancelRequested?: AiJobCancelRequest | null
+}
+
+/** Who asked to cancel a job, and when (AGL-3616). */
+export interface AiJobCancelRequest {
+  at: ITimestamp
+  /** The member or staff account that asked; `null` when nobody was named. */
+  by: string | null
 }
 
 /**
@@ -676,4 +727,10 @@ export interface AiJobSummary {
   publishAsked?: boolean
   /** A `build` job's planning spend and how it settled (AGL-3616). */
   orchestration?: AiJobOrchestration
+  /**
+   * A cancel was asked and the job has not ended yet (AGL-3616): the step in
+   * flight is finishing or aborting, and nothing after it runs. Absent once
+   * the job is terminal, and on every job nobody canceled.
+   */
+  cancelRequested?: boolean
 }

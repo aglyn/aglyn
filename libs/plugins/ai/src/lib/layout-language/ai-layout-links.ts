@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiAsksToGetInTouch } from '../runtime/ai-doctrine-validators'
 import { aiPageLinkSection } from '../runtime/ai-page-links'
 import type { AiLayoutListing } from './ai-layout-listings'
 
@@ -117,9 +118,8 @@ function slugOf(slug: string): string {
 
 const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 
-/** Words that ask a visitor to get in touch, which the site's form answers. */
-const CONTACT_WORDS =
-  /\b(?:contact|book|booking|call|quote|estimate|appointment|schedule|reserve|reservation|get in touch|request|visit|enquire|inquire|enquiry|inquiry|message|talk|consult|consultation|order|sign up|join|apply|start)\b/i
+/** Words that ask a visitor to get in touch, which the site's form answers: rule 10's own list (AGL-3729). */
+const CONTACT_WORDS = { test: aiAsksToGetInTouch }
 
 export interface AiLayoutLinkScope {
   /** The page's section names in plan order. */
@@ -160,13 +160,11 @@ function pageDestination(
   targets: AiLayoutTargets,
 ): AiLayoutDestination | null {
   if (!page || page.id === targets.pageId) return null
-  if (
-    targets.homeIds.includes(page.id) &&
-    !HOME_WORDS.test(label) &&
-    !isHomeSlug(page.slug)
-  )
-    return null
-  if (isHomeSlug(page.slug) && !HOME_WORDS.test(label)) return null
+  // A link home says so, in English or by the home page's own title: a
+  // Spanish site's home is "Inicio" (AGL-3760).
+  const saysHome = HOME_WORDS.test(label) || (wordsOf(label).join(' ') !== '' && wordsOf(label).join(' ') === wordsOf(page.label).join(' '))
+  if (targets.homeIds.includes(page.id) && !saysHome && !isHomeSlug(page.slug)) return null
+  if (isHomeSlug(page.slug) && !saysHome) return null
   if (page.href) return { kind: 'path', href: page.href, ...(page.standsInFor ? { standsInFor: page.standsInFor, label: page.label } : {}) }
   return { kind: 'page', screenId: page.id }
 }

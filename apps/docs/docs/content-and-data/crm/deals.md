@@ -340,7 +340,9 @@ and sets no stage, because the win already did.
 
 ## A deal's page
 
-Opening a deal shows:
+A deal's page is where you work one deal: its stage, what it is worth, the
+people on it and what is owed on it, each on a card of its own. Opening a deal
+shows:
 
 - **The header** — the deal's title in the page heading and the trail, the
   pipeline and stage under its kind, its status, amount and owner as chips,
@@ -349,12 +351,8 @@ Opening a deal shows:
   buttons and, on a closed deal, the way to reopen it. The line under it says
   how long the deal has sat in its stage, its probability and its forecast
   category.
-- **Properties** — the amount and its weighted value, the probability (the
-  deal's own beside its stage's, *40% · from stage: 75%*), the forecast
-  category, the expected close, the type, lead source and next step, the
-  owner, links to the contact and the company, the campaign, the notes, and one row per
-  [custom field](./custom-fields.md) defined on the **Deals** tab of the Fields
-  section; **Edit** carries a control for each.
+- **Properties** — what the deal is worth and where it stands; see
+  [Deal properties](#deal-properties).
 - **Contact roles** — every person on the deal, the part each plays, and the
   Primary; see [Contact roles](#contact-roles).
 - **Products** — the [line items](#line-items) behind the amount, with the
@@ -362,9 +360,27 @@ Opening a deal shows:
 - **Tasks** and **Activity** — what is owed on this deal and what has happened
   on it.
 
-A deal also appears on the pages of the contact and the company it names — on
-a contact's page, for every [role](#contact-roles) the person holds on it —
-each with a **New deal** shortcut that starts a deal already linked to them.
+### Deal properties {#deal-properties}
+
+The **Properties** card lists what the deal is worth and where it stands; to
+change any of it, choose **Edit** in the page's header, which carries a control
+for each.
+
+It shows the amount and its weighted value, the probability (the deal's own
+beside its stage's, *40% · from stage: 75%*), the forecast category, the
+expected close, the type, lead source and next step, the owner, links to the
+contact and the company, the campaign, the notes, and one row per
+[custom field](./custom-fields.md) defined on the **Deals** tab of the Fields
+section.
+
+### Deals on a contact or a company {#deals-on-a-record}
+
+The **Deals** card on a contact's or a company's page lists every deal that
+names that record, newest first, and **New deal** in its header starts one
+already linked to them.
+
+On a contact's page the card also lists the deals the person is on in any
+other [contact role](#contact-roles), with the part they play beside each.
 
 ## Files
 

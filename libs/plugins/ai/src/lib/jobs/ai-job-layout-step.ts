@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import { aiSiteStyleTokens } from '../model/ai-site-kinds'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -89,6 +90,7 @@ import {
 import { AI_LAYOUT_LANGUAGE_THINKING, aiJobUsesLayoutLanguage, aiLayoutDesignOf } from './ai-job-page-language'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
+import { aiStoreFrameLinksOf } from '../model/ai-site-store-pages'
 
 /**
  * The layout step (AGL-2909): the generation step of a `layout` job, run once
@@ -418,12 +420,17 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
           targets,
           extend: aiLayoutChecks(inventory, plan, job.brief),
           design: aiLayoutDesignOf(job, '/'),
+          storeLinks: aiStoreFrameLinksOf(job.inputs),
+          // The frame's own words in the site's language (AGL-3760).
+          ...(job.plan?.language ? { language: job.plan.language } : {}),
         }),
         ...(signal ? { signal } : {}),
       })
       const spent = aiGenerationSpent(result)
       if (result.status === 'refused') return { ...spent, refused: true }
       if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+      // Never written once the job is canceled (AGL-3616).
+      throwIfAiJobCanceled(signal)
       const draft = await writeAiDraft(firestore, {
         kind: 'layout',
         hostId,
@@ -480,6 +487,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
 
+    // Never written once the job is canceled (AGL-3616).
+    throwIfAiJobCanceled(signal)
     const draft = await writeAiDraft(firestore, {
       kind: 'layout',
       hostId,

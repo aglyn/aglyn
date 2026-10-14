@@ -25,6 +25,7 @@ import DocsHelpExcerpt from '../components/docs-help-excerpt.component'
 import {
   DOCS_HELP_ANCHORS,
   type DocsHelpAnchor,
+  DOCS_HELP_SECTION_TITLES,
   DOCS_HELP_TOPICS,
   type DocsHelpTopic,
   type DocsHelpTopicKey,
@@ -32,6 +33,7 @@ import {
 
 export {
   DOCS_HELP_ANCHORS,
+  DOCS_HELP_SECTION_TITLES,
   type DocsHelpAnchor,
   DOCS_HELP_TOPICS,
   type DocsHelpTopic,
@@ -176,10 +178,32 @@ export function docsHelp<K extends DocsHelpTopicKey>(
   topic: K,
   overrides: DocsHelpOverrides<K> = {},
 ): { title: string; excerpt: ReactNode; href: string } {
-  const { path, title }: DocsHelpTopic = DOCS_HELP_TOPICS[topic]
+  const { path }: DocsHelpTopic = DOCS_HELP_TOPICS[topic]
+  const { anchor } = overrides
   return {
-    title: overrides.title ?? title,
-    excerpt: overrides.excerpt ?? createElement(DocsHelpExcerpt, { topic }),
-    href: `${buildDocsUrl(path)}${overrides.anchor ?? ''}`,
+    title: overrides.title ?? docsHelpTitle(topic, anchor),
+    excerpt:
+      overrides.excerpt ?? createElement(DocsHelpExcerpt, { topic, anchor }),
+    href: `${buildDocsUrl(path)}${anchor ?? ''}`,
   }
+}
+
+/**
+ * A help tooltip's title: the heading its anchor opens on, else the page's
+ * (AGL-3707).
+ *
+ * An anchor used to move only the link. Every card that deep-linked a section
+ * of one page still printed that page's title and description, so the console
+ * tour's blurb sat on All Sites, the notification settings and a host's
+ * activity card alike. The heading is what the reader is about to open — and
+ * what tells two cards on the same page apart.
+ */
+export function docsHelpTitle(
+  topic: DocsHelpTopicKey,
+  anchor?: string,
+): string {
+  const sections = DOCS_HELP_SECTION_TITLES[topic] as
+    | Readonly<Record<string, string>>
+    | undefined
+  return (anchor && sections?.[anchor]) || DOCS_HELP_TOPICS[topic].title
 }

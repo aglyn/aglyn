@@ -29,6 +29,7 @@ import {
   mdiPauseCircle,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { newTabLinkProps } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import {
   SITE_LIVE_NOTICE_BODY,
   SITE_LIVE_NOTICE_TITLE,
@@ -64,12 +65,17 @@ import { aiSiteStartAnswersFromInputs } from '../model/ai-site-start'
 import { AiSiteStartCard } from './ai-site-start-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
-import { aiCreditsBillingHref, aiSiteBuildDoneLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiSiteBuildDoneLinks, aiStoreFinishLinks } from './ai-job-links'
+import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AiJobPlan } from './ai-job-plan.component'
-import { aiBuildCanRetry } from '../model/ai-build-progress'
-import { resumeAiJobRequest } from './ai-job-requests'
+import { aiBuildCanRetry, aiBuildRetryCreditRange } from '../model/ai-build-progress'
+import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
+import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
+import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
+import { AiJobCancelButton } from './ai-job-cancel.component'
+import { AI_JOB_CANCELING_COPY } from '../model/ai-job-cancel-copy'
 
 /**
  * "Building your site" (AGL-3594): one job's page, at `/ai-jobs/{jobId}`
@@ -240,29 +246,33 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const [retrying, setRetrying] = useState(
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('retry') === '1',
   )
-  const tryAgain = useCallback(async () => {
-    if (!orgId || !job || typeof job !== 'object') return
-    setBusy(true)
-    setNotice(null)
-    // A finished build tries again only what failed (AGL-3616).
-    const decision = await resumeAiJobRequest(
-      user,
-      orgId,
-      job,
-      aiBuildCanRetry(job) ? { retry: 'failed-items' } : {},
-    )
-    if (decision.job) setJob(decision.job)
-    if (decision.error) setNotice(decision.error)
-    setBusy(false)
-  }, [orgId, job, user, setJob])
+  // A Free Try again past what is left (AGL-3722): its prompt, until chosen.
+  const [retryPrompt, setRetryPrompt] = useState<AiCreditsPrompt | null>(null)
+  const tryAgain = useCallback(
+    async (options: { creditsConfirmed?: boolean } = {}) => {
+      if (!orgId || !job || typeof job !== 'object') return
+      setBusy(true)
+      setNotice(null)
+      setRetryPrompt(null)
+      // A finished build tries again only what failed (AGL-3616).
+      const retry = aiBuildCanRetry(job)
+      const decision = await resumeAiJobRequest(user, orgId, job, retry ? { retry: 'failed-items', ...options } : {})
+      if (decision.job) setJob(decision.job)
+      if (decision.credits && retry) setRetryPrompt(decision.credits)
+      else if (decision.error) setNotice(decision.error)
+      setBusy(false)
+    },
+    [orgId, job, user, setJob],
+  )
   const confirmPlan = useCallback(
-    async (target: AiJobSummary, options: { publish?: boolean } = {}) => {
+    async (target: AiJobSummary, options: AiJobResumeOptions = {}) => {
       if (!orgId) return
       setBusy(true)
       setNotice(null)
       const decision = await resumeAiJobRequest(user, orgId, target, options)
       if (decision.job) setJob(decision.job)
-      if (decision.error) setNotice(decision.error)
+      // A plan past what is left draws its own prompt from the job (AGL-3722).
+      if (decision.error && !(decision.credits && target.status === 'needs_review')) setNotice(decision.error)
       setBusy(false)
     },
     [orgId, user, setJob],
@@ -330,6 +340,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   }
 
   const phase = aiSiteBuildPhase(ready)
+  const terminal = AI_JOB_TERMINAL_STATUSES.includes(ready.status)
   const rows = aiSiteBuildRows(ready)
   const fraction = aiSiteBuildFraction(rows)
   const activeRow = phase === 'working' ? (rows.find((row) => row.state === 'active') ?? null) : null
@@ -337,10 +348,13 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   const links = phase === 'done' ? aiSiteBuildDoneLinks(ready, orgSlug) : { view: null, pages: null }
   const sitePublish = ready.kind === 'site' && phase === 'done' ? (ready.sitePublish ?? null) : null
   const liveUrl = sitePublish && sitePublish.published.length > 0 ? sitePublish.liveUrl : null
+  // A store start's last steps (AGL-3676): only payments, products, shipping and tax, and the policies.
+  const storeFinish = phase === 'done' ? aiStoreFinishLinks(ready, orgSlug) : null
   // Paused by the meter (AGL-3660): out of credits or at a cap, carried on by Resume.
   const paused = ready.status === 'needs_input'
   const retryRefusal = ready.review?.retryRefusal
   const buildRetry = aiBuildCanRetry(ready)
+  const retryRange = buildRetry ? aiBuildRetryCreditRange(ready) : null
   const canRetry = (phase === 'stopped' && ready.review?.reason === 'doctrine') || buildRetry
   const buildPlanWaiting = ready.kind === 'build' && phase === 'stopped' && ready.review?.reason === 'plan'
   // A guided start that ended without building its site starts over from its
@@ -428,6 +442,11 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           {credits}
         </Typography>
       ) : null}
+      {ready.cancelRequested && !terminal ? (
+        // Asked to cancel while a step is in flight (AGL-3616): it finishes
+        // or stops, and the page turns to "canceled" when it has.
+        <Alert severity="info">{AI_JOB_CANCELING_COPY}</Alert>
+      ) : null}
       {retrying && restartAnswers && hostId ? (
         <AiSiteStartCard
           hostId={hostId}
@@ -441,7 +460,12 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
       ) : null}
       {buildPlanWaiting ? (
         // A build's plan, confirmed here as in the chat (AGL-3616).
-        <AiJobPlan job={ready} busy={busy} onResume={(target, options) => void confirmPlan(target, options)} />
+        <AiJobPlan
+          job={ready}
+          busy={busy}
+          orgSlug={orgSlug}
+          onResume={(target, options) => void confirmPlan(target, options)}
+        />
       ) : null}
       {sitePublish && sitePublish.drafts.length > 0 && (
         // The pages the publish left as drafts, each with its plain reason;
@@ -465,9 +489,18 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
       {phase === 'done' && buildRetry && (
         <Box>
           <Button variant="outlined" disabled={busy} onClick={() => void tryAgain()}>
-            {'Try again what failed'}
+            {retryRange ? `Try again what failed · ${aiCreditRangeText(retryRange)}` : 'Try again what failed'}
           </Button>
         </Box>
+      )}
+      {retryPrompt && (
+        <AiCreditsPromptNotice
+          prompt={retryPrompt}
+          noun={ready.kind === 'site' ? 'site' : 'build'}
+          orgSlug={orgSlug}
+          busy={busy}
+          onBuildWhatFits={() => void tryAgain({ creditsConfirmed: true })}
+        />
       )}
       {phase === 'done' && !liveNotice && (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -484,7 +517,15 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
               {'View your site'}
             </Button>
           ) : links.view ? (
-            <Button variant="contained" size="large" component={AppLink} href={links.view}>
+            // The console's own view of the first page, but still a VIEW, so
+            // it opens beside this page like the live one above (AGL-3660).
+            <Button
+              variant="contained"
+              size="large"
+              component={AppLink}
+              href={links.view}
+              {...newTabLinkProps}
+            >
               {'View your site'}
             </Button>
           ) : null}
@@ -495,6 +536,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           )}
         </Stack>
       )}
+      {storeFinish && <AiStoreFinishCard steps={storeFinish} />}
       {paused && (
         // Paused by the meter (AGL-3660): the way to more credits — the
         // workspace's own Billing page, where plans and the AI add-on are
@@ -520,8 +562,9 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           )}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
             {restartAnswers && hostId && (
+              // A fresh job from the same answers; a canceled one starts again.
               <Button variant="contained" onClick={() => setRetrying(true)}>
-                {'Try again'}
+                {phase === 'canceled' ? 'Start again' : 'Try again'}
               </Button>
             )}
             {canRetry && (
@@ -537,6 +580,17 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           </Stack>
         </Stack>
       )}
+      {/* Cancel (AGL-3616): while the job can stop, and disabled with its reason once it cannot. */}
+      <Box>
+        <AiJobCancelButton
+          job={ready}
+          user={user}
+          orgId={orgId}
+          onJob={setJob}
+          variant={terminal ? 'text' : 'outlined'}
+          size={terminal ? 'small' : 'medium'}
+        />
+      </Box>
       {ready.plan && ready.plan.screens.length > 0 && (
         <Accordion
           // Open while the site is built, so the plan is in view as each part of it is written.

@@ -205,12 +205,61 @@ describe('THEME_EDITOR_CONTROLS (AGL-2938)', () => {
 })
 
 describe('the editor writes (AGL-2938)', () => {
-  it('sets a palette color on main and keeps the rest of its record', () => {
+  it('sets a palette color on main and drops the shades derived from the old main', () => {
+    const theme: HostTheme = {
+      colorSchemes: {
+        light: {
+          primary: { main: '#4f46e5', light: '#818cf8', dark: '#3730a3', contrastText: '#fff' },
+          secondary: { main: '#0f766e', dark: '#115e59' },
+          background: { default: '#fafafa' },
+        },
+        dark: { primary: { main: '#a5b4fc', dark: '#6366f1' } },
+      },
+    }
+    const next = writeThemeColor(theme, 'light', 'primary', '#b3261e')
+    // Only main survives, so the theme derives light, dark and contrastText
+    // from the new color instead of painting the old indigo.
+    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#b3261e' })
+    expect(readThemeColor(next, 'light', 'primary')).toBe('#b3261e')
+    // Every other group, and the other scheme, is untouched.
+    expect(next.colorSchemes?.light?.secondary).toEqual({ main: '#0f766e', dark: '#115e59' })
+    expect(next.colorSchemes?.light?.background).toEqual({ default: '#fafafa' })
+    expect(next.colorSchemes?.dark).toEqual(theme.colorSchemes?.dark)
+    // The input is never mutated.
+    expect(theme.colorSchemes?.light?.primary?.dark).toBe('#3730a3')
+  })
+
+  it('drops the recolored accent tint, which was washed from the old main', () => {
+    const theme: HostTheme = {
+      colorSchemes: {
+        light: {
+          primary: { main: '#0d6efd', dark: '#0a58ca' },
+          tint: { primary: '#cfe2ff', secondary: '#e2e3e5' },
+        },
+        dark: { tint: { primary: '#031633' } },
+      },
+    }
+    const next = writeThemeColor(theme, 'light', 'primary', '#b3261e')
+    expect(next.colorSchemes?.light).toEqual({
+      primary: { main: '#b3261e' },
+      tint: { secondary: '#e2e3e5' },
+    })
+    // The other scheme keeps its own tint until its own accent changes.
+    expect(next.colorSchemes?.dark).toEqual({ tint: { primary: '#031633' } })
+    // A tint group left empty goes with it.
+    const secondary = writeThemeColor(next, 'light', 'secondary', '#f2b705')
+    expect(secondary.colorSchemes?.light?.tint).toBeUndefined()
+    // Setting a tint itself still works, and survives later tint edits.
+    const authored = writeThemeColor(secondary, 'light', 'tint.primary', '#fbeae8')
+    expect(authored.colorSchemes?.light?.tint).toEqual({ primary: '#fbeae8' })
+  })
+
+  it('sets a palette color on main and clears it back to inherit', () => {
     const theme: HostTheme = {
       colorSchemes: { light: { primary: { main: '#111111', contrastText: '#fff' } } },
     }
     const next = writeThemeColor(theme, 'light', 'primary', '#222222')
-    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#222222', contrastText: '#fff' })
+    expect(next.colorSchemes?.light?.primary).toEqual({ main: '#222222' })
     expect(readThemeColor(next, 'light', 'primary')).toBe('#222222')
     // Cleared, the palette record goes with it and the slot inherits.
     const cleared = writeThemeColor(next, 'light', 'primary', undefined)
@@ -460,5 +509,84 @@ describe('readThemeFonts / writeThemeFonts (AGL-3656)', () => {
     })
     expect(custom.fonts?.[0].source).toBe('custom')
     expect(readThemeFonts(custom).body?.source).toBe('custom')
+  })
+})
+
+describe('component look fields (click-only Style components)', () => {
+  const {
+    clearComponentOverride,
+    readComponentLook,
+    THEME_COMPONENT_LOOK_FIELDS,
+    THEME_LOOK_CUSTOM,
+    THEME_LOOK_DEFAULT,
+    themeComponentLookField,
+    writeComponentLook,
+  } = jest.requireActual('./theme-editor-fields') as typeof import('./theme-editor-fields')
+
+  it('styles only whitelisted components, and every choice round-trips', () => {
+    for (const field of THEME_COMPONENT_LOOK_FIELDS) {
+      for (const target of field.targets) {
+        expect(HOST_THEME_COMPONENT_WHITELIST).toContain(target.component)
+      }
+      expect(readComponentLook({}, field)).toBe(THEME_LOOK_DEFAULT)
+      for (const option of field.options) {
+        const theme = writeComponentLook({}, field, option.value)
+        expect(readComponentLook(theme, field)).toBe(option.value)
+        // What it writes survives the save path's sanitizer unchanged.
+        expect(sanitizeHostTheme(theme).components).toEqual(theme.components)
+        expect(writeComponentLook(theme, field, THEME_LOOK_DEFAULT)).toEqual({})
+      }
+    }
+  })
+
+  it('writes each leaf of a two-target choice, plus its companion', () => {
+    const corners = writeComponentLook({}, themeComponentLookField('input.corners'), 'pill')
+    expect(corners.components).toEqual({
+      MuiOutlinedInput: { sx: { root: { borderRadius: '999px' } } },
+      MuiFilledInput: {
+        sx: { root: { borderRadius: '999px' } },
+        styleOverrides: { root: { overflow: 'hidden' } },
+      },
+    })
+    const padding = writeComponentLook({}, themeComponentLookField('button.padding'), 'roomy')
+    expect(padding.components?.MuiButton?.sx).toEqual({ root: { px: 3, py: 1 } })
+  })
+
+  it('keeps every override it does not own when clearing', () => {
+    const theme: HostTheme = {
+      components: {
+        MuiButton: {
+          defaultProps: { variant: 'outlined', disableElevation: true },
+          styleOverrides: { root: { fontWeight: 600, letterSpacing: 1 } },
+        },
+      },
+    }
+    const cleared = writeComponentLook(
+      writeComponentLook(theme, themeComponentLookField('button.variant'), THEME_LOOK_DEFAULT),
+      themeComponentLookField('button.weight'),
+      THEME_LOOK_DEFAULT,
+    )
+    expect(cleared.components).toEqual({
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+        styleOverrides: { root: { letterSpacing: 1 } },
+      },
+    })
+    expect(
+      clearComponentOverride(cleared, {
+        component: 'MuiCard',
+        target: 'sx',
+        slot: 'root',
+        property: 'borderRadius',
+        media: null,
+      }),
+    ).toBe(cleared)
+  })
+
+  it('reads a value no choice names as custom', () => {
+    const theme: HostTheme = { components: { MuiCard: { defaultProps: { elevation: 5 } } } }
+    expect(readComponentLook(theme, themeComponentLookField('card.elevation'))).toBe(
+      THEME_LOOK_CUSTOM,
+    )
   })
 })

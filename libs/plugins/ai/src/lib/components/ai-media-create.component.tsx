@@ -18,7 +18,8 @@
 import { lockdownRefusalText, parseLockdownRefusal, resolveEffectivePlan } from '@aglyn/aglyn'
 import type { ConsoleMediaLibraryZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiCreation } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -135,6 +136,38 @@ function kindMenuItems(kinds: readonly AiMediaKind[], size: AiImageSize): ReactN
 }
 
 /**
+ * The window's own help (AGL-3660): each control links the section of the
+ * guide about it, not the guide's top.
+ */
+const AI_MEDIA_HELP = {
+  dialog: pluginDocsHelp('aiImages', {
+    anchor: '#make-a-picture',
+    excerpt:
+      'Choose a kind, describe the picture, pick a shape and how many. The pictures land in the folder you have open, with alt text you can edit.',
+  }),
+  locked: pluginDocsHelp('aiImages', {
+    anchor: '#who-can-use-it',
+    excerpt:
+      'Creating pictures needs AI on your plan and the Generate with AI permission. A Free workspace creates them from its monthly credits.',
+  }),
+  shape: pluginDocsHelp('aiImages', {
+    anchor: '#shapes-and-how-many',
+    excerpt:
+      'Five shapes, from Square 1:1 to Tall 9:16, and one to four pictures per request. Each picture is charged on its own.',
+  }),
+  credits: pluginDocsHelp('aiImages', {
+    anchor: '#credits',
+    excerpt:
+      'The estimate is per picture times how many. You are charged only for pictures that reach your library; a declined or failed picture costs nothing.',
+  }),
+  declined: pluginDocsHelp('aiImages', {
+    anchor: '#declined-pictures',
+    excerpt:
+      'Google’s safety filters may decline real people, celebrities, brands and unsafe content. A declined picture is not charged.',
+  }),
+}
+
+/**
  * The size the door will make a picture at for this workspace (AGL-3602):
  * 512 px on the Free plan, 1K on a paid one. The door decides from the plan
  * itself; this reads the same plan so the estimate matches, and reads 1K —
@@ -183,7 +216,10 @@ export function AiMediaCreateButton(props: AiMediaCreateButtonProps) {
       <>
         {button}
         <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
-          <DialogTitle>{'Create images with AI'}</DialogTitle>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {'Create images with AI'}
+            <HelpTip {...AI_MEDIA_HELP.locked} />
+          </DialogTitle>
           <DialogContent>
             <Typography>
               {upgrade.canManageBilling
@@ -319,7 +355,10 @@ export function AiMediaCreateDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{'Create images with AI'}</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {'Create images with AI'}
+        <HelpTip {...AI_MEDIA_HELP.dialog} />
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <TextField
@@ -356,14 +395,20 @@ export function AiMediaCreateDialog({
             }
           />
           {mode === 'photo' ? (
-            <Typography variant="body2" color="text.secondary">
-              {AI_MEDIA_RASTER_SAFETY_NOTE}
-            </Typography>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                {AI_MEDIA_RASTER_SAFETY_NOTE}
+              </Typography>
+              <HelpTip {...AI_MEDIA_HELP.declined} />
+            </Stack>
           ) : null}
           <Stack spacing={0.5}>
-            <Typography variant="body2" color="text.secondary">
-              {'Shape'}
-            </Typography>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                {'Shape'}
+              </Typography>
+              <HelpTip {...AI_MEDIA_HELP.shape} />
+            </Stack>
             <ToggleButtonGroup
               size="small"
               exclusive
@@ -455,9 +500,12 @@ export function AiMediaCreateDialog({
               </MenuItem>
             ))}
           </TextField>
-          <Typography variant="body2" color="text.secondary">
-            {aiMediaCreditEstimate(mode, count, imageSize)}
-          </Typography>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              {aiMediaCreditEstimate(mode, count, imageSize)}
+            </Typography>
+            <HelpTip {...AI_MEDIA_HELP.credits} />
+          </Stack>
           {busy ? (
             <Stack spacing={1}>
               <LinearProgress />

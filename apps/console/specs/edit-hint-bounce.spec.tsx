@@ -52,7 +52,9 @@ import EditHintBounce, {
 } from '../components/edit-hint-bounce.component'
 import {
   holdSignUpLanding,
+  isLeavingConsole,
   releaseSignUpLanding,
+  resetLeavingConsoleForTests,
 } from '../utils/sign-up-landing-hold'
 
 let mockUser: unknown
@@ -84,6 +86,7 @@ describe('EditHintBounce (AGL-1842)', () => {
   afterEach(() => {
     jest.restoreAllMocks()
     act(() => releaseSignUpLanding('spec'))
+    resetLeavingConsoleForTests()
     window.history.replaceState(null, '', '/acme/hosts')
   })
 
@@ -164,6 +167,31 @@ describe('EditHintBounce (AGL-1842)', () => {
     // Unstamped, so the next console load plants the hint instead of a day
     // later.
     expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBeNull()
+  })
+
+  it('marks the console as leaving before it navigates, so no claim starts in the gap (AGL-3690)', async () => {
+    mockUser = signedInUser
+    navigate.mockImplementation(() => {
+      // At the moment of navigation the mark is already set.
+      expect(isLeavingConsole()).toBe(true)
+    })
+    render(<EditHintBounce navigate={navigate} />)
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not mark the console as leaving when a provisioning holds it', async () => {
+    global.fetch = jest.fn(async () => {
+      act(() => holdSignUpLanding('spec'))
+      return { ok: true, status: 200, json: async () => ({ blob: 'b' }) }
+    }) as unknown as typeof fetch
+    mockUser = signedInUser
+    render(<EditHintBounce navigate={navigate} />)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(isLeavingConsole()).toBe(false)
   })
 
   it('does nothing within the throttle window', async () => {

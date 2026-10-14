@@ -39,6 +39,10 @@ import {
   emailUnverifiedResponse,
   findUserByEmailAcrossPools,
   findUserByUidAcrossPools,
+  normalizeMemberPhotoUrl,
+  readAccountProfiles,
+  resolveUserRecordIdentity,
+  type AccountProfileIdentity,
   firebaseAdmin,
   getOrgDoc,
   isImpersonationSession,
@@ -365,8 +369,23 @@ async function handler(request: Request): Promise<Response> {
         // identity `backfillMemberIdentity` had put there for them (AGL-1131)
         // — the only copy any member surface can read (AGL-1122).
         email = found.record.email || undefined
-        displayName = found.record.displayName || undefined
-        photoURL = found.record.photoURL || undefined
+        // Through the one account-identity resolver (AGL-3721): the Auth
+        // record, then the person's `users/{uid}` profile (which the sign-in
+        // seed fills from the IdP), then a provider entry — so adding an SSO
+        // account mirrors the name and face their own account menu shows,
+        // instead of the blank the tenant Auth record holds. Still ABSENT
+        // when nothing resolves, never null, for the reason above.
+        const profiles = await readAccountProfiles([found.record.uid]).catch(
+          () => new Map<string, AccountProfileIdentity>(),
+        )
+        const identity = resolveUserRecordIdentity(
+          found.record,
+          profiles.get(found.record.uid) ?? null,
+        )
+        displayName = identity.displayName || undefined
+        // The roster's own allowlist (https or a media-CDN path) decides.
+        const photo = normalizeMemberPhotoUrl(identity.photoUrl ?? '')
+        photoURL = photo.ok && !photo.clearing ? photo.photoURL : undefined
       } catch (lookupError) {
         // Only a genuinely-missing account is the "invite them instead" 404.
         // Anything else (transient Admin SDK failure, misconfig) must NOT be

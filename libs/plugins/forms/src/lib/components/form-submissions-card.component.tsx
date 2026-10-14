@@ -91,12 +91,7 @@ export function FormSubmissionsCard(props: FormSubmissionsCardProps) {
   return (
     <CardDisplay
       header="Submissions to this form"
-      help={pluginDocsHelp('forms', {
-        anchor: '#one-forms-own-page',
-        excerpt:
-          'The same table the Inbox shows, narrowed to this form, and loaded ' +
-          'when you ask rather than on every visit to this page.',
-      })}
+      help={pluginDocsHelp('forms', { anchor: '#form-submissions' })}
       HeaderProps={
         transfer?.can('export', { resource: FORM_SUBMISSIONS_TRANSFER_KEY, scope: 'host', hostId })
           ? {

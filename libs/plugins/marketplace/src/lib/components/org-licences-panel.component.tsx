@@ -430,10 +430,7 @@ export function OrgLicencesPanel({
         <CardDisplay
           header={'This workspace'}
           help={pluginDocsHelp('publisherHandbook', {
-            anchor: '#how-installs-work-the-buyer-side',
-            excerpt:
-              'What this workspace owns — installable by any member with ' +
-              'install permission, whoever on the team paid for it.',
+            anchor: '#workspace-licenses',
           })}
           subheader={
             'Installable by any member with install permission, whoever ' +
@@ -473,10 +470,7 @@ export function OrgLicencesPanel({
         <CardDisplay
           header={'Bought by you'}
           help={pluginDocsHelp('publisherHandbook', {
-            anchor: '#how-installs-work-the-buyer-side',
-            excerpt:
-              'Your own purchases across every workspace you belong to — a ' +
-              'purchase licenses one organization, so this says which.',
+            anchor: '#licenses-you-bought',
           })}
           subheader={
             'Your own receipts, and which workspace each license landed in'

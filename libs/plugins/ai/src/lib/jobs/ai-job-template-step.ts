@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { throwIfAiJobCanceled } from './ai-job-cancel'
 import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
 import { normalizeScreenSlug } from '@aglyn/aglyn/app-utils/screen-route'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -576,6 +577,8 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
 
+    // Never written once the job is canceled (AGL-3616).
+    throwIfAiJobCanceled(signal)
     const draft = await writeAiDraft(firestore, {
       kind: 'template',
       hostId,

@@ -53,6 +53,8 @@ import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { HostScreenVisibility } from '@aglyn/aglyn/foundation/definitions/platform.types'
+import { isScreenIndexable } from '@aglyn/aglyn/app-utils/search-indexing'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import {
   AI_DRAFT_FIELDS,
@@ -250,6 +252,19 @@ describe('the screen draft’s document', () => {
     expect(version).toMatchObject({ screenId: 'job-page', hostId: 'host-1', displayName: AI_DRAFT_VERSION_NAME, layoutId: 'lay-site' })
     expect(Buffer.isBuffer(version['nodes'])).toBe(true)
     expect(decodeStoredNodes(version['nodes'])).toEqual(NODES)
+  })
+
+  it('writes a store’s account or cart unlisted, the page Access setting the tenant serves noindex, and every other page public (AGL-3676)', async () => {
+    seedLiveSite()
+    const unlisted = await writeAiDraft(firestore, screenInput({ visibility: HostScreenVisibility.UNLISTED }))
+    if (unlisted.ok === false) throw new Error(unlisted.error)
+    const screen = mockDocs.get('hosts/host-1/screens/job-page') ?? {}
+    expect(screen['visibility']).toBe(HostScreenVisibility.UNLISTED)
+    expect(isScreenIndexable(screen as never)).toBe(false)
+    const page = await writeAiDraft(firestore, screenInput({ id: 'job-page-2', name: 'About' }))
+    if (page.ok === false) throw new Error(page.error)
+    expect(mockDocs.get('hosts/host-1/screens/job-page-2')).not.toHaveProperty('visibility')
+    expect(isScreenIndexable(mockDocs.get('hosts/host-1/screens/job-page-2') as never)).toBe(true)
   })
 
   it('binds no layout the plan did not name', async () => {

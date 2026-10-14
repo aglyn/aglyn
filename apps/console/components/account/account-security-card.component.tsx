@@ -43,11 +43,7 @@ const securitySchema: FormSchema = {
   id: 'security',
   title: 'Security',
   CardDisplayProps: {
-    help: docsHelp('account', {
-      anchor: '#resetting-your-password',
-      excerpt:
-        'Change your console password by confirming the current one first.',
-    }),
+    help: docsHelp('manageAccount', { anchor: '#security' }),
   },
   fields: [
     FIELD_SCHEMA_PASSWORD_OLD,

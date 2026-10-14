@@ -76,6 +76,11 @@ beforeEach(() => {
     },
     'orgs/o1/datasets/orders/records/r1': { values: { state: 'TX', total: 400 } },
     'orgs/o1/datasets/team': { displayName: 'Team', visibleTo: ['org'], fields: ['name'] },
+    'orgs/o1/datasets/work': {
+      displayName: 'Work',
+      visibleTo: ['host:h3'],
+      model: { order: ['title', 'image'], fields: { title: { name: 'Title', type: 'text' }, image: { name: 'Image', type: 'text', customType: 'image' } } },
+    },
     'orgs/o1/datasets/gone': { displayName: 'Old', visibleTo: ['org'], deletedAt: 1 },
   }
 })
@@ -102,6 +107,19 @@ describe('the dataset index', () => {
         name: 'Team',
         facts: { fields: [{ id: 'name', name: 'Name', type: 'text' }], visibleTo: ['org'], installedFrom: null },
       },
+      {
+        id: 'work',
+        name: 'Work',
+        facts: {
+          // A record's photo names the type it rides (AGL-3616).
+          fields: [
+            { id: 'title', name: 'Title', type: 'text' },
+            { id: 'image', name: 'Image', type: 'text', customType: 'image' },
+          ],
+          visibleTo: ['host:h3'],
+          installedFrom: null,
+        },
+      },
     ])
     expect(JSON.stringify(records)).not.toContain('TX')
   })
@@ -111,6 +129,27 @@ describe('the dataset index', () => {
     expect(onH1.records.map((record) => record.id)).toEqual(['orders', 'team'])
     const onH2 = await datasetRecordIndex.list({ orgId: 'o1', hostId: 'h2', limit: 10 })
     expect(onH2.records.map((record) => record.id)).toEqual(['team'])
+  })
+
+  it('says, narrowed to a site, where each dataset’s records have pages of their own there (AGL-3747)', async () => {
+    // The site's record template for Team, and one for a dataset it may not see.
+    mockDocs['hosts/h1/recordPages/scr-person'] = { datasetId: 'team', base: '/people/', slugField: 'slug', titleField: 'name' }
+    mockDocs['hosts/h1/recordPages/scr-broken'] = { datasetId: 'orders', base: '', slugField: 'slug' }
+    mockDocs['hosts/h2/recordPages/scr-other'] = { datasetId: 'orders', base: 'orders', slugField: 'ref' }
+    const onH1 = await datasetRecordIndex.list({ orgId: 'o1', hostId: 'h1', limit: 10 })
+    expect(onH1.records.map((record) => [record.id, record.facts['recordPage']])).toEqual([
+      // A binding with no base serves nothing, so it is no record page.
+      ['orders', null],
+      ['team', { screenId: 'scr-person', base: 'people', slugField: 'slug' }],
+    ])
+    expect((await datasetRecordIndex.get({ orgId: 'o1', hostId: 'h1', id: 'team' }))?.facts['recordPage']).toEqual({
+      screenId: 'scr-person',
+      base: 'people',
+      slugField: 'slug',
+    })
+    // Not narrowed to a site, there is no site to have record pages on.
+    const everywhere = await datasetRecordIndex.list({ orgId: 'o1', limit: 10 })
+    expect(everywhere.records.every((record) => !('recordPage' in record.facts))).toBe(true)
   })
 
   it('says when the scope holds more than it answered', async () => {

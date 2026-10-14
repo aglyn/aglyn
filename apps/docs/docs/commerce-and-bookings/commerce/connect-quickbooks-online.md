@@ -48,6 +48,14 @@ You need:
 A connection made against a QuickBooks **sandbox** company shows a **Sandbox
 company** label.
 
+## Choose your books {#choose-your-books}
+
+When a connection links more than one set of books, the Accounting page asks
+which one this workspace posts to: pick it and select **Use these books**.
+
+Nothing is posted until you choose. Every paid order, refund, fee and payout of
+the workspace then goes to those books.
+
 ## Choose your accounts
 
 Under **Accounts and tax**, pick:

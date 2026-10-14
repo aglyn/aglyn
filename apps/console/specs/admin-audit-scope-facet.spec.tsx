@@ -257,16 +257,16 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
 
   it('a Scope pick separates two rows with the SAME target prefix, across the log', async () => {
     render(<AdminAudit />)
-    await screen.findByText('lockdowns/platform')
+    await screen.findByTitle('lockdowns/platform')
     const host = await pickFilter('Scope', 'host')
     act(() => {
       fireEvent.click(host)
     })
     // THE ASSERTION. The two lockdown rows share `lockdowns/` and differ only
     // in `scope`, so a filter that survived on `target` would keep both.
-    await waitFor(() => expect(screen.queryByText('lockdowns/platform')).toBeNull())
-    expect(screen.getByText('lockdowns/host-77')).toBeTruthy()
-    expect(screen.queryByText('mediaQuarantines/index')).toBeNull()
+    await waitFor(() => expect(screen.queryByTitle('lockdowns/platform')).toBeNull())
+    expect(screen.getByTitle('lockdowns/host-77')).toBeTruthy()
+    expect(screen.queryByTitle('mediaQuarantines/index')).toBeNull()
     // On the query, as the equality the stored field answers, and chipped.
     expect(constraint('where')).toEqual([
       { kind: 'where', field: 'scope', op: '==', value: 'host' },
@@ -277,7 +277,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
   it('offers the scopes the writers store, and any the log has shown', async () => {
     mockRows = [withAdminAuditIndex({ ...ROWS[0], scope: 'brand-new-scope' })]
     render(<AdminAudit />)
-    await screen.findByText('lockdowns/platform')
+    await screen.findByTitle('lockdowns/platform')
     // A known scope is pickable before any row on screen carries it — the
     // pick is a query over the whole log, not a match over this page …
     expect(await pickFilter('Scope', 'asset')).toBeTruthy()
@@ -287,14 +287,14 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
 
   it('the search matches an actor’s email address', async () => {
     render(<AdminAudit />)
-    await screen.findByText('lockdowns/platform')
+    await screen.findByTitle('lockdowns/platform')
     act(() => {
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'carol@aglyn.com' } })
     })
-    await waitFor(() => expect(screen.queryByText('lockdowns/platform')).toBeNull(), {
+    await waitFor(() => expect(screen.queryByTitle('lockdowns/platform')).toBeNull(), {
       timeout: 3000,
     })
-    expect(screen.getByText('mediaQuarantines/index')).toBeTruthy()
+    expect(screen.getByTitle('mediaQuarantines/index')).toBeTruthy()
     // By the token the writer stamped, on the query.
     expect(constraint('where')).toEqual([
       { kind: 'where', field: 'searchTokens', op: 'array-contains', value: 'carol@aglyn.' },
@@ -320,7 +320,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
     ;(URL as any).revokeObjectURL = () => undefined
     try {
       render(<AdminAudit />)
-      await screen.findByText('lockdowns/platform')
+      await screen.findByTitle('lockdowns/platform')
       fireEvent.click(screen.getByText('Export CSV'))
       await waitFor(() => expect(written).toHaveLength(1))
       const [header, ...rows] = written[0].split('\n')

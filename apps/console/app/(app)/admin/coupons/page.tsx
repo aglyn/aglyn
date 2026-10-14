@@ -537,11 +537,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Create a coupon'}
-              help={docsHelp('billing', {
-                anchor: '#tiers--entitlements',
-                excerpt:
-                  'Create a percent or fixed-amount discount coupon, optionally with a redemption code, and see its net-margin rating before committing.',
-              })}
+              help={docsHelp('staffConsole', { anchor: '#create-a-coupon' })}
               contentGutterX
               contentGutterY
             >
@@ -777,11 +773,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Existing coupons'}
-              help={docsHelp('staffConsole', {
-                anchor: '#existing-coupons',
-                excerpt:
-                  'Every Stripe coupon and its promotion codes, with redemption counts and validity.',
-              })}
+              help={docsHelp('staffConsole', { anchor: '#existing-coupons' })}
               contentGutterX
               contentGutterY
             >

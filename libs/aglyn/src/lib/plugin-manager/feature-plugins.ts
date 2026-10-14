@@ -52,7 +52,7 @@ import type {
 import type { Plugin, PluginId } from './plugin-manager'
 import type { HostThemeSource } from '../app-utils/site-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 export type {
   ConsoleImportMappingZoneProps,
   ConsoleRecordEmailZoneProps,
@@ -828,6 +828,15 @@ export const CONSOLE_WIDGET_SLOTS = {
    * is `startBlank`, because a takeover somebody can only dismiss BACK INTO is
    * the funnel this zone exists to refuse, and nothing here is a half-answered
    * state worth returning to.
+   *
+   * ── Or drawn before the site exists (AGL-3761) ───────────────────────────
+   *
+   * "Create site" draws this zone first, with `pendingSite` and no site: the
+   * name and address are asked inside the widget's own first step, and the
+   * site is created only by a choice that needs it — the starter, Skip, or a
+   * start the widget begins. A dismissal there is `leave`, and creates
+   * nothing. A zone with no widget, or a widget that answers `ready(false)`,
+   * gets the shell's plain name-and-address dialog instead.
    */
   hostFirstRun: 'hostFirstRun',
   /**
@@ -1207,9 +1216,61 @@ export interface ConsoleOrgSitesZoneProps {
 }
 
 
+/**
+ * A site that does not exist yet (AGL-3761): what the `hostFirstRun` zone
+ * hands its widget when it is drawn by "Create site" rather than on a site
+ * that was just created.
+ *
+ * Nothing is created while the widget asks its questions. The site comes into
+ * being only when the person makes a choice that needs it: the starter (the
+ * zone's `startBlank`), or a start the widget begins with {@link create}.
+ * Dismissing the widget before then is the zone's `leave`, and leaves nothing
+ * behind.
+ */
+export interface ConsolePendingSite {
+  /**
+   * The site's name and address, as the shell asks for them, with their own
+   * validation and availability check. The widget draws them where it asks
+   * its first question, before any choice that creates the site.
+   */
+  fields: ReactNode
+  /**
+   * Whether the name and address can be used, showing what is wrong with them
+   * when they cannot. A widget asks before moving past the step that draws
+   * {@link fields}.
+   */
+  check: () => boolean
+  /** Something has been typed into {@link fields}. */
+  dirty: boolean
+  /**
+   * Creates the site now, with nothing on it, for a start the widget is about
+   * to begin. Resolves to the site, or to why it was not created; `address`
+   * marks a refusal the person fixes in {@link fields}. A second call after a
+   * success answers the same site and creates nothing.
+   */
+  create: () => Promise<ConsoleCreatedSite | { error: string; address?: boolean }>
+  /** The site {@link create} made, once it has. */
+  created: ConsoleCreatedSite | null
+  /**
+   * The widget's answer to whether it draws anything here. A widget that
+   * will not (a release it is not part of, a route that refused it) says
+   * `false`, and the shell asks for the site its own way instead.
+   */
+  ready: (shown: boolean) => void
+}
+
+/** A site the pending flow created (AGL-3761). */
+export interface ConsoleCreatedSite {
+  hostId: string
+  /** Its subdomain, which is what a console URL names a site by. */
+  host: string
+  orgSlug: string
+}
+
 /** What the `hostFirstRun` zone hands each widget (AGL-2918). */
 export interface ConsoleHostFirstRunZoneProps {
-  hostId: string
+  /** The site; `null` while it does not exist yet, with {@link pendingSite} set. */
+  hostId: string | null
   /** The org the page names; `undefined` while it resolves. */
   orgId: string | undefined
   /** Path slug for building `/[orgSlug]/…` links. */
@@ -1227,7 +1288,7 @@ export interface ConsoleHostFirstRunZoneProps {
    * every way of dismissing it does BEFORE it has started anything. See
    * `hostFirstRun` in {@link CONSOLE_WIDGET_SLOTS}.
    */
-  startBlank: () => void
+  startBlank: () => void | Promise<boolean>
   /**
    * Closes the zone after its widget STARTED the site some other way — a
    * guided start whose job is running (AGL-3594). The shell records that the
@@ -1235,8 +1296,17 @@ export interface ConsoleHostFirstRunZoneProps {
    * site's pages are the job's to build. A widget that started nothing calls
    * `startBlank` instead. Optional, so a shell that predates it still closes
    * the zone through `startBlank`.
+   *
+   * With {@link pendingSite} and no site created yet, it is also how every
+   * dismissal leaves: nothing has been made, so nothing is written.
    */
   leave?: () => void
+  /**
+   * Present when the zone is drawn by "Create site" before the site exists
+   * (AGL-3761). `startBlank` then CREATES the site with the starter, and
+   * resolves `false` when it could not, with the reason shown.
+   */
+  pendingSite?: ConsolePendingSite
 }
 
 /**

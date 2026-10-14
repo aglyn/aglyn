@@ -26,8 +26,8 @@ import {
   type AdvertisingTagHost,
   resolveAdvertisingTags,
 } from '@aglyn/aglyn/app-utils/advertising-tags'
-import { isPlatformMarketingHost } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import {
+  hostConfiguresAdvertisingTag,
   readStoredVisitorConsent,
   type StoredVisitorConsent,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
@@ -53,19 +53,20 @@ import { useCallback, type ReactElement } from 'react'
  *
  * ## Why the component still renders when the answer is no
  *
- * `active` stays true for the whole of Aglyn's own marketing site, granted or
- * not, because the withdrawal path needs a listener that is still mounted when
- * the answer is no — see {@link AdvertisingTagMounts} for why React dropping a
+ * `active` stays true for the whole of any site that configures an
+ * advertising tag — Aglyn's own marketing site, or a customer's site running
+ * the tags its owner set on Setup → Tracking (AGL-3694) — granted or not,
+ * because the withdrawal path needs a listener that is still mounted when the
+ * answer is no — see {@link AdvertisingTagMounts} for why React dropping a
  * `<Script>` does not unload the library it already ran (AGL-1608).
  *
  * ## Why the listener is scoped by the host too
  *
- * On a customer's site this installs NOTHING — no listener, no scripts. The
- * teardown is additionally attribute-scoped inside `revokeAdvertisingTags`, so
- * even if it did run it could not touch a pixel a customer pasted into their
- * own Custom HTML. Two independent scopes, because reaching into a customer's
- * page to kill their tag would be its own kind of breach of the promise this
- * feature is scoped by.
+ * On a site with no advertising tag configured this installs NOTHING — no
+ * listener, no scripts. The teardown is additionally attribute-scoped inside
+ * `revokeAdvertisingTags`, so it can never touch a pixel a customer pasted
+ * into their own Custom HTML: we did not load it and it does not run on a
+ * consent record of ours.
  */
 export interface AdvertisingTagsProps {
   /** The resolved tenant host — the GA property is the surface discriminator. */
@@ -101,10 +102,11 @@ export default function AdvertisingTags({
   sharedLibraries,
 }: AdvertisingTagsProps): ReactElement | null {
   const hostId = host?.$id
-  // Our own marketing site, or nothing at all. Evaluated before the verdict as
-  // well as inside it: this is the condition that decides whether this
-  // component has any behavior on this site, listener included.
-  const ourSurface = isPlatformMarketingHost(host)
+  // Our own marketing site, or a customer's site running the tags its owner
+  // configured (AGL-3694). A site with no advertising tag of either kind has
+  // no behavior here at all, listener included: there is nothing of ours to
+  // withdraw on it.
+  const configured = hostConfiguresAdvertisingTag(host)
   const tags = ready === true ? resolveAdvertisingTags(host, stored) : []
 
   // Read the record FRESH rather than closing over `stored`: the teardown
@@ -120,7 +122,7 @@ export default function AdvertisingTags({
 
   return (
     <AdvertisingTagMounts
-      active={ourSurface === true && Boolean(hostId)}
+      active={configured && Boolean(hostId)}
       tags={tags}
       resolve={resolve}
       nonce={nonce}

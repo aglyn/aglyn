@@ -297,7 +297,7 @@ export function AiOverlayEditorCard(props: AiOverlayEditorCardProps) {
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             {'Write with AI'}
           </Typography>
-          <Link href={help.href} target="_blank" rel="noopener" variant="caption" title={help.excerpt}>
+          <Link href={help.href} target="_blank" rel="noopener" variant="caption" title={help.excerptText}>
             {'How it works'}
           </Link>
         </Stack>
@@ -472,7 +472,7 @@ export function AiCreateOverlayButton(props: AiCreateOverlayButtonProps) {
               {'The overlay is saved switched off and opened in the editor, where you add its link, ' +
                 'its pages and its schedule. No visitor sees it until you turn it on.'}
               {' '}
-              <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+              <Link href={help.href} target="_blank" rel="noopener" title={help.excerptText}>
                 {'How it works'}
               </Link>
             </Typography>

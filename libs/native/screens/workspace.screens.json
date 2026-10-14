@@ -543,6 +543,14 @@
             }
           ]
         },
+        {
+          "type": "links",
+          "items": [
+            { "title": "AI settings", "subtitle": "Provider and the model for each kind of step", "icon": "gearshape|settings", "screen": "core.pluginSettings.ai", "when": "org.manager && params.pluginId == ai" },
+            { "title": "Commerce settings", "subtitle": "Register discounts, tipping, receipts and the customer display", "icon": "gearshape|settings", "screen": "core.pluginSettings.commerce", "when": "org.manager && params.pluginId == commerce" },
+            { "title": "Bookings settings", "subtitle": "Booking horizon and the booking page", "icon": "gearshape|settings", "screen": "core.pluginSettings.bookings", "when": "org.manager && params.pluginId == bookings" }
+          ]
+        },
         { "type": "zone", "name": "pluginSettings", "title": "Settings", "params": { "pluginId": "{params.pluginId}" } }
       ]
     }

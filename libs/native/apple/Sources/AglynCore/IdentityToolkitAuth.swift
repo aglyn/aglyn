@@ -56,7 +56,12 @@ public final class MemoryCredentialStore: AuthCredentialStore, @unchecked Sendab
 /// very thing an unsigned build lacks (`errSecMissingEntitlement`, -34018).
 /// A read never shows a prompt: when the Keychain asks (an ad-hoc rebuild
 /// changes the app's signature), the session is treated as absent and the
-/// person signs in again.
+/// person signs in again. `kSecUseAuthenticationUISkip` alone does not do
+/// that in the file-based Keychain: the read blocked on an access prompt and
+/// held the launch screen up indefinitely, so every call here runs with
+/// Keychain user interaction off (`errSecInteractionNotAllowed` instead of a
+/// prompt). `AuthSession.make` also names the item per build, so a rebuild
+/// starts from no item rather than another build's.
 public struct KeychainCredentialStore: AuthCredentialStore {
   public let service: String
   public let account: String
@@ -82,21 +87,40 @@ public struct KeychainCredentialStore: AuthCredentialStore {
     // LAContext replacement applies to access-controlled items only.
     lookup[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUISkip
     var result: CFTypeRef?
-    guard SecItemCopyMatching(lookup as CFDictionary, &result) == errSecSuccess,
+    let status = withoutKeychainPrompts { SecItemCopyMatching(lookup as CFDictionary, &result) }
+    guard status == errSecSuccess,
       let data = result as? Data
     else { return nil }
     return try? JSONDecoder().decode(StoredAuthSession.self, from: data)
   }
 
   public func save(_ session: StoredAuthSession?) {
-    SecItemDelete(query as CFDictionary)
-    guard let session, let data = try? JSONEncoder().encode(session) else { return }
-    var item = query
-    item[kSecValueData as String] = data
-    item[kSecAttrLabel as String] = "\(AglynBrand.name) sign-in"
-    SecItemAdd(item as CFDictionary, nil)
+    withoutKeychainPrompts {
+      SecItemDelete(query as CFDictionary)
+      guard let session, let data = try? JSONEncoder().encode(session) else { return }
+      var item = query
+      item[kSecValueData as String] = data
+      item[kSecAttrLabel as String] = "\(AglynBrand.name) sign-in"
+      SecItemAdd(item as CFDictionary, nil)
+    }
   }
 
+}
+
+/// Runs a Keychain call that fails rather than prompts. Keychain user
+/// interaction is a process-wide switch on macOS, so it is restored after.
+private let keychainPromptLock = NSLock()
+
+func withoutKeychainPrompts<T>(_ body: () -> T) -> T {
+  #if os(macOS)
+    keychainPromptLock.lock()
+    defer { keychainPromptLock.unlock() }
+    var allowed: DarwinBoolean = true
+    SecKeychainGetUserInteractionAllowed(&allowed)
+    SecKeychainSetUserInteractionAllowed(false)
+    defer { SecKeychainSetUserInteractionAllowed(allowed.boolValue) }
+  #endif
+  return body()
 }
 
 /// Firebase Auth over its REST APIs: `accounts:signInWithPassword`,

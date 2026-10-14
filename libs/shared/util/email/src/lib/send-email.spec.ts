@@ -255,6 +255,46 @@ describe('sendEmail', () => {
     })
 
     /*
+     * BLIND COPIES (AGL-3699): a review platform's invitation inbox copied on
+     * an order email. They reach the provider as `bcc`, never in `to`, an
+     * address already on the message is not copied twice, and a marketing
+     * send — whose gate asks only about its one visible recipient — refuses
+     * any.
+     */
+    it('hands blind copies to the provider as bcc, de-duplicated against to', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        text: 'Body',
+        bcc: ['shop.com+abc@invite.trustpilot.com', 'A@example.com', 'not-an-address', 'shop.com+abc@invite.trustpilot.com'],
+      })
+
+      const body = lastBody(fetchMock)
+      expect(body.to).toEqual(['a@example.com'])
+      expect(body.bcc).toEqual(['shop.com+abc@invite.trustpilot.com'])
+    })
+
+    it('sends no bcc field when there are no blind copies', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({ to: 'a@example.com', subject: 'Hi', text: 'Body', bcc: [] })
+      expect(lastBody(fetchMock)).not.toHaveProperty('bcc')
+    })
+
+    it('refuses blind copies on a marketing send', async () => {
+      const fetchMock = mockFetch({})
+      const result = await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        text: 'Body',
+        bcc: 'copy@example.com',
+        marketing: { hostId: 'host_1', siteBase: 'https://shop.example.com', consentHostIds: ['host_1'], consentAwaitsConfirmation: false },
+      })
+      expect(result).toMatchObject({ sent: false, reason: 'no-recipient' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    /*
      * THE `context` TAG (AGL-2407).
      *
      * Until this, `campaign-send.ts` was the only sender in the product that

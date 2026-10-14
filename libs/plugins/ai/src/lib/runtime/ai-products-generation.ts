@@ -54,8 +54,10 @@ import type { AiSystemBlock } from './ai-runtime'
  * Every answer is held by a check in `tools/ai-products-tool.ts`, which is
  * where storefront copy safety is enforced — no health, financial or legal
  * claim, no certification or endorsement the merchant did not state, and no
- * price. The rules below say the same, so the model is never refused for a
- * rule it was not told.
+ * price in any text. The rules below say the same, so the model is never
+ * refused for a rule it was not told. A catalog's products each carry a
+ * suggested price in a field of its own (Zach, 2026-10-12), which code keeps
+ * in range (`aiCatalogPrice`); the copy still states none.
  */
 
 /** The step kind every generation of a `products` job is routed as. */
@@ -77,8 +79,10 @@ export const AI_PRODUCT_CATEGORIES_MAX_TOKENS = 2_000
  * Rules every storefront generation states, because its check refuses an
  * answer for each of them.
  */
+const STOREFRONT_PRICE_RULE =
+  'Never write a price, a discount, a shipping promise or a stock level: the store owner sets those.'
 const STOREFRONT_RULES = [
-  'Never write a price, a discount, a shipping promise or a stock level: the store owner sets those.',
+  STOREFRONT_PRICE_RULE,
   'Never say a product cures, treats, heals or prevents anything, and never promise a health, financial or legal result.',
   'Never claim a certification, an award, a license, an endorsement or a best seller that the owner’s own words do not state.',
   'Write plain text: no markup, no formatting marks, no emoji, no links.',
@@ -112,13 +116,16 @@ export const AI_PRODUCT_COPY_INSTRUCTIONS: AiSystemBlock[] = [
 export const AI_CATALOG_INSTRUCTIONS: AiSystemBlock[] = [
   {
     text:
-      'You propose the first products of an online store from its owner’s brief. Each is a draft the owner completes: a name, a type, a description, tags, options, a search listing and what its photo should show.\n\n' +
+      'You propose the first products of an online store from its owner’s brief. Each is a draft the owner completes: a name, a type, a description, tags, options, a search listing, what its photo should show and a suggested price.\n\n' +
       `Answer by calling ${AI_CATALOG_TOOL_NAME} exactly once. A reply in prose cannot be used.\n\n` +
       'Rules:\n' +
       [
         'Propose 6 to 12 products that fit the brief, unless the brief says how many.',
         'Write only from the brief. Never invent a material, a size, an origin or a feature it does not give; where a shopper would need a fact the brief does not give, mark it in square brackets, like [material], in the description only.',
-        ...STOREFRONT_RULES,
+        // The price has its own field (Zach, 2026-10-12); the copy states none.
+        'Never write a price, a discount, a shipping promise or a stock level in any text: the price goes only in its own field, and the owner sets the rest.',
+        ...STOREFRONT_RULES.filter((rule) => rule !== STOREFRONT_PRICE_RULE),
+        'Price each product as a small independent shop would list that kind of product, in US dollars, for the size or quantity the brief gives: for example a bar of handmade soap about 8 to 12, a body lotion 14 to 22, a candle 18 to 32, a ceramic mug 24 to 38, a gift set 30 to 45. Use a whole amount or one ending in .50 or .95. One price covers every option.',
         `Options are only the choices a shopper makes, such as a size or a color, with at most ${AI_CATALOG_OPTION_VALUES_MAX} values each; a product with no choice has none.`,
         'The photo says in one sentence what a photo of the product should show, so the owner can take or pick it. Never a link.',
         'The search title names the product plainly, and neither it nor the search description marks a missing fact.',

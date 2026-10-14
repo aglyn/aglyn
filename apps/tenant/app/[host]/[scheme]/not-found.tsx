@@ -148,14 +148,6 @@ async function resolveHostNotFoundTitle(hostParam: string): Promise<string> {
 }
 
 export default function HostNotFound() {
-  return (
-    <SiteNotFound
-      code="404"
-      title={'We can’t find that page'}
-      message={
-        'The link may be out of date, or the page may have been moved or ' +
-        'removed. Everything else on the site is still here.'
-      }
-    />
-  )
+  // Its heading and words are the site's own, in the site's language (AGL-3771).
+  return <SiteNotFound code="404" />
 }
