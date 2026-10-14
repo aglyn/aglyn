@@ -23,6 +23,7 @@ private struct SectionTabs: View {
       Text("Installed").tag(marketplaceInstalledScreen)
       Text("Licenses").tag(marketplaceLicencesScreen)
       Text("Publish").tag(marketplacePublishScreen)
+      Text("Selling").tag(marketplaceSellScreen)
     }
     .pickerStyle(.segmented)
     .labelsHidden()

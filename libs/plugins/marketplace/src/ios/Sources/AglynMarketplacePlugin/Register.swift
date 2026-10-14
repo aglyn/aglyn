@@ -24,6 +24,9 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
     InstalledScreen(context: context)
   }
   r.screen(marketplaceLicencesScreen, title: "Licenses", icon: "doc.text") { context, _ in LicencesScreen(context: context) }
+  r.screen(marketplaceSellScreen, title: "Selling", icon: "storefront") { context, params in
+    SellScreen(context: context, initialSection: params["section"])
+  }
   r.quickAction("marketplace.open", title: "Marketplace", icon: "storefront", order: 60, screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.page", path: "/marketplace", screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.listing-page", path: "/marketplace/:listingId", screen: marketplaceListingScreen)

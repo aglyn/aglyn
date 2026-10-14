@@ -100,6 +100,7 @@ private fun SectionTabs(context: NativePluginContext, current: String) {
       ChipOption(MARKETPLACE_INSTALLED_SCREEN, "Installed", "extension"),
       ChipOption(MARKETPLACE_LICENCES_SCREEN, "Licenses", "receipt"),
       ChipOption(MARKETPLACE_PUBLISH_SCREEN, "Publish", "upload"),
+      ChipOption(MARKETPLACE_SELL_SCREEN, "Selling", "storefront"),
     ),
     current,
     { if (it != current) context.navigate(it) },
