@@ -193,6 +193,44 @@ class ScreenSpecTest {
     assertEquals(keys[0], sent.last().headers["Idempotency-Key"])
   }
 
+  /** A paged job sends the cursor back until the route is done, adds the pages up, and reports lines. */
+  @Test
+  fun loopAddsPagesUpAndReportsLines() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(
+      200 to """{"planned":2,"drift":{"byCollection":{"a":1}},"nextCursor":"c1"}""",
+      200 to """{"planned":3,"drift":{"byCollection":{"a":2,"b":1}},"nextCursor":null,"done":true}""",
+      sent = sent,
+    )
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val action = ActionSpec.parse(
+      Json.parseToJsonElement(
+        """{"label":"Scan","url":"/api/admin/backfill-scope","body":{"dryRun":true},"success":"Scanned",
+           "loop":{"cursor":"nextCursor","until":"done"},
+           "report":[{"text":"{response.planned} planned"},{"text":"none","when":"response.missing"},
+                     {"each":"response.drift.byCollection","text":"{item.key}: {item.value}"}]}""",
+      ),
+    )!!
+    val outcome = model.run(action, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.Done>(outcome)
+    assertEquals("Scanned\n5 planned\na: 3\nb: 1", outcome.message)
+    assertEquals(Json.parseToJsonElement("2"), outcome.response.obj("pages"))
+    assertEquals(Json.parseToJsonElement("false"), outcome.response.obj("bounded"))
+    assertEquals(Json.parseToJsonElement("""{"dryRun":true,"cursor":"c1"}"""), Json.parseToJsonElement((sent[1].body as TextContent).text))
+  }
+
+  /** A probe that answers 503 is reporting: its body is the answer. */
+  @Test
+  fun loadAcceptsTheStatusAProbeReportsWith() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(503 to """{"status":"degraded","checks":{"a":{"ok":false}}}""", 503 to """{"status":"degraded"}""", 503 to """{"status":"degraded"}""", sent = sent)
+    val spec = ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X","load":{"probe":{"url":"/api/health/crons","accept":[503]}}}"""))!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"data":{}}"""), api)
+    model.load()
+    assertEquals(ScreenModel.Phase.Ready, model.phase)
+    assertEquals(JsonPrimitive("degraded"), ScreenValues.lookup("data.probe.status", model.context))
+  }
+
   @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()

@@ -64,6 +64,8 @@ class LoadSpec(val key: String, json: JsonElement) {
   val body: JsonElement? = json.obj("body")
   /** A load whose failure leaves its key null instead of failing the screen. */
   val optional: Boolean = json.isTrue("optional")
+  /** Statuses whose body is the answer, not a failure: a health probe answers 503 when it reports degraded. */
+  val accept: List<Int> = json.arr("accept").mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() }
   /** A Firestore document path to read instead of a route. */
   val doc: String? = json.str("doc")
   /** A Firestore collection query to read instead of a route. */
@@ -80,6 +82,28 @@ class BlockSpec(val type: String, val raw: JsonElement) {
   operator fun get(key: String): JsonElement? = raw.obj(key)
   fun string(key: String): String? = raw.str(key)
   fun flag(key: String): Boolean = raw.isTrue(key)
+}
+
+/** One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it. */
+class ReportLine(val text: String, val whenCondition: String?, val each: String?) {
+  companion object {
+    fun parse(json: JsonElement): ReportLine? {
+      (json as? JsonPrimitive)?.takeIf { it.isString }?.let { return ReportLine(it.content, null, null) }
+      return json.str("text")?.let { ReportLine(it, json.str("when"), json.str("each")) }
+    }
+  }
+}
+
+/** A route that works in pages: the request repeats, with the cursor it answered, until it says it is done. */
+class LoopSpec(json: JsonElement) {
+  /** The response field holding the next cursor. */
+  val cursor: String = json.str("cursor") ?: "nextCursor"
+  /** The body field the cursor goes back in. */
+  val param: String = json.str("param") ?: "cursor"
+  /** The response field that is true on the last page. */
+  val until: String? = json.str("until")
+  /** Pages at most. */
+  val max: Int = (json.obj("max") as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 40
 }
 
 class NavigateSpec(val screen: String, val params: Map<String, String>)
@@ -122,6 +146,10 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
+  /** Lines the result is reported in, after `success`: `{ when, each, text }`, one per line. */
+  val report: List<ReportLine> = json.arr("report").mapNotNull { ReportLine.parse(it) }
+  /** Repeats the request page by page until the route is done, and answers the totals. */
+  val loop: LoopSpec? = json.obj("loop")?.let { LoopSpec(it) }
 
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>

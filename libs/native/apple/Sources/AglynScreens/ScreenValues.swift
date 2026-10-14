@@ -418,6 +418,39 @@ public enum ScreenValues {
     return unit == 0 ? "\(grouped(amount)) B" : "\(grouped(amount, fraction: 1)) \(units[unit])"
   }
 
+  /// Two answers added: numbers sum, objects merge key by key, anything else takes the newer value.
+  public static func sum(_ total: JSONValue, _ page: JSONValue) -> JSONValue {
+    switch (total, page) {
+    case (.number(let left), .number(let right)): return .number(left + right)
+    case (.object(var left), .object(let right)):
+      for (key, value) in right { left[key] = left[key].map { sum($0, value) } ?? value }
+      return .object(left)
+    default: return page
+    }
+  }
+
+  /// An object's plain values as `words: value`, joined by " · ": the readings of a check that
+  /// have no screen of their own. Keys are sorted and split from camelCase; `ok`, `ms` and `code`
+  /// are shown elsewhere, and nested values are left out.
+  static func facts(_ value: JSONValue?) -> String {
+    guard case .object(let record)? = value else { return text(value) }
+    return record.keys.sorted().compactMap { key -> String? in
+      guard !["ok", "ms", "code"].contains(key), let entry = record[key] else { return nil }
+      let shown: String
+      switch entry {
+      case .string(let text) where !text.isEmpty: shown = text
+      case .number: shown = formatted(entry, as: "number", in: .null)
+      case .bool(let flag): shown = flag ? "yes" : "no"
+      default: return nil
+      }
+      var words = ""
+      for character in key {
+        if character.isUppercase { words += " " + character.lowercased() } else { words.append(character) }
+      }
+      return "\(words): \(shown)"
+    }.joined(separator: " · ")
+  }
+
   /// A value in a named format. Unknown formats print the plain text.
   public static func formatted(_ value: JSONValue?, as format: String, in context: JSONValue) -> String {
     // `cents/<currency path>` reads the currency beside the amount.
@@ -454,6 +487,16 @@ public enum ScreenValues {
       return raw.prefix(1).uppercased() + raw.dropFirst()
     case "upper":
       return text(value).uppercased()
+    case "facts":
+      return facts(value)
+    case "duration":
+      // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
+      guard let millis = number(value), millis.isFinite else { return "unknown" }
+      let minutes = Int(millis / 60_000)
+      if minutes < 1 { return "under a minute" }
+      if minutes < 60 { return "\(minutes) min" }
+      let hours = minutes / 60
+      return hours < 48 ? "\(hours)h \(minutes % 60)m" : "\(hours / 24) days"
     case "json":
       return (try? value.map { String(data: try $0.encoded(), encoding: .utf8) ?? "" }) ?? ""
     default:

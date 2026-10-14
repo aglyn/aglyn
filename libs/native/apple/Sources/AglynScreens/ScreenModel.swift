@@ -226,7 +226,13 @@ public final class ScreenModel {
       return (load.key, try await FirestoreLoads.query(reader, query, in: context), nil)
     }
     let body = load.body.map { ScreenValues.resolveBody($0, in: context) }
-    let value = try await api.request(path, method: load.method, body: body) ?? .null
+    let value: JSONValue
+    do {
+      value = try await api.request(path, method: load.method, body: body) ?? .null
+    } catch let error as ConsoleAPIError where load.accept.contains(error.status) && error.body != nil {
+      // A probe that answers 503 is reporting, and the report is the body.
+      value = error.body ?? .null
+    }
     let cursor = load.cursor.flatMap { ScreenValues.lookup($0, in: value)?.stringValue }
     return (load.key, value, cursor)
   }
@@ -291,9 +297,20 @@ public final class ScreenModel {
     do {
       let sentBody = body ?? (action.method == .get ? nil : [:])
       let headers = headers(for: action, path: path, body: sentBody, in: scope)
-      let response = try await api.request(path, method: action.method, body: sentBody, headers: headers)
-      let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", response ?? .null)) }
-      return .done(message: message, response: response)
+      let response: JSONValue?
+      if let loop = action.loop {
+        response = try await Self.paged(loop) { cursor in
+          var page = sentBody ?? [:]
+          if let cursor, case .object(var record) = page {
+            record[loop.param] = .string(cursor)
+            page = .object(record)
+          }
+          return try await api.request(path, method: action.method, body: page, headers: headers)
+        }
+      } else {
+        response = try await api.request(path, method: action.method, body: sentBody, headers: headers)
+      }
+      return .done(message: Self.message(for: action, response: response, in: scope), response: response)
     } catch let error as ConsoleAPIError {
       if Self.wantsReauth(error) { return .needsReauth(error.message) }
       if error.status == 404, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
@@ -301,6 +318,48 @@ public final class ScreenModel {
     } catch {
       return .failed(error.localizedDescription)
     }
+  }
+
+  /// What an action says when it succeeds: `success`, then its report lines (`each` repeats a line per row).
+  static func message(for action: ActionSpec, response: JSONValue?, in scope: JSONValue) -> String? {
+    let context = ScreenContext.with(scope, "response", response ?? .null)
+    var lines: [String] = []
+    if let success = action.success { lines.append(ScreenValues.render(success, in: context)) }
+    for line in action.report where ScreenValues.condition(line.when, in: context) {
+      if let each = line.each {
+        for row in ScreenValues.rows(ScreenValues.lookup(each, in: context)) {
+          lines.append(ScreenValues.render(line.text, in: ScreenContext.with(context, item: row)))
+        }
+      } else {
+        lines.append(ScreenValues.render(line.text, in: context))
+      }
+    }
+    return lines.isEmpty ? nil : lines.joined(separator: "\n")
+  }
+
+  /// Sends a page at a time until the route says it is done, and answers the totals: numbers add
+  /// up (a map of counts too), anything else keeps the last page's value. `pages` counts the
+  /// requests, and `bounded` is true when `max` pages did not reach the end.
+  static func paged(_ loop: LoopSpec, send: (_ cursor: String?) async throws -> JSONValue?) async throws -> JSONValue? {
+    var totals: JSONValue = .null
+    var cursor: String?
+    var pages = 0
+    var finished = false
+    while pages < loop.max {
+      let page = try await send(cursor) ?? .null
+      pages += 1
+      totals = ScreenValues.sum(totals, page)
+      cursor = ScreenValues.lookup(loop.cursor, in: page)?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+      let done = loop.until.map { ScreenValues.truthy(ScreenValues.lookup($0, in: page)) } ?? false
+      if done || cursor == nil {
+        finished = true
+        break
+      }
+    }
+    guard case .object(var record) = totals else { return totals }
+    record["pages"] = .number(Double(pages))
+    record["bounded"] = .bool(!finished)
+    return .object(record)
   }
 
   /// The action's request headers, rendered; `{attempt}` is the key held for this exact request.

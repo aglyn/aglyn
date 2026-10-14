@@ -365,6 +365,46 @@ object ScreenValues {
     return if (unit == 0) "${grouped(amount)} B" else "${grouped(amount, 1)} ${units[unit]}"
   }
 
+  /** Two answers added: numbers sum, objects merge key by key, anything else takes the newer value. */
+  fun sum(total: JsonElement, page: JsonElement): JsonElement {
+    if (total is JsonPrimitive && page is JsonPrimitive && !total.isString && !page.isString) {
+      val left = total.content.toDoubleOrNull()
+      val right = page.content.toDoubleOrNull()
+      if (left != null && right != null) {
+        val added = left + right
+        return if (added == floor(added) && abs(added) < 9.0e15) JsonPrimitive(added.toLong()) else JsonPrimitive(added)
+      }
+    }
+    if (total is JsonObject && page is JsonObject) {
+      val merged = total.toMutableMap()
+      for ((key, value) in page) merged[key] = merged[key]?.let { sum(it, value) } ?: value
+      return JsonObject(merged)
+    }
+    return page
+  }
+
+  /**
+   * An object's plain values as `words: value`, joined by " · ": the readings of a check that
+   * have no screen of their own. Keys are sorted and split from camelCase; `ok`, `ms` and `code`
+   * are shown elsewhere, and nested values are left out.
+   */
+  internal fun facts(value: JsonElement?): String {
+    val record = value as? JsonObject ?: return text(value)
+    return record.keys.sorted().mapNotNull { key ->
+      if (key in setOf("ok", "ms", "code")) return@mapNotNull null
+      val entry = record.getValue(key) as? JsonPrimitive ?: return@mapNotNull null
+      val shown = when {
+        entry.isString -> entry.content.ifEmpty { return@mapNotNull null }
+        entry.content == "true" -> "yes"
+        entry.content == "false" -> "no"
+        entry.content.toDoubleOrNull() != null -> formatted(entry, "number", JsonNull)
+        else -> return@mapNotNull null
+      }
+      val words = buildString { for (character in key) if (character.isUpperCase()) append(' ').append(character.lowercaseChar()) else append(character) }
+      "$words: $shown"
+    }.joinToString(" · ")
+  }
+
   fun formatted(value: JsonElement?, format: String, context: JsonElement): String {
     val parts = format.split('/', limit = 2)
     return when (parts[0]) {
@@ -386,6 +426,18 @@ object ScreenValues {
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
       "upper" -> text(value).uppercase()
+      "facts" -> facts(value)
+      // The console's `formatAge`: "under a minute", "12 min", "3h 5m", "4 days".
+      "duration" -> number(value)?.takeIf { it.isFinite() }?.let { millis ->
+        val minutes = (millis / 60_000).toLong()
+        val hours = minutes / 60
+        when {
+          minutes < 1 -> "under a minute"
+          minutes < 60 -> "$minutes min"
+          hours < 48 -> "${hours}h ${minutes % 60}m"
+          else -> "${hours / 24} days"
+        }
+      } ?: "unknown"
       "json" -> value?.toString() ?: ""
       else -> text(value)
     }

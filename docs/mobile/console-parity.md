@@ -62,8 +62,8 @@ line here is done; each line names the console source it was read from.
 | Site | Domain card (`StaffDomainCard`), content card, media library card, usage and settings snapshot | open |
 | Person | System email composer (`/api/admin/users/system-email`), product-email consent, acquisition, erase card | open |
 | Overview | Users total, Top usage, anomalies banner, marketplace overview cards (`/api/marketplace/admin/overview`) | open |
-| Health | Scope drift (`/api/admin/backfill-scope`), pending erasures (`/api/admin/run-erasures`), idempotency claims | open |
-| Maintenance | `/admin/maintenance`: schedule readings and the three guarded jobs (audit archive, plugin artifact reaper, plugin verdict re-verification) | open |
+| Health | The nine probes (the old list read a shape the route never answers), CSP and server config (also read the wrong fields), scope drift (`/api/admin/backfill-scope`), pending erasures (`/api/admin/run-erasures`), idempotency claims | done (paged jobs: action `loop`) |
+| Maintenance | `/admin/maintenance`: schedule readings and the three guarded jobs (audit archive, plugin artifact reaper, plugin verdict re-verification), generated from `maintenance-jobs.ts`; the console also locks the real run until a preview has been read, which the screen leaves to the route's reason and typed phrase | done |
 | System emails | Suppressions (`/api/admin/emails/suppressions`), history import, message viewer, test send | open |
 | Abuse reports | Counter-notices (DMCA put-back) queue, risk-notice actions, session log | open |
 | Lockdown | Platform and feature locks, "what would this caller be told", session log | open |

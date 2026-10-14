@@ -189,7 +189,12 @@ class ScreenModel(
       val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", context))
       return Triple(load.key, SwitchboardRows.site(org, host), null)
     }
-    val value = client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
+    val value = try {
+      client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
+    } catch (error: ConsoleApiError) {
+      // A probe that answers 503 is reporting, and the report is the body.
+      error.body?.takeIf { error.status in load.accept } ?: throw error
+    }
     return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
   }
 
@@ -243,8 +248,14 @@ class ScreenModel(
     val path = ScreenValues.renderUrl(template, scope)
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
-      val response = client.request(path, action.method, body, headers = headers(action, path, body, scope))
-      ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
+      val sent = headers(action, path, body, scope)
+      val response = action.loop?.let { loop ->
+        paged(loop) { cursor ->
+          val page = if (cursor != null && body is JsonObject) JsonObject(body + (loop.param to JsonPrimitive(cursor))) else body
+          client.request(path, action.method, page, headers = sent)
+        }
+      } ?: client.request(path, action.method, body, headers = sent)
+      ActionOutcome.Done(message(action, response, scope), response)
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
@@ -256,6 +267,49 @@ class ScreenModel(
     } catch (error: Throwable) {
       ActionOutcome.Failed(error.message ?: "That did not work. Try again.")
     }
+  }
+
+  /** What an action says when it succeeds: `success`, then its report lines (`each` repeats a line per row). */
+  internal fun message(action: ActionSpec, response: JsonElement?, scope: JsonElement): String? {
+    val context = ScreenContext.with(scope, "response", response)
+    val lines = mutableListOf<String>()
+    action.success?.let { lines += ScreenValues.render(it, context) }
+    for (line in action.report) {
+      if (!ScreenValues.condition(line.whenCondition, context)) continue
+      if (line.each != null) {
+        for (row in ScreenValues.rows(ScreenValues.lookup(line.each, context))) lines += ScreenValues.render(line.text, ScreenContext.withItem(context, row))
+      } else {
+        lines += ScreenValues.render(line.text, context)
+      }
+    }
+    return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+  }
+
+  /**
+   * Sends a page at a time until the route says it is done, and answers the totals: numbers add up
+   * (a map of counts too), anything else keeps the last page's value. `pages` counts the requests,
+   * and `bounded` is true when `max` pages did not reach the end.
+   */
+  internal suspend fun paged(loop: LoopSpec, send: suspend (cursor: String?) -> JsonElement?): JsonElement? {
+    var totals: JsonElement = JsonNull
+    var cursor: String? = null
+    var pages = 0
+    var finished = false
+    while (pages < loop.max) {
+      val page = send(cursor) ?: JsonNull
+      pages += 1
+      totals = ScreenValues.sum(totals, page)
+      cursor = (ScreenValues.lookup(loop.cursor, page) as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotEmpty() }?.content
+      val done = loop.until?.let { ScreenValues.truthy(ScreenValues.lookup(it, page)) } ?: false
+      if (done || cursor == null) {
+        finished = true
+        break
+      }
+    }
+    val record = (totals as? JsonObject)?.toMutableMap() ?: return totals
+    record["pages"] = JsonPrimitive(pages)
+    record["bounded"] = JsonPrimitive(!finished)
+    return JsonObject(record)
   }
 
   /** The action's request headers, rendered; `{attempt}` is the key held for this exact request. */

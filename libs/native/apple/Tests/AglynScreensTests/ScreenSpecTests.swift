@@ -156,6 +156,43 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(transport.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), keys[0])
   }
 
+  /// A paged job sends the cursor back until the route is done, adds the pages up, and reports lines.
+  @MainActor
+  func testLoopAddsPagesUpAndReportsLines() async throws {
+    let transport = RecordingTransport(responses: [
+      (200, #"{"planned":2,"drift":{"byCollection":{"a":1}},"nextCursor":"c1"}"#),
+      (200, #"{"planned":3,"drift":{"byCollection":{"a":2,"b":1}},"nextCursor":null,"done":true}"#),
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Scan", "url": "/api/admin/backfill-scope", "body": ["dryRun": true], "success": "Scanned",
+        "loop": ["cursor": "nextCursor", "until": "done"],
+        "report": [
+          ["text": "{response.planned} planned"], ["text": "none", "when": "response.missing"],
+          ["each": "response.drift.byCollection", "text": "{item.key}: {item.value}"],
+        ],
+      ]))
+    let outcome = await model.run(action, in: model.context)
+    XCTAssertEqual(outcome, .done(message: "Scanned\n5 planned\na: 3\nb: 1", response: outcome.response))
+    XCTAssertEqual(outcome.response?["pages"], 2)
+    XCTAssertEqual(outcome.response?["bounded"], false)
+    XCTAssertEqual(JSONValue.decode(transport.requests[1].httpBody ?? Data()), ["dryRun": true, "cursor": "c1"])
+  }
+
+  /// A probe that answers 503 is reporting: its body is the answer.
+  @MainActor
+  func testLoadAcceptsTheStatusAProbeReportsWith() async throws {
+    let transport = RecordingTransport(responses: Array(repeating: (503, #"{"status":"degraded","checks":{"a":{"ok":false}}}"#), count: 3))
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in })
+    let spec = try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X", "load": ["probe": ["url": "/api/health/crons", "accept": [503]]]]))
+    let model = ScreenModel(spec: spec, context: ["data": [:]], api: api)
+    await model.load()
+    XCTAssertEqual(model.phase, .ready)
+    XCTAssertEqual(ScreenValues.lookup("data.probe.status", in: model.context), "degraded")
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
@@ -215,5 +252,12 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
     lock.unlock()
     let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
     return (Data(body.utf8), response)
+  }
+}
+
+extension ActionOutcome {
+  var response: JSONValue? {
+    if case .done(_, let response) = self { return response }
+    return nil
   }
 }

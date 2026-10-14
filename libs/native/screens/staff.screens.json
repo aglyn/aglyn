@@ -2668,16 +2668,71 @@
       "order": 15,
       "requires": "staff.is",
       "links": [
-        "/admin/health",
-        "/admin/maintenance"
+        "/admin/health"
       ],
       "load": {
+        "serving": {
+          "url": "/api/health",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "billing": {
+          "url": "/api/health/billing",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "errorBeacon": {
+          "url": "/api/health/error-beacon",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "backups": {
+          "url": "/api/health/backups",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
         "crons": {
           "url": "/api/health/crons",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "rateLimits": {
+          "url": "/api/health/rate-limits",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "signupVolume": {
+          "url": "/api/health/signup-volume",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "authDoors": {
+          "url": "/api/health/auth-doors",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        },
+        "email": {
+          "url": "/api/admin/email-health?probe=1",
           "optional": true
         },
         "csp": {
-          "url": "/api/admin/csp-reports?days=7",
+          "url": "/api/admin/csp-reports?days={params.days|'7'}",
           "optional": true
         },
         "gateways": {
@@ -2687,38 +2742,351 @@
         "config": {
           "url": "/api/admin/server-config",
           "optional": true
+        },
+        "erasures": {
+          "url": "/api/admin/run-erasures?view=summary",
+          "optional": true
+        },
+        "queue": {
+          "url": "/api/admin/run-erasures?pageSize=25",
+          "optional": true,
+          "cursor": "nextCursor",
+          "items": "rows"
+        },
+        "claimsSummary": {
+          "url": "/api/admin/idempotency-claims?view=summary",
+          "optional": true
+        },
+        "claims": {
+          "url": "/api/admin/idempotency-claims?pageSize=25",
+          "optional": true,
+          "cursor": "nextCursor",
+          "items": "rows"
         }
       },
       "blocks": [
         {
-          "type": "list",
-          "title": "Scheduled jobs",
-          "items": "data.crons.crons",
-          "primary": "{item.name|item.id}",
-          "secondary": "Last run {item.lastRunAt|item.lastRunMs|'never':datetime}",
-          "icon": "clock|schedule",
-          "badges": [
-            {
-              "text": "{item.status:title}",
-              "tones": {
-                "Ok": "success",
-                "Healthy": "success",
-                "Late": "warning",
-                "Failing": "error",
-                "*": "neutral"
-              }
-            }
-          ],
-          "empty": "—"
+          "type": "notice",
+          "tone": "success",
+          "text": "Every probe answered, all healthy.",
+          "when": "data.serving.status == ok && data.billing.status == ok && data.errorBeacon.status == ok && data.backups.status == ok && data.crons.status == ok && data.rateLimits.status == ok && data.signupVolume.status == ok && data.authDoors.status == ok && data.email.healthy"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "A probe reports degraded. See the affected checks below for what it means and what to do.",
+          "when": "data.serving.status == degraded || data.billing.status == degraded || data.errorBeacon.status == degraded || data.backups.status == degraded || data.crons.status == degraded || data.rateLimits.status == degraded || data.signupVolume.status == degraded || data.authDoors.status == degraded || data.email.healthy == false"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "A probe that did not answer is NOT healthy. Its state is unknown, and unknown is not green.",
+          "when": "!data.serving || !data.billing || !data.errorBeacon || !data.backups || !data.crons || !data.rateLimits || !data.signupVolume || !data.authDoors || !data.email"
         },
         {
           "type": "list",
-          "title": "Content-security reports, last 7 days",
-          "items": "data.csp.reports",
-          "primary": "{item.blockedUri|item.directive}",
-          "secondary": "{item.documentUri} · {item.count|'1'}×",
+          "title": "{const.probes.serving.label}",
+          "footer": "{const.probes.serving.meaning}",
+          "items": "data.serving.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
           "count": false,
-          "empty": "None."
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.serving.remedy}",
+          "when": "!data.serving || data.serving.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.billing.label}",
+          "footer": "{const.probes.billing.meaning}",
+          "items": "data.billing.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.billing.remedy}",
+          "when": "!data.billing || data.billing.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.errorBeacon.label}",
+          "footer": "{const.probes.errorBeacon.meaning}",
+          "items": "data.errorBeacon.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.errorBeacon.remedy}",
+          "when": "!data.errorBeacon || data.errorBeacon.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.backups.label}",
+          "footer": "{const.probes.backups.meaning}",
+          "items": "data.backups.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.backups.remedy}",
+          "when": "!data.backups || data.backups.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.crons.label}",
+          "footer": "{const.probes.crons.meaning}",
+          "items": "data.crons.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.crons.remedy}",
+          "when": "!data.crons || data.crons.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.rateLimits.label}",
+          "footer": "{const.probes.rateLimits.meaning}",
+          "items": "data.rateLimits.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.rateLimits.remedy}",
+          "when": "!data.rateLimits || data.rateLimits.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.signupVolume.label}",
+          "footer": "{const.probes.signupVolume.meaning}",
+          "items": "data.signupVolume.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.signupVolume.remedy}",
+          "when": "!data.signupVolume || data.signupVolume.status != ok"
+        },
+        {
+          "type": "list",
+          "title": "{const.probes.authDoors.label}",
+          "footer": "{const.probes.authDoors.meaning}",
+          "items": "data.authDoors.checks",
+          "primary": "{item.key}",
+          "secondary": "{item.value.code}",
+          "tertiary": "{item.value:facts}",
+          "badges": [
+            {
+              "text": "Pass",
+              "when": "item.value.ok",
+              "tone": "success"
+            },
+            {
+              "text": "Fail",
+              "when": "!item.value.ok",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No reading. This probe did not answer."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.authDoors.remedy}",
+          "when": "!data.authDoors || data.authDoors.status != ok"
+        },
+        {
+          "type": "fields",
+          "title": "{const.probes.email.label}",
+          "footer": "{const.probes.email.meaning}",
+          "object": "data.email",
+          "rows": [
+            {
+              "label": "Can send",
+              "value": "{item.healthy:yesno}"
+            },
+            {
+              "label": "API key",
+              "value": "{item.hasApiKey:yesno}"
+            },
+            {
+              "label": "Sender address",
+              "value": "{item.hasFrom:yesno}"
+            },
+            {
+              "label": "Sends from",
+              "value": "{item.fromDomain}"
+            },
+            {
+              "label": "Credential probe",
+              "value": "{item.credentials.status} {item.credentials.detail}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Delivery blockers",
+          "when": "data.email.blockers",
+          "items": "data.email.blockers",
+          "primary": "{item}",
+          "icon": "exclamationmark.octagon|report",
+          "count": false
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "What to do: {const.probes.email.remedy}",
+          "when": "!data.email || !data.email.healthy"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "The read hit its row cap. This window is INCOMPLETE and the missing rows are the oldest days. Narrow the window before concluding a directive is clean.",
+          "when": "data.csp.truncated"
+        },
+        {
+          "type": "list",
+          "title": "Content-Security-Policy violations, last {params.days|'7'} days",
+          "footer": "The durable violation counters. A directive with no rows across the window is one that can safely be flipped from report-only to enforcing. Blocked means the browser refused it; measured means a report-only policy saw it and it loaded anyway.",
+          "items": "data.csp.rows",
+          "primary": "{item.directive}",
+          "secondary": "{item.origin} · {item.lastSite}{item.lastPath}",
+          "tertiary": "{item.day} · {item.count|'1'}× · last seen {item.lastSeenMs:datetime}",
+          "icon": "shield|shield",
+          "badges": [
+            {
+              "text": "Blocked",
+              "when": "item.disposition == enforce",
+              "tone": "error"
+            },
+            {
+              "text": "Measured",
+              "when": "item.disposition != enforce",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "No violations recorded in this window."
         },
         {
           "type": "list",
@@ -2759,14 +3127,899 @@
           "empty": "No refusals."
         },
         {
+          "type": "actions",
+          "title": "Sharing-scope drift",
+          "footer": "A document with no sharing scope is invisible to every scoped read; both enforcement layers fail closed on it. The weekly job only reports. Scanning is always a dry run; stamping is a deliberate act and happens here.",
+          "items": [
+            {
+              "id": "scan",
+              "label": "Scan for drift",
+              "icon": "magnifyingglass|search",
+              "url": "/api/admin/backfill-scope",
+              "body": {
+                "dryRun": true
+              },
+              "loop": {
+                "cursor": "nextCursor",
+                "until": "done",
+                "max": 40
+              },
+              "reload": false,
+              "success": "Scan complete",
+              "report": [
+                {
+                  "text": "No drift. Every scoped document across {response.pages} page(s) carries a sharing scope.",
+                  "when": "response.planned == 0"
+                },
+                {
+                  "text": "{response.planned} document(s) are missing their sharing scope. Nothing has been changed.",
+                  "when": "response.planned != 0"
+                },
+                {
+                  "each": "response.drift.byCollection",
+                  "text": "{item.key}: {item.value}"
+                },
+                {
+                  "text": "members (stale scopeTokens projection): {response.drift.members}",
+                  "when": "response.drift.members"
+                },
+                {
+                  "text": "Stopped after {response.pages} pages before the route reported done. Run it again to continue from the start.",
+                  "when": "response.bounded"
+                }
+              ]
+            },
+            {
+              "id": "stamp",
+              "label": "Stamp the missing scopes",
+              "icon": "checkmark.seal|fact_check",
+              "destructive": true,
+              "confirm": "Stamp the sharing scope on every document that is missing one? Scan first to see how many.",
+              "url": "/api/admin/backfill-scope",
+              "body": {
+                "dryRun": false
+              },
+              "loop": {
+                "cursor": "nextCursor",
+                "until": "done",
+                "max": 40
+              },
+              "reload": false,
+              "success": "Stamped {response.planned} document(s) across {response.pages} page(s). Scan again to confirm it now reports none."
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Pending erasures",
+          "footer": "Erasure requests wait out a 7-day hold and are then executed by the 04:00 UTC job. Running the queue early is for when a deadline will not wait for the schedule. It deletes workspaces permanently and cannot be undone.",
+          "object": "data.erasures",
+          "rows": [
+            {
+              "label": "Due now",
+              "value": "{item.dueCount:number}"
+            },
+            {
+              "label": "In the queue",
+              "value": "{item.queued:number}"
+            },
+            {
+              "label": "People waiting",
+              "value": "{item.people.pending:number}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "load": "queue",
+          "items": "data.queue.rows",
+          "primary": "{item.name|item.slug|item.orgId}",
+          "secondary": "Requested {item.requestedAtMs:datetime}",
+          "tertiary": "Hold expires {item.holdExpiresAtMs:datetime}",
+          "icon": "trash|delete_forever",
+          "badges": [
+            {
+              "text": "Due",
+              "when": "item.due",
+              "tone": "warning"
+            },
+            {
+              "text": "Holding",
+              "when": "!item.due",
+              "tone": "neutral"
+            }
+          ],
+          "open": {
+            "screen": "core.staff.org",
+            "params": {
+              "orgId": "{item.orgId}"
+            }
+          },
+          "count": false,
+          "empty": "Nothing queued."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "runErasures",
+              "label": "Run the erasure queue now",
+              "icon": "trash|delete_forever",
+              "destructive": true,
+              "when": "staff.is",
+              "confirm": "This permanently deletes every workspace whose 7-day hold has passed. It cannot be undone.",
+              "url": "/api/admin/run-erasures",
+              "reason": true,
+              "body": {
+                "reason": "{form.reason}"
+              },
+              "success": "Run complete: {response.erased:count} erased, {response.skipped:count} skipped, {response.scanned:number} scanned",
+              "report": [
+                {
+                  "each": "response.skipped",
+                  "text": "Skipped {item.orgId}: {item.reason|'no reason given'}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Idempotency claims",
+          "footer": "A claim is taken before a payment call and settled after it. One that never settled is a key the customer cannot reuse until it expires. Their retry with a fresh key works, so the only symptom is a refused attempt.",
+          "object": "data.claimsSummary",
+          "rows": [
+            {
+              "label": "In flight or stuck",
+              "value": "{item.pending:number}"
+            },
+            {
+              "label": "Stranded",
+              "value": "{item.stranded:number}"
+            },
+            {
+              "label": "Stranded after",
+              "value": "{item.strandedAfterMs:duration}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "{data.claimsSummary.untimed} pending claim(s) carry no claim time, so they have no age and are not listed below.",
+          "when": "data.claimsSummary.untimed"
+        },
+        {
+          "type": "list",
+          "load": "claims",
+          "items": "data.claims.rows",
+          "primary": "{item.kind|'Unknown operation'}",
+          "secondary": "{item.scopeId|'—'} · org {item.orgId|'—'}",
+          "tertiary": "Age {item.ageMs:duration}",
+          "badges": [
+            {
+              "text": "Stranded",
+              "when": "item.stranded",
+              "tone": "warning"
+            },
+            {
+              "text": "In flight",
+              "when": "!item.stranded",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "Nothing pending. Every claim taken has settled or been released."
+        },
+        {
           "type": "list",
           "title": "Resolved server config",
-          "when": "data.config",
-          "items": "data.config",
-          "primary": "{item.key}",
+          "footer": "What this deployment actually resolved, read from inside the running function. Source separates a value someone set from a code default that happens to agree. Values are never shown: the report carries classes and presence only.",
+          "items": "data.config.knobs",
+          "primary": "{item.label}",
+          "secondary": "{item.key} · {item.source}",
+          "tertiary": "{item.drives}",
           "trailing": "{item.value}",
+          "badges": [
+            {
+              "text": "Check",
+              "when": "item.warning",
+              "tone": "error"
+            }
+          ],
           "count": false,
           "empty": "—"
+        },
+        {
+          "type": "list",
+          "title": "Configured text that does not resolve to what it says",
+          "when": "data.config.warnings",
+          "items": "data.config.warnings",
+          "primary": "{item}",
+          "icon": "exclamationmark.triangle|warning",
+          "count": false
+        },
+        {
+          "type": "fields",
+          "title": "This deployment",
+          "object": "data.config.deployment",
+          "rows": [
+            {
+              "label": "Environment",
+              "value": "{item.env}"
+            },
+            {
+              "label": "Deployment",
+              "value": "{item.id}"
+            },
+            {
+              "label": "Commit",
+              "value": "{item.commit}"
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "id": "window",
+          "label": "Change the CSP window",
+          "icon": "calendar|event",
+          "prompt": [
+            {
+              "key": "days",
+              "label": "Days of violations to read",
+              "kind": "select",
+              "initial": "{params.days|'7'}",
+              "options": [
+                "1",
+                "7",
+                "14",
+                "30",
+                "90"
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.health",
+            "params": {
+              "days": "{form.days}"
+            }
+          }
+        }
+      ],
+      "constants": {
+        "probes": {
+          "serving": {
+            "label": "Serving",
+            "path": "/api/health",
+            "auth": "public",
+            "meaning": "The console and its dependencies answer. Degraded here means customers are seeing errors right now.",
+            "remedy": "Check the failing dependency code below, then the Vercel and Firebase status pages."
+          },
+          "billing": {
+            "label": "Billing webhook",
+            "path": "/api/health/billing",
+            "auth": "public",
+            "meaning": "Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land ON THE FIRST ATTEMPT and actually move something — plus the separate Connect destination that carries connected-account events. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments, or connected merchants keep selling on a charge-eligibility flag that stopped being refreshed.",
+            "remedy": "Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). deliveries-retried means the deliveries DID land — on a second or later attempt, so earlier ones failed and every event-scored count above reads a healthy zero; this is the only arm that sees what the Stripe Dashboard error rate sees, so read the `retriedAtMs` events in stripeEvents for the ids, types and lag, and check what was failing at that hour (a deploy, a cold start, a rolled secret half-applied). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. connect-endpoint-missing / connect-endpoint-disabled / connect-events-unsubscribed are the SECOND destination, not the one above: connected-account events are delivered only to a destination created with `connect: true`, so without it `syncConnectAccountStatus` never runs and a merchant whose Stripe account got restricted keeps selling until a shopper meets the failure at payment. `npm run setup:stripe` creates it — note `connect: true` is settable only at creation, so a wrong one must be deleted, not edited. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries."
+          },
+          "errorBeacon": {
+            "label": "Error beacon",
+            "path": "/api/health/error-beacon",
+            "auth": "public",
+            "meaning": "The client-error beacon can still reach Cloud Logging. Degraded means browser errors are being collected by nothing — and a dead beacon reads as ZERO errors everywhere else, which is indistinguishable from a clean day.",
+            "remedy": "no-credential is the deployment FIREBASE_* env, http-401/403 is a lost logging.logEntries.create grant, http-429 is quota — all three red on the first sample, because all three stay broken until somebody fixes them. credential-unavailable and transport-* mean the attempt decided nothing, and one of those is forgiven while a heartbeat is proven to have landed inside the grace window: a green row reading heartbeat-missed is that forgiveness being spent, and the next probe reds if nothing lands. Clears on the next heartbeat that lands. The tenant runtime has its own credential and its own copy of this probe."
+          },
+          "backups": {
+            "label": "Backups & exports",
+            "path": "/api/health/backups",
+            "auth": "public",
+            "meaning": "A restore point exists and is recent. Degraded means the worst day would have nothing to restore from — the failure that went unnoticed for eleven days in AGL-1490.",
+            "remedy": "Read the state histogram: NOT_AVAILABLE backups are the Google-managed ones failing, a stale export age means the weekly export job stopped running."
+          },
+          "crons": {
+            "label": "Scheduled jobs",
+            "path": "/api/health/crons",
+            "auth": "public",
+            "meaning": "Every scheduled job is still BEING SCHEDULED. Degraded means one of them stopped firing and said nothing — the failure everything else here is blind to, because every other cron signal is triggered by a run. Downstream of these rows are metered billing, GDPR erasures, the audit archive and scheduled publishing: a silently unscheduled job means customers are not billed, or data is not reaped, with the rest of this board green.",
+            "remedy": "Read the row, then read its RUNNER — the two fail differently. A GitHub Actions row that is job-silent: check `.github/workflows/scheduled-crons.yml` still carries its `- cron:` line, then the workflow's recent runs (GitHub disables scheduled workflows on a repo with no activity for 60 days, and it also coalesces and silently DROPS triggers under load — that is AGL-1617, which is why nothing sub-hourly lives there any more). A Cloud Scheduler row that is job-silent: `gcloud scheduler jobs list --project=aglyn-main` should show firebase-schedule-pluginJobsBeat-us-central1, firebase-schedule-consoleFastCrons-us-central1 and firebase-schedule-consoleAiJobsBeat-us-central1; then `gcloud functions logs read consoleFastCrons` (or consoleAiJobsBeat, for ai-jobs-beat) for the status it got back — a 401 is CRON_SECRET drift, a 429 is Bot Protection with AGLYN_PROBE_TOKEN unset, and 'skipped' means AGLYN_CONSOLE_URL is unset. plugin-jobs-beat also reads silent when AGLYN_JOB_RUNNER_URL points at another deployment. job-never-reported means it has not run ONCE since we started watching: usually a route that 404s in production because the promotion never happened. beats-unavailable is our own Firestore read, not the jobs. A job in a legitimately idle stretch is green on purpose and never counts here."
+          },
+          "rateLimits": {
+            "label": "Rate limiters",
+            "path": "/api/health/rate-limits",
+            "auth": "public",
+            "meaning": "No durable limiter fell back recently. Degraded means sign-in, password reset, form submit and the public API were bounded per-instance instead of globally — the door was wider than intended.",
+            "remedy": "A past episode clears itself as the window rolls forward. Several episodes means more than one instance saw it — check Firestore availability for that window."
+          },
+          "signupVolume": {
+            "label": "Signup volume",
+            "path": "/api/health/signup-volume",
+            "auth": "public",
+            "meaning": "Three questions about account creation, and the second is the one that used to be missing. Too MANY orgs is a signup wave the per-uid and per-IP limits cannot see. ZERO orgs while the signup page was being served is a drought: people arrived and not one of them got an account, which is exactly what a broken signup looks like from outside. And a blind decision means the account-creation gate could not read the signups lock at all — the lock is unenforceable and Firestore is failing on that path, refusing nobody and therefore invisible to every refusal threshold. Fourth, the outcome: sign-ups that got a workspace and never reached a site (AGL-3725). Every other question here is about workspaces, and a sign-up stranded after its workspace exists answers all of them correctly.",
+            "remedy": "signup-wave: the manual response is the signups feature lock on Staff → Lockdown. signup-drought: try the signup form yourself, then read the refusal split on the same body — the cause names which door closed. signups-lock-unreadable: check Firestore availability from the blocking function, and remember that while this reads non-zero the signups lever cannot be relied on to hold. signups-stranded: two or more orgs from the last twelve hours, each over thirty minutes old, have no site; open the newest one's owner in Staff → Users and read where their session ended (AGL-3724 was a 404 on the auth host right after the workspace was made)."
+          },
+          "authDoors": {
+            "label": "Ways in",
+            "path": "/api/health/auth-doors",
+            "auth": "public",
+            "meaning": "A person can still get IN, by any of the six doors: password sign-in, password recovery, the verification link, Google, SSO and passkeys. Each is asserted by asking the real provider a question whose correct answer is a refusal, so nothing is created and no account is used. This is the board row that was missing while signup was refusing every visitor on the platform with every component check green.",
+            "remedy": "Read which door the body names. provider-not-configured on passwordSignIn means email-and-password sign-in was switched off in the Identity Platform console and every customer using it is locked out. origin-not-authorized means the console origin fell off the authorized-domain list. api-key-rejected means the public web key was rotated or restricted. appcheck-rejected means the App Check precondition the browser also satisfies is failing. probe-signin-failed means the optional probe identity itself is disabled or its password changed — fix or unset it, never ignore the endpoint."
+          },
+          "email": {
+            "label": "Email delivery",
+            "path": "/api/admin/email-health?probe=1",
+            "auth": "staff",
+            "meaning": "This deployment can actually send mail. Misconfigured means invites, password resets and receipts silently go nowhere — every sender no-ops without BOTH the key and the sender address.",
+            "remedy": "The blockers listed below are in the order they stop delivery. Domain verification is not observable here, so a clean report can still bounce until DNS is verified."
+          }
+        }
+      }
+    },
+    {
+      "id": "core.staff.maintenance",
+      "title": "Maintenance",
+      "subtitle": "Scheduled jobs and running one by hand",
+      "icon": "hammer|construction",
+      "scope": "staff",
+      "group": "staff",
+      "order": 15,
+      "requires": "staff.is",
+      "links": [
+        "/admin/maintenance"
+      ],
+      "load": {
+        "crons": {
+          "url": "/api/health/crons",
+          "optional": true,
+          "accept": [
+            503
+          ]
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "These jobs run on a schedule. The point of this page is seeing whether the schedule is still working: a job that stopped running looks exactly like one with nothing to do. Running one by hand is for when something cannot wait, and every run by hand is recorded in the audit log. Scope drift and pending erasures have their own cards on Health."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Audit archive",
+          "text": "No schedule reading for this job. The crons probe did not report it.",
+          "when": "!data.crons.checks.audit-archive"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Audit archive",
+          "text": "Scheduled · {data.crons.checks.audit-archive.schedule} · last report {data.crons.checks.audit-archive.lastBeatAgeMinutes|'never'} min ago",
+          "when": "data.crons.checks.audit-archive.ok"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Audit archive",
+          "text": "NOT RUNNING {data.crons.checks.audit-archive.code|'no reading'} · {data.crons.checks.audit-archive.schedule} · last report {data.crons.checks.audit-archive.lastBeatAgeMinutes|'never'} min ago",
+          "when": "data.crons.checks.audit-archive && !data.crons.checks.audit-archive.ok"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Moves adminAudit entries past the 90-day retention window into the Storage compliance trail, then deletes them from Firestore.\n\nAudit rows are written to Storage and then PERMANENTLY DELETED from Firestore. They stop being queryable from the audit log; the archived copy is JSON lines in a bucket. This cannot be undone from the console."
+        },
+        {
+          "type": "actions",
+          "footer": "Preview first. How many rows a real run would move, and in how many batches. Nothing is written or deleted. The real run needs a reason of at least 8 characters and the phrase typed exactly.",
+          "items": [
+            {
+              "id": "audit-archive.preview",
+              "label": "Preview (dry run)",
+              "icon": "eye|visibility",
+              "method": "GET",
+              "url": "/api/admin/audit-archive",
+              "reload": false,
+              "success": "What a real run would do",
+              "report": [
+                {
+                  "text": "{response.archived:number} audit rows",
+                  "when": "response.archived != ''"
+                },
+                {
+                  "text": "{response.batches:number} batches",
+                  "when": "response.batches != ''"
+                },
+                {
+                  "text": "{response.scanned:number} objects scanned",
+                  "when": "response.scanned != ''"
+                },
+                {
+                  "text": "{response.orphans:number} orphaned objects",
+                  "when": "response.orphans != ''"
+                },
+                {
+                  "text": "{response.deleted:number} objects deleted",
+                  "when": "response.deleted != ''"
+                },
+                {
+                  "text": "{response.bytesReclaimable:number} bytes reclaimable",
+                  "when": "response.bytesReclaimable != ''"
+                },
+                {
+                  "text": "{response.kept:number} objects kept",
+                  "when": "response.kept != ''"
+                },
+                {
+                  "text": "{response.tooNew:number} objects too new to reap",
+                  "when": "response.tooNew != ''"
+                },
+                {
+                  "text": "{response.skipped:number} versions already current",
+                  "when": "response.skipped != ''"
+                },
+                {
+                  "text": "{response.downloaded:number} versions downloaded",
+                  "when": "response.downloaded != ''"
+                },
+                {
+                  "text": "{response.deferredByCap:number} deferred by the per-run cap",
+                  "when": "response.deferredByCap != ''"
+                },
+                {
+                  "text": "{response.needsStaff:count} LIVE version(s) now fail the verifier",
+                  "when": "response.needsStaff"
+                },
+                {
+                  "text": "no live version fails the verifier",
+                  "when": "!response.needsStaff && response.downloaded != ''"
+                },
+                {
+                  "text": "{response.erasureDue:count} erasure(s) past the hold",
+                  "when": "response.erasureDue"
+                }
+              ]
+            },
+            {
+              "id": "audit-archive.run",
+              "label": "Run for real",
+              "icon": "play.fill|play_arrow",
+              "destructive": true,
+              "confirm": "Audit rows are written to Storage and then PERMANENTLY DELETED from Firestore. They stop being queryable from the audit log; the archived copy is JSON lines in a bucket. This cannot be undone from the console.",
+              "url": "/api/admin/audit-archive",
+              "prompt": [
+                {
+                  "key": "confirm",
+                  "label": "Confirmation phrase",
+                  "kind": "text",
+                  "required": true,
+                  "help": "Type ARCHIVE AUDIT ROWS exactly, case and spacing included. The server refuses the run without it.",
+                  "mustMatch": "ARCHIVE AUDIT ROWS"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "dryRun": false,
+                "reason": "{form.reason}",
+                "confirm": "{form.confirm}"
+              },
+              "reload": false,
+              "success": "Run complete",
+              "report": [
+                {
+                  "text": "{response.archived:number} audit rows",
+                  "when": "response.archived != ''"
+                },
+                {
+                  "text": "{response.batches:number} batches",
+                  "when": "response.batches != ''"
+                },
+                {
+                  "text": "{response.scanned:number} objects scanned",
+                  "when": "response.scanned != ''"
+                },
+                {
+                  "text": "{response.orphans:number} orphaned objects",
+                  "when": "response.orphans != ''"
+                },
+                {
+                  "text": "{response.deleted:number} objects deleted",
+                  "when": "response.deleted != ''"
+                },
+                {
+                  "text": "{response.bytesReclaimable:number} bytes reclaimable",
+                  "when": "response.bytesReclaimable != ''"
+                },
+                {
+                  "text": "{response.kept:number} objects kept",
+                  "when": "response.kept != ''"
+                },
+                {
+                  "text": "{response.tooNew:number} objects too new to reap",
+                  "when": "response.tooNew != ''"
+                },
+                {
+                  "text": "{response.skipped:number} versions already current",
+                  "when": "response.skipped != ''"
+                },
+                {
+                  "text": "{response.downloaded:number} versions downloaded",
+                  "when": "response.downloaded != ''"
+                },
+                {
+                  "text": "{response.deferredByCap:number} deferred by the per-run cap",
+                  "when": "response.deferredByCap != ''"
+                },
+                {
+                  "text": "{response.needsStaff:count} LIVE version(s) now fail the verifier",
+                  "when": "response.needsStaff"
+                },
+                {
+                  "text": "no live version fails the verifier",
+                  "when": "!response.needsStaff && response.downloaded != ''"
+                },
+                {
+                  "text": "{response.erasureDue:count} erasure(s) past the hold",
+                  "when": "response.erasureDue"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Plugin artifact reaper",
+          "text": "No schedule reading for this job. The crons probe did not report it.",
+          "when": "!data.crons.checks.reap-plugin-artifacts"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Plugin artifact reaper",
+          "text": "Scheduled · {data.crons.checks.reap-plugin-artifacts.schedule} · last report {data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes|'never'} min ago",
+          "when": "data.crons.checks.reap-plugin-artifacts.ok"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Plugin artifact reaper",
+          "text": "NOT RUNNING {data.crons.checks.reap-plugin-artifacts.code|'no reading'} · {data.crons.checks.reap-plugin-artifacts.schedule} · last report {data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes|'never'} min ago",
+          "when": "data.crons.checks.reap-plugin-artifacts && !data.crons.checks.reap-plugin-artifacts.ok"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "text": "Deletes plugin bundles in the artifacts bucket that no version document claims. The bucket is invisible to the Firebase console, so there is nowhere else to look at it.\n\nOrphaned objects are PERMANENTLY DELETED. The bucket has no object versioning, so nothing can be restored. Objects younger than 7 days are never reaped, and an orphaned listing is reported rather than reaped — but everything the preview lists under \"orphans\" will go."
+        },
+        {
+          "type": "actions",
+          "footer": "Preview first. Every object a real run would delete, the bytes reclaimed, and the orphaned listings it will report but never touch. The real run needs a reason of at least 8 characters and the phrase typed exactly.",
+          "items": [
+            {
+              "id": "reap-plugin-artifacts.preview",
+              "label": "Preview (dry run)",
+              "icon": "eye|visibility",
+              "method": "GET",
+              "url": "/api/admin/reap-plugin-artifacts",
+              "reload": false,
+              "success": "What a real run would do",
+              "report": [
+                {
+                  "text": "{response.archived:number} audit rows",
+                  "when": "response.archived != ''"
+                },
+                {
+                  "text": "{response.batches:number} batches",
+                  "when": "response.batches != ''"
+                },
+                {
+                  "text": "{response.scanned:number} objects scanned",
+                  "when": "response.scanned != ''"
+                },
+                {
+                  "text": "{response.orphans:number} orphaned objects",
+                  "when": "response.orphans != ''"
+                },
+                {
+                  "text": "{response.deleted:number} objects deleted",
+                  "when": "response.deleted != ''"
+                },
+                {
+                  "text": "{response.bytesReclaimable:number} bytes reclaimable",
+                  "when": "response.bytesReclaimable != ''"
+                },
+                {
+                  "text": "{response.kept:number} objects kept",
+                  "when": "response.kept != ''"
+                },
+                {
+                  "text": "{response.tooNew:number} objects too new to reap",
+                  "when": "response.tooNew != ''"
+                },
+                {
+                  "text": "{response.skipped:number} versions already current",
+                  "when": "response.skipped != ''"
+                },
+                {
+                  "text": "{response.downloaded:number} versions downloaded",
+                  "when": "response.downloaded != ''"
+                },
+                {
+                  "text": "{response.deferredByCap:number} deferred by the per-run cap",
+                  "when": "response.deferredByCap != ''"
+                },
+                {
+                  "text": "{response.needsStaff:count} LIVE version(s) now fail the verifier",
+                  "when": "response.needsStaff"
+                },
+                {
+                  "text": "no live version fails the verifier",
+                  "when": "!response.needsStaff && response.downloaded != ''"
+                },
+                {
+                  "text": "{response.erasureDue:count} erasure(s) past the hold",
+                  "when": "response.erasureDue"
+                }
+              ]
+            },
+            {
+              "id": "reap-plugin-artifacts.run",
+              "label": "Run for real",
+              "icon": "play.fill|play_arrow",
+              "destructive": true,
+              "confirm": "Orphaned objects are PERMANENTLY DELETED. The bucket has no object versioning, so nothing can be restored. Objects younger than 7 days are never reaped, and an orphaned listing is reported rather than reaped — but everything the preview lists under \"orphans\" will go.",
+              "url": "/api/admin/reap-plugin-artifacts",
+              "prompt": [
+                {
+                  "key": "confirm",
+                  "label": "Confirmation phrase",
+                  "kind": "text",
+                  "required": true,
+                  "help": "Type DELETE ORPHANED BUNDLES exactly, case and spacing included. The server refuses the run without it.",
+                  "mustMatch": "DELETE ORPHANED BUNDLES"
+                }
+              ],
+              "reason": true,
+              "body": {
+                "dryRun": false,
+                "reason": "{form.reason}",
+                "confirm": "{form.confirm}"
+              },
+              "reload": false,
+              "success": "Run complete",
+              "report": [
+                {
+                  "text": "{response.archived:number} audit rows",
+                  "when": "response.archived != ''"
+                },
+                {
+                  "text": "{response.batches:number} batches",
+                  "when": "response.batches != ''"
+                },
+                {
+                  "text": "{response.scanned:number} objects scanned",
+                  "when": "response.scanned != ''"
+                },
+                {
+                  "text": "{response.orphans:number} orphaned objects",
+                  "when": "response.orphans != ''"
+                },
+                {
+                  "text": "{response.deleted:number} objects deleted",
+                  "when": "response.deleted != ''"
+                },
+                {
+                  "text": "{response.bytesReclaimable:number} bytes reclaimable",
+                  "when": "response.bytesReclaimable != ''"
+                },
+                {
+                  "text": "{response.kept:number} objects kept",
+                  "when": "response.kept != ''"
+                },
+                {
+                  "text": "{response.tooNew:number} objects too new to reap",
+                  "when": "response.tooNew != ''"
+                },
+                {
+                  "text": "{response.skipped:number} versions already current",
+                  "when": "response.skipped != ''"
+                },
+                {
+                  "text": "{response.downloaded:number} versions downloaded",
+                  "when": "response.downloaded != ''"
+                },
+                {
+                  "text": "{response.deferredByCap:number} deferred by the per-run cap",
+                  "when": "response.deferredByCap != ''"
+                },
+                {
+                  "text": "{response.needsStaff:count} LIVE version(s) now fail the verifier",
+                  "when": "response.needsStaff"
+                },
+                {
+                  "text": "no live version fails the verifier",
+                  "when": "!response.needsStaff && response.downloaded != ''"
+                },
+                {
+                  "text": "{response.erasureDue:count} erasure(s) past the hold",
+                  "when": "response.erasureDue"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Plugin verdict re-verification",
+          "text": "No schedule reading for this job. The crons probe did not report it.",
+          "when": "!data.crons.checks.reverify-plugin-versions"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Plugin verdict re-verification",
+          "text": "Scheduled · {data.crons.checks.reverify-plugin-versions.schedule} · last report {data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes|'never'} min ago",
+          "when": "data.crons.checks.reverify-plugin-versions.ok"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Plugin verdict re-verification",
+          "text": "NOT RUNNING {data.crons.checks.reverify-plugin-versions.code|'no reading'} · {data.crons.checks.reverify-plugin-versions.schedule} · last report {data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes|'never'} min ago",
+          "when": "data.crons.checks.reverify-plugin-versions && !data.crons.checks.reverify-plugin-versions.ok"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Re-runs the static verifier across stored plugin versions and updates each cached verdict. A regression on a live version notifies staff.\n\nCached verdicts are recomputed and written back, and staff are notified about regressions on live versions. Nothing is delisted or revoked, and a wrong verdict is recomputed on the next run."
+        },
+        {
+          "type": "actions",
+          "footer": "Preview first. Which versions would be re-checked, which are already current, and which would come back failing — without writing any verdict. The real run needs a reason of at least 8 characters.",
+          "items": [
+            {
+              "id": "reverify-plugin-versions.preview",
+              "label": "Preview (dry run)",
+              "icon": "eye|visibility",
+              "method": "GET",
+              "url": "/api/admin/reverify-plugin-versions",
+              "reload": false,
+              "success": "What a real run would do",
+              "report": [
+                {
+                  "text": "{response.archived:number} audit rows",
+                  "when": "response.archived != ''"
+                },
+                {
+                  "text": "{response.batches:number} batches",
+                  "when": "response.batches != ''"
+                },
+                {
+                  "text": "{response.scanned:number} objects scanned",
+                  "when": "response.scanned != ''"
+                },
+                {
+                  "text": "{response.orphans:number} orphaned objects",
+                  "when": "response.orphans != ''"
+                },
+                {
+                  "text": "{response.deleted:number} objects deleted",
+                  "when": "response.deleted != ''"
+                },
+                {
+                  "text": "{response.bytesReclaimable:number} bytes reclaimable",
+                  "when": "response.bytesReclaimable != ''"
+                },
+                {
+                  "text": "{response.kept:number} objects kept",
+                  "when": "response.kept != ''"
+                },
+                {
+                  "text": "{response.tooNew:number} objects too new to reap",
+                  "when": "response.tooNew != ''"
+                },
+                {
+                  "text": "{response.skipped:number} versions already current",
+                  "when": "response.skipped != ''"
+                },
+                {
+                  "text": "{response.downloaded:number} versions downloaded",
+                  "when": "response.downloaded != ''"
+                },
+                {
+                  "text": "{response.deferredByCap:number} deferred by the per-run cap",
+                  "when": "response.deferredByCap != ''"
+                },
+                {
+                  "text": "{response.needsStaff:count} LIVE version(s) now fail the verifier",
+                  "when": "response.needsStaff"
+                },
+                {
+                  "text": "no live version fails the verifier",
+                  "when": "!response.needsStaff && response.downloaded != ''"
+                },
+                {
+                  "text": "{response.erasureDue:count} erasure(s) past the hold",
+                  "when": "response.erasureDue"
+                }
+              ]
+            },
+            {
+              "id": "reverify-plugin-versions.run",
+              "label": "Run for real",
+              "icon": "play.fill|play_arrow",
+              "destructive": false,
+              "confirm": "Cached verdicts are recomputed and written back, and staff are notified about regressions on live versions. Nothing is delisted or revoked, and a wrong verdict is recomputed on the next run.",
+              "url": "/api/admin/reverify-plugin-versions",
+              "prompt": [],
+              "reason": true,
+              "body": {
+                "dryRun": false,
+                "reason": "{form.reason}"
+              },
+              "reload": false,
+              "success": "Run complete",
+              "report": [
+                {
+                  "text": "{response.archived:number} audit rows",
+                  "when": "response.archived != ''"
+                },
+                {
+                  "text": "{response.batches:number} batches",
+                  "when": "response.batches != ''"
+                },
+                {
+                  "text": "{response.scanned:number} objects scanned",
+                  "when": "response.scanned != ''"
+                },
+                {
+                  "text": "{response.orphans:number} orphaned objects",
+                  "when": "response.orphans != ''"
+                },
+                {
+                  "text": "{response.deleted:number} objects deleted",
+                  "when": "response.deleted != ''"
+                },
+                {
+                  "text": "{response.bytesReclaimable:number} bytes reclaimable",
+                  "when": "response.bytesReclaimable != ''"
+                },
+                {
+                  "text": "{response.kept:number} objects kept",
+                  "when": "response.kept != ''"
+                },
+                {
+                  "text": "{response.tooNew:number} objects too new to reap",
+                  "when": "response.tooNew != ''"
+                },
+                {
+                  "text": "{response.skipped:number} versions already current",
+                  "when": "response.skipped != ''"
+                },
+                {
+                  "text": "{response.downloaded:number} versions downloaded",
+                  "when": "response.downloaded != ''"
+                },
+                {
+                  "text": "{response.deferredByCap:number} deferred by the per-run cap",
+                  "when": "response.deferredByCap != ''"
+                },
+                {
+                  "text": "{response.needsStaff:count} LIVE version(s) now fail the verifier",
+                  "when": "response.needsStaff"
+                },
+                {
+                  "text": "no live version fails the verifier",
+                  "when": "!response.needsStaff && response.downloaded != ''"
+                },
+                {
+                  "text": "{response.erasureDue:count} erasure(s) past the hold",
+                  "when": "response.erasureDue"
+                }
+              ]
+            }
+          ]
         }
       ]
     },

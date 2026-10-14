@@ -53,7 +53,25 @@
         "h1": "editor",
         "h2": "viewer"
       },
-      "hostKey": "h2"
+      "hostKey": "h2",
+      "check": {
+        "ok": false,
+        "ms": 12,
+        "code": "job-silent",
+        "schedule": "0 4 * * *",
+        "lastBeatAgeMinutes": 1500,
+        "newestReadyAgeDays": 3,
+        "degradedEpisodes": 2,
+        "held": true,
+        "note": "",
+        "nested": {
+          "a": 1
+        }
+      },
+      "msA": 30000,
+      "msB": 720000,
+      "msC": 11100000,
+      "msD": 360000000
     }
   },
   "render": [
@@ -152,6 +170,14 @@
     {
       "template": "{data.access[@data.hostKey]}",
       "expect": "viewer"
+    },
+    {
+      "template": "{data.check:facts}",
+      "expect": "degraded episodes: 2 · held: yes · last beat age minutes: 1,500 · newest ready age days: 3 · schedule: 0 4 * * *"
+    },
+    {
+      "template": "{data.msA:duration}|{data.msB:duration}|{data.msC:duration}|{data.msD:duration}|{data.nothing:duration}",
+      "expect": "under a minute|12 min|3h 5m|4 days|unknown"
     }
   ],
   "url": [

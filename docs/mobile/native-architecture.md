@@ -879,7 +879,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503), or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
@@ -895,6 +895,13 @@ follows a success; `write` merges a document the person writes directly, as
 the console does (their own profile, the site document), under the rules.
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
+
+`report` is a list of lines (`{ text, when, each }`, or a plain string) appended to `success`, one per
+line; `each` repeats a line for every row or map entry as `item`. `loop` (`{ cursor, param, until, max }`)
+sends a route that works in pages again, with the cursor it answered, until it says it is done, and
+answers the totals: numbers add up (a map of counts too), `pages` counts the requests and `bounded` says
+the last page was not reached. Formats `facts` (an object's plain values as `words: value`) and `duration`
+(milliseconds as "12 min", "3h 5m") read the health probes and the stuck claims.
 
 `headers` names request headers, each a template. `{attempt}` there is one key per
 (action, route, resolved body): sending the same request again, a retry or a second tap,

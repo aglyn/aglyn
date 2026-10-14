@@ -73,6 +73,8 @@ public struct LoadSpec: Sendable, Hashable {
   public let body: JSONValue?
   /// A load whose failure leaves its key null instead of failing the screen.
   public let optional: Bool
+  /// Statuses whose body is the answer, not a failure: a health probe answers 503 when it reports degraded.
+  public let accept: [Int]
   /// A Firestore document path to read instead of a route.
   public let doc: String?
   /// A Firestore collection query to read instead of a route.
@@ -94,6 +96,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.method = .get
       self.body = nil
       self.optional = false
+      self.accept = []
     } else {
       self.url = json["url"]?.stringValue ?? ""
       self.when = json["when"]?.stringValue
@@ -106,6 +109,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
+      self.accept = json["accept"].array.compactMap { value in value.numberValue.map { Int($0) } }
     }
   }
 }
@@ -169,6 +173,10 @@ public struct ActionSpec: Sendable, Identifiable {
   /// console writes the document directly under the rules (their own
   /// `users/{uid}` profile): `{ "doc": "users/{user.uid}", "fields": {...} }`.
   public let write: JSONValue?
+  /// Lines the result is reported in, after `success`: `{ when, each, text }`, one per line.
+  public let report: [ReportLine]
+  /// Repeats the request page by page until the route is done, and answers the totals.
+  public let loop: LoopSpec?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
@@ -201,6 +209,8 @@ public struct ActionSpec: Sendable, Identifiable {
     self.copy = json["copy"]?.stringValue
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
+    self.report = json["report"].array.compactMap(ReportLine.init)
+    self.loop = json["loop"].flatMap(LoopSpec.init)
   }
 
   /// Every field the action asks for before it runs: its prompt, then a reason.
@@ -209,6 +219,45 @@ public struct ActionSpec: Sendable, Identifiable {
       ? prompt + [FieldSpec(key: "reason", label: "Reason", kind: "multiline", required: true,
           help: "Recorded in the audit log.")]
       : prompt
+  }
+}
+
+/// One line of an action's report. `each` repeats it for every row of a list or entry of a map (`item`); `when` drops it.
+public struct ReportLine: Sendable {
+  public let text: String
+  public let when: String?
+  public let each: String?
+
+  init?(_ json: JSONValue) {
+    if let text = json.stringValue {
+      self.text = text
+      self.when = nil
+      self.each = nil
+      return
+    }
+    guard let text = json["text"]?.stringValue else { return nil }
+    self.text = text
+    self.when = json["when"]?.stringValue
+    self.each = json["each"]?.stringValue
+  }
+}
+
+/// A route that works in pages: the request repeats, with the cursor it answered, until it says it is done.
+public struct LoopSpec: Sendable {
+  /// The response field holding the next cursor.
+  public let cursor: String
+  /// The body field the cursor goes back in.
+  public let param: String
+  /// The response field that is true on the last page.
+  public let until: String?
+  /// Pages at most.
+  public let max: Int
+
+  init?(_ json: JSONValue) {
+    self.cursor = json["cursor"]?.stringValue ?? "nextCursor"
+    self.param = json["param"]?.stringValue ?? "cursor"
+    self.until = json["until"]?.stringValue
+    self.max = json["max"]?.numberValue.map { Int($0) } ?? 40
   }
 }
 
