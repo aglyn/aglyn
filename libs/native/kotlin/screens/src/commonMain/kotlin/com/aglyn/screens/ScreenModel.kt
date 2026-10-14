@@ -312,7 +312,58 @@ class ScreenModel(
     writeOne(write, scope, target)
   }
 
+  /**
+   * A walk-in at the front desk, as the console's reservations card books one: `{ stay: { resource, checkIn, checkOut,
+   * guestName } }` prices the stay, checks the dates against every live stay of that resource and its blocks, and only then
+   * adds the confirmed reservation. Anything it cannot book is said in words, and nothing is written.
+   */
+  private suspend fun bookStay(stay: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    fun text(key: String) = ScreenValues.render(stay.str(key).orEmpty(), scope).trim()
+    val reader = reader ?: throw IllegalStateException("Those dates could not be checked. Try again.")
+    val hostId = ScreenValues.render("{site.id}", scope)
+    val resourceId = text("resource")
+    val checkIn = Stays.dayMs(text("checkIn"))
+    val checkOut = Stays.dayMs(text("checkOut"))
+    if (resourceId.isEmpty() || checkIn == null || checkOut == null) throw IllegalStateException("Choose a resource and both dates.")
+    val resource = Stays.resource(reader.get("hosts/$hostId/resources/$resourceId")?.data) ?: throw IllegalStateException("That resource is gone.")
+    val quote = Stays.quote(resource, checkIn, checkOut)
+    quote.problem?.let { throw IllegalStateException(it) }
+    // The same query the booking door checks against: every stay of this resource that ends after the walk-in arrives.
+    val overlapping = try {
+      reader.page(
+        com.aglyn.core.FirestoreQuery(
+          "hosts/$hostId/reservations",
+          listOf(com.aglyn.core.FirestoreFilter("resourceId", com.aglyn.core.FilterOp.EQ, resourceId), com.aglyn.core.FirestoreFilter("checkOutDayMs", com.aglyn.core.FilterOp.GT, checkIn)),
+          listOf(com.aglyn.core.FirestoreOrder("checkOutDayMs")),
+          500,
+        ),
+      ).docs
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Throwable) {
+      throw IllegalStateException("Could not check those dates. Try again.")
+    }
+    if (!Stays.isRangeAvailable(resource, overlapping.mapNotNull { Stays.booked(it.data) }, checkIn, checkOut, nowMillis())) throw IllegalStateException("Those dates are taken")
+    target.add(
+      "hosts/$hostId/reservations",
+      mapOf(
+        "resourceId" to resourceId,
+        "status" to "confirmed",
+        "checkInDayMs" to checkIn,
+        "checkOutDayMs" to checkOut,
+        "guestName" to text("guestName").ifEmpty { null },
+        "guestEmail" to null,
+        "nights" to quote.nights,
+        "totalCents" to quote.totalCents,
+        "depositCents" to 0,
+        "paidCents" to 0,
+        "createdAtMs" to nowMillis(),
+      ),
+    )
+  }
+
   private suspend fun writeOne(write: JsonElement, scope: JsonElement, target: com.aglyn.core.FirestoreWriter) {
+    write.obj("stay")?.let { bookStay(it, scope, target); return }
     write.str("delete")?.let { target.delete(ScreenValues.render(it, scope)); return }
     val fields = ScreenValues.resolveBody(write.obj("fields") ?: JsonObject(emptyMap()), scope)
     @Suppress("UNCHECKED_CAST")
@@ -324,7 +375,7 @@ class ScreenModel(
   private suspend fun perform(action: ActionSpec, scope: JsonElement): ActionOutcome {
     action.write?.let { write ->
       val target = writer ?: return ActionOutcome.Failed("Saving is not available here.")
-      if (write.str("doc") == null && write.str("add") == null && write.str("delete") == null && write.arr("steps").isEmpty()) {
+      if (write.str("doc") == null && write.str("add") == null && write.str("delete") == null && write.obj("stay") == null && write.arr("steps").isEmpty()) {
         return ActionOutcome.Failed("Saving is not available here.")
       }
       return try {

@@ -356,7 +356,51 @@ public final class ScreenModel {
     try await writeOne(write, scope, writer)
   }
 
+  /// A walk-in at the front desk, as the console's reservations card books one: `{ stay: { resource, checkIn, checkOut,
+  /// guestName } }` prices the stay, checks the dates against every live stay of that resource and its blocks, and only then
+  /// adds the confirmed reservation. Anything it cannot book is said in words, and nothing is written.
+  private func bookStay(_ stay: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    func text(_ key: String) -> String {
+      ScreenValues.render(stay[key]?.stringValue ?? "", in: scope).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard let reader else { throw ConsoleAPIError(status: 0, message: "Those dates could not be checked. Try again.") }
+    let hostID = ScreenValues.render("{site.id}", in: scope)
+    let resourceID = text("resource")
+    guard !resourceID.isEmpty, let checkIn = Stays.day(text("checkIn")), let checkOut = Stays.day(text("checkOut")) else {
+      throw ConsoleAPIError(status: 0, message: "Choose a resource and both dates.")
+    }
+    let stored = try await FirestoreLoads.rawDocument(reader, "hosts/\(hostID)/resources/\(resourceID)")
+    guard let resource = Stays.resource(stored?.data) else { throw ConsoleAPIError(status: 0, message: "That resource is gone.") }
+    let quote = Stays.quote(resource, checkIn: checkIn, checkOut: checkOut)
+    if let problem = quote.problem { throw ConsoleAPIError(status: 0, message: problem) }
+    // The same query the booking door checks against: every stay of this resource that ends after the walk-in arrives.
+    let query = FirestoreQuery(
+      ["hosts", hostID, "reservations"], equals: [("resourceId", resourceID)],
+      filters: [ListQueryConstraint(path: "checkOutDayMs", op: .greaterThan, value: Double(checkIn))],
+      order: [.init("checkOutDayMs")], limit: 500)
+    let overlapping: [FirestoreDocument]
+    do { overlapping = try await FirestoreLoads.documents(reader, query) } catch {
+      throw ConsoleAPIError(status: 0, message: "Could not check those dates. Try again.")
+    }
+    let now = Int64((Date().timeIntervalSince1970 * 1000).rounded())
+    guard Stays.isRangeAvailable(resource, booked: overlapping.compactMap { Stays.booked($0.data) }, checkIn: checkIn, checkOut: checkOut, now: now) else {
+      throw ConsoleAPIError(status: 0, message: "Those dates are taken")
+    }
+    let guest = text("guestName")
+    try await writer.merge(
+      ["hosts", hostID, "reservations", newResourceID()],
+      [
+        "resourceId": resourceID, "status": "confirmed", "checkInDayMs": Double(checkIn), "checkOutDayMs": Double(checkOut),
+        "guestName": guest.isEmpty ? NSNull() : guest, "guestEmail": NSNull(), "nights": quote.nights,
+        "totalCents": Double(quote.totalCents), "depositCents": 0, "paidCents": 0, "createdAtMs": Double(now),
+      ])
+  }
+
   private func writeOne(_ write: JSONValue, _ scope: JSONValue, _ writer: FirestoreWriter) async throws {
+    if let stay = write["stay"] {
+      try await bookStay(stay, scope, writer)
+      return
+    }
     if let path = write["delete"]?.stringValue {
       try await writer.delete(FirestoreLoads.segments(ScreenValues.render(path, in: scope)))
       return
@@ -376,7 +420,7 @@ public final class ScreenModel {
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
     if let write = action.write {
       guard let writer else { return .failed("Saving is not available here.") }
-      guard write["doc"] != nil || write["add"] != nil || write["delete"] != nil || !write["steps"].array.isEmpty else {
+      guard write["doc"] != nil || write["add"] != nil || write["delete"] != nil || write["stay"] != nil || !write["steps"].array.isEmpty else {
         return .failed("Saving is not available here.")
       }
       do {

@@ -827,6 +827,53 @@
                 }
               },
               "success": "Resource saved"
+            },
+            {
+              "id": "walkIn",
+              "label": "Walk-in",
+              "icon": "person.badge.plus|person_add",
+              "when": "data.resources.items.0",
+              "prompt": [
+                {
+                  "key": "resourceId",
+                  "label": "Resource",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.resources.items.0.$id}",
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.resources.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name}"
+                  }
+                },
+                {
+                  "key": "checkIn",
+                  "label": "Check-in",
+                  "kind": "date",
+                  "required": true
+                },
+                {
+                  "key": "checkOut",
+                  "label": "Check-out",
+                  "kind": "date",
+                  "required": true
+                },
+                {
+                  "key": "guestName",
+                  "label": "Guest name (optional)",
+                  "kind": "text"
+                }
+              ],
+              "write": {
+                "stay": {
+                  "resource": "{form.resourceId}",
+                  "checkIn": "{form.checkIn}",
+                  "checkOut": "{form.checkOut}",
+                  "guestName": "{form.guestName}"
+                }
+              },
+              "success": "Walk-in reserved — collect payment at POS"
             }
           ]
         },

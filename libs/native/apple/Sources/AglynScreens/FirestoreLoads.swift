@@ -114,7 +114,7 @@ enum FirestoreLoads {
   }
 
   @MainActor
-  private static func rawDocument(_ reader: FirestoreReader, _ path: String) async throws -> FirestoreDocument? {
+  static func rawDocument(_ reader: FirestoreReader, _ path: String) async throws -> FirestoreDocument? {
     let doc: FirestoreDocument? = try await withCheckedThrowingContinuation { continuation in
       var listener: FirestoreListening?
       var finished = false
@@ -187,7 +187,13 @@ enum FirestoreLoads {
       if let field = aggregate["sum"]?.stringValue, let total = try await reader.sum(whole, field: field) { result["sum"] = .number(total) }
       return .object(result)
     }
-    let docs: [FirestoreDocument] = try await withCheckedThrowingContinuation { continuation in
+    return ["items": .array(try await documents(reader, query).map(json))]
+  }
+
+  /// A query read once.
+  @MainActor
+  static func documents(_ reader: FirestoreReader, _ query: FirestoreQuery) async throws -> [FirestoreDocument] {
+    try await withCheckedThrowingContinuation { continuation in
       var listener: FirestoreListening?
       var finished = false
       listener = reader.listen(query) { result in
@@ -198,6 +204,5 @@ enum FirestoreLoads {
       }
       if finished { listener?.remove() }
     }
-    return ["items": .array(docs.map(json))]
   }
 }

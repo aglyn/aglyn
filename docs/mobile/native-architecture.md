@@ -961,7 +961,9 @@ the grammar. A `write` is `{ doc, fields }` (merge a document), `{ add, fields }
 document in a collection, with an id of its own), `{ delete }`, `{ steps: [...] }` (several
 in order) or `{ each: { items, filter }, doc, fields }` (one per row of the data that passes
 the filter, with `item` set to the row); `siteWide: true` also drops the site's cached
-pages, as the console's `writeSiteWideChange` does. A field value is resolved like a
+pages, as the console's `writeSiteWideChange` does. `{ stay: { resource, checkIn, checkOut, guestName } }` is the front desk's walk-in: it prices the
+stay and checks the dates against the resource's live reservations and blocks (ports of the console's reservation functions,
+replayed from `stays-cases.json`), then adds a confirmed reservation, or says in words why it cannot. A field value is resolved like a
 body, and these operations shape it: `{"$timestamp": true}` (the server's time),
 `{"$orNull": v}` (null when empty, which a merge write turns into a cleared field; a
 template that found nothing is otherwise left out), `{"$cents": "{form.amount}"}` (typed
