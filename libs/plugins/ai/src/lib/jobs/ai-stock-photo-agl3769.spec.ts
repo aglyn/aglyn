@@ -166,3 +166,33 @@ describe('a site’s photo words are read subject first (AGL-3769, Panaderia La 
     )
   })
 })
+
+/*
+ * Panaderia El Trigal (job iGmqrEgyW4, beta.249, AGL-3771): its plan gave no
+ * photo words, so every slot searched its Spanish business type, "con pan
+ * dulce", and its story section placed the Río Dulce at dusk. A site in
+ * another language whose plan gave none is searched by its kind of site.
+ */
+describe('a site in another language with no photo words (AGL-3771)', () => {
+  it('reads the English name of the kind of site the person picked', () => {
+    expect(aiStockPhotoWordsOf({ plan: { language: 'es' }, inputs: { siteKind: 'restaurant', businessType: BRIEF } })).toEqual({
+      language: 'es',
+      kindWords: 'restaurant cafe',
+    })
+  })
+
+  it('is searched by its kind of site, never its business type in its own language', () => {
+    const terms = aiStockSourceTerms({ business: BRIEF, language: 'es', kindWords: 'restaurant cafe' })
+    expect(terms).toEqual(aiStockSiteTerms('restaurant cafe'))
+    expect(JSON.stringify(terms)).not.toContain('dulce')
+  })
+
+  it('keeps its plan photo words first, and an English site its business type', () => {
+    expect(aiStockSourceTerms({ business: BRIEF, language: 'es', photoWords: PHOTO_WORDS, kindWords: 'restaurant cafe' })).toEqual(
+      aiStockSiteTerms('bakery'),
+    )
+    expect(aiStockSourceTerms({ business: 'A family bakery', language: 'en', kindWords: 'restaurant cafe' })).toEqual(
+      aiStockSiteTerms('A family bakery'),
+    )
+  })
+})
