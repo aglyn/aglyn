@@ -56,6 +56,24 @@ object ScreenValues {
     else -> emptyList()
   }
 
+  /**
+   * The rows one or more levels down: each segment of [path] names the list (or map) inside every row so far,
+   * and each row found carries `$parent`, the row it came out of (and so on up: `item.$parent.$parent`).
+   */
+  fun flatten(rows: List<JsonElement>, path: String): List<JsonElement> {
+    var current = rows
+    for (segment in path.split('.').filter { it.isNotEmpty() }) {
+      current = current.flatMap { container ->
+        rows(lookup(segment, container)).map { child ->
+          val record = (child as? JsonObject)?.toMutableMap() ?: mutableMapOf("value" to child)
+          record["\$parent"] = container
+          JsonObject(record)
+        }
+      }
+    }
+    return current
+  }
+
   internal fun segments(path: String): List<String> {
     val parts = mutableListOf<String>()
     val current = StringBuilder()

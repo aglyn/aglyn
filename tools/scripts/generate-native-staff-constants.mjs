@@ -56,6 +56,8 @@ export async function staffSources() {
   await jiti.import(join(ROOT, 'libs/plugins/ai/src/lib/declarations.ts'))
   const emails = await jiti.import(join(ROOT, 'libs/shared/util/email/src/lib/system-email-catalog.ts'))
   const suppression = await jiti.import(join(ROOT, 'apps/console/utils/email-suppression-filters.ts'))
+  const plans = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'))
+  const revenue = await jiti.import(join(ROOT, 'apps/console/utils/revenue-view.ts'))
   const abuse = await jiti.import(join(ROOT, 'libs/aglyn/src/lib/app-utils/abuse-report.ts'))
   const model = (file) => jiti.import(join(ROOT, `libs/plugins/marketplace/src/lib/model/${file}.ts`))
   const checklist = await model('plugin-review-checklist')
@@ -81,6 +83,17 @@ export async function staffSources() {
     },
     suppressions: {
       reasons: Object.entries(suppression.SUPPRESSION_REASON_LABELS).map(([value, { label }]) => ({ value, label })),
+    },
+    margin: {
+      plans: Object.entries(plans.PLAN_LABELS).map(([value, label]) => ({ value, label })),
+    },
+    revenue: {
+      orgStates: revenue.ORG_STATE_LABELS,
+      // The words the console prints for each way contracted and settled can differ; the amounts come from the route.
+      causes: revenue
+        .gapCauses({ gap: { causes: {} } })
+        .map(({ id, label, action, periodScoped }) => ({ id, label, action, periodScoped, field: `${id}Cents` })),
+      subscriptionsNote: revenue.earnedLines({ settled: { subscriptions: {} } })[0].note,
     },
     abuse: {
       categories: abuse.ABUSE_REPORT_CATEGORIES.map(({ id, label, severity }) => ({ value: id, label, severity })),
@@ -266,6 +279,8 @@ const replace = (id, change) => {
 replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
 replace('core.staff.emails', (screen) => ({ ...screen, constants: sources.emails }))
 replace('core.staff.emailSuppressions', (screen) => ({ ...screen, constants: sources.suppressions }))
+replace('core.staff.margin', (screen) => ({ ...screen, constants: sources.margin }))
+replace('core.staff.revenue', (screen) => ({ ...screen, constants: sources.revenue }))
 replace('core.staff.abuse', (screen) => ({ ...screen, constants: sources.abuse }))
 replace('core.staff.lockdown', (screen) => ({ ...screen, constants: sources.lockdown }))
 replace('core.staff.org', (screen) => ({ ...screen, constants: { lockReasons: sources.lockReasons, cancelReasons: sources.cancelReasons } }))

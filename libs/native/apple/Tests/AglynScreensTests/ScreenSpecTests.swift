@@ -211,6 +211,19 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(bare.url(for: load), "/api/x?pageSize=50")
   }
 
+  /// A list can walk down into the lists inside its rows; each row found knows the row it came from.
+  func testFlattenWalksDownAndKeepsTheParent() {
+    let sources: [JSONValue] = [
+      ["id": "s1", "tables": [["heading": "By plugin", "rows": [["name": "A"], ["name": "B"]]], ["heading": "By shop", "rows": [["name": "C"]]]]],
+      ["id": "s2", "tables": [["heading": "Other", "rows": []]]],
+    ]
+    let rows = ScreenValues.flatten(sources, through: "tables.rows")
+    XCTAssertEqual(rows.map { ScreenValues.text($0["name"]) }, ["A", "B", "C"])
+    XCTAssertEqual(ScreenValues.text(ScreenValues.lookup("item.$parent.heading", in: ScreenContext.with([:], item: rows[2]))), "By shop")
+    XCTAssertEqual(ScreenValues.text(ScreenValues.lookup("item.$parent.$parent.id", in: ScreenContext.with([:], item: rows[0]))), "s1")
+    XCTAssertEqual(ScreenValues.flatten(sources, through: "tables").count, 3)
+  }
+
   @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])

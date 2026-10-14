@@ -568,7 +568,8 @@ private fun ListBlock(
   trigger: (ActionSpec, JsonElement) -> Unit,
 ) {
   val scope = rememberCoroutineScope()
-  val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
+  val found = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
+  val rows = (block.string("flatten")?.let { ScreenValues.flatten(found, it) } ?: found)
     .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
   val loadKey = block.string("load")
   SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {

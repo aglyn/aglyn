@@ -79,6 +79,7 @@ data class ScreenSession(
       put("now", buildJsonObject {
         val (year, month) = nowParts()
         put("month", "$year-${month.toString().padStart(2, '0')}")
+        put("previousMonth", "${if (month == 1) year - 1 else year}-${(if (month == 1) 12 else month - 1).toString().padStart(2, '0')}")
         put("quarter", "$year-Q${(month - 1) / 3 + 1}")
         put("ms", nowMillis().toDouble())
       })

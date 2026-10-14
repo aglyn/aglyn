@@ -4403,55 +4403,375 @@
         "/admin/revenue"
       ],
       "load": {
-        "revenue": "/api/admin/revenue?period={params.period|now.month}"
+        "revenue": "/api/admin/revenue?period={params.period|now.previousMonth}"
       },
       "blocks": [
         {
+          "type": "notice",
+          "tone": "warning",
+          "title": "A lower bound",
+          "text": "The sweep stopped at its safety ceiling for {data.revenue.truncatedSources}, so those totals are incomplete. Every other figure is whole. Narrow the period rather than quoting the incomplete numbers.",
+          "when": "data.revenue.truncatedSources"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Settled figures do not cover this whole period",
+          "text": "No invoice has ever been recorded, so every settled figure below is unanswerable rather than zero.",
+          "when": "data.revenue.settledMirrorEmpty"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Settled figures do not cover this whole period",
+          "text": "Invoices have only been recorded since {data.revenue.settledCoverageStart:date}. Anything collected before that was never mirrored, so the settled figures below are a lower bound for this period, not a measured zero. Contracted figures are unaffected.",
+          "when": "data.revenue.periodPrecedesCoverage"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "Unbilled metered usage could not be read",
+          "text": "The gap below is missing that cause entirely, so its residual is overstated by however much usage went unbilled.",
+          "when": "data.revenue.unbilledMeteredFailed"
+        },
+        {
+          "type": "list",
+          "title": "Sources that could not be read",
+          "items": "data.revenue.sources",
+          "filter": "item.failure || item.outcome == refused",
+          "primary": "{item.failure.title|item.pluginId}",
+          "secondary": "{item.failure.detail|item.reason}",
+          "icon": "exclamationmark.triangle|warning",
+          "count": false,
+          "empty": "Every source answered."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "{data.revenue.attention.rowsOutsideEveryPeriod} invoices carry no payment date",
+          "text": "A date-range query cannot match a row whose timestamp is empty, so those invoices are invisible to every period and the settled figure is short by them.",
+          "when": "data.revenue.attention.rowsOutsideEveryPeriod"
+        },
+        {
           "type": "fields",
+          "title": "The two bases ({data.revenue.period})",
           "object": "data.revenue",
+          "footer": "Contracted is a monthly run-rate for the book as it stands today (a point in time, not a figure for the period). Settled is cash that arrived during the period and includes marketplace and storefront commission that the contracted figure has no concept of. Compare them only through the gap section below.",
           "rows": [
             {
-              "label": "Recurring revenue",
-              "value": "{item.mrrUsd|item.totals.mrrUsd:dollars}"
+              "label": "Contracted (monthly)",
+              "value": "{item.contracted.total.mrrUsd:dollars}"
             },
             {
-              "label": "Collected this period",
-              "value": "{item.collectedUsd|item.totals.collectedUsd:dollars}"
+              "label": "Live subscriptions",
+              "value": "{item.contracted.total.orgs:number}"
             },
             {
-              "label": "Refunded",
-              "value": "{item.refundedUsd|item.totals.refundedUsd:dollars}"
-            },
-            {
-              "label": "Metered, not yet billed",
-              "value": "{item.unbilledMeteredUsd:dollars}"
+              "label": "Settled and earned",
+              "value": "{item.settled.totalEarnedCents:cents}"
             }
           ]
         },
         {
-          "type": "list",
-          "title": "By plan",
-          "items": "data.revenue.byPlan",
-          "primary": "{item.plan:title}",
-          "trailing": "{item.mrrUsd:dollars}",
-          "count": false,
-          "empty": "—"
+          "type": "fields",
+          "title": "How each org is treated",
+          "object": "data.revenue.contracted",
+          "footer": "A plan tier is not a price. A comped org, an org on a 100%-off coupon, an enterprise org on a negotiated rate and an org carrying add-ons all bill something other than their plan's list price, so every figure is derived from the Stripe subscription mirror rather than the plan field. Discounts given away: {data.revenue.contracted.discountUsd:dollars} off a list price of {data.revenue.contracted.total.listPriceUsd:dollars}.",
+          "rows": [
+            {
+              "label": "Active and collecting",
+              "value": "{item.collecting.orgs:number} · {item.collecting.mrrUsd:dollars} contracted · settled counts"
+            },
+            {
+              "label": "Trialing",
+              "value": "{item.trialing.orgs:number} · {item.trialing.mrrUsd:dollars} contracted · settles $0 until it converts"
+            },
+            {
+              "label": "Past due",
+              "value": "{item.pastDue.orgs:number} · {item.pastDue.mrrUsd:dollars} contracted · owed, Stripe is retrying the card"
+            },
+            {
+              "label": "Comped / staff override",
+              "value": "{item.compedOrgs:number} · $0 · bills nothing, so it adds nothing to either base"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "The gap",
+          "object": "data.revenue.gap",
+          "when": "!data.revenue.periodIsClosed",
+          "footer": "Positive means money contracted that did not arrive. Negative means cash arrived that the contracted base does not account for, most often an annual invoice landing in one month or a subscription that has since ended.",
+          "rows": [
+            {
+              "label": "Should have collected",
+              "value": "{item.collectingMrrCents:cents}"
+            },
+            {
+              "label": "Subscription cash settled",
+              "value": "{item.settledSubscriptionCents:cents}"
+            },
+            {
+              "label": "Gap",
+              "value": "{item.gapCents:cents}"
+            },
+            {
+              "label": "Unexplained residual",
+              "value": "{item.unexplainedCents:cents}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "No gap is shown for a period that has ended",
+          "text": "Contracted is what the book bills today; settled is cash collected during the period. Subtracting them would measure two different instants, so this page declines to compute a residual rather than label it one. A past period's contracted base is not recoverable.",
+          "when": "data.revenue.periodIsClosed"
         },
         {
           "type": "list",
-          "title": "Subscriptions",
-          "items": "data.revenue.subscriptions",
-          "primary": "{item.orgName|item.orgId}",
-          "secondary": "{item.plan:title} · {item.interval}",
-          "trailing": "{item.amountUsd:dollars}",
+          "title": "What is in the gap",
+          "when": "!data.revenue.periodIsClosed",
+          "items": "const.causes",
+          "primary": "{item.label}",
+          "secondary": "{item.action}",
+          "trailing": "{data.revenue.gap.causes[@item.field]:cents}",
+          "count": false
+        },
+        {
+          "type": "list",
+          "title": "What is in the gap (this period only)",
+          "when": "data.revenue.periodIsClosed",
+          "items": "const.causes",
+          "filter": "item.periodScoped",
+          "primary": "{item.label}",
+          "secondary": "{item.action}",
+          "trailing": "{data.revenue.gap.causes[@item.field]:cents}",
+          "count": false
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Unbilled metered usage is not available for a quarter: the usage rollup keys on a single month. Select a month to see it. The $0 is \"not measured\", not \"nothing missed\".",
+          "when": "data.revenue.unbilledMeteredApplies == false"
+        },
+        {
+          "type": "fields",
+          "title": "Where the money came from",
+          "object": "data.revenue.settled",
+          "footer": "Net throughout. There is no gross figure here that means the platform's money; see gross versus net below.",
+          "rows": [
+            {
+              "label": "Subscriptions, add-ons and metered usage",
+              "value": "{item.subscriptions.netOfReversalsCents:cents}"
+            },
+            {
+              "label": "Total earned",
+              "value": "{item.totalEarnedCents:cents}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "{const.subscriptionsNote}"
+        },
+        {
+          "type": "list",
+          "title": "From the plugins",
+          "items": "data.revenue.sources",
+          "filter": "item.outcome == answered",
+          "primary": "{item.earned.label}",
+          "secondary": "{item.earned.note}",
+          "trailing": "{item.earned.cents:cents}",
+          "count": false,
+          "empty": "No plugin earned anything."
+        },
+        {
+          "type": "fields",
+          "title": "Gross versus net: subscriptions",
+          "object": "data.revenue.settled.subscriptions",
+          "rows": [
+            {
+              "label": "Subscription invoices paid (gross, tax included)",
+              "value": "{item.grossCents:cents} · {item.transactionCount|'0'} invoices"
+            },
+            {
+              "label": "Less sales tax collected (the state's, never revenue)",
+              "value": "{item.taxCents:cents}"
+            },
+            {
+              "label": "Less refunds and lost disputes",
+              "value": "{item.refundedCents:cents}, of which {item.chargedBackCents:cents} charged back"
+            },
+            {
+              "label": "Own tagged purchases",
+              "value": "{item.internalTrafficCents:cents} (real cash, excluded from GA)"
+            }
+          ],
+          "footer": "Stripe keeps its processing fee on a refund and a lost dispute costs a further fee, so the true cost is higher than the refund line."
+        },
+        {
+          "type": "list",
+          "title": "Gross versus net: plugins",
+          "items": "data.revenue.sources",
+          "flatten": "grossToNet",
+          "filter": "item.label",
+          "primary": "{item.label}",
+          "secondary": "{item.note}",
+          "trailing": "{item.cents:cents}",
+          "badges": [
+            {
+              "text": "Deduction",
+              "when": "item.deduction",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "No plugin lines."
+        },
+        {
+          "type": "list",
+          "title": "Notes from the plugins",
+          "items": "data.revenue.sources",
+          "flatten": "notes",
+          "primary": "{item.label}",
+          "badges": [
+            {
+              "text": "Check",
+              "when": "item.tone == warning",
+              "tone": "warning"
+            }
+          ],
+          "count": false,
+          "empty": "None."
+        },
+        {
+          "type": "list",
+          "title": "Which orgs did what",
+          "footer": "The totals above, attributed. Contracted is what each org bills today; settled is what it actually paid during the period, net of tax and reversals. The two answer different questions on purpose: an org can have one without the other, and that is usually the interesting row rather than an error. These rows plus the omitted line sum to the totals.",
+          "items": "data.revenue.attribution.rows",
+          "primary": "{item.name|item.orgId}",
+          "secondary": "{const.orgStates[@item.state]|item.state:title} · {item.plan|'Free':title} · {item.mrrUsd:dollars} a month contracted",
+          "tertiary": "Settled {item.settledCents:cents} after {item.refundedCents:cents} returned · unbilled meter {item.unbilledMeteredCents:cents} · {item.invoices|'0'} invoices",
+          "trailing": "{item.settledCents:cents}",
+          "badges": [
+            {
+              "text": "{const.orgStates[@item.state]|item.state:title}",
+              "tones": {
+                "Active and collecting": "success",
+                "Past due": "error",
+                "Trialing": "info",
+                "*": "neutral"
+              }
+            }
+          ],
           "open": {
             "screen": "core.staff.org",
             "params": {
               "orgId": "{item.orgId}"
-            },
-            "when": "item.orgId"
+            }
           },
-          "empty": "—"
+          "count": false,
+          "empty": "No org contributed to either base in this period. That is a real answer, not a failed read."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "title": "{data.revenue.attribution.omittedOrgs} more org(s) not listed",
+          "text": "The rest carry {data.revenue.attribution.omittedMrrUsd:dollars} of contracted MRR and {data.revenue.attribution.omittedSettledCents:cents} of settled cash between them, so the rows above plus this line still account for the totals.",
+          "when": "data.revenue.attribution.omittedOrgs"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "title": "This attribution is incomplete",
+          "text": "The org sweep hit its safety ceiling, so orgs beyond it are in neither the table nor the totals.",
+          "when": "data.revenue.contractedTruncated"
+        },
+        {
+          "type": "list",
+          "title": "Which plugin, and which storefront",
+          "footer": "Each source is attributed on the dimension it is actually measured in: commission by the plugin that earned it, take by the storefront that generated it. Every table sums to its own line in Where the money came from.",
+          "items": "data.revenue.sources",
+          "flatten": "attribution.rows",
+          "primary": "{item.name}",
+          "secondary": "{item.$parent.heading} · {item.detail}",
+          "tertiary": "{item.count|'0'} {item.$parent.countLabel}",
+          "trailing": "{item.gainCents:cents}",
+          "badges": [
+            {
+              "text": "Returned {item.lossCents:cents}",
+              "when": "item.lossCents",
+              "tone": "error"
+            }
+          ],
+          "count": false,
+          "empty": "No plugin attribution in this period."
+        }
+      ],
+      "constants": {
+        "orgStates": {
+          "collecting": "Active and collecting",
+          "trialing": "Trialing",
+          "pastDue": "Past due",
+          "comped": "Comped / staff override",
+          "inactive": "No live subscription"
+        },
+        "causes": [
+          {
+            "id": "pastDue",
+            "label": "Past due — contracted, owed, not collected",
+            "action": "Stripe is still retrying these cards. This is dunning: the money is owed and may still arrive, or may churn. Chase before the retry schedule runs out.",
+            "periodScoped": false,
+            "field": "pastDueCents"
+          },
+          {
+            "id": "trialing",
+            "label": "Trialing — contracted, converts later",
+            "action": "A trial settles $0 by design and is not a failure. It is counted in contracted MRR because the subscription is real, and excluded from the collecting figure because no invoice is due yet.",
+            "periodScoped": false,
+            "field": "trialingCents"
+          },
+          {
+            "id": "reversed",
+            "label": "Refunded and charged back — a loss",
+            "action": "Money handed back. Stripe does not return its processing fee on a refund and a lost dispute costs a further fee on top, so a reversal costs more than the amount shown here — it is never a wash.",
+            "periodScoped": true,
+            "field": "reversedCents"
+          },
+          {
+            "id": "unbilledMetered",
+            "label": "Metered usage measured but never invoiced",
+            "action": "The nightly rollup priced this usage and the meter event never reached Stripe, so it was measured and never charged. This is a leak, not a timing difference — check Maintenance for a blocked sweep.",
+            "periodScoped": true,
+            "field": "unbilledMeteredCents"
+          }
+        ],
+        "subscriptionsNote": "Paid invoices on Aglyn’s own account, net of sales tax and net of every refund and lost dispute. Add-ons and metered usage bill as lines on these same invoices, so they are already inside this figure — counting the usage rollup beside it would double them."
+      },
+      "subtitle": "Contracted and settled, and the gap between them",
+      "actions": [
+        {
+          "id": "period",
+          "label": "Change the period",
+          "icon": "calendar|event",
+          "prompt": [
+            {
+              "key": "period",
+              "label": "Period",
+              "kind": "text",
+              "required": true,
+              "initial": "{params.period|now.previousMonth}",
+              "help": "A month as 2026-09 or a quarter as 2026-Q3. The console opens on last month; a month that has ended compares nothing against today's contracted base."
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.revenue",
+            "params": {
+              "period": "{form.period}"
+            }
+          }
         }
       ]
     },
@@ -4470,7 +4790,14 @@
         "rows": {
           "url": "/api/admin/margin-utilization?pageSize=50",
           "cursor": "nextCursor",
-          "items": "rows"
+          "items": "rows",
+          "filters": [
+            {
+              "field": "plan",
+              "op": "equals",
+              "value": "{params.plan}"
+            }
+          ]
         }
       },
       "blocks": [
@@ -4479,8 +4806,8 @@
           "load": "rows",
           "items": "data.rows.rows",
           "primary": "{item.name|item.orgId}",
-          "secondary": "{item.plan:title} · {item.bands.hosts.used} of {item.bands.hosts.included} sites",
-          "tertiary": "Storage {item.bands.storageGb.used:number} of {item.bands.storageGb.included:number} GB · page views {item.bands.pageViews.used:number}",
+          "secondary": "{item.plan|'Free':title} · {item.mrrUsd:dollars} a month · {item.netRevenueUsd:dollars} net · cost {item.cogs.cogsUsd:dollars} · margin {item.marginPct:percent}",
+          "tertiary": "Of what the plan includes ({item.month|'no rollup'}): sites {item.bands.hosts.used:number} ({item.bands.hosts.fraction|'—':percent}), storage {item.bands.storageGb.fraction|'—':percent}, page views {item.bands.pageViews.fraction|'—':percent}, data {item.bands.dataStorageMb.fraction|'—':percent}, API requests {item.bands.apiRequests.fraction|'—':percent}, email sends {item.bands.emailSends.fraction|'—':percent}",
           "icon": "chart.bar|bar_chart",
           "open": {
             "screen": "core.staff.org",
@@ -4488,7 +4815,96 @@
               "orgId": "{item.orgId}"
             }
           },
-          "empty": "No rows."
+          "empty": "No rows.",
+          "title": "By organization",
+          "footer": "Four Firestore reads per organization, so a page is read when you open this and more on Load more. Utilization is used against what the plan includes: Uncapped has no ceiling, No allowance has none included. Margin is net of processor fees and measured cost; it is a ceiling, since nothing costs support, acquisition or overhead. The console also draws the fleet-wide distribution of each band and of margin; here each organization carries its own figures.",
+          "badges": [
+            {
+              "text": "{item.rating:title}",
+              "when": "item.rating",
+              "tones": {
+                "Ok": "success",
+                "Warn": "warning",
+                "Block": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "No rollup",
+              "when": "!item.month",
+              "tone": "neutral"
+            }
+          ],
+          "count": true
+        }
+      ],
+      "constants": {
+        "plans": [
+          {
+            "value": "free",
+            "label": "Free"
+          },
+          {
+            "value": "starter",
+            "label": "Starter"
+          },
+          {
+            "value": "pro",
+            "label": "Pro"
+          },
+          {
+            "value": "business",
+            "label": "Business"
+          },
+          {
+            "value": "scale",
+            "label": "Scale"
+          },
+          {
+            "value": "advanced",
+            "label": "Advanced"
+          },
+          {
+            "value": "agency",
+            "label": "Agency"
+          },
+          {
+            "value": "enterprise",
+            "label": "Enterprise"
+          }
+        ]
+      },
+      "subtitle": "Consumption of each included band, the cost, and the realized margin, worst first",
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter by plan",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "plan",
+              "label": "Plan",
+              "kind": "select",
+              "initial": "{params.plan}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Every plan"
+                }
+              ],
+              "optionsFrom": {
+                "items": "const.plans",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.margin",
+            "params": {
+              "plan": "{form.plan}"
+            }
+          }
         }
       ]
     },

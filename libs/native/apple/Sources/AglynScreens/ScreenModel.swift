@@ -87,8 +87,11 @@ extension ScreenSession {
     let parts = calendar.dateComponents([.year, .month], from: date)
     let year = parts.year ?? 2026
     let month = parts.month ?? 1
+    let previousYear = month == 1 ? year - 1 : year
+    let previousMonth = month == 1 ? 12 : month - 1
     return [
       "month": .string(String(format: "%04d-%02d", year, month)),
+      "previousMonth": .string(String(format: "%04d-%02d", previousYear, previousMonth)),
       "quarter": .string("\(year)-Q\((month - 1) / 3 + 1)"),
       "ms": .number((date.timeIntervalSince1970 * 1000).rounded()),
     ]

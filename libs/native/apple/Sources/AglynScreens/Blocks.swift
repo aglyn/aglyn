@@ -121,7 +121,8 @@ struct ListBlock: View {
   let trigger: (ActionSpec, JSONValue) -> Void
 
   var body: some View {
-    let rows = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
+    let found = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
+    let rows = (block["flatten"]?.stringValue.map { ScreenValues.flatten(found, through: $0) } ?? found)
       .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
     let loadKey = block["load"]?.stringValue
     Section {

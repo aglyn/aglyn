@@ -55,6 +55,22 @@ public enum ScreenValues {
     }
   }
 
+  /// The rows one or more levels down: each segment of `path` names the list (or map) inside every row so far,
+  /// and each row found carries `$parent`, the row it came out of (and so on up: `item.$parent.$parent`).
+  public static func flatten(_ rows: [JSONValue], through path: String) -> [JSONValue] {
+    var current = rows
+    for segment in path.split(separator: ".").map(String.init) where !segment.isEmpty {
+      current = current.flatMap { container -> [JSONValue] in
+        Self.rows(lookup(segment, in: container)).map { child in
+          guard case .object(var record) = child else { return ["value": child, "$parent": container] }
+          record["$parent"] = container
+          return .object(record)
+        }
+      }
+    }
+    return current
+  }
+
   /// A path's segments, split on dots outside brackets.
   static func segments(_ path: String) -> [String] {
     var parts: [String] = []

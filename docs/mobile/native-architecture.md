@@ -912,7 +912,7 @@ like a read.
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
-whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
+whose field matches) and `map[key.with.dots]`. `now` has `month`, `previousMonth`, `quarter` and `ms`. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). Formats: `date`, `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
 `count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved

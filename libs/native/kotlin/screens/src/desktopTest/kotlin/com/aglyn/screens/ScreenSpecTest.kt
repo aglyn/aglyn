@@ -247,6 +247,20 @@ class ScreenSpecTest {
     assertEquals("/api/x?pageSize=50", bare.url(load))
   }
 
+  /** A list can walk down into the lists inside its rows; each row found knows the row it came from. */
+  @Test
+  fun flattenWalksDownAndKeepsTheParent() {
+    val sources = (Json.parseToJsonElement(
+      """[{"id":"s1","tables":[{"heading":"By plugin","rows":[{"name":"A"},{"name":"B"}]},{"heading":"By shop","rows":[{"name":"C"}]}]},
+         {"id":"s2","tables":[{"heading":"Other","rows":[]}]}]""",
+    ) as JsonArray).toList()
+    val rows = ScreenValues.flatten(sources, "tables.rows")
+    assertEquals(listOf("A", "B", "C"), rows.map { ScreenValues.text(it.obj("name")) })
+    assertEquals("By shop", ScreenValues.text(ScreenValues.lookup("item.\$parent.heading", ScreenContext.withItem(JsonObject(emptyMap()), rows[2]))))
+    assertEquals("s1", ScreenValues.text(ScreenValues.lookup("item.\$parent.\$parent.id", ScreenContext.withItem(JsonObject(emptyMap()), rows[0]))))
+    assertEquals(3, ScreenValues.flatten(sources, "tables").size)
+  }
+
   @Test
   fun reauthAnswerAsksForThePassword() = runTest {
     val sent = mutableListOf<HttpRequestData>()
