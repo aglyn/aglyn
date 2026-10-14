@@ -1,5 +1,5 @@
 {
-  "$comment": "The shipping labels of one order, in the order's services: the labels bought, voiding one, checking the address, buying an outbound or return label from a rate, and the customs invoice. Grammar: docs/mobile/native-architecture.md section 13.",
+  "$comment": "The shipping labels of one order, in the order's services: the labels bought, voiding one, checking the address, buying an outbound or return label from a rate, and the customs invoice; and the labels for several orders at once, from the orders ticked in the list (the ordersBulk zone). Grammar: docs/mobile/native-architecture.md section 13.",
   "screens": [
     {
       "id": "shipping.order",
@@ -695,6 +695,183 @@
                 }
               ],
               "success": "Checked"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipping.batch",
+      "title": "Buy labels",
+      "label": "Buy labels",
+      "subtitle": "One box and one service rule for every ticked order",
+      "icon": "printer|print",
+      "scope": "site",
+      "zones": [
+        "ordersBulk"
+      ],
+      "order": 50,
+      "load": {
+        "avail": {
+          "optional": true,
+          "url": "/api/shipping/availability?hostId={site.id}"
+        },
+        "settings": {
+          "optional": true,
+          "url": "/api/shipping/settings?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "data.avail.available == false",
+          "text": "Shipping labels are not set up on this site."
+        },
+        {
+          "type": "notice",
+          "id": "about",
+          "tone": "info",
+          "when": "data.avail.available != false",
+          "text": "Rate every ticked order in one box under one service rule, review the prices, then buy them all. Each order’s label is its own purchase, so trying again buys only what was not bought."
+        },
+        {
+          "type": "actions",
+          "id": "rate",
+          "when": "data.avail.available != false",
+          "items": [
+            {
+              "id": "rate",
+              "label": "Get rates",
+              "icon": "request_quote|request_quote",
+              "prompt": [
+                {
+                  "key": "presetId",
+                  "label": "Box",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.settings.settings.defaultPackageId|data.settings.settings.packages.0.id}",
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.settings.settings.packages",
+                    "value": "{item.id}",
+                    "label": "{item.name} ({item.lengthCm} × {item.widthCm} × {item.heightCm} cm)"
+                  }
+                },
+                {
+                  "key": "policy",
+                  "label": "Service",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "cheapest",
+                  "options": [
+                    {
+                      "value": "cheapest",
+                      "label": "Cheapest for each order"
+                    },
+                    {
+                      "value": "fastest",
+                      "label": "Fastest for each order"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "shipping.batchReview",
+                "params": {
+                  "orderIds": "{params.orderIds}",
+                  "run": "{params.run}",
+                  "presetId": "{form.presetId}",
+                  "policy": "{form.policy}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipping.batchReview",
+      "title": "Labels for these orders",
+      "label": "Review labels",
+      "icon": "printer|print",
+      "scope": "site",
+      "load": {
+        "rates": {
+          "url": "/api/shipping/batch/rates",
+          "method": "POST",
+          "body": {
+            "hostId": "{site.id}",
+            "recordIds": {
+              "$split": "{params.orderIds}"
+            },
+            "presetId": "{params.presetId}",
+            "policy": "{params.policy}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "results",
+          "title": "Rates",
+          "items": "data.rates.results",
+          "empty": "No orders were rated.",
+          "icon": "printer|print",
+          "primary": "{item.recordRef|item.recordId}",
+          "secondary": "{item.rate.label|item.error}",
+          "tertiary": "{item.weightGrams} g",
+          "trailing": "{item.rate.amountCents:cents/item.rate.currency}",
+          "badges": [
+            {
+              "text": "Your carrier account",
+              "tone": "neutral",
+              "when": "item.rate.merchantCarrierAccount"
+            },
+            {
+              "text": "No rate",
+              "tone": "warning",
+              "when": "!item.rate"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "buy",
+          "when": "data.rates.results.*.rate.rateId",
+          "items": [
+            {
+              "id": "buy",
+              "label": "Buy labels",
+              "icon": "printer|print",
+              "confirm": "Buy {data.rates.results.*.rate.rateId:plural/label}? Each one is charged to your shipping account as it is bought; an order that cannot be bought is skipped and the rest go ahead.",
+              "url": "/api/shipping/batch/buy",
+              "body": {
+                "hostId": "{site.id}",
+                "batchKey": "{params.run}",
+                "items": {
+                  "$map": {
+                    "list": "{data.rates.results}",
+                    "where": "item.rate",
+                    "fields": {
+                      "recordId": "{item.recordId}",
+                      "shipmentId": "{item.shipmentId}",
+                      "rateId": "{item.rate.rateId}"
+                    }
+                  }
+                }
+              },
+              "reload": false,
+              "back": true,
+              "instead": [
+                {
+                  "when": "response.results.*.error",
+                  "title": "Some labels were not bought",
+                  "text": "{response.results.*.error}"
+                }
+              ],
+              "success": "{response.results.*.label.labelUrl:plural/label} bought. Each is on its order, ready to print."
             }
           ]
         }

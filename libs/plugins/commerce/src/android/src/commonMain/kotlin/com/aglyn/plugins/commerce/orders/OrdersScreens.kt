@@ -55,6 +55,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.screens.ScreenCatalog
 import com.aglyn.plugins.commerce.pos.Load
 import com.aglyn.plugins.commerce.pos.newAttemptKey
 import com.aglyn.ui.ActionDialog
@@ -198,6 +199,14 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
           enabled = picked.isNotEmpty() && !running,
           modifier = Modifier.weight(1f).testTag("orders-bulk-fulfill"),
         ) { Text("Mark ${picked.size} fulfilled") }
+        // Whatever services are connected add what they can do to the ticked orders (buy their labels, say).
+        if (ScreenCatalog.zone("ordersBulk").isNotEmpty()) {
+          OutlinedButton(
+            onClick = { context.navigate("commerce.ordersBulk", mapOf("orderIds" to picked.sorted().joinToString(","), "run" to newAttemptKey("bulk").filter { it.isLetterOrDigit() })) },
+            enabled = picked.isNotEmpty() && picked.size <= 50,
+            modifier = Modifier.testTag("orders-bulk-more"),
+          ) { Text("More…") }
+        }
       }
     }
     if (confirming) {

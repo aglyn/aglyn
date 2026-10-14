@@ -12,7 +12,7 @@ final class ShippingPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["shipping.billing", "shipping.boxes", "shipping.carriers", "shipping.connectCarrier", "shipping.connectOwn", "shipping.labels", "shipping.order", "shipping.own", "shipping.returnLabel", "shipping.service", "shipping.services", "shipping.shipFrom", "shipping.spend"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["shipping.batch", "shipping.batchReview", "shipping.billing", "shipping.boxes", "shipping.carriers", "shipping.connectCarrier", "shipping.connectOwn", "shipping.labels", "shipping.order", "shipping.own", "shipping.returnLabel", "shipping.service", "shipping.services", "shipping.shipFrom", "shipping.spend"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "shipping", contributes: declared, register: registerShippingNative)], into: registry)
     XCTAssertEqual(result.failed, [])

@@ -773,6 +773,28 @@
           ]
         }
       ]
+    },
+    {
+      "id": "commerce.ordersBulk",
+      "title": "Selected orders",
+      "label": "Selected orders",
+      "subtitle": "What can be done to the orders ticked in the list",
+      "icon": "done_all|done_all",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "ordersBulk",
+          "params": {
+            "orderIds": "{params.orderIds}",
+            "run": "{params.run}"
+          },
+          "title": "Services",
+          "footer": "Shipping labels and the other services you have connected, for the orders you ticked.",
+          "empty": "No service is connected for these orders. Connect shipping in Commerce settings."
+        }
+      ]
     }
   ]
 }

@@ -944,7 +944,9 @@ field per row (a carrier that names its own credential fields), `kinds` mapping 
 row flag to a kind (`password`, or `yesno` for a No/Yes pick that sends "" or
 "true"). Body operations grow `{"$replace": {list, key, match, value}}` (the row
 whose key matches, replaced) and `{"$uuid": "box_"}` (a fresh id with that prefix), and
-`{form}` reads the whole form as an object.
+`{form}` reads the whole form as an object. `{"$map": {list, where, fields}}` is one object of `fields` for each row of the
+list that meets `where` (all of them with none), each read with `item` set to the row: the items a batch purchase sends, from
+the rows a rate request answered.
 
 A condition may compare numbers and times: `path < @now.ms+7d` (also `<=`, `>`, `>=`), the
 right side a number or `@path` with an optional offset in ms, s, m, h or d; a missing

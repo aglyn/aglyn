@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynScreens
 import AglynUI
 import SwiftUI
 
@@ -65,13 +66,26 @@ struct OrdersScreen: View {
     }
     .safeAreaInset(edge: .bottom) {
       if selecting {
-        Button("Mark \(picked.count) fulfilled") { confirmingBulk = true }
-          .buttonStyle(.borderedProminent)
-          .disabled(picked.isEmpty || running)
-          .padding()
-          .frame(maxWidth: .infinity)
-          .background(.bar)
-          .accessibilityIdentifier("orders-bulk-fulfill")
+        HStack {
+          Button("Mark \(picked.count) fulfilled") { confirmingBulk = true }
+            .buttonStyle(.borderedProminent)
+            .disabled(picked.isEmpty || running)
+            .accessibilityIdentifier("orders-bulk-fulfill")
+          // Whatever services are connected add what they can do to the ticked orders (buy their labels, say).
+          if !ScreenCatalog.shared.zone("ordersBulk").isEmpty {
+            Button("More…") {
+              context.navigate(
+                "commerce.ordersBulk",
+                ["orderIds": picked.sorted().joined(separator: ","), "run": UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()])
+            }
+            .buttonStyle(.bordered)
+            .disabled(picked.isEmpty || picked.count > 50)
+            .accessibilityIdentifier("orders-bulk-more")
+          }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.bar)
       }
     }
     .confirmationDialog(

@@ -290,6 +290,15 @@ public enum ScreenValues {
       let key = spec["key"]?.stringValue ?? ""
       let match = Self.text(resolveBody(spec["match"] ?? .null, in: context))
       return .array(list.filter { Self.text(lookup(key, in: $0)) != match })
+    case .object(let record) where record.count == 1 && record["$map"] != nil:
+      // `{"$map": {"list": "{data.rates.results}", "where": "item.rate", "fields": {"recordId": "{item.recordId}"}}}`: one object of
+      // `fields` for each row of the list that meets `where` (all of them with none), each read with `item` set to the row.
+      let spec = record["$map"] ?? .null
+      var list: [JSONValue] = []
+      if case .array(let items) = resolveBody(spec["list"] ?? .null, in: context) { list = items }
+      let keep = spec["where"]?.stringValue
+      let fields = spec["fields"] ?? .null
+      return .array(list.map { ScreenContext.with(context, item: $0) }.filter { condition(keep, in: $0) }.map { resolveBody(fields, in: $0) })
     case .object(let record) where record.count == 1 && record["$number"] != nil:
       // `{"$number": "{form.ready}"}`: a choice or typed text as a number; null when it is not one (a select's "don't say").
       return number(resolveBody(record["$number"] ?? .null, in: context)).map { .number($0) } ?? .null

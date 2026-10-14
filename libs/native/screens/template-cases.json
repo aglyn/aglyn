@@ -846,6 +846,53 @@
           }
         ]
       }
+    },
+    {
+      "body": {
+        "m": {
+          "$map": {
+            "list": "{data.members}",
+            "where": "item.role == editor",
+            "fields": {
+              "id": "{item.$id}",
+              "mail": "{item.email}"
+            }
+          }
+        },
+        "all": {
+          "$map": {
+            "list": "{data.members}",
+            "fields": {
+              "id": "{item.$id}"
+            }
+          }
+        },
+        "none": {
+          "$map": {
+            "list": "{data.missing}",
+            "fields": {
+              "id": "{item.$id}"
+            }
+          }
+        }
+      },
+      "expect": {
+        "m": [
+          {
+            "id": "u2",
+            "mail": "b@acme.test"
+          }
+        ],
+        "all": [
+          {
+            "id": "u1"
+          },
+          {
+            "id": "u2"
+          }
+        ],
+        "none": []
+      }
     }
   ],
   "condition": [

@@ -256,6 +256,14 @@ object ScreenValues {
       val key = (spec["key"] as? JsonPrimitive)?.content.orEmpty()
       val match = text(spec["match"]?.let { resolveBody(it, context) })
       JsonArray(list.filter { text(lookup(key, it)) != match })
+    } else if (body.size == 1 && body["\$map"] is JsonObject) {
+      // `{"$map": {"list": "{data.rates.results}", "where": "item.rate", "fields": {"recordId": "{item.recordId}"}}}`: one object of
+      // `fields` for each row of the list that meets `where` (all of them with none), each read with `item` set to the row.
+      val spec = body["\$map"] as JsonObject
+      val list = (spec["list"]?.let { resolveBody(it, context) } as? JsonArray) ?: JsonArray(emptyList())
+      val keep = (spec["where"] as? JsonPrimitive)?.content
+      val fields = spec["fields"] ?: JsonNull
+      JsonArray(list.map { ScreenContext.withItem(context, it) }.filter { condition(keep, it) }.map { resolveBody(fields, it) })
     } else if (body.size == 1 && body["\$number"] != null) {
       // `{"$number": "{form.ready}"}`: a choice or typed text as a number; null when it is not one (a select's "don't say").
       number(resolveBody(body.getValue("\$number"), context))?.let { JsonPrimitive(it) } ?: JsonNull
