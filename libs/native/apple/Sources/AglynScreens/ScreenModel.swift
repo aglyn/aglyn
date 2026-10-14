@@ -328,23 +328,53 @@ public final class ScreenModel {
   /// Runs an action against `scope` (the screen's context, maybe with an
   /// item and the filled inputs under `form`).
   public func run(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
-    let outcome = await perform(action, in: scope)
-    if let stash = action.stash {
-      var response: JSONValue?
-      switch outcome {
-      case .done(_, let answer): response = answer ?? .null
-      case .file: response = .null
-      default: response = nil
-      }
-      if let response {
-        ScreenStash.set(ScreenValues.resolveBody(stash, in: ScreenContext.with(scope, "response", response)))
-        context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
+    var outcome = await perform(action, in: scope)
+    // `repeat`: asked again until the answer meets `until`, the stash taking each pass so a screen shows
+    // the progress; `stop` ends it as a failure with the route's own words.
+    if let again = action.repeating {
+      let ceiling = Int(again["max"]?.numberValue ?? 200)
+      var passes = 1
+      while case .done(_, let answer) = outcome, passes < ceiling {
+        let after = ScreenContext.with(scope, "response", answer ?? .null)
+        stashAnswer(of: action, outcome: outcome, scope: scope)
+        if let stop = again["stop"]?.stringValue, ScreenValues.condition(stop, in: after) {
+          return .failed(
+            ScreenValues.render(
+              again["stopMessage"]?.stringValue ?? "The action stopped. Run it again to carry on.", in: after))
+        }
+        if ScreenValues.condition(again["until"]?.stringValue ?? "response.done", in: after) { break }
+        outcome = await perform(action, in: scope)
+        passes += 1
       }
     }
+    stashAnswer(of: action, outcome: outcome, scope: scope)
     if case .done(_, let response) = outcome, let then = action.then?.action {
       _ = await perform(then, in: ScreenContext.with(scope, "response", response ?? .null))
     }
+    // A follow-up that must succeed runs with the stash just made and the answer in scope.
+    if case .done(_, let response) = outcome, let follow = action.after?.action {
+      let seen = ScreenContext.with(ScreenContext.with(scope, "stash", .object(ScreenStash.values)), "response", response ?? .null)
+      let next = await run(follow, in: seen)
+      switch next {
+      case .failed, .needsReauth: return next
+      default: break
+      }
+    }
     return outcome
+  }
+
+  /// Keeps what an action's `stash` asks for from its outcome.
+  private func stashAnswer(of action: ActionSpec, outcome: ActionOutcome, scope: JSONValue) {
+    guard let stash = action.stash else { return }
+    var response: JSONValue?
+    switch outcome {
+    case .done(_, let answer): response = answer ?? .null
+    case .file: response = .null
+    default: response = nil
+    }
+    guard let response else { return }
+    ScreenStash.set(ScreenValues.resolveBody(stash, in: ScreenContext.with(scope, "response", response)))
+    context = ScreenContext.with(context, "stash", .object(ScreenStash.values))
   }
 
   func perform(_ action: ActionSpec, in scope: JSONValue) async -> ActionOutcome {
@@ -391,7 +421,12 @@ public final class ScreenModel {
       }
     }
     do {
-      let response = try await api.request(path, method: action.method, body: body ?? (action.method == .get ? nil : [:]))
+      let response: JSONValue?
+      if let chunk = action.chunk {
+        response = try await Self.sendInParts(chunk, path: path, method: action.method, body: body ?? [:], api: api)
+      } else {
+        response = try await api.request(path, method: action.method, body: body ?? (action.method == .get ? nil : [:]))
+      }
       let message = action.success.map { ScreenValues.render($0, in: ScreenContext.with(scope, "response", response ?? .null)) }
       return .done(message: message, response: response)
     } catch let error as ConsoleAPIError {
@@ -401,6 +436,39 @@ public final class ScreenModel {
     } catch {
       return .failed(error.localizedDescription)
     }
+  }
+
+  /// A file sent in parts, as the console's upload client sends it: each part's text under `field` with its
+  /// `part` and `parts`, the job the first answer names sent back with the rest. The last answer must say the
+  /// file is whole (`until`).
+  static func sendInParts(_ chunk: JSONValue, path: String, method: HTTPMethod, body: JSONValue, api: ConsoleAPIClient) async throws
+    -> JSONValue?
+  {
+    guard case .object(let record) = body, let field = chunk["field"]?.stringValue else {
+      return try await api.request(path, method: method, body: body)
+    }
+    let parts = ScreenValues.splitUpload(record[field]?.stringValue ?? "", budget: Int(chunk["bytes"]?.numberValue ?? 3_000_000))
+    let firstOnly = chunk["firstOnly"].arrayOfStrings
+    var jobId: String?
+    var last: JSONValue?
+    for (at, content) in parts.enumerated() {
+      var one = record
+      one[field] = .string(content)
+      if parts.count > 1 {
+        one["part"] = .number(Double(at))
+        one["parts"] = .number(Double(parts.count))
+      }
+      if at > 0 { for key in firstOnly { one[key] = nil } }
+      if let jobId, let key = chunk["idKey"]?.stringValue { one[key] = .string(jobId) }
+      last = try await api.request(path, method: method, body: .object(one))
+      if let from = chunk["idFrom"]?.stringValue, let id = last.flatMap({ ScreenValues.lookup(from, in: $0) })?.stringValue {
+        jobId = id
+      }
+    }
+    if let until = chunk["until"]?.stringValue, !ScreenValues.truthy(last.flatMap { ScreenValues.lookup(until, in: $0) }) {
+      throw ConsoleAPIError(status: 500, message: "The file did not finish uploading. Try again.")
+    }
+    return last
   }
 
   /// A route's "sign in again first" answer, in any of the shapes the routes use.

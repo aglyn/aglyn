@@ -613,8 +613,11 @@ class ScreenSpecTest {
     val actions = history.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
     val job = Json.parseToJsonElement("""{"org":{"id":"o1"},"item":{"id":"j9","kind":"package","resultFile":true,"undo":{"available":true}}}""")
     assertEquals(listOf("results", "undo"), actions.filter { ScreenValues.condition(it.whenCondition, job) }.map { it.id })
-    val records = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","resultFile":false,"undo":{"available":true}}}""")
-    assertEquals(emptyList(), actions.filter { ScreenValues.condition(it.whenCondition, records) }.map { it.id })
+    // A records import opens in the wizard (its results and its undo), until it is undone.
+    val records = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","status":"applied","resultFile":false,"undo":{"available":true}}}""")
+    assertEquals(listOf("open"), actions.filter { ScreenValues.condition(it.whenCondition, records) }.map { it.id })
+    val undone = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","status":"undone","resultFile":true}}""")
+    assertEquals(listOf("results"), actions.filter { ScreenValues.condition(it.whenCondition, undone) }.map { it.id })
     assertEquals("import-j9-results.csv", ScreenValues.render(actions.first().download!!, job))
   }
 

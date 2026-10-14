@@ -52,9 +52,10 @@ object ScreenValues {
     for ((position, raw) in parts.withIndex()) {
       // `rows.*.field`: that field of every row, as a list (rows without it are left out; a field
       // that is itself a list adds its members, so `resources.*.items` is every resource's items).
-      if (raw == "*" && current is JsonArray) {
+      val walked = wildcardRows(current)
+      if (raw == "*" && walked != null) {
         val rest = parts.drop(position + 1).joinToString(".")
-        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, root, it) }.flatMap { if (it is JsonArray) it.toList() else listOf(it) })
+        return JsonArray(walked.mapNotNull { if (rest.isEmpty()) it else lookup(rest, root, it) }.flatMap { if (it is JsonArray) it.toList() else listOf(it) })
       }
       // `name[group][group]…`: each group is `[field=other.path]` (the first row whose field reads as the text
       // at other.path, or as a quoted literal), `[@path]` (the key is the text at path) or `[some.key]` (a key
@@ -82,6 +83,13 @@ object ScreenValues {
       }
     }
     return current
+  }
+
+  /** What `*` walks: an array's rows, or an object's values in key order. */
+  private fun wildcardRows(value: JsonElement?): List<JsonElement>? = when (value) {
+    is JsonArray -> value
+    is JsonObject -> value.keys.sorted().map { value.getValue(it) }
+    else -> null
   }
 
   /** The groups of `[a][b[c]]`: `a` and `b[c]`, matching brackets inside a group. */
@@ -117,15 +125,17 @@ object ScreenValues {
 
   /**
    * The scopes a list or an option source walks: one per row of `items` that meets `filter`, with
-   * the row as `item`; or, given `within` (a path read from each row), one per row of that inner
+   * the row as `item` and its position as `index`; or, given `within` (a path read from each row), one per row of that inner
    * list, the outer row as `parent` (every resource's items, labeled by their resource).
    */
   fun scopes(path: String, within: String?, filter: String?, context: JsonElement): List<JsonElement> {
     val found = mutableListOf<JsonElement>()
-    for (row in rows(lookup(path, context))) {
-      val outer = ScreenContext.withItem(context, row)
+    for ((at, row) in rows(lookup(path, context)).withIndex()) {
+      val outer = ScreenContext.with(ScreenContext.withItem(context, row), "index", JsonPrimitive(at))
       if (!within.isNullOrEmpty()) {
-        for (inner in rows(lookup(within, row))) found += ScreenContext.withItem(outer, inner)
+        for ((inside, inner) in rows(lookup(within, row)).withIndex()) {
+          found += ScreenContext.with(ScreenContext.withItem(outer, inner), "index", JsonPrimitive(inside))
+        }
       } else {
         found += outer
       }
@@ -307,6 +317,22 @@ object ScreenValues {
       val value = spec["value"]?.let { resolveBody(it, context) } ?: JsonNull
       if (key.isNotEmpty()) { if (truthy(value)) map[key] = value else map.remove(key) }
       JsonObject(map)
+    } else if (body.size == 1 && body["\$index"] is JsonObject) {
+      // `{"$index": {"rows": "data.picklists", "key": "{item.fieldId}", "value": "{item.proposals}"}}`: the rows as a
+      // map, each under its key (a row with no key is left out).
+      val spec = body["\$index"] as JsonObject
+      val map = mutableMapOf<String, JsonElement>()
+      for (row in rows(lookup(spec["rows"]?.let { (it as? JsonPrimitive)?.content }.orEmpty(), context))) {
+        val scope = ScreenContext.withItem(context, row)
+        val key = text(spec["key"]?.let { resolveBody(it, scope) })
+        if (key.isNotEmpty()) map[key] = spec["value"]?.let { resolveBody(it, scope) } ?: JsonNull
+      }
+      JsonObject(map)
+    } else if (body.size == 1 && body["\$merge"] is JsonArray) {
+      // `{"$merge": [a, b]}`: the maps laid over one another, deeply; a later value wins.
+      var merged: Map<String, JsonElement> = emptyMap()
+      for (part in body["\$merge"] as JsonArray) (resolveBody(part, context) as? JsonObject)?.let { merged = mergeMaps(merged, it) }
+      JsonObject(merged)
     } else if (body.size == 1 && body["\$split"] != null) {
       // `{"$split": "{form.pcts}"}`: the comma-separated text as a list; a part that is a number stays one.
       val parts = text(resolveBody(body.getValue("\$split"), context)).split(',').map { it.trim() }.filter { it.isNotEmpty() }
@@ -319,12 +345,105 @@ object ScreenValues {
       buildMap {
         for ((key, value) in body) {
           val resolved = resolveBody(value, context)
+          // `name?`: sent only when it holds something (not null, "", [] or {}); false and 0 are real answers.
+          if (key.endsWith("?")) {
+            if (!isBlank(resolved)) put(key.dropLast(1), resolved)
+            continue
+          }
           // A template that found nothing is left out; a literal null is sent (it clears the field).
           if (resolved != JsonNull || value == JsonNull) put(key, resolved)
         }
       },
     )
     JsonNull -> JsonNull
+  }
+
+  /** Nothing to send: null, empty text, an empty list or an empty map. */
+  internal fun isBlank(value: JsonElement): Boolean = when (value) {
+    JsonNull -> true
+    is JsonPrimitive -> value.isString && value.content.isEmpty()
+    is JsonArray -> value.isEmpty()
+    is JsonObject -> value.isEmpty()
+  }
+
+  /** [base] with [top] laid over it: maps merge key by key, anything else is replaced. */
+  internal fun mergeMaps(base: Map<String, JsonElement>, top: Map<String, JsonElement>): Map<String, JsonElement> {
+    val out = base.toMutableMap()
+    for ((key, value) in top) {
+      val under = out[key]
+      out[key] = if (value is JsonObject && under is JsonObject) JsonObject(mergeMaps(under, value)) else value
+    }
+    return out
+  }
+
+  /**
+   * A chosen file's text: UTF-8 (a byte-order mark dropped), UTF-16 where it carries its mark, else
+   * Windows-1252, the encoding a spreadsheet's "CSV" is saved in. Nothing is dropped silently.
+   */
+  fun decodeFileText(bytes: ByteArray): String {
+    fun at(i: Int) = bytes.getOrNull(i)?.toInt()?.and(0xFF) ?: -1
+    if (at(0) == 0xEF && at(1) == 0xBB && at(2) == 0xBF) return bytes.decodeToString(3, bytes.size)
+    if (at(0) == 0xFF && at(1) == 0xFE) return utf16(bytes, 2, littleEndian = true)
+    if (at(0) == 0xFE && at(1) == 0xFF) return utf16(bytes, 2, littleEndian = false)
+    return try {
+      bytes.decodeToString(throwOnInvalidSequence = true)
+    } catch (_: CharacterCodingException) {
+      buildString { for (b in bytes) append(windows1252(b.toInt() and 0xFF)) }
+    }
+  }
+
+  private fun utf16(bytes: ByteArray, from: Int, littleEndian: Boolean): String {
+    val out = StringBuilder()
+    var i = from
+    while (i + 1 < bytes.size) {
+      val a = bytes[i].toInt() and 0xFF
+      val b = bytes[i + 1].toInt() and 0xFF
+      out.append((if (littleEndian) (b shl 8) or a else (a shl 8) or b).toChar())
+      i += 2
+    }
+    return out.toString()
+  }
+
+  private val cp1252High = "\u20AC\u0081\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\u008D\u017D\u008F" +
+    "\u0090\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\u009D\u017E\u0178"
+
+  private fun windows1252(code: Int): Char = if (code in 0x80..0x9F) cp1252High[code - 0x80] else code.toChar()
+
+  /** What one character costs once JSON-encoded, in UTF-8 bytes (the console's `encodedBytes`). */
+  private fun encodedBytes(code: Int): Int = when {
+    code == '"'.code || code == '\\'.code -> 2
+    code == 0x08 || code == 0x09 || code == 0x0A || code == 0x0C || code == 0x0D -> 2
+    code < 0x20 -> 6
+    code < 0x80 -> 1
+    code < 0x800 -> 2
+    code in 0xD800..0xDFFF -> 6 // a lone surrogate is written as \uXXXX
+    code < 0x10000 -> 3
+    else -> 4
+  }
+
+  /**
+   * A file's text cut into parts that each take at most [budget] bytes once JSON-encoded, ending on a
+   * character boundary (a surrogate pair is never split), so the parts join back into the file.
+   */
+  fun splitUpload(text: String, budget: Int = 3_000_000): List<String> {
+    val parts = mutableListOf<String>()
+    var start = 0
+    var at = 0
+    var used = 0
+    while (at < text.length) {
+      val high = text[at].isHighSurrogate() && at + 1 < text.length && text[at + 1].isLowSurrogate()
+      val size = if (high) 2 else 1
+      val cost = if (high) 4 else encodedBytes(text[at].code)
+      if (used + cost > budget && at > start) {
+        parts += text.substring(start, at)
+        start = at
+        used = 0
+      }
+      used += cost
+      at += size
+    }
+    parts += text.substring(start)
+    return parts
   }
 
   fun renderUrl(template: String, context: JsonElement): String {
@@ -518,6 +637,10 @@ object ScreenValues {
 
   fun formatted(value: JsonElement?, format: String, context: JsonElement): String {
     val parts = format.split('/', limit = 2)
+    // `first3`: a list's first three entries, joined.
+    if (parts[0].startsWith("first") && value is JsonArray) {
+      parts[0].drop(5).toIntOrNull()?.let { count -> return text(JsonArray(value.take(count))) }
+    }
     return when (parts[0]) {
       "date" -> epochMillis(value)?.let { dateText(it, false) } ?: text(value)
       "datetime" -> epochMillis(value)?.let { dateText(it, true) } ?: text(value)

@@ -101,6 +101,9 @@ test('a dataset is listed one at a time from the workspace datasets', () => {
   const datasets = records.blocks.find((block) => block.title === 'Dataset records')
   assert.equal(datasets.items, 'data.datasets.items')
   assert.equal(datasets.actions[0].export.resource, 'data.dataset:{item.$id}')
+  assert.deepEqual(datasets.actions.map((action) => action.id), ['export'])
+  const wizard = screen(spec(true), 'core.settings.data.records').blocks.find((block) => block.title === 'Dataset records')
+  assert.deepEqual(wizard.actions[1].navigate, { screen: 'core.settings.data.import', params: { resource: 'data.dataset:{item.$id}' } })
   assert.deepEqual(records.load.datasets.query, { collection: 'orgs/{org.id}/datasets', orderBy: 'name', limit: 100 })
 })
 

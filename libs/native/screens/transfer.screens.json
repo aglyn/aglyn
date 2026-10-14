@@ -95,6 +95,17 @@
           "icon": "tray.and.arrow.down|inbox",
           "actions": [
             {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play|play_arrow",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.jobId}"
+                }
+              }
+            },
+            {
               "id": "discard",
               "label": "Discard",
               "icon": "trash|delete",
@@ -150,6 +161,18 @@
               },
               "download": "import-{item.id}-results.csv",
               "success": "Results ready to save"
+            },
+            {
+              "id": "open",
+              "label": "Open",
+              "icon": "arrow.up.right.square|open_in_new",
+              "when": "item.kind == records && item.status != undone",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.id}"
+                }
+              }
             },
             {
               "id": "undo",

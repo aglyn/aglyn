@@ -187,6 +187,18 @@ public struct ActionSpec: Sendable, Identifiable {
   /// `export: { resource, title, hostId }`: the platform's export sheet for a records resource (its
   /// fields, the format, then the file saved or shared), as every list opens it.
   public let export: JSONValue?
+  /// `chunk: { field, bytes, idFrom, idKey, firstOnly, until }`: the file text in `field` of the body goes in
+  /// parts of at most `bytes` (JSON-encoded), each with `part` and `parts`, the job the first answer names
+  /// (`idFrom`) sent back as `idKey`; keys in `firstOnly` ride on the first part alone; `until` is the answer
+  /// path that must be true when the last part has landed.
+  public let chunk: JSONValue?
+  /// `repeat: { until, max, stop, stopMessage }`: the action runs again while its answer does not meet
+  /// `until` (a condition over `response`), as the console calls apply until the route says it is done; the
+  /// stash takes every pass's answer, so a screen can show the progress; `stop` ends it as a failure.
+  public let repeating: JSONValue?
+  /// A follow-up that must succeed (unlike `then`): it runs once the action and its stash are done, with the
+  /// stash and the action's answer in scope, and a failure of its own fails the action.
+  public let after: ActionSpecBox?
   /// `downloadAt`: the route answers with JSON, and the file is the value at this path of it
   /// (a workspace package export wraps its file as `{ fileName, package }`). `download` is then a
   /// template over `response`, which names the file.
@@ -218,7 +230,8 @@ public struct ActionSpec: Sendable, Identifiable {
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)
-    self.reload = json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil)
+    self.reload = json["reload"] == .bool(true)
+      || (json["reload"] != .bool(false) && (json["url"]?.stringValue != nil || json["write"] != nil))
     self.otherwise = json["else"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.then = json["then"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.when = json["when"]?.stringValue
@@ -231,6 +244,9 @@ public struct ActionSpec: Sendable, Identifiable {
     self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
     self.downloadAt = json["downloadAt"]?.stringValue
     self.export = json["export"]
+    self.chunk = json["chunk"]
+    self.repeating = json["repeat"]
+    self.after = json["after"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }

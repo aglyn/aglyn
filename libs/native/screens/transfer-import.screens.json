@@ -1,0 +1,1868 @@
+{
+  "$comment": "Records import (AGL-3671): the console's import wizard, step by step, over /api/transfer/{fields,upload,analyze,plan,apply,status,undo}. Grammar: docs/mobile/native-architecture.md §13.",
+  "screens": [
+    {
+      "id": "core.settings.data.import",
+      "title": "Import records",
+      "icon": "square.and.arrow.down|upload",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "delimiter": {
+          "comma": ",",
+          "semicolon": ";",
+          "tab": "\t",
+          "pipe": "|"
+        }
+      },
+      "load": {
+        "info": {
+          "url": "/api/transfer/fields",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "resource": "{params.resource}",
+            "hostId?": "{params.hostId}"
+          }
+        }
+      },
+      "subtitle": "Upload a file, match its columns, review, then import",
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "{data.info.resource.label}",
+          "rows": [
+            {
+              "label": "Most rows",
+              "value": "{data.info.resource.limits.maxRows|'50000'}"
+            },
+            {
+              "label": "Most size",
+              "value": "24 MB"
+            },
+            {
+              "label": "Finds existing records by",
+              "value": "{data.info.matchKeys.*.fieldId}",
+              "when": "data.info.matchKeys"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "{data.info.defaultPolicy.note}",
+          "when": "data.info.defaultPolicy.note"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Choose a spreadsheet (CSV), JSON or NDJSON file. It is read and matched to the fields first, and nothing is written until you have reviewed it. You can undo an import for seven days."
+        },
+        {
+          "type": "form",
+          "id": "file",
+          "fields": [
+            {
+              "key": "file",
+              "label": "File",
+              "kind": "file",
+              "required": true,
+              "help": "CSV (comma, semicolon, tab or pipe separated), JSON or NDJSON. Spreadsheet text encodings are read as they are."
+            },
+            {
+              "key": "delimiter",
+              "label": "Separator",
+              "kind": "select",
+              "initial": "",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Detect it"
+                },
+                {
+                  "value": "comma",
+                  "label": "Comma"
+                },
+                {
+                  "value": "semicolon",
+                  "label": "Semicolon"
+                },
+                {
+                  "value": "tab",
+                  "label": "Tab"
+                },
+                {
+                  "value": "pipe",
+                  "label": "Pipe"
+                }
+              ],
+              "when": "form.fileName !~= .json && form.fileName !~= .ndjson"
+            },
+            {
+              "key": "headerRow",
+              "label": "The first row holds the column names",
+              "kind": "toggle",
+              "initial": "true",
+              "when": "form.fileName !~= .json && form.fileName !~= .ndjson"
+            }
+          ],
+          "submit": {
+            "label": "Upload and read the file",
+            "url": "/api/transfer/upload",
+            "body": {
+              "orgId": "{org.id}",
+              "resource": "{params.resource}",
+              "hostId?": "{params.hostId}",
+              "fileName": "{form.fileName}",
+              "content": "{form.file}",
+              "delimiter?": "{const.delimiter[@form.delimiter]}",
+              "headerRow": "{form.headerRow}"
+            },
+            "chunk": {
+              "field": "content",
+              "bytes": 3000000,
+              "idFrom": "job.id",
+              "idKey": "jobId",
+              "firstOnly": [
+                "delimiter",
+                "headerRow"
+              ],
+              "until": "complete"
+            },
+            "stash": {
+              "importJob": "{response.job.id}",
+              "importResource": "{params.resource}",
+              "importHost": "{params.hostId}",
+              "importFile": "{form.fileName}",
+              "importMapping": null,
+              "importDates": null,
+              "importPicklists": null,
+              "importLookups": null,
+              "importKeys": null,
+              "importFields": null,
+              "importRows": null,
+              "importPolicy": null,
+              "importPlan": null,
+              "importResult": null,
+              "importAck": null,
+              "importProgress": null,
+              "importUndo": null
+            },
+            "after": {
+              "label": "Read the file",
+              "url": "/api/transfer/analyze",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}"
+              },
+              "stash": {
+                "importMapping": "{response.match.mapping}"
+              },
+              "reload": false
+            },
+            "navigate": {
+              "screen": "core.settings.data.import.columns"
+            },
+            "reload": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.columns",
+      "title": "Match the columns",
+      "icon": "tablecells|view_agenda",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "matchReason": {
+          "exactAlias": "Same name",
+          "normalizedAlias": "Same name, spelled differently",
+          "fuzzy": "Similar name",
+          "typeInference": "Looks like this kind of value"
+        }
+      },
+      "load": {
+        "info": {
+          "url": "/api/transfer/fields",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "resource": "{stash.importResource}",
+            "hostId?": "{stash.importHost}"
+          }
+        },
+        "analysis": {
+          "url": "/api/transfer/analyze",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{stash.importJob}",
+            "mapping?": "{stash.importMapping}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "{stash.importFile|'Your file'}",
+          "when": "data.analysis",
+          "rows": [
+            {
+              "label": "Rows",
+              "value": "{data.analysis.rowCount:number}"
+            },
+            {
+              "label": "Columns matched",
+              "value": "{stash.importMapping:count} of {data.analysis.headers:count}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Fix before continuing",
+          "when": "data.analysis.mappingProblems.duplicates",
+          "items": "data.analysis.mappingProblems.duplicates",
+          "count": false,
+          "primary": "{data.info.fields[id=item.fieldId].label|item.fieldId} is chosen for more than one column. Choose one column for it.",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "when": "data.analysis.mappingProblems.unmappedRequired",
+          "items": "data.analysis.mappingProblems.unmappedRequired",
+          "count": false,
+          "primary": "Required field with no column: {data.info.fields[id=item].label|item}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "when": "data.analysis.mappingProblems.invalid",
+          "items": "data.analysis.mappingProblems.invalid",
+          "count": false,
+          "primary": "“{data.analysis.headers[@item.column]}” is mapped to a field this import cannot write.",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "title": "Columns",
+          "when": "data.analysis.headers",
+          "items": "data.analysis.headers",
+          "count": true,
+          "primary": "{item}",
+          "secondary": "{data.analysis.samples.*.[@index]:first3}",
+          "tertiary": "Proposed: {data.info.fields[id=data.analysis.match.proposals[column=index].fieldId].label|'nothing'} · {const.matchReason[@data.analysis.match.proposals[column=index].reason]|'no match'}",
+          "trailing": "{data.info.fields[id=stash.importMapping[@index]].label|'Ignored'}",
+          "icon": "tablecells|view_agenda",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose the field",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "field",
+                  "label": "Field for this column",
+                  "kind": "select",
+                  "initial": "{stash.importMapping[@index]}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Ignore this column"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.info.fields",
+                    "value": "{item.id}",
+                    "label": "{item.label}",
+                    "filter": "item.matchKey || !item.readOnly && !item.derived && !item.system"
+                  },
+                  "help": "A field two columns share, and a required field no column fills, hold the import back."
+                }
+              ],
+              "stash": {
+                "importMapping": {
+                  "$put": {
+                    "map": "{stash.importMapping}",
+                    "key": "{index}",
+                    "value": "{form.field}"
+                  }
+                }
+              },
+              "reload": true
+            }
+          ],
+          "empty": "The file has no columns."
+        },
+        {
+          "type": "actions",
+          "when": "data.analysis.headers",
+          "items": [
+            {
+              "id": "next",
+              "label": "Continue",
+              "icon": "arrow.right|arrow_forward",
+              "when": "!data.analysis.mappingProblems.duplicates && !data.analysis.mappingProblems.unmappedRequired && !data.analysis.mappingProblems.invalid && stash.importMapping",
+              "url": "/api/transfer/analyze",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "mapping?": "{stash.importMapping}",
+                "dateOrders?": "{stash.importDates}",
+                "matchKeys?": "{stash.importKeys}"
+              },
+              "stash": {
+                "importPicklists": {
+                  "$merge": [
+                    {
+                      "$index": {
+                        "rows": "response.picklists",
+                        "key": "{item.fieldId}",
+                        "value": "{item.proposals}"
+                      }
+                    },
+                    "{stash.importPicklists}"
+                  ]
+                }
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.values"
+              },
+              "reload": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.values",
+      "title": "What each value becomes",
+      "icon": "checklist|inventory_2",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "picklistAction": {
+          "mapTo": "Map to a list value",
+          "addValue": "Add it to the list",
+          "leaveBlank": "Leave the field blank",
+          "refuseRow": "Refuse these rows"
+        },
+        "lookupAction": {
+          "create": "Create the record",
+          "mapTo": "Use a record you have",
+          "leaveBlank": "Leave the field blank",
+          "refuseRow": "Refuse these rows"
+        },
+        "dateOrder": {
+          "mdy": "Month first (10/31/2026)",
+          "dmy": "Day first (31/10/2026)"
+        }
+      },
+      "load": {
+        "info": {
+          "url": "/api/transfer/fields",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "resource": "{stash.importResource}",
+            "hostId?": "{stash.importHost}"
+          }
+        },
+        "analysis": {
+          "url": "/api/transfer/analyze",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{stash.importJob}",
+            "mapping?": "{stash.importMapping}",
+            "dateOrders?": "{stash.importDates}",
+            "matchKeys?": "{stash.importKeys}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "How values were read",
+          "when": "data.analysis.derivations",
+          "items": "data.analysis.derivations",
+          "count": false,
+          "primary": "{data.info.fields[id=item.fieldId].label|item.fieldId}",
+          "secondary": "{item.filled:number} filled · {item.unchanged:number} read as typed · {item.derivations.*.note}",
+          "tertiary": "{item.problems.*.message}",
+          "trailing": "{const.dateOrder[@stash.importDates[@item.fieldId]]|''}",
+          "icon": "wand.and.stars|auto_awesome",
+          "actions": [
+            {
+              "id": "order",
+              "label": "Choose the date order",
+              "icon": "calendar|calendar_month",
+              "when": "item.ambiguousDates",
+              "prompt": [
+                {
+                  "key": "order",
+                  "label": "These dates read either way",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.importDates[@item.fieldId]}",
+                  "options": [
+                    {
+                      "value": "mdy",
+                      "label": "Month first (10/31/2026)"
+                    },
+                    {
+                      "value": "dmy",
+                      "label": "Day first (31/10/2026)"
+                    }
+                  ]
+                }
+              ],
+              "stash": {
+                "importDates": {
+                  "$put": {
+                    "map": "{stash.importDates}",
+                    "key": "{item.fieldId}",
+                    "value": "{form.order}"
+                  }
+                }
+              },
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Values a list does not hold",
+          "when": "data.analysis.picklists",
+          "items": "data.analysis.picklists",
+          "within": "unmatched",
+          "count": true,
+          "primary": "“{item.value}”",
+          "secondary": "{data.info.fields[id=parent.fieldId].label|parent.fieldId} · {item.count:number} rows",
+          "tertiary": "Closest: {item.suggestions.*.label:first3}",
+          "trailing": "{const.picklistAction[@stash.importPicklists[@parent.fieldId][@item.key].action]|'Choose'}",
+          "icon": "list.bullet|list",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose what it becomes",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "action",
+                  "label": "What it becomes",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.importPicklists[@parent.fieldId][@item.key].action}",
+                  "options": [
+                    {
+                      "value": "mapTo",
+                      "label": "Map to a list value"
+                    },
+                    {
+                      "value": "addValue",
+                      "label": "Add it to the list"
+                    },
+                    {
+                      "value": "leaveBlank",
+                      "label": "Leave the field blank"
+                    },
+                    {
+                      "value": "refuseRow",
+                      "label": "Refuse these rows"
+                    }
+                  ]
+                },
+                {
+                  "key": "valueId",
+                  "label": "Which list value",
+                  "kind": "select",
+                  "when": "form.action == mapTo",
+                  "initial": "{stash.importPicklists[@parent.fieldId][@item.key].valueId|item.suggestions.0.valueId}",
+                  "optionsFrom": {
+                    "items": "parent.set.values",
+                    "value": "{item.id}",
+                    "label": "{item.label}",
+                    "filter": "item.active"
+                  }
+                },
+                {
+                  "key": "label",
+                  "label": "How it is named in the list",
+                  "kind": "text",
+                  "when": "form.action == addValue",
+                  "initial": "{stash.importPicklists[@parent.fieldId][@item.key].label|item.value}"
+                },
+                {
+                  "key": "meaning",
+                  "label": "What it means",
+                  "kind": "select",
+                  "when": "form.action == addValue && parent.spec.meanings",
+                  "initial": "{stash.importPicklists[@parent.fieldId][@item.key].meaning}",
+                  "optionsFrom": {
+                    "items": "parent.spec.meanings",
+                    "value": "{item}",
+                    "label": "{item:title}"
+                  }
+                },
+                {
+                  "key": "group",
+                  "label": "Listed under",
+                  "kind": "select",
+                  "when": "form.action == addValue && parent.spec.groups",
+                  "initial": "{stash.importPicklists[@parent.fieldId][@item.key].group}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "No group"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "parent.spec.groups",
+                    "value": "{item.id}",
+                    "label": "{item.label}"
+                  }
+                }
+              ],
+              "stash": {
+                "importPicklists": {
+                  "$put": {
+                    "map": "{stash.importPicklists}",
+                    "key": "{parent.fieldId}",
+                    "value": {
+                      "$put": {
+                        "map": "{stash.importPicklists[@parent.fieldId]}",
+                        "key": "{item.key}",
+                        "value": {
+                          "action": "{form.action}",
+                          "valueId?": "{form.valueId}",
+                          "label?": "{form.label}",
+                          "meaning?": "{form.meaning}",
+                          "group?": "{form.group}"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "References that name no record",
+          "when": "data.analysis.lookups.*.unresolved",
+          "items": "data.analysis.lookups",
+          "within": "unresolved",
+          "count": true,
+          "primary": "“{item.value}”",
+          "secondary": "{data.info.fields[id=parent.fieldId].label|parent.fieldId} · {item.count:number} rows",
+          "tertiary": "Could be: {item.suggestions.*.label:first3}",
+          "trailing": "{const.lookupAction[@stash.importLookups[@parent.fieldId][@item.key].action]|'Choose'}",
+          "icon": "link|link",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose what it becomes",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "action",
+                  "label": "What it becomes",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.importLookups[@parent.fieldId][@item.key].action}",
+                  "options": [
+                    {
+                      "value": "create",
+                      "label": "Create the record"
+                    },
+                    {
+                      "value": "mapTo",
+                      "label": "Use a record you have"
+                    },
+                    {
+                      "value": "leaveBlank",
+                      "label": "Leave the field blank"
+                    },
+                    {
+                      "value": "refuseRow",
+                      "label": "Refuse these rows"
+                    }
+                  ]
+                },
+                {
+                  "key": "recordId",
+                  "label": "Which record",
+                  "kind": "select",
+                  "when": "form.action == mapTo",
+                  "initial": "{stash.importLookups[@parent.fieldId][@item.key].recordId|item.suggestions.0.recordId}",
+                  "optionsFrom": {
+                    "items": "item.suggestions",
+                    "value": "{item.recordId}",
+                    "label": "{item.label}"
+                  }
+                }
+              ],
+              "stash": {
+                "importLookups": {
+                  "$put": {
+                    "map": "{stash.importLookups}",
+                    "key": "{parent.fieldId}",
+                    "value": {
+                      "$put": {
+                        "map": "{stash.importLookups[@parent.fieldId]}",
+                        "key": "{item.key}",
+                        "value": {
+                          "action": "{form.action}",
+                          "recordId?": "{form.recordId}"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every value reads as the file has it. Nothing needs a choice here.",
+          "when": "!data.analysis.picklists && !data.analysis.lookups"
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "next",
+              "label": "Continue",
+              "icon": "arrow.right|arrow_forward",
+              "navigate": {
+                "screen": "core.settings.data.import.matching"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.matching",
+      "title": "How rows find their records",
+      "icon": "magnifyingglass|search",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "matchKind": {
+          "new": "New",
+          "matched": "Matched",
+          "ambiguous": "Ambiguous",
+          "duplicateInFile": "Repeated in the file"
+        },
+        "normalizer": {
+          "exact": "exactly",
+          "trim": "ignoring spaces at either end",
+          "caseless": "ignoring case",
+          "email": "by email address",
+          "domain": "by web domain",
+          "name": "by name, ignoring case and punctuation",
+          "slug": "by slug",
+          "phone": "by phone number",
+          "externalId": "by external ID",
+          "aglynId": "by Aglyn ID",
+          "instant": "at the same moment, to the minute"
+        }
+      },
+      "load": {
+        "info": {
+          "url": "/api/transfer/fields",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "resource": "{stash.importResource}",
+            "hostId?": "{stash.importHost}"
+          }
+        },
+        "analysis": {
+          "url": "/api/transfer/analyze",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{stash.importJob}",
+            "mapping?": "{stash.importMapping}",
+            "dateOrders?": "{stash.importDates}",
+            "matchKeys?": "{stash.importKeys}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Rows against what you have",
+          "when": "data.analysis.matches",
+          "rows": [
+            {
+              "label": "New",
+              "value": "{data.analysis.matches.summary.new|'0'}"
+            },
+            {
+              "label": "Matched",
+              "value": "{data.analysis.matches.summary.matched|'0'}"
+            },
+            {
+              "label": "Ambiguous",
+              "value": "{data.analysis.matches.summary.ambiguous|'0'}"
+            },
+            {
+              "label": "Repeated in the file",
+              "value": "{data.analysis.matches.summary.duplicateInFile|'0'}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Matched on",
+          "when": "data.analysis.matches.keys",
+          "items": "data.analysis.matches.keys",
+          "count": false,
+          "primary": "{data.info.fields[id=item.fieldId].label|item.fieldId}",
+          "secondary": "{const.normalizer[@item.normalizer]|''}",
+          "icon": "key|key"
+        },
+        {
+          "type": "actions",
+          "when": "data.info.matchKeys",
+          "items": [
+            {
+              "id": "keys",
+              "label": "Change what rows are matched on",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "keys",
+                  "label": "Fields that find a record",
+                  "kind": "multiselect",
+                  "required": true,
+                  "initial": "{stash.importKeys|data.info.defaultMatchKeys}",
+                  "optionsFrom": {
+                    "items": "data.info.matchKeys",
+                    "value": "{item.fieldId}",
+                    "label": "{data.info.fields[id=item.fieldId].label|item.fieldId}"
+                  },
+                  "help": "A row is looked up by each in turn; the first that finds a record wins."
+                }
+              ],
+              "stash": {
+                "importKeys": "{form.keys}"
+              },
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Rows",
+          "when": "data.analysis.matches.rows",
+          "items": "data.analysis.matches.rows",
+          "count": false,
+          "primary": "Row {item.row + 1}: {item.label|'(no name)'}",
+          "badges": [
+            {
+              "text": "{const.matchKind[@item.outcome.kind]}"
+            }
+          ],
+          "icon": "doc.text|description",
+          "empty": "No rows."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "next",
+              "label": "Continue",
+              "icon": "arrow.right|arrow_forward",
+              "navigate": {
+                "screen": "core.settings.data.import.rules"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.rules",
+      "title": "What happens to a row",
+      "icon": "slider.horizontal.3|tune",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "mode": {
+          "overwrite": {
+            "label": "Overwrite",
+            "description": "The file’s value replaces the record’s."
+          },
+          "fillBlanks": {
+            "label": "Fill blanks",
+            "description": "Written only where the record has no value."
+          },
+          "keepExisting": {
+            "label": "Keep existing",
+            "description": "Never changed on an existing record."
+          },
+          "append": {
+            "label": "Append",
+            "description": "The file’s items are added to the list."
+          }
+        },
+        "blank": {
+          "leave": {
+            "label": "Leave the value",
+            "description": "A blank cell changes nothing."
+          },
+          "clear": {
+            "label": "Clear the value",
+            "description": "A blank cell empties the field."
+          }
+        },
+        "modeList": [
+          {
+            "value": "overwrite",
+            "label": "Overwrite"
+          },
+          {
+            "value": "fillBlanks",
+            "label": "Fill blanks"
+          },
+          {
+            "value": "keepExisting",
+            "label": "Keep existing"
+          },
+          {
+            "value": "append",
+            "label": "Append"
+          }
+        ]
+      },
+      "load": {
+        "info": {
+          "url": "/api/transfer/fields",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "resource": "{stash.importResource}",
+            "hostId?": "{stash.importHost}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "{data.info.defaultPolicy.note}",
+          "when": "data.info.defaultPolicy.note"
+        },
+        {
+          "type": "form",
+          "id": "policy",
+          "fields": [
+            {
+              "key": "onMatch",
+              "label": "A row that matches a record",
+              "kind": "select",
+              "required": true,
+              "initial": "{stash.importPolicy.record.onMatch|data.info.defaultPolicy.record.onMatch|'update'}",
+              "options": [
+                {
+                  "value": "update",
+                  "label": "Update the record"
+                },
+                {
+                  "value": "skip",
+                  "label": "Skip the row"
+                },
+                {
+                  "value": "duplicate",
+                  "label": "Create a duplicate anyway"
+                }
+              ]
+            },
+            {
+              "key": "onNew",
+              "label": "A row that matches nothing",
+              "kind": "select",
+              "required": true,
+              "initial": "{stash.importPolicy.record.onNew|data.info.defaultPolicy.record.onNew|'create'}",
+              "options": [
+                {
+                  "value": "create",
+                  "label": "Create a record"
+                },
+                {
+                  "value": "skip",
+                  "label": "Skip the row"
+                }
+              ]
+            },
+            {
+              "key": "onAmbiguous",
+              "label": "A row that matches several records",
+              "kind": "select",
+              "required": true,
+              "initial": "{stash.importPolicy.record.onAmbiguous|data.info.defaultPolicy.record.onAmbiguous|'ask'}",
+              "options": [
+                {
+                  "value": "ask",
+                  "label": "Let me choose for each row"
+                },
+                {
+                  "value": "skip",
+                  "label": "Skip the row"
+                }
+              ]
+            },
+            {
+              "key": "mode",
+              "label": "An existing value, when the file has one",
+              "kind": "select",
+              "required": true,
+              "initial": "{stash.importPolicy.fieldDefault.mode|data.info.defaultPolicy.fieldDefault.mode|'fillBlanks'}",
+              "options": [
+                {
+                  "value": "overwrite",
+                  "label": "Overwrite"
+                },
+                {
+                  "value": "fillBlanks",
+                  "label": "Fill blanks"
+                },
+                {
+                  "value": "keepExisting",
+                  "label": "Keep existing"
+                }
+              ],
+              "help": "Fill blanks never replaces a value somebody already has. Anything stronger is your choice, here or per field below."
+            },
+            {
+              "key": "blank",
+              "label": "A blank cell",
+              "kind": "select",
+              "required": true,
+              "initial": "{stash.importPolicy.fieldDefault.blank|data.info.defaultPolicy.fieldDefault.blank|'leave'}",
+              "options": [
+                {
+                  "value": "leave",
+                  "label": "Leave the value"
+                },
+                {
+                  "value": "clear",
+                  "label": "Clear the value"
+                }
+              ]
+            }
+          ],
+          "submit": {
+            "label": "Check the import",
+            "url": "/api/transfer/plan",
+            "body": {
+              "orgId": "{org.id}",
+              "jobId": "{stash.importJob}",
+              "mapping": "{stash.importMapping}",
+              "matchKeys?": "{stash.importKeys}",
+              "dateOrders?": "{stash.importDates}",
+              "picklistChoices?": "{stash.importPicklists}",
+              "lookupChoices?": "{stash.importLookups}",
+              "policy": {
+                "record": {
+                  "onMatch": "{form.onMatch}",
+                  "onNew": "{form.onNew}",
+                  "onAmbiguous": "{form.onAmbiguous}"
+                },
+                "fieldDefault": {
+                  "mode": "{form.mode}",
+                  "blank": "{form.blank}"
+                },
+                "fields?": "{stash.importFields}",
+                "rows?": "{stash.importRows}"
+              }
+            },
+            "stash": {
+              "importPlan": "{response}",
+              "importPolicy": {
+                "record": {
+                  "onMatch": "{form.onMatch}",
+                  "onNew": "{form.onNew}",
+                  "onAmbiguous": "{form.onAmbiguous}"
+                },
+                "fieldDefault": {
+                  "mode": "{form.mode}",
+                  "blank": "{form.blank}"
+                }
+              }
+            },
+            "navigate": {
+              "screen": "core.settings.data.import.review"
+            },
+            "reload": false
+          }
+        },
+        {
+          "type": "list",
+          "title": "Rules for one field",
+          "items": "data.info.fields",
+          "filter": "stash.importMapping.* ~= @item.id",
+          "count": false,
+          "primary": "{item.label}",
+          "secondary": "{const.mode[@stash.importFields[@item.id].mode].label|'Default'} · {const.blank[@stash.importFields[@item.id].blank].label|'Default'}",
+          "tertiary": "{data.info.locked[fieldId=item.id].reason|''}",
+          "icon": "list.bullet.rectangle|list",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose how it is handled",
+              "icon": "slider.horizontal.3|tune",
+              "when": "!data.info.locked[fieldId=item.id]",
+              "prompt": [
+                {
+                  "key": "mode",
+                  "label": "An existing value, when the file has one",
+                  "kind": "select",
+                  "initial": "{stash.importFields[@item.id].mode}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Use the default"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "const.modeList",
+                    "value": "{item.value}",
+                    "label": "{item.label}",
+                    "filter": "item.value != append || parent.type == tags,multiPicklist,list"
+                  }
+                },
+                {
+                  "key": "blank",
+                  "label": "A blank cell",
+                  "kind": "select",
+                  "initial": "{stash.importFields[@item.id].blank}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Use the default"
+                    },
+                    {
+                      "value": "leave",
+                      "label": "Leave the value"
+                    },
+                    {
+                      "value": "clear",
+                      "label": "Clear the value"
+                    }
+                  ]
+                }
+              ],
+              "stash": {
+                "importFields": {
+                  "$put": {
+                    "map": "{stash.importFields}",
+                    "key": "{item.id}",
+                    "value": {
+                      "mode?": "{form.mode}",
+                      "blank?": "{form.blank}"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "empty": "Map a column first."
+        },
+        {
+          "type": "list",
+          "title": "Held by the feature",
+          "when": "data.info.locked",
+          "items": "data.info.locked",
+          "count": false,
+          "primary": "{data.info.fields[id=item.fieldId].label|item.fieldId}",
+          "secondary": "{item.reason}",
+          "icon": "lock|lock"
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.review",
+      "title": "Review the import",
+      "icon": "checklist|inventory_2",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "warning": {
+          "derivation": {
+            "title": "Values read differently from how they were typed",
+            "description": "A cell was reformatted to fit its field: a date put in order, a number read with its separators, a name split."
+          },
+          "ambiguousDate": {
+            "title": "Dates that read either way",
+            "description": "Day and month could be swapped; they are read in the order you chose."
+          },
+          "unmatchedPicklist": {
+            "title": "Values a list does not hold",
+            "description": "These values are mapped to another value, left blank, or refuse their rows, as you chose."
+          },
+          "newPicklistValue": {
+            "title": "New list values",
+            "description": "These values are added to the organization’s list for everyone."
+          },
+          "unresolvedLookup": {
+            "title": "References that name no record",
+            "description": "Created, mapped, left blank or refused, as you chose."
+          },
+          "ambiguousMatch": {
+            "title": "Rows that match more than one record",
+            "description": "They are skipped unless you chose the record they update."
+          },
+          "duplicateInFile": {
+            "title": "Rows repeated in the file",
+            "description": "A later row with the same key as an earlier one is skipped."
+          },
+          "lockedRule": {
+            "title": "Values a rule holds back",
+            "description": "The owning feature never lets a file set these values."
+          },
+          "droppedCell": {
+            "title": "Cells that could not be read",
+            "description": "These cells are dropped; the rest of each row is imported."
+          },
+          "overwriteNonBlank": {
+            "title": "Existing values that will be replaced",
+            "description": "Records already hold a value here, and the file’s value replaces it."
+          },
+          "clearValue": {
+            "title": "Existing values that will be cleared",
+            "description": "A blank cell clears what the record holds, as you chose."
+          },
+          "planLimit": {
+            "title": "Rows past what your plan allows",
+            "description": "These rows fail; the rest are imported."
+          },
+          "screening": {
+            "title": "What this import’s own checks found",
+            "description": "The feature you are importing into checked the file for signs of trouble. Each item says what it found and what happens to it."
+          },
+          "resourceRule": {
+            "title": "Rows the feature asks you to check",
+            "description": "The feature that owns these records flags them; each says why. A row it refuses fails, and the rest are imported."
+          }
+        },
+        "verdict": {
+          "create": "Create",
+          "update": "Update",
+          "unchanged": "Unchanged",
+          "skip": "Skip",
+          "fail": "Fail"
+        },
+        "reason": {
+          "matchedSkipped": "Matched a record, and matched rows are skipped",
+          "newSkipped": "Matched nothing, and new rows are skipped",
+          "skippedByChoice": "You chose to skip it",
+          "ambiguousSkipped": "Matched more than one record",
+          "ambiguousUnresolved": "Matched more than one record, and none was chosen",
+          "duplicateInFile": "Repeats an earlier row",
+          "missingRequired": "A required field is blank",
+          "refusedValue": "A value refuses the row",
+          "matchedRecordMissing": "The matched record no longer exists",
+          "planLimit": "Past what your plan allows",
+          "resourceRule": "Refused by a rule of the feature that owns it"
+        },
+        "mode": {
+          "overwrite": {
+            "label": "Overwrite",
+            "description": "The file’s value replaces the record’s."
+          },
+          "fillBlanks": {
+            "label": "Fill blanks",
+            "description": "Written only where the record has no value."
+          },
+          "keepExisting": {
+            "label": "Keep existing",
+            "description": "Never changed on an existing record."
+          },
+          "append": {
+            "label": "Append",
+            "description": "The file’s items are added to the list."
+          }
+        }
+      },
+      "load": {
+        "info": {
+          "url": "/api/transfer/fields",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "resource": "{stash.importResource}",
+            "hostId?": "{stash.importHost}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Importing: {stash.importProgress.rowsDone:number} of {stash.importProgress.rowCount:number} rows.",
+          "when": "stash.importProgress"
+        },
+        {
+          "type": "fields",
+          "title": "{stash.importFile|'The file'}",
+          "when": "stash.importPlan",
+          "rows": [
+            {
+              "label": "Create",
+              "value": "{stash.importPlan.summary.create|'0'}"
+            },
+            {
+              "label": "Update",
+              "value": "{stash.importPlan.summary.update|'0'}"
+            },
+            {
+              "label": "Unchanged",
+              "value": "{stash.importPlan.summary.unchanged|'0'}"
+            },
+            {
+              "label": "Skip",
+              "value": "{stash.importPlan.summary.skip|'0'}"
+            },
+            {
+              "label": "Fail",
+              "value": "{stash.importPlan.summary.fail|'0'}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Worth a look",
+          "when": "stash.importPlan.warnings",
+          "items": "stash.importPlan.warnings",
+          "count": true,
+          "primary": "{const.warning[@item.class].title}",
+          "secondary": "{const.warning[@item.class].description}",
+          "tertiary": "{item.rows:number} rows",
+          "badges": [
+            {
+              "text": "Needs your OK",
+              "when": "item.requiresAcknowledgement"
+            }
+          ],
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "title": "Rows that match more than one record",
+          "when": "stash.importPlan.ambiguous",
+          "items": "stash.importPlan.ambiguous",
+          "count": true,
+          "primary": "Row {item.row + 1}",
+          "secondary": "{item.recordIds.*:first3}",
+          "trailing": "{stash.importRows[@item.row].recordId|stash.importRows[@item.row].action|'Not chosen'}",
+          "icon": "person.2|group",
+          "actions": [
+            {
+              "id": "record",
+              "label": "Update one of them",
+              "icon": "arrow.triangle.merge|merge",
+              "url": "/api/transfer/plan",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "mapping": "{stash.importMapping}",
+                "matchKeys?": "{stash.importKeys}",
+                "dateOrders?": "{stash.importDates}",
+                "picklistChoices?": "{stash.importPicklists}",
+                "lookupChoices?": "{stash.importLookups}",
+                "policy": {
+                  "record": "{stash.importPolicy.record}",
+                  "fieldDefault": "{stash.importPolicy.fieldDefault}",
+                  "fields?": "{stash.importFields}",
+                  "rows?": {
+                    "$put": {
+                      "map": "{stash.importRows}",
+                      "key": "{item.row}",
+                      "value": {
+                        "recordId": "{form.record}"
+                      }
+                    }
+                  }
+                }
+              },
+              "stash": {
+                "importPlan": "{response}",
+                "importRows": {
+                  "$put": {
+                    "map": "{stash.importRows}",
+                    "key": "{item.row}",
+                    "value": {
+                      "recordId": "{form.record}"
+                    }
+                  }
+                }
+              },
+              "reload": false,
+              "prompt": [
+                {
+                  "key": "record",
+                  "label": "Which record",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.importRows[@item.row].recordId}",
+                  "optionsFrom": {
+                    "items": "item.recordIds",
+                    "value": "{item}",
+                    "label": "{stash.importPlan.recordLabels[@item]|item}"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "skip",
+              "label": "Skip this row",
+              "icon": "forward|arrow_forward",
+              "url": "/api/transfer/plan",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "mapping": "{stash.importMapping}",
+                "matchKeys?": "{stash.importKeys}",
+                "dateOrders?": "{stash.importDates}",
+                "picklistChoices?": "{stash.importPicklists}",
+                "lookupChoices?": "{stash.importLookups}",
+                "policy": {
+                  "record": "{stash.importPolicy.record}",
+                  "fieldDefault": "{stash.importPolicy.fieldDefault}",
+                  "fields?": "{stash.importFields}",
+                  "rows?": {
+                    "$put": {
+                      "map": "{stash.importRows}",
+                      "key": "{item.row}",
+                      "value": {
+                        "action": "skip"
+                      }
+                    }
+                  }
+                }
+              },
+              "stash": {
+                "importPlan": "{response}",
+                "importRows": {
+                  "$put": {
+                    "map": "{stash.importRows}",
+                    "key": "{item.row}",
+                    "value": {
+                      "action": "skip"
+                    }
+                  }
+                }
+              },
+              "reload": false
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Existing values that change",
+          "when": "stash.importPlan.conflicts",
+          "items": "stash.importPlan.conflicts",
+          "within": "fields",
+          "count": true,
+          "primary": "{data.info.fields[id=item.fieldId].label|item.fieldId}",
+          "secondary": "Row {parent.row + 1}: {stash.importPlan.recordLabels[@parent.recordId]|parent.recordId}",
+          "tertiary": "{item.before|'blank'} → {item.after|'blank'}",
+          "badges": [
+            {
+              "text": "{const.mode[@item.mode].label|''}"
+            }
+          ],
+          "icon": "arrow.left.arrow.right|swap_horiz"
+        },
+        {
+          "type": "list",
+          "title": "The first rows",
+          "when": "stash.importPlan.sample",
+          "items": "stash.importPlan.sample",
+          "count": false,
+          "primary": "Row {item.index + 1}: {const.verdict[@item.verdict]}",
+          "secondary": "{const.reason[@item.reason]|''}",
+          "tertiary": "{item.diff.*.fieldId}",
+          "icon": "doc.text|description"
+        },
+        {
+          "type": "actions",
+          "when": "stash.importPlan",
+          "items": [
+            {
+              "id": "apply",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "stash.importPlan.acknowledgementsRequired",
+              "confirm": "Import this file? Everything it writes is kept for seven days, so the import can be undone.",
+              "url": "/api/transfer/apply",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "acknowledged": "{form.ack}"
+              },
+              "repeat": {
+                "until": "response.done",
+                "max": 400,
+                "stop": "response.job.status == failed",
+                "stopMessage": "{response.job.error.message|'The import stopped. Run it again to carry on from where it stopped.'}"
+              },
+              "stash": {
+                "importProgress": "{response.progress}",
+                "importResult": "{response}"
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.done"
+              },
+              "reload": false,
+              "prompt": [
+                {
+                  "key": "ack",
+                  "label": "Before importing",
+                  "kind": "multiselect",
+                  "coversAll": true,
+                  "optionsFrom": {
+                    "items": "stash.importPlan.acknowledgementsRequired",
+                    "value": "{item}",
+                    "label": "{const.warning[@item].title}: {const.warning[@item].description}"
+                  },
+                  "help": "Tick each one to confirm you understand it."
+                }
+              ]
+            },
+            {
+              "id": "applyNow",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "!stash.importPlan.acknowledgementsRequired",
+              "confirm": "Import this file? Everything it writes is kept for seven days, so the import can be undone.",
+              "url": "/api/transfer/apply",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}"
+              },
+              "repeat": {
+                "until": "response.done",
+                "max": 400,
+                "stop": "response.job.status == failed",
+                "stopMessage": "{response.job.error.message|'The import stopped. Run it again to carry on from where it stopped.'}"
+              },
+              "stash": {
+                "importProgress": "{response.progress}",
+                "importResult": "{response}"
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.done"
+              },
+              "reload": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.done",
+      "title": "Imported",
+      "icon": "checkmark.circle|check_circle",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "reason": {
+          "matchedSkipped": "Matched a record, and matched rows are skipped",
+          "newSkipped": "Matched nothing, and new rows are skipped",
+          "skippedByChoice": "You chose to skip it",
+          "ambiguousSkipped": "Matched more than one record",
+          "ambiguousUnresolved": "Matched more than one record, and none was chosen",
+          "duplicateInFile": "Repeats an earlier row",
+          "missingRequired": "A required field is blank",
+          "refusedValue": "A value refuses the row",
+          "matchedRecordMissing": "The matched record no longer exists",
+          "planLimit": "Past what your plan allows",
+          "resourceRule": "Refused by a rule of the feature that owns it"
+        }
+      },
+      "load": {
+        "status": {
+          "url": "/api/transfer/status",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{stash.importJob}",
+            "include": "results"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "success",
+          "text": "{data.status.job.results.created|'0'} created, {data.status.job.results.updated|'0'} updated, {data.status.job.results.unchanged|'0'} unchanged, {data.status.job.results.skipped|'0'} skipped, {data.status.job.results.failed|'0'} failed.",
+          "when": "data.status.job.status == applied"
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "The import stopped part of the way. Open it again from the history to carry on.",
+          "when": "data.status.job.status == applying,failed"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "This import was undone.",
+          "when": "data.status.job.status == undone"
+        },
+        {
+          "type": "list",
+          "title": "Not imported",
+          "when": "data.status.rows",
+          "items": "data.status.rows",
+          "filter": "item.outcome == failed",
+          "count": true,
+          "primary": "Row {item.row + 1}",
+          "secondary": "{item.message|const.reason[@item.reason]|'Refused'}",
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "fields",
+          "when": "data.status.undo.available",
+          "rows": [
+            {
+              "label": "You can undo this until",
+              "value": "{data.status.undo.expiresAt:datetime}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "results",
+              "label": "Download the results",
+              "icon": "arrow.down.doc|download",
+              "url": "/api/transfer/status",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "download": "results"
+              },
+              "download": "import-{stash.importJob}-results.csv",
+              "success": "Results ready to save"
+            },
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "data.status.undo.available",
+              "stash": {
+                "importUndo": null
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.undo"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.undo",
+      "title": "Undo the import",
+      "icon": "arrow.uturn.backward|undo",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "action": {
+          "created": "Delete it",
+          "updated": "Put back what it held"
+        },
+        "choice": {
+          "keep": "Keep the edit",
+          "revert": "Undo it too"
+        }
+      },
+      "load": {
+        "undo": {
+          "url": "/api/transfer/undo",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{stash.importJob}",
+            "action": "plan",
+            "limit": 200
+          },
+          "cursor": "next",
+          "cursorParam": "offset",
+          "items": "conflicts"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "What undoing does",
+          "rows": [
+            {
+              "label": "Records put back",
+              "value": "{data.undo.counts.restore|'0'}"
+            },
+            {
+              "label": "Records the import added, removed",
+              "value": "{data.undo.counts.delete|'0'}"
+            },
+            {
+              "label": "Edited since the import",
+              "value": "{data.undo.counts.conflict|'0'}"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "text": "Records edited since the import are kept as they are unless you choose to undo them too.",
+          "when": "data.undo.conflicts"
+        },
+        {
+          "type": "list",
+          "title": "Edited since the import",
+          "load": "undo",
+          "when": "data.undo.conflicts",
+          "items": "data.undo.conflicts",
+          "count": true,
+          "primary": "{item.label|item.recordId}",
+          "secondary": "Row {item.row + 1} · {const.action[@item.action]}",
+          "tertiary": "{item.fields}",
+          "trailing": "{const.choice[@stash.importUndo[@item.recordId]]|'Keep the edit'}",
+          "icon": "pencil|edit",
+          "actions": [
+            {
+              "id": "choose",
+              "label": "Choose",
+              "icon": "slider.horizontal.3|tune",
+              "prompt": [
+                {
+                  "key": "decision",
+                  "label": "What undo does to it",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{stash.importUndo[@item.recordId]|'keep'}",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "Keep the edit"
+                    },
+                    {
+                      "value": "revert",
+                      "label": "Undo it too"
+                    }
+                  ]
+                }
+              ],
+              "stash": {
+                "importUndo": {
+                  "$put": {
+                    "map": "{stash.importUndo}",
+                    "key": "{item.recordId}",
+                    "value": "{form.decision}"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "undo",
+              "label": "Undo the import",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "confirm": "Undo this import? Records you edited since are kept unless you chose to undo them too.",
+              "url": "/api/transfer/undo",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{stash.importJob}",
+                "action": "apply",
+                "decisions?": "{stash.importUndo}",
+                "otherwise": "keep"
+              },
+              "repeat": {
+                "until": "response.done",
+                "max": 200
+              },
+              "success": "Undone",
+              "back": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "core.settings.data.import.open",
+      "title": "Import",
+      "icon": "arrow.up.arrow.down|sync",
+      "scope": "org",
+      "requires": "org.manager",
+      "constants": {
+        "status": {
+          "draft": "Uploaded",
+          "analyzed": "Being set up",
+          "planned": "Ready to import",
+          "applying": "Importing",
+          "applied": "Imported",
+          "failed": "Stopped",
+          "undone": "Undone"
+        }
+      },
+      "load": {
+        "status": {
+          "url": "/api/transfer/status",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "jobId": "{params.jobId}"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "{data.status.job.fileName|'This import'}",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.status[@data.status.job.status]|data.status.job.status:title}"
+            },
+            {
+              "label": "Rows",
+              "value": "{data.status.job.rowCount:number}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "continue",
+              "label": "Carry on setting it up",
+              "icon": "arrow.right|arrow_forward",
+              "when": "data.status.job.status == draft,analyzed,planned",
+              "stash": {
+                "importJob": "{data.status.job.id}",
+                "importResource": "{data.status.job.resource}",
+                "importHost": "{data.status.job.hostId}",
+                "importFile": "{data.status.job.fileName}",
+                "importMapping": null,
+                "importDates": null,
+                "importPicklists": null,
+                "importLookups": null,
+                "importKeys": null,
+                "importFields": null,
+                "importRows": null,
+                "importPolicy": null,
+                "importPlan": null,
+                "importResult": null,
+                "importAck": null,
+                "importProgress": null,
+                "importUndo": null
+              },
+              "after": {
+                "label": "Read the file",
+                "url": "/api/transfer/analyze",
+                "body": {
+                  "orgId": "{org.id}",
+                  "jobId": "{stash.importJob}"
+                },
+                "stash": {
+                  "importMapping": "{response.match.mapping}"
+                },
+                "reload": false
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.columns"
+              },
+              "reload": false
+            },
+            {
+              "id": "resume",
+              "label": "Resume the import",
+              "icon": "play|play_arrow",
+              "when": "data.status.job.status == applying,failed",
+              "stash": {
+                "importJob": "{data.status.job.id}",
+                "importResource": "{data.status.job.resource}",
+                "importHost": "{data.status.job.hostId}",
+                "importFile": "{data.status.job.fileName}",
+                "importMapping": null,
+                "importDates": null,
+                "importPicklists": null,
+                "importLookups": null,
+                "importKeys": null,
+                "importFields": null,
+                "importRows": null,
+                "importPolicy": null,
+                "importPlan": null,
+                "importResult": null,
+                "importAck": null,
+                "importProgress": null,
+                "importUndo": null
+              },
+              "url": "/api/transfer/apply",
+              "body": {
+                "orgId": "{org.id}",
+                "jobId": "{data.status.job.id}"
+              },
+              "repeat": {
+                "until": "response.done",
+                "max": 400,
+                "stop": "response.job.status == failed",
+                "stopMessage": "{response.job.error.message|'The import stopped. Run it again to carry on from where it stopped.'}"
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.done"
+              },
+              "reload": false
+            },
+            {
+              "id": "results",
+              "label": "See the results",
+              "icon": "list.bullet|list",
+              "when": "data.status.job.status == applied,undone",
+              "stash": {
+                "importJob": "{data.status.job.id}",
+                "importResource": "{data.status.job.resource}",
+                "importHost": "{data.status.job.hostId}",
+                "importFile": "{data.status.job.fileName}",
+                "importMapping": null,
+                "importDates": null,
+                "importPicklists": null,
+                "importLookups": null,
+                "importKeys": null,
+                "importFields": null,
+                "importRows": null,
+                "importPolicy": null,
+                "importPlan": null,
+                "importResult": null,
+                "importAck": null,
+                "importProgress": null,
+                "importUndo": null
+              },
+              "navigate": {
+                "screen": "core.settings.data.import.done"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

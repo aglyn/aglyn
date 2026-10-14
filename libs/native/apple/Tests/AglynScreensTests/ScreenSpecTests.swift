@@ -580,8 +580,11 @@ final class ScreenSpecTests: XCTestCase {
     let job: JSONValue = ["id": "j9", "kind": "package", "resultFile": true, "undo": ["available": true]]
     let scope = ScreenContext.with(["org": ["id": "o1"]], item: job)
     XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: scope) }.map(\.id), ["results", "undo"])
-    let records = ScreenContext.with(scope, "item", ["id": "j9", "kind": "records", "resultFile": false, "undo": ["available": true]])
-    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: records) }.map(\.id), [])
+    // A records import opens in the wizard (its results and its undo), until it is undone.
+    let records = ScreenContext.with(scope, "item", ["id": "j9", "kind": "records", "status": "applied", "resultFile": false, "undo": ["available": true]])
+    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: records) }.map(\.id), ["open"])
+    let undone = ScreenContext.with(scope, "item", ["id": "j9", "kind": "records", "status": "undone", "resultFile": true])
+    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: undone) }.map(\.id), ["results"])
     XCTAssertEqual(ScreenValues.render(try XCTUnwrap(actions.first?.download), in: scope), "import-j9-results.csv")
   }
 

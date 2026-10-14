@@ -171,7 +171,7 @@ async function main() {
     plugins,
     planLabelFor: (feature) => entitlements.planLabelGrantingFeature(feature),
     featureKeys: Object.keys(entitlements.resolveOrgEntitlements({ plan: 'free' }).features),
-    importWizard: false,
+    importWizard: true,
   })
 
   const outputs = [

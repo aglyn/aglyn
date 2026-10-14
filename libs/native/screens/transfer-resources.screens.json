@@ -198,6 +198,18 @@
                 "resource": "{item.key}",
                 "title": "Export {item.label}"
               }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "data.ent.features.crm && item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}"
+                }
+              }
             }
           ]
         },
@@ -300,6 +312,18 @@
               "export": {
                 "resource": "{item.key}",
                 "title": "Export {item.label}"
+              }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "data.ent.features.outreach && item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}"
+                }
               }
             }
           ]
@@ -455,6 +479,17 @@
               "export": {
                 "resource": "data.dataset:{item.$id}",
                 "title": "Export {item.name|item.$id}"
+              }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "data.dataset:{item.$id}"
+                }
               }
             }
           ]
@@ -633,6 +668,19 @@
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
               }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
+              }
             }
           ]
         },
@@ -661,6 +709,19 @@
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
               }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "data.ent.features.bookings && item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
+              }
             }
           ]
         },
@@ -687,6 +748,19 @@
                 "resource": "{item.key}",
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
+              }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
               }
             }
           ]
@@ -716,6 +790,19 @@
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
               }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "data.ent.features.giftCards && item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
+              }
             }
           ]
         },
@@ -742,6 +829,19 @@
                 "resource": "{item.key}",
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
+              }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
               }
             }
           ]
@@ -771,6 +871,19 @@
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
               }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "data.ent.features.eventCalendar && item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
+              }
             }
           ]
         },
@@ -798,6 +911,19 @@
                 "resource": "{item.key}",
                 "title": "Export {item.label}",
                 "hostId": "{site.id}"
+              }
+            },
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "when": "data.ent.features.redirects && item.imports",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{item.key}",
+                  "hostId": "{site.id}"
+                }
               }
             }
           ]

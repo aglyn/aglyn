@@ -126,7 +126,26 @@
           "c1": "x",
           "c2": "y"
         }
-      }
+      },
+      "picklists": [
+        {
+          "fieldId": "status",
+          "proposals": {
+            "x": {
+              "action": "leaveBlank"
+            }
+          }
+        },
+        {
+          "fieldId": "tier",
+          "proposals": {
+            "gold": {
+              "action": "mapTo",
+              "valueId": "g"
+            }
+          }
+        }
+      ]
     }
   },
   "render": [
@@ -285,6 +304,18 @@
     {
       "template": "{data.groups[label='Missing'].items.0.key|'none'}",
       "expect": "none"
+    },
+    {
+      "template": "{data.list:first1}",
+      "expect": "x"
+    },
+    {
+      "template": "{data.groups.*.items.*.key:first2}",
+      "expect": "outreach/a, outreach/b"
+    },
+    {
+      "template": "{data.access.*}",
+      "expect": "editor, viewer"
     }
   ],
   "url": [
@@ -463,6 +494,63 @@
       "expect": {
         "clear": null
       }
+    },
+    {
+      "body": {
+        "merged": {
+          "$merge": [
+            {
+              "$index": {
+                "rows": "data.picklists",
+                "key": "{item.fieldId}",
+                "value": "{item.proposals}"
+              }
+            },
+            {
+              "status": {
+                "x": {
+                  "action": "addValue"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "merged": {
+          "status": {
+            "x": {
+              "action": "addValue"
+            }
+          },
+          "tier": {
+            "gold": {
+              "action": "mapTo",
+              "valueId": "g"
+            }
+          }
+        }
+      }
+    },
+    {
+      "body": {
+        "a?": "{data.missing}",
+        "b?": "",
+        "c?": "{data.flag}",
+        "d": "x",
+        "e?": "{data.list}",
+        "f?": "{org.name}",
+        "g?": []
+      },
+      "expect": {
+        "c": false,
+        "d": "x",
+        "e": [
+          "x",
+          "y"
+        ],
+        "f": "Acme"
+      }
     }
   ],
   "condition": [
@@ -588,6 +676,14 @@
     },
     {
       "when": "data.groups.*.label ~= @data.missing",
+      "expect": false
+    },
+    {
+      "when": "staff.is && org.manager || org.role == admin",
+      "expect": true
+    },
+    {
+      "when": "staff.is && org.manager || org.role == owner",
       "expect": false
     }
   ]

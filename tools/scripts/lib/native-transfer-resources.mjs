@@ -200,6 +200,16 @@ export function transferResourcesSpec({ plugins, planLabelFor, featureKeys, impo
         icon: 'arrow.down.doc|download',
         export: { resource: `${dataset.resource.key}:{item.$id}`, title: 'Export {item.name|item.$id}' },
       },
+      ...(importWizard
+        ? [
+            {
+              id: 'import',
+              label: 'Import',
+              icon: 'square.and.arrow.down|upload',
+              navigate: { screen: RECORDS_IMPORT, params: { resource: `${dataset.resource.key}:{item.$id}` } },
+            },
+          ]
+        : []),
     ],
   }
 
