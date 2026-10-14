@@ -121,8 +121,9 @@ struct ListBlock: View {
   let trigger: (ActionSpec, JSONValue) -> Void
 
   var body: some View {
-    let rows = ScreenValues.rows(ScreenValues.lookup(block["items"]?.stringValue ?? "", in: context))
-      .filter { ScreenValues.condition(block["filter"]?.stringValue, in: ScreenContext.with(context, item: $0)) }
+    let rows = ScreenValues.scopes(
+      items: block["items"]?.stringValue ?? "", within: block["within"]?.stringValue,
+      filter: block["filter"]?.stringValue, in: context)
     let loadKey = block["load"]?.stringValue
     Section {
       if rows.isEmpty {
@@ -132,7 +133,7 @@ struct ListBlock: View {
           .padding(.vertical, AglynSpace.one)
       }
       ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-        ListRow(block: block, scope: ScreenContext.with(context, item: row), selection: selection, open: open, trigger: trigger)
+        ListRow(block: block, scope: row, selection: selection, open: open, trigger: trigger)
       }
       if let loadKey, model.cursors[loadKey] != nil {
         Button {
@@ -303,6 +304,13 @@ enum FieldValue: Equatable {
 func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   switch (field.kind, value) {
   case ("toggle", .flag(let flag)?): return .bool(flag)
+  case ("multiselect", .text(let text)?):
+    // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
+    let chosen = text.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
+    return chosen.isEmpty ? .null : .array(chosen.map(JSONValue.string))
+  case ("file", .text(let text)?):
+    if text.isEmpty { return .null }
+    return field.parse == "json" ? (JSONValue.decode(Data(text.utf8)) ?? .null) : .string(text)
   case ("number", .text(let text)?):
     let trimmed = text.trimmingCharacters(in: .whitespaces)
     return trimmed.isEmpty ? .null : Double(trimmed).map(JSONValue.number) ?? .string(trimmed)
@@ -316,6 +324,7 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
 func initialValue(_ field: FieldSpec, in context: JSONValue) -> FieldValue {
   let resolved = field.initial.map { ScreenValues.resolve($0, in: context) } ?? .null
   if field.kind == "toggle" { return .flag(ScreenValues.truthy(resolved)) }
+  if field.kind == "multiselect" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
   if field.kind == "date", let millis = ScreenValues.epochMillis(resolved) {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
@@ -329,6 +338,8 @@ struct FieldInput: View {
   let field: FieldSpec
   let context: JSONValue
   @Binding var value: FieldValue
+  @State private var picking: PickSource?
+  @State private var fileName: String?
 
   private var text: Binding<String> {
     Binding(get: { if case .text(let t) = value { t } else { "" } }, set: { value = .text($0) })
@@ -346,6 +357,36 @@ struct FieldInput: View {
       case "select":
         Picker(field.label, selection: text) {
           ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
+        }
+      case "multiselect":
+        // Each choice a switch; the chosen ids are kept one per line.
+        let chosen = Set(text.wrappedValue.split(separator: "\n").map(String.init))
+        VStack(alignment: .leading, spacing: 4) {
+          Text(field.label).font(AglynFont.subheadline)
+          ForEach(field.choices(in: context), id: \.value) { choice in
+            Toggle(
+              choice.label,
+              isOn: Binding(
+                get: { chosen.contains(choice.value) },
+                set: { on in
+                  var next = field.choices(in: context).map(\.value).filter { $0 == choice.value ? on : chosen.contains($0) }
+                  // Keep ids the list no longer offers rather than silently dropping them.
+                  next += chosen.filter { id in !field.choices(in: context).contains { $0.value == id } }
+                  text.wrappedValue = next.joined(separator: "\n")
+                }))
+          }
+        }
+      case "file":
+        HStack {
+          Button(text.wrappedValue.isEmpty ? "Choose a file" : "Choose a different file") { picking = .files }
+          if !text.wrappedValue.isEmpty {
+            Text(fileName ?? "File chosen").font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
+          }
+        }
+        .aglynMediaPicker($picking, multiple: false) { files in
+          guard let file = files.first else { return }
+          fileName = file.name
+          text.wrappedValue = String(data: file.data, encoding: .utf8) ?? ""
         }
       case "multiline":
         TextField(field.label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)

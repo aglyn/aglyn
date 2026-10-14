@@ -927,6 +927,45 @@ whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
 in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
 
+The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
+`now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
+counters and daily documents are named by, so `data.counter[@now.month]` reads
+this month's figure. A path `rows.*.field` is that field of every row, as a
+list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
+a term that is missing makes the sum missing, and `x?` counts as zero where it
+is missing. `a ?? 'text'` keeps a real 0 or false.
+
+A Firestore `query` load takes `where` as `[field, op, value]` (any operator,
+a value may be `{"$date": ISO}`) and `count: true`, which answers
+`{ "count": N }` from the server's count (the web SDK's `getCountFromServer`).
+A load with `each: "data.sites.sites"` runs once per row of an earlier load,
+with the row as `item`, and its key holds the list of answers (a failed one is
+null); at most 50 rows.
+
+Files and multi-step flows (the Imports and exports hub is the largest user):
+
+- `download: "name"` makes an action's route answer a file (an export) that the
+  person saves or shares, named by the route's `Content-Disposition` or else by
+  `name`. `downloadAt: "package"` is for a route that answers JSON: the file is
+  the value at that path of the answer, indented, and `download` is then a
+  template over `response` that names it (a workspace package's export answers
+  `{ fileName, package }`).
+- A `file` field reads the chosen file; `parse: "json"` sends it parsed.
+  `multiselect` holds a list of ids; `coversAll: true` leaves it unfinished
+  until every choice is chosen (the warnings an import must have acknowledged).
+- `stash: { key: template }` on an action keeps values as `stash.<key>` for the
+  screens that follow (a package read once, the plan made from it, the choices
+  made so far) until the app closes. `{"$put": {map, key, value}}` in a body or a
+  stash sets one entry of a map and removes it when the value is empty.
+- `optionsFrom` and a list's `items` can take `within: "items"`: one entry per row
+  of each row's inner list, the outer row as `parent` (`{parent.label}: {item.name}`).
+  `a.*.b.*.c` flattens lists it meets, so `resources.*.items.*.key` is every
+  resource's item keys. `path ~= @other.path` asks whether a list holds, or a text
+  contains, what the other path reads.
+- A POST load pages too: `cursor` names the response field, and the next page is
+  the same body with the cursor under `cursorParam` (a number cursor, such as a
+  job's `createdAt`, goes back as a number).
+
 ### The plugin switchboard
 
 `{ "switchboard": "org" }` reads `orgs/{org}` and `{ "switchboard": "site" }`

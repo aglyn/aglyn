@@ -74,7 +74,34 @@
           "hosts": 2
         }
       },
-      "kindKey": "hosts"
+      "kindKey": "hosts",
+      "groups": [
+        {
+          "label": "Sequences",
+          "items": [
+            {
+              "key": "outreach/a",
+              "name": "Welcome"
+            },
+            {
+              "key": "outreach/b"
+            }
+          ]
+        },
+        {
+          "label": "Campaigns",
+          "items": [
+            {
+              "key": "campaign/c"
+            }
+          ]
+        },
+        {
+          "label": "Empty",
+          "items": []
+        }
+      ],
+      "pick": "y"
     }
   },
   "render": [
@@ -171,6 +198,54 @@
       "expect": "{literal}}"
     },
     {
+      "template": "{data.access[@data.hostKey]}",
+      "expect": "viewer"
+    },
+    {
+      "template": "{data.addons.catalog[@data.kindKey].unitUsd:dollars}/mo",
+      "expect": "$5.00/mo"
+    },
+    {
+      "template": "{data.addons.quantities[@data.kindKey]|'0'} of {data.addons.catalog[@data.kindKey].max}",
+      "expect": "2 of 20"
+    },
+    {
+      "template": "{data.missing + 1}",
+      "expect": ""
+    },
+    {
+      "template": "{data.money + data.bytes - 1:number}",
+      "expect": "1,696,319"
+    },
+    {
+      "template": "{data.big - 1000000:number}",
+      "expect": "234,567.89"
+    },
+    {
+      "template": "{data.members.*.count + 1}",
+      "expect": "1"
+    },
+    {
+      "template": "{data.members.*.joined}",
+      "expect": "1791331200"
+    },
+    {
+      "template": "{data.big - 1000000 + data.nothing?:number}",
+      "expect": "234,567.89"
+    },
+    {
+      "template": "{data.big - 1000000 + data.nothing:number}",
+      "expect": ""
+    },
+    {
+      "template": "{data.groups.*.items.*.key}",
+      "expect": "outreach/a, outreach/b, campaign/c"
+    },
+    {
+      "template": "{data.groups.*.label}",
+      "expect": "Sequences, Campaigns, Empty"
+    },
+    {
       "template": "{'(512) 555-0123':phone}",
       "expect": "+15125550123"
     },
@@ -185,18 +260,6 @@
     {
       "template": "{'555':phone}",
       "expect": "555"
-    },
-    {
-      "template": "{data.access[@data.hostKey]}",
-      "expect": "viewer"
-    },
-    {
-      "template": "{data.addons.catalog[@data.kindKey].unitUsd:dollars}/mo",
-      "expect": "$5.00/mo"
-    },
-    {
-      "template": "{data.addons.quantities[@data.kindKey]|'0'} of {data.addons.catalog[@data.kindKey].max}",
-      "expect": "2 of 20"
     },
     {
       "template": "{data.missing ?? 'not recorded':cents}",
@@ -448,6 +511,66 @@
     },
     {
       "when": "!data.addons.quantities[@data.kindKey]",
+      "expect": false
+    },
+    {
+      "when": "data.money > 100000",
+      "expect": true
+    },
+    {
+      "when": "data.money >= 123456",
+      "expect": true
+    },
+    {
+      "when": "data.money < data.bytes",
+      "expect": true
+    },
+    {
+      "when": "data.money <= 100",
+      "expect": false
+    },
+    {
+      "when": "data.missing > 1",
+      "expect": false
+    },
+    {
+      "when": "data.list ~= x",
+      "expect": true
+    },
+    {
+      "when": "data.list ~= z",
+      "expect": false
+    },
+    {
+      "when": "org.name ~= cm",
+      "expect": true
+    },
+    {
+      "when": "params.uid == @data.members.1.$id",
+      "expect": true
+    },
+    {
+      "when": "params.uid != @data.members.0.$id",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= z",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= x",
+      "expect": false
+    },
+    {
+      "when": "data.list ~= @data.pick",
+      "expect": true
+    },
+    {
+      "when": "data.list !~= @data.pick",
+      "expect": false
+    },
+    {
+      "when": "data.groups.*.label ~= @data.missing",
       "expect": false
     }
   ]

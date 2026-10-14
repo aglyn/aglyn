@@ -70,6 +70,11 @@ class LoadSpec(val key: String, json: JsonElement) {
   val query: JsonElement? = json.obj("query")
   /** `org` or `site`: the plugin switchboard's rows ([SwitchboardRows]). */
   val switchboard: String? = json.str("switchboard")
+  /**
+   * A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row, with the row
+   * as `item`, and its key holds the list of answers (a failed one is null).
+   */
+  val each: String? = json.str("each")
 }
 
 class BlockSpec(val type: String, val raw: JsonElement) {
@@ -124,6 +129,11 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val then: ActionSpec? = json.obj("then")?.let { parse(it) }
   /** A change to the signed-in person's own sign-in, made through the session (`changePassword`, `updateDisplayName`); its inputs are the body. */
   val account: String? = json.str("account")
+
+  /** The route answers with a file (an export), not JSON; the person saves it. Its value names the file when the route names none. */
+  val download: String? = json.str("download") ?: if (json.isTrue("download")) "download" else null
+  /** The route answers with JSON, and the file is the value at this path of it (a workspace package export wraps its file as `{ fileName, package }`); `download` is then a template over `response` that names the file. */
+  val downloadAt: String? = json.str("downloadAt")
   /**
    * `{ when, title, text }` (or a list of them, the first that matches wins): when the route's answer
    * meets `when`, `text` (a template over `response`) is shown in place of the success message.
@@ -148,6 +158,8 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     ((instead as? JsonArray) ?: instead?.let { listOf(it) }.orEmpty()).firstOrNull { ScreenValues.condition(it.str("when"), scope) }
   /** A Firestore merge the signed-in person makes themselves: `{ "doc": "users/{user.uid}", "fields": {...} }`. */
   val write: JsonElement? = json.obj("write")
+  /** `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds, until the app closes. */
+  val stash: JsonElement? = json.obj("stash")
 
   /** Every field the action asks for before it runs: its prompt, then a reason. */
   val inputs: List<FieldSpec>
@@ -171,10 +183,18 @@ class FieldSpec private constructor(
   val whenCondition: String?,
   /** A template the typed value must equal (type the workspace name to delete it). */
   val mustMatch: String? = null,
+  /** For a `file` field: `json` parses the chosen file and sends the value, else its text is sent. */
+  val parse: String? = null,
+  /** For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an import must have acknowledged, each one). */
+  val coversAll: Boolean = false,
 ) {
   /** Whether a value leaves this field unfinished: required and empty, or not the text it must match. */
   fun unmet(value: JsonElement, context: JsonElement): Boolean {
     if (mustMatch != null && ScreenValues.text(value) != ScreenValues.render(mustMatch, context)) return true
+    if (coversAll && kind == "multiselect") {
+      val chosen = ((value as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
+      if (choices(context).any { it.first !in chosen }) return true
+    }
     return required && kind != "toggle" && !ScreenValues.truthy(value)
   }
 
@@ -183,9 +203,8 @@ class FieldSpec private constructor(
     val path = from.str("items") ?: return options
     val valueTemplate = from.str("value") ?: "{item.\$id}"
     val labelTemplate = from.str("label") ?: valueTemplate
-    val rows = (ScreenValues.lookup(path, context) as? JsonArray) ?: emptyList()
-    return options + rows.map { row ->
-      val scope = ScreenContext.withItem(context, row)
+    val scopes = ScreenValues.scopes(path, from.str("within"), from.str("filter"), context)
+    return options + scopes.map { scope ->
       ScreenValues.render(valueTemplate, scope) to ScreenValues.render(labelTemplate, scope)
     }
   }
@@ -210,6 +229,8 @@ class FieldSpec private constructor(
         optionsFrom = json.obj("optionsFrom"),
         whenCondition = json.str("when"),
         mustMatch = json.str("mustMatch"),
+        parse = json.str("parse"),
+        coversAll = json.isTrue("coversAll"),
       )
     }
   }

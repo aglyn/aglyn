@@ -21,11 +21,38 @@ object ScreenValues {
   /** The time zone dates print in; tests pin it to UTC. */
   var timeZone: String? = null
 
+  /** The clock `now` reads, in epoch milliseconds; tests pin it. */
+  var clock: () -> Long = { nowMillis() }
+
+  /** `now.year`, `now.month` (`2026-10`), `now.prevMonth`, `now.quarter`, `now.ms` and `now.day` (`2026-10-13`) in UTC, the keys the console's monthly counters and daily documents are named by. */
+  fun nowObject(): JsonElement {
+    val (year, month, day) = localParts(clock(), "UTC")
+    val y = year.toString().padStart(4, '0')
+    val m = month.toString().padStart(2, '0')
+    val d = day.toString().padStart(2, '0')
+    val (priorYear, priorMonth) = if (month == 1) (year - 1) to 12 else year to (month - 1)
+    val prior = "${priorYear.toString().padStart(4, '0')}-${priorMonth.toString().padStart(2, '0')}"
+    return JsonObject(
+      mapOf(
+        "year" to JsonPrimitive(y), "month" to JsonPrimitive("$y-$m"), "day" to JsonPrimitive("$y-$m-$d"),
+        "prevMonth" to JsonPrimitive(prior), "quarter" to JsonPrimitive("$year-Q${(month - 1) / 3 + 1}"),
+        "ms" to JsonPrimitive(clock().toDouble()),
+      ),
+    )
+  }
+
   fun lookup(path: String, context: JsonElement): JsonElement? {
     val trimmed = path.trim()
     if (trimmed.isEmpty()) return context
     var current: JsonElement? = context
-    for (raw in segments(trimmed)) {
+    val parts = segments(trimmed)
+    for ((position, raw) in parts.withIndex()) {
+      // `rows.*.field`: that field of every row, as a list (rows without it are left out; a field
+      // that is itself a list adds its members, so `resources.*.items` is every resource's items).
+      if (raw == "*" && current is JsonArray) {
+        val rest = parts.drop(position + 1).joinToString(".")
+        return JsonArray(current.mapNotNull { if (rest.isEmpty()) it else lookup(rest, it) }.flatMap { if (it is JsonArray) it.toList() else listOf(it) })
+      }
       val open = raw.indexOf('[')
       if (raw.endsWith("]") && open >= 0) {
         val segment = raw.substring(0, open)
@@ -54,6 +81,24 @@ object ScreenValues {
     is JsonArray -> value
     is JsonObject -> value.keys.sorted().map { JsonObject(mapOf("key" to JsonPrimitive(it), "value" to value.getValue(it))) }
     else -> emptyList()
+  }
+
+  /**
+   * The scopes a list or an option source walks: one per row of `items` that meets `filter`, with
+   * the row as `item`; or, given `within` (a path read from each row), one per row of that inner
+   * list, the outer row as `parent` (every resource's items, labeled by their resource).
+   */
+  fun scopes(path: String, within: String?, filter: String?, context: JsonElement): List<JsonElement> {
+    val found = mutableListOf<JsonElement>()
+    for (row in rows(lookup(path, context))) {
+      val outer = ScreenContext.withItem(context, row)
+      if (!within.isNullOrEmpty()) {
+        for (inner in rows(lookup(within, row))) found += ScreenContext.withItem(outer, inner)
+      } else {
+        found += outer
+      }
+    }
+    return found.filter { condition(filter, it) }
   }
 
   internal fun segments(path: String): List<String> {
@@ -112,6 +157,28 @@ object ScreenValues {
     lastUnquotedColon(body)?.let { colon ->
       format = body.substring(colon + 1).trim()
       body = body.substring(0, colon)
+    }
+    // `a + b - c`: a sum of numbers (paths or literals), each operator set apart by spaces. A term
+    // that is missing makes the whole sum missing, so a read that failed never shows as zero.
+    arithmeticTerms(body)?.let { terms ->
+      var total = 0.0
+      for ((sign, term) in terms) {
+        // A term ending in `?` is zero where it is missing (an add-on never bought).
+        val optional = term.endsWith("?")
+        val path = if (optional) term.dropLast(1) else term
+        val value = path.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: lookup(path, context)
+        if (optional && (value == null || value == JsonNull)) continue
+        // A list (`rows.*.field`) adds up its numbers.
+        if (value is JsonArray) {
+          total += sign * value.mapNotNull { number(it) }.sum()
+          continue
+        }
+        val amount = number(value) ?: return null
+        total += sign * amount
+      }
+      val sum = JsonPrimitive(total)
+      val named = format
+      return if (named.isNullOrEmpty()) sum else JsonPrimitive(formatted(sum, named, context))
     }
     // `a ?? b`: the first alternative that is present at all (false and 0 count), else the quoted literal.
     if (body.contains("??")) {
@@ -269,18 +336,70 @@ object ScreenValues {
 
   private fun clause(raw: String, context: JsonElement): Boolean {
     val clause = raw.trim()
+    val equality = "==" in clause || "!=" in clause
+    // `path ~= x` (or `~= @path`): a list holds x, or a text contains it.
+    if (!equality) {
+      val at = clause.indexOf("~=")
+      if (at >= 0) {
+        // `path !~= x` is the other way round.
+        val negated = clause.substring(0, at).endsWith("!")
+        val left = lookup(clause.substring(0, at).trimEnd('!', ' '), context)
+        var right = clause.substring(at + 2).trim()
+        if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
+        // `a ~= @path`: what is wanted is read from the context (the kinds a file holds, against a row's own).
+        else if (right.startsWith("@")) right = text(lookup(right.substring(1), context))
+        val holds = if (left is JsonArray) left.any { text(it) == right } else text(left).contains(right)
+        return if (negated) !holds else holds
+      }
+      // `a > b`, `a >= b`, `a < b`, `a <= b`: numbers, each side a literal or a path.
+      for (op in listOf(">=", "<=", ">", "<")) {
+        val place = clause.indexOf(op)
+        if (place < 0) continue
+        fun side(part: String): Double? = part.trim().let { it.toDoubleOrNull() ?: number(lookup(it, context)) }
+        val left = side(clause.substring(0, place)) ?: return false
+        val right = side(clause.substring(place + op.length)) ?: return false
+        return when (op) {
+          ">=" -> left >= right
+          "<=" -> left <= right
+          ">" -> left > right
+          else -> left < right
+        }
+      }
+    }
     for (op in listOf("!=", "==")) {
       val at = clause.indexOf(op)
       if (at >= 0) {
         val left = text(lookup(clause.substring(0, at), context))
         var right = clause.substring(at + 2).trim()
         if (right.length >= 2 && right.startsWith("'") && right.endsWith("'")) right = right.substring(1, right.length - 1)
-        val options = right.split(',').map { it.trim() }
+        // `a == @path`: the other side is read from the context (the plan a row stands for against the current one).
+        val options = if (right.startsWith("@")) listOf(text(lookup(right.substring(1), context))) else right.split(',').map { it.trim() }
         return if (op == "==") left in options else left !in options
       }
     }
     if (clause.startsWith("!")) return !truthy(lookup(clause.substring(1), context))
     return truthy(lookup(clause, context))
+  }
+
+  /** The signed terms of `a + b - c`, or null where the text is not a sum. */
+  internal fun arithmeticTerms(body: String): List<Pair<Double, String>>? {
+    if ('\'' in body || !(body.contains(" + ") || body.contains(" - "))) return null
+    val terms = mutableListOf<Pair<Double, String>>()
+    var sign = 1.0
+    val current = mutableListOf<String>()
+    for (word in body.split(' ').filter { it.isNotEmpty() }) {
+      if (word == "+" || word == "-") {
+        if (current.isEmpty()) return null
+        terms += sign to current.joinToString(" ")
+        current.clear()
+        sign = if (word == "+") 1.0 else -1.0
+      } else {
+        current += word
+      }
+    }
+    if (current.isEmpty()) return null
+    terms += sign to current.joinToString(" ")
+    return if (terms.size > 1) terms else null
   }
 
   private fun lastUnquotedColon(text: String): Int? {

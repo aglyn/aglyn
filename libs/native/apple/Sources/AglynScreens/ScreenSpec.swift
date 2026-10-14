@@ -79,6 +79,9 @@ public struct LoadSpec: Sendable, Hashable {
   public let query: JSONValue?
   /// `org` or `site`: the plugin switchboard's rows (SwitchboardRows).
   public let switchboard: String?
+  /// A path to rows an earlier load brought (`data.sites.sites`): this load then runs once per row,
+  /// with the row as `item`, and its key holds the list of answers (a failed one is null).
+  public let each: String?
 
   init(key: String, _ json: JSONValue) {
     self.key = key
@@ -91,6 +94,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.doc = nil
       self.query = nil
       self.switchboard = nil
+      self.each = nil
       self.method = .get
       self.body = nil
       self.optional = false
@@ -103,6 +107,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.doc = json["doc"]?.stringValue
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
+      self.each = json["each"]?.stringValue
       self.method = HTTPMethod(rawValue: (json["method"]?.stringValue ?? "GET").uppercased()) ?? .get
       self.body = json["body"]
       self.optional = json["optional"] == .bool(true)
@@ -175,10 +180,21 @@ public struct ActionSpec: Sendable, Identifiable {
   /// A change to the signed-in person's own sign-in, made through the
   /// session (`changePassword`, `updateDisplayName`); its inputs are the body.
   public let account: String?
+
+  /// `{ key: template }`: values kept for later screens as `stash.<key>` once the action succeeds
+  /// (a chosen package, the plan read from it), until the app closes.
+  public let stash: JSONValue?
   /// The action to run instead when the route answers 404 (add a member, else invite them).
   public let otherwise: ActionSpecBox?
   /// A follow-up the action makes once it succeeds (best effort, like the console's).
   public let then: ActionSpecBox?
+  /// `download`: the route answers with a file (an export), not JSON; the person saves or shares it.
+  /// Its value names the file when the route names none.
+  public let download: String?
+  /// `downloadAt`: the route answers with JSON, and the file is the value at this path of it
+  /// (a workspace package export wraps its file as `{ fileName, package }`). `download` is then a
+  /// template over `response`, which names the file.
+  public let downloadAt: String?
   /// `{ when, title, text }` (or a list of them, the first that matches wins): when the route's
   /// answer meets `when`, the person is shown `text` (a template over `response`) in place of the
   /// success message, as the console's report dialog shows the documentation that may already
@@ -217,6 +233,9 @@ public struct ActionSpec: Sendable, Identifiable {
     self.reveal = json["reveal"]?.stringValue
     self.write = json["write"]
     self.account = json["account"]?.stringValue
+    self.stash = json["stash"]
+    self.download = json["download"]?.stringValue ?? (json["download"] == .bool(true) ? "download" : nil)
+    self.downloadAt = json["downloadAt"]?.stringValue
     self.instead = json["instead"]
     self.check = json["check"].flatMap(ActionSpec.init).map(ActionSpecBox.init)
   }
@@ -278,10 +297,19 @@ public struct FieldSpec: Sendable, Identifiable {
   public let when: String?
   /// A template the typed value must equal (type the workspace name to delete it).
   public let mustMatch: String?
+  /// For a `file` field: `json` parses the chosen file and sends the value, else its text is sent.
+  public let parse: String?
+  /// For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an
+  /// import must have acknowledged, each one).
+  public let coversAll: Bool
 
   /// Whether a value leaves this field unfinished: required and empty, or not the text it must match.
   public func unmet(_ value: JSONValue, in context: JSONValue) -> Bool {
     if let mustMatch, ScreenValues.text(value) != ScreenValues.render(mustMatch, in: context) { return true }
+    if coversAll, kind == "multiselect" {
+      let chosen = Set(Optional(value).array.compactMap { $0.stringValue })
+      if choices(in: context).contains(where: { !chosen.contains($0.value) }) { return true }
+    }
     return required && kind != "toggle" && !ScreenValues.truthy(value)
   }
 
@@ -297,6 +325,8 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = nil
     self.when = nil
     self.mustMatch = nil
+    self.parse = nil
+    self.coversAll = false
   }
 
   init?(_ json: JSONValue) {
@@ -315,6 +345,8 @@ public struct FieldSpec: Sendable, Identifiable {
     self.optionsFrom = json["optionsFrom"]
     self.when = json["when"]?.stringValue
     self.mustMatch = json["mustMatch"]?.stringValue
+    self.parse = json["parse"]?.stringValue
+    self.coversAll = json["coversAll"] == .bool(true)
   }
 
   /// The choices for a `select`: the static options, then any read from data.
@@ -322,10 +354,10 @@ public struct FieldSpec: Sendable, Identifiable {
     guard let from = optionsFrom, let path = from["items"]?.stringValue else { return options }
     let valueTemplate = from["value"]?.stringValue ?? "{item.$id}"
     let labelTemplate = from["label"]?.stringValue ?? valueTemplate
-    let rows = ScreenValues.lookup(path, in: context).array
-    return options + rows.map { row in
-      let scope = ScreenContext.with(context, item: row)
-      return (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
+    let scopes = ScreenValues.scopes(
+      items: path, within: from["within"]?.stringValue, filter: from["filter"]?.stringValue, in: context)
+    return options + scopes.map { scope in
+      (ScreenValues.render(valueTemplate, in: scope), ScreenValues.render(labelTemplate, in: scope))
     }
   }
 }

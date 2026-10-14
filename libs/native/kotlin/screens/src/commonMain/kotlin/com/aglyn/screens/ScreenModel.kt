@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -108,8 +109,28 @@ data class ScreenSession(
 
 val LocalScreenSession = compositionLocalOf { ScreenSession() }
 
+/**
+ * Values an action keeps for later screens (`stash`): a chosen file, the plan read from it, the choices made
+ * on the way. In memory only, until the app closes.
+ */
+object ScreenStash {
+  var values: JsonObject = JsonObject(emptyMap())
+    private set
+
+  fun set(updates: JsonElement) {
+    val record = updates as? JsonObject ?: return
+    val next = values.toMutableMap()
+    for ((key, value) in record) if (value == JsonNull) next.remove(key) else next[key] = value
+    values = JsonObject(next)
+  }
+
+  fun clear() { values = JsonObject(emptyMap()) }
+}
+
 sealed interface ActionOutcome {
   data class Done(val message: String?, val response: JsonElement?) : ActionOutcome
+  /** A route answered with a file to save. */
+  class File(val name: String, val mimeType: String, val bytes: ByteArray, val message: String?) : ActionOutcome
   data class NeedsReauth(val message: String) : ActionOutcome
   data class Failed(val message: String) : ActionOutcome
 }
@@ -148,13 +169,22 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  internal fun url(load: LoadSpec, cursor: String? = null): String {
-    var url = ScreenValues.renderUrl(load.url, context)
+  internal fun url(load: LoadSpec, cursor: String? = null, scope: JsonElement = context): String {
+    var url = ScreenValues.renderUrl(load.url, scope)
     search[load.key]?.takeIf { it.isNotBlank() }?.let {
       url += (if ('?' in url) "&" else "?") + "search=" + ScreenValues.encodeComponent(it)
     }
-    if (cursor != null) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
+    // A GET route pages through the query string; a POST route reads it from the body (`pageBody`).
+    if (cursor != null && load.method == ApiMethod.GET) url += (if ('?' in url) "&" else "?") + load.cursorParam + "=" + ScreenValues.encodeComponent(cursor)
     return url
+  }
+
+  /** The body of a paged POST load's next page: its own body with the cursor under `cursorParam` (a number when it reads as one, since the route compares it as one). */
+  internal fun pageBody(load: LoadSpec, cursor: String): JsonElement? {
+    if (load.method == ApiMethod.GET) return null
+    val own = (load.body?.let { ScreenValues.resolveBody(it, context) } as? JsonObject) ?: JsonObject(emptyMap())
+    val value: JsonElement = cursor.toLongOrNull()?.let { JsonPrimitive(it) } ?: cursor.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(cursor)
+    return JsonObject(own + (load.cursorParam to value))
   }
 
   suspend fun load() {
@@ -163,10 +193,12 @@ class ScreenModel(
       phase = Phase.Failed("Sign in to continue.")
       return
     }
+    context = ScreenContext.with(context, "stash", ScreenStash.values)
+    context = ScreenContext.with(context, "now", ScreenValues.nowObject())
     val loads = spec.loads.filter { ScreenValues.condition(it.whenCondition, context) }
     val results = try {
-      coroutineScope {
-        loads.map { load ->
+      val first = coroutineScope {
+        loads.filter { it.each == null }.map { load ->
           async {
             try {
               fetch(client, load)
@@ -178,6 +210,27 @@ class ScreenModel(
           }
         }.awaitAll()
       }
+      // The per-row loads (`each`) follow once the rows they walk have arrived.
+      val seen = ScreenContext.with(context, "data", JsonObject(first.associate { it.first to it.second }))
+      val walked = loads.filter { it.each != null }.map { load ->
+        val rows = ((ScreenValues.lookup(load.each.orEmpty(), seen) as? JsonArray) ?: JsonArray(emptyList())).take(EACH_CEILING)
+        val answers = coroutineScope {
+          rows.map { row ->
+            async {
+              val scope = ScreenContext.withItem(seen, row)
+              try {
+                fetch(client, load, scope).second
+              } catch (error: CancellationException) {
+                throw error
+              } catch (_: Throwable) {
+                JsonNull
+              }
+            }
+          }.awaitAll()
+        }
+        Triple(load.key, JsonArray(answers) as JsonElement, null as String?)
+      }
+      first + walked
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
@@ -193,22 +246,32 @@ class ScreenModel(
     phase = Phase.Ready
   }
 
-  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec): Triple<String, JsonElement, String?> {
+  private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, scope: JsonElement = context): Triple<String, JsonElement, String?> {
     load.doc?.let { doc ->
-      return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
+      return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, scope)) } ?: JsonNull, null)
     }
     load.query?.let { query ->
-      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, context) } ?: JsonNull, null)
+      return Triple(load.key, reader?.let { FirestoreLoads.query(it, query, scope) } ?: JsonNull, null)
     }
-    load.switchboard?.let { scope ->
+    load.switchboard?.let { level ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
-      val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", context))
-      if (scope != "site") return Triple(load.key, SwitchboardRows.org(org), null)
-      val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", context))
+      val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", scope))
+      if (level != "site") return Triple(load.key, SwitchboardRows.org(org), null)
+      val host = FirestoreLoads.document(reader, ScreenValues.render("hosts/{site.id}", scope))
       return Triple(load.key, SwitchboardRows.site(org, host), null)
     }
-    val value = client.request(url(load), load.method, load.body?.let { ScreenValues.resolveBody(it, context) }) ?: JsonNull
-    return Triple(load.key, value, load.cursor?.let { (ScreenValues.lookup(it, value) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
+    val value = client.request(url(load, scope = scope), load.method, load.body?.let { ScreenValues.resolveBody(it, scope) }) ?: JsonNull
+    return Triple(load.key, value, cursorOf(load, value))
+  }
+
+  /** A paged route's next cursor: the text at `cursor`, or a number (a job's `createdAt`) as text. */
+  private fun cursorOf(load: LoadSpec, page: JsonElement): String? {
+    val found = load.cursor?.let { ScreenValues.lookup(it, page) } as? JsonPrimitive ?: return null
+    return when {
+      found.isString -> found.content.takeIf { it.isNotEmpty() }
+      found is JsonNull -> null
+      else -> ScreenValues.text(found)
+    }
   }
 
   suspend fun loadMore(key: String) {
@@ -219,13 +282,13 @@ class ScreenModel(
     if (loadingMore[key] == true) return
     loadingMore[key] = true
     try {
-      val page = client.request(url(load, cursor)) ?: JsonNull
+      val page = client.request(url(load, cursor), load.method, pageBody(load, cursor)) ?: JsonNull
       val more = (ScreenValues.lookup(itemsPath, page) as? JsonArray) ?: JsonArray(emptyList())
       val record = (data as? JsonObject)?.toMutableMap() ?: return
       val current = record[key] ?: return
       record[key] = appending(more, itemsPath, current)
       context = ScreenContext.with(context, "data", JsonObject(record))
-      val next = load.cursor?.let { (ScreenValues.lookup(it, page) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+      val next = cursorOf(load, page)
       if (next.isNullOrEmpty()) cursors.remove(key) else cursors[key] = next
     } catch (error: CancellationException) {
       throw error
@@ -237,6 +300,17 @@ class ScreenModel(
 
   suspend fun run(action: ActionSpec, scope: JsonElement): ActionOutcome {
     val outcome = perform(action, scope)
+    action.stash?.let { stash ->
+      val answer: JsonElement? = when (outcome) {
+        is ActionOutcome.Done -> outcome.response ?: JsonNull
+        is ActionOutcome.File -> JsonNull
+        else -> null
+      }
+      if (answer != null) {
+        ScreenStash.set(ScreenValues.resolveBody(stash, ScreenContext.with(scope, "response", answer)))
+        context = ScreenContext.with(context, "stash", ScreenStash.values)
+      }
+    }
     if (outcome is ActionOutcome.Done) action.then?.let { perform(it, ScreenContext.with(scope, "response", outcome.response)) }
     return outcome
   }
@@ -286,6 +360,24 @@ class ScreenModel(
     val path = ScreenValues.renderUrl(template, scope)
     val body = if (action.method == ApiMethod.GET) null else (action.body?.let { ScreenValues.resolveBody(it, scope) } ?: JsonObject(emptyMap()))
     return try {
+      val at = action.downloadAt
+      val named = action.download
+      if (at != null && named != null) {
+        // The route answers with JSON; the file is the value at `at`, named from the answer.
+        val answer = client.request(path, action.method, body, headers = headers(action, path, body, scope)) ?: JsonNull
+        val value = ScreenValues.lookup(at, answer)?.takeIf { it !is JsonNull } ?: return ActionOutcome.Failed("The route sent no file.")
+        val fileName = ScreenValues.render(named, ScreenContext.with(scope, "response", answer))
+        return ActionOutcome.File(
+          fileName, "application/json", prettyJson.encodeToString(JsonElement.serializer(), value).encodeToByteArray(),
+          action.success?.let { ScreenValues.render(it, scope) },
+        )
+      }
+      action.download?.let { fallback ->
+        val file = client.download(path, if (action.method == ApiMethod.GET) null else (body ?: JsonObject(emptyMap())), action.method)
+        return ActionOutcome.File(
+          file.name ?: ScreenValues.render(fallback, scope), file.contentType, file.bytes, action.success?.let { ScreenValues.render(it, scope) },
+        )
+      }
       val response = client.request(path, action.method, body, headers = headers(action, path, body, scope))
       ActionOutcome.Done(action.success?.let { ScreenValues.render(it, ScreenContext.with(scope, "response", response)) }, response)
     } catch (error: CancellationException) {
@@ -312,6 +404,12 @@ class ScreenModel(
   }
 
   companion object {
+    /** The most rows a per-row load (`each`) runs for. */
+    const val EACH_CEILING = 50
+
+    /** A saved JSON file reads as the console's own exports do: indented. */
+    private val prettyJson = Json { prettyPrint = true }
+
     /** JSON as the plain values a Firestore merge takes. */
     fun plain(value: JsonElement): Any? = when (value) {
       JsonNull -> null

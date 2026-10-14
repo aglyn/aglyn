@@ -313,28 +313,6 @@
       ]
     },
     {
-      "id": "core.settings.data",
-      "title": "Imports and exports",
-      "icon": "arrow.up.arrow.down|sync",
-      "scope": "org",
-      "requires": "org.manager",
-      "links": ["/settings/data"],
-      "load": { "jobs": { "url": "/api/transfer/jobs", "method": "POST", "body": { "orgId": "{org.id}", "limit": 50 } } },
-      "blocks": [
-        {
-          "type": "list",
-          "title": "History",
-          "items": "data.jobs.jobs",
-          "primary": "{item.label|item.resource:title} {item.kind:title}",
-          "secondary": "{item.fileName|item.resource}",
-          "tertiary": "{item.createdByEmail} · {item.createdAt:datetime}",
-          "icon": "arrow.up.arrow.down|sync",
-          "badges": [{ "text": "{item.status:title}", "tones": { "Done": "success", "Applied": "success", "Failed": "error", "*": "neutral" } }],
-          "empty": "No imports or exports yet."
-        }
-      ]
-    },
-    {
       "id": "core.settings.privacy",
       "title": "Privacy requests",
       "icon": "hand.raised|privacy_tip",
@@ -401,6 +379,19 @@
       "blocks": [
         { "type": "notice", "tone": "error", "when": "!data.org.erasureRequestedAt", "text": "Deleting {org.name} cancels its plan, takes every site offline and erases its data after the grace period." },
         { "type": "notice", "tone": "warning", "when": "data.org.erasureRequestedAt", "text": "Deletion was requested {data.org.erasureRequestedAt:date}. You can cancel it until the grace period ends." },
+        {
+          "type": "actions",
+          "title": "Your data",
+          "when": "org.owner || staff.is",
+          "footer": "Export anything you want to keep before deleting: everything in the workspace as one JSON file. You may be asked for your password first.",
+          "items": [
+            {
+              "id": "export", "label": "Download a copy of the workspace data", "icon": "arrow.down.doc|download",
+              "method": "GET", "url": "/api/orgs/export-data?orgId={org.id}", "download": "aglyn-workspace-export.json",
+              "success": "The export is ready to save"
+            }
+          ]
+        },
         {
           "type": "actions",
           "items": [

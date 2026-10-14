@@ -6,7 +6,7 @@ import Foundation
 /// A file a console route answered with: its name from `Content-Disposition`,
 /// its type, its bytes, and the response headers (an export counts its rows in
 /// `X-Aglyn-Export-Rows`).
-public struct DownloadedFile: Sendable {
+public struct DownloadedFile: Sendable, Equatable {
   public let name: String?
   public let contentType: String
   public let data: Data
@@ -39,21 +39,22 @@ public struct DownloadedFile: Sendable {
 }
 
 extension ConsoleAPIClient {
-  /// POSTs `body` to a route that answers with a file (the export route), as
-  /// the signed-in person, and hands back the bytes. A refusal throws the
-  /// route's own words, as `request` does; nothing is retried, since an
-  /// export is a fresh read each time.
-  public func download(_ path: String, body: JSONValue) async throws -> DownloadedFile {
+  /// Calls a route that answers with a file (the export route; a POST with `body` unless the route
+  /// is a GET), as the signed-in person, and hands back the bytes. A refusal throws the route's own
+  /// words, as `request` does; nothing is retried, since an export is a fresh read each time.
+  public func download(_ path: String, method: HTTPMethod = .post, body: JSONValue? = nil) async throws -> DownloadedFile {
     var forceRefresh = false
     while true {
       guard let token = try await getIDToken(forceRefresh) else {
         throw ConsoleAPIError(status: 401, message: "Sign in to continue.")
       }
       var request = URLRequest(url: try url(for: path))
-      request.httpMethod = HTTPMethod.post.rawValue
+      request.httpMethod = method.rawValue
       request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-      request.httpBody = try body.encoded()
+      if let body {
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try body.encoded()
+      }
       let data: Data
       let response: HTTPURLResponse
       do {

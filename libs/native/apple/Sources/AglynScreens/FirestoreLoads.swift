@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 
@@ -69,18 +70,42 @@ enum FirestoreLoads {
     return doc.map(json) ?? .null
   }
 
+  /// A where value as the readers take it: a number, bool or string, or a `{ "$date": ISO }` as a Date.
+  static func plainValue(_ value: JSONValue) -> Any {
+    switch value {
+    case .bool(let flag): return flag
+    case .number(let number): return number == number.rounded() && abs(number) < 9_007_199_254_740_992 ? Int64(number) : number
+    case .object(let record):
+      if let iso = record["$date"]?.stringValue {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: iso) { return date }
+      }
+      return ScreenValues.text(value)
+    default: return ScreenValues.text(value)
+    }
+  }
+
   /// A collection query, read once: `{ "items": [...] }`.
   /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`.
   @MainActor
   static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue) async throws -> JSONValue {
     let collection = ScreenValues.render(spec["collection"]?.stringValue ?? "", in: context)
-    let equals: [(field: String, value: Any)] = spec["where"].array.compactMap { clause in
-      guard case .array(let parts) = clause, parts.count == 3, let field = parts[0].stringValue else { return nil }
-      let value = ScreenValues.resolve(parts[2].stringValue ?? ScreenValues.text(parts[2]), in: context)
-      switch value {
-      case .bool(let flag): return (field, flag)
-      case .number(let number): return (field, number)
-      default: return (field, ScreenValues.text(value))
+    // `[field, op, value]`: equality, or any list-query operator (`>`, `in`, …); a value may be
+    // `{ "$date": ISO }` for a timestamp.
+    var equals: [(field: String, value: Any)] = []
+    var filters: [ListQueryConstraint] = []
+    for clause in spec["where"].array {
+      guard case .array(let parts) = clause, parts.count == 3, let field = parts[0].stringValue else { continue }
+      let resolved = ScreenValues.resolve(parts[2].stringValue ?? ScreenValues.text(parts[2]), in: context)
+      let value: Any = plainValue(parts[2].stringValue == nil ? parts[2] : resolved)
+      let op = parts[1].stringValue ?? "=="
+      if op == "==" {
+        equals.append((field, value))
+      } else {
+        filters.append(ListQueryConstraint(path: field, op: ListQueryOp(rawValue: op) ?? .unknown, value: value))
       }
     }
     var order: [FirestoreQuery.Order] = []
@@ -88,8 +113,14 @@ enum FirestoreLoads {
       let parts = raw.split(separator: " ")
       order = [FirestoreQuery.Order(String(parts[0]), descending: parts.count > 1 && parts[1] == "desc")]
     }
-    let limit = ScreenValues.number(spec["limit"]).map { Int($0) } ?? 50
-    let query = FirestoreQuery(segments(collection), equals: equals, order: order, limit: limit)
+    let counting = spec["count"] == .bool(true)
+    // `count: true` answers `{ "count": N }`: the server's count where the reader has one (the web
+    // SDK's getCountFromServer), else the rows up to a ceiling.
+    if counting, let counted = try await reader.count(FirestoreQuery(segments(collection), equals: equals, filters: filters)) {
+      return ["count": .number(Double(counted))]
+    }
+    let limit = ScreenValues.number(spec["limit"]).map { Int($0) } ?? (counting ? 1000 : 50)
+    let query = FirestoreQuery(segments(collection), equals: equals, filters: filters, order: order, limit: limit)
     let docs: [FirestoreDocument] = try await withCheckedThrowingContinuation { continuation in
       var listener: FirestoreListening?
       var finished = false
@@ -101,6 +132,7 @@ enum FirestoreLoads {
       }
       if finished { listener?.remove() }
     }
+    if counting { return ["count": .number(Double(docs.count))] }
     return ["items": .array(docs.map(json))]
   }
 }

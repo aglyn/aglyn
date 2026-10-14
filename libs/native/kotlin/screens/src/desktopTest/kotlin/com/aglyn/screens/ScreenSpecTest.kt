@@ -208,6 +208,106 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun aDownloadActionHandsBackTheFileUnderTheNameTheRouteGives() = runTest {
+    val engine = MockEngine { request ->
+      val named = request.url.encodedPath.endsWith("/named")
+      respond(
+        """{"a":1}""", HttpStatusCode.OK,
+        if (named) headersOf("Content-Disposition" to listOf("attachment; filename=\"export-2026.json\""), "Content-Type" to listOf("application/json")) else headersOf(),
+      )
+    }
+    val api = ConsoleApiClient("http://localhost", HttpClient(engine) { expectSuccess = false }, { "t" }, sleep = {})
+    val model = ScreenModel(ScreenSpec.parse(Json.parseToJsonElement("""{"id":"core.x","title":"X"}"""))!!, JsonObject(emptyMap()), api)
+    val named = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Export","method":"GET","url":"/api/x/named","download":"fallback.json","success":"Ready"}"""))!!
+    val file = model.run(named, JsonObject(emptyMap()))
+    assertIs<ActionOutcome.File>(file)
+    assertEquals("export-2026.json", file.name)
+    assertEquals("Ready", file.message)
+    assertEquals("""{"a":1}""", file.bytes.decodeToString())
+    val unnamed = ActionSpec.parse(Json.parseToJsonElement("""{"label":"Export","method":"GET","url":"/api/x/other","download":"fallback.json"}"""))!!
+    assertEquals("fallback.json", (model.run(unnamed, JsonObject(emptyMap())) as ActionOutcome.File).name)
+  }
+
+  @Test
+  fun nowNamesTheMonthlyAndDailyKeysInUtc() {
+    val before = ScreenValues.clock
+    try {
+      ScreenValues.clock = { 1_791_385_440_000L } // 2026-10-07T15:04:00Z
+      val now = ScreenValues.nowObject()
+      assertEquals("2026", now.str("year"))
+      assertEquals("2026-10", now.str("month"))
+      assertEquals("2026-10-07", now.str("day"))
+      assertEquals("2026-09", now.str("prevMonth"))
+      assertEquals("2026-Q4", now.str("quarter"))
+      assertEquals(1_791_385_440_000.0, ((now as JsonObject)["ms"] as JsonPrimitive).content.toDouble())
+      val context = Json.parseToJsonElement("""{"now":$now,"data":{"counter":{"2026-10":4,"2026-09":9}}}""")
+      assertEquals("4", ScreenValues.render("{data.counter[@now.month]}", context))
+    } finally {
+      ScreenValues.clock = before
+    }
+  }
+
+  @Test
+  fun aCountLoadAnswersTheServersCountAndFallsBackToTheRows() = runTest {
+    val counted = object : com.aglyn.core.FirestoreReader {
+      override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? = null
+      override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+      override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+      override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+      override suspend fun count(query: com.aglyn.core.FirestoreQuery): Long? = if (query.collectionPath == "hosts/h1/layouts") 7L else null
+    }
+    val context = Json.parseToJsonElement("""{"site":{"id":"h1"}}""")
+    val spec = Json.parseToJsonElement("""{"collection":"hosts/{site.id}/layouts","count":true}""")
+    assertEquals(Json.parseToJsonElement("""{"count":7.0}"""), FirestoreLoads.query(counted, spec, context))
+    val rows = Json.parseToJsonElement("""{"collection":"hosts/{site.id}/forms","count":true}""")
+    assertEquals(Json.parseToJsonElement("""{"count":0.0}"""), FirestoreLoads.query(counted, rows, context))
+  }
+
+  @Test
+  fun aWhereClauseCarriesItsOperatorAndADateValue() = runTest {
+    val seen = mutableListOf<com.aglyn.core.FirestoreQuery>()
+    val reader = object : com.aglyn.core.FirestoreReader {
+      override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? = null
+      override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+      override fun observeDoc(path: String) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>>()
+      override fun observe(query: com.aglyn.core.FirestoreQuery) = kotlinx.coroutines.flow.emptyFlow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>>()
+      override suspend fun count(query: com.aglyn.core.FirestoreQuery): Long? { seen += query; return 3L }
+    }
+    val spec = Json.parseToJsonElement("""{"collection":"hosts/h1/components","count":true,"where":[["deletedAt",">",{"${'$'}date":"1970-01-01T00:00:00Z"}],["kind","==","button"]]}""")
+    FirestoreLoads.query(reader, spec, JsonObject(emptyMap()))
+    val filters = seen.single().filters
+    assertEquals(com.aglyn.core.FilterOp.GT, filters[0].op)
+    assertEquals(com.aglyn.core.FirestoreTimestamp(0, 0), filters[0].value)
+    assertEquals(com.aglyn.core.FilterOp.EQ, filters[1].op)
+    assertEquals(com.aglyn.core.FirestoreTimestamp(1_791_385_440, 0), FirestoreLoads.isoInstant("2026-10-07T15:04:00Z"))
+  }
+
+  @Test
+  fun aPerRowLoadRunsOncePerRowAndItsListSums() = runTest {
+    val routes = listOf(
+      "/api/sites" to """{"sites":[{"id":"a"},{"id":"b"},{"id":"c"}]}""",
+      "hostId=a" to """{"bandwidthGb":1.5}""",
+      "hostId=b" to """{"bandwidthGb":2}""",
+    )
+    val engine = MockEngine { request ->
+      val url = request.url.toString()
+      respond(routes.firstOrNull { url.contains(it.first) }?.second ?: "{}", HttpStatusCode.OK, headersOf("Content-Type", "application/json"))
+    }
+    val api = ConsoleApiClient("http://localhost", HttpClient(engine) { expectSuccess = false }, { "t" }, sleep = {})
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{"sites":"/api/sites","traffic":{"url":"/api/usage?hostId={item.id}","each":"data.sites.sites","optional":true}}}""",
+      ),
+    )!!
+    val model = ScreenModel(spec, JsonObject(emptyMap()), api)
+    model.load()
+    assertEquals(3, (model.data.obj("traffic") as JsonArray).size)
+    // Site c answered nothing useful; a and b add up, and the missing one is left out, not read as zero.
+    assertEquals("4.5", ScreenValues.render("{data.traffic.*.bandwidthGb + 1}", model.context))
+    assertEquals(7, ScreenValues.render("{now.prevMonth}", model.context).length)
+  }
+
+  @Test
   fun anActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() {
     val action = ActionSpec.parse(
       Json.parseToJsonElement(
@@ -238,6 +338,47 @@ class ScreenSpecTest {
   }
 
   @Test
+  fun aMultiselectHoldsTheChosenIdsAndReadsThemBack() {
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"models","kind":"multiselect","initial":"{data.row.models}",
+           "optionsFrom":{"items":"data.models","value":"{item.id}","label":"{item.label}"}}""",
+      ),
+    )!!
+    val context = Json.parseToJsonElement("""{"data":{"row":{"models":["a","c"]},"models":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}}""")
+    assertEquals(listOf("a", "b"), field.choices(context).map { it.first })
+    val start = initialValue(field, context)
+    assertEquals(FieldValue.Text("a\nc"), start)
+    assertEquals(Json.parseToJsonElement("""["a","c"]"""), fieldJson(field, start))
+    assertEquals(JsonNull, fieldJson(field, FieldValue.Text("")))
+  }
+
+  @Test
+  fun aFileFieldSendsTheParsedFileAndAnActionKeepsWhatItLearnedForTheNextScreen() = runTest {
+    val file = FieldSpec.parse(Json.parseToJsonElement("""{"key":"package","kind":"file","parse":"json"}"""))!!
+    assertEquals(Json.parseToJsonElement("""{"manifest":{"items":[]}}"""), fieldJson(file, FieldValue.Text("""{"manifest":{"items":[]}}""")))
+    assertEquals(JsonNull, fieldJson(file, FieldValue.Text("not json")))
+    assertEquals(JsonNull, fieldJson(file, FieldValue.Text("")))
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"plan":{"items":[{"key":"page/a","needsChoice":true,"choices":["replace","skip"]}]}}""", sent = sent)
+    val importSpec = ScreenSpec.parseFile(File(screensDir, "site.screens.json").readText()).first { it.id == "core.site.import" }
+    val plan = ActionSpec.parse(importSpec.blocks.first { it.id == "package" }["submit"])!!
+    ScreenStash.clear()
+    val model = ScreenModel(importSpec, JsonObject(emptyMap()), api)
+    model.run(plan, Json.parseToJsonElement("""{"site":{"id":"h1"},"form":{"package":{"manifest":{"items":[]}}}}"""))
+    assertEquals(Json.parseToJsonElement("""{"manifest":{"items":[]}}"""), ScreenStash.values["package"])
+    assertEquals(Json.parseToJsonElement("{}"), ScreenStash.values["decisions"])
+    val review = ScreenSpec.parseFile(File(screensDir, "site.screens.json").readText()).first { it.id == "core.site.import.review" }
+    val choose = ActionSpec.parse(review.blocks.first { it.type == "list" }.raw.arr("actions").first())!!
+    val row = Json.parseToJsonElement("""{"key":"page/a","choices":["replace","keepBoth","merge","skip"]}""")
+    val picking = ScreenContext.with(ScreenContext.withItem(ScreenContext.with(JsonObject(emptyMap()), "stash", ScreenStash.values), row), "form", Json.parseToJsonElement("""{"decision":"skip"}"""))
+    ScreenModel(review, JsonObject(emptyMap()), api).run(choose, picking)
+    assertEquals(Json.parseToJsonElement("""{"page/a":"skip"}"""), ScreenStash.values["decisions"])
+    assertEquals(listOf("replace", "keepBoth", "skip"), choose.prompt.first().choices(picking).map { it.first })
+    ScreenStash.clear()
+  }
+
+  @Test
   fun theAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() {
     val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }
     val list = spec.blocks.first { it.type == "list" }
@@ -259,6 +400,42 @@ class ScreenSpecTest {
     assertEquals("hostedInvoiceUrl", set.insteadEntry(bank).str("open"))
     assertEquals("Card declined", set.insteadEntry(scope("{}", """"response":{"paymentPending":true,"declined":true}""")).str("title"))
     assertNull(set.insteadEntry(scope("{}", """"response":{"ok":true,"quantities":{"hosts":3}}""")))
+  }
+
+  @Test
+  fun thePlanChangeQuotesWhatTheConsoleQuotes() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.plans" }
+    val list = spec.blocks.first { it.type == "list" }
+    val switchPlan = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.first { it.id == "switch" }
+    assertNotNull(switchPlan.check)
+    val constants = spec.raw.obj("constants").toString()
+    fun scope(item: String, preview: String, data: String): JsonElement = Json.parseToJsonElement(
+      """{"item":$item,"const":$constants,"data":$data,"preview":$preview}""",
+    )
+    val data = """{"org":{"plan":"pro","subscription":{"status":"active"}},"billing":{"subscription":{}},"collab":{"sites":[{"hostId":"a"},{"hostId":"b"}]},"seats":{"managerSeats":2},"datasets":{"count":1}}"""
+    val business = """{"id":"business","label":"Business"}"""
+    assertEquals(
+      "Switch to Business? You'll be charged $11.00 USD now for the rest of this period, and your plan changes as soon as the payment goes through. That includes $1.00 USD tax.",
+      switchPlan.confirmText(scope(business, """{"downgrade":false,"chargesNow":true,"prorationCents":1000,"chargedNowCents":1100,"prorationTaxCents":100,"taxComplete":true,"currency":"usd","periodEnd":"2026-11-01T00:00:00Z"}""", data)),
+    )
+    assertEquals(
+      "Switch to Business? Unused time credits $2.50 USD back on your next invoice on Nov 1, 2026. Tax is calculated once we have your billing address. This total does not include it yet.",
+      switchPlan.confirmText(scope(business, """{"downgrade":false,"prorationCents":-250,"taxComplete":false,"currency":"usd","periodEnd":"2026-11-01T00:00:00Z"}""", data)),
+    )
+    assertEquals(
+      "Move down to Business? Nothing is charged today, and nothing changes yet. You keep Pro — and everything you've already paid for — until Nov 1, 2026, when this organization moves to Business. You can keep your current plan any time before then.",
+      switchPlan.confirmText(scope(business, """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z"}""", data)),
+    )
+    val withAi = """{"org":{"plan":"pro","subscription":{"status":"active"},"seatAddons":{"aiAddon":1}},"billing":{"subscription":{}},"collab":{"sites":[{"hostId":"a"},{"hostId":"b"}]},"seats":{"managerSeats":7},"datasets":{"count":1}}"""
+    val text = switchPlan.confirmText(scope("""{"id":"free","label":"Free"}""", """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z","droppedAddons":["aiAddon"]}""", withAi))!!
+    assertTrue("Your Aglyn AI add-on is not sold on Free, so it is removed" in text)
+    assertTrue("over the Free plan on: 2 sites (Free includes 1)" in text)
+    assertTrue("7 team members (Free includes 1)" in text)
+    assertTrue("Nothing is deleted and these keep working" in text)
+    val manager = Json.parseToJsonElement("""{"org":{"manager":true,"plan":"pro"},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"business"}}""")
+    assertTrue(ScreenValues.condition(switchPlan.whenCondition, manager))
+    val current = Json.parseToJsonElement("""{"org":{"manager":true},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"pro"}}""")
+    assertFalse(ScreenValues.condition(switchPlan.whenCondition, current))
   }
 
   @Test
@@ -325,5 +502,196 @@ class ScreenSpecTest {
     assertEquals(2, (ScreenValues.lookup("data.list.rows", model.context) as JsonArray).size)
     assertFalse("list" in model.cursors)
     assertEquals("orgId=o%201&cursor=a", sent.last().url.encodedQuery)
+  }
+
+  private fun transfer(id: String) = ScreenSpec.parseFile(File(screensDir, "transfer.screens.json").readText()).first { it.id == id }
+
+  @Test
+  fun aPostLoadPagesByPuttingItsCursorInTheBody() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(
+      200 to """{"jobs":[{"id":"a"}],"next":1791385440000}""",
+      200 to """{"jobs":[{"id":"b"}],"next":null}""",
+      sent = sent,
+    )
+    val spec = ScreenSpec.parse(
+      Json.parseToJsonElement(
+        """{"id":"core.x","title":"X","load":{"jobs":{"url":"/api/transfer/jobs","method":"POST","body":{"orgId":"{org.id}","limit":25},"cursor":"next","cursorParam":"after","items":"jobs"}}}""",
+      ),
+    )!!
+    val model = ScreenModel(spec, Json.parseToJsonElement("""{"org":{"id":"o1"},"data":{}}"""), api)
+    model.load()
+    // A number cursor (a job's createdAt) pages as text, and goes back as the number it was.
+    assertEquals("1791385440000", model.cursors["jobs"])
+    model.loadMore("jobs")
+    assertEquals(2, (ScreenValues.lookup("data.jobs.jobs", model.context) as JsonArray).size)
+    assertFalse("jobs" in model.cursors)
+    assertEquals(Json.parseToJsonElement("""{"orgId":"o1","limit":25,"after":1791385440000}"""), Json.parseToJsonElement((sent.last().body as TextContent).text))
+    assertEquals("/api/transfer/jobs", sent.last().url.encodedPath)
+    assertEquals("", sent.last().url.encodedQuery)
+  }
+
+  @Test
+  fun aListAndAnOptionSourceCanWalkTheListsInsideTheRows() {
+    val context = Json.parseToJsonElement(
+      """{"params":{},"data":{"resources":[
+          {"key":"outreach.sequences","label":"Sequences","items":[{"key":"outreach.sequences/a","name":"Welcome"},{"key":"outreach.sequences/b","id":"b"}]},
+          {"key":"marketing.campaigns","label":"Campaigns","items":[{"key":"marketing.campaigns/c","name":"Launch"}]},
+          {"key":"crm.email-templates","label":"Email templates","items":[]}]}}""",
+    )
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"items","kind":"multiselect",
+           "initial":"{data.resources[key=params.resource].items.*.key|data.resources.*.items.*.key}",
+           "optionsFrom":{"items":"data.resources","within":"items","value":"{item.key}","label":"{parent.label}: {item.name|item.id}"}}""",
+      ),
+    )!!
+    assertEquals(
+      listOf("outreach.sequences/a=Sequences: Welcome", "outreach.sequences/b=Sequences: b", "marketing.campaigns/c=Campaigns: Launch"),
+      field.choices(context).map { "${it.first}=${it.second}" },
+    )
+    // Everything is picked until a resource is named, then only its items.
+    assertEquals(FieldValue.Text("outreach.sequences/a\noutreach.sequences/b\nmarketing.campaigns/c"), initialValue(field, context))
+    assertEquals(
+      FieldValue.Text("marketing.campaigns/c"),
+      initialValue(field, ScreenContext.with(context, "params", Json.parseToJsonElement("""{"resource":"marketing.campaigns"}"""))),
+    )
+    val rows = ScreenValues.scopes("data.resources", "items", "item.name", context)
+    assertEquals(2, rows.size)
+    assertEquals("Campaigns", ScreenValues.render("{parent.label}", rows[1]))
+  }
+
+  @Test
+  fun aMultiselectThatCoversAllIsUnfinishedUntilEveryChoiceIsChosen() {
+    val field = FieldSpec.parse(
+      Json.parseToJsonElement(
+        """{"key":"ack","kind":"multiselect","coversAll":true,"optionsFrom":{"items":"data.warnings","value":"{item}","label":"{item}"}}""",
+      ),
+    )!!
+    val context = Json.parseToJsonElement("""{"data":{"warnings":["replace","failed"]}}""")
+    assertTrue(field.unmet(JsonNull, context))
+    assertTrue(field.unmet(Json.parseToJsonElement("""["replace"]"""), context))
+    assertFalse(field.unmet(Json.parseToJsonElement("""["failed","replace"]"""), context))
+    assertFalse(field.unmet(JsonNull, Json.parseToJsonElement("""{"data":{"warnings":[]}}""")))
+  }
+
+  @Test
+  fun anActionCanSaveTheValueAtAPathOfTheRoutesAnswerAsTheFile() = runTest {
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to """{"ok":true,"fileName":"aglyn-package-2026.json","package":{"name":"a/b","manifest":{"items":[]}}}""", sent = sent)
+    val spec = transfer("core.settings.data.packageExport")
+    val export = ActionSpec.parse(spec.blocks.first { it.type == "actions" }.raw.arr("items").first())!!
+    assertEquals("package", export.downloadAt)
+    val scope = Json.parseToJsonElement("""{"org":{"id":"o1"},"form":{"items":["outreach.sequences/a"],"dependencies":true}}""")
+    val file = ScreenModel(spec, JsonObject(emptyMap()), api).run(export, scope)
+    assertIs<ActionOutcome.File>(file)
+    assertEquals("aglyn-package-2026.json", file.name)
+    // The file is the package alone, indented, with no escaped slashes, and it reads back as it was.
+    val text = file.bytes.decodeToString()
+    assertTrue("\n  " in text)
+    assertTrue("\"a/b\"" in text)
+    assertEquals(Json.parseToJsonElement("""{"name":"a/b","manifest":{"items":[]}}"""), Json.parseToJsonElement(text))
+    assertEquals(
+      Json.parseToJsonElement("""{"orgId":"o1","action":"export","items":["outreach.sequences/a"],"dependencies":true}"""),
+      Json.parseToJsonElement((sent.last().body as TextContent).text),
+    )
+  }
+
+  @Test
+  fun thePackageReviewPlansAgainOnEveryChoiceAndAsksForEveryAcknowledgement() = runTest {
+    val plan = """{"job":{"id":"j1"},"items":[],"references":[],"summary":{"create":1},"blocking":[],"acknowledgementsRequired":["replace","failed"],"resources":{}}"""
+    val sent = mutableListOf<HttpRequestData>()
+    val api = client(200 to plan, 200 to plan, sent = sent)
+    val review = transfer("core.settings.data.packageReview")
+    val model = ScreenModel(review, JsonObject(emptyMap()), api)
+    val chooseItem = ActionSpec.parse(review.blocks.first { it.type == "list" && it.title == "Items" }.raw.arr("actions").first())!!
+    ScreenStash.clear()
+    ScreenStash.set(
+      Json.parseToJsonElement("""{"plan":{"job":{"id":"j1"}},"decisions":{"page/x":"skip"},"dependencyChoices":{"mailbox/m":{"action":"dropReference"}}}"""),
+    )
+    val row = Json.parseToJsonElement("""{"key":"outreach.sequences/a","decision":"create","decisions":["create","replace","skip"]}""")
+    val picking = ScreenContext.with(
+      ScreenContext.withItem(Json.parseToJsonElement("""{"org":{"id":"o1"}}""").let { ScreenContext.with(it, "stash", ScreenStash.values) }, row),
+      "form", Json.parseToJsonElement("""{"decision":"replace"}"""),
+    )
+    assertTrue(ScreenValues.condition(chooseItem.whenCondition, picking))
+    assertFalse(ScreenValues.condition(chooseItem.whenCondition, ScreenContext.with(picking, "item", Json.parseToJsonElement("""{"decisions":["create"]}"""))))
+    model.run(chooseItem, picking)
+    // The new choice joins the earlier ones, and the other kind of choice is sent along unchanged.
+    assertEquals(
+      Json.parseToJsonElement(
+        """{"orgId":"o1","action":"plan","jobId":"j1","decisions":{"page/x":"skip","outreach.sequences/a":"replace"},"dependencyChoices":{"mailbox/m":{"action":"dropReference"}}}""",
+      ),
+      Json.parseToJsonElement((sent.last().body as TextContent).text),
+    )
+    assertEquals(Json.parseToJsonElement("""{"page/x":"skip","outreach.sequences/a":"replace"}"""), ScreenStash.values["decisions"])
+
+    // A reference mapped to one of yours carries that one; a leave-out carries no id.
+    val chooseReference = ActionSpec.parse(
+      review.blocks.first { it.type == "list" && it.title == "Things this workspace does not have" }.raw.arr("actions").first(),
+    )!!
+    val reference = Json.parseToJsonElement("""{"key":"mailbox/m2","choices":["import","mapTo","skipItem"],"targets":[]}""")
+    val mapping = ScreenContext.with(
+      ScreenContext.withItem(Json.parseToJsonElement("""{"org":{"id":"o1"}}""").let { ScreenContext.with(it, "stash", ScreenStash.values) }, reference),
+      "form", Json.parseToJsonElement("""{"action":"skipItem"}"""),
+    )
+    assertEquals(listOf("import", "skipItem"), chooseReference.prompt.first().choices(mapping).map { it.first }) // nothing of yours to map to
+    model.run(chooseReference, mapping)
+    val second = Json.parseToJsonElement((sent.last().body as TextContent).text)
+    assertEquals(
+      Json.parseToJsonElement("""{"mailbox/m":{"action":"dropReference"},"mailbox/m2":{"action":"skipItem"}}"""),
+      (second as JsonObject)["dependencyChoices"],
+    )
+
+    // Import asks for every acknowledgement the plan requires, and for none when it requires none.
+    val apply = ActionSpec.parse(review.blocks.last { it.type == "actions" }.raw.arr("items").first())!!
+    val ack = apply.prompt.first()
+    val waiting = ScreenContext.with(JsonObject(emptyMap()), "stash", ScreenStash.values)
+    assertEquals(listOf("replace", "failed"), ack.choices(waiting).map { it.first })
+    assertTrue(ack.unmet(Json.parseToJsonElement("""["replace"]"""), waiting))
+    assertFalse(ack.unmet(Json.parseToJsonElement("""["replace","failed"]"""), waiting))
+    val applyNow = ActionSpec.parse(review.blocks.last { it.type == "actions" }.raw.arr("items").last())!!
+    assertEquals("applyNow", applyNow.id)
+    fun offered(plan: String) =
+      listOf(apply, applyNow).filter { ScreenValues.condition(it.whenCondition, Json.parseToJsonElement("""{"stash":{"plan":$plan}}""")) }.map { it.id }
+    assertEquals(listOf("apply"), offered("""{"acknowledgementsRequired":["replace"],"blocking":[]}"""))
+    assertEquals(listOf("applyNow"), offered("""{"acknowledgementsRequired":[],"blocking":[]}"""))
+    assertEquals(emptyList(), offered("""{"acknowledgementsRequired":["replace"],"blocking":["Choose what happens to 1 item."]}"""))
+    assertEquals(emptyList(), offered("""{"acknowledgementsRequired":[],"blocking":["Choose what happens to 1 item."]}"""))
+    ScreenStash.clear()
+  }
+
+  @Test
+  fun theRulesListShowsOnlyTheResourcesTheFileHolds() {
+    val review = transfer("core.settings.data.packageReview")
+    val rules = review.blocks.first { it.type == "list" && it.title == "Rules every import keeps" }
+    val context = Json.parseToJsonElement(
+      """{"stash":{"plan":{
+          "items":[{"kind":"outreach.sequences"},{"kind":"outreach.sequences"}],
+          "resources":{
+            "outreach.sequences":{"label":"Sequences","rules":[{"label":"Imported as a draft","reason":"A sequence never sends from a file."}]},
+            "marketing.campaigns":{"label":"Campaigns","rules":[{"label":"Imported as a draft","reason":"x"}]},
+            "crm.email-templates":{"label":"Email templates","rules":[]}}}}}""",
+    )
+    val found = ScreenValues.scopes("stash.plan.resources", null, rules.string("filter"), context)
+    assertEquals(listOf("Sequences"), found.map { ScreenValues.render("{item.value.label}", it) })
+    assertEquals("Imported as a draft", ScreenValues.render(rules.string("secondary").orEmpty(), found[0]))
+  }
+
+  @Test
+  fun theHubPagesItsHistoryAndOffersTheConsolesRowActions() {
+    val hub = transfer("core.settings.data")
+    val jobs = hub.loads.first { it.key == "jobs" }
+    assertEquals(com.aglyn.core.ApiMethod.POST, jobs.method)
+    assertEquals("next", jobs.cursor)
+    assertEquals("after", jobs.cursorParam)
+    val history = hub.blocks.first { it.title == "History" }
+    assertEquals("jobs", history.string("load"))
+    val actions = history.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+    val job = Json.parseToJsonElement("""{"org":{"id":"o1"},"item":{"id":"j9","kind":"package","resultFile":true,"undo":{"available":true}}}""")
+    assertEquals(listOf("results", "undo"), actions.filter { ScreenValues.condition(it.whenCondition, job) }.map { it.id })
+    val records = Json.parseToJsonElement("""{"item":{"id":"j9","kind":"records","resultFile":false,"undo":{"available":true}}}""")
+    assertEquals(emptyList(), actions.filter { ScreenValues.condition(it.whenCondition, records) }.map { it.id })
+    assertEquals("import-j9-results.csv", ScreenValues.render(actions.first().download!!, job))
   }
 }

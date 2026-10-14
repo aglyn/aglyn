@@ -175,6 +175,7 @@ private fun SpecBody(
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var revealed by remember { mutableStateOf<Pair<String, String>?>(null) }
   var running by remember { mutableStateOf<String?>(null) }
+  val exporter = com.aglyn.ui.LocalFileExporter.current
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
 
@@ -217,6 +218,7 @@ private fun SpecBody(
           is ActionOutcome.Done -> confirming = Pending(action, ScreenContext.with(actionScope, "preview", checked.response ?: JsonObject(emptyMap())))
           is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, checked.message)
           is ActionOutcome.Failed -> show(checked.message, StatusTone.ERROR)
+          is ActionOutcome.File -> Unit // a check asks a question; it never answers with a file
         }
         return
       }
@@ -227,6 +229,14 @@ private fun SpecBody(
     when (outcome) {
       is ActionOutcome.NeedsReauth -> reauthing = Pending(action, actionScope, outcome.message)
       is ActionOutcome.Failed -> show(outcome.message, StatusTone.ERROR)
+      is ActionOutcome.File -> {
+        val exporter = exporter
+        when {
+          exporter == null -> show("Saving a file is not available here.", StatusTone.WARNING)
+          exporter.export(outcome.name, outcome.mimeType, outcome.bytes) -> show(outcome.message ?: "Saved ${outcome.name}", StatusTone.SUCCESS)
+          else -> Unit
+        }
+      }
       is ActionOutcome.Done -> {
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
@@ -602,8 +612,7 @@ private fun ListBlock(
   trigger: (ActionSpec, JsonElement) -> Unit,
 ) {
   val scope = rememberCoroutineScope()
-  val rows = ScreenValues.rows(ScreenValues.lookup(block.string("items").orEmpty(), context))
-    .filter { ScreenValues.condition(block.string("filter"), ScreenContext.withItem(context, it)) }
+  val rows = ScreenValues.scopes(block.string("items").orEmpty(), block.string("within"), block.string("filter"), context)
   val loadKey = block.string("load")
   SectionCard(title?.let { if (rows.isNotEmpty() && block["count"] != JsonPrimitive(false)) "$it · ${rows.size}" else it }) {
     Column(Modifier.fillMaxWidth()) {
@@ -617,7 +626,7 @@ private fun ListBlock(
       }
       rows.forEachIndexed { index, row ->
         if (index > 0) HorizontalDivider()
-        ListRow(block, ScreenContext.withItem(context, row), selection, open, trigger)
+        ListRow(block, row, selection, open, trigger)
       }
       if (loadKey != null && model.cursors[loadKey] != null) {
         HorizontalDivider()
@@ -724,6 +733,11 @@ internal sealed interface FieldValue {
 
 internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when {
   field.kind == "toggle" && value is FieldValue.Flag -> JsonPrimitive(value.value)
+  // The chosen ids, one per line while edited; nothing chosen is null (no restriction).
+  field.kind == "multiselect" && value is FieldValue.Text ->
+    value.value.split('\n').filter { it.isNotEmpty() }.let { chosen -> if (chosen.isEmpty()) JsonNull else JsonArray(chosen.map { JsonPrimitive(it) }) }
+  field.kind == "file" && value is FieldValue.Text ->
+    if (value.value.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(value.value) }.getOrDefault(JsonNull) else JsonPrimitive(value.value)
   field.kind == "number" && value is FieldValue.Text -> value.value.trim().let { t -> if (t.isEmpty()) JsonNull else t.toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(t) }
   value is FieldValue.Text -> JsonPrimitive(if (field.kind == "multiline" || field.kind == "password") value.value else value.value.trim())
   value is FieldValue.Flag -> JsonPrimitive(value.value)
@@ -733,6 +747,7 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
 internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
   val resolved = field.initial?.let { ScreenValues.resolve(it, context) } ?: JsonNull
   if (field.kind == "toggle") return FieldValue.Flag(ScreenValues.truthy(resolved))
+  if (field.kind == "multiselect") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
   if (field.kind == "date") ScreenValues.epochMillis(resolved)?.let { millis ->
     val (y, m, d) = localParts(millis, "UTC")
     return FieldValue.Text("$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}")
@@ -748,6 +763,42 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
   Column(Modifier.fillMaxWidth().testTag("field-${field.key}")) {
     when (field.kind) {
       "toggle" -> SwitchRow(field.label, (value as? FieldValue.Flag)?.value == true, { onChange(FieldValue.Flag(it)) }, supporting = help)
+      "file" -> {
+        // The chosen file is read whole as text (a package, a CSV); its name sits beside the button.
+        val picker = com.aglyn.ui.LocalMediaPicker.current
+        val chooser = rememberCoroutineScope()
+        var fileName by remember { mutableStateOf<String?>(null) }
+        Text(field.label, style = MaterialTheme.typography.titleSmall)
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          OutlinedButton(
+            enabled = picker != null,
+            onClick = {
+              chooser.launch {
+                picker?.pick(com.aglyn.ui.PickSource.FILES, multiple = false)?.firstOrNull()?.let { file ->
+                  fileName = file.name
+                  onChange(FieldValue.Text(file.bytes.decodeToString()))
+                }
+              }
+            },
+          ) { Text(if (text.isEmpty()) "Choose a file" else "Choose a different file") }
+          if (text.isNotEmpty()) Text(fileName ?: "File chosen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+      "multiselect" -> {
+        // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
+        val choices = field.choices(context)
+        val chosen = text.split('\n').filter { it.isNotEmpty() }
+        Text(field.label, style = MaterialTheme.typography.titleSmall)
+        for ((id, label) in choices) {
+          SwitchRow(label, id in chosen, { on ->
+            val offered = choices.map { it.first }
+            val next = offered.filter { if (it == id) on else it in chosen } + chosen.filter { it !in offered }
+            onChange(FieldValue.Text(next.joinToString("\n")))
+          }, supporting = null)
+        }
+        help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
       "select" -> {
         val choices = field.choices(context)
         var expanded by remember { mutableStateOf(false) }

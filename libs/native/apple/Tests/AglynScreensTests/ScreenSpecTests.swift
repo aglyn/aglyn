@@ -148,6 +148,70 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ScreenValues.render("{user.emailVerified:yesno}", in: context), "Yes")
   }
 
+  func testNowNamesTheMonthlyAndDailyKeysInUTC() {
+    let before = ScreenValues.clock
+    defer { ScreenValues.clock = before }
+    ScreenValues.clock = { Date(timeIntervalSince1970: 1_791_385_440) }  // 2026-10-07T15:04:00Z
+    let now = ScreenValues.nowObject()
+    XCTAssertEqual(now["year"], "2026")
+    XCTAssertEqual(now["month"], "2026-10")
+    XCTAssertEqual(now["day"], "2026-10-07")
+    XCTAssertEqual(now["prevMonth"], "2026-09")
+    XCTAssertEqual(now["quarter"], "2026-Q4")
+    XCTAssertEqual(now["ms"], .number(1_791_385_440_000))
+    let context: JSONValue = ["now": now, "data": ["counter": ["2026-10": 4, "2026-09": 9]]]
+    XCTAssertEqual(ScreenValues.render("{data.counter[@now.month]}", in: context), "4")
+  }
+
+  @MainActor
+  func testACountLoadAnswersTheServersCountAndFallsBackToTheRows() async throws {
+    final class Counting: FirestoreReader, @unchecked Sendable {
+      @MainActor func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
+        onChange(.success([]))
+        return Handle()
+      }
+      @MainActor func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void) -> FirestoreListening {
+        onChange(.success(nil))
+        return Handle()
+      }
+      func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+      func deleteDocument(_ path: [String]) async throws {}
+      func count(_ query: FirestoreQuery) async throws -> Int? { query.collection == ["hosts", "h1", "layouts"] ? 7 : nil }
+      final class Handle: FirestoreListening { func remove() {} }
+    }
+    let context: JSONValue = ["site": ["id": "h1"]]
+    let counted = try await FirestoreLoads.query(Counting(), ["collection": "hosts/{site.id}/layouts", "count": true], in: context)
+    XCTAssertEqual(counted["count"], 7)
+    let rows = try await FirestoreLoads.query(Counting(), ["collection": "hosts/{site.id}/forms", "count": true], in: context)
+    XCTAssertEqual(rows["count"], 0)
+  }
+
+  func testAWhereValueMayBeADate() {
+    XCTAssertEqual(FirestoreLoads.plainValue(["$date": "2026-10-07T15:04:00Z"]) as? Date, Date(timeIntervalSince1970: 1_791_385_440))
+    XCTAssertEqual(FirestoreLoads.plainValue(.number(3)) as? Int64, 3)
+    XCTAssertEqual(FirestoreLoads.plainValue(.string("button")) as? String, "button")
+  }
+
+  @MainActor
+  func testAPerRowLoadRunsOncePerRowAndItsListSums() async throws {
+    let transport = RoutedTransport([
+      ("/api/sites", #"{"sites":[{"id":"a"},{"id":"b"},{"id":"c"}]}"#),
+      ("hostId=a", #"{"bandwidthGb":1.5}"#), ("hostId=b", #"{"bandwidthGb":2}"#),
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["sites": "/api/sites", "traffic": ["url": "/api/usage?hostId={item.id}", "each": "data.sites.sites", "optional": true]],
+      ]))
+    let model = ScreenModel(spec: spec, context: [:], api: api)
+    await model.load()
+    XCTAssertEqual(model.data["traffic"].array.count, 3)
+    // Site c answered nothing useful; a and b add up, and the missing one is left out, not read as zero.
+    XCTAssertEqual(ScreenValues.render("{data.traffic.*.bandwidthGb + 1}", in: model.context), "4.5")
+    XCTAssertEqual(ScreenValues.render("{now.prevMonth}", in: model.context).count, 7)
+  }
+
   func testAnActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() throws {
     let action = try XCTUnwrap(
       ActionSpec([
@@ -200,6 +264,75 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(transport.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), keys[0])
   }
 
+  func testAMultiselectHoldsTheChosenIdsAndReadsThemBack() throws {
+    let field = try XCTUnwrap(
+      FieldSpec([
+        "key": "models", "kind": "multiselect", "initial": "{data.row.models}",
+        "optionsFrom": ["items": "data.models", "value": "{item.id}", "label": "{item.label}"],
+      ]))
+    let context: JSONValue = ["data": ["row": ["models": ["a", "c"]], "models": [["id": "a", "label": "A"], ["id": "b", "label": "B"]]]]
+    XCTAssertEqual(field.choices(in: context).map(\.value), ["a", "b"])
+    let start = initialValue(field, in: context)
+    XCTAssertEqual(start, .text("a\nc"))
+    XCTAssertEqual(fieldJSON(field, start), ["a", "c"])
+    XCTAssertEqual(fieldJSON(field, .text("")), .null)
+    XCTAssertEqual(fieldJSON(field, nil), .null)
+  }
+
+  @MainActor
+  func testADownloadActionHandsBackTheFileUnderTheNameTheRouteGives() async throws {
+    struct FileTransport: HTTPTransport {
+      func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let named = request.url?.path.hasSuffix("/named") == true
+        let response = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil,
+          headerFields: named ? ["Content-Disposition": #"attachment; filename="export-2026.json""#, "Content-Type": "application/json"] : [:])!
+        return (Data(#"{"a":1}"#.utf8), response)
+      }
+    }
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: FileTransport())
+    let model = ScreenModel(spec: try XCTUnwrap(ScreenSpec(["id": "core.x", "title": "X"])), context: [:], api: api)
+    let named = try XCTUnwrap(ActionSpec(["label": "Export", "method": "GET", "url": "/api/x/named", "download": "fallback.json", "success": "Ready"]))
+    guard case .file(let file, let name, let message) = await model.run(named, in: [:]) else { return XCTFail("expected a file") }
+    XCTAssertEqual(name, "export-2026.json")
+    XCTAssertEqual(message, "Ready")
+    XCTAssertEqual(String(data: file.data, encoding: .utf8), #"{"a":1}"#)
+    let unnamed = try XCTUnwrap(ActionSpec(["label": "Export", "method": "GET", "url": "/api/x/other", "download": "fallback.json"]))
+    guard case .file(_, let fallback, _) = await model.run(unnamed, in: [:]) else { return XCTFail("expected a file") }
+    XCTAssertEqual(fallback, "fallback.json")
+  }
+
+  @MainActor
+  func testAFileFieldSendsTheParsedFileAndAnActionKeepsWhatItLearnedForTheNextScreen() async throws {
+    let file = try XCTUnwrap(FieldSpec(["key": "package", "kind": "file", "parse": "json"]))
+    XCTAssertEqual(fieldJSON(file, .text(#"{"manifest":{"items":[]}}"#)), ["manifest": ["items": []]])
+    XCTAssertEqual(fieldJSON(file, .text("not json")), .null)
+    XCTAssertEqual(fieldJSON(file, .text("")), .null)
+    let transport = RecordingTransport(responses: [(200, #"{"plan":{"items":[{"key":"page/a","needsChoice":true,"choices":["replace","skip"]}]}}"#)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.import" })
+    let form = try XCTUnwrap(spec.blocks.first { $0.id == "package" })
+    let plan = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    let model = ScreenModel(spec: spec, context: [:], api: api)
+    ScreenStash.clear()
+    let scope: JSONValue = ["site": ["id": "h1"], "form": ["package": ["manifest": ["items": []]]]]
+    _ = await model.run(plan, in: scope)
+    XCTAssertEqual(ScreenStash.values["package"], ["manifest": ["items": []]])
+    XCTAssertEqual(ScreenValues.lookup("plan.plan.items.0.key", in: .object(ScreenStash.values)), "page/a")
+    XCTAssertEqual(ScreenStash.values["decisions"], [:])
+    // The review screen picks a decision for an item and keeps it for the apply.
+    let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.import.review" })
+    let list = try XCTUnwrap(review.blocks.first { $0.type == "list" })
+    let choose = try XCTUnwrap(list["actions"].array.first.flatMap(ActionSpec.init))
+    let row: JSONValue = ["key": "page/a", "choices": ["replace", "keepBoth", "merge", "skip"]]
+    let picking = ScreenContext.with(ScreenContext.with(["stash": .object(ScreenStash.values)], item: row), "form", ["decision": "skip"])
+    _ = await ScreenModel(spec: review, context: [:], api: api).run(choose, in: picking)
+    XCTAssertEqual(ScreenStash.values["decisions"], ["page/a": "skip"])
+    let options = try XCTUnwrap(choose.prompt.first).choices(in: picking).map(\.value)
+    XCTAssertEqual(options, ["replace", "keepBoth", "skip"])  // merge needs per-field choices and is not offered
+    ScreenStash.clear()
+  }
+
   @MainActor
   func testTheAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.addons" })
@@ -229,6 +362,56 @@ final class ScreenSpecTests: XCTestCase {
     let declined = ScreenContext.with(base, "response", ["paymentPending": true, "declined": true])
     XCTAssertEqual(set.insteadEntry(in: declined)?["title"]?.stringValue, "Card declined")
     XCTAssertNil(set.insteadEntry(in: ScreenContext.with(base, "response", ["ok": true, "quantities": ["hosts": 3]])))
+  }
+
+  @MainActor
+  func testThePlanChangeQuotesWhatTheConsoleQuotes() throws {
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing.plans" })
+    let list = try XCTUnwrap(spec.blocks.first { $0.type == "list" })
+    let actions = list["actions"].array.compactMap(ActionSpec.init)
+    let switchPlan = try XCTUnwrap(actions.first { $0.id == "switch" })
+    XCTAssertNotNil(switchPlan.check)
+    var base: JSONValue = [
+      "item": ["id": "business", "label": "Business"],
+      "const": spec.raw["constants"] ?? .null,
+      "data": [
+        "org": ["plan": "pro", "subscription": ["status": "active"]],
+        "billing": ["subscription": [:]],
+        "collab": ["sites": [["hostId": "a"], ["hostId": "b"]]],
+        "seats": ["managerSeats": 2], "datasets": ["count": 1],
+      ],
+    ]
+    func quote(_ preview: JSONValue, data: JSONValue? = nil) -> String {
+      var scope = ScreenContext.with(base, "preview", preview)
+      if let data { scope = ScreenContext.with(scope, "data", data) }
+      return switchPlan.confirmText(in: scope) ?? ""
+    }
+    // Charged now, tax included.
+    XCTAssertEqual(
+      quote(["downgrade": false, "chargesNow": true, "prorationCents": 1000, "chargedNowCents": 1100, "prorationTaxCents": 100, "taxComplete": true, "currency": "usd", "periodEnd": "2026-11-01T00:00:00Z"]),
+      "Switch to Business? You'll be charged $11.00 USD now for the rest of this period, and your plan changes as soon as the payment goes through. That includes $1.00 USD tax.")
+    // A credit, with tax the address cannot decide yet.
+    XCTAssertEqual(
+      quote(["downgrade": false, "prorationCents": -250, "taxComplete": false, "currency": "usd", "periodEnd": "2026-11-01T00:00:00Z"]),
+      "Switch to Business? Unused time credits $2.50 USD back on your next invoice on Nov 1, 2026. Tax is calculated once we have your billing address. This total does not include it yet.")
+    // A move down waits for the period end.
+    XCTAssertEqual(
+      quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z"]),
+      "Move down to Business? Nothing is charged today, and nothing changes yet. You keep Pro — and everything you've already paid for — until Nov 1, 2026, when this organization moves to Business. You can keep your current plan any time before then.")
+    // The AI add-on is dropped where the target does not sell it, and over-limit counts are named.
+    var data = base["data"] ?? .null
+    data = ScreenContext.with(data, "org", ["plan": "pro", "subscription": ["status": "active"], "seatAddons": ["aiAddon": 1]])
+    data = ScreenContext.with(data, "seats", ["managerSeats": 7])
+    base = ScreenContext.with(base, "item", ["id": "free", "label": "Free"])
+    let text = quote(["downgrade": true, "periodEnd": "2026-11-01T00:00:00Z", "droppedAddons": ["aiAddon"]], data: data)
+    XCTAssertTrue(text.contains("Your Aglyn AI add-on is not sold on Free, so it is removed"))
+    XCTAssertTrue(text.contains("over the Free plan on: 2 sites (Free includes 1)"))
+    XCTAssertTrue(text.contains("7 team members (Free includes 1)"))
+    XCTAssertTrue(text.contains("Nothing is deleted and these keep working"))
+    // Only a different plan is offered, and only to a workspace with a live subscription.
+    let scope = ScreenContext.with(base, "item", ["id": "pro"])
+    XCTAssertFalse(ScreenValues.condition(switchPlan.when, in: scope))
+    XCTAssertTrue(ScreenValues.condition(switchPlan.when, in: ScreenContext.with(scope, "item", ["id": "business"]).withManager()))
   }
 
   @MainActor
@@ -297,6 +480,189 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(transport.requests.last?.url?.query, "orgId=o%201&cursor=a")
   }
 
+  @MainActor
+  func testAPostLoadPagesByPuttingItsCursorInTheBody() async throws {
+    let transport = RecordingTransport(responses: [
+      (200, #"{"jobs":[{"id":"a"}],"next":1791385440000}"#), (200, #"{"jobs":[{"id":"b"}],"next":null}"#),
+    ])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let spec = try XCTUnwrap(
+      ScreenSpec([
+        "id": "core.x", "title": "X",
+        "load": ["jobs": ["url": "/api/transfer/jobs", "method": "POST", "body": ["orgId": "{org.id}", "limit": 25], "cursor": "next", "cursorParam": "after", "items": "jobs"]],
+      ]))
+    let model = ScreenModel(spec: spec, context: ["org": ["id": "o1"], "data": [:]], api: api)
+    await model.load()
+    // A number cursor (a job's createdAt) pages as text, and goes back as the number it was.
+    XCTAssertEqual(model.cursors["jobs"], "1791385440000")
+    await model.loadMore("jobs")
+    XCTAssertEqual(ScreenValues.lookup("data.jobs.jobs", in: model.context).array.count, 2)
+    XCTAssertNil(model.cursors["jobs"])
+    let sent = try XCTUnwrap(transport.requests.last?.httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(sent, ["orgId": "o1", "limit": 25, "after": 1791385440000])
+    XCTAssertEqual(transport.requests.last?.url?.path, "/api/transfer/jobs")
+    XCTAssertNil(transport.requests.last?.url?.query)
+  }
+
+  func testAListAndAnOptionSourceCanWalkTheListsInsideTheRows() throws {
+    let context: JSONValue = [
+      "params": [:],
+      "data": ["resources": [
+        ["key": "outreach.sequences", "label": "Sequences", "items": [["key": "outreach.sequences/a", "name": "Welcome"], ["key": "outreach.sequences/b", "id": "b"]]],
+        ["key": "marketing.campaigns", "label": "Campaigns", "items": [["key": "marketing.campaigns/c", "name": "Launch"]]],
+        ["key": "crm.email-templates", "label": "Email templates", "items": []],
+      ]],
+    ]
+    let field = try XCTUnwrap(
+      FieldSpec([
+        "key": "items", "kind": "multiselect",
+        "initial": "{data.resources[key=params.resource].items.*.key|data.resources.*.items.*.key}",
+        "optionsFrom": ["items": "data.resources", "within": "items", "value": "{item.key}", "label": "{parent.label}: {item.name|item.id}"],
+      ]))
+    XCTAssertEqual(
+      field.choices(in: context).map { "\($0.value)=\($0.label)" },
+      ["outreach.sequences/a=Sequences: Welcome", "outreach.sequences/b=Sequences: b", "marketing.campaigns/c=Campaigns: Launch"])
+    // Everything is picked until a resource is named, then only its items.
+    XCTAssertEqual(initialValue(field, in: context), .text("outreach.sequences/a\noutreach.sequences/b\nmarketing.campaigns/c"))
+    XCTAssertEqual(initialValue(field, in: ScreenContext.with(context, "params", ["resource": "marketing.campaigns"])), .text("marketing.campaigns/c"))
+    let rows = ScreenValues.scopes(items: "data.resources", within: "items", filter: "item.name", in: context)
+    XCTAssertEqual(rows.count, 2)
+    XCTAssertEqual(ScreenValues.render("{parent.label}", in: rows[1]), "Campaigns")
+  }
+
+  func testAMultiselectThatCoversAllIsUnfinishedUntilEveryChoiceIsChosen() throws {
+    let field = try XCTUnwrap(
+      FieldSpec([
+        "key": "ack", "kind": "multiselect", "coversAll": true,
+        "optionsFrom": ["items": "data.warnings", "value": "{item}", "label": "{item}"],
+      ]))
+    let context: JSONValue = ["data": ["warnings": ["replace", "failed"]]]
+    XCTAssertTrue(field.unmet(.null, in: context))
+    XCTAssertTrue(field.unmet(["replace"], in: context))
+    XCTAssertFalse(field.unmet(["failed", "replace"], in: context))
+    XCTAssertFalse(field.unmet(.null, in: ["data": ["warnings": []]]))
+  }
+
+  @MainActor
+  func testAnActionCanSaveTheValueAtAPathOfTheRoutesAnswerAsTheFile() async throws {
+    let answer = #"{"ok":true,"fileName":"aglyn-package-2026.json","package":{"name":"a/b","manifest":{"items":[]}}}"#
+    let transport = RecordingTransport(responses: [(200, answer)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.packageExport" })
+    let actions = try XCTUnwrap(spec.blocks.first { $0.type == "actions" })
+    let export = try XCTUnwrap(actions["items"].array.first.flatMap(ActionSpec.init))
+    XCTAssertEqual(export.downloadAt, "package")
+    let scope: JSONValue = ["org": ["id": "o1"], "form": ["items": ["outreach.sequences/a"], "dependencies": true]]
+    guard case .file(let file, let name, _) = await ScreenModel(spec: spec, context: [:], api: api).run(export, in: scope) else {
+      return XCTFail("expected a file")
+    }
+    XCTAssertEqual(name, "aglyn-package-2026.json")
+    // The file is the package alone, indented, with no escaped slashes, and it reads back as it was.
+    let text = try XCTUnwrap(String(data: file.data, encoding: .utf8))
+    XCTAssertTrue(text.contains("\n  "))
+    XCTAssertTrue(text.contains("\"a/b\""))
+    XCTAssertEqual(JSONValue.decode(file.data), ["name": "a/b", "manifest": ["items": []]])
+    let sent = try XCTUnwrap(transport.requests.last?.httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(sent, ["orgId": "o1", "action": "export", "items": ["outreach.sequences/a"], "dependencies": true])
+  }
+
+  @MainActor
+  func testThePackageReviewPlansAgainOnEveryChoiceAndAsksForEveryAcknowledgement() async throws {
+    let plan = #"{"job":{"id":"j1"},"items":[],"references":[],"summary":{"create":1},"blocking":[],"acknowledgementsRequired":["replace","failed"],"resources":{}}"#
+    let transport = RecordingTransport(responses: [(200, plan), (200, plan)])
+    let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
+    let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.packageReview" })
+    let model = ScreenModel(spec: review, context: [:], api: api)
+    let items = try XCTUnwrap(review.blocks.first { $0.type == "list" && $0.title == "Items" })
+    let chooseItem = try XCTUnwrap(items["actions"].array.first.flatMap(ActionSpec.init))
+    ScreenStash.clear()
+    ScreenStash.set(["plan": ["job": ["id": "j1"]], "decisions": ["page/x": "skip"], "dependencyChoices": ["mailbox/m": ["action": "dropReference"]]])
+    let row: JSONValue = ["key": "outreach.sequences/a", "decision": "create", "decisions": ["create", "replace", "skip"]]
+    let picking = ScreenContext.with(
+      ScreenContext.with(["org": ["id": "o1"], "stash": .object(ScreenStash.values)], item: row), "form", ["decision": "replace"])
+    XCTAssertTrue(ScreenValues.condition(chooseItem.when, in: picking))
+    XCTAssertFalse(ScreenValues.condition(chooseItem.when, in: ScreenContext.with(picking, "item", ["decisions": ["create"]])))
+    _ = await model.run(chooseItem, in: picking)
+    // The new choice joins the earlier ones, and the other kind of choice is sent along unchanged.
+    let sent = try XCTUnwrap(transport.requests.last?.httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(
+      sent,
+      [
+        "orgId": "o1", "action": "plan", "jobId": "j1",
+        "decisions": ["page/x": "skip", "outreach.sequences/a": "replace"],
+        "dependencyChoices": ["mailbox/m": ["action": "dropReference"]],
+      ])
+    XCTAssertEqual(ScreenStash.values["decisions"], ["page/x": "skip", "outreach.sequences/a": "replace"])
+    XCTAssertEqual(ScreenValues.lookup("summary.create", in: ScreenStash.values["plan"] ?? .null), 1)
+
+    // A reference mapped to one of yours carries that one; a leave-out carries no id.
+    let references = try XCTUnwrap(review.blocks.first { $0.type == "list" && $0.title == "Things this workspace does not have" })
+    let chooseReference = try XCTUnwrap(references["actions"].array.first.flatMap(ActionSpec.init))
+    let reference: JSONValue = ["key": "mailbox/m2", "choices": ["import", "mapTo", "skipItem"], "targets": []]
+    let mapping = ScreenContext.with(
+      ScreenContext.with(["org": ["id": "o1"], "stash": .object(ScreenStash.values)], item: reference), "form", ["action": "skipItem"])
+    XCTAssertEqual(try XCTUnwrap(chooseReference.prompt.first).choices(in: mapping).map(\.value), ["import", "skipItem"])  // nothing of yours to map to
+    _ = await model.run(chooseReference, in: mapping)
+    let second = try XCTUnwrap(transport.requests.last?.httpBody.flatMap(JSONValue.decode))
+    XCTAssertEqual(second["dependencyChoices"], ["mailbox/m": ["action": "dropReference"], "mailbox/m2": ["action": "skipItem"]])
+
+    // Import asks for every acknowledgement the plan requires, and for none when it requires none.
+    let actions = try XCTUnwrap(review.blocks.last { $0.type == "actions" })
+    let apply = try XCTUnwrap(actions["items"].array.first.flatMap(ActionSpec.init))
+    let ack = try XCTUnwrap(apply.prompt.first)
+    let waiting: JSONValue = ["stash": .object(ScreenStash.values)]
+    XCTAssertEqual(ack.choices(in: waiting).map(\.value), ["replace", "failed"])
+    XCTAssertTrue(ack.unmet(["replace"], in: waiting))
+    XCTAssertFalse(ack.unmet(["replace", "failed"], in: waiting))
+    let applyNow = try XCTUnwrap(actions["items"].array.last.flatMap(ActionSpec.init))
+    XCTAssertEqual(applyNow.id, "applyNow")
+    func offered(_ plan: JSONValue) -> [String] {
+      [apply, applyNow].filter { ScreenValues.condition($0.when, in: ["stash": ["plan": plan]]) }.map(\.id)
+    }
+    XCTAssertEqual(offered(["acknowledgementsRequired": ["replace"], "blocking": []]), ["apply"])
+    XCTAssertEqual(offered(["acknowledgementsRequired": [], "blocking": []]), ["applyNow"])
+    XCTAssertEqual(offered(["acknowledgementsRequired": ["replace"], "blocking": ["Choose what happens to 1 item."]]), [])
+    XCTAssertEqual(offered(["acknowledgementsRequired": [], "blocking": ["Choose what happens to 1 item."]]), [])
+    ScreenStash.clear()
+  }
+
+  @MainActor
+  func testTheRulesListShowsOnlyTheResourcesTheFileHolds() throws {
+    let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.packageReview" })
+    let rules = try XCTUnwrap(review.blocks.first { $0.type == "list" && $0.title == "Rules every import keeps" })
+    let context: JSONValue = [
+      "stash": ["plan": [
+        "items": [["kind": "outreach.sequences"], ["kind": "outreach.sequences"]],
+        "resources": [
+          "outreach.sequences": ["label": "Sequences", "rules": [["label": "Imported as a draft", "reason": "A sequence never sends from a file."]]],
+          "marketing.campaigns": ["label": "Campaigns", "rules": [["label": "Imported as a draft", "reason": "x"]]],
+          "crm.email-templates": ["label": "Email templates", "rules": []],
+        ],
+      ]]
+    ]
+    let found = ScreenValues.scopes(items: "stash.plan.resources", within: nil, filter: rules["filter"]?.stringValue, in: context)
+    XCTAssertEqual(found.map { ScreenValues.render("{item.value.label}", in: $0) }, ["Sequences"])
+    XCTAssertEqual(ScreenValues.render(rules["secondary"]?.stringValue ?? "", in: found[0]), "Imported as a draft")
+  }
+
+  @MainActor
+  func testTheHubPagesItsHistoryAndOffersTheConsolesRowActions() throws {
+    let hub = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data" })
+    let jobs = try XCTUnwrap(hub.loads.first { $0.key == "jobs" })
+    XCTAssertEqual(jobs.method, .post)
+    XCTAssertEqual(jobs.cursor, "next")
+    XCTAssertEqual(jobs.cursorParam, "after")
+    let history = try XCTUnwrap(hub.blocks.first { $0.title == "History" })
+    XCTAssertEqual(history["load"]?.stringValue, "jobs")
+    let actions = history["actions"].array.compactMap(ActionSpec.init)
+    let job: JSONValue = ["id": "j9", "kind": "package", "resultFile": true, "undo": ["available": true]]
+    let scope = ScreenContext.with(["org": ["id": "o1"]], item: job)
+    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: scope) }.map(\.id), ["results", "undo"])
+    let records = ScreenContext.with(scope, "item", ["id": "j9", "kind": "records", "resultFile": false, "undo": ["available": true]])
+    XCTAssertEqual(actions.filter { ScreenValues.condition($0.when, in: records) }.map(\.id), [])
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(actions.first?.download), in: scope), "import-j9-results.csv")
+  }
+
   static func targets(_ json: JSONValue) -> [String] {
     switch json {
     case .object(let record):
@@ -327,4 +693,22 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
     let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
     return (Data(body.utf8), response)
   }
+}
+
+/// Answers by what the request's URL contains, so loads that run in parallel get the right body.
+final class RoutedTransport: HTTPTransport, @unchecked Sendable {
+  private let routes: [(String, String)]
+  init(_ routes: [(String, String)]) { self.routes = routes }
+
+  func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    let url = request.url?.absoluteString ?? ""
+    let body = routes.first { url.contains($0.0) }?.1 ?? "{}"
+    let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+    return (Data(body.utf8), response)
+  }
+}
+
+extension JSONValue {
+  /// A copy whose org is a manager, as `org.manager` reads.
+  fileprivate func withManager() -> JSONValue { ScreenContext.with(self, "org", ["manager": true]) }
 }
