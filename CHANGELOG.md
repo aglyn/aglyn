@@ -30,6 +30,7 @@ content on the marketing site and is written separately.
 <details>
 <summary>Also in this release: 1 test</summary>
 
+- **ci:** manifests cached in the scratch path; xcodebuild says what it rebuilt (AGL-3783)
 - **marketing:** the conversions card spec loads its module once, outside any test's budget
 
 </details>
