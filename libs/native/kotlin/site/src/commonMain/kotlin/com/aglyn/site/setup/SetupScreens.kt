@@ -790,6 +790,36 @@ private fun ThemeEditorCard(load: Load<ThemeEditorLoad>, onRetry: () -> Unit, ap
       NumberField(catalog.spacing, draft.spacing, canEdit) { draft = draft.copy(spacing = it) }
       NumberField(catalog.navHeightXs, draft.navHeightXs, canEdit) { draft = draft.copy(navHeightXs = it) }
       NumberField(catalog.navHeightSm, draft.navHeightSm, canEdit) { draft = draft.copy(navHeightSm = it) }
+      if (catalog.looks.isNotEmpty()) {
+        HorizontalDivider()
+        Text("Style components", style = MaterialTheme.typography.titleSmall)
+        Text(
+          "The site-wide look of buttons, form inputs and cards. \"Theme default\" gives back the theme's own.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        for ((group, label) in catalog.lookGroups) {
+          Text(label, style = MaterialTheme.typography.labelLarge)
+          for (field in catalog.looks.filter { it.group == group }) {
+            val value = draft.componentLooks[field.id].orEmpty()
+            SelectField(
+              field.label,
+              buildList {
+                add(SelectOption(THEME_LOOK_DEFAULT, "Theme default"))
+                if (value == THEME_LOOK_CUSTOM) add(SelectOption(THEME_LOOK_CUSTOM, "Custom (set in the Besigner)", enabled = false))
+                for (option in field.options) {
+                  // A color choice shows the scheme's color it draws in, where the theme sets one.
+                  val shown = option.token?.let { draft.colors[scheme]?.get(it) }?.takeIf { it.isNotBlank() }
+                  add(SelectOption(option.value, option.label, supporting = shown))
+                }
+              },
+              value,
+              { draft = draft.copy(componentLooks = draft.componentLooks + (field.id to (it ?: THEME_LOOK_DEFAULT))) },
+              enabled = canEdit,
+            )
+          }
+        }
+      }
     }
   }
 }

@@ -941,6 +941,31 @@ private struct ThemeEditorForm: View {
       ThemeNumberField(range: catalog.spacing, value: $draft.spacing, enabled: canEdit)
       ThemeNumberField(range: catalog.navHeightXs, value: $draft.navHeightXs, enabled: canEdit)
       ThemeNumberField(range: catalog.navHeightSm, value: $draft.navHeightSm, enabled: canEdit)
+      if !catalog.looks.isEmpty {
+        Text("Style components").font(AglynFont.strongSubheadline)
+        Text("The site-wide look of buttons, form inputs and cards. \"Theme default\" gives back the theme's own.")
+          .font(AglynFont.caption).foregroundStyle(.secondary)
+        ForEach(catalog.lookGroups, id: \.group) { group, label in
+          Text(label).font(AglynFont.strongSubheadline)
+          ForEach(catalog.looks.filter { $0.group == group }) { field in
+            let value = draft.componentLooks[field.id] ?? themeLookDefault
+            Picker(field.label, selection: Binding(get: { value }, set: { draft.componentLooks[field.id] = $0 })) {
+              Text("Theme default").tag(themeLookDefault)
+              if value == themeLookCustom { Text("Custom (set in the Besigner)").tag(themeLookCustom) }
+              ForEach(field.options, id: \.value) { option in
+                // A color choice shows the scheme's color it draws in, where the theme sets one.
+                let shown: String? = option.token.flatMap { token in
+                  let held: String?? = draft.colors[scheme]?[token]
+                  return (held ?? nil).flatMap { $0.isEmpty ? nil : $0 }
+                }
+                Text(shown.map { "\(option.label) · \($0)" } ?? option.label).tag(option.value)
+              }
+            }
+            .disabled(!canEdit)
+            .accessibilityIdentifier("look-\(field.id)")
+          }
+        }
+      }
     }
     .onChange(of: stored) { _, next in draft = next }
   }

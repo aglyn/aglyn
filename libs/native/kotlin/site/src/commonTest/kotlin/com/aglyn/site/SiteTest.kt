@@ -70,6 +70,8 @@ import com.aglyn.site.setup.fontFileSize
 import com.aglyn.site.setup.installedFontsOf
 import com.aglyn.site.setup.isFontFileName
 import com.aglyn.site.setup.themePresetsOf
+import com.aglyn.site.setup.themeCatalogOf
+import com.aglyn.site.setup.themeValuesOf
 import com.aglyn.site.setup.SetupSection
 import com.aglyn.site.setup.ThemeEdit
 import com.aglyn.site.setup.ThemeValues
@@ -261,6 +263,24 @@ class SiteTest {
       themeEdits(before, after),
     )
     assertTrue(themeEdits(before, before).isEmpty())
+  }
+
+  @Test
+  fun readsTheStyleComponentsCatalogAndSendsOnlyTheLooksThatChanged() {
+    val catalog = themeCatalogOf(
+      Json.parseToJsonElement(
+        """{"componentLooks":{"groups":[{"group":"button","label":"Buttons"}],"fields":[{"id":"button.variant","group":"button","label":"Button style","kind":"select","options":[{"value":"contained","label":"Filled"},{"value":"outlined","label":"Outlined"}]},{"id":"input.border","group":"input","label":"Input border color","kind":"color","options":[{"value":"primary","label":"Primary","token":"primary"}]}]}}""",
+      ),
+    )
+    assertEquals(listOf("button" to "Buttons"), catalog.lookGroups)
+    assertEquals(listOf("button.variant", "input.border"), catalog.looks.map { it.id })
+    assertEquals("primary", catalog.looks[1].options[0].token)
+    val values = themeValuesOf(Json.parseToJsonElement("""{"componentLooks":{"button.variant":"","input.border":"__custom__","card.variant":"outlined"}}"""))
+    assertEquals("outlined", values.componentLooks["card.variant"])
+    val after = values.copy(componentLooks = mapOf("button.variant" to "outlined", "input.border" to "__custom__", "card.variant" to ""))
+    // A Custom look is left alone; "Theme default" is the empty choice that clears one.
+    assertEquals(listOf(ThemeEdit.ComponentLook("button.variant", "outlined"), ThemeEdit.ComponentLook("card.variant", "")), themeEdits(values, after))
+    assertEquals(mapOf("control" to "componentLook", "field" to "card.variant", "value" to ""), ThemeEdit.ComponentLook("card.variant", "").body())
   }
 
   @Test
