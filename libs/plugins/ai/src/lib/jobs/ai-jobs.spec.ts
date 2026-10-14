@@ -1146,6 +1146,32 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
       })
     })
 
+    it('a step that stops on our side before the provider gives back what earlier passes spent (AGL-3765)', async () => {
+      // A page job's form unit refused at a band another build filled after
+      // the plan was confirmed: it spends nothing itself, and the job had
+      // spent its plan.
+      let calls = 0
+      registerAiJobStep('insight', async () => {
+        calls += 1
+        return calls === 1
+          ? ((await spent({ continue: true })()) as never)
+          : ({
+              outputs: [],
+              usage: ZERO,
+              estCostUsd: 0,
+              model: 'claude-sonnet-5',
+              stopReason: null,
+              failure: 'Another build on this site used the last form your plan includes while this one was running.',
+            } as never)
+      })
+      const job = await freeJob()
+      await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })
+      expect((await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('failed')
+      expect(await getAiJob(firestore, 'org-free', job.$id)).toMatchObject({
+        status: 'failed', creditsSpent: 6, refundedCredits: 6, refundReason: 'step-failure',
+      })
+    })
+
     it('a step the machine gave up on after its attempts gives back what the job spent', async () => {
       registerAiJobStep('insight', spent({ continue: true }) as never)
       const job = await freeJob()

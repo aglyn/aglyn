@@ -9,7 +9,7 @@ unlisted: true
 
 :::caution Rolling out
 The Aglyn app on Zapier is **not yet published**. Until it is, no **Zapier** card
-appears on your site's setup page and Aglyn is not listed in Zapier's app directory.
+appears in your site's **Setup → Integrations** and Aglyn is not listed in Zapier's app directory.
 :::
 
 Zapier connects Aglyn to thousands of other apps without code. A **Zap** starts on a
@@ -74,7 +74,7 @@ contact; or a submission with every field — so a later step can use any field.
 
 ## See and disconnect your Zaps
 
-The **Zapier** card on a site's setup page lists every Zap that takes the site's
+The **Zapier** card in a site's **Setup → Integrations** lists every Zap that takes the site's
 records: what it takes, the API key it connected with, and when it was last sent
 something. A site admin can **Disconnect** one there, and it stops receiving events at
 once.
