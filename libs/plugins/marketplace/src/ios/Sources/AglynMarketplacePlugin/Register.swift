@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynScreens
 import SwiftUI
 
 /// The Marketplace plugin's native registration: the same ids its `mobile.contributes` declares in plugins.config.json (the
@@ -26,4 +27,6 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
   r.quickAction("marketplace.open", title: "Marketplace", icon: "storefront", order: 60, screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.page", path: "/marketplace", screen: marketplaceBrowseScreen)
   r.deepLink("marketplace.listing-page", path: "/marketplace/:listingId", screen: marketplaceListingScreen)
+  // Publishing the site as a template, from Backup & restore's `siteTemplate` zone, and the Publisher Agreement it needs.
+  SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 }
