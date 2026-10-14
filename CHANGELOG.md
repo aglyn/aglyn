@@ -15,6 +15,9 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **native:** site setup hosts the business profile and SEO zones, filled by the AI plugin ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** edit an image: rotate, flip, crop and shrink, then replace it or save a copy ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
+- **native:** uploaded filters and the cover film's poster ([AGL-3668](https://linear.app/aglyn/issue/AGL-3668))
 - **legal:** v15 — Privacy and Subprocessors: hashed email matching for Aglyn's own ads ([AGL-3780](https://linear.app/aglyn/issue/AGL-3780))
 - **ai:** serve the fast tier from Haiku 5.5, retire Haiku 4.5 and Sonnet 5 ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
 - **ai:** bill the fast tier at the platform's 1.5x markup ([AGL-3781](https://linear.app/aglyn/issue/AGL-3781))
@@ -56,6 +59,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **marketplace:** a plugin's page uninstall runs the impact check ([AGL-3790](https://linear.app/aglyn/issue/AGL-3790))
 - **auth:** verify-email link waits for a press before redeeming ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **billing:** every staff refund carries a Stripe reason derived from ours ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
 - **billing:** a fraud refund tells Stripe it is fraudulent ([AGL-3786](https://linear.app/aglyn/issue/AGL-3786))
@@ -89,8 +93,9 @@ content on the marketing site and is written separately.
 - **commerce:** name each store settings page in place of Products > Settings ([AGL-3713](https://linear.app/aglyn/issue/AGL-3713))
 
 <details>
-<summary>Also in this release: 3 test, 1 chore, 3 ci</summary>
+<summary>Also in this release: 3 test, 1 chore, 4 ci</summary>
 
+- **native:** only main saves the swift build cache; a PR restores it ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **native:** judge a PR by its test merge, not a lagging base sha ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **native:** key the swift build cache by runner image and cache manifests ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
 - **native:** refresh main's swift build cache after auto-merges too ([AGL-3783](https://linear.app/aglyn/issue/AGL-3783))
