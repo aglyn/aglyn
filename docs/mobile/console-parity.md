@@ -78,7 +78,8 @@ line here is done; each line names the console source it was read from.
 | Alerts | Per-type switches and delivery, the digest hour (it POSTed to a route that takes PUT), the test per type (it sent none), recipients, webhook and health checks | done |
 | Platform settings | Mail sent this hour beside the send-rate form | done |
 | Audit log | Only the archive was native; now the admin actions (latest 100, scope and action filters) and one entry with before and after, then the archive. The console's date range and CSV export are not carried | partial |
-| Sales tax, Churn, and the Workspaces, Sites and People lists | read against the console page by page in the PRs that follow; findings are added to this table | open |
+| Workspaces, Sites and People lists | Filters (plan, billing status, suspended; suspended, own domain, workspace; disabled, staff, role) with the console's newest-first order; the Workspaces list shows last activity and erasure requested. The plan shown is the stored plan, where the console resolves a comp; the console's column picker and header sorts are not carried | partial |
+| Sales tax, Churn | read against the console page in the PRs that follow | open |
 
 Texts (`sms`): the plugin is infrastructure with no console page of its own.
 The console's texts surfaces are the Commerce settings card's "Also send as

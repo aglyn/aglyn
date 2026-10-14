@@ -318,9 +318,26 @@
       ],
       "load": {
         "orgs": {
-          "url": "/api/admin/orgs?pageSize=50",
+          "url": "/api/admin/orgs?pageSize=50&sort=createdAt:desc",
           "cursor": "nextCursor",
-          "items": "orgs"
+          "items": "orgs",
+          "filters": [
+            {
+              "field": "plan",
+              "op": "equals",
+              "value": "{params.plan}"
+            },
+            {
+              "field": "subscription",
+              "op": "equals",
+              "value": "{params.subscription}"
+            },
+            {
+              "field": "suspended",
+              "op": "equals",
+              "value": "{params.suspended}"
+            }
+          ]
         }
       },
       "blocks": [
@@ -332,12 +349,17 @@
           "items": "data.orgs.orgs",
           "primary": "{item.name|item.$id}",
           "secondary": "{item.slug} · {item.plan|'Free':title}",
-          "tertiary": "Created {item.createdAt:date}",
+          "tertiary": "Created {item.createdAt:date} · last activity {item.lastActivityAt:date}",
           "icon": "building.2|business",
           "badges": [
             {
               "text": "Suspended",
               "when": "item.suspended",
+              "tone": "error"
+            },
+            {
+              "text": "Erasure requested",
+              "when": "item.erasureRequestedAt",
               "tone": "error"
             },
             {
@@ -356,6 +378,132 @@
             }
           },
           "empty": "No workspaces match."
+        }
+      ],
+      "constants": {
+        "plans": [
+          {
+            "value": "free",
+            "label": "Free"
+          },
+          {
+            "value": "starter",
+            "label": "Starter"
+          },
+          {
+            "value": "pro",
+            "label": "Pro"
+          },
+          {
+            "value": "business",
+            "label": "Business"
+          },
+          {
+            "value": "scale",
+            "label": "Scale"
+          },
+          {
+            "value": "advanced",
+            "label": "Advanced"
+          },
+          {
+            "value": "agency",
+            "label": "Agency"
+          },
+          {
+            "value": "enterprise",
+            "label": "Enterprise"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "plan",
+              "label": "Stored plan",
+              "kind": "select",
+              "initial": "{params.plan}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                }
+              ],
+              "optionsFrom": {
+                "items": "const.plans",
+                "value": "{item.value}",
+                "label": "{item.label}"
+              }
+            },
+            {
+              "key": "subscription",
+              "label": "Billing status",
+              "kind": "select",
+              "initial": "{params.subscription}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "trialing",
+                  "label": "Trialing"
+                },
+                {
+                  "value": "active",
+                  "label": "Active"
+                },
+                {
+                  "value": "past_due",
+                  "label": "Past due"
+                },
+                {
+                  "value": "canceled",
+                  "label": "Canceled"
+                },
+                {
+                  "value": "unpaid",
+                  "label": "Unpaid"
+                },
+                {
+                  "value": "paused",
+                  "label": "Paused"
+                }
+              ]
+            },
+            {
+              "key": "suspended",
+              "label": "Suspended",
+              "kind": "select",
+              "initial": "{params.suspended}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "true",
+                  "label": "Suspended"
+                },
+                {
+                  "value": "false",
+                  "label": "Not suspended"
+                }
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.orgs",
+            "params": {
+              "plan": "{form.plan}",
+              "subscription": "{form.subscription}",
+              "suspended": "{form.suspended}"
+            }
+          }
         }
       ]
     },
@@ -1502,9 +1650,26 @@
       ],
       "load": {
         "sites": {
-          "url": "/api/admin/sites?pageSize=50",
+          "url": "/api/admin/sites?pageSize=50&sort=createdAt:desc",
           "cursor": "nextCursor",
-          "items": "sites"
+          "items": "sites",
+          "filters": [
+            {
+              "field": "suspended",
+              "op": "equals",
+              "value": "{params.suspended}"
+            },
+            {
+              "field": "hasCustomDomain",
+              "op": "equals",
+              "value": "{params.domain}"
+            },
+            {
+              "field": "orgId",
+              "op": "equals",
+              "value": "{params.orgId}"
+            }
+          ]
         }
       },
       "blocks": [
@@ -1542,6 +1707,69 @@
             }
           },
           "empty": "No sites match."
+        }
+      ],
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "suspended",
+              "label": "Suspended",
+              "kind": "select",
+              "initial": "{params.suspended}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "true",
+                  "label": "Yes"
+                },
+                {
+                  "value": "false",
+                  "label": "No"
+                }
+              ]
+            },
+            {
+              "key": "domain",
+              "label": "Has its own domain",
+              "kind": "select",
+              "initial": "{params.domain}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "true",
+                  "label": "Yes"
+                },
+                {
+                  "value": "false",
+                  "label": "No"
+                }
+              ]
+            },
+            {
+              "key": "orgId",
+              "label": "Workspace ID",
+              "kind": "text",
+              "initial": "{params.orgId}"
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.sites",
+            "params": {
+              "suspended": "{form.suspended}",
+              "domain": "{form.domain}",
+              "orgId": "{form.orgId}"
+            }
+          }
         }
       ]
     },
@@ -1801,7 +2029,24 @@
           "url": "/api/admin/users?pageSize=50",
           "cursor": "nextPageToken",
           "cursorParam": "nextPageToken",
-          "items": "users"
+          "items": "users",
+          "filters": [
+            {
+              "field": "disabled",
+              "op": "equals",
+              "value": "{params.disabled}"
+            },
+            {
+              "field": "staff",
+              "op": "equals",
+              "value": "{params.staff}"
+            },
+            {
+              "field": "staffRole",
+              "op": "equals",
+              "value": "{params.role}"
+            }
+          ]
         }
       },
       "blocks": [
@@ -1834,6 +2079,87 @@
             }
           },
           "empty": "Search by email or name."
+        }
+      ],
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "disabled",
+              "label": "Disabled",
+              "kind": "select",
+              "initial": "{params.disabled}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "true",
+                  "label": "Yes"
+                },
+                {
+                  "value": "false",
+                  "label": "No"
+                }
+              ]
+            },
+            {
+              "key": "staff",
+              "label": "Staff",
+              "kind": "select",
+              "initial": "{params.staff}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "true",
+                  "label": "Yes"
+                },
+                {
+                  "value": "false",
+                  "label": "No"
+                }
+              ]
+            },
+            {
+              "key": "role",
+              "label": "Staff role",
+              "kind": "select",
+              "initial": "{params.role}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "support",
+                  "label": "Support"
+                },
+                {
+                  "value": "billing",
+                  "label": "Billing"
+                },
+                {
+                  "value": "super",
+                  "label": "Super"
+                }
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.staff.users",
+            "params": {
+              "disabled": "{form.disabled}",
+              "staff": "{form.staff}",
+              "role": "{form.role}"
+            }
+          }
         }
       ]
     },

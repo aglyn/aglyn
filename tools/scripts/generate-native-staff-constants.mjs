@@ -279,6 +279,7 @@ const replace = (id, change) => {
 replace('core.staff.health', (screen) => ({ ...screen, constants: { probes: sources.probes } }))
 replace('core.staff.emails', (screen) => ({ ...screen, constants: sources.emails }))
 replace('core.staff.emailSuppressions', (screen) => ({ ...screen, constants: sources.suppressions }))
+replace('core.staff.orgs', (screen) => ({ ...screen, constants: sources.margin }))
 replace('core.staff.margin', (screen) => ({ ...screen, constants: sources.margin }))
 replace('core.staff.revenue', (screen) => ({ ...screen, constants: sources.revenue }))
 replace('core.staff.abuse', (screen) => ({ ...screen, constants: sources.abuse }))
