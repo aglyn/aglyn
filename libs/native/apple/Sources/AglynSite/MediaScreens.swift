@@ -52,7 +52,10 @@ struct MediaScreen: View {
             .padding(.top, AglynSpace.one)
             .accessibilityIdentifier("media-tabs")
           }
-          MediaScopeGate(context: context, scope: scope, initialMediaID: params["media"]).id(scope)
+          MediaScopeGate(context: context, scope: scope) { scopeTokens in
+            MediaLibrary(context: context, scope: scope, scopeTokens: scopeTokens, initialMediaID: params["media"])
+          }
+          .id(scope)
         }
         .background(AglynColor.page)
       } else {
@@ -66,29 +69,24 @@ struct MediaScreen: View {
 /// Resolves who may read what in a workspace library before it loads: an
 /// org-wide member reads it whole; a member limited to some sites reads it
 /// through their scope tokens, as the rules require.
-struct MediaScopeGate: View {
+struct MediaScopeGate<Content: View>: View {
   let context: NativePluginContext
   let scope: MediaScope
-  let initialMediaID: String?
+  @ViewBuilder let content: (_ scopeTokens: [String]?) -> Content
   @State private var member = LiveDocument()
 
   var body: some View {
     switch scope {
     case .site:
-      MediaLibrary(context: context, scope: scope, scopeTokens: nil, initialMediaID: initialMediaID)
+      content(nil)
     case .org(_, let forHostID?):
-      MediaLibrary(
-        context: context, scope: scope,
-        scopeTokens: [OrgAccess.orgScopeToken, OrgAccess.hostScopeToken(forHostID)], initialMediaID: initialMediaID)
+      content([OrgAccess.orgScopeToken, OrgAccess.hostScopeToken(forHostID)])
     case .org(let orgID, nil):
       Group {
         switch member.state {
         case .loading: SkeletonGrid(count: 9)
-        case .failed:
-          MediaLibrary(context: context, scope: scope, scopeTokens: nil, initialMediaID: initialMediaID)
-        case .ready(let doc):
-          MediaLibrary(
-            context: context, scope: scope, scopeTokens: OrgAccess.libraryScope(doc), initialMediaID: initialMediaID)
+        case .failed: content(nil)
+        case .ready(let doc): content(OrgAccess.libraryScope(doc))
         }
       }
       .task(id: orgID) { await member.bind(context.firestore, ["orgs", orgID, "members", context.uid]) }
