@@ -831,14 +831,26 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     // form another build on this site just made, as its page would place any
     // form the site has. Otherwise a site that had room when the plan was
     // confirmed and was filled since stopped this job on our side, given
-    // back; one that was already full is the workspace's limit to change.
+    // back; one that was already full is the workspace's limit to change. A
+    // lookup that fails leaves the refusal as it was.
     const refused = async (
       refusal: string,
       spent: Pick<AiJobStepOutcome, 'outputs' | 'usage' | 'estCostUsd' | 'model' | 'stopReason'>,
     ): Promise<AiJobStepOutcome> => {
-      const reused = await siblingForm(firestore, { job, now })
+      const lookup = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await read()
+        } catch (error) {
+          console.error('ai form step: band refusal lookup failed', { jobId: job.$id, hostId, error })
+          return fallback
+        }
+      }
+      const reused = await lookup(() => siblingForm(firestore, { job, now }), null)
       if (reused) return { ...spent, outputs: [output(reused, { note: AI_FORM_REUSED_NOTE })] }
-      const taken = await readAiDraftBandTakenSince(firestore, { kind: 'form', hostId, org, since: plan?.confirmedAt })
+      const taken = await lookup(
+        () => readAiDraftBandTakenSince(firestore, { kind: 'form', hostId, org, since: plan?.confirmedAt }),
+        false,
+      )
       if (taken) return { ...spent, failure: AI_FORM_BAND_TAKEN_COPY }
       return { ...spent, review: aiLimitReview(refusal) }
     }

@@ -711,6 +711,22 @@ describe('the form step', () => {
       expect(outcome.failure).toBe(AI_FORM_BAND_TAKEN_COPY)
       expect(outcome.outputs).toEqual([])
     })
+
+    it('leaves the refusal as it was when the lookup fails', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      try {
+        mockDocs.set('hosts/host-1/forms/frm-sibling', { displayName: 'Booking request', createdAt: new Date(NOW.getTime() - 60_000) })
+        const siblingForm = jest.fn(async () => {
+          throw new Error('14 UNAVAILABLE')
+        })
+        const outcome = await createAiJobFormStep({ siblingForm })(context(unitPatch()))
+        expect(outcome.review).toMatchObject({ reason: 'limit' })
+        expect(outcome.failure).toBeUndefined()
+        expect(error).toHaveBeenCalledWith('ai form step: band refusal lookup failed', expect.objectContaining({ jobId: FORM_ID }))
+      } finally {
+        error.mockRestore()
+      }
+    })
   })
 
   it('adds the facts in square brackets the form shows after what the member decides (AGL-3056)', async () => {
