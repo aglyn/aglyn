@@ -194,6 +194,34 @@ final class ScreenSpecTests: XCTestCase {
   }
 
   @MainActor
+  func testAnActionCanShowTheRoutesAnswerInsteadOfItsSuccessMessage() throws {
+    let action = try XCTUnwrap(
+      ActionSpec([
+        "label": "Report", "url": "/api/issue-reports", "success": "Filed",
+        "instead": ["when": "response.deflected", "title": "Already answered", "text": "{response.sections.0.title}: {response.sections.0.text}"],
+      ]))
+    let instead = try XCTUnwrap(action.instead)
+    let answered: JSONValue = ["response": ["deflected": true, "sections": [["title": "Domains", "text": "Point a CNAME."]]]]
+    XCTAssertTrue(ScreenValues.condition(instead["when"]?.stringValue, in: answered))
+    XCTAssertEqual(ScreenValues.render(instead["text"]?.stringValue ?? "", in: answered), "Domains: Point a CNAME.")
+    XCTAssertFalse(ScreenValues.condition(instead["when"]?.stringValue, in: ["response": ["ok": true]]))
+  }
+
+  @MainActor
+  func testTheReportFormShowsOnlyTheFieldsOfItsKind() throws {
+    let support = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.support" })
+    let block = try XCTUnwrap(support.blocks.first { $0.title == "Report an issue" })
+    let action = try XCTUnwrap(block["items"].array.first.flatMap(ActionSpec.init))
+    func asked(_ kind: String) -> [String] {
+      let form: JSONValue = ["form": ["kind": .string(kind)]]
+      return action.prompt.filter { ScreenValues.condition($0.when, in: form) }.map(\.key)
+    }
+    XCTAssertEqual(asked("bug"), ["kind", "summary", "steps", "expected", "actual", "frequency", "contactConsent"])
+    XCTAssertEqual(asked("idea"), ["kind", "summary", "problem", "workaround", "proposal", "contactConsent"])
+    XCTAssertEqual(asked("question"), ["kind", "summary", "question", "tried", "skipDeflection", "contactConsent"])
+  }
+
+  @MainActor
   func testReauthAnswerAsksForThePassword() async throws {
     let transport = RecordingTransport(responses: [(403, #"{"error":"reauth-required","message":"Confirm it is you"}"#)])
     let api = ConsoleAPIClient(origin: "http://localhost", getIDToken: { _ in "t" }, transport: transport)
